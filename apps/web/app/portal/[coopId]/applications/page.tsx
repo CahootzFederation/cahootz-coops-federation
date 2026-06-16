@@ -8,6 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
+  formatApplicationAnswer,
+  getApplicationAnswerEntries,
+} from "@/lib/application-display";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -24,6 +28,10 @@ export default function ApplicationsPage() {
 
   // Fetch pending applications
   const { data: applications, isLoading, error, refetch } = api.admin.getPendingApplications.useQuery();
+  const { data: questionsData } = api.coopConfig.getApplicationQuestions.useQuery({ coopId });
+  const questionLabelById = new Map(
+    (questionsData?.questions ?? []).map((question: any) => [question.id, question.label]),
+  );
 
   // Update status mutation
   const updateStatus = api.admin.updateUserStatus.useMutation({
@@ -128,6 +136,7 @@ export default function ApplicationsPage() {
   // Handle both singular and array format for applications
   const application = (currentApp as any).application || currentApp.applications?.[0];
   const appData = application?.data;
+  const dynamicAnswerEntries = getApplicationAnswerEntries(appData);
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -309,6 +318,24 @@ export default function ApplicationsPage() {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {dynamicAnswerEntries.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-lg mb-3 text-amber-500">Application Answers</h3>
+                  <div className="space-y-3">
+                    {dynamicAnswerEntries.map(([questionId, answer]) => (
+                      <div key={questionId}>
+                        <Label className="text-gray-400 text-sm">
+                          {questionLabelById.get(questionId) ?? questionId}
+                        </Label>
+                        <div className="mt-2 bg-slate-950 p-4 rounded-lg text-sm text-gray-200">
+                          {formatApplicationAnswer(answer)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </>

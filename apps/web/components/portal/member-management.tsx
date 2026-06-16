@@ -30,6 +30,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import {
+  formatApplicationAnswer,
+  getApplicationAnswerEntries,
+} from "@/lib/application-display";
 import { FileText, CheckCircle2, XCircle, Loader2, Wallet, RefreshCw, Info, AlertTriangle, Star, X } from "lucide-react";
 
 type UserStatus = 'PENDING' | 'ACTIVE' | 'REJECTED' | 'SUSPENDED';
@@ -74,6 +78,10 @@ export default function MemberManagement() {
     { enabled: statusFilter === 'ALL' }
   );
   const allUsers = allUsersQuery.data;
+  const { data: questionsData } = api.coopConfig.getApplicationQuestions.useQuery({ coopId });
+  const questionLabelById = new Map(
+    (questionsData?.questions ?? []).map((question: any) => [question.id, question.label]),
+  );
 
   const filteredUsersQuery = api.admin.getUsersByStatus.useQuery(
     { coopId, status: statusFilter as UserStatus },
@@ -512,6 +520,28 @@ export default function MemberManagement() {
 
           {selectedUser?.application && (
             <div className="space-y-4">
+              {(() => {
+                const dynamicAnswerEntries = getApplicationAnswerEntries(selectedUser.application.data);
+
+                return dynamicAnswerEntries.length > 0 ? (
+                  <div>
+                    <h3 className="font-semibold mb-2 text-sm text-gray-400">Application Answers</h3>
+                    <div className="space-y-3">
+                      {dynamicAnswerEntries.map(([questionId, answer]) => (
+                        <div key={questionId}>
+                          <span className="text-gray-500 text-sm block mb-1">
+                            {questionLabelById.get(questionId) ?? questionId}
+                          </span>
+                          <p className="text-sm bg-slate-900 p-3 rounded">
+                            {formatApplicationAnswer(answer)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+
               {/* Personal Information */}
               <div>
                 <h3 className="font-semibold mb-2 text-sm text-gray-400">Personal Information</h3>

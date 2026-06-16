@@ -3,8 +3,8 @@ import { ScrollView, View, Pressable, TextInput, Alert, ActivityIndicator } from
 import { useSubmitApplication } from '@/hooks/use-api';
 import { useAuth } from '@/contexts/auth-context';
 import { getApiUrl } from '@/lib/config';
-import type { ApplicationData } from '@/lib/api';
 import { api } from '@/lib/api';
+import { buildMobileApplicationSubmissionInput } from '@/lib/application-submission';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -507,22 +507,7 @@ export default function OnboardingFlow() {
       }
 
       // Prepare application data with dynamic answers
-      const applicationData: ApplicationData = {
-        coopId: selectedCoopId!,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        phone: formData.phone,
-        password: formData.password,
-        confirmPassword: formData.confirmPassword,
-        // Include all dynamic answers
-        ...formData.dynamicAnswers,
-        videoCID: formData.videoCID || undefined,
-        photoCID: formData.photoCID || undefined,
-        agreeToCoopValues: formData.agreeToCoopValues,
-        agreeToTerms: formData.agreeToTerms,
-        agreeToPrivacy: formData.agreeToPrivacy,
-      } as any;
+      const applicationData = buildMobileApplicationSubmissionInput(selectedCoopId!, formData);
 
       // Submit application using hook
       // Sanitize sensitive fields before logging

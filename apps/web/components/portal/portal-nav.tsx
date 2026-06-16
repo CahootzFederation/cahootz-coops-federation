@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Coins,
   FileText,
+  Grid3X3,
   Landmark,
   LogOut,
   Menu,
@@ -60,6 +61,11 @@ const adminReviewLinks: NavItem[] = [
     title: "Applications",
     href: "/portal/applications",
     icon: ClipboardList,
+  },
+  {
+    title: "Apps",
+    href: "/portal/apps",
+    icon: Grid3X3,
   },
   {
     title: "Rules",

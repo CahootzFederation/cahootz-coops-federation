@@ -53,8 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const inAuthGroup = segments[0] === '(authenticated)';
 
     if (user && !inAuthGroup) {
-      // User is logged in but not in authenticated routes, redirect to home
-      router.replace('/(authenticated)/home');
+      // User is logged in but not in authenticated routes, redirect to app launcher
+      router.replace('/(authenticated)/apps' as any);
     } else if (!user && inAuthGroup) {
       // User is not logged in but in authenticated routes, redirect to onboarding
       router.replace('/');

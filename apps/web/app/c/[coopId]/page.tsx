@@ -3,12 +3,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   ArrowRight,
+  Building2,
+  MapPin,
   Users,
   Store,
   Sparkles,
 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FallbackImage } from "@/components/ui/fallback-image";
 import { CoopHero } from "./components/coop-hero";
 import { StoreCard } from "./components/store-card";
 import { FeaturedProducts } from "./components/featured-products";
@@ -149,6 +153,58 @@ async function getFeaturedProducts(coopId: string) {
   }
 }
 
+async function getPublicApps(coopId: string) {
+  try {
+    const apiUrl = env.NEXT_PUBLIC_API_URL;
+    const input = JSON.stringify({ coopId });
+    const url = `${apiUrl}/coopApps.listPublic?input=${encodeURIComponent(input)}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const data = await response.json();
+    return data.result.data || [];
+  } catch (error) {
+    console.error('Error fetching public apps:', error);
+    return [];
+  }
+}
+
+async function getDirectoryBusinesses(coopId: string) {
+  try {
+    const apiUrl = env.NEXT_PUBLIC_API_URL;
+    const input = JSON.stringify({ coopId, limit: 4 });
+    const url = `${apiUrl}/directory.listPublic?input=${encodeURIComponent(input)}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const data = await response.json();
+    return data.result?.data?.businesses || [];
+  } catch (error) {
+    console.error('Error fetching directory businesses:', error);
+    return [];
+  }
+}
+
 
 
 
@@ -209,6 +265,9 @@ export default async function CoopPublicPage({ params }: PageProps) {
   
   // Fetch featured products for this coop
   const featuredProducts = await getFeaturedProducts(coopId);
+  const publicApps = await getPublicApps(coopId);
+  const directoryEnabled = publicApps.some((app: any) => app.key === 'directory');
+  const directoryBusinesses = directoryEnabled ? await getDirectoryBusinesses(coopId) : [];
   const liveStats = previewData?.stats ?? {};
   const liveMemberCount = Number(liveStats.memberCount ?? 0);
   const liveProductCount = Number(liveStats.productCount ?? 0);
@@ -310,6 +369,137 @@ export default async function CoopPublicPage({ params }: PageProps) {
         </section>
       )}
 
+      {/* Apps Section */}
+      {publicApps.length > 0 && (
+        <section className="border-b bg-muted/20 py-10">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-7">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight text-foreground">
+                  Explore {coop.name}
+                </h2>
+                <p className="mt-1 text-muted-foreground">
+                  Open public apps and resources from this cooperative
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-x-7 gap-y-8 sm:gap-x-9">
+              {publicApps.map((app: any) => {
+                const href = app.key === 'directory'
+                  ? `/c/${coopId}/directory`
+                  : `/c/${coopId}/products`;
+                const Icon = app.key === 'directory' ? MapPin : Store;
+                const iconStyle = app.key === 'directory'
+                  ? { background: `linear-gradient(145deg, ${accentColorHex}, ${primaryColorHex})` }
+                  : { background: `linear-gradient(145deg, ${primaryColorHex}, ${accentColorHex})` };
+
+                return (
+                  <Link
+                    key={app.key}
+                    href={href}
+                    className="group w-24 text-center sm:w-28"
+                    aria-label={`Open ${app.name}`}
+                  >
+                    <div
+                      className="mx-auto flex h-20 w-20 items-center justify-center rounded-[1.6rem] text-white shadow-lg shadow-black/10 ring-1 ring-white/60 transition-transform group-hover:-translate-y-1 group-hover:shadow-xl sm:h-24 sm:w-24 sm:rounded-[1.85rem]"
+                      style={iconStyle}
+                    >
+                      <Icon className="h-9 w-9 sm:h-10 sm:w-10" strokeWidth={2.25} />
+                    </div>
+                    <span className="mt-2 block text-sm font-semibold leading-tight text-foreground">
+                      {app.name}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Directory Section */}
+      {directoryEnabled && (
+        <section className="border-b py-12 md:py-16">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-8 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+                  Local Business Directory
+                </h2>
+                <p className="mt-1 text-muted-foreground">
+                  Businesses and services connected to {coop.name}
+                </p>
+              </div>
+              <Button variant="outline" asChild className="hover:border-[var(--coop-accent)] hover:text-[var(--coop-accent)] transition-colors">
+                <Link href={`/c/${coopId}/directory`}>
+                  View Directory
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+
+            {directoryBusinesses.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 py-12 text-center">
+                <Building2 className="h-10 w-10 text-muted-foreground" />
+                <h3 className="mt-4 text-lg font-semibold text-foreground">No directory businesses yet</h3>
+                <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                  Local businesses added by coop admins will show up here.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                {directoryBusinesses.map((business: any) => (
+                  <Link
+                    key={business.id}
+                    href={`/c/${coopId}/directory`}
+                    className="group overflow-hidden rounded-lg border bg-card transition-all hover:border-[var(--coop-accent)] hover:shadow-md"
+                  >
+                    <div className="relative aspect-[4/3] bg-muted">
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Building2 className="h-10 w-10 text-muted-foreground/40" />
+                      </div>
+                      {business.imageUrl && (
+                        <FallbackImage
+                          src={business.imageUrl}
+                          alt={business.name}
+                          fill
+                          sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+                          className="object-cover transition-transform group-hover:scale-105"
+                        />
+                      )}
+                      {business.isFeatured && (
+                        <Badge className="absolute left-3 top-3">Featured</Badge>
+                      )}
+                    </div>
+                    <div className="space-y-3 p-4">
+                      <div>
+                        <h3 className="line-clamp-1 font-semibold text-foreground">{business.name}</h3>
+                        {business.category && (
+                          <p className="mt-1 text-sm text-muted-foreground">{business.category}</p>
+                        )}
+                      </div>
+                      {business.description && (
+                        <p className="line-clamp-2 text-sm text-muted-foreground">
+                          {business.description}
+                        </p>
+                      )}
+                      {[business.city, business.state].filter(Boolean).length > 0 && (
+                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                          <MapPin className="h-4 w-4" />
+                          <span className="line-clamp-1">
+                            {[business.city, business.state].filter(Boolean).join(", ")}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Featured Products Section */}
       <section className="py-12 md:py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -329,7 +519,17 @@ export default async function CoopPublicPage({ params }: PageProps) {
               </Link>
             </Button>
           </div>
-          <FeaturedProducts products={products} coopSlug={coopId} />
+          {products.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 py-12 text-center">
+              <Store className="h-10 w-10 text-muted-foreground" />
+              <h3 className="mt-4 text-lg font-semibold text-foreground">No products yet</h3>
+              <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                Products from approved marketplace stores will show up here.
+              </p>
+            </div>
+          ) : (
+            <FeaturedProducts products={products} coopSlug={coopId} />
+          )}
         </div>
       </section>
 
@@ -439,6 +639,14 @@ export default async function CoopPublicPage({ params }: PageProps) {
               >
                 About
               </Link>
+              {directoryEnabled && (
+                <Link
+                  href={`/c/${coopId}/directory`}
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Directory
+                </Link>
+              )}
               <Link
                 href={`/c/${coopId}/stores`}
                 className="text-sm text-muted-foreground hover:text-foreground"

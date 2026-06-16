@@ -405,6 +405,72 @@ model PublicCoopInfo {
   @@schema("public")
 }
 
+// ── Coop Apps Models ───────────────────────────────────────────
+
+model CoopAppSetting {
+  id            String   @id @default(cuid())
+  coopId        String
+  appKey        String
+  publicEnabled Boolean  @default(true)
+  memberEnabled Boolean  @default(true)
+  portalEnabled Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([coopId, appKey])
+  @@index([coopId, publicEnabled, sortOrder])
+  @@index([coopId, memberEnabled, sortOrder])
+  @@schema("public")
+}
+
+model CoopAppRequest {
+  id          String   @id @default(cuid())
+  coopId      String
+  title       String
+  description String?  @db.Text
+  requestedBy String?
+  status      String   @default("SUBMITTED") // SUBMITTED | REVIEWED | ARCHIVED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([coopId, status, createdAt])
+  @@schema("public")
+}
+
+model DirectoryBusiness {
+  id          String   @id @default(cuid())
+  coopId      String
+  name        String
+  category    String?
+  description String?  @db.Text
+  imageUrl    String?
+  address     String?
+  city        String?
+  state       String?
+  zipCode     String?
+  formattedAddress String?
+  placeId     String?
+  latitude    Float?
+  longitude   Float?
+  phone       String?
+  email       String?
+  website     String?
+  tags        String[] @default([])
+  isFeatured  Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String?
+  updatedBy   String?
+
+  @@index([coopId, isActive, isFeatured, sortOrder])
+  @@index([coopId, category])
+  @@index([coopId, latitude, longitude])
+  @@schema("public")
+}
+
 // ── Proposal Engine Models ────────────────────────────
 model Proposal {
   id        String         @id @default(cuid())

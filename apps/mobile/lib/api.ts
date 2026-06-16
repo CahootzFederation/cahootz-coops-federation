@@ -1119,6 +1119,62 @@ export const api = {
   },
 
   /**
+   * Get enabled member/mobile apps for the active coop.
+   */
+  async getMemberApps(coopId?: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId: coopId ?? resolveCoopId() }));
+    const response = await fetch(`${API_BASE_URL}/trpc/coopApps.listMember?input=${input}`, {
+      method: 'GET',
+      headers: {
+        ...networkConfig.defaultHeaders,
+      },
+    });
+
+    const result = await response.json();
+    if (result.error) {
+      throw new Error(result.error.message || 'Failed to get apps');
+    }
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return result.result?.data;
+  },
+
+  /**
+   * Get directory businesses for the active coop.
+   */
+  async getDirectoryBusinesses(options?: {
+    coopId?: string;
+    category?: string;
+    search?: string;
+    limit?: number;
+  }) {
+    const input = encodeURIComponent(JSON.stringify({
+      coopId: options?.coopId ?? resolveCoopId(),
+      category: options?.category,
+      search: options?.search,
+      limit: options?.limit ?? 100,
+    }));
+    const response = await fetch(`${API_BASE_URL}/trpc/directory.listMember?input=${input}`, {
+      method: 'GET',
+      headers: {
+        ...networkConfig.defaultHeaders,
+      },
+    });
+
+    const result = await response.json();
+    if (result.error) {
+      throw new Error(result.error.message || 'Failed to get directory businesses');
+    }
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return result.result?.data;
+  },
+
+  /**
    * Get single store details (public)
    */
   async getStore(storeId: string) {

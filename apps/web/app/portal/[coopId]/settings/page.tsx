@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Wallet, Shield, User, Copy, CheckCircle, Coins, Globe, ArrowRight } from "lucide-react";
+import { Wallet, Shield, User, Copy, CheckCircle, Coins, Globe, ArrowRight, Grid3X3 } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/lib/trpc/client";
 import { useCoin } from "@/hooks/use-platform-config";
@@ -217,6 +217,29 @@ export default function SettingsPage() {
             <Button asChild className="bg-blue-600 hover:bg-blue-700">
               <Link href={`/portal/${coopId}/settings/public-page`} className="inline-flex items-center gap-2">
                 Edit Public Page
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Apps Settings - Admin Only */}
+      {isAdmin && (
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-white">
+              <Grid3X3 className="h-5 w-5 text-emerald-500" />
+              Apps
+            </CardTitle>
+            <CardDescription>
+              Manage enabled apps, directory listings, and requested future apps.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild className="bg-emerald-600 hover:bg-emerald-700">
+              <Link href={`/portal/${coopId}/apps`} className="inline-flex items-center gap-2">
+                Manage Apps
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>

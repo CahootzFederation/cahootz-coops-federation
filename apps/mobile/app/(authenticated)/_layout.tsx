@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { View } from 'react-native';
-import { Home, User, Store, FileText } from 'lucide-react-native';
+import { Grid3X3, Home, User, FileText } from 'lucide-react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function AuthenticatedLayout() {
@@ -36,9 +36,24 @@ export default function AuthenticatedLayout() {
       }}
     >
       <Tabs.Screen
+        name="apps"
+        options={{
+          title: 'Apps',
+          tabBarIcon: ({ color, focused }) => (
+            <View style={focused ? {
+              backgroundColor: '#FEF3C7',
+              borderRadius: 12,
+              padding: 8,
+            } : { padding: 8 }}>
+              <Grid3X3 color={color} size={22} strokeWidth={focused ? 2.5 : 2} />
+            </View>
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="home"
         options={{
-          title: 'Home',
+          title: 'Wallet',
           tabBarIcon: ({ color, focused }) => (
             <View style={focused ? {
               backgroundColor: '#FEF3C7',
@@ -46,21 +61,6 @@ export default function AuthenticatedLayout() {
               padding: 8,
             } : { padding: 8 }}>
               <Home color={color} size={22} strokeWidth={focused ? 2.5 : 2} />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="stores"
-        options={{
-          title: 'Shop',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? {
-              backgroundColor: '#FEF3C7',
-              borderRadius: 12,
-              padding: 8,
-            } : { padding: 8 }}>
-              <Store color={color} size={22} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
         }}
@@ -98,6 +98,8 @@ export default function AuthenticatedLayout() {
         }}
       />
       {/* Hide these screens from tabs - accessed via navigation */}
+      <Tabs.Screen name="stores" options={{ href: null }} />
+      <Tabs.Screen name="directory" options={{ href: null }} />
       <Tabs.Screen name="stripe-onboarding" options={{ href: null }} />
       <Tabs.Screen name="apply-sc-verification" options={{ href: null }} />
 

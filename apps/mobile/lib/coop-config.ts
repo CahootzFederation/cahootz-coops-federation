@@ -51,8 +51,8 @@ export interface CoopConfig {
 // Default config for unauthenticated state
 const defaultConfig: CoopConfig = {
   id: 'default',
-  name: process.env.EXPO_PUBLIC_DEFAULT_COOP_NAME || 'Soulaan',
-  shortName: process.env.EXPO_PUBLIC_DEFAULT_COOP_SHORT_NAME || 'Soulaan',
+  name: process.env.EXPO_PUBLIC_DEFAULT_COOP_NAME || 'Unknown',
+  shortName: process.env.EXPO_PUBLIC_DEFAULT_COOP_SHORT_NAME || 'Unknown',
   tagline: process.env.EXPO_PUBLIC_DEFAULT_COOP_TAGLINE || 'Building Generational Wealth Together',
 
   apiUrl: process.env.EXPO_PUBLIC_API_URL || 'https://api.soulaan.app',

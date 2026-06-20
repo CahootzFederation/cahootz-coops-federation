@@ -56,6 +56,9 @@ export interface ApplicationData {
   agreeToCoopValues: boolean;
   agreeToTerms: boolean;
   agreeToPrivacy: boolean;
+
+  // Co-op configured question answers
+  dynamicAnswers?: Record<string, any>;
   
   // Allow dynamic question answers
   [key: string]: any;

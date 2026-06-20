@@ -11,6 +11,7 @@ interface SessionResponse {
   address?: string | null;
   userId?: string | null;
   email?: string | null;
+  name?: string | null;
   loginMethod?: string | null;
   hasProfile?: boolean;
   activeCoopId?: string | null;
@@ -18,10 +19,55 @@ interface SessionResponse {
   adminRole?: string | null;
 }
 
+type TinaCommand = [
+  "identify",
+  {
+    email: string;
+    name?: string;
+    tags: string[];
+    excludeFromAnalytics: boolean;
+  },
+];
+
+interface TinaQueue {
+  push: (command: TinaCommand) => unknown;
+}
+
+declare global {
+  interface Window {
+    tina?: TinaCommand[] | TinaQueue;
+  }
+}
+
 function compactProperties<T extends Record<string, unknown>>(properties: T) {
   return Object.fromEntries(
     Object.entries(properties).filter(([, value]) => value !== undefined && value !== null && value !== ""),
   );
+}
+
+function canPushToTina(tina: Window["tina"]): tina is TinaQueue {
+  return typeof tina?.push === "function";
+}
+
+function identifyWithTina(session: SessionResponse) {
+  if (!session.email) return;
+
+  const tina = window.tina ?? [];
+  window.tina = tina;
+
+  if (!canPushToTina(tina)) return;
+
+  const payload: TinaCommand[1] = {
+    email: session.email,
+    tags: ["team"],
+    excludeFromAnalytics: true,
+  };
+
+  if (session.name) {
+    payload.name = session.name;
+  }
+
+  tina.push(["identify", payload]);
 }
 
 export function PostHogIdentity() {
@@ -53,6 +99,7 @@ export function PostHogIdentity() {
           const properties = compactProperties({
             user_id: session.userId,
             email: session.email,
+            name: session.name,
             wallet_address: session.address,
             login_method: session.loginMethod,
             has_profile: session.hasProfile,
@@ -65,6 +112,7 @@ export function PostHogIdentity() {
 
           if (currentIdentityRef.current !== identityKey) {
             posthog.identify(distinctId, properties);
+            identifyWithTina(session);
             currentIdentityRef.current = identityKey;
           }
 

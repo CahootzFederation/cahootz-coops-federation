@@ -27,6 +27,7 @@ export interface AuthSession {
   address: string;
   userId?: string;
   email?: string;
+  name?: string;
   loginMethod?: 'wallet' | 'email';
   isLoggedIn: boolean;
   hasProfile: boolean;
@@ -336,6 +337,7 @@ export async function createSession(address: string, coopId?: string): Promise<A
   session.address = address;
   session.userId = user?.id;
   session.email = user?.email;
+  session.name = user?.name ?? undefined;
   session.loginMethod = 'wallet';
   session.isLoggedIn = true;
   session.hasProfile = hasProfile;
@@ -429,6 +431,7 @@ export async function createUserSession(userId: string, coopId: string): Promise
   session.address = walletAddress;
   session.userId = user.id;
   session.email = user.email;
+  session.name = user.name ?? undefined;
   session.loginMethod = 'email';
   session.isLoggedIn = true;
   session.hasProfile = !!user.name;

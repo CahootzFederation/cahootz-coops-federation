@@ -24,6 +24,7 @@ import { Suspense } from "react";
 import { BusinessSignupForm } from "@/components/business-signup-form";
 import { BlogCard } from "@/components/blog/blog-card";
 import { MemberApplicationFlow } from "@/components/member-application-flow";
+import { TreasuryContributionCalculator } from "@/components/treasury-contribution-calculator";
 import { WaitlistSignupForm } from "@/components/waitlist-signup-form";
 import { env } from "@/env";
 import { getFeaturedBlogPosts } from "@/lib/blog";
@@ -285,16 +286,16 @@ export default async function HomePage() {
                   <div className="flex items-center justify-between border-b border-white/10 pb-4">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-widest text-[#ffb36f]">Today in your co-op</p>
-                      <h2 className="mt-1 text-xl font-black">Gen Z Co-op</h2>
+                      <h2 className="mt-1 text-xl font-black">Artist Co-op</h2>
                     </div>
                     <div className="rounded-lg bg-[#f0975b] px-3 py-1 text-xs font-bold text-[#111111]">LIVE</div>
                   </div>
 
                   <div className="mt-4 grid grid-cols-3 gap-2">
                     {[
-                      ["9", "Proposals"],
-                      ["18", "Stores"],
-                      ["320", "Members"],
+                      ["12", "Projects"],
+                      ["7", "Studios"],
+                      ["420", "Members"],
                     ].map(([value, label]) => (
                       <div key={label} className="rounded-lg border border-white/10 bg-white/[0.04] p-3 text-center">
                         <p className="text-2xl font-black">{value}</p>
@@ -307,18 +308,18 @@ export default async function HomePage() {
                     {[
                       {
                         icon: <Store className="h-4 w-4" />,
-                        title: "Book a member workspace",
-                        detail: "Earn rewards while supporting co-op spaces.",
+                        title: "Book a member studio day",
+                        detail: "Use shared space, tools, and production support.",
                       },
                       {
                         icon: <MessageSquare className="h-4 w-4" />,
-                        title: "Discuss the creator fund proposal",
-                        detail: "24 members commented before the vote.",
+                        title: "Vote on the equipment library",
+                        detail: "Members are choosing what tools get funded next.",
                       },
                       {
                         icon: <ShieldCheck className="h-4 w-4" />,
-                        title: "Vendor feature budget approved",
-                        detail: "Members funded the next co-op tool build.",
+                        title: "Local distribution route approved",
+                        detail: "More member work can reach shops, events, and buyers.",
                       },
                     ].map((item) => (
                       <div key={item.title} className="flex gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
@@ -631,6 +632,8 @@ export default async function HomePage() {
             </div>
           </div>
         </section>
+
+        <TreasuryContributionCalculator />
 
         <section id="join" className="border-t border-white/10 bg-[#f0975b] px-5 py-20 text-[#111111] sm:px-6 md:py-24">
           <div className="mx-auto grid max-w-7xl gap-10 xl:grid-cols-[0.7fr_1.3fr]">

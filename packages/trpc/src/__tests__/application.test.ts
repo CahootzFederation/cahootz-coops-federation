@@ -335,4 +335,96 @@ describe('Application Router - submitApplication', () => {
     // Assert
     expect(result.success).toBe(true);
   });
+
+  it('should submit Soulaan dynamic answers when a question id matches the default email field', async () => {
+    mockPrismaClient.user.findUnique.mockResolvedValue(null);
+
+    const txUserCreate = vi.fn().mockResolvedValue({
+      id: 'user_789',
+      email: 'applicant@example.com',
+      name: 'Deon Robinson',
+      phone: '+14159363880',
+      role: 'user',
+      status: 'PENDING',
+    });
+    const txApplicationCreate = vi.fn().mockResolvedValue({
+      id: 'app_789',
+      userId: 'user_789',
+      status: 'SUBMITTED',
+      data: {},
+      createdAt: new Date(),
+    });
+    const txMembershipUpsert = vi.fn().mockResolvedValue({
+      id: 'membership_789',
+      userId: 'user_789',
+      coopId: 'soulaan',
+      status: 'PENDING',
+      roles: ['member'],
+    });
+
+    mockPrismaClient.$transaction.mockImplementation(async (callback) => {
+      return callback({
+        user: {
+          create: txUserCreate,
+        },
+        application: {
+          create: txApplicationCreate,
+        },
+        userCoopMembership: {
+          upsert: txMembershipUpsert,
+        },
+      });
+    });
+
+    const result = await caller.application.submitApplication({
+      coopId: 'soulaan',
+      firstName: 'Deon',
+      lastName: 'Robinson',
+      email: 'applicant@example.com',
+      phone: '4159363880',
+      password: 'password123',
+      confirmPassword: 'password123',
+      agreeToCoopValues: true,
+      agreeToTerms: true,
+      agreeToPrivacy: true,
+      dynamicAnswers: {
+        fullName: 'Why do you want to join Soulaan Co-op?',
+        email: ['Member', 'Ally'],
+        occupation: 'Entrepreneur',
+        whyJoin: 'I can bring organizing and business-building experience.',
+        q_1778700311970: 'yes',
+        q_1778700347312: 'A community business.',
+        q_1778700361575: 'yes',
+        q_1778700409302: 'yes',
+        q_1778700436362: ['yes'],
+        q_1778700460221: '',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockPrismaClient.user.findUnique).toHaveBeenCalledWith({
+      where: { email: 'applicant@example.com' },
+      include: {
+        applications: {
+          where: { coopId: 'soulaan' },
+        },
+      },
+    });
+    expect(txApplicationCreate).toHaveBeenCalledWith({
+      data: {
+        userId: 'user_789',
+        coopId: 'soulaan',
+        status: 'SUBMITTED',
+        data: expect.objectContaining({
+          email: 'applicant@example.com',
+          phone: '+14159363880',
+          dynamicAnswers: expect.objectContaining({
+            email: ['Member', 'Ally'],
+            fullName: 'Why do you want to join Soulaan Co-op?',
+            q_1778700436362: ['yes'],
+          }),
+        }),
+      },
+    });
+  });
 });

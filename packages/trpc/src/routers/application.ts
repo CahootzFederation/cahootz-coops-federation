@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
+import type { Prisma } from "@repo/db";
 
 import { Context, AuthenticatedContext } from "../context.js";
 import { publicProcedure, privateProcedure } from "../procedures/index.js";
@@ -12,8 +13,13 @@ import { sendApplicationSubmittedNotification } from "../services/slack-notifica
 
 // Backend wallet is now stored in CoopConfig per-coop
 
-// Validation schema for application submission
-// Now accepts dynamic question answers via passthrough
+function toJsonValue(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
+}
+
+// Validation schema for application submission.
+// Dynamic form answers are accepted under dynamicAnswers so question ids can
+// overlap with reserved account fields like email without changing their type.
 const applicationSchema = z.object({
   // Coop identification
   coopId: z.string().min(1, "Coop ID is required"),
@@ -29,6 +35,9 @@ const applicationSchema = z.object({
   // Media uploads (optional)
   videoCID: z.string().optional(),
   photoCID: z.string().optional(),
+
+  // Co-op configured question answers
+  dynamicAnswers: z.record(z.unknown()).optional(),
   
   // Terms Agreement
   agreeToCoopValues: z.boolean().refine(val => val === true, "Must agree to co-op values"),
@@ -123,7 +132,7 @@ export const applicationRouter = router({
           console.log('📝 Creating application...');
           
           // Extract password, confirmPassword, and coopId from input (don't store these in data)
-          const { password, confirmPassword, coopId, ...applicationData } = input;
+          const { password, confirmPassword, coopId, dynamicAnswers, ...applicationData } = input;
           
           // Store all application data including dynamic question answers
           const application = await tx.application.create({
@@ -131,10 +140,11 @@ export const applicationRouter = router({
               userId: user.id,
               coopId: input.coopId,
               status: "SUBMITTED",
-              data: {
+              data: toJsonValue({
                 ...applicationData,
+                dynamicAnswers: dynamicAnswers ?? {},
                 phone: user.phone, // Use normalized phone from user record
-              },
+              }),
             },
           });
           console.log('✅ Application created:', application.id);

@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import Script from "next/script";
 import { Suspense } from "react";
 
 import { BusinessSignupForm } from "@/components/business-signup-form";
@@ -202,13 +201,6 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#111111] text-white">
-      
-      <Script
-        async
-        src="https://www.usetina.com/tina.js"
-        data-site-key="tina_dCbAoHEO1ISRi3XI_Hg9MG_Y"
-        strategy="afterInteractive"
-      />
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[#111111]/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-6">
           <Link href="/" className="flex items-center gap-3">

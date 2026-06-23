@@ -23,6 +23,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
+import { buildApplicationSubmissionInput } from "@/lib/application-submission";
+import type { ApplicationAnswer, MemberApplicationFormData } from "@/lib/application-submission";
 import { api } from "@/lib/trpc/client";
 import { cn } from "@/lib/utils";
 
@@ -56,20 +58,7 @@ interface ApplicationQuestion {
   validation?: Record<string, unknown>;
 }
 
-interface FormData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  password: string;
-  confirmPassword: string;
-  agreeToCoopValues: boolean;
-  agreeToTerms: boolean;
-  agreeToPrivacy: boolean;
-  dynamicAnswers: Record<string, string | string[]>;
-}
-
-const initialFormData: FormData = {
+const initialFormData: MemberApplicationFormData = {
   firstName: "",
   lastName: "",
   email: "",
@@ -101,7 +90,7 @@ function isBlank(value: unknown) {
 
 function getMissingQuestionLabels(
   questions: ApplicationQuestion[],
-  answers: FormData["dynamicAnswers"],
+  answers: MemberApplicationFormData["dynamicAnswers"],
 ) {
   return questions
     .filter((question) => question.required && isBlank(answers[question.id]))
@@ -109,7 +98,25 @@ function getMissingQuestionLabels(
 }
 
 function extractErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
+  if (error instanceof Error) {
+    try {
+      const parsed = JSON.parse(error.message) as unknown;
+      if (Array.isArray(parsed)) {
+        const messages = parsed
+          .map((issue) => {
+            if (typeof issue !== "object" || issue === null || !("message" in issue)) return null;
+            return typeof issue.message === "string" ? issue.message : null;
+          })
+          .filter((message): message is string => Boolean(message));
+
+        if (messages.length > 0) return messages.join(" ");
+      }
+    } catch {
+      // Keep the original error message when it is not a serialized validation error.
+    }
+
+    return error.message;
+  }
   return "Could not submit your application. Please try again.";
 }
 
@@ -154,7 +161,7 @@ export function MemberApplicationFlow({
   const stepKeys = lockedCoopId ? lockedStepKeys : allStepKeys;
   const [step, setStep] = useState(0);
   const [selectedCoopId, setSelectedCoopId] = useState(lockedCoopId ?? "");
-  const [formData, setFormData] = useState<FormData>(initialFormData);
+  const [formData, setFormData] = useState<MemberApplicationFormData>(initialFormData);
   const [errorMessage, setErrorMessage] = useState("");
   const [applicationReference, setApplicationReference] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -219,12 +226,15 @@ export function MemberApplicationFlow({
     return () => window.clearTimeout(timeout);
   }, [applicationReference, resetFlow, router, successRedirectDelayMs, successRedirectHref]);
 
-  const updateField = <K extends keyof FormData>(field: K, value: FormData[K]) => {
+  const updateField = <K extends keyof MemberApplicationFormData>(
+    field: K,
+    value: MemberApplicationFormData[K],
+  ) => {
     setFormData((current) => ({ ...current, [field]: value }));
     setErrorMessage("");
   };
 
-  const updateDynamicAnswer = (questionId: string, value: string | string[]) => {
+  const updateDynamicAnswer = (questionId: string, value: ApplicationAnswer) => {
     setFormData((current) => ({
       ...current,
       dynamicAnswers: {
@@ -324,19 +334,9 @@ export function MemberApplicationFlow({
     if (!validateAgreements()) return;
 
     try {
-      const result = await submitApplication.mutateAsync({
-        coopId: selectedCoopId,
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        email: formData.email.trim(),
-        phone: formData.phone.trim(),
-        password: formData.password,
-        confirmPassword: formData.confirmPassword,
-        ...formData.dynamicAnswers,
-        agreeToCoopValues: formData.agreeToCoopValues,
-        agreeToTerms: formData.agreeToTerms,
-        agreeToPrivacy: formData.agreeToPrivacy,
-      });
+      const result = await submitApplication.mutateAsync(
+        buildApplicationSubmissionInput(selectedCoopId, formData),
+      );
 
       try {
         const applicantEmail = formData.email.trim().toLowerCase();
@@ -656,12 +656,15 @@ function PersonalInfoStep({
   onToggleConfirmPassword,
   onChange,
 }: {
-  formData: FormData;
+  formData: MemberApplicationFormData;
   showPassword: boolean;
   showConfirmPassword: boolean;
   onTogglePassword: () => void;
   onToggleConfirmPassword: () => void;
-  onChange: <K extends keyof FormData>(field: K, value: FormData[K]) => void;
+  onChange: <K extends keyof MemberApplicationFormData>(
+    field: K,
+    value: MemberApplicationFormData[K],
+  ) => void;
 }) {
   return (
     <div>
@@ -751,8 +754,8 @@ function QuestionsStep({
   coopName?: string;
   questions: ApplicationQuestion[];
   isLoading: boolean;
-  answers: FormData["dynamicAnswers"];
-  onChange: (questionId: string, value: string | string[]) => void;
+  answers: MemberApplicationFormData["dynamicAnswers"];
+  onChange: (questionId: string, value: ApplicationAnswer) => void;
 }) {
   if (isLoading) {
     return (
@@ -801,9 +804,12 @@ function ReviewStep({
   onChange,
 }: {
   selectedCoop?: CoopOption;
-  formData: FormData;
+  formData: MemberApplicationFormData;
   questions: ApplicationQuestion[];
-  onChange: <K extends keyof FormData>(field: K, value: FormData[K]) => void;
+  onChange: <K extends keyof MemberApplicationFormData>(
+    field: K,
+    value: MemberApplicationFormData[K],
+  ) => void;
 }) {
   const answeredCount = questions.filter((question) => !isBlank(formData.dynamicAnswers[question.id])).length;
 

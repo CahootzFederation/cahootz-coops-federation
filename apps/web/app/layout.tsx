@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type React from "react";
 import { Suspense } from "react";
 import { Inter } from "next/font/google";
+import Script from "next/script";
 
 import "./globals.css";
 import { PostHogIdentity } from "@/components/posthog-identity";
@@ -149,6 +150,12 @@ export default function RootLayout({
         <link rel="manifest" href="/site.webmanifest" />
       </head>
       <body className={inter.className}>
+        <Script
+          async
+          src="https://www.usetina.com/tina.js"
+          data-site-key="tina_dCbAoHEO1ISRi3XI_Hg9MG_Y"
+          strategy="afterInteractive"
+        />
         <PostHogProvider>
           <Suspense fallback={null}>
             <PostHogPageView />

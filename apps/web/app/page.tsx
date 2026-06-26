@@ -231,15 +231,6 @@ export default async function HomePage() {
             <Link href="/blog" className="text-slate-400 transition hover:text-white">
               Blog
             </Link>
-            <a
-              href={GITHUB_REPOSITORY_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-slate-400 transition hover:text-white"
-            >
-              <Github className="h-4 w-4" />
-              GitHub
-            </a>
             <Link href="#join" className="text-slate-400 transition hover:text-white">
               Join
             </Link>
@@ -289,15 +280,6 @@ export default async function HomePage() {
                 >
                   Add your business
                 </Link>
-                <a
-                  href={GITHUB_REPOSITORY_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-5 py-3 text-base font-semibold transition hover:bg-white/10"
-                >
-                  <Github className="h-5 w-5" />
-                  View on GitHub
-                </a>
               </div>
             </div>
 

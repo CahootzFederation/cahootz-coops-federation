@@ -64,7 +64,7 @@ describe('walletAuthRouter', () => {
     });
 
     expect(result.challengeId).toBe('challenge_123');
-    expect(result.message).toContain('Sign in to Soulaan');
+    expect(result.message).toContain('Sign in to Cahootz');
     expect(result.message).toContain(`Wallet: ${walletAddress}`);
     expect(db.walletChallenge.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -80,7 +80,7 @@ describe('walletAuthRouter', () => {
   it('verifies a valid signature and consumes the challenge', async () => {
     const expiresAt = new Date(Date.now() + 60_000);
     const message = [
-      'Sign in to Soulaan',
+      'Sign in to Cahootz',
       '',
       `Wallet: ${walletAddress}`,
       'Nonce: test',

@@ -37,7 +37,7 @@ const ROLES = {
 };
 
 async function main() {
-  console.log("\n🔐 Soulaan Co-op Role Management\n");
+  console.log("\n🔐 Cahootz Co-op Role Management\n");
 
   // Get signer
   const [signer] = await ethers.getSigners();

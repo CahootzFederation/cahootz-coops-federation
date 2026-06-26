@@ -140,7 +140,7 @@ export async function generateChallenge(address: string, requestOrigin?: string)
   const message = new SiweMessage({
     domain,
     address,
-    statement: 'Sign in to Soulaan Co-op Admin Panel',
+    statement: 'Sign in to Cahootz Admin Panel',
     uri,
     version: '1',
     chainId: 84532, // Base Sepolia

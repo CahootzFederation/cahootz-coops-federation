@@ -40,7 +40,7 @@ export function getServerConfig() {
   return {
     session: {
       secret: sessionSecret,
-      cookieName: 'soulaan_auth_session',
+      cookieName: 'cahootz_auth_session',
       maxAge: 60 * 60 * 24 * 7, // 1 week
     },
   };

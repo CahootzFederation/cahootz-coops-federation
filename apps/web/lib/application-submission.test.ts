@@ -14,7 +14,7 @@ describe("buildApplicationSubmissionInput", () => {
       agreeToTerms: true,
       agreeToPrivacy: true,
       dynamicAnswers: {
-        fullName: "I want to join Soulaan Co-op.",
+        fullName: "I want to join Cahootz Co-op.",
         email: ["Member", "Ally"],
         occupation: "Entrepreneur",
       },

@@ -42,7 +42,7 @@ export default function ScanPayScreen() {
     try {
       // Parse the QR code data
       // Format: coop://pay/r/{token} or coop://pay/s/{code}
-      // Or web URL: https://soulaan.app/pay?r={token}
+      // Or web URL: https://app.cahootz.coop/pay?r={token}
 
       let token: string | null = null;
       let code: string | null = null;
@@ -51,7 +51,7 @@ export default function ScanPayScreen() {
         token = data.replace('coop://pay/r/', '');
       } else if (data.startsWith('coop://pay/s/')) {
         code = data.replace('coop://pay/s/', '');
-      } else if (data.includes('soulaan.app/pay')) {
+      } else if (data.includes('app.cahootz.coop/pay')) {
         const url = new URL(data);
         token = url.searchParams.get('r');
         if (!token) {

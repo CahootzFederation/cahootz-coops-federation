@@ -32,7 +32,7 @@ async function main() {
     return new Promise((resolve) => rl.question(query, resolve));
   };
 
-  console.log("\n🔐 Soulaan Co-op Admin Setup");
+  console.log("\n🔐 Cahootz Co-op Admin Setup");
   console.log("================================\n");
 
   // Load latest deployment

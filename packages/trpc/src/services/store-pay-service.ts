@@ -137,7 +137,7 @@ export async function createPaymentRequest(
 
   // Generate QR code data (deep link URL)
   const qrCodeData = `coop://pay/r/${request.token}`;
-  const paymentUrl = `https://soulaan.app/pay?r=${request.token}`;
+  const paymentUrl = `https://app.cahootz.coop/pay?r=${request.token}`;
 
   return {
     requestId: request.id,

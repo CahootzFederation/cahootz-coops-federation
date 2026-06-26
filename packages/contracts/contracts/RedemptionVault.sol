@@ -75,7 +75,7 @@ contract RedemptionVault is AccessControlEnumerable, ReentrancyGuard {
     uint256 public totalUSDCReserve;
 
     // Multi-coop foundation (minimal)
-    uint256 public coopId = 1; // Default to Soulaan Co-op
+    uint256 public coopId = 1; // Default Cahootz co-op id
     address public clearingContract = address(0); // Future cross-coop clearing
 
     // Events

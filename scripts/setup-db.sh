@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Database Setup Script for Soulaan Co-op
+# Database Setup Script for Cahootz
 # This script creates the PostgreSQL database and runs migrations
 
 set -e  # Exit on error
 
-echo "🗄️  Setting up Soulaan Co-op Database..."
+echo "🗄️  Setting up Cahootz Database..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Database configuration

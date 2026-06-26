@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-const CART_STORAGE_KEY = '@soulaan_web_cart';
+const CART_STORAGE_KEY = '@cahootz_web_cart';
 
 export interface CartItem {
   productId: string;

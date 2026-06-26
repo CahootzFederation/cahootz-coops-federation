@@ -1,6 +1,6 @@
 /**
  * Seed script to create:
- * 1. Soulaan Official Store (owned by backend wallet user)
+ * 1. Cahootz Official Store (owned by backend wallet user)
  * 2. Founder Badge product category configuration
  * 3. Six Founder Badge products at specified prices
  */
@@ -46,8 +46,8 @@ async function main() {
     user = await prisma.user.create({
       data: {
         walletAddress,
-        email: 'backend@soulaan.coop',
-        name: 'Soulaan Backend',
+        email: 'backend@cahootz.coop',
+        name: 'Cahootz Backend',
         status: 'ACTIVE',
         roles: ['admin'],
         profileCompleted: true,
@@ -79,24 +79,24 @@ async function main() {
   });
   console.log(`✅ Founder Badges category: ${founderBadgeCategory.id}\n`);
 
-  // 4. Check if Soulaan Official Store already exists
+  // 4. Check if Cahootz Official Store already exists
   let store = await prisma.store.findFirst({
     where: {
       ownerId: user.id,
-      name: 'Soulaan Official Store',
+      name: 'Cahootz Official Store',
     },
   });
 
   if (store) {
-    console.log(`✅ Soulaan Official Store already exists: ${store.id}\n`);
+    console.log(`✅ Cahootz Official Store already exists: ${store.id}\n`);
   } else {
-    // Create the Soulaan Official Store
-    console.log('🏪 Creating Soulaan Official Store...');
+    // Create the Cahootz Official Store
+    console.log('🏪 Creating Cahootz Official Store...');
     store = await prisma.store.create({
       data: {
         ownerId: user.id,
-        name: 'Soulaan Official Store',
-        description: 'Official Soulaan Cooperative store offering Founder Badges and exclusive items.',
+        name: 'Cahootz Official Store',
+        description: 'Official Cahootz cooperative store offering Founder Badges and exclusive items.',
         category: 'OTHER',
         status: 'APPROVED',
         acceptsUC: true,
@@ -106,7 +106,7 @@ async function main() {
         isFeatured: true,
       },
     });
-    console.log(`✅ Created Soulaan Official Store: ${store.id}\n`);
+    console.log(`✅ Created Cahootz Official Store: ${store.id}\n`);
   }
 
   // 5. Create Founder Badge products
@@ -129,7 +129,7 @@ async function main() {
       data: {
         storeId: store.id,
         name: badge.name,
-        description: `Become a ${badge.name.replace(' Badge', '')} and support the Soulaan Cooperative with a founding contribution of $${badge.priceUSD.toLocaleString()}.`,
+        description: `Become a ${badge.name.replace(' Badge', '')} and support the Cahootz cooperative with a founding contribution of $${badge.priceUSD.toLocaleString()}.`,
         category: 'FOUNDER_BADGES',
         priceUSD: badge.priceUSD,
         ucDiscountPrice: null, // No UC discount

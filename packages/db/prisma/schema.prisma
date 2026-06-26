@@ -2161,7 +2161,7 @@ enum AuditStatus {
  * Editable by admins. Cached at runtime.
  * Well-known keys:
  * coin.symbol      — e.g. "SC"
- * coin.name        — e.g. "Soulaan Coin"
+ * coin.name        — e.g. "Cahootz Coin"
  * coin.description — short description shown in UI
  * platform.name    — e.g. "Cahootz"
  */

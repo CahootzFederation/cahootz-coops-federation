@@ -152,7 +152,7 @@ async function seedCoopDisplayInfo() {
           {
             id: "motivation",
             type: "textarea",
-            label: "Why do you want to join the Soulaan Co-op? (Optional)",
+            label: "Why do you want to join the Cahootz Co-op? (Optional)",
             placeholder: "Share your motivation for joining...",
             required: false,
             validation: { maxLength: 500 },

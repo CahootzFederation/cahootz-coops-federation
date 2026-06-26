@@ -146,7 +146,7 @@ app.post("/api/test-email/order-confirmation", async (req: Request, res: Respons
 
   try {
     const { sendOrderConfirmationEmail } = await import("@repo/trpc/services/email-service");
-    const recipient = "deon.robinson.sf@gmail.com";
+    const recipient = "team@cahootzcoops.com";
     const now = new Date();
 
     await sendOrderConfirmationEmail({

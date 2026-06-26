@@ -361,7 +361,7 @@ export default function PublicPageSettingsPage() {
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Soulaan Co-op"
+              placeholder="Cahootz Co-op"
             />
           </div>
           <div>

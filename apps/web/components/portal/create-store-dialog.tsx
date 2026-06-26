@@ -198,7 +198,7 @@ export function CreateStoreDialog({ coopId, onSuccess }: CreateStoreDialogProps)
               <ShieldCheck className="h-4 w-4 text-amber-500" />
               <div>
                 <p className="text-sm font-medium text-white">SC Verified</p>
-                <p className="text-xs text-gray-400">Mark as Soulaan Coop verified (DB only, no blockchain)</p>
+                <p className="text-xs text-gray-400">Mark as Cahootz co-op verified (DB only, no blockchain)</p>
               </div>
             </div>
             <Switch

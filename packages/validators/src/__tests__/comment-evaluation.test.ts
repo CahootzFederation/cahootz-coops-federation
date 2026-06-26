@@ -38,7 +38,7 @@ describe("ProposalEngine.evaluateComment", () => {
   };
 
   const config: CoopConfigData = {
-    charterText: "Soulaan Co-op exists to rebuild economic sovereignty through internal investment and local production.",
+    charterText: "Cahootz exists to rebuild economic sovereignty through internal investment and local production.",
     missionGoals: [
       { key: "income_stability",  label: "Income Stability",  priorityWeight: 0.35 },
       { key: "leakage_reduction", label: "Leakage Reduction", priorityWeight: 0.20 },

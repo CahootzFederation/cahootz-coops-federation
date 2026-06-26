@@ -9,7 +9,7 @@ const getApiBaseUrl = () => {
   }
   
   // Fallback to default values
-  return __DEV__ ? 'http://localhost:3001' : 'https://api.soulaan.coop';
+  return __DEV__ ? 'http://localhost:3001' : 'https://api.cahootz.coop';
 };
 
 // API configuration for Expo
@@ -45,7 +45,7 @@ export const getApiUrl = () => {
 };
 
 export const getWebUrl = () => {
-  return process.env.EXPO_PUBLIC_WEB_URL || (__DEV__ ? 'http://localhost:3000' : 'https://soulaan.coop');
+  return process.env.EXPO_PUBLIC_WEB_URL || (__DEV__ ? 'http://localhost:3000' : 'https://cahootz.coop');
 };
 
 // Network configuration for Expo
@@ -61,7 +61,7 @@ export const networkConfig = {
 
   // CORS configuration (handled by the API server)
   cors: {
-    origin: __DEV__ ? ['http://localhost:3000', 'http://localhost:8081'] : ['https://soulaan.coop'],
+    origin: __DEV__ ? ['http://localhost:3000', 'http://localhost:8081'] : ['https://cahootz.coop'],
     credentials: true,
   }
 };

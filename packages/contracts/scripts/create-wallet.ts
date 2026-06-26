@@ -38,7 +38,7 @@ async function main() {
     privateKey: wallet.privateKey,
     mnemonic: wallet.mnemonic?.phrase,
     createdAt: new Date().toISOString(),
-    purpose: "Soulaan Co-op Contract Deployment",
+    purpose: "Cahootz Co-op Contract Deployment",
   };
 
   const filename = `deployer-wallet-${Date.now()}.json`;

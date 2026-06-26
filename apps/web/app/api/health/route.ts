@@ -14,7 +14,7 @@ export async function GET(_request: NextRequest) {
     return NextResponse.json({
       status: 'ok',
       timestamp: new Date().toISOString(),
-      service: 'soulaan-coop-api',
+      service: 'cahootz-api',
       database: 'connected',
       uptime: process.uptime(),
     });
@@ -24,7 +24,7 @@ export async function GET(_request: NextRequest) {
       {
         status: 'error',
         timestamp: new Date().toISOString(),
-        service: 'soulaan-coop-api',
+        service: 'cahootz-api',
         database: 'disconnected',
         error: error instanceof Error ? error.message : 'Unknown error',
       },

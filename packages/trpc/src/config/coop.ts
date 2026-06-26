@@ -45,8 +45,8 @@ export function getCoopConfig(): CoopConfig {
     tagline: process.env.COOP_TAGLINE || 'Building Generational Wealth Together',
 
     // URLs
-    appUrl: process.env.APP_URL || 'https://soulaan.app',
-    webUrl: process.env.WEB_URL || 'https://soulaan.coop',
+    appUrl: process.env.APP_URL || 'https://app.cahootz.coop',
+    webUrl: process.env.WEB_URL || 'https://cahootz.coop',
     iosAppStoreUrl: process.env.IOS_APP_STORE_URL || 'https://apps.apple.com/app/soulaan',
     androidPlayStoreUrl: process.env.ANDROID_PLAY_STORE_URL || 'https://play.google.com/store/apps/details?id=com.soulaan',
 

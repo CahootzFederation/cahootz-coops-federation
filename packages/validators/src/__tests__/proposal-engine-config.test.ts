@@ -74,7 +74,7 @@ describe("ProposalEngine with CoopConfig", () => {
   });
 
   const createConfig = (): CoopConfigData => ({
-    charterText: "Soulaan Co-op charter text for testing purposes with enough content to pass validation",
+    charterText: "Cahootz Co-op charter text for testing purposes with enough content to pass validation",
     missionGoals: [
       { key: "income_stability",  label: "Income Stability",  priorityWeight: 0.35 },
       { key: "asset_creation",    label: "Asset Creation",    priorityWeight: 0.25 },

@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   Check,
   Clock,
+  Github,
   Globe,
   Landmark,
   MessageSquare,
@@ -70,6 +71,8 @@ export const metadata: Metadata = {
     canonical: "https://cahootz.coop",
   },
 };
+
+const GITHUB_REPOSITORY_URL = "https://github.com/CahootzFederation/cahootz-coops-federation";
 
 const proofPoints = [
   {
@@ -228,6 +231,15 @@ export default async function HomePage() {
             <Link href="/blog" className="text-slate-400 transition hover:text-white">
               Blog
             </Link>
+            <a
+              href={GITHUB_REPOSITORY_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-slate-400 transition hover:text-white"
+            >
+              <Github className="h-4 w-4" />
+              GitHub
+            </a>
             <Link href="#join" className="text-slate-400 transition hover:text-white">
               Join
             </Link>
@@ -277,6 +289,15 @@ export default async function HomePage() {
                 >
                   Add your business
                 </Link>
+                <a
+                  href={GITHUB_REPOSITORY_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-5 py-3 text-base font-semibold transition hover:bg-white/10"
+                >
+                  <Github className="h-5 w-5" />
+                  View on GitHub
+                </a>
               </div>
             </div>
 
@@ -703,9 +724,20 @@ export default async function HomePage() {
             />
             <span className="font-bold">Cahootz</span>
           </div>
-          <p className="text-center text-sm text-slate-400 md:text-right">
-            The community platform for co-ops that want local spending, governance, and ownership in one loop.
-          </p>
+          <div className="flex flex-col items-center gap-3 text-center md:items-end md:text-right">
+            <p className="text-sm text-slate-400">
+              The community platform for co-ops that want local spending, governance, and ownership in one loop.
+            </p>
+            <a
+              href={GITHUB_REPOSITORY_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 text-sm font-semibold text-slate-300 transition hover:text-white"
+            >
+              <Github className="h-4 w-4" />
+              GitHub
+            </a>
+          </div>
         </div>
       </footer>
     </div>

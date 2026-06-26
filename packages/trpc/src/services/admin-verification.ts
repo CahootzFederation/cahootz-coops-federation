@@ -449,7 +449,7 @@ export async function verifyAdminSignature(
  */
 export function generateAuthChallenge(nonce: string): string {
   const timestamp = new Date().toISOString();
-  return `Sign this message to authenticate as admin:\n\nNonce: ${nonce}\nTimestamp: ${timestamp}\n\nI verify that I am an administrator of the Soulaan Co-op.`;
+  return `Sign this message to authenticate as admin:\n\nNonce: ${nonce}\nTimestamp: ${timestamp}\n\nI verify that I am an administrator of a Cahootz co-op.`;
 }
 
 /**

@@ -31,7 +31,7 @@ const ACTIVE_MEMBERSHIP = {
 const COOP_CONFIG = {
   id: 'cfg_1',
   coopId: 'coop_1',
-  name: 'Soulaan Coop',
+  name: 'Cahootz Coop',
   slug: 'soulaan',
   bgColor: '#B45309',
   accentColor: '#16A34A',
@@ -264,7 +264,7 @@ describe('auth.verifyLoginCode', () => {
 
     expect(result.success).toBe(true);
     expect(result.user?.coop?.id).toBe('coop_1');
-    expect(result.user?.coop?.name).toBe('Soulaan Coop');
+    expect(result.user?.coop?.name).toBe('Cahootz Coop');
     expect(result.user?.coop?.shortName).toBe('soulaan');
   });
 

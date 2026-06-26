@@ -8,14 +8,14 @@ export interface CoinConfig {
 
 const DEFAULT_COIN: CoinConfig = {
   symbol: "SC",
-  name: "Soulaan Coin",
+  name: "Cahootz Coin",
   description: "",
 };
 
 /**
  * Returns coin config (symbol, name, description) from PlatformConfig table.
  * When a coopId is provided, coop-level token metadata takes precedence.
- * Falls back to SC / Soulaan Coin defaults if the queries haven't resolved yet.
+ * Falls back to SC / Cahootz Coin defaults if the queries haven't resolved yet.
  */
 export function useCoin(coopId?: string): CoinConfig {
   const { data: platformConfig } = api.platformConfig.getConfig.useQuery(undefined, {

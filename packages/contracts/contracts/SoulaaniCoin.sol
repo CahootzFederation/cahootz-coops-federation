@@ -28,7 +28,7 @@ error AlreadyBanned(address account);
 
 /**
  * @title SoulaaniCoin (SC)
- * @notice Non-transferable, soulbound governance and yield token for Soulaan Co-op
+ * @notice Non-transferable, soulbound governance and yield token for Cahootz co-ops
  * @dev ERC-20-based but with all transfers blocked (soulbound)
  *
  * SC is earned through sanctioned co-op activities:
@@ -143,7 +143,7 @@ contract SoulaaniCoin is ERC20, ERC20Pausable, AccessControlEnumerable {
     uint256 public lastDecayCheck; // Timestamp of last decay execution
 
     // Multi-coop foundation (minimal)
-    uint256 public coopId = 1; // Default to Soulaan Co-op
+    uint256 public coopId = 1; // Default Cahootz co-op id
     address public clearingContract = address(0); // Future cross-coop clearing
     address public allyCoin = address(0);
 

@@ -264,7 +264,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <Label className="text-gray-400">Full Name (e.g. Soulaan Coin)</Label>
+                <Label className="text-gray-400">Full Name (e.g. Cahootz Coin)</Label>
                 <Input
                   className="mt-1 bg-slate-800 border-slate-700 text-white"
                   placeholder={coopConfig?.scTokenName || coin.name}

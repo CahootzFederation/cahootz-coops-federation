@@ -1199,7 +1199,7 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
                         <Label htmlFor="name">Full Name *</Label>
                         <Input
                           id="name"
-                          placeholder="Soulaan Co-operative"
+                          placeholder="Cahootz Co-operative"
                           value={coopConfig.name}
                           onChange={(e) => setCoopConfig({ ...coopConfig, name: e.target.value })}
                           className={!coopConfig.name.trim() ? "border-red-500" : ""}

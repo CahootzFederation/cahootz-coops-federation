@@ -12,8 +12,8 @@ import { config as appConfig } from './config';
 
 // Create wagmi config with both Base Sepolia and Base Mainnet
 const metadata = {
-  name: 'Soulaan Co-op Admin',
-  description: 'Soulaan Co-op Admin Panel',
+  name: 'Cahootz Admin',
+  description: 'Cahootz co-op admin panel',
   url: appConfig.app.uri,
   icons: [`${appConfig.app.uri}/favicon.ico`],
 };

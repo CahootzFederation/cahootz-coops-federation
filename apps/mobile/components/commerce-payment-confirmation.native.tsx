@@ -61,7 +61,7 @@ export default function CommercePaymentConfirmation({
       }
 
       const { error } = await initPaymentSheet({
-        merchantDisplayName: merchantName || 'Soulaan Co-op',
+        merchantDisplayName: merchantName || 'Cahootz Co-op',
         paymentIntentClientSecret: clientSecret,
         allowsDelayedPaymentMethods: false,
         returnURL: 'coop://stripe-redirect',

@@ -22,7 +22,7 @@ const STATE_CHANGING_METHODS = ['POST', 'PUT', 'DELETE', 'PATCH'];
 // Session options
 const sessionOptions = {
   password: env.SESSION_SECRET || 'complex_password_at_least_32_characters_long',
-  cookieName: 'soulaan_auth_session',
+  cookieName: 'cahootz_auth_session',
   cookieOptions: {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',

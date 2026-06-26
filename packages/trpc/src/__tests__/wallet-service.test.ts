@@ -182,7 +182,7 @@ describe('Wallet Service', () => {
           findFirst: vi.fn().mockResolvedValue(null),
           create: vi.fn().mockResolvedValue({
             id: 'admin_user',
-            email: `${walletAddress}@wallet.soulaan.coop`,
+            email: `${walletAddress}@wallet.cahootz.coop`,
             walletAddress,
             roles: ['member', 'admin'],
             status: 'ACTIVE',
@@ -205,7 +205,7 @@ describe('Wallet Service', () => {
       expect(linked).toEqual({ userId: 'admin_user', walletAddress });
       expect(mockClient.user.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          email: `${walletAddress}@wallet.soulaan.coop`,
+          email: `${walletAddress}@wallet.cahootz.coop`,
           walletAddress,
           roles: ['member', 'admin'],
           status: 'ACTIVE',

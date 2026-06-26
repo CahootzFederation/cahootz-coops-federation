@@ -286,7 +286,7 @@ async function mirrorImage(
     const response = await fetch(imageUrl, {
       headers: {
         accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        "user-agent": "SoulaanCoopProductImporter/1.0",
+        "user-agent": "CahootzProductImporter/1.0",
       },
     });
 

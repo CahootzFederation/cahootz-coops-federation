@@ -28,7 +28,7 @@ export default function BusinessOnboardingRefreshPage() {
           Your session expired
         </h1>
         <p className="text-gray-600 mb-4">
-          The payment setup link has expired. Please return to the Soulaan Co-op app and tap <strong>"Set Up Payments"</strong> again to get a fresh link.
+          The payment setup link has expired. Please return to the Cahootz app and tap <strong>"Set Up Payments"</strong> again to get a fresh link.
         </p>
         <p className="text-sm text-gray-400">
           You can close this tab.

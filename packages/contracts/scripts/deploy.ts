@@ -16,7 +16,7 @@ async function waitForTx(tx: any, description: string) {
 }
 
 /**
- * Deploy all Soulaan Co-op contracts to Base Sepolia
+ * Deploy all Cahootz co-op contracts to Base Sepolia
  *
  * This script deploys:
  * 1. AllyCoin (ALLY) - Non-transferable ally token
@@ -27,7 +27,7 @@ async function waitForTx(tx: any, description: string) {
  * It then grants roles to appropriate addresses and saves deployment info.
  */
 async function main() {
-  console.log("\n🚀 Starting Soulaan Co-op Contract Deployment...\n");
+  console.log("\n🚀 Starting Cahootz Co-op Contract Deployment...\n");
 
   // Get deployer account
   const [deployer] = await ethers.getSigners();

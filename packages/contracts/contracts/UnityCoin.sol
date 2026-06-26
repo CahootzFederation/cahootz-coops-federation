@@ -20,7 +20,7 @@ interface ICoopClearing {
 
 /**
  * @title UnityCoin (UC)
- * @notice Stable digital currency for the Soulaan Co-op economy
+ * @notice Stable digital currency for Cahootz co-op economies
  * @dev ERC-20 token with role-based minting, burning, and pausing
  *
  * UC is pegged 70% to USD, 30% to essential community goods/services.
@@ -81,7 +81,7 @@ contract UnityCoin is ERC20, ERC20Burnable, ERC20Pausable, AccessControlEnumerab
     uint256 public defaultReserveBps = 500; // 5% global reserve rate for all SC-verified stores
 
     // Multi-coop foundation (minimal)
-    uint256 public coopId = 1; // Default to Soulaan Co-op
+    uint256 public coopId = 1; // Default Cahootz co-op id
     address public clearingContract = address(0); // Future cross-coop clearing
 
     // Events
@@ -450,7 +450,7 @@ contract UnityCoin is ERC20, ERC20Burnable, ERC20Pausable, AccessControlEnumerab
 
     /**
      * @notice Update SoulaaniCoin contract reference
-     * @param newSoulaaniCoin New SoulaaniCoin contract address
+     * @param newSoulaaniCoin New SoulCoin contract address
      * @dev Only callable by DEFAULT_ADMIN_ROLE. Allows upgrading SC contract independently.
      */
     function setSoulaaniCoinAddress(address newSoulaaniCoin, string calldata reason) external onlyRole(DEFAULT_ADMIN_ROLE) {

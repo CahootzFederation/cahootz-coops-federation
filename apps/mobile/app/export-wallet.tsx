@@ -94,7 +94,7 @@ export default function ExportWalletScreen() {
             <View className="flex-row">
               <Text className="text-gray-600 mr-2">•</Text>
               <Text className="flex-1 text-gray-700">
-                Soulaan Co-op will never ask you for your private key
+                Cahootz will never ask you for your private key
               </Text>
             </View>
 
@@ -198,7 +198,7 @@ export default function ExportWalletScreen() {
           Wallet Signing Enabled
         </Text>
         <Text className="text-gray-600 mb-6">
-          This device can now sign Soulaan wallet verification messages. Save this information securely if you also want an external backup.
+          This device can now sign Cahootz wallet verification messages. Save this information securely if you also want an external backup.
         </Text>
 
         {/* Wallet Address */}

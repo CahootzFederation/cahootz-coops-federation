@@ -41,13 +41,13 @@ function handleDeepLink(url: string) {
       }
     }
 
-    // Handle web URL fallback: https://soulaan.app/pay?r={token}
+    // Handle web URL fallback: https://app.cahootz.coop/pay?r={token}
     if (parsed.queryParams?.r) {
       router.push({ pathname: '/(authenticated)/quick-pay', params: { token: parsed.queryParams.r as string } } as any);
       return;
     }
 
-    // Handle web URL fallback: https://soulaan.app/pay?s={code}
+    // Handle web URL fallback: https://app.cahootz.coop/pay?s={code}
     if (parsed.queryParams?.s) {
       router.push({ pathname: '/(authenticated)/quick-pay', params: { code: parsed.queryParams.s as string } } as any);
       return;

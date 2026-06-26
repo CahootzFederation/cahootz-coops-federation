@@ -1,9 +1,9 @@
 {
-  "name": "@soulaan/contracts",
+  "name": "@cahootz/contracts",
   "version": "0.1.0",
   "private": true,
   "type": "commonjs",
-  "description": "Smart contracts for Soulaan Co-op (UC, SC, RedemptionVault)",
+  "description": "Smart contracts for Cahootz co-ops (UC, SC, RedemptionVault)",
   "scripts": {
     "_build": "hardhat compile",
     "compile": "hardhat compile",

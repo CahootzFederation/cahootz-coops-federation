@@ -39,7 +39,7 @@ async function sendWaitlistToSlack(data: WaitlistData, origin: string) {
   }
 
   const message = {
-    text: `🎉 New Soulaan Waitlist Signup!\n\n*Email:* ${data.email}\n*Name:* ${data.name || "Not provided"}\n*Source:* ${data.source}\n*Interested Coop:* ${data.suggestedCoop || "Not provided"}\n*Website URL:* ${origin}\n*Time:* ${new Date().toLocaleString()}`,
+    text: `🎉 New Cahootz Waitlist Signup!\n\n*Email:* ${data.email}\n*Name:* ${data.name || "Not provided"}\n*Source:* ${data.source}\n*Interested Coop:* ${data.suggestedCoop || "Not provided"}\n*Website URL:* ${origin}\n*Time:* ${new Date().toLocaleString()}`,
   };
 
   const response = await fetch(slackWebhookUrl, {

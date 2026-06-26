@@ -518,7 +518,7 @@ async function main() {
   try {
     // Prompt for co-op details
     console.log("Please provide co-op information for mobile app visibility:");
-    const coopName = await askQuestion("Co-op Name (e.g., 'Soulaan Co-operative'): ");
+    const coopName = await askQuestion("Co-op Name (e.g., 'Cahootz Co-operative'): ");
     const coopSlug = await askQuestion("Slug (e.g., 'soulaan', leave empty to auto-generate): ");
     const coopTagline = await askQuestion("Tagline (e.g., 'Building Generational Wealth Together'): ");
     const coopDescription = await askQuestion("Description (optional, press Enter to skip): ");

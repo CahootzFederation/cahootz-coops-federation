@@ -5,10 +5,10 @@ const prisma = new PrismaClient();
 async function main() {
   // Seed real admin user
   await prisma.user.upsert({
-    where: { email: "admin@soulaan.coop" },
+    where: { email: "admin@cahootz.coop" },
     update: {},
     create: {
-      email: "admin@soulaan.coop",
+      email: "admin@cahootz.coop",
       name: "Deon Robinson",
       role: "admin",
       status: "ACTIVE",
@@ -16,7 +16,7 @@ async function main() {
   });
 
   console.log("✅ Admin user seeded successfully");
-  console.log("   Email: admin@soulaan.coop");
+  console.log("   Email: admin@cahootz.coop");
   console.log("   Name: Deon Robinson");
   console.log("   Role: admin");
   console.log("   Status: ACTIVE");

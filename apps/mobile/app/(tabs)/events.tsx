@@ -175,7 +175,7 @@ export default function EventsScreen() {
       <View className="mx-4 mt-4 mb-8 bg-amber-50 rounded-2xl p-4 border border-amber-200">
         <Text className="text-amber-800 font-semibold mb-2">Earn SC by Participating</Text>
         <Text className="text-amber-700 text-sm">
-          Attend community events to earn Soulaan Coin rewards. The more you participate, the more you earn!
+          Attend community events to earn Cahootz Coin rewards. The more you participate, the more you earn!
         </Text>
       </View>
     </ScrollView>

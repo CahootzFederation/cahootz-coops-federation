@@ -21,7 +21,7 @@ class CharterValidator {
   }
 
   async validateChanges() {
-    console.log('🏛️  Soulaan Co-op Charter Compliance Validator (LLM-Powered)\n');
+    console.log('🏛️  Cahootz Charter Compliance Validator (LLM-Powered)\n');
     
     try {
       // Check if OpenAI API key is available
@@ -72,9 +72,9 @@ class CharterValidator {
 
   async loadCharter() {
     try {
-      this.charter = fs.readFileSync('documents/soulaan-coop-charter.md', 'utf8');
+      this.charter = fs.readFileSync('documents/cahootz-charter.md', 'utf8');
     } catch (error) {
-      throw new Error('Could not load charter document. Make sure documents/soulaan-coop-charter.md exists.');
+      throw new Error('Could not load charter document. Make sure documents/cahootz-charter.md exists.');
     }
   }
 
@@ -140,7 +140,7 @@ class CharterValidator {
   }
 
   async analyzeLLMCompliance(changes) {
-    const prompt = `You are an expert code reviewer for the Soulaan Co-op, a Black economic sovereignty cooperative. Analyze these git diffs for compliance with our charter.
+    const prompt = `You are an expert code reviewer for Cahootz, a cooperative economy platform. Analyze these git diffs for compliance with our charter.
 
     DECISION POLICY:
     - Treat harmless/non-functional edits as PASS with score 100 and no violations. Harmless includes: README/docs wording or formatting, comments, whitespace/formatting, renames that don’t change logic, type-only changes, tests/refactors without behavioral change, CI/config tweaks that don’t reduce enforcement, and dependency bumps that don’t change behavior.
@@ -154,7 +154,7 @@ class CharterValidator {
     - If changes are purely documentation and contain no harmful content, return score 100 and no violations.
     - If mixed changes, focus analysis on the risky parts only. Do not penalize spelling/grammar, link updates, or copyedits that preserve meaning.
     
-    SOULAAN CO-OP CHARTER (Key Principles):
+    CAHOOTZ CHARTER (Key Principles):
     ${this.charter} // Truncate charter if too long
     
     CODE CHANGES TO ANALYZE:
@@ -183,7 +183,7 @@ class CharterValidator {
         messages: [
           {
             role: 'system',
-            content: 'You are a charter compliance expert for the Soulaan Co-op. Analyze code changes for alignment with Black economic sovereignty principles. Always respond with valid JSON.'
+            content: 'You are a charter compliance expert for Cahootz. Analyze code changes for alignment with cooperative economy principles. Always respond with valid JSON.'
           },
           {
             role: 'user',
@@ -261,7 +261,7 @@ class CharterValidator {
     console.log('  4. Respect business sector eligibility');
     console.log('  5. Maintain transparency and security standards');
     console.log('');
-    console.log('📖 Full charter: documents/soulaan-coop-charter.md');
+    console.log('📖 Full charter: documents/cahootz-charter.md');
   }
 
 

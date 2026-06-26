@@ -12,12 +12,12 @@ const addressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/, "Invalid Ethereum 
 const signatureSchema = z.string().regex(/^0x[a-fA-F0-9]{130}$/, "Invalid signature");
 
 function getChallengeDomain(): string {
-  const configuredUrl = process.env.WEB_BASE_URL || process.env.NEXT_PUBLIC_WEB_URL || "https://soulaan.coop";
+  const configuredUrl = process.env.WEB_BASE_URL || process.env.NEXT_PUBLIC_WEB_URL || "https://cahootz.coop";
 
   try {
     return new URL(configuredUrl).host;
   } catch {
-    return "soulaan.coop";
+    return "cahootz.coop";
   }
 }
 
@@ -39,7 +39,7 @@ function buildWalletChallengeMessage({
   expiresAt: Date;
 }): string {
   return [
-    "Sign in to Soulaan",
+    "Sign in to Cahootz",
     "",
     `Domain: ${domain}`,
     `Purpose: ${purpose}`,

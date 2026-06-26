@@ -208,7 +208,7 @@ export default function HomeScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Soulaan Coin Card */}
+        {/* Cahootz Coin Card */}
         <TouchableOpacity
           className="flex-1 rounded-2xl p-4 shadow-lg"
           style={{ backgroundColor: '#B45309' }}
@@ -217,7 +217,7 @@ export default function HomeScreen() {
         >
           <View className="flex-row items-center gap-2 mb-3">
             <TrendingUp size={18} color="white" />
-            <Text className="text-white text-sm font-medium">Soulaan Coin</Text>
+            <Text className="text-white text-sm font-medium">Cahootz Coin</Text>
           </View>
           {loading ? (
             <ActivityIndicator size="small" color="white" />

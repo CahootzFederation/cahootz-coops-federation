@@ -36,7 +36,7 @@ async function loadConfig(): Promise<PlatformConfigMap> {
   return {
     coin: {
       symbol: map['coin.symbol'] ?? 'SC',
-      name: map['coin.name'] ?? 'Soulaan Coin',
+      name: map['coin.name'] ?? 'Cahootz Coin',
       description: map['coin.description'] ?? '',
     },
     platformName: map['platform.name'] ?? 'Cahootz',

@@ -58,7 +58,7 @@ module.exports = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
-        // Soulaan Brand Colors
+        // Cahootz Brand Colors
         gold: {
           50: 'hsl(var(--gold-50))',
           100: 'hsl(var(--gold-100))',

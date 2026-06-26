@@ -2,7 +2,7 @@
 
 Cahootz is a platform for launching and operating community-owned economies. It brings together member onboarding, cooperative storefronts, payments, governance, proposal workflows, and treasury tooling in one monorepo.
 
-The codebase currently includes web, mobile, API, database, smart contract, and shared service packages. Some internal package names and contract identifiers still use legacy names while the broader product documentation moves to Cahootz.
+The codebase currently includes web, mobile, API, database, smart contract, and shared service packages.
 
 ## Documentation
 

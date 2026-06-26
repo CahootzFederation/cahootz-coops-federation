@@ -210,7 +210,7 @@ export default function StoreScreen() {
       <View className="mx-4 mt-4 mb-8 bg-green-50 rounded-2xl p-4 border border-green-200">
         <Text className="text-green-800 font-semibold mb-2">Earn SC Rewards</Text>
         <Text className="text-green-700 text-sm">
-          Shop at SC-verified stores and earn 1% back in Soulaan Coin on every purchase!
+          Shop at SC-verified stores and earn 1% back in Cahootz Coin on every purchase!
         </Text>
       </View>
     </ScrollView>

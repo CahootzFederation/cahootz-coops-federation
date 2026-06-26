@@ -336,7 +336,7 @@ describe('Application Router - submitApplication', () => {
     expect(result.success).toBe(true);
   });
 
-  it('should submit Soulaan dynamic answers when a question id matches the default email field', async () => {
+  it('should submit Cahootz dynamic answers when a question id matches the default email field', async () => {
     mockPrismaClient.user.findUnique.mockResolvedValue(null);
 
     const txUserCreate = vi.fn().mockResolvedValue({
@@ -388,7 +388,7 @@ describe('Application Router - submitApplication', () => {
       agreeToTerms: true,
       agreeToPrivacy: true,
       dynamicAnswers: {
-        fullName: 'Why do you want to join Soulaan Co-op?',
+        fullName: 'Why do you want to join Cahootz Co-op?',
         email: ['Member', 'Ally'],
         occupation: 'Entrepreneur',
         whyJoin: 'I can bring organizing and business-building experience.',
@@ -420,7 +420,7 @@ describe('Application Router - submitApplication', () => {
           phone: '+14159363880',
           dynamicAnswers: expect.objectContaining({
             email: ['Member', 'Ally'],
-            fullName: 'Why do you want to join Soulaan Co-op?',
+            fullName: 'Why do you want to join Cahootz Co-op?',
             q_1778700436362: ['yes'],
           }),
         }),

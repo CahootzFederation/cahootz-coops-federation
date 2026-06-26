@@ -34,7 +34,7 @@ function normalizeAddress(address: string): string {
 }
 
 function syntheticWalletEmail(address: string): string {
-  return `${normalizeAddress(address)}@wallet.soulaan.coop`;
+  return `${normalizeAddress(address)}@wallet.cahootz.coop`;
 }
 
 function uniqueRoles(...roleSets: Array<string[] | undefined>): string[] {
@@ -727,7 +727,7 @@ export function calculateSCReward(amountUSD: number): number {
 }
 
 /**
- * Mint Soulaani Coin (SC) to a user's wallet as a reward
+ * Mint SoulCoin (SC) to a user's wallet as a reward
  * Called for qualifying transactions (e.g., store payments)
  * @param userId - The user ID to mint SC for
  * @param amountSC - Amount of SC to mint
@@ -829,7 +829,7 @@ export async function mintSCToUser(
   }
 
   // Encode mintReward function call
-  // SoulaaniCoin has 18 decimals
+  // SoulCoin has 18 decimals
   const amountInWei = parseUnits(amountSC.toString(), 18);
   
   // Convert reason string to bytes32 hash

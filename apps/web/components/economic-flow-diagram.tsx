@@ -44,7 +44,7 @@ export function EconomicFlowDiagram() {
                   fontSize="14"
                   fontWeight="bold"
                 >
-                  Soulaan Co-op
+                  Cahootz Co-op
                 </text>
                 <text
                   x="500"

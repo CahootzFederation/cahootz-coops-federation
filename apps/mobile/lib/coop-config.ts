@@ -51,12 +51,12 @@ export interface CoopConfig {
 // Default config for unauthenticated state
 const defaultConfig: CoopConfig = {
   id: 'default',
-  name: process.env.EXPO_PUBLIC_DEFAULT_COOP_NAME || 'Soulaan',
-  shortName: process.env.EXPO_PUBLIC_DEFAULT_COOP_SHORT_NAME || 'Soulaan',
+  name: process.env.EXPO_PUBLIC_DEFAULT_COOP_NAME || 'Cahootz',
+  shortName: process.env.EXPO_PUBLIC_DEFAULT_COOP_SHORT_NAME || 'Cahootz',
   tagline: process.env.EXPO_PUBLIC_DEFAULT_COOP_TAGLINE || 'Building Generational Wealth Together',
 
-  apiUrl: process.env.EXPO_PUBLIC_API_URL || 'https://api.soulaan.app',
-  webUrl: process.env.EXPO_PUBLIC_WEB_URL || 'https://soulaan.coop',
+  apiUrl: process.env.EXPO_PUBLIC_API_URL || 'https://api.cahootz.coop',
+  webUrl: process.env.EXPO_PUBLIC_WEB_URL || 'https://cahootz.coop',
 
   primaryColor: 'amber-600',
   accentColor: 'green-600',
@@ -69,7 +69,7 @@ const defaultConfig: CoopConfig = {
   currencySymbol: '$',
   currencyCode: 'USD',
 
-  supportEmail: 'support@soulaan.coop',
+  supportEmail: 'support@cahootz.coop',
   supportPhone: '',
 
   enableWithdrawals: true,

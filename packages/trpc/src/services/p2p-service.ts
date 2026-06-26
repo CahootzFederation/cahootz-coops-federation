@@ -132,7 +132,7 @@ export async function sendToSoulaanUser(params: {
   );
   
   if (!isSenderActive) {
-    throw new Error('You must be an active Soulaan Co-op member to send payments. Please complete your membership application.');
+    throw new Error('You must be an active Cahootz co-op member to send payments. Please complete your membership application.');
   }
 
   // Check if recipient is an active SC member
@@ -141,7 +141,7 @@ export async function sendToSoulaanUser(params: {
   );
   
   if (!isRecipientActive) {
-    throw new Error('Recipient must be an active Soulaan Co-op member to receive payments.');
+    throw new Error('Recipient must be an active Cahootz co-op member to receive payments.');
   }
 
   // Check sender's balance

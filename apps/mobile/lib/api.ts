@@ -1,4 +1,4 @@
-// Expo-compatible API client for Soulaan co-op application
+// Expo-compatible API client for Cahootz co-op applications
 // Uses native fetch API - no additional dependencies required
 
 import { getApiUrl, getWebUrl, networkConfig } from './config';
@@ -88,7 +88,7 @@ export interface WaitlistSignupData {
 // Helper functions for API calls
 export const api = {
   /**
-   * Submit a new application to join the Soulaan co-op
+   * Submit a new application to join a Cahootz co-op
    */
   async submitApplication(data: ApplicationData) {
     const response = await fetch(`${API_BASE_URL}/trpc/application.submitApplication`, {
@@ -2354,7 +2354,7 @@ export const api = {
     }
 
     return result.result?.data ?? {
-      coin: { symbol: 'SC', name: 'Soulaan Coin', description: '' },
+      coin: { symbol: 'SC', name: 'Cahootz Coin', description: '' },
       platformName: 'Cahootz',
     };
   },

@@ -12,7 +12,7 @@ export default function CoopIndexFallbackPage() {
         </div>
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Choose a co-op page</h1>
         <p className="mt-4 text-base text-slate-300">
-          Public co-op pages live at addresses like <span className="font-mono text-slate-100">/c/soulaan</span>.
+          Public co-op pages live at addresses like <span className="font-mono text-slate-100">/c/cahootz</span>.
         </p>
         <div className="mt-8">
           <Button asChild className="bg-amber-600 hover:bg-amber-700">

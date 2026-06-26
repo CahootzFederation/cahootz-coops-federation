@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 
 export type CoinConfig = {
   symbol: string;   // e.g. "SC"
-  name: string;     // e.g. "Soulaan Coin"
+  name: string;     // e.g. "Cahootz Coin"
   description: string;
 };
 
@@ -16,7 +16,7 @@ type PlatformConfigContextValue = {
 const DEFAULT: PlatformConfigContextValue = {
   coin: {
     symbol: 'SC',
-    name: 'Soulaan Coin',
+    name: 'Cahootz Coin',
     description: '',
   },
   platformName: 'Cahootz',

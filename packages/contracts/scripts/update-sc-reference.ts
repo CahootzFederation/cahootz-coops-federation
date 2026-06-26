@@ -32,7 +32,7 @@ async function main() {
 
   console.log("📋 Contract Addresses:");
   console.log(`   UnityCoin: ${UC_ADDRESS}`);
-  console.log(`   New SoulaaniCoin: ${NEW_SC_ADDRESS}`);
+  console.log(`   New SoulCoin: ${NEW_SC_ADDRESS}`);
   console.log("=".repeat(70));
   console.log("");
 

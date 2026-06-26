@@ -620,24 +620,6 @@ export default async function HomePage() {
           </section>
         )}
 
-        <section className="px-5 py-20 sm:px-6 md:py-24">
-          <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.7fr_1fr]">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-widest text-[#ffb36f]">Real talk</p>
-              <h2 className="mt-3 text-3xl font-black tracking-tight md:text-5xl">Questions people ask before they join.</h2>
-            </div>
-
-            <div className="space-y-4">
-              {faqs.map(({ q, a }) => (
-                <div key={q} className="rounded-lg border border-white/10 bg-[#1b1b1b] p-6">
-                  <h3 className="text-lg font-bold">{q}</h3>
-                  <p className="mt-3 leading-7 text-slate-400">{a}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
         <TreasuryContributionCalculator />
 
         <section id="join" className="border-t border-white/10 bg-[#f0975b] px-5 py-20 text-[#111111] sm:px-6 md:py-24">
@@ -691,6 +673,24 @@ export default async function HomePage() {
                   </Suspense>
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="px-5 py-20 sm:px-6 md:py-24">
+          <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.7fr_1fr]">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-widest text-[#ffb36f]">Real talk</p>
+              <h2 className="mt-3 text-3xl font-black tracking-tight md:text-5xl">Questions people ask before they join.</h2>
+            </div>
+
+            <div className="space-y-4">
+              {faqs.map(({ q, a }) => (
+                <div key={q} className="rounded-lg border border-white/10 bg-[#1b1b1b] p-6">
+                  <h3 className="text-lg font-bold">{q}</h3>
+                  <p className="mt-3 leading-7 text-slate-400">{a}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>

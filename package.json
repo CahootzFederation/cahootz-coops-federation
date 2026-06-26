@@ -8,6 +8,7 @@
   "packageManager": "pnpm@10.11.1",
   "scripts": {
     "build": "turbo run build",
+    "build:web": "pnpm --filter @cahootz/web... --fail-if-no-match build",
     "blog:sync": "pnpm -F @cahootz/web blog:sync",
     "clean": "git clean -xdf node_modules",
     "clean:workspaces": "turbo run clean",
@@ -28,7 +29,7 @@
     "dev:api:full": "pnpm -F @cahootz/api dev:full",
     "dev:web": "pnpm -F @cahootz/web dev",
     "dev:next": "turbo watch dev -F @repo/nextjs...",
-    "deploy:web": "pnpm db:deploy-setup && pnpm -F @cahootz/web build",
+    "deploy:web": "pnpm db:deploy-setup && pnpm build:web",
     "format": "turbo run format --continue ",
     "format:fix": "turbo run format --continue ",
     "lint": "turbo run lint --continue",

@@ -258,13 +258,15 @@ export default async function HomePage() {
             <div>
               <div className="inline-flex items-center gap-2 rounded-lg border border-[#f0975b]/30 bg-[#f0975b]/10 px-3 py-1.5 text-sm font-medium text-[#ffb36f]">
                 <Zap className="h-4 w-4" />
-                For groups that want to keep more of what they build
+                For communities ready to build more together
               </div>
               <h1 className="mt-6 max-w-4xl text-5xl font-semibold leading-[1.03] tracking-tight sm:text-6xl md:text-7xl">
-                One place to spend together, earn more, and own what you build.
+                Coordinate your community into shared economic power.
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-200 md:text-xl">
-              Bring your people into one system where you can organize what you’re doing, make decisions together, and fund what comes next.
+                Bring members, businesses, and neighbors into one place to organize needs,
+                make decisions, pool support, and turn collective action into benefits
+                everyone can see.
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
                 <Link

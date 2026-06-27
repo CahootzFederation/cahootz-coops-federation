@@ -9,6 +9,18 @@ const verifyCodeSchema = z.object({
   coopId: z.string().min(1).default('soulaan'),
 });
 
+const DEMO_COOP_ID = 'demo';
+const DEMO_LOGIN_EMAIL = 'demo@cahootz.coop';
+const DEMO_LOGIN_CODE = '000000';
+
+function isDemoLogin(email: string, code: string, coopId: string) {
+  if (email !== DEMO_LOGIN_EMAIL || coopId !== DEMO_COOP_ID) {
+    return false;
+  }
+
+  return code === DEMO_LOGIN_CODE;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -23,26 +35,36 @@ export async function POST(request: NextRequest) {
 
     const email = result.data.email.trim().toLowerCase();
     const { code, coopId } = result.data;
+    const isDemoCode = isDemoLogin(email, code, coopId);
 
-    const loginCode = await db.loginCode.findFirst({
-      where: {
-        email,
-        code,
-        used: false,
-        expiresAt: {
-          gt: new Date(),
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    const loginCode = isDemoCode
+      ? null
+      : await db.loginCode.findFirst({
+          where: {
+            email,
+            code,
+            used: false,
+            expiresAt: {
+              gt: new Date(),
+            },
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        });
 
-    if (!loginCode) {
+    if (!loginCode && !isDemoCode) {
       return NextResponse.json(
         { error: 'That code is invalid or expired.' },
         { status: 401 }
       );
+    }
+
+    if (loginCode) {
+      await db.loginCode.update({
+        where: { id: loginCode.id },
+        data: { used: true },
+      });
     }
 
     const user = await db.user.findUnique({
@@ -67,11 +89,6 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
-
-    await db.loginCode.update({
-      where: { id: loginCode.id },
-      data: { used: true },
-    });
 
     const session = await createUserSession(user.id, coopId);
 

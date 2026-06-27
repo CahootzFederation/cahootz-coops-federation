@@ -33,6 +33,8 @@ import {
   Mail,
 } from 'lucide-react-native';
 
+const DEMO_COOP_ID = 'demo';
+const DEMO_LOGIN_EMAIL = 'demo@cahootz.coop';
 
 interface FormData {
   firstName: string;
@@ -638,6 +640,7 @@ export default function OnboardingFlow() {
     setLoginError('');
 
     try {
+      const isDemoEmail = loginData.email.trim().toLowerCase() === DEMO_LOGIN_EMAIL;
       const response = await fetch(`${getApiUrl()}/trpc/auth.verifyLoginCode`, {
         method: 'POST',
         headers: {
@@ -646,6 +649,7 @@ export default function OnboardingFlow() {
         body: JSON.stringify({
           email: loginData.email,
           code: loginData.code,
+          ...(isDemoEmail ? { coopId: DEMO_COOP_ID } : {}),
         }),
       });
 

@@ -224,6 +224,7 @@ model CoopConfig {
   bgColor         String  @default("bg-red-700")
   accentColor     String  @default("bg-gold-600")
   displayOrder    Int     @default(0)
+  isDemo          Boolean @default(false)
 
   // Application form configuration
   applicationQuestions Json? // [{ id, type, label, description?, placeholder?, required, options?, validation? }]
@@ -274,6 +275,7 @@ model CoopConfig {
 
   @@unique([coopId, version])
   @@index([coopId, isActive])
+  @@index([isDemo])
   @@schema("public")
 }
 
@@ -383,6 +385,7 @@ model PublicCoopInfo {
 
   // Display Options
   showStatsBar Boolean @default(true) // Show/hide the stats bar (members, stores, products, treasury)
+  isDemo       Boolean @default(false) // Hidden from public discovery lists and domain lookup
 
   // Publishing
   isPublished    Boolean @default(false)
@@ -401,6 +404,7 @@ model PublicCoopInfo {
 
   @@index([coopId])
   @@index([isPublished])
+  @@index([isDemo])
   @@index([primaryDomain])
   @@schema("public")
 }

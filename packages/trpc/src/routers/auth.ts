@@ -7,6 +7,24 @@ import { publicProcedure, privateProcedure } from "../procedures/index.js";
 import { router } from "../trpc.js";
 import { sendLoginCode, generateLoginCode, isEmailConfigured } from "../lib/email.js";
 
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+const DEMO_COOP_ID = "demo";
+const DEMO_LOGIN_EMAIL = "demo@cahootz.coop";
+const DEMO_LOGIN_CODE = "000000";
+
+function isDemoLogin(email: string, code?: string, coopId?: string) {
+  if (normalizeEmail(email) !== DEMO_LOGIN_EMAIL) {
+    return false;
+  }
+
+  if (coopId && DEMO_COOP_ID !== coopId) {
+    return false;
+  }
+
+  return code === undefined || code === DEMO_LOGIN_CODE;
+}
+
 export const authRouter = router({
   /**
    * Login endpoint that checks user status
@@ -194,8 +212,10 @@ export const authRouter = router({
 
       try {
         // Find user by email
+        const email = normalizeEmail(input.email);
+
         const user = await context.db.user.findUnique({
-          where: { email: input.email.toLowerCase() },
+          where: { email },
           select: {
             id: true,
             status: true,
@@ -262,6 +282,13 @@ export const authRouter = router({
             })
           : null;
 
+        if (isDemoLogin(email, undefined, input.coopId)) {
+          return {
+            success: true,
+            message: "Use the demo code to sign in.",
+          };
+        }
+
         // Generate 6-digit code
         const code = generateLoginCode();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -277,10 +304,10 @@ export const authRouter = router({
 
         // Send email with code (only if email is configured)
         if (isEmailConfigured()) {
-          await sendLoginCode(input.email.toLowerCase(), code, coopConfig?.name);
+          await sendLoginCode(email, code, coopConfig?.name);
         } else {
           // In development, log the code to console
-          console.log(`[DEV] Login code for ${input.email}: ${code}`);
+          console.log(`[DEV] Login code for ${email}: ${code}`);
         }
 
         return {
@@ -308,6 +335,7 @@ export const authRouter = router({
     .input(z.object({
       email: z.string().email("Invalid email address"),
       code: z.string().length(6, "Code must be 6 digits"),
+      coopId: z.string().min(1).optional(),
     }))
     .output(z.object({
       success: z.boolean(),
@@ -337,19 +365,24 @@ export const authRouter = router({
       const context = ctx as Context;
 
       try {
-        // Find the login code
-        const loginCode = await context.db.loginCode.findFirst({
-          where: {
-            email: input.email,
-            code: input.code,
-            used: false,
-            expiresAt: {
-              gt: new Date(), // Not expired
-            },
-          },
-        });
+        const email = normalizeEmail(input.email);
+        const isDemoCode = isDemoLogin(email, input.code, input.coopId);
 
-        if (!loginCode) {
+        // Find the login code
+        const loginCode = isDemoCode
+          ? null
+          : await context.db.loginCode.findFirst({
+              where: {
+                email,
+                code: input.code,
+                used: false,
+                expiresAt: {
+                  gt: new Date(), // Not expired
+                },
+              },
+            });
+
+        if (!loginCode && !isDemoCode) {
           throw new TRPCError({
             code: "UNAUTHORIZED",
             message: "Invalid or expired code",
@@ -357,18 +390,21 @@ export const authRouter = router({
         }
 
         // Mark code as used
-        await context.db.loginCode.update({
-          where: { id: loginCode.id },
-          data: { used: true },
-        });
+        if (loginCode) {
+          await context.db.loginCode.update({
+            where: { id: loginCode.id },
+            data: { used: true },
+          });
+        }
 
         // Get user with memberships (select only needed fields to avoid column-not-found errors)
         const user = await context.db.user.findUnique({
-          where: { email: input.email },
+          where: { email },
           include: {
             memberships: {
               where: {
                 status: "ACTIVE",
+                ...(isDemoCode ? { coopId: DEMO_COOP_ID } : {}),
               },
               orderBy: {
                 joinedAt: 'desc',

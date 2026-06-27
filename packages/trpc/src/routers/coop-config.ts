@@ -103,7 +103,7 @@ export const coopConfigRouter = router({
     })))
     .query(async ({ ctx }) => {
       const coops = await ctx.db.coopConfig.findMany({
-        where: { isActive: true },
+        where: { isActive: true, isDemo: false },
         orderBy: { displayOrder: 'asc' },
         select: {
           coopId: true,
@@ -118,6 +118,7 @@ export const coopConfigRouter = router({
         where: {
           coopId: { in: coops.map((coop) => coop.coopId) },
           isPublished: true,
+          isDemo: false,
         },
         select: { coopId: true },
       });
@@ -177,6 +178,7 @@ export const coopConfigRouter = router({
       const coops = await ctx.db.coopConfig.findMany({
         where: { 
           isActive: true,
+          isDemo: false,
           name: { not: null },
         },
         orderBy: { displayOrder: 'asc' },

@@ -14,7 +14,7 @@ export const publicCoopInfoRouter = router({
         where: { coopId: input.coopId },
       });
 
-      if (!publicInfo || !publicInfo.isPublished) {
+      if (!publicInfo || !publicInfo.isPublished || publicInfo.isDemo) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Public coop page not found or not published',
@@ -149,7 +149,7 @@ export const publicCoopInfoRouter = router({
       // Get all published public info and filter in code
       // (Prisma JSON array_contains has type issues)
       const allPublicInfo = await ctx.db.publicCoopInfo.findMany({
-        where: { isPublished: true },
+        where: { isPublished: true, isDemo: false },
       });
 
       const publicInfo = allPublicInfo.find(info => {
@@ -225,6 +225,7 @@ export const publicCoopInfoRouter = router({
           features: config.displayFeatures || undefined,
           primaryColor: config.bgColor || '#f59e0b',
           accentColor: config.accentColor || '#ea580c',
+          isDemo: config.isDemo,
           isPublished: false, // Start unpublished
           createdBy: ctx.walletAddress,
         },

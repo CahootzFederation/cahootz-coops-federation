@@ -38,7 +38,7 @@
     "lint:ws": "pnpm dlx sherif@latest -r unordered-dependencies",
     "postinstall": "pnpm lint:ws",
     "start": "turbo run start",
-    "start:api": "pnpm -F @cahootz/api start",
+    "start:api": "turbo run start --filter=@cahootz/api",
     "start:web": "pnpm -F @cahootz/web start",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

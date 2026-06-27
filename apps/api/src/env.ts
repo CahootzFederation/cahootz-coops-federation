@@ -25,7 +25,7 @@ export const env = createEnv({
     RESEND_FROM_EMAIL: z.string().email().default("support@mail.cahootzcoops.com"),
     EMAIL_TEST_TOKEN: z.string().min(16).optional(),
     // Vercel Blob
-    BLOB_READ_WRITE_TOKEN: z.string().min(1),
+    BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
   },
   clientPrefix: "PUBLIC_",
   client: {},

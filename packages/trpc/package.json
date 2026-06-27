@@ -14,94 +14,94 @@
   },
   "exports": {
     ".": {
+      "types": "./dist/trpc.d.ts",
       "import": "./dist/trpc.js",
-      "require": "./dist/trpc.js",
-      "types": "./dist/trpc.d.ts"
+      "require": "./dist/trpc.js"
     },
     "./context": {
+      "types": "./dist/context.d.ts",
       "import": "./dist/context.js",
-      "require": "./dist/context.js",
-      "types": "./dist/context.d.ts"
+      "require": "./dist/context.js"
     },
     "./router": {
+      "types": "./dist/routers/index.d.ts",
       "import": "./dist/routers/index.js",
-      "require": "./dist/routers/index.js",
-      "types": "./dist/routers/index.d.ts"
+      "require": "./dist/routers/index.js"
     },
     "./server": {
+      "types": "./dist/server/index.d.ts",
       "import": "./dist/server/index.js",
-      "require": "./dist/server/index.js",
-      "types": "./dist/server/index.d.ts"
+      "require": "./dist/server/index.js"
     },
     "./services/wallet-service": {
+      "types": "./dist/services/wallet-service.d.ts",
       "import": "./dist/services/wallet-service.js",
-      "require": "./dist/services/wallet-service.js",
-      "types": "./dist/services/wallet-service.d.ts"
+      "require": "./dist/services/wallet-service.js"
     },
     "./services/blockchain": {
+      "types": "./dist/services/blockchain.d.ts",
       "import": "./dist/services/blockchain.js",
-      "require": "./dist/services/blockchain.js",
-      "types": "./dist/services/blockchain.d.ts"
+      "require": "./dist/services/blockchain.js"
     },
     "./services/payment/*": {
+      "types": "./dist/services/payment/*.d.ts",
       "import": "./dist/services/payment/*.js",
-      "require": "./dist/services/payment/*.js",
-      "types": "./dist/services/payment/*.d.ts"
+      "require": "./dist/services/payment/*.js"
     },
     "./services/admin-verification": {
+      "types": "./dist/services/admin-verification.d.ts",
       "import": "./dist/services/admin-verification.js",
-      "require": "./dist/services/admin-verification.js",
-      "types": "./dist/services/admin-verification.d.ts"
+      "require": "./dist/services/admin-verification.js"
     },
     "./services/reward-retry-service": {
+      "types": "./dist/services/reward-retry-service.d.ts",
       "import": "./dist/services/reward-retry-service.js",
-      "require": "./dist/services/reward-retry-service.js",
-      "types": "./dist/services/reward-retry-service.d.ts"
+      "require": "./dist/services/reward-retry-service.js"
     },
     "./services/feature-flag-service": {
+      "types": "./dist/services/feature-flag-service.d.ts",
       "import": "./dist/services/feature-flag-service.js",
-      "require": "./dist/services/feature-flag-service.js",
-      "types": "./dist/services/feature-flag-service.d.ts"
+      "require": "./dist/services/feature-flag-service.js"
     },
     "./services/payment-webhook-service": {
+      "types": "./dist/services/payment-webhook-service.d.ts",
       "import": "./dist/services/payment-webhook-service.js",
-      "require": "./dist/services/payment-webhook-service.js",
-      "types": "./dist/services/payment-webhook-service.d.ts"
+      "require": "./dist/services/payment-webhook-service.js"
     },
     "./services/payment-orchestration-service": {
+      "types": "./dist/services/payment-orchestration-service.d.ts",
       "import": "./dist/services/payment-orchestration-service.js",
-      "require": "./dist/services/payment-orchestration-service.js",
-      "types": "./dist/services/payment-orchestration-service.d.ts"
+      "require": "./dist/services/payment-orchestration-service.js"
     },
     "./services/treasury-ledger-service": {
+      "types": "./dist/services/treasury-ledger-service.d.ts",
       "import": "./dist/services/treasury-ledger-service.js",
-      "require": "./dist/services/treasury-ledger-service.js",
-      "types": "./dist/services/treasury-ledger-service.d.ts"
+      "require": "./dist/services/treasury-ledger-service.js"
     },
     "./services/reward-policy-service": {
+      "types": "./dist/services/reward-policy-service.d.ts",
       "import": "./dist/services/reward-policy-service.js",
-      "require": "./dist/services/reward-policy-service.js",
-      "types": "./dist/services/reward-policy-service.d.ts"
+      "require": "./dist/services/reward-policy-service.js"
     },
     "./services/sc-token-service": {
+      "types": "./dist/services/sc-token-service.d.ts",
       "import": "./dist/services/sc-token-service.js",
-      "require": "./dist/services/sc-token-service.js",
-      "types": "./dist/services/sc-token-service.d.ts"
+      "require": "./dist/services/sc-token-service.js"
     },
     "./services/stripe-connect-service": {
+      "types": "./dist/services/stripe-connect-service.d.ts",
       "import": "./dist/services/stripe-connect-service.js",
-      "require": "./dist/services/stripe-connect-service.js",
-      "types": "./dist/services/stripe-connect-service.d.ts"
+      "require": "./dist/services/stripe-connect-service.js"
     },
     "./services/slack-notification-service": {
+      "types": "./dist/services/slack-notification-service.d.ts",
       "import": "./dist/services/slack-notification-service.js",
-      "require": "./dist/services/slack-notification-service.js",
-      "types": "./dist/services/slack-notification-service.d.ts"
+      "require": "./dist/services/slack-notification-service.js"
     },
     "./services/email-service": {
+      "types": "./dist/services/email-service.d.ts",
       "import": "./dist/services/email-service.js",
-      "require": "./dist/services/email-service.js",
-      "types": "./dist/services/email-service.d.ts"
+      "require": "./dist/services/email-service.js"
     }
   },
   "keywords": [],

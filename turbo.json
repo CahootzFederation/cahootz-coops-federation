@@ -14,7 +14,7 @@
       "persistent": true
     },
     "start": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["build", "^build"],
       "cache": false,
       "persistent": true
     },

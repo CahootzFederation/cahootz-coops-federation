@@ -4,7 +4,10 @@
  * Run with: pnpm tsx scripts/seed-coop-display-info.ts
  */
 
-import { PrismaClient } from "@prisma/client";
+import * as PrismaClientModule from "@prisma/client";
+
+const PrismaClient =
+  (PrismaClientModule as any).PrismaClient ?? (PrismaClientModule as any).default.PrismaClient;
 
 const prisma = new PrismaClient();
 

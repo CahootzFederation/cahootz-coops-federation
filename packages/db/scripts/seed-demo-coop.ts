@@ -1,7 +1,10 @@
 /**
  * Seed a hidden demo co-op and member account for App Store review and sales demos.
  */
-import { PrismaClient } from "@prisma/client";
+import * as PrismaClientModule from "@prisma/client";
+
+const PrismaClient =
+  (PrismaClientModule as any).PrismaClient ?? (PrismaClientModule as any).default.PrismaClient;
 
 const prisma = new PrismaClient();
 

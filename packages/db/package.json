@@ -12,6 +12,7 @@
     "build": "pnpm run db:generate && tsup",
     "dev": "pnpm run db:generate && tsup --watch",
     "seed": "ts-node --transpile-only prisma/seed.ts",
+    "seed:coop-display": "pnpm with-env ts-node --transpile-only scripts/seed-coop-display-info.ts",
     "seed:categories": "pnpm with-env ts-node --transpile-only scripts/seed-categories.ts",
     "seed:test-store": "pnpm with-env ts-node --transpile-only scripts/seed-test-store.ts",
     "seed:demo-coop": "pnpm with-env ts-node --transpile-only scripts/seed-demo-coop.ts",

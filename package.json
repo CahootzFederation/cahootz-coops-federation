@@ -20,7 +20,7 @@
     "db:clear-blockchain": "tsx packages/db/migrations/clear-blockchain-data.ts",
     "db:seed-coops": "pnpm -F @repo/db seed:coop-display",
     "db:seed-demo-coop": "pnpm -F @repo/db seed:demo-coop",
-    "db:deploy-setup": "pnpm db:migrate-prod && pnpm db:seed-coops",
+    "db:deploy-setup": "pnpm db:migrate-prod && pnpm db:seed-coops && pnpm db:seed-demo-coop",
     "update-env": "bash scripts/update-all-env-files.sh",
     "update-contract-artifacts": "bash scripts/update-contract-artifacts.sh",
     "check:versions": "node scripts/check-package-versions.mjs",

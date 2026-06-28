@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { Search, MapPin, Star, ShoppingBag } from "lucide-react-native";
 
 import { Text } from "@/components/ui/text";
-import { api } from "@/lib/api";
+import { api, resolveCoopId } from "@/lib/api";
 import { useCoin } from "@/contexts/platform-config-context";
 
 
@@ -25,7 +25,8 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 export default function StoreScreen() {
-  const coin = useCoin();
+  const platformCoin = useCoin();
+  const [coopCoin, setCoopCoin] = useState(platformCoin);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [storeCategories, setStoreCategories] = useState<{ key: string; label: string }[]>([]);
@@ -45,22 +46,29 @@ export default function StoreScreen() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [categories, storesResult] = await Promise.all([
+        const activeCoopId = resolveCoopId();
+        const [categories, storesResult, coopConfig] = await Promise.all([
           api.getStoreCategories(true),
           api.getStores({
             featured: true,
             category: selectedCategory || undefined,
             limit: 20,
           }),
+          activeCoopId === 'error-no-coop-id' ? Promise.resolve(null) : api.getCoopConfig(activeCoopId),
         ]);
         setStoreCategories(categories);
         setFeaturedStores(storesResult?.stores || []);
+        setCoopCoin({
+          symbol: coopConfig?.scTokenSymbol || platformCoin.symbol,
+          name: coopConfig?.scTokenName || platformCoin.name,
+          description: platformCoin.description,
+        });
       } catch (error) {
         console.error('Failed to load store data:', error);
       }
     };
     loadData();
-  }, [selectedCategory]);
+  }, [platformCoin.description, platformCoin.name, platformCoin.symbol, selectedCategory]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -88,7 +96,7 @@ export default function StoreScreen() {
       {/* Header */}
       <View className="px-4 pt-14 pb-4">
         <Text className="text-xl font-bold text-gray-800">Community Store</Text>
-        <Text className="text-gray-500 text-sm">Support local businesses, earn {coin.symbol} rewards</Text>
+        <Text className="text-gray-500 text-sm">Support local businesses, earn {coopCoin.symbol} rewards</Text>
       </View>
 
       {/* Search Bar */}
@@ -180,7 +188,7 @@ export default function StoreScreen() {
                   <Text className="text-base font-semibold text-gray-800">{store.name}</Text>
                   {store.isScVerified && (
                     <View className="ml-2 bg-green-100 px-2 py-0.5 rounded-full">
-                      <Text className="text-xs text-green-700 font-medium">SC</Text>
+                      <Text className="text-xs text-green-700 font-medium">{coopCoin.symbol}</Text>
                     </View>
                   )}
                 </View>
@@ -206,11 +214,11 @@ export default function StoreScreen() {
         ))}
       </View>
 
-      {/* SC Verified Info */}
+      {/* Coin Verified Info */}
       <View className="mx-4 mt-4 mb-8 bg-green-50 rounded-2xl p-4 border border-green-200">
-        <Text className="text-green-800 font-semibold mb-2">Earn SC Rewards</Text>
+        <Text className="text-green-800 font-semibold mb-2">Earn {coopCoin.symbol} Rewards</Text>
         <Text className="text-green-700 text-sm">
-          Shop at SC-verified stores and earn 1% back in Cahootz Coin on every purchase!
+          Shop at {coopCoin.symbol}-verified stores and earn 1% back in {coopCoin.name} on every purchase!
         </Text>
       </View>
     </ScrollView>

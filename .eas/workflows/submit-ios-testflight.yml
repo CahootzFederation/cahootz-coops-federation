@@ -1,11 +1,18 @@
+name: Submit iOS TestFlight
+
 on:
   push:
-    branches: ['main']
+    branches: ["main"]
+
+defaults:
+  run:
+    working_directory: ./apps/mobile
 
 jobs:
   build_ios:
     name: Build iOS app
     type: build
+    environment: production
     params:
       platform: ios
       profile: production
@@ -14,5 +21,9 @@ jobs:
     name: Submit to TestFlight
     needs: [build_ios]
     type: testflight
+    environment: production
+    env:
+      EXPO_DEBUG: "1"
     params:
       build_id: ${{ needs.build_ios.outputs.build_id }}
+      profile: production

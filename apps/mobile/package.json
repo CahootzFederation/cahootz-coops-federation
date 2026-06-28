@@ -1,6 +1,5 @@
 {
   "name": "@cahootz/mobile",
-  "private": true,
   "main": "expo-router/entry",
   "version": "0.1.0",
   "scripts": {
@@ -17,10 +16,18 @@
     "lint:fix": "pnpm lint --fix",
     "type-check": "tsc --noEmit",
     "test": "jest --passWithNoTests",
-    "ios": "expo run:ios"
+    "ios": "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 expo run:ios"
   },
   "jest": {
     "preset": "jest-expo"
+  },
+  "expo": {
+    "autolinking": {
+      "searchPaths": [
+        "../../node_modules",
+        "./node_modules"
+      ]
+    }
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

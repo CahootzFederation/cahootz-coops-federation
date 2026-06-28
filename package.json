@@ -21,6 +21,7 @@
     "db:clear-blockchain": "tsx packages/db/migrations/clear-blockchain-data.ts",
     "db:seed-coops": "pnpm -F @repo/db seed:coop-display",
     "db:seed-demo-coop": "pnpm -F @repo/db seed:demo-coop",
+    "db:seed-demo-data": "pnpm db:seed-demo-coop && pnpm -F @repo/db seed:demo-data",
     "db:deploy-setup": "pnpm db:migrate-prod && pnpm db:seed-coops && pnpm db:seed-demo-coop",
     "update-env": "bash scripts/update-all-env-files.sh",
     "update-contract-artifacts": "bash scripts/update-contract-artifacts.sh",
@@ -47,7 +48,7 @@
     "test:watch": "turbo run test:watch",
     "ui-add": "turbo run ui-add",
     "android": "expo run:android",
-    "ios": "expo run:ios",
+    "ios": "pnpm -F @cahootz/mobile ios",
     "charter:validate": "node scripts/validate-charter-compliance.js",
     "setup:dev": "bash scripts/setup-dev.sh"
   },

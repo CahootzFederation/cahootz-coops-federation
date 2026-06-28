@@ -11,6 +11,23 @@ import { startHealthMonitoring } from "./health-monitor.js";
 
 const app: Application = express();
 
+const corsOrigins = [
+  // Local development
+  "http://localhost:3000",      // Web app (alternative port)
+  "http://localhost:3001",      // Web app (main port)
+  "http://localhost:8081",      // Expo dev server
+  "http://localhost:19000",     // Alternative Expo port
+  "http://localhost:19006",     // Expo web
+
+  // Production domains
+  "https://soulaan-api-production.up.railway.app",
+  "https://www.soulaan.com",
+  "https://cahootzcoop.com",
+  "https://cahootzcoops.com",
+  "https://www.cahootzcoops.com",
+  "https://mobile.cahootzcoops.com",
+];
+
 // Import webhook handlers
 import { handleStripeWebhookNew, handlePayPalWebhook, handleSquareWebhook } from './webhooks';
 import uploadRouter from './routes/upload.js';
@@ -40,22 +57,7 @@ app.use((req, res, next) => {
 // Enable CORS for all routes - allow web app, mobile app, and production origins
 app.use(
   cors({
-    origin: [
-      // Local development
-      "http://localhost:3000",      // Web app (alternative port)
-      "http://localhost:3001",      // Web app (main port)
-      "http://localhost:8081",      // Expo dev server
-      "http://localhost:19000",     // Alternative Expo port
-      "http://localhost:19006",     // Expo web
-      
-      // Production domains
-      "https://soulaan-api-production.up.railway.app",
-      "https://www.soulaan.com",
-      "https://cahootzcoop.com",
-      "https://cahootzcoops.com",
-      "https://mobile.cahootzcoops.com",
-
-    ],
+    origin: corsOrigins,
     credentials: true,
   }),
 );

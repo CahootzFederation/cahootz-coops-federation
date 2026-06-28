@@ -2100,6 +2100,8 @@ export const api = {
     if (result.error) return null;
     return result.result?.data as {
       proposalCategories: { key: string; label: string; isActive: boolean }[];
+      scTokenSymbol?: string;
+      scTokenName?: string;
     } | null;
   },
 

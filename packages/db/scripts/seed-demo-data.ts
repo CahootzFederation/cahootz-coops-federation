@@ -59,6 +59,22 @@ const demoUsers = [
     walletAddress: "0x0000000000000000000000000000000000000D14",
     balance: 1515,
   },
+  {
+    key: "avery",
+    email: "demo+avery@cahootz.coop",
+    name: "Avery Chen",
+    roles: ["member"],
+    walletAddress: "0x0000000000000000000000000000000000000E15",
+    balance: 310,
+  },
+  {
+    key: "rosa",
+    email: "demo+rosa@cahootz.coop",
+    name: "Rosa Martinez",
+    roles: ["member", "governor"],
+    walletAddress: "0x0000000000000000000000000000000000000F16",
+    balance: 1740,
+  },
 ];
 
 const demoBusinesses = [
@@ -264,6 +280,9 @@ async function clearDemoData() {
   await prisma.treasuryReservePolicy.deleteMany({ where: { coopId: DEMO_COOP_ID } });
   await prisma.sCMintEvent.deleteMany({ where: { idempotencyKey: { startsWith: "demo-seed-" } } });
   await prisma.sCBurnEvent.deleteMany({ where: { idempotencyKey: { startsWith: "demo-seed-" } } });
+  await prisma.auditLog.deleteMany({ where: { actorId: "system:demo-data-seed" } });
+  await prisma.stripePaymentEvent.deleteMany({ where: { stripeEventId: { startsWith: "evt_demo_seed_" } } });
+  await prisma.feeConfig.deleteMany({ where: { createdBy: "system:demo-data-seed" } });
   await prisma.treasuryLedgerEntry.deleteMany({
     where: { sourceTransactionType: "DEMO_PROPOSAL_ALLOCATION" },
   });
@@ -790,6 +809,93 @@ async function seedOrdersAndTransactions(params: {
     });
   }
 
+  const firstStoreKey = Array.from(stores.keys())[0];
+  const firstStore = stores.get(firstStoreKey);
+  const firstBusiness = businesses.get(firstStoreKey);
+  const firstProduct = productsByStore.get(firstStoreKey)?.[0];
+  const failedBuyer = users.get("avery");
+  const refundBuyer = users.get("rosa");
+
+  if (firstStore && firstBusiness && firstProduct && failedBuyer && refundBuyer) {
+    await prisma.storeOrder.create({
+      data: {
+        storeId: firstStore.id,
+        buyerId: failedBuyer.id,
+        subtotalUSD: firstProduct.priceUSD,
+        discountUSD: 0,
+        totalUSD: firstProduct.priceUSD,
+        paymentMethod: "CARD",
+        paymentStatus: "FAILED",
+        fulfillmentStatus: "CANCELLED",
+        shippingAddress: "123 Demo Lane, Atlanta, GA 30303",
+        note: `${SEED_TAG}: seeded failed payment order`,
+        createdAt: daysAgo(2),
+      },
+    });
+
+    const refundedOrder = await prisma.storeOrder.create({
+      data: {
+        storeId: firstStore.id,
+        buyerId: refundBuyer.id,
+        subtotalUSD: firstProduct.priceUSD,
+        discountUSD: 0,
+        totalUSD: firstProduct.priceUSD,
+        paymentMethod: "CARD",
+        paymentStatus: "REFUNDED",
+        fulfillmentStatus: "CANCELLED",
+        shippingAddress: "123 Demo Lane, Atlanta, GA 30303",
+        note: `${SEED_TAG}: seeded refunded order`,
+        createdAt: daysAgo(6),
+      },
+    });
+
+    await prisma.storeOrderItem.create({
+      data: {
+        orderId: refundedOrder.id,
+        productId: firstProduct.id,
+        quantity: 1,
+        priceUSD: firstProduct.priceUSD,
+        totalUSD: firstProduct.priceUSD,
+      },
+    });
+
+    const refundedTransaction = await prisma.commerceTransaction.create({
+      data: {
+        customerId: refundBuyer.id,
+        businessId: firstBusiness.id,
+        coopId: DEMO_COOP_ID,
+        listedAmount: firstProduct.priceUSD,
+        chargedAmount: Number((firstProduct.priceUSD * 1.04).toFixed(2)),
+        merchantSettlementAmount: 0,
+        treasuryFeeAmount: 0,
+        platformMarkupBps: 400,
+        treasuryFeeBps: 400,
+        stripePaymentIntentId: "pi_demo_refunded_001",
+        stripeChargeId: "ch_demo_refunded_001",
+        stripeDestinationAccountId: `acct_demo_${firstStoreKey}`,
+        status: "REFUNDED",
+        sourceType: "CHECKOUT",
+        metadata: { seedTag: SEED_TAG, orderId: refundedOrder.id, refundReason: "Customer requested cancellation" },
+        createdAt: refundedOrder.createdAt,
+        completedAt: refundedOrder.createdAt,
+      },
+    });
+
+    await prisma.treasuryLedgerEntry.create({
+      data: {
+        sourceTransactionId: refundedTransaction.id,
+        sourceTransactionType: "REFUND",
+        accountType: "PENDING_SETTLEMENT",
+        entryType: "REFUND",
+        amount: refundedTransaction.chargedAmount,
+        direction: "DEBIT",
+        description: `Refunded demo order at ${firstStore.name}`,
+        metadata: { seedTag: SEED_TAG, orderId: refundedOrder.id },
+        occurredAt: daysAgo(5),
+      },
+    });
+  }
+
   await prisma.treasuryReservePolicy.create({
     data: {
       coopId: DEMO_COOP_ID,
@@ -1122,6 +1228,232 @@ function ninaOrFallback(users: Map<string, any>) {
   return users.get("nina") ?? users.get("reviewer");
 }
 
+async function seedPlatformAndTokenOps(users: Map<string, any>) {
+  const reviewer = users.get("reviewer");
+  const avery = users.get("avery");
+  const rosa = users.get("rosa");
+
+  await prisma.featureFlag.upsert({
+    where: { key: "demo.quickPay" },
+    update: {
+      enabled: true,
+      description: "Enable quick-pay flows in the demo co-op.",
+      metadata: { seedTag: SEED_TAG, coopId: DEMO_COOP_ID },
+    },
+    create: {
+      key: "demo.quickPay",
+      enabled: true,
+      description: "Enable quick-pay flows in the demo co-op.",
+      metadata: { seedTag: SEED_TAG, coopId: DEMO_COOP_ID },
+    },
+  });
+
+  await prisma.featureFlag.upsert({
+    where: { key: "demo.scRewards" },
+    update: {
+      enabled: true,
+      description: "Show seeded SC reward and minting flows.",
+      metadata: { seedTag: SEED_TAG, coopId: DEMO_COOP_ID },
+    },
+    create: {
+      key: "demo.scRewards",
+      enabled: true,
+      description: "Show seeded SC reward and minting flows.",
+      metadata: { seedTag: SEED_TAG, coopId: DEMO_COOP_ID },
+    },
+  });
+
+  await prisma.platformConfig.upsert({
+    where: { key: "demo.coin.symbol" },
+    update: { value: "DSC", updatedBy: "system:demo-data-seed" },
+    create: { key: "demo.coin.symbol", value: "DSC", updatedBy: "system:demo-data-seed" },
+  });
+
+  await prisma.platformConfig.upsert({
+    where: { key: "demo.coin.name" },
+    update: { value: "Demo Share Coin", updatedBy: "system:demo-data-seed" },
+    create: { key: "demo.coin.name", value: "Demo Share Coin", updatedBy: "system:demo-data-seed" },
+  });
+
+  await prisma.feeConfig.create({
+    data: {
+      platformMarkupBps: 400,
+      merchantFeeBps: 0,
+      treasuryFeeBps: 400,
+      effectiveFrom: daysAgo(60),
+      isActive: true,
+      createdBy: "system:demo-data-seed",
+      createdAt: daysAgo(60),
+    },
+  });
+
+  if (reviewer) {
+    await prisma.adminRole.upsert({
+      where: { userId_coopId_role: { userId: reviewer.id, coopId: DEMO_COOP_ID, role: "SUPER_ADMIN" } },
+      update: { grantedBy: "system:demo-data-seed", grantedAt: daysAgo(30), revokedAt: null, revokedBy: null },
+      create: {
+        userId: reviewer.id,
+        coopId: DEMO_COOP_ID,
+        role: "SUPER_ADMIN",
+        grantedBy: "system:demo-data-seed",
+        grantedAt: daysAgo(30),
+      },
+    });
+  }
+
+  if (rosa) {
+    await prisma.adminRole.upsert({
+      where: { userId_coopId_role: { userId: rosa.id, coopId: DEMO_COOP_ID, role: "GOVERNANCE_ADMIN" } },
+      update: { grantedBy: "system:demo-data-seed", grantedAt: daysAgo(20), revokedAt: null, revokedBy: null },
+      create: {
+        userId: rosa.id,
+        coopId: DEMO_COOP_ID,
+        role: "GOVERNANCE_ADMIN",
+        grantedBy: "system:demo-data-seed",
+        grantedAt: daysAgo(20),
+      },
+    });
+  }
+
+  if (avery) {
+    const manualMint = await prisma.sCMintEvent.create({
+      data: {
+        idempotencyKey: "demo-seed-manual-mint-avery",
+        userId: avery.id,
+        walletAddress: "0x0000000000000000000000000000000000000E15",
+        coopTokenClass: "demo",
+        requestedAmount: 150,
+        actualAmount: 150,
+        sourceType: "MANUAL_GRANT",
+        contractTxHash: demoTxHash(900),
+        blockNumber: 1250900,
+        status: "COMPLETED",
+        metadata: { seedTag: SEED_TAG, reason: "Welcome grant for demo member" },
+        createdAt: daysAgo(4),
+        completedAt: daysAgo(4),
+      },
+    });
+
+    await prisma.sCRewardTransaction.create({
+      data: {
+        userId: avery.id,
+        coopId: DEMO_COOP_ID,
+        amountSC: 150,
+        reason: "MANUAL_ADJUSTMENT",
+        status: "COMPLETED",
+        txHash: demoTxHash(901),
+        sourceType: "MANUAL",
+        sourceRecordId: manualMint.id,
+        metadata: { seedTag: SEED_TAG, reason: "Welcome grant for demo member" },
+        createdAt: daysAgo(4),
+        completedAt: daysAgo(4),
+      },
+    });
+  }
+
+  if (reviewer) {
+    const burn = await prisma.sCBurnEvent.create({
+      data: {
+        idempotencyKey: "demo-seed-manual-burn-reviewer",
+        userId: reviewer.id,
+        walletAddress: DEMO_WALLET_ADDRESS,
+        requestedAmount: 12,
+        actualAmount: 12,
+        reason: "MANUAL_ADJUSTMENT",
+        authorizedBy: DEMO_WALLET_ADDRESS,
+        contractTxHash: demoTxHash(902),
+        blockNumber: 1250902,
+        status: "COMPLETED",
+        metadata: { seedTag: SEED_TAG, note: "Seeded correction burn for audit screens." },
+        createdAt: daysAgo(3),
+        completedAt: daysAgo(3),
+      },
+    });
+
+    await prisma.auditLog.createMany({
+      data: [
+        {
+          actorId: "system:demo-data-seed",
+          actorType: "SYSTEM",
+          action: "SC_MINT",
+          resource: "SCMintEvent",
+          resourceId: "demo-seed-manual-mint-avery",
+          ipAddress: "127.0.0.1",
+          userAgent: "demo-seed",
+          metadata: { seedTag: SEED_TAG, coopId: DEMO_COOP_ID },
+          status: "SUCCESS",
+          occurredAt: daysAgo(4),
+        },
+        {
+          actorId: "system:demo-data-seed",
+          actorType: "SYSTEM",
+          action: "SC_BURN",
+          resource: "SCBurnEvent",
+          resourceId: burn.id,
+          ipAddress: "127.0.0.1",
+          userAgent: "demo-seed",
+          metadata: { seedTag: SEED_TAG, coopId: DEMO_COOP_ID },
+          status: "SUCCESS",
+          occurredAt: daysAgo(3),
+        },
+        {
+          actorId: "system:demo-data-seed",
+          actorType: "SYSTEM",
+          action: "BUSINESS_APPROVAL",
+          resource: "StoreApplication",
+          ipAddress: "127.0.0.1",
+          userAgent: "demo-seed",
+          metadata: { seedTag: SEED_TAG, coopId: DEMO_COOP_ID },
+          status: "SUCCESS",
+          occurredAt: daysAgo(17),
+        },
+      ],
+    });
+  }
+
+  await prisma.stripePaymentEvent.createMany({
+    data: [
+      {
+        stripeEventId: "evt_demo_seed_payment_succeeded",
+        eventType: "payment_intent.succeeded",
+        accountId: "acct_demo_harvest",
+        payload: {
+          id: "evt_demo_seed_payment_succeeded",
+          type: "payment_intent.succeeded",
+          data: { object: { id: "pi_demo_harvest_0", amount: 7072, currency: "usd" } },
+        },
+        processed: true,
+        processedAt: daysAgo(8),
+        createdAt: daysAgo(8),
+      },
+      {
+        stripeEventId: "evt_demo_seed_charge_refunded",
+        eventType: "charge.refunded",
+        accountId: "acct_demo_harvest",
+        payload: {
+          id: "evt_demo_seed_charge_refunded",
+          type: "charge.refunded",
+          data: { object: { id: "ch_demo_refunded_001", amount_refunded: 3536, currency: "usd" } },
+        },
+        processed: true,
+        processedAt: daysAgo(5),
+        createdAt: daysAgo(5),
+      },
+      {
+        stripeEventId: "evt_demo_seed_payment_failed",
+        eventType: "payment_intent.payment_failed",
+        payload: {
+          id: "evt_demo_seed_payment_failed",
+          type: "payment_intent.payment_failed",
+          data: { object: { id: "pi_demo_failed_001", last_payment_error: { message: "Demo card declined" } } },
+        },
+        processed: false,
+        createdAt: daysAgo(2),
+      },
+    ],
+  });
+}
+
 async function seedNotifications(users: Map<string, any>) {
   const reviewer = users.get("reviewer");
   const maya = users.get("maya");
@@ -1173,6 +1505,7 @@ async function main() {
   await seedOrdersAndTransactions({ users, stores, productsByStore, businesses });
   await seedTransfersAndFinancials(users);
   await seedGovernance(users);
+  await seedPlatformAndTokenOps(users);
   await seedNotifications(users);
 
   console.log("Seeded full demo data set.");

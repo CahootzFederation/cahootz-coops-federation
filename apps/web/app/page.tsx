@@ -712,15 +712,29 @@ export default async function HomePage() {
             <p className="text-sm text-slate-400">
               The community platform for co-ops that want local spending, governance, and ownership in one loop.
             </p>
-            <a
-              href={GITHUB_REPOSITORY_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 text-sm font-semibold text-slate-300 transition hover:text-white"
-            >
-              <Github className="h-4 w-4" />
-              GitHub
-            </a>
+            <div className="flex flex-wrap items-center justify-center gap-4 md:justify-end">
+              <Link
+                href="/terms"
+                className="text-sm font-semibold text-slate-300 transition hover:text-white"
+              >
+                Terms
+              </Link>
+              <Link
+                href="/privacy"
+                className="text-sm font-semibold text-slate-300 transition hover:text-white"
+              >
+                Privacy Policy
+              </Link>
+              <a
+                href={GITHUB_REPOSITORY_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 text-sm font-semibold text-slate-300 transition hover:text-white"
+              >
+                <Github className="h-4 w-4" />
+                GitHub
+              </a>
+            </div>
           </div>
         </div>
       </footer>

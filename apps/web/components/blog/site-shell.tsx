@@ -57,9 +57,25 @@ export function SiteShell({ children }: SiteShellProps) {
             </div>
             <span className="font-bold">Cahootz</span>
           </div>
-          <p className="text-center text-sm text-slate-400 md:text-right">
-            The community platform for co-ops that want local spending, governance, and ownership in one loop.
-          </p>
+          <div className="flex flex-col items-center gap-3 text-center md:items-end md:text-right">
+            <p className="text-sm text-slate-400">
+              The community platform for co-ops that want local spending, governance, and ownership in one loop.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-4 md:justify-end">
+              <Link
+                href="/terms"
+                className="text-sm font-semibold text-slate-300 transition hover:text-white"
+              >
+                Terms
+              </Link>
+              <Link
+                href="/privacy"
+                className="text-sm font-semibold text-slate-300 transition hover:text-white"
+              >
+                Privacy Policy
+              </Link>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

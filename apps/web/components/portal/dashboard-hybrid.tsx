@@ -12,6 +12,7 @@ import {
   DollarSign,
   Landmark,
   Loader2,
+  Newspaper,
   Settings,
   ShieldCheck,
   Store,
@@ -44,12 +45,31 @@ interface ActionLink {
   adminOnly?: boolean;
 }
 
+interface RecentTransaction {
+  id: string;
+  status: string;
+  chargedAmount: number;
+  business: {
+    name: string;
+  };
+  customer: {
+    name: string;
+  };
+}
+
 const actionLinks: ActionLink[] = [
   {
     title: "Review applications",
     description: "Move approved people into active membership.",
     href: "/applications",
     icon: ClipboardList,
+    adminOnly: true,
+  },
+  {
+    title: "Edit public page",
+    description: "Update the public newsletter page and weekly email settings.",
+    href: "/settings/public-page",
+    icon: Newspaper,
     adminOnly: true,
   },
   {
@@ -71,6 +91,12 @@ const actionLinks: ActionLink[] = [
     description: "Review decisions shaping the co-op.",
     href: "/proposals",
     icon: Vote,
+  },
+  {
+    title: "Submit story",
+    description: "Send articles and events to the co-op paper.",
+    href: "/newsletter/submit",
+    icon: Newspaper,
   },
   {
     title: "Member directory",
@@ -161,7 +187,7 @@ export default function DashboardHybrid() {
   const pendingMints = scStatsQuery.data?.pending || 0;
   const hasIssues = failedMints > 0 || pendingMints > 5;
   const visibleActions = actionLinks.filter((item) => isAdmin || !item.adminOnly);
-  const recentTransactions = paymentStatsQuery.data?.recentTransactions || [];
+  const recentTransactions = (paymentStatsQuery.data?.recentTransactions || []) as RecentTransaction[];
 
   return (
     <div className="space-y-6">

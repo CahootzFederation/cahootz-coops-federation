@@ -85,6 +85,18 @@ export interface WaitlistSignupData {
   suggestedCoop?: string;
 }
 
+export interface NewsletterSubmissionData {
+  coopId: string;
+  type: 'article' | 'event';
+  title: string;
+  summary: string;
+  date?: string;
+  location?: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+  imageUrl?: string;
+}
+
 // Helper functions for API calls
 export const api = {
   /**
@@ -147,6 +159,26 @@ export const api = {
     }
 
     return result as { success: boolean; message: string };
+  },
+
+  async submitNewsletterSubmission(data: NewsletterSubmissionData, walletAddress?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/publicCoopInfo.submitNewsletterSubmission`, {
+      method: 'POST',
+      headers: createApiHeaders(walletAddress),
+      body: JSON.stringify(data),
+    });
+
+    const result = await response.json();
+
+    if (result.error) {
+      throw new Error(result.error.message || 'Could not submit to the newsletter');
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return result.result?.data;
   },
 
   /**

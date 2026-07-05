@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { ScrollView, View, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowDownLeft, ArrowUpRight, Clock, Wallet, Copy, Check, Store, TrendingUp, Coins } from 'lucide-react-native';
+import { ArrowDownLeft, ArrowUpRight, Clock, Wallet, Copy, Check, Store, TrendingUp, Coins, Newspaper } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { Text } from '@/components/ui/text';
@@ -277,6 +277,28 @@ export default function HomeScreen() {
               )}
             </LinearGradient>
           </View>
+
+          <TouchableOpacity
+            onPress={() => router.push('/(authenticated)/submit-newsletter' as any)}
+            className="mb-4 rounded-2xl border border-gray-100 bg-white p-4"
+            activeOpacity={0.85}
+          >
+            <View className="flex-row items-center">
+              <View
+                className="mr-4 h-12 w-12 items-center justify-center rounded-2xl"
+                style={{ backgroundColor: withAlpha(primaryColor, '1A') }}
+              >
+                <Newspaper size={22} color={primaryColor} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-base font-semibold text-gray-900">Submit to the Newsletter</Text>
+                <Text className="mt-1 text-sm leading-5 text-gray-500">
+                  Send a story or event to the co-op paper.
+                </Text>
+              </View>
+              <Text className="text-2xl text-gray-300">›</Text>
+            </View>
+          </TouchableOpacity>
 
           {/* Recent Activity */}
           <View className="mb-4">

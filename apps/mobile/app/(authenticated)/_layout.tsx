@@ -124,6 +124,7 @@ export default function AuthenticatedLayout() {
       <Tabs.Screen name="fund-wallet" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
       <Tabs.Screen name="proposal-detail" options={{ href: null }} />
+      <Tabs.Screen name="submit-newsletter" options={{ href: null }} />
     </Tabs>
   );
 }

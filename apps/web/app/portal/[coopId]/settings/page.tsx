@@ -204,15 +204,15 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
               <Globe className="h-5 w-5 text-blue-500" />
-              Public Landing Page
+              Public Page
             </CardTitle>
             <CardDescription>
-              Manage your coop&apos;s public-facing website and custom domain
+              Manage your coop&apos;s public page, newsletter, and email format
             </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-gray-300 mb-4">
-              Create and customize a public landing page for your coop that can be accessed at /c/{coopId} or via a custom domain.
+              Create and customize the public page for your coop at /c/{coopId}, including stories, events, classifieds, and business notes.
             </p>
             <Button asChild className="bg-blue-600 hover:bg-blue-700">
               <Link href={`/portal/${coopId}/settings/public-page`} className="inline-flex items-center gap-2">

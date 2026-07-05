@@ -231,6 +231,9 @@ export default async function HomePage() {
             <Link href="/blog" className="text-slate-400 transition hover:text-white">
               Blog
             </Link>
+            <Link href="/contact" className="text-slate-400 transition hover:text-white">
+              Contact
+            </Link>
             <Link href="#join" className="text-slate-400 transition hover:text-white">
               Join
             </Link>
@@ -541,7 +544,7 @@ export default async function HomePage() {
                 </div>
                 <p className="max-w-xl text-slate-400">
                   Apply to join any active co-op. When a co-op has published its public page,
-                  you can also visit its marketplace.
+                  you can also read its community newsletter.
                 </p>
               </div>
 
@@ -561,7 +564,7 @@ export default async function HomePage() {
                       <div className="mt-5 flex flex-col gap-2 sm:flex-row md:flex-col xl:flex-row">
                         <Link
                           href={`/${coop.coopId}/application`}
-                          className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md bg-[#f0975b] px-4 py-2 text-sm font-bold text-[#111111] transition hover:bg-[#ffb36f]"
+                          className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md bg-[#f0975b] px-4 py-2 text-sm font-bold text-[#111111] no-underline transition hover:bg-[#ffb36f] hover:no-underline"
                         >
                           Apply
                           <ArrowRight className="h-4 w-4" />
@@ -569,10 +572,10 @@ export default async function HomePage() {
                         {coop.hasPublishedPublicPage && (
                           <Link
                             href={`/c/${coop.coopId}`}
-                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white transition hover:border-[#f0975b]/60 hover:bg-white/10"
+                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white no-underline transition hover:border-[#f0975b]/60 hover:bg-white/10 hover:no-underline"
                           >
-                            Marketplace
-                            <Store className="h-4 w-4" />
+                            Newsletter
+                            <Newspaper className="h-4 w-4" />
                           </Link>
                         )}
                       </div>
@@ -724,6 +727,12 @@ export default async function HomePage() {
                 className="text-sm font-semibold text-slate-300 transition hover:text-white"
               >
                 Privacy Policy
+              </Link>
+              <Link
+                href="/contact"
+                className="text-sm font-semibold text-slate-300 transition hover:text-white"
+              >
+                Contact
               </Link>
               <a
                 href={GITHUB_REPOSITORY_URL}

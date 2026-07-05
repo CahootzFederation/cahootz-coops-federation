@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { env } from "~/env";
+
 export type CommunityPostType = "article" | "event" | "business" | "announcement";
 
 export interface CommunityPost {
@@ -254,7 +256,7 @@ const soulaanSampleCommunityPosts: CommunityPost[] = [
 ];
 
 export function withDevSampleCommunityPosts(coopId: string, posts: CommunityPost[]) {
-  if (process.env.NODE_ENV === "production" || coopId !== "soulaan") {
+  if (env.NODE_ENV === "production" || coopId !== "soulaan") {
     return posts;
   }
 

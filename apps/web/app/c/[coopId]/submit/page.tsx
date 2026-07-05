@@ -98,7 +98,7 @@ export default function PublicContributorSubmitPage() {
       form.summary.trim() ||
       form.contentMarkdown
         .trim()
-        .replace(/[#*_>`\[\]()]/g, "")
+        .replace(/[#*_>`[\]()]/g, "")
         .replace(/\s+/g, " ")
         .slice(0, 700) ||
       `Source link: ${form.sourceUrl.trim()}`;

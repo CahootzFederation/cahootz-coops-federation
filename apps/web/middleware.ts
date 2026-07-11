@@ -39,6 +39,17 @@ const RATE_LIMIT = 10; // requests per minute
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute in milliseconds
 
 export async function middleware(request: NextRequest) {
+  const host = request.headers.get("host")?.replace(/^www\./, "");
+
+  if (host === "soulaancoop.com") {
+    const url = request.nextUrl.clone();
+
+    if (url.pathname === "/") {
+      url.pathname = "/c/soulaan";
+      return NextResponse.rewrite(url);
+    }
+  }
+
   const response = NextResponse.next();
   
   // Check if the request is for a protected API route
@@ -113,7 +124,7 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 
-// Configure the middleware to run only for API routes
+// Configure the middleware to run for root domain rewrites and API routes
 export const config = {
-  matcher: ['/api/:path*'],
+  matcher: ['/', '/api/:path*'],
 };

@@ -5,6 +5,7 @@ export const env = createEnv({
   server: {
     RESEND_API_KEY: z.string().startsWith("re_").optional(),
     RESEND_FROM_EMAIL: z.string().email().default("support@mail.cahootzcoops.com"),
+    SENTRY_DSN: z.string().url().optional(),
  
   },
   clientPrefix: "PUBLIC_",

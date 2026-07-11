@@ -758,6 +758,9 @@ importers:
       '@repo/validators':
         specifier: workspace:*
         version: link:../validators
+      '@sentry/node':
+        specifier: 5.30.0
+        version: 5.30.0
       '@t3-oss/env-core':
         specifier: ^0.9.2
         version: 0.9.2(typescript@5.9.3)(zod@3.25.76)

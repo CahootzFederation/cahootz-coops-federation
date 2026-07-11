@@ -24,6 +24,11 @@ module.exports = {
   ],
   theme: {
     extend: {
+      fontSize: {
+        xs: ['14px', { lineHeight: '20px' }],
+        sm: ['15px', { lineHeight: '22px' }],
+        base: ['16px', { lineHeight: '24px' }],
+      },
       colors: {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
@@ -137,4 +142,3 @@ module.exports = {
   },
   plugins: [require('tailwindcss-animate')]
 }
-

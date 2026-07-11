@@ -92,6 +92,7 @@ export default function OnboardingFlow() {
   const [isRequestingCode, setIsRequestingCode] = useState(false);
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
   const { login } = useAuth();
+  const isDemoLoginEmail = loginData.email.trim().toLowerCase() === DEMO_LOGIN_EMAIL;
 
   // Fetch available coops from backend
   const [availableCoops, setAvailableCoops] = useState<{
@@ -611,7 +612,8 @@ export default function OnboardingFlow() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: loginData.email,
+          email: loginData.email.trim().toLowerCase(),
+          ...(isDemoLoginEmail ? { coopId: DEMO_COOP_ID } : {}),
         }),
       });
 
@@ -647,7 +649,7 @@ export default function OnboardingFlow() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: loginData.email,
+          email: loginData.email.trim().toLowerCase(),
           code: loginData.code,
           ...(isDemoEmail ? { coopId: DEMO_COOP_ID } : {}),
         }),
@@ -690,8 +692,8 @@ export default function OnboardingFlow() {
                 <Icon as={screen.icon} size={64} className="text-white" />
               </View>
               <Text className="text-2xl font-bold text-white mb-2 text-center">{screen.title}</Text>
-              <Text className="text-lg font-semibold text-cream-100 mb-4 text-center">{screen.subtitle}</Text>
-              <Text className="text-cream-100 text-sm leading-relaxed text-center">{screen.description}</Text>
+              <Text className="text-lg font-semibold text-white mb-4 text-center">{screen.subtitle}</Text>
+              <Text className="text-white text-sm leading-relaxed text-center">{screen.description}</Text>
             </CardContent>
           </Card>
 
@@ -751,7 +753,7 @@ export default function OnboardingFlow() {
           </View>
           <View className="flex-1">
             <Text className="text-white text-xl font-black">Join the waitlist</Text>
-            <Text className="text-charcoal-300 text-sm leading-5 mt-1">
+            <Text className="text-charcoal-100 text-sm leading-5 mt-1">
               Not sure which co-op fits yet? Get early access and updates first.
             </Text>
           </View>
@@ -815,7 +817,7 @@ export default function OnboardingFlow() {
               <Icon as={Store} size={28} className="text-gold-400" />
             </View>
             <Text className="text-3xl font-black text-white mb-2">Choose Your Co-op</Text>
-            <Text className="text-charcoal-300 leading-6">
+            <Text className="text-charcoal-100 leading-6">
               Explore live communities, then apply when one feels aligned with your goals.
             </Text>
           </View>
@@ -833,7 +835,7 @@ export default function OnboardingFlow() {
           {isLoadingCoops && (
             <View className="items-center py-8">
               <ActivityIndicator size="large" color="#D4AF37" />
-              <Text className="text-charcoal-300 mt-4">Loading available co-ops...</Text>
+              <Text className="text-charcoal-100 mt-4">Loading available co-ops...</Text>
             </View>
           )}
 
@@ -871,7 +873,7 @@ export default function OnboardingFlow() {
                 // Determine text color based on background luminance
                 const useWhiteText = coop.bgColor ? isColorDark(coop.bgColor || '') : true;
                 const textColorClass = useWhiteText ? 'text-white' : 'text-charcoal-800';
-                const subtextColorClass = useWhiteText ? 'text-cream-100' : 'text-charcoal-600';
+                const subtextColorClass = useWhiteText ? 'text-white' : 'text-charcoal-700';
                 
                 return (
                   <Pressable key={coop.id} onPress={() => selectCoop(coop.id)}>
@@ -892,7 +894,7 @@ export default function OnboardingFlow() {
                         <Text className={`${subtextColorClass} text-sm leading-6 mb-4`}>{coop.description}</Text>
                         <View className="flex flex-row items-center justify-between">
                           <Badge className={useWhiteText ? "bg-white/20" : "bg-gold-600/15"}>
-                            <Text className={`text-xs ${useWhiteText ? 'text-white' : 'text-charcoal-700'}`}>Learn More</Text>
+                            <Text className={`text-sm font-semibold ${useWhiteText ? 'text-white' : 'text-charcoal-700'}`}>Learn More</Text>
                           </Badge>
                         </View>
                       </CardContent>
@@ -906,7 +908,7 @@ export default function OnboardingFlow() {
           {/* No Coops Available */}
           {!isLoadingCoops && coopsWithIcons.length === 0 && (
             <View className="items-center py-8">
-              <Text className="text-charcoal-300 text-center">No cooperatives available at this time.</Text>
+              <Text className="text-charcoal-100 text-center">No cooperatives available at this time.</Text>
             </View>
           )}
         </View>
@@ -917,11 +919,11 @@ export default function OnboardingFlow() {
         <View className="w-full max-w-md mx-auto">
           <View className="flex flex-row justify-between items-center">
             <Button variant="ghost" onPress={prevStep}>
-              <Icon as={ChevronLeft} size={16} className="text-charcoal-300" />
-              <Text className="text-charcoal-300 ml-1">Back</Text>
+              <Icon as={ChevronLeft} size={16} className="text-charcoal-100" />
+              <Text className="text-charcoal-100 ml-1">Back</Text>
             </Button>
             <Button variant="ghost" onPress={goToLogin}>
-              <Text className="text-charcoal-300">Already a member? </Text>
+              <Text className="text-charcoal-100">Already a member? </Text>
               <Text className="text-gold-400 font-semibold">Sign In</Text>
             </Button>
           </View>
@@ -942,8 +944,8 @@ export default function OnboardingFlow() {
             <View className="mb-6">
               <View className="flex-row items-center justify-between mb-5">
                 <Button variant="ghost" onPress={prevStep} className="px-0">
-                  <Icon as={ChevronLeft} size={16} className="text-charcoal-300" />
-                  <Text className="text-charcoal-300 ml-1">Co-ops</Text>
+                  <Icon as={ChevronLeft} size={16} className="text-charcoal-100" />
+                  <Text className="text-charcoal-100 ml-1">Co-ops</Text>
                 </Button>
                 <Button variant="ghost" onPress={goToLogin} className="px-0">
                   <Text className="text-gold-400 font-semibold">Sign in</Text>
@@ -960,7 +962,7 @@ export default function OnboardingFlow() {
             <Card className="bg-charcoal-800 border-white/10 mb-4">
               <CardContent className="p-5">
                 <Text className="font-semibold text-white mb-2">Mission</Text>
-                <Text className="text-charcoal-300 text-sm leading-relaxed">{selectedCoop.mission}</Text>
+                <Text className="text-charcoal-100 text-sm leading-relaxed">{selectedCoop.mission}</Text>
               </CardContent>
             </Card>
 
@@ -976,7 +978,7 @@ export default function OnboardingFlow() {
                       </View>
                       <View className="flex-1">
                         <Text className="font-medium text-white">{feature.title}</Text>
-                        <Text className="text-sm text-charcoal-300">{feature.description}</Text>
+                        <Text className="text-sm text-charcoal-100">{feature.description}</Text>
                       </View>
                     </View>
                   ))}
@@ -1004,15 +1006,15 @@ export default function OnboardingFlow() {
                 <Icon as={ChevronRight} size={16} className="text-charcoal-900 ml-2" />
               </Button>
               <Button variant="outline" onPress={prevStep} className="border-white/15 bg-white/5 h-12 rounded-xl">
-                <Icon as={ChevronLeft} size={16} className="text-charcoal-200" />
-                <Text className="text-charcoal-200 ml-1">Back to Co-ops</Text>
+                <Icon as={ChevronLeft} size={16} className="text-white" />
+                <Text className="text-white ml-1">Back to Co-ops</Text>
               </Button>
             </View>
 
             {/* Login Link */}
             <View className="items-center">
               <Button variant="ghost" onPress={goToLogin}>
-                <Text className="text-charcoal-300">Already a member? </Text>
+                <Text className="text-charcoal-100">Already a member? </Text>
                 <Text className="text-gold-400 font-semibold">Sign In</Text>
               </Button>
             </View>
@@ -1538,8 +1540,8 @@ export default function OnboardingFlow() {
             <View className="bg-red-700 p-3 rounded-full mb-4">
               <Icon as={Building} size={32} className="text-white" />
             </View>
-            <Text className="text-2xl font-bold text-charcoal-800 mb-2 text-center">Welcome Back</Text>
-            <Text className="text-charcoal-600 text-center">
+            <Text className="text-3xl font-bold text-charcoal-900 mb-2 text-center">Welcome Back</Text>
+            <Text className="text-charcoal-700 text-center leading-6">
               {codeSent ? 'Enter the code sent to your email' : 'Sign in to access your co-op membership'}
             </Text>
           </View>
@@ -1587,22 +1589,22 @@ export default function OnboardingFlow() {
                 {/* Submit Button */}
                 {!codeSent ? (
                   <Button
-                    className="w-full bg-red-700 py-3"
+                    className="h-auto min-h-16 w-full bg-red-700 px-4 py-4"
                     onPress={handleRequestCode}
                     disabled={isRequestingCode || !loginData.email}
                   >
-                    <Text className="text-white font-semibold">
+                    <Text className="text-center text-white font-semibold">
                       {isRequestingCode ? 'Sending Code...' : 'Send Login Code'}
                     </Text>
                   </Button>
                 ) : (
                   <View className="gap-3">
                     <Button
-                      className="w-full bg-red-700 py-3"
+                      className="h-auto min-h-16 w-full bg-red-700 px-4 py-4"
                       onPress={handleVerifyCode}
                       disabled={isVerifyingCode || !loginData.code || loginData.code.length !== 6}
                     >
-                      <Text className="text-white font-semibold">
+                      <Text className="text-center text-white font-semibold">
                         {isVerifyingCode ? 'Verifying...' : 'Verify & Sign In'}
                       </Text>
                     </Button>
@@ -1610,11 +1612,11 @@ export default function OnboardingFlow() {
                     {/* Resend Code Button */}
                     <Button
                       variant="outline"
-                      className="w-full border-cream-300"
+                      className="h-auto min-h-14 w-full border-cream-300 px-4 py-3"
                       onPress={handleRequestCode}
                       disabled={!canResend || isRequestingCode}
                     >
-                      <Text className="text-charcoal-700">
+                      <Text className="text-center text-charcoal-700">
                         {canResend ? 'Resend Code' : `Resend in ${resendTimer}s`}
                       </Text>
                     </Button>
@@ -1640,7 +1642,7 @@ export default function OnboardingFlow() {
           {/* Signup Link */}
           <View className="items-center mt-6">
             <Button variant="ghost" onPress={goToBrowseCoops}>
-              <Text className="text-charcoal-600">Don&apos;t have an account? </Text>
+              <Text className="text-charcoal-700">Don&apos;t have an account? </Text>
               <Text className="font-semibold text-gold-700">Join a Co-op</Text>
             </Button>
           </View>

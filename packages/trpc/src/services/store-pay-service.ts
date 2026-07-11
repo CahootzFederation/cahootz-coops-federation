@@ -236,11 +236,12 @@ export interface StoreInfo {
 export async function getStoreByShortCode(code: string, coopId: string): Promise<StoreInfo | null> {
   const normalized = normalizeShortCode(code);
 
-  const store = await db.store.findFirst({
+  const store = await (db.store as any).findFirst({
     where: {
       shortCode: normalized,
       coopId,
       status: 'APPROVED',
+      deletedAt: null,
       acceptsQuickPay: true,
     },
     select: {

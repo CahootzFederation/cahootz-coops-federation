@@ -6,11 +6,18 @@ import { Context, CoopScopedContext } from "../context.js";
 import { publicProcedure, privateProcedure } from "../procedures/index.js";
 import { router } from "../trpc.js";
 import Stripe from "stripe";
+import { sendApplicationAcceptedEmail, isEmailConfigured } from "../services/email-service.js";
 
 // Initialize Stripe (optional - only if key is configured)
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
   : null;
+
+function getPortalUrl(coopId: string): string | undefined {
+  const baseUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_URI;
+  if (!baseUrl) return undefined;
+  return `${baseUrl.replace(/\/$/, "")}/portal/${coopId}`;
+}
 
 export const adminRouter = router({
   /**
@@ -195,6 +202,35 @@ export const adminRouter = router({
         },
       });
 
+      if (input.status === 'ACTIVE' && isEmailConfigured()) {
+        void (async () => {
+          try {
+            const [user, coopConfig] = await Promise.all([
+              context.db.user.findUnique({
+                where: { id: input.userId },
+                select: { email: true, name: true },
+              }),
+              context.db.coopConfig.findFirst({
+                where: { coopId: input.coopId, isActive: true },
+                select: { name: true },
+                orderBy: { version: 'desc' },
+              }),
+            ]);
+
+            if (user?.email) {
+              await sendApplicationAcceptedEmail({
+                to: user.email,
+                applicantName: user.name,
+                coopName: coopConfig?.name,
+                portalUrl: getPortalUrl(input.coopId),
+              });
+            }
+          } catch (emailError) {
+            console.error('Failed to send application acceptance email:', emailError);
+          }
+        })();
+      }
+
       return membership;
     }),
 
@@ -257,6 +293,50 @@ export const adminRouter = router({
           reviewedAt: new Date(),
         },
       });
+
+      if (input.status === 'ACTIVE' && isEmailConfigured()) {
+        void (async () => {
+          try {
+            const users = await context.db.user.findMany({
+              where: { id: { in: input.userIds } },
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                applications: {
+                  where: { status: 'APPROVED' },
+                  select: { coopId: true },
+                  orderBy: { reviewedAt: 'desc' },
+                  take: 1,
+                },
+              },
+            });
+
+            const coopIds = Array.from(new Set(users.flatMap((user) => user.applications.map((application) => application.coopId))));
+            const coopConfigs = await context.db.coopConfig.findMany({
+              where: { coopId: { in: coopIds }, isActive: true },
+              select: { coopId: true, name: true },
+            });
+            const coopNames = new Map(coopConfigs.map((config) => [config.coopId, config.name]));
+
+            await Promise.all(
+              users
+                .filter((user) => !!user.email)
+                .map((user) => {
+                  const coopId = user.applications[0]?.coopId;
+                  return sendApplicationAcceptedEmail({
+                    to: user.email,
+                    applicantName: user.name,
+                    coopName: coopId ? coopNames.get(coopId) : undefined,
+                    portalUrl: coopId ? getPortalUrl(coopId) : undefined,
+                  });
+                }),
+            );
+          } catch (emailError) {
+            console.error('Failed to send batch application acceptance emails:', emailError);
+          }
+        })();
+      }
 
       return { success: true, count: input.userIds.length };
     }),

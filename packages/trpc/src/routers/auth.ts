@@ -12,6 +12,7 @@ const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const DEMO_COOP_ID = "demo";
 const DEMO_LOGIN_EMAIL = "demo@cahootz.coop";
 const DEMO_LOGIN_CODE = "000000";
+const isProduction = process.env.NODE_ENV === "production";
 
 function isDemoLogin(email: string, code?: string, coopId?: string) {
   if (normalizeEmail(email) !== DEMO_LOGIN_EMAIL) {
@@ -302,8 +303,9 @@ export const authRouter = router({
           },
         });
 
-        // Send email with code (only if email is configured)
-        if (isEmailConfigured()) {
+        // In production, attempt the send so failures are reported instead of
+        // returning "sent" when Resend is missing or broken.
+        if (isEmailConfigured() || isProduction) {
           await sendLoginCode(email, code, coopConfig?.name);
         } else {
           // In development, log the code to console

@@ -1,7 +1,8 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import Link from "next/link";
-import { ShoppingBag, Users } from "lucide-react";
+import { ArrowRight, ShoppingBag, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface CoopHeroProps {
@@ -13,7 +14,10 @@ interface CoopHeroProps {
     tagline: string;
     description: string;
     bgColor: string;
-    gradientStyle?: React.CSSProperties;
+    gradientStyle?: CSSProperties;
+    primaryCtaLabel: string;
+    primaryCtaUrl: string;
+    secondaryCtaLabel: string;
   };
 }
 
@@ -71,9 +75,10 @@ export function CoopHero({ coop }: CoopHeroProps) {
               style={{ color: coop.bgColor }}
               asChild
             >
-              <Link href={`/c/${coop.slug}/products`}>
-                <ShoppingBag className="mr-2 h-5 w-5" />
-                Shop the Coop
+              <Link href={coop.primaryCtaUrl}>
+                <Users className="mr-2 h-5 w-5" />
+                {coop.primaryCtaLabel}
+                <ArrowRight className="ml-1 h-5 w-5" />
               </Link>
             </Button>
             <Button
@@ -82,9 +87,9 @@ export function CoopHero({ coop }: CoopHeroProps) {
               className="border-white/30 bg-white/10 text-white hover:bg-white/20"
               asChild
             >
-              <Link href={`/${coop.slug}/application`}>
-                <Users className="mr-2 h-5 w-5" />
-                Apply to Join
+              <Link href={`/c/${coop.slug}/products`}>
+                <ShoppingBag className="mr-2 h-5 w-5" />
+                {coop.secondaryCtaLabel}
               </Link>
             </Button>
           </div>

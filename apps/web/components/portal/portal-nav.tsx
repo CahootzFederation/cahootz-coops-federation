@@ -8,9 +8,11 @@ import {
   ClipboardList,
   Coins,
   FileText,
+  Globe,
   Landmark,
   LogOut,
   Menu,
+  Newspaper,
   Settings,
   Store,
   Users,
@@ -49,6 +51,11 @@ const memberLinks: NavItem[] = [
     icon: Vote,
   },
   {
+    title: "Submit Story",
+    href: "/portal/newsletter/submit",
+    icon: Newspaper,
+  },
+  {
     title: "Settings",
     href: "/portal/settings",
     icon: Settings,
@@ -60,6 +67,11 @@ const adminReviewLinks: NavItem[] = [
     title: "Applications",
     href: "/portal/applications",
     icon: ClipboardList,
+  },
+  {
+    title: "Public Page",
+    href: "/portal/settings/public-page",
+    icon: Globe,
   },
   {
     title: "Rules",

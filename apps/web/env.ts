@@ -16,6 +16,8 @@ export const env = createEnv({
   server: {
 
     SLACK_WEBHOOK_URL: z.string().url().optional(),
+    RESEND_API_KEY: z.string().startsWith("re_").optional(),
+    RESEND_FROM_EMAIL: z.string().min(3).default("support@mail.cahootzcoops.com"),
     SESSION_SECRET: z.string().min(32).optional(),
     NOTION_TOKEN: z.string().optional(),
     NOTION_BLOG_DATABASE_ID: z.string().optional(),
@@ -41,6 +43,8 @@ export const env = createEnv({
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
     SLACK_WEBHOOK_URL: process.env.SLACK_WEBHOOK_URL,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
     SESSION_SECRET: process.env.SESSION_SECRET,
     NOTION_TOKEN: process.env.NOTION_TOKEN,
     NOTION_BLOG_DATABASE_ID: process.env.NOTION_BLOG_DATABASE_ID,

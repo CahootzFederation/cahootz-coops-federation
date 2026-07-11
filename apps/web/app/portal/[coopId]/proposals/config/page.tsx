@@ -1004,10 +1004,10 @@ export default function CoopConfigPage() {
         </div>
       </ConfigSectionEditor>
 
-      {/* Features */}
+      {/* Member Benefits */}
       <ConfigSectionEditor
-        title="Features"
-        description="Feature cards shown to members. Highlight the key benefits of joining."
+        title="Member Benefits"
+        description="Benefits shown to applicants and on the public newsletter page. Update them here so the co-op config stays the source of truth."
         isDirty={editFeatures !== null}
         onSave={propose("displayFeatures", { displayFeatures: editFeatures ?? config.displayFeatures ?? [] }, { displayFeatures: config.displayFeatures ?? [] })}
         isSaving={proposeChange.isPending}
@@ -1018,7 +1018,7 @@ export default function CoopConfigPage() {
           {(editFeatures ?? config.displayFeatures ?? []).map((feature, i) => (
             <div key={i} className="rounded-md border border-slate-600 bg-slate-900/50 p-4 space-y-3">
               <div className="space-y-2">
-                <Label className="text-gray-300">Feature Title</Label>
+                <Label className="text-gray-300">Benefit Title</Label>
                 <Input
                   value={feature.title}
                   onChange={(e) => {
@@ -1030,7 +1030,7 @@ export default function CoopConfigPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-gray-300">Feature Description</Label>
+                <Label className="text-gray-300">Benefit Description</Label>
                 <Textarea
                   value={feature.description}
                   onChange={(e) => {
@@ -1053,28 +1053,28 @@ export default function CoopConfigPage() {
                 className="text-red-400 hover:text-red-300"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                Remove Feature
+                Remove Benefit
               </Button>
             </div>
           ))}
           {(editFeatures ?? config.displayFeatures ?? []).length === 0 && (
-            <p className="text-xs text-gray-600">No features configured</p>
+            <p className="text-xs text-gray-600">No member benefits configured</p>
           )}
         </div>
 
         <div className="mt-4 rounded-md border border-dashed border-slate-600 p-4 space-y-3">
-          <p className="text-xs text-gray-500 font-medium">Add new feature</p>
+          <p className="text-xs text-gray-500 font-medium">Add new member benefit</p>
           <Input
             value={newFeatureTitle}
             onChange={(e) => setNewFeatureTitle(e.target.value)}
-            placeholder="Feature title"
+            placeholder="Benefit title"
             className="bg-slate-900 border-slate-600 text-white"
           />
           <Textarea
             value={newFeatureDescription}
             onChange={(e) => setNewFeatureDescription(e.target.value)}
             rows={2}
-            placeholder="Feature description"
+            placeholder="Benefit description"
             className="bg-slate-900 border-slate-600 text-white text-sm resize-none"
           />
           <Button
@@ -1093,7 +1093,7 @@ export default function CoopConfigPage() {
             disabled={!newFeatureTitle.trim() || !newFeatureDescription.trim()}
           >
             <Plus className="h-4 w-4 mr-2" />
-            Add Feature
+            Add Benefit
           </Button>
         </div>
       </ConfigSectionEditor>

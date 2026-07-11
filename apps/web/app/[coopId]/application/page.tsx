@@ -128,9 +128,8 @@ export default async function CoopApplicationPage({ params }: PageProps) {
     "Apply for membership in a cooperative built around shared ownership.";
   const description = publicInfo?.aboutBody || coopConfig?.description || DEFAULT_CAHOOTZ_DESCRIPTION;
   const mission = publicInfo?.missionBody || coopConfig?.displayMission || description;
-  const publicFeatures = normalizeFeatures(publicInfo?.features);
   const configFeatures = normalizeFeatures(coopConfig?.displayFeatures);
-  const features = publicFeatures.length ? publicFeatures : configFeatures;
+  const features = configFeatures;
   const accentColor = coopConfig?.accentColor?.startsWith("#") ? coopConfig.accentColor : "#d97706";
 
   const lockedCoop = {

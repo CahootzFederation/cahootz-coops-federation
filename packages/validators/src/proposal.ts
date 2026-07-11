@@ -227,6 +227,7 @@ export const ProposalOutputZ = z.object({
 
 /** A single coop-specific mission goal with its scoring priority weight */
 export const MissionGoalZ = z.object({
+  /** Machine key generated from label, e.g. "Income Stability" → "income_stability". */
   key: z.string().min(1),
   label: z.string().min(1),
   priorityWeight: z.number().min(0).max(1),

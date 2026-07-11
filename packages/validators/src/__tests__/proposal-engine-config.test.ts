@@ -474,7 +474,7 @@ describe("Scoring gates — acceptance criteria A–E", () => {
     expect(evaluation.computed_scores.mission_weighted_score).toBeCloseTo(0.40, 2);
 
     // stored goal_priority_weight should be the normalized value
-    const goalA = evaluation.mission_impact_scores.find((s: any) => s.goal_id === "goal_a");
+    const goalA = evaluation.mission_impact_scores.find((s: any) => s.goal_id === "a");
     expect(goalA?.goal_priority_weight).toBeCloseTo(0.40, 2);
   });
 

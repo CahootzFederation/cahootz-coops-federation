@@ -22,7 +22,7 @@ import path from "node:path";
 export interface CoopConfigData {
   charterText: string;
   /** Coop-specific mission goals with their priority weights */
-  missionGoals: { key: string; label: string; priorityWeight: number; description?: string; domain?: string; scoringRubric?: string }[];
+  missionGoals: MissionGoalConfig[];
   /** Universal structural scoring weights */
   structuralWeights: { feasibility: number; risk: number; accountability: number };
   /** Blend ratio between mission and structural overall score */
@@ -59,8 +59,18 @@ export interface CoopConfigData {
   councilVoteThresholdUSD?: number;
 }
 
+interface MissionGoalConfig {
+  key: string;
+  label: string;
+  priorityWeight: number;
+  description?: string;
+  domain?: string;
+  scoringRubric?: string;
+  originalKey?: string;
+}
+
 // ── Default config values ──────────────────────────────────────────────────
-const DEFAULT_MISSION_GOALS: { key: string; label: string; priorityWeight: number; description?: string; domain?: string; scoringRubric?: string }[] = [
+const DEFAULT_MISSION_GOALS: MissionGoalConfig[] = [
   {
     key: "member_benefit",
     label: "Member Benefit",
@@ -97,6 +107,35 @@ const DEFAULT_PASS_THRESHOLD = 0.6;
 const DEFAULT_STRONG_GOAL_THRESHOLD = 0.70;
 const DEFAULT_MISSION_MIN_THRESHOLD = 0.50;
 const DEFAULT_STRUCTURAL_GATE = 0.65;
+
+function missionGoalKeyFromLabel(label: string): string {
+  const key = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return key || "goal";
+}
+
+function normalizeMissionGoals(goals?: MissionGoalConfig[]): MissionGoalConfig[] {
+  const source = goals?.length ? goals : DEFAULT_MISSION_GOALS;
+  const seen = new Map<string, number>();
+
+  return source.map((goal) => {
+    const label = goal.label.trim() || goal.key || "Goal";
+    const baseKey = missionGoalKeyFromLabel(label);
+    const count = seen.get(baseKey) ?? 0;
+    seen.set(baseKey, count + 1);
+
+    return {
+      ...goal,
+      label,
+      ...(goal.key && goal.key !== baseKey ? { originalKey: goal.key } : {}),
+      key: count === 0 ? baseKey : `${baseKey}_${count + 1}`,
+    };
+  });
+}
 
 function normalizeCurrency(val: unknown): "UC" | "USD" | "mixed" {
   const s = String(val).toUpperCase();
@@ -183,7 +222,7 @@ export class ProposalEngine {
       ? config.charterText.substring(0, 2000)
       : await this.readCharter().then(t => t.substring(0, 2000));
 
-    const goalKeys = (config?.missionGoals ?? DEFAULT_MISSION_GOALS).map(g => g.key);
+    const goalKeys = normalizeMissionGoals(config?.missionGoals).map(g => g.key);
 
     const EvalSchema = z.object({
       alignment: z.enum(["ALIGNED", "NEUTRAL", "MISALIGNED"]),
@@ -269,7 +308,7 @@ export class ProposalEngine {
     },
     config?: CoopConfigData,
   ): Evaluation {
-    const missionGoals = config?.missionGoals ?? DEFAULT_MISSION_GOALS;
+    const missionGoals = normalizeMissionGoals(config?.missionGoals);
     const sw = config?.structuralWeights ?? DEFAULT_STRUCTURAL_WEIGHTS;
     const mix = config?.scoreMix ?? DEFAULT_SCORE_MIX;
 
@@ -284,7 +323,7 @@ export class ProposalEngine {
 
     // Build mission impact scores with normalized priority weights
     const mission_impact_scores: MissionImpactScore[] = missionGoals.map(goal => {
-      const found = rawEval.mission_impact_scores.find(s => s.goal_id === goal.key);
+      const found = rawEval.mission_impact_scores.find(s => s.goal_id === goal.key || s.goal_id === goal.originalKey);
       return {
         goal_id: goal.key,
         impact_score: this.clamp01(found?.impact_score ?? 0.5),
@@ -403,9 +442,17 @@ export class ProposalEngine {
     budget: { currency: "UC" | "USD" | "mixed"; amountRequested: number };
     treasuryPlan?: { localPercent: number; nationalPercent: number; acceptUC: true };
   }> {
-    const categoryKeys = (config?.proposalCategories ?? [])
-      .filter(c => c.isActive)
-      .map(c => c.key);
+    const activeCategories = (config?.proposalCategories ?? []).filter(c => c.isActive);
+    const categoryKeys = activeCategories.map(c => c.key);
+    const categoryInstructions = activeCategories.length > 0
+      ? [
+          "Valid categories:",
+          ...activeCategories.map(c => {
+            const description = c.description ? ` — ${c.description}` : "";
+            return `- ${c.key} (${c.label})${description}`;
+          }),
+        ].join("\n")
+      : "No configured proposal categories. Use a concise lowercase category key.";
 
     const ExtractionSchema = z.object({
       title: z.string().min(5).max(140),
@@ -442,7 +489,7 @@ export class ProposalEngine {
       instructions: [
         "Extract ALL structured information from raw proposal text.",
         charterContext,
-        `Valid categories: ${categoryKeys.join(", ")}`,
+        categoryInstructions,
         "ALL FIELDS ARE REQUIRED — Provide reasonable defaults if missing.",
         "- title: 5–140 chars",
         "- summary: 20–1000 chars",
@@ -508,7 +555,7 @@ export class ProposalEngine {
     risk_flags: string[];
     llm_summary: string;
   }> {
-    const missionGoals = config?.missionGoals ?? DEFAULT_MISSION_GOALS;
+    const missionGoals = normalizeMissionGoals(config?.missionGoals);
     const scorerAgents = config?.scorerAgents ?? [];
     const expertCalibration = config?.expertCalibration ?? {};
 
@@ -540,13 +587,19 @@ export class ProposalEngine {
     const proposalCategories = config?.proposalCategories ?? [];
     const categoryContext = proposalCategories.length > 0
       ? "PROPOSAL CATEGORIES:\n" +
-        proposalCategories.filter(c => c.isActive).map(c => `- ${c.key} (${c.label})`).join("\n")
+        proposalCategories.filter(c => c.isActive).map(c => {
+          const description = c.description ? `: ${c.description}` : "";
+          return `- ${c.key} (${c.label})${description}`;
+        }).join("\n")
       : "";
 
     const exclusionList = config?.sectorExclusions ?? [];
     const exclusionContext = exclusionList.length > 0
       ? "SECTOR EXCLUSIONS — flag if proposal matches:\n" +
-        exclusionList.map(e => `- ${e.value}`).join("\n")
+        exclusionList.map(e => {
+          const description = e.description ? `: ${e.description}` : "";
+          return `- ${e.value}${description}`;
+        }).join("\n")
       : "";
 
     const MissionScoreItemZ = z.object({
@@ -823,7 +876,7 @@ export class ProposalEngine {
     evaluation: Evaluation,
     config?: CoopConfigData,
   ): Promise<Alternative[]> {
-    const missionGoals = config?.missionGoals ?? DEFAULT_MISSION_GOALS;
+    const missionGoals = normalizeMissionGoals(config?.missionGoals);
     const goalKeys = missionGoals.map(g => `${g.key} (${g.label})`);
     const passThreshold = config?.screeningPassThreshold ?? DEFAULT_PASS_THRESHOLD;
 
@@ -916,7 +969,7 @@ export class ProposalEngine {
     });
 
     const passThreshold = config?.screeningPassThreshold ?? DEFAULT_PASS_THRESHOLD;
-    const missionGoals = config?.missionGoals ?? DEFAULT_MISSION_GOALS;
+    const missionGoals = normalizeMissionGoals(config?.missionGoals);
 
     const budgetAmount: number = extracted.budget?.amountRequested ?? 0;
     const tier = this.determineBudgetTier(budgetAmount, config);
@@ -1061,16 +1114,18 @@ export class ProposalEngine {
       checks.push({ name: "treasury_allocation_sum", passed: true, note: "Treasury plan not provided" });
     }
 
-    const defaultExclusions = [
+    const defaultExclusions: { value: string; description?: string }[] = [
       { value: "fashion" }, { value: "restaurant" }, { value: "cafe" }, { value: "food truck" },
     ];
     const exclusions = config?.sectorExclusions ?? defaultExclusions;
     const lower = `${extractedFields.title} ${input.text}`.toLowerCase();
-    const excludedHit = exclusions.some((e) => lower.includes(e.value.toLowerCase()));
+    const excludedHit = exclusions.find((e) => lower.includes(e.value.toLowerCase()));
     checks.push({
       name: "sector_exclusion_screen",
       passed: !excludedHit,
-      note: excludedHit ? "Proposal appears to match excluded sectors" : undefined,
+      note: excludedHit
+        ? `Proposal appears to match excluded sector: ${excludedHit.value}${excludedHit.description ? ` — ${excludedHit.description}` : ""}`
+        : undefined,
     });
 
     const manipulationPatterns = [
@@ -1143,7 +1198,7 @@ export class ProposalEngine {
     }
 
     // Recompute mission_impact_score and FinalScore using the same logic as computeEvaluation
-    const missionGoals = config?.missionGoals ?? DEFAULT_MISSION_GOALS;
+    const missionGoals = normalizeMissionGoals(config?.missionGoals);
     const totalWeight = missionGoals.reduce((s, g) => s + (g.priorityWeight ?? 1), 0) || 1;
     const penalizedMissionWeighted = penalizedMissionScores.reduce((sum, ms) => {
       const goalDef = missionGoals.find(g => g.key === ms.goal_id);

@@ -20,10 +20,10 @@ export const env = createEnv({
     PAYPAL_CLIENT_ID: z.string().optional(),
     PAYPAL_CLIENT_SECRET: z.string().optional(),
     SQUARE_WEBHOOK_SIGNATURE_KEY: z.string().optional(),
-    SLACK_WEBHOOK_URL: z.string().url(),
-    RESEND_API_KEY: z.string().startsWith("re_"),
+    SLACK_WEBHOOK_URL: z.string().url().optional(),
+    RESEND_API_KEY: z.string().startsWith("re_").optional(),
     RESEND_FROM_EMAIL: z.string().email().default("support@mail.cahootzcoops.com"),
-    SENTRY_DSN: z.string().url(),
+    SENTRY_DSN: z.string().url().optional(),
     EMAIL_TEST_TOKEN: z.string().min(16).optional(),
     // Vercel Blob
     BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),

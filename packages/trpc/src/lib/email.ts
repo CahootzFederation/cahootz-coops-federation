@@ -18,6 +18,22 @@ import { env } from "../env.js";
 
 type EmailRecipient = string | string[];
 const DEFAULT_NETWORK_NAME = "Cahootz Co-ops";
+const DEFAULT_FROM_EMAIL = "support@mail.cahootzcoops.com";
+const LOGIN_EMAIL_FROM = DEFAULT_FROM_EMAIL;
+type SentryCaptureContext = {
+  tags?: Record<string, string>;
+  extra?: Record<string, unknown>;
+};
+type SentryScope = {
+  setTag?: (key: string, value: string) => void;
+  setExtras?: (extras: Record<string, unknown>) => void;
+};
+type SentryLike = {
+  captureException?: (error: Error, context?: SentryCaptureContext) => void;
+  configureScope?: (callback: (scope: SentryScope) => void) => void;
+  getCurrentHub?: () => { getClient?: () => unknown };
+  init?: (options: { dsn: string }) => void;
+};
 
 export interface OrderEmailItem {
   productName: string;
@@ -453,35 +469,157 @@ function NewOrderAlertEmail({ order }: { order: OrderEmailData }) {
   );
 }
 
+function ApplicationAcceptedEmail({
+  applicantName,
+  coopName,
+  portalUrl,
+}: {
+  applicantName?: string | null;
+  coopName?: string | null;
+  portalUrl?: string | null;
+}) {
+  const displayName = coopName || DEFAULT_NETWORK_NAME;
+  const preview = `Your ${displayName} application was accepted.`;
+
+  return h(
+    EmailShell,
+    { brandName: displayName, preview },
+    h(Text, { style: styles.pill }, "Application accepted"),
+    h(Heading, { style: styles.heading }, "Welcome in"),
+    h(
+      Text,
+      { style: styles.text },
+      `Good news${applicantName ? `, ${applicantName}` : ""}: your application to join ${displayName} has been approved.`,
+    ),
+    h(
+      Text,
+      { style: styles.text },
+      "You can now sign in and access your co-op member portal.",
+    ),
+    portalUrl
+      ? h(
+          Section,
+          { style: { marginTop: "22px" } },
+          h(Button, { href: portalUrl, style: styles.button }, "Open member portal"),
+        )
+      : null,
+    h(Hr, { style: { borderColor: colors.line, margin: "24px 0" } }),
+    h(
+      Text,
+      { style: styles.muted },
+      "If you have questions about your membership, reply to this email.",
+    ),
+  );
+}
+
+function normalizeError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  return new Error(typeof error === "string" ? error : "Unknown email send error");
+}
+
+async function captureEmailSendFailure(
+  error: unknown,
+  context: Record<string, unknown>,
+): Promise<void> {
+  const normalizedError = normalizeError(error);
+  const tags = { area: "email", service: "resend" };
+  const extra = {
+    ...context,
+    service: "resend",
+  };
+  const captureContext = { tags, extra };
+
+  try {
+    const globalSentry = (globalThis as { Sentry?: SentryLike }).Sentry;
+
+    if (globalSentry?.captureException) {
+      globalSentry.captureException(normalizedError, captureContext);
+      return;
+    }
+
+    const sentryPackage = "@sentry/node";
+    const sentry = (await import(sentryPackage).catch(() => null)) as SentryLike | null;
+    const isInitialized = !!sentry?.getCurrentHub?.().getClient?.();
+
+    if (!isInitialized && env.SENTRY_DSN && sentry?.init) {
+      sentry.init({ dsn: env.SENTRY_DSN });
+    }
+
+    if (sentry?.configureScope) {
+      sentry.configureScope((scope) => {
+        Object.entries(tags).forEach(([key, value]) => scope.setTag?.(key, value));
+        scope.setExtras?.(extra);
+      });
+    }
+
+    if (sentry?.captureException) {
+      sentry.captureException(normalizedError, captureContext);
+      return;
+    }
+  } catch (captureError) {
+    console.error("Failed to report email send failure to Sentry:", captureError);
+  }
+
+  console.error("Email send failure:", normalizedError, extra);
+}
+
 async function sendEmail({
   to,
   subject,
   react,
+  from,
+  replyTo,
+  reportToSentry = false,
+  sentryContext,
 }: {
   to: EmailRecipient;
   subject: string;
   react: React.ReactElement;
+  from?: string;
+  replyTo?: string;
+  reportToSentry?: boolean;
+  sentryContext?: Record<string, unknown>;
 }) {
-  if (!isEmailConfigured()) {
-    throw new Error("Resend email is not configured");
-  }
-
-  const html = await render(react);
-  const resend = new Resend(env.RESEND_API_KEY);
-  const result = await resend.emails.send({
-    from: env.RESEND_FROM_EMAIL,
+  const sender = from || env.RESEND_FROM_EMAIL || DEFAULT_FROM_EMAIL;
+  const emailContext = {
     to,
     subject,
-    html,
-    text: toPlainText(html),
-    replyTo: env.RESEND_FROM_EMAIL,
-  });
+    from: sender,
+    ...sentryContext,
+  };
 
-  if (result.error) {
-    throw new Error(result.error.message);
+  try {
+    if (!isEmailConfigured()) {
+      throw new Error("Resend email is not configured");
+    }
+
+    const html = await render(react);
+    const resend = new Resend(env.RESEND_API_KEY);
+    const result = await resend.emails.send({
+      from: sender,
+      to,
+      subject,
+      html,
+      text: toPlainText(html),
+      replyTo: replyTo || sender,
+    });
+
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+
+    if (!result.data) {
+      throw new Error("Resend did not return sent email data");
+    }
+
+    return result.data;
+  } catch (error) {
+    if (reportToSentry) {
+      await captureEmailSendFailure(error, emailContext);
+    }
+
+    throw error;
   }
-
-  return result.data;
 }
 
 export async function sendLoginCode(
@@ -493,6 +631,13 @@ export async function sendLoginCode(
     to: email,
     subject: `Your ${coopName || DEFAULT_NETWORK_NAME} login code`,
     react: h(LoginCodeEmail, { code, coopName }),
+    from: LOGIN_EMAIL_FROM,
+    replyTo: LOGIN_EMAIL_FROM,
+    reportToSentry: true,
+    sentryContext: {
+      emailType: "login_code",
+      coopName: coopName || DEFAULT_NETWORK_NAME,
+    },
   });
 }
 
@@ -524,6 +669,24 @@ export async function sendNewOrderAlertEmail({
   });
 }
 
+export async function sendApplicationAcceptedEmail({
+  to,
+  applicantName,
+  coopName,
+  portalUrl,
+}: {
+  to: EmailRecipient;
+  applicantName?: string | null;
+  coopName?: string | null;
+  portalUrl?: string | null;
+}): Promise<void> {
+  await sendEmail({
+    to,
+    subject: `Your ${coopName || DEFAULT_NETWORK_NAME} application was accepted`,
+    react: h(ApplicationAcceptedEmail, { applicantName, coopName, portalUrl }),
+  });
+}
+
 export async function sendOrderEmails({
   customerEmail,
   merchantEmail,
@@ -548,7 +711,7 @@ export async function sendOrderEmails({
 
   const merchantRecipients = [
     ...(Array.isArray(merchantEmail) ? merchantEmail : merchantEmail ? [merchantEmail] : []),
-    ...(env.RESEND_FROM_EMAIL ? [env.RESEND_FROM_EMAIL] : []),
+    env.RESEND_FROM_EMAIL,
   ].filter((email, index, all) => all.indexOf(email) === index);
 
   if (merchantRecipients.length > 0) {

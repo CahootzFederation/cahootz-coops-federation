@@ -114,6 +114,7 @@ This is a **financial application** handling real money, digital currencies, and
 - ✅ Sanitize all user inputs to prevent injection attacks
 - ✅ Hash and salt passwords (never store plaintext)
 - ✅ Use environment variables for secrets (never hardcode)
+- ✅ For transactional email routing, reuse existing configured sender/support emails already in the codebase; do not add one-off email env variables without explicit approval
 - ✅ Use signed messages/proofs and replay protection for critical actions
 - ✅ Prefer immutable, auditable event trails for financial and governance flows
 - ❌ Never log sensitive data (keys, tokens, passwords, PINs)

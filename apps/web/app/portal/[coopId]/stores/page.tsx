@@ -47,9 +47,35 @@ import { BulkProductImportDialog } from "@/components/portal/bulk-product-import
 import { EditStoreDialog } from "@/components/portal/edit-store-dialog";
 import { EditProductDialog } from "@/components/portal/edit-product-dialog";
 
-type MainTab = "applications" | "stores" | "featured";
+type MainTab = "applications" | "stores" | "orders" | "featured";
 type ApplicationStatus = "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED";
 type StoreStatus = "PENDING" | "APPROVED" | "SUSPENDED" | "REJECTED";
+type OrderSource = "ALL" | "STORE_ORDER" | "COMMERCE_TRANSACTION";
+
+function formatCurrency(amount: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(amount);
+}
+
+function formatOrderDate(value: string) {
+  return new Date(value).toLocaleString("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function shortOrderId(id: string) {
+  return id.length > 12 ? id.slice(-12) : id;
+}
+
+function orderStatusClass(status: string | null) {
+  if (status === "COMPLETED" || status === "DELIVERED") return "bg-green-600";
+  if (status === "FAILED" || status === "CANCELLED" || status === "REFUNDED") return "bg-red-600";
+  if (status === "PROCESSING" || status === "SHIPPED") return "bg-blue-600";
+  return "bg-yellow-600";
+}
 
 export default function StoreManagementPage() {
   const { coopId } = useCoopContext();
@@ -77,6 +103,14 @@ export default function StoreManagementPage() {
           All Stores
         </Button>
         <Button
+          onClick={() => setMainTab("orders")}
+          variant={mainTab === "orders" ? "default" : "ghost"}
+          className={mainTab === "orders" ? "bg-amber-600 hover:bg-amber-700" : ""}
+        >
+          <DollarSign className="h-4 w-4 mr-2" />
+          Orders
+        </Button>
+        <Button
           onClick={() => setMainTab("applications")}
           variant={mainTab === "applications" ? "default" : "ghost"}
           className={mainTab === "applications" ? "bg-amber-600 hover:bg-amber-700" : ""}
@@ -96,6 +130,7 @@ export default function StoreManagementPage() {
 
       {/* Tab Content */}
       {mainTab === "stores" && <AllStoresTab />}
+      {mainTab === "orders" && <AllOrdersTab />}
       {mainTab === "applications" && <ApplicationsTab />}
       {mainTab === "featured" && <FeaturedProductsTab />}
     </div>
@@ -109,12 +144,14 @@ function AllStoresTab() {
   const { coopId } = useCoopContext();
   const [statusFilter, setStatusFilter] = useState<StoreStatus | undefined>("APPROVED");
   const [search, setSearch] = useState("");
+  const [includeDeleted, setIncludeDeleted] = useState(false);
   const [selectedStore, setSelectedStore] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
 
   const { data, isLoading, refetch } = api.store.getAllStores.useQuery({
     status: statusFilter,
     search: search || undefined,
+    includeDeleted,
   });
 
   const toggleFeatured = api.store.toggleFeatured.useMutation({
@@ -218,6 +255,16 @@ function AllStoresTab() {
           />
         </div>
         <Button
+          onClick={() => {
+            setIncludeDeleted((value) => !value);
+            if (!includeDeleted) setStatusFilter(undefined);
+          }}
+          variant="outline"
+          className="border-slate-700"
+        >
+          {includeDeleted ? "Hide Deleted" : "Show Deleted"}
+        </Button>
+        <Button
           onClick={() => batchVerify.mutate({ limit: 50 })}
           disabled={batchVerify.isPending}
           variant="outline"
@@ -264,9 +311,14 @@ function AllStoresTab() {
                           Featured
                         </Badge>
                       )}
+                      {(store as any).deletedAt && (
+                        <Badge className="bg-red-700 text-xs">
+                          Deleted
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-gray-400 mb-2">
-                      {store.category.replace(/_/g, " ")} • Owner: {store.owner.name || store.owner.email}
+                      {(store.category || "Uncategorized").replace(/_/g, " ")} • Owner: {store.owner.name || store.owner.email}
                     </p>
                     <div className="flex gap-4 text-sm text-gray-500">
                       <span><Package className="h-4 w-4 inline mr-1" />{store.productCount} products</span>
@@ -440,7 +492,12 @@ function AllStoresTab() {
                         )}
                         On-Chain
                       </Button>
-                      <StoreStatusActions storeId={store.id} currentStatus={store.status} onSuccess={() => refetch()} />
+                      <StoreStatusActions
+                        storeId={store.id}
+                        currentStatus={store.status}
+                        isDeleted={!!(store as any).deletedAt}
+                        onSuccess={() => refetch()}
+                      />
                     </div>
 
                     {/* Stripe Connect Status */}
@@ -457,6 +514,8 @@ function AllStoresTab() {
                       <StoreSCRewardsPanel storeId={store.id} storeName={store.name} />
                     )}
 
+                    <StoreOrdersPanel storeId={store.id} />
+
                     {/* Products Section */}
                     <StoreProductsPanel storeId={store.id} storeName={store.name} />
                   </div>
@@ -466,6 +525,228 @@ function AllStoresTab() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================
+// ALL ORDERS TAB
+// ============================================
+function AllOrdersTab() {
+  const [sourceFilter, setSourceFilter] = useState<OrderSource>("ALL");
+  const [search, setSearch] = useState("");
+  const [includeDeleted, setIncludeDeleted] = useState(false);
+
+  const { data, isLoading, error, refetch } = api.store.getAllStoreOrdersAdmin.useQuery({
+    source: sourceFilter,
+    search: search || undefined,
+    includeDeleted,
+    limit: 75,
+  });
+
+  const updateOrderDeleted = api.store.updateOrderDeletedAdmin.useMutation({
+    onSuccess: () => refetch(),
+  });
+
+  const orders = data?.orders ?? [];
+  const sourceTabs: { label: string; value: OrderSource }[] = [
+    { label: "All", value: "ALL" },
+    { label: "Stripe Checkout", value: "COMMERCE_TRANSACTION" },
+    { label: "Store Orders", value: "STORE_ORDER" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-4 items-center">
+        <div className="flex gap-2 bg-slate-800 rounded-lg p-1">
+          {sourceTabs.map((tab) => (
+            <Button
+              key={tab.value}
+              onClick={() => setSourceFilter(tab.value)}
+              variant={sourceFilter === tab.value ? "default" : "ghost"}
+              size="sm"
+              className={sourceFilter === tab.value ? "bg-slate-700" : ""}
+            >
+              {tab.label}
+            </Button>
+          ))}
+        </div>
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Search orders..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="pl-10 bg-slate-800 border-slate-700"
+          />
+        </div>
+        <Button variant="outline" onClick={() => refetch()} className="border-slate-700">
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Refresh
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => setIncludeDeleted((value) => !value)}
+          className="border-slate-700"
+        >
+          {includeDeleted ? "Hide Deleted" : "Show Deleted"}
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center h-[30vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        </div>
+      ) : error ? (
+        <Card className="bg-red-950/30 border-red-900">
+          <CardContent className="p-4 text-red-300">{error.message}</CardContent>
+        </Card>
+      ) : orders.length === 0 ? (
+        <div className="text-center py-12">
+          <DollarSign className="h-12 w-12 mx-auto text-gray-600 mb-4" />
+          <p className="text-gray-400">No orders found</p>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-slate-800 overflow-hidden">
+          {orders.map((order) => (
+            <OrderRow
+              key={`${order.source}-${order.id}`}
+              order={order}
+              onToggleDeleted={(deleted) =>
+                updateOrderDeleted.mutate({
+                  orderId: order.id,
+                  source: order.source,
+                  deleted,
+                })
+              }
+              isUpdating={updateOrderDeleted.isPending}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StoreOrdersPanel({ storeId }: { storeId: string }) {
+  const { data, isLoading, error, refetch } = api.store.getAllStoreOrdersAdmin.useQuery({
+    storeId,
+    limit: 20,
+  });
+
+  const updateOrderDeleted = api.store.updateOrderDeletedAdmin.useMutation({
+    onSuccess: () => refetch(),
+  });
+
+  const orders = data?.orders ?? [];
+
+  return (
+    <div>
+      <h4 className="font-medium text-white mb-3">Orders ({orders.length})</h4>
+      {isLoading ? (
+        <div className="py-4 text-center text-gray-400">Loading orders...</div>
+      ) : error ? (
+        <div className="py-4 text-sm text-red-400">{error.message}</div>
+      ) : orders.length === 0 ? (
+        <div className="py-4 text-sm text-gray-400">No orders created for this store yet.</div>
+      ) : (
+        <div className="rounded-lg border border-slate-800 overflow-hidden">
+          {orders.map((order) => (
+            <OrderRow
+              key={`${order.source}-${order.id}`}
+              order={order}
+              compact
+              onToggleDeleted={(deleted) =>
+                updateOrderDeleted.mutate({
+                  orderId: order.id,
+                  source: order.source,
+                  deleted,
+                })
+              }
+              isUpdating={updateOrderDeleted.isPending}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrderRow({
+  order,
+  compact = false,
+  onToggleDeleted,
+  isUpdating = false,
+}: {
+  order: any;
+  compact?: boolean;
+  onToggleDeleted?: (deleted: boolean) => void;
+  isUpdating?: boolean;
+}) {
+  const sourceLabel = order.source === "COMMERCE_TRANSACTION" ? "Stripe" : "Store";
+  const isDeleted = !!order.deletedAt;
+
+  return (
+    <div className={`bg-slate-900 border-b border-slate-800 last:border-b-0 p-4 ${isDeleted ? "opacity-70" : ""}`}>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
+            <h3 className="font-semibold text-white">
+              {compact ? shortOrderId(order.id) : `Order ${shortOrderId(order.id)}`}
+            </h3>
+            <Badge className="bg-slate-700">{sourceLabel}</Badge>
+            <Badge className={orderStatusClass(order.paymentStatus)}>{order.paymentStatus}</Badge>
+            {order.fulfillmentStatus && (
+              <Badge className={orderStatusClass(order.fulfillmentStatus)}>{order.fulfillmentStatus}</Badge>
+            )}
+            {isDeleted && <Badge className="bg-red-700">Deleted</Badge>}
+          </div>
+          {!compact && (
+            <p className="text-sm text-gray-400">
+              {order.storeName} • {formatOrderDate(order.createdAt)}
+            </p>
+          )}
+          <p className="text-sm text-gray-300 mt-2">
+            {order.itemSummary || "Order total"}
+            {order.itemCount > 1 ? ` (${order.itemCount} items)` : ""}
+          </p>
+          <div className="mt-2 grid gap-1 text-xs text-gray-500 md:grid-cols-2">
+            <span>Customer: {order.customerName || order.customerEmail || "Unknown"}</span>
+            <span>Email: {order.customerEmail || "None"}</span>
+            {order.shippingAddress && <span className="md:col-span-2">Ship to: {order.shippingAddress}</span>}
+            {order.transactionReference && (
+              <span className="md:col-span-2">Reference: {shortOrderId(order.transactionReference)}</span>
+            )}
+          </div>
+        </div>
+        <div className="text-left md:text-right">
+          <p className="text-lg font-bold text-white">{formatCurrency(order.totalUSD)}</p>
+          <p className="text-xs text-gray-500">{order.paymentMethod}</p>
+          {compact && <p className="text-xs text-gray-500 mt-1">{formatOrderDate(order.createdAt)}</p>}
+          {onToggleDeleted && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isUpdating}
+              onClick={() => onToggleDeleted(!isDeleted)}
+              className={
+                isDeleted
+                  ? "mt-3 border-green-600 text-green-500 hover:bg-green-600 hover:text-white"
+                  : "mt-3 border-red-600 text-red-500 hover:bg-red-600 hover:text-white"
+              }
+            >
+              {isUpdating ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : isDeleted ? (
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+              ) : (
+                <Trash2 className="h-3 w-3 mr-1" />
+              )}
+              {isDeleted ? "Restore" : "Soft Delete"}
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1399,19 +1680,21 @@ function StoreSCRewardsPanel({ storeId, storeName }: { storeId: string; storeNam
 }
 
 // ============================================
-// STORE STATUS ACTIONS (SUSPEND/DELETE)
+// STORE STATUS ACTIONS (DISABLE/DELETE)
 // ============================================
 function StoreStatusActions({ 
   storeId, 
   currentStatus, 
+  isDeleted,
   onSuccess 
 }: { 
   storeId: string; 
   currentStatus: string;
+  isDeleted: boolean;
   onSuccess: () => void;
 }) {
   const [showConfirm, setShowConfirm] = useState(false);
-  const [action, setAction] = useState<'suspend' | 'delete' | null>(null);
+  const [action, setAction] = useState<'suspend' | 'delete' | 'restore' | null>(null);
 
   const updateStatus = api.store.updateStoreStatus.useMutation({
     onSuccess: () => {
@@ -1421,7 +1704,7 @@ function StoreStatusActions({
     },
   });
 
-  const handleAction = (actionType: 'suspend' | 'delete') => {
+  const handleAction = (actionType: 'suspend' | 'delete' | 'restore') => {
     setAction(actionType);
     setShowConfirm(true);
   };
@@ -1433,6 +1716,11 @@ function StoreStatusActions({
       updateStatus.mutate({ 
         storeId, 
         status: currentStatus === 'SUSPENDED' ? 'APPROVED' : 'SUSPENDED' 
+      });
+    } else if (action === 'restore') {
+      updateStatus.mutate({ 
+        storeId, 
+        status: 'APPROVED' 
       });
     } else if (action === 'delete') {
       updateStatus.mutate({ 
@@ -1448,9 +1736,11 @@ function StoreStatusActions({
         <span className="text-sm text-gray-400">
           {action === 'suspend' 
             ? currentStatus === 'SUSPENDED' 
-              ? 'Reactivate store?' 
-              : 'Suspend store?'
-            : 'Delete store?'}
+              ? 'Enable store?' 
+              : 'Disable store?'
+            : action === 'restore'
+              ? 'Restore store?'
+              : 'Soft delete store?'}
         </span>
         <Button
           size="sm"
@@ -1481,37 +1771,52 @@ function StoreStatusActions({
 
   return (
     <>
-      {currentStatus !== 'SUSPENDED' && (
+      {isDeleted && (
         <Button
           variant="outline"
           size="sm"
-          onClick={() => handleAction('suspend')}
-          className="border-orange-600 text-orange-600 hover:bg-orange-600 hover:text-white"
-        >
-          <Ban className="h-4 w-4 mr-1" />
-          Suspend Store
-        </Button>
-      )}
-      {currentStatus === 'SUSPENDED' && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => handleAction('suspend')}
+          onClick={() => handleAction('restore')}
           className="border-green-600 text-green-600 hover:bg-green-600 hover:text-white"
         >
           <CheckCircle2 className="h-4 w-4 mr-1" />
-          Reactivate Store
+          Restore Store
         </Button>
       )}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => handleAction('delete')}
-        className="border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
-      >
-        <Trash2 className="h-4 w-4 mr-1" />
-        Delete Store
-      </Button>
+      {!isDeleted && (
+        <>
+          {currentStatus !== 'SUSPENDED' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleAction('suspend')}
+              className="border-orange-600 text-orange-600 hover:bg-orange-600 hover:text-white"
+            >
+              <Ban className="h-4 w-4 mr-1" />
+              Disable Store
+            </Button>
+          )}
+          {currentStatus === 'SUSPENDED' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleAction('suspend')}
+              className="border-green-600 text-green-600 hover:bg-green-600 hover:text-white"
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1" />
+              Enable Store
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleAction('delete')}
+            className="border-red-600 text-red-600 hover:bg-red-600 hover:text-white"
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Soft Delete Store
+          </Button>
+        </>
+      )}
     </>
   );
 }

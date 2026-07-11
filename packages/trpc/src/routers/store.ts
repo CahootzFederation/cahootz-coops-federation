@@ -18,6 +18,48 @@ import { env } from "../env.js";
 const StoreCategoryEnum = z.string().min(1).max(100);
 const ProductCategoryEnum = z.string().min(1).max(100);
 
+function requireCoopId(ctx: unknown): string {
+  const coopId = (ctx as CoopScopedContext).coopId;
+  if (!coopId) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "coopId is required",
+    });
+  }
+  return coopId;
+}
+
+function getStringMetadata(metadata: Prisma.JsonValue | null | undefined, key: string): string | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function summarizeMetadataItems(metadata: Prisma.JsonValue | null | undefined, fallback: string) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return { itemCount: 1, itemSummary: fallback };
+  }
+
+  const items = (metadata as Record<string, unknown>).items;
+  if (!Array.isArray(items) || items.length === 0) {
+    return { itemCount: 1, itemSummary: fallback };
+  }
+
+  const names = items
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+      const record = item as Record<string, unknown>;
+      const name = record.name ?? record.productName;
+      return typeof name === "string" && name.trim().length > 0 ? name : null;
+    })
+    .filter((name): name is string => !!name);
+
+  return {
+    itemCount: items.length,
+    itemSummary: names.slice(0, 2).join(", ") || fallback,
+  };
+}
+
 export const storeRouter = router({
   // ══════════════════════════════════════════════════════════════
   // PUBLIC ENDPOINTS - Browse stores and products
@@ -44,6 +86,7 @@ export const storeRouter = router({
       const where: any = {
         coopId,
         status: "APPROVED",
+        deletedAt: null,
       };
 
       if (category) where.category = category;
@@ -156,6 +199,7 @@ export const storeRouter = router({
       // surface so customers don't land on a store they can't buy from.
       if (
         store.status !== "APPROVED" ||
+        store.deletedAt ||
         !store.business?.stripeAccount?.chargesEnabled
       ) {
         throw new TRPCError({
@@ -212,6 +256,7 @@ export const storeRouter = router({
         isActive: true,
         store: {
           status: "APPROVED",
+          deletedAt: null,
           ...(coopId && { coopId }),
           business: {
             stripeAccount: {
@@ -297,6 +342,7 @@ export const storeRouter = router({
               acceptsUC: true,
               ucDiscountPercent: true,
               status: true,
+              deletedAt: true,
               business: {
                 select: {
                   stripeAccount: { select: { chargesEnabled: true } },
@@ -311,6 +357,7 @@ export const storeRouter = router({
         !product ||
         !product.isActive ||
         product.store.status !== "APPROVED" ||
+        product.store.deletedAt ||
         !product.store.business?.stripeAccount?.chargesEnabled
       ) {
         throw new TRPCError({
@@ -803,7 +850,7 @@ export const storeRouter = router({
         });
       }
 
-      if (store.status !== "APPROVED") {
+      if (store.status !== "APPROVED" || store.deletedAt) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Your store must be approved before adding products",
@@ -1051,8 +1098,9 @@ export const storeRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const context = ctx as Context;
+      const db = context.db as any;
 
-      const store = await context.db.store.findUnique({
+      const store = await db.store.findUnique({
         where: { id: input.storeId },
         include: { application: true },
       });
@@ -1064,16 +1112,18 @@ export const storeRouter = router({
         });
       }
 
-      await context.db.$transaction([
-        context.db.store.update({
+      await db.$transaction([
+        db.store.update({
           where: { id: input.storeId },
           data: {
             status: "APPROVED",
+            deletedAt: null,
+            deletedBy: null,
             isScVerified: input.grantScVerification,
             scVerifiedAt: input.grantScVerification ? new Date() : null,
           },
         }),
-        context.db.storeApplication.update({
+        db.storeApplication.update({
           where: { storeId: input.storeId },
           data: {
             status: "APPROVED",
@@ -1415,15 +1465,20 @@ export const storeRouter = router({
     .input(z.object({
       status: z.enum(["PENDING", "APPROVED", "SUSPENDED", "REJECTED"]).optional(),
       search: z.string().optional(),
+      includeDeleted: z.boolean().optional().default(false),
       limit: z.number().min(1).max(100).optional().default(50),
       cursor: z.string().optional(),
     }).optional())
     .query(async ({ input, ctx }) => {
       const context = ctx as Context;
+      const coopId = requireCoopId(ctx);
       const { status, search, cursor } = input || {};
       const limit = input?.limit ?? 50;
 
-      const where: any = {};
+      const where: any = { coopId };
+      if (!input?.includeDeleted) {
+        where.deletedAt = null;
+      }
       if (status) {
         where.status = status;
       }
@@ -1500,6 +1555,8 @@ export const storeRouter = router({
           totalSales: store.totalSales,
           rating: store.rating,
           reviewCount: store.reviewCount,
+          deletedAt: store.deletedAt,
+          deletedBy: store.deletedBy,
           productCount: store._count.products,
           orderCount: store._count.orders,
           createdAt: store.createdAt,
@@ -1517,6 +1574,264 @@ export const storeRouter = router({
         } : null,
         })),
         nextCursor,
+      };
+    }),
+
+  /**
+   * Get all orders created in the active co-op for admin management.
+   * Includes both legacy StoreOrder rows and Stripe-backed CommerceTransaction rows.
+   */
+  getAllStoreOrdersAdmin: privateProcedure
+    .input(z.object({
+      storeId: z.string().optional(),
+      search: z.string().optional(),
+      source: z.enum(["ALL", "STORE_ORDER", "COMMERCE_TRANSACTION"]).optional().default("ALL"),
+      fulfillmentStatus: z.enum(["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"]).optional(),
+      paymentStatus: z.enum(["PENDING", "COMPLETED", "FAILED", "REFUNDED"]).optional(),
+      commerceStatus: z.enum(["PENDING", "PROCESSING", "COMPLETED", "FAILED", "REFUNDED", "PARTIALLY_REFUNDED"]).optional(),
+      includeDeleted: z.boolean().optional().default(false),
+      limit: z.number().min(1).max(100).optional().default(50),
+    }).optional())
+    .query(async ({ input, ctx }) => {
+      const context = ctx as Context;
+      const db = context.db as any;
+      const coopId = requireCoopId(ctx);
+      const limit = input?.limit ?? 50;
+      const search = input?.search?.trim();
+      const source = input?.source ?? "ALL";
+      const matchingBuyerIds = search
+        ? (
+            await db.user.findMany({
+              where: {
+                OR: [
+                  { name: { contains: search, mode: "insensitive" } },
+                  { email: { contains: search, mode: "insensitive" } },
+                ],
+              },
+              select: { id: true },
+              take: 100,
+            })
+          ).map((user: { id: string }) => user.id)
+        : [];
+
+      const storeOrderWhere: any = {
+        store: {
+          coopId,
+          ...(input?.storeId ? { id: input.storeId } : {}),
+          ...(input?.includeDeleted ? {} : { deletedAt: null }),
+        },
+        ...(input?.includeDeleted ? {} : { deletedAt: null }),
+        ...(input?.fulfillmentStatus ? { fulfillmentStatus: input.fulfillmentStatus } : {}),
+        ...(input?.paymentStatus ? { paymentStatus: input.paymentStatus } : {}),
+      };
+
+      if (search) {
+        storeOrderWhere.OR = [
+          { id: { contains: search, mode: "insensitive" } },
+          { store: { name: { contains: search, mode: "insensitive" } } },
+          ...(matchingBuyerIds.length > 0 ? [{ buyerId: { in: matchingBuyerIds } }] : []),
+        ];
+      }
+
+      const commerceWhere: any = {
+        coopId,
+        ...(input?.includeDeleted ? {} : { deletedAt: null }),
+        ...(input?.commerceStatus ? { status: input.commerceStatus } : {}),
+        ...(input?.storeId
+          ? {
+              business: {
+                store: {
+                  id: input.storeId,
+                  ...(input?.includeDeleted ? {} : { deletedAt: null }),
+                },
+              },
+            }
+          : {}),
+      };
+
+      if (search) {
+        commerceWhere.OR = [
+          { id: { contains: search, mode: "insensitive" } },
+          { business: { name: { contains: search, mode: "insensitive" } } },
+          { business: { store: { name: { contains: search, mode: "insensitive" } } } },
+          { customer: { name: { contains: search, mode: "insensitive" } } },
+          { customer: { email: { contains: search, mode: "insensitive" } } },
+        ];
+      }
+
+      const [storeOrders, commerceTransactions] = await Promise.all([
+        source === "COMMERCE_TRANSACTION"
+          ? Promise.resolve([])
+          : db.storeOrder.findMany({
+              where: storeOrderWhere,
+              take: limit,
+              orderBy: { createdAt: "desc" },
+              include: {
+                store: {
+                  select: { id: true, name: true, email: true },
+                },
+                items: {
+                  include: {
+                    product: {
+                      select: { name: true },
+                    },
+                  },
+                },
+              },
+            }),
+        source === "STORE_ORDER"
+          ? Promise.resolve([])
+          : db.commerceTransaction.findMany({
+              where: commerceWhere,
+              take: limit,
+              orderBy: { createdAt: "desc" },
+              include: {
+                customer: {
+                  select: { id: true, name: true, email: true },
+                },
+                business: {
+                  include: {
+                    store: {
+                      select: { id: true, name: true, email: true },
+                    },
+                  },
+                },
+              },
+            }),
+      ]);
+
+      const buyerMap = new Map<string, { id: string; name: string | null; email: string | null }>(
+        (
+          await db.user.findMany({
+            where: { id: { in: storeOrders.map((order: any) => order.buyerId) } },
+            select: { id: true, name: true, email: true },
+          })
+        ).map((buyer: { id: string; name: string | null; email: string | null }) => [buyer.id, buyer]),
+      );
+
+      const normalizedStoreOrders = (storeOrders as any[]).map((order) => ({
+        id: order.id,
+        source: "STORE_ORDER" as const,
+        storeId: order.store.id,
+        storeName: order.store.name,
+        storeEmail: order.store.email,
+        customerId: order.buyerId,
+        customerName: buyerMap.get(order.buyerId)?.name ?? null,
+        customerEmail: buyerMap.get(order.buyerId)?.email ?? null,
+        totalUSD: order.totalUSD,
+        subtotalUSD: order.subtotalUSD,
+        paymentMethod: order.paymentMethod,
+        paymentStatus: order.paymentStatus,
+        fulfillmentStatus: order.fulfillmentStatus,
+        transactionReference: order.transactionHash,
+        shippingAddress: order.shippingAddress,
+        note: order.note,
+        deletedAt: order.deletedAt ? order.deletedAt.toISOString() : null,
+        deletedBy: order.deletedBy,
+        itemCount: order.items.length,
+        itemSummary: order.items.slice(0, 2).map((item: any) => item.product.name).join(", "),
+        createdAt: order.createdAt.toISOString(),
+      }));
+
+      const normalizedCommerceTransactions = (commerceTransactions as any[]).map((transaction) => {
+        const itemSummary = summarizeMetadataItems(transaction.metadata, "Order total");
+        const customerEmail = getStringMetadata(transaction.metadata, "guestEmail") || transaction.customer.email;
+        const customerName = getStringMetadata(transaction.metadata, "guestName") || transaction.customer.name;
+
+        return {
+          id: transaction.id,
+          source: "COMMERCE_TRANSACTION" as const,
+          storeId: transaction.business.store?.id ?? null,
+          storeName: transaction.business.store?.name || transaction.business.name,
+          storeEmail: transaction.business.store?.email ?? null,
+          customerId: transaction.customer.id,
+          customerName,
+          customerEmail,
+          totalUSD: transaction.chargedAmount,
+          subtotalUSD: transaction.listedAmount,
+          paymentMethod: "CARD",
+          paymentStatus: transaction.status,
+          fulfillmentStatus: null,
+          transactionReference:
+            transaction.stripeChargeId || transaction.stripePaymentIntentId,
+          shippingAddress: getStringMetadata(transaction.metadata, "shippingAddress"),
+          note: getStringMetadata(transaction.metadata, "note"),
+          deletedAt: transaction.deletedAt ? transaction.deletedAt.toISOString() : null,
+          deletedBy: transaction.deletedBy,
+          itemCount: itemSummary.itemCount,
+          itemSummary: itemSummary.itemSummary,
+          createdAt: transaction.createdAt.toISOString(),
+        };
+      });
+
+      const orders = [...normalizedStoreOrders, ...normalizedCommerceTransactions]
+        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+        .slice(0, limit);
+
+      return { orders };
+    }),
+
+  /**
+   * Soft-delete or restore an order in the active co-op.
+   */
+  updateOrderDeletedAdmin: privateProcedure
+    .input(z.object({
+      orderId: z.string(),
+      source: z.enum(["STORE_ORDER", "COMMERCE_TRANSACTION"]),
+      deleted: z.boolean(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as Context;
+      const db = context.db as any;
+      const coopId = requireCoopId(ctx);
+      const deletedAt = input.deleted ? new Date() : null;
+      const deletedBy = input.deleted ? ((ctx as any).walletAddress ?? null) : null;
+
+      if (input.source === "STORE_ORDER") {
+        const order = await db.storeOrder.findFirst({
+          where: {
+            id: input.orderId,
+            store: { coopId },
+          },
+          select: { id: true },
+        });
+
+        if (!order) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Order not found",
+          });
+        }
+
+        await db.storeOrder.update({
+          where: { id: order.id },
+          data: { deletedAt, deletedBy },
+        });
+      } else {
+        const transaction = await db.commerceTransaction.findFirst({
+          where: {
+            id: input.orderId,
+            coopId,
+          },
+          select: { id: true },
+        });
+
+        if (!transaction) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Order not found",
+          });
+        }
+
+        await db.commerceTransaction.update({
+          where: { id: transaction.id },
+          data: { deletedAt, deletedBy },
+        });
+      }
+
+      return {
+        success: true,
+        message: input.deleted ? "Order soft deleted" : "Order restored",
       };
     }),
 
@@ -1693,12 +2008,13 @@ export const storeRouter = router({
       const context = ctx as Context;
       const limit = input?.limit ?? 8;
 
-      const products = await context.db.product.findMany({
+      const products = await (context.db as any).product.findMany({
         where: {
           isFeatured: true,
           isActive: true,
           store: {
             status: "APPROVED",
+            deletedAt: null,
             business: {
               stripeAccount: {
                 chargesEnabled: true,
@@ -2478,7 +2794,7 @@ export const storeRouter = router({
         },
       });
 
-      if (!store || store.status !== "APPROVED") {
+      if (!store || store.status !== "APPROVED" || store.deletedAt) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Store not found",
@@ -3088,9 +3404,11 @@ export const storeRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const context = ctx as Context;
+      const db = context.db as any;
+      const coopId = requireCoopId(ctx);
 
-      const store = await context.db.store.findUnique({
-        where: { id: input.storeId },
+      const store = await db.store.findFirst({
+        where: { id: input.storeId, coopId },
       });
 
       if (!store) {
@@ -3100,10 +3418,17 @@ export const storeRouter = router({
         });
       }
 
-      await context.db.store.update({
-        where: { id: input.storeId },
+      await db.store.update({
+        where: { id: store.id },
         data: {
           status: input.status,
+          deletedAt: input.status === "REJECTED" ? new Date() : input.status === "APPROVED" ? null : store.deletedAt,
+          deletedBy:
+            input.status === "REJECTED"
+              ? ((ctx as any).walletAddress ?? null)
+              : input.status === "APPROVED"
+                ? null
+                : store.deletedBy,
         },
       });
 

@@ -9,12 +9,19 @@ import { router } from "../trpc.js";
 import { createWalletForUser } from "../services/wallet-service.js";
 import { syncMembershipToContract } from "../services/blockchain.js";
 import { toE164 } from "../lib/phone.js";
+import { sendApplicationAcceptedEmail, isEmailConfigured } from "../services/email-service.js";
 import { sendApplicationSubmittedNotification } from "../services/slack-notification-service.js";
 
 // Backend wallet is now stored in CoopConfig per-coop
 
 function toJsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
+}
+
+function getPortalUrl(coopId: string): string | undefined {
+  const baseUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_URI;
+  if (!baseUrl) return undefined;
+  return `${baseUrl.replace(/\/$/, "")}/portal/${coopId}`;
 }
 
 // Validation schema for application submission.
@@ -481,6 +488,27 @@ export const applicationRouter = router({
           }
         } else {
           console.warn('⚠️ Backend wallet private key not configured, skipping contract sync');
+        }
+
+        if (application.user.email && isEmailConfigured()) {
+          void (async () => {
+            try {
+              const coopConfig = await context.db.coopConfig.findFirst({
+                where: { coopId: input.coopId, isActive: true },
+                select: { name: true },
+                orderBy: { version: "desc" },
+              });
+
+              await sendApplicationAcceptedEmail({
+                to: application.user.email,
+                applicantName: application.user.name,
+                coopName: coopConfig?.name,
+                portalUrl: getPortalUrl(input.coopId),
+              });
+            } catch (emailError) {
+              console.error("Failed to send application acceptance email:", emailError);
+            }
+          })();
         }
 
         const response = {

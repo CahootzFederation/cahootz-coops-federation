@@ -1188,6 +1188,8 @@ model Store {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  deletedBy String?
 
   // Relations
   products                  Product[]
@@ -1200,6 +1202,7 @@ model Store {
   @@unique([coopId, shortCode])
   @@index([ownerId])
   @@index([coopId, status])
+  @@index([deletedAt])
   @@index([category])
   @@schema("public")
 }
@@ -1313,6 +1316,8 @@ model StoreOrder {
   note      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  deletedBy String?
 
   // Relations
   items     StoreOrderItem[]
@@ -1320,6 +1325,7 @@ model StoreOrder {
 
   @@index([storeId])
   @@index([buyerId])
+  @@index([deletedAt])
   @@schema("public")
 }
 
@@ -1848,6 +1854,8 @@ model CommerceTransaction {
   completedAt   DateTime?
   failedAt      DateTime?
   failureReason String?
+  deletedAt     DateTime?
+  deletedBy     String?
 
   // Relations
   treasuryLedgerEntries TreasuryLedgerEntry[]
@@ -1857,6 +1865,7 @@ model CommerceTransaction {
   @@index([businessId, createdAt(sort: Desc)])
   @@index([coopId])
   @@index([status])
+  @@index([deletedAt])
   @@index([stripePaymentIntentId])
   @@schema("public")
 }

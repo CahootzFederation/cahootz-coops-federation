@@ -1,6 +1,7 @@
 export {
   generateLoginCode,
   isEmailConfigured,
+  sendApplicationAcceptedEmail,
   sendLoginCode,
   sendNewOrderAlertEmail,
   sendOrderConfirmationEmail,

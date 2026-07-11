@@ -10,10 +10,42 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Loader2, ArrowLeft, ShieldAlert, PlusCircle, Bot, Users, Globe, X, Plus, ToggleLeft, ToggleRight, Trash2 } from "lucide-react";
+import { Loader2, ArrowLeft, ShieldAlert, PlusCircle, Bot, Users, Globe, X, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { Label } from "@/components/ui/label";
 import { ConfigSectionEditor } from "@/components/portal/proposals/config-section-editor";
+
+interface MissionGoal {
+  key: string;
+  label: string;
+  priorityWeight: number;
+  description?: string;
+}
+
+function missionGoalKeyFromLabel(label: string) {
+  const key = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return key || "goal";
+}
+
+function withGeneratedMissionGoalKeys(goals: MissionGoal[]) {
+  const seen = new Map<string, number>();
+
+  return goals.map((goal) => {
+    const baseKey = missionGoalKeyFromLabel(goal.label);
+    const count = seen.get(baseKey) ?? 0;
+    seen.set(baseKey, count + 1);
+
+    return {
+      ...goal,
+      key: count === 0 ? baseKey : `${baseKey}_${count + 1}`,
+    };
+  });
+}
 
 export default function CoopConfigPage() {
   const params = useParams();
@@ -97,22 +129,10 @@ export default function CoopConfigPage() {
   const [editAccountabilityWeight, setEditAccountabilityWeight] = useState("");
 
   // Mission goals editing
-  const [editGoals, setEditGoals] = useState<{ key: string; label: string; priorityWeight: number; description?: string }[] | null>(null);
-  const [newGoalKey, setNewGoalKey] = useState("");
+  const [editGoals, setEditGoals] = useState<MissionGoal[] | null>(null);
   const [newGoalLabel, setNewGoalLabel] = useState("");
   const [newGoalWeight, setNewGoalWeight] = useState("");
   const [newGoalDescription, setNewGoalDescription] = useState("");
-
-  // Categories editing
-  const [editCategories, setEditCategories] = useState<{ key: string; label: string; isActive: boolean; description?: string }[] | null>(null);
-  const [newCategoryKey, setNewCategoryKey] = useState("");
-  const [newCategoryLabel, setNewCategoryLabel] = useState("");
-  const [newCategoryDescription, setNewCategoryDescription] = useState("");
-
-  // Sector exclusions editing
-  const [editExclusions, setEditExclusions] = useState<{ value: string; description?: string }[] | null>(null);
-  const [newExclusionValue, setNewExclusionValue] = useState("");
-  const [newExclusionDescription, setNewExclusionDescription] = useState("");
 
   // Display features editing
   const [editFeatures, setEditFeatures] = useState<{ title: string; description: string }[] | null>(null);
@@ -320,7 +340,11 @@ export default function CoopConfigPage() {
         title="Mission Goals"
         description="Goals used to score proposal mission impact. Edit weights, descriptions, or add new goals — changes won't go live until acknowledged."
         isDirty={editGoals !== null}
-        onSave={propose("missionGoals", { missionGoals: editGoals ?? config.missionGoals }, { missionGoals: config.missionGoals })}
+        onSave={propose(
+          "missionGoals",
+          { missionGoals: withGeneratedMissionGoalKeys(editGoals ?? config.missionGoals) },
+          { missionGoals: config.missionGoals },
+        )}
         isSaving={proposeChange.isPending}
         {...sectionReview("missionGoals")}
         coopId={coopId}
@@ -344,7 +368,7 @@ export default function CoopConfigPage() {
         <div className="space-y-3">
           {(editGoals ?? config.missionGoals).map((goal, i) => (
             <div key={i} className="rounded-md border border-slate-700 bg-slate-900 p-3 space-y-2">
-              {/* Top row: label, key, weight, remove */}
+              {/* Top row: label, weight, remove */}
               <div className="flex items-center gap-2">
                 <div className="flex-1 min-w-0">
                   <Input
@@ -355,17 +379,6 @@ export default function CoopConfigPage() {
                     }}
                     placeholder="Label"
                     className="bg-slate-800 border-slate-600 text-white text-sm h-8"
-                  />
-                </div>
-                <div className="w-36">
-                  <Input
-                    value={goal.key}
-                    onChange={(e) => {
-                      const base = editGoals ?? config.missionGoals;
-                      setEditGoals(base.map((g, j) => j === i ? { ...g, key: e.target.value } : g));
-                    }}
-                    placeholder="key"
-                    className="bg-slate-800 border-slate-600 text-white font-mono text-xs h-8"
                   />
                 </div>
                 <div className="w-24 flex items-center gap-1">
@@ -419,22 +432,9 @@ export default function CoopConfigPage() {
             <div className="flex-1">
               <Input
                 value={newGoalLabel}
-                onChange={(e) => {
-                  setNewGoalLabel(e.target.value);
-                  if (!newGoalKey) {
-                    setNewGoalKey(e.target.value.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""));
-                  }
-                }}
+                onChange={(e) => setNewGoalLabel(e.target.value)}
                 placeholder="Label (e.g. Income Stability)"
                 className="bg-slate-900 border-slate-600 text-white text-sm h-8"
-              />
-            </div>
-            <div className="w-36">
-              <Input
-                value={newGoalKey}
-                onChange={(e) => setNewGoalKey(e.target.value)}
-                placeholder="key"
-                className="bg-slate-900 border-slate-600 text-white font-mono text-xs h-8"
               />
             </div>
             <div className="w-24 flex items-center gap-1">
@@ -460,20 +460,19 @@ export default function CoopConfigPage() {
           <button
             type="button"
             onClick={() => {
-              if (!newGoalLabel.trim() || !newGoalKey.trim() || !newGoalWeight) return;
+              if (!newGoalLabel.trim() || !newGoalWeight) return;
               const base = editGoals ?? config.missionGoals;
               setEditGoals([...base, {
-                key: newGoalKey.trim(),
+                key: missionGoalKeyFromLabel(newGoalLabel),
                 label: newGoalLabel.trim(),
                 priorityWeight: parseFloat(newGoalWeight) / 100,
                 description: newGoalDescription.trim() || undefined,
               }]);
-              setNewGoalKey("");
               setNewGoalLabel("");
               setNewGoalWeight("");
               setNewGoalDescription("");
             }}
-            disabled={!newGoalLabel.trim() || !newGoalKey.trim() || !newGoalWeight}
+            disabled={!newGoalLabel.trim() || !newGoalWeight}
             className="flex items-center gap-1 px-3 h-8 rounded-md bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white text-sm font-medium transition-colors"
           >
             <Plus className="h-4 w-4" />
@@ -637,254 +636,6 @@ export default function CoopConfigPage() {
               className="bg-slate-900 border-slate-600 text-white mt-1"
             />
           </div>
-        </div>
-      </ConfigSectionEditor>
-
-      {/* Proposal Categories */}
-      <ConfigSectionEditor
-        title="Proposal Categories"
-        description="Toggle categories on/off, edit labels and descriptions, or add new ones. The description is shown to submitters and sent to the AI."
-        isDirty={editCategories !== null}
-        onSave={propose("proposalCategories", { proposalCategories: editCategories ?? config.proposalCategories }, { proposalCategories: config.proposalCategories })}
-        isSaving={proposeChange.isPending}
-        {...sectionReview("proposalCategories")}
-        coopId={coopId}
-      >
-        <p className="text-xs text-gray-500 mb-3">
-          Toggle categories on/off, edit descriptions, or add new ones. The <span className="text-amber-400 font-medium">description</span> is shown to proposal submitters and sent to the AI to guide screening.
-        </p>
-
-        {/* Category list */}
-        <div className="space-y-3">
-          {(editCategories ?? config.proposalCategories).map((cat, i) => {
-            const active = cat.isActive;
-            return (
-              <div key={i} className="rounded-md border border-slate-700 bg-slate-900 p-3 space-y-2">
-                {/* Top row: toggle, label, key, remove */}
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const base = editCategories ?? config.proposalCategories;
-                      setEditCategories(base.map((c, j) => j === i ? { ...c, isActive: !c.isActive } : c));
-                    }}
-                    className="flex-shrink-0 text-gray-400 hover:text-white transition-colors"
-                    title={active ? "Deactivate" : "Activate"}
-                  >
-                    {active
-                      ? <ToggleRight className="h-5 w-5 text-green-400" />
-                      : <ToggleLeft className="h-5 w-5 text-gray-500" />
-                    }
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <Input
-                      value={cat.label}
-                      onChange={(e) => {
-                        const base = editCategories ?? config.proposalCategories;
-                        setEditCategories(base.map((c, j) => j === i ? { ...c, label: e.target.value } : c));
-                      }}
-                      className={`bg-slate-800 border-slate-600 text-sm h-8 ${active ? "text-white" : "text-gray-500"}`}
-                      placeholder="Label"
-                    />
-                  </div>
-                  <div className="w-36">
-                    <Input
-                      value={cat.key}
-                      onChange={(e) => {
-                        const base = editCategories ?? config.proposalCategories;
-                        setEditCategories(base.map((c, j) => j === i ? { ...c, key: e.target.value } : c));
-                      }}
-                      className="bg-slate-800 border-slate-600 text-gray-400 font-mono text-xs h-8"
-                      placeholder="key"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const base = editCategories ?? config.proposalCategories;
-                      setEditCategories(base.filter((_, j) => j !== i));
-                    }}
-                    className="flex-shrink-0 text-gray-600 hover:text-red-400 transition-colors"
-                    title="Remove category"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-
-                {/* Description row */}
-                <Textarea
-                  value={cat.description ?? ""}
-                  onChange={(e) => {
-                    const base = editCategories ?? config.proposalCategories;
-                    setEditCategories(base.map((c, j) => j === i ? { ...c, description: e.target.value } : c));
-                  }}
-                  rows={2}
-                  placeholder="Describe this category for submitters and the AI — what kinds of proposals belong here?"
-                  className="bg-slate-800 border-slate-600 text-white text-xs resize-none placeholder:text-gray-600"
-                />
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Add new category */}
-        <div className="mt-4 rounded-md border border-dashed border-slate-600 p-3 space-y-2">
-          <p className="text-xs text-gray-500 font-medium">Add new category</p>
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <Input
-                value={newCategoryLabel}
-                onChange={(e) => {
-                  setNewCategoryLabel(e.target.value);
-                  if (!newCategoryKey) {
-                    setNewCategoryKey(e.target.value.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""));
-                  }
-                }}
-                placeholder="Label (e.g. Community Projects)"
-                className="bg-slate-900 border-slate-600 text-white text-sm h-8"
-              />
-            </div>
-            <div className="w-40">
-              <Input
-                value={newCategoryKey}
-                onChange={(e) => setNewCategoryKey(e.target.value)}
-                placeholder="community_projects"
-                className="bg-slate-900 border-slate-600 text-white font-mono text-xs h-8"
-              />
-            </div>
-          </div>
-          <Textarea
-            value={newCategoryDescription}
-            onChange={(e) => setNewCategoryDescription(e.target.value)}
-            rows={2}
-            placeholder="Describe this category for submitters and the AI..."
-            className="bg-slate-900 border-slate-600 text-white text-xs resize-none placeholder:text-gray-600"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              if (!newCategoryLabel.trim() || !newCategoryKey.trim()) return;
-              const base = editCategories ?? config.proposalCategories;
-              setEditCategories([...base, {
-                key: newCategoryKey.trim(),
-                label: newCategoryLabel.trim(),
-                isActive: true,
-                description: newCategoryDescription.trim() || undefined,
-              }]);
-              setNewCategoryKey("");
-              setNewCategoryLabel("");
-              setNewCategoryDescription("");
-            }}
-            disabled={!newCategoryLabel.trim() || !newCategoryKey.trim()}
-            className="flex items-center gap-1 px-3 h-8 rounded-md bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white text-sm font-medium transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Add Category
-          </button>
-        </div>
-      </ConfigSectionEditor>
-
-      {/* Sector Exclusions */}
-      <ConfigSectionEditor
-        title="Sector Exclusions"
-        description="Proposals matching these sectors are flagged during AI screening. The description explains the exclusion to the AI."
-        isDirty={editExclusions !== null}
-        onSave={propose("sectorExclusions", { sectorExclusions: editExclusions ?? config.sectorExclusions }, { sectorExclusions: config.sectorExclusions })}
-        isSaving={proposeChange.isPending}
-        {...sectionReview("sectorExclusions")}
-        coopId={coopId}
-      >
-
-        {/* Exclusion rows */}
-        <div className="space-y-3">
-          {(editExclusions ?? config.sectorExclusions).map((excl, i) => (
-            <div key={i} className="rounded-md border border-red-800/30 bg-red-950/10 p-3 space-y-2">
-              <div className="flex items-center gap-2">
-                <Input
-                  value={excl.value}
-                  onChange={(e) => {
-                    const base = editExclusions ?? config.sectorExclusions;
-                    setEditExclusions(base.map((ex, j) => j === i ? { ...ex, value: e.target.value } : ex));
-                  }}
-                  className="bg-slate-900 border-slate-700 text-red-300 font-mono text-sm h-8 flex-1"
-                  placeholder="sector keyword"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const base = editExclusions ?? config.sectorExclusions;
-                    setEditExclusions(base.filter((_, j) => j !== i));
-                  }}
-                  className="flex-shrink-0 text-gray-600 hover:text-red-400 transition-colors"
-                  title="Remove"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <Textarea
-                value={excl.description ?? ""}
-                onChange={(e) => {
-                  const base = editExclusions ?? config.sectorExclusions;
-                  setEditExclusions(base.map((ex, j) => j === i ? { ...ex, description: e.target.value } : ex));
-                }}
-                rows={2}
-                placeholder="Explain why this sector is excluded — the AI uses this to understand the rule..."
-                className="bg-slate-900 border-slate-700 text-white text-xs resize-none placeholder:text-gray-600"
-              />
-            </div>
-          ))}
-          {(editExclusions ?? config.sectorExclusions).length === 0 && (
-            <p className="text-xs text-gray-600">No exclusions set</p>
-          )}
-        </div>
-
-        {/* Add new exclusion */}
-        <div className="mt-4 rounded-md border border-dashed border-slate-600 p-3 space-y-2">
-          <p className="text-xs text-gray-500 font-medium">Add new exclusion</p>
-          <Input
-            value={newExclusionValue}
-            onChange={(e) => setNewExclusionValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                const val = newExclusionValue.trim().toLowerCase();
-                if (!val) return;
-                const base = editExclusions ?? config.sectorExclusions;
-                if (!base.some(ex => ex.value === val)) {
-                  setEditExclusions([...base, { value: val, description: newExclusionDescription.trim() || undefined }]);
-                  setNewExclusionValue("");
-                  setNewExclusionDescription("");
-                }
-              }
-            }}
-            placeholder="Sector keyword (e.g. alcohol)"
-            className="bg-slate-900 border-slate-600 text-white font-mono text-sm h-8"
-          />
-          <Textarea
-            value={newExclusionDescription}
-            onChange={(e) => setNewExclusionDescription(e.target.value)}
-            rows={2}
-            placeholder="Why is this sector excluded? The AI uses this to flag matching proposals..."
-            className="bg-slate-900 border-slate-600 text-white text-xs resize-none placeholder:text-gray-600"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              const val = newExclusionValue.trim().toLowerCase();
-              if (!val) return;
-              const base = editExclusions ?? config.sectorExclusions;
-              if (!base.some(ex => ex.value === val)) {
-                setEditExclusions([...base, { value: val, description: newExclusionDescription.trim() || undefined }]);
-                setNewExclusionValue("");
-                setNewExclusionDescription("");
-              }
-            }}
-            disabled={!newExclusionValue.trim()}
-            className="flex items-center gap-1 px-3 h-8 rounded-md bg-red-700 hover:bg-red-600 disabled:opacity-40 text-white text-sm font-medium transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Add Exclusion
-          </button>
         </div>
       </ConfigSectionEditor>
 

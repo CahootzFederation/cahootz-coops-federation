@@ -232,7 +232,7 @@ model CoopConfig {
 
   // Governance configuration
   charterText               String @db.Text
-  missionGoals              Json // [{ key, label, priorityWeight, description? }]
+  missionGoals              Json // [{ key auto-generated from label, label, priorityWeight, description? }]
   structuralWeights         Json // { feasibility, risk, accountability } — sum to 1
   scoreMix                  Json // { missionWeight, structuralWeight } — sum to 1
   screeningPassThreshold    Float  @default(0.6) // 0..1
@@ -240,8 +240,8 @@ model CoopConfig {
   approvalThresholdPercent  Float  @default(51)
   votingWindowDays          Int    @default(7)
   scVotingCapPercent        Float  @default(2)
-  proposalCategories        Json // [{ key, label, isActive }]
-  sectorExclusions          Json // ["fashion", "restaurant", ...]
+  proposalCategories        Json // [{ key, label, isActive, description? }]
+  sectorExclusions          Json // [{ value, description? }]
   scorerAgents              Json   @default("[]") // [{ agentKey, label, enabled, promptTemplate?, model? }]
   minScBalanceToSubmit      Float  @default(0)
   aiAutoApproveThresholdUSD Float  @default(500)

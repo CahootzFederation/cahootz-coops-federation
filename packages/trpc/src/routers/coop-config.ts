@@ -6,6 +6,52 @@ import type { CoopConfig, Prisma } from "@repo/db";
 import type { AuthenticatedContext } from "../context.js";
 import { linkExternalWalletToUser } from "../services/wallet-service.js";
 
+type MissionGoalConfig = {
+  key: string;
+  label: string;
+  priorityWeight: number;
+  description?: string;
+  domain?: string;
+  expertRequired?: boolean;
+  scoringRubric?: string;
+};
+
+function missionGoalKeyFromLabel(label: string): string {
+  const key = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return key || "goal";
+}
+
+function withGeneratedMissionGoalKeys(goals: MissionGoalConfig[]): MissionGoalConfig[] {
+  const seen = new Map<string, number>();
+
+  return goals.map((goal) => {
+    const label = goal.label.trim() || goal.key || "Goal";
+    const baseKey = missionGoalKeyFromLabel(label);
+    const count = seen.get(baseKey) ?? 0;
+    seen.set(baseKey, count + 1);
+
+    return {
+      ...goal,
+      label,
+      key: count === 0 ? baseKey : `${baseKey}_${count + 1}`,
+    };
+  });
+}
+
+function normalizeConfigChanges(changes: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(changes.missionGoals)) return changes;
+
+  return {
+    ...changes,
+    missionGoals: withGeneratedMissionGoalKeys(changes.missionGoals as MissionGoalConfig[]),
+  };
+}
+
 function mapDbToConfigOutput(record: CoopConfig): CoopConfigOutput {
   return {
     id: record.id,
@@ -13,7 +59,7 @@ function mapDbToConfigOutput(record: CoopConfig): CoopConfigOutput {
     version: record.version,
     isActive: record.isActive,
     charterText: record.charterText,
-    missionGoals: record.missionGoals as Array<{ key: string; label: string; priorityWeight: number; description?: string; domain?: string; expertRequired?: boolean; scoringRubric?: string }>,
+    missionGoals: withGeneratedMissionGoalKeys(record.missionGoals as MissionGoalConfig[]),
     structuralWeights: record.structuralWeights as { feasibility: number; risk: number; accountability: number },
     scoreMix: record.scoreMix as { missionWeight: number; structuralWeight: number },
     screeningPassThreshold: record.screeningPassThreshold,
@@ -21,7 +67,7 @@ function mapDbToConfigOutput(record: CoopConfig): CoopConfigOutput {
     approvalThresholdPercent: record.approvalThresholdPercent,
     votingWindowDays: record.votingWindowDays,
     scVotingCapPercent: record.scVotingCapPercent,
-    proposalCategories: record.proposalCategories as Array<{ key: string; label: string; isActive: boolean }>,
+    proposalCategories: record.proposalCategories as Array<{ key: string; label: string; isActive: boolean; description?: string }>,
     // Normalize legacy string[] → { value, description? }[] transparently
     sectorExclusions: (record.sectorExclusions as Array<string | { value: string; description?: string }>)
       .map(e => typeof e === "string" ? { value: e } : e),
@@ -422,7 +468,7 @@ export const coopConfigRouter = router({
             applicationQuestions: fields.applicationQuestions as Prisma.InputJsonValue,
             // Governance fields
             charterText: fields.charterText ?? `${coopId} Co-op Charter`,
-            missionGoals: fields.missionGoals ?? defaultMissionGoals,
+            missionGoals: fields.missionGoals ? withGeneratedMissionGoalKeys(fields.missionGoals) : defaultMissionGoals,
             structuralWeights: fields.structuralWeights ?? { feasibility: 0.40, risk: 0.35, accountability: 0.25 },
             scoreMix: fields.scoreMix ?? { missionWeight: 0.60, structuralWeight: 0.40 },
             screeningPassThreshold: fields.screeningPassThreshold ?? 0.6,
@@ -510,7 +556,7 @@ export const coopConfigRouter = router({
       }
 
       const newFields: Record<string, any> = {};
-      if (updates.missionGoals !== undefined) newFields.missionGoals = updates.missionGoals;
+      if (updates.missionGoals !== undefined) newFields.missionGoals = withGeneratedMissionGoalKeys(updates.missionGoals);
       if (updates.structuralWeights !== undefined) newFields.structuralWeights = updates.structuralWeights;
       if (updates.scoreMix !== undefined) newFields.scoreMix = updates.scoreMix;
       if (updates.screeningPassThreshold !== undefined) newFields.screeningPassThreshold = updates.screeningPassThreshold;
@@ -781,9 +827,11 @@ export const coopConfigRouter = router({
         data: { status: "SUPERSEDED", reviewedBy: walletAddress, reviewedAt: new Date() },
       });
 
+      const proposedChanges = normalizeConfigChanges(input.proposedChanges);
+
       // Compute diff from current snapshot and proposed changes
       const diff: { field: string; before: unknown; after: unknown }[] = [];
-      for (const [field, after] of Object.entries(input.proposedChanges)) {
+      for (const [field, after] of Object.entries(proposedChanges)) {
         const before = input.currentSnapshot[field];
         if (JSON.stringify(before) !== JSON.stringify(after)) {
           diff.push({ field, before, after });
@@ -794,7 +842,7 @@ export const coopConfigRouter = router({
         data: {
           coopConfigId: current.id,
           section: input.section,
-          proposedChanges: toJsonValue(input.proposedChanges),
+          proposedChanges: toJsonValue(proposedChanges),
           diff: toJsonValue(diff),
           reason: input.reason,
           status: "PENDING",
@@ -892,7 +940,7 @@ export const coopConfigRouter = router({
 
       if (!current) throw new Error(`No active config found for coopId: ${input.coopId}`);
 
-      const changes = audit.proposedChanges as Record<string, unknown> | null ?? {};
+      const changes = normalizeConfigChanges(audit.proposedChanges as Record<string, unknown> | null ?? {});
       const sequence = await nextSequence(ctx.db, current.id);
 
       const [updatedConfig] = await ctx.db.$transaction([

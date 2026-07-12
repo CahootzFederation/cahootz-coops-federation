@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   BarChart3,
+  Bot,
   ClipboardList,
   Coins,
   FileText,
@@ -67,6 +68,11 @@ const adminReviewLinks: NavItem[] = [
     title: "Applications",
     href: "/portal/applications",
     icon: ClipboardList,
+  },
+  {
+    title: "Agents",
+    href: "/portal/agents",
+    icon: Bot,
   },
   {
     title: "Public Page",

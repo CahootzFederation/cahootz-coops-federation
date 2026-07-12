@@ -1,15 +1,26 @@
 import { z } from 'zod';
-import { randomUUID } from 'crypto';
+import { Agent, run, webSearchTool } from '@openai/agents';
+import { createHash, randomUUID } from 'crypto';
 import { TRPCError } from '@trpc/server';
 import { authenticatedProcedure, publicProcedure, privateProcedure } from '../procedures';
 import { router } from '../trpc';
 import type { AuthenticatedContext } from '../context.js';
+import {
+  buildArticleWriterBrief,
+  extractArticleSamples,
+  generateArticleDraftWithAgentOrchestration,
+  hasSubjectOverlap,
+  type ArticleSample,
+} from '../services/newsletter-article-agent';
 
 type NewsletterSubmissionType = 'article' | 'event';
 type NewsletterSubmissionStatus = 'pending' | 'published' | 'dismissed';
+type NewsletterAgentId = 'article-writer' | 'event-writer';
 
 interface PreviewOverrides {
   newsletterSubmissions?: unknown;
+  newsletterResearchSources?: unknown;
+  newsletterAgentSchedules?: unknown;
   [key: string]: unknown;
 }
 
@@ -32,7 +43,74 @@ export interface NewsletterSubmission {
   submittedByWallet: string;
   submittedAt: string;
   status: NewsletterSubmissionStatus;
+  source?: 'member' | 'public-contributor' | 'agent';
+  agentId?: NewsletterAgentId;
+  agentName?: string;
+  recommendedBecause?: string;
+  agentPrompt?: string;
+  approvalRequired?: boolean;
 }
+
+export interface NewsletterResearchSource {
+  url: string;
+  label?: string;
+}
+
+export interface NewsletterResearchResult {
+  id: string;
+  type: 'event' | 'article_source' | 'organization' | 'news';
+  title: string;
+  sourceUrl: string;
+  sourceName: string;
+  dateFound: string;
+  eventDate?: string;
+  location?: string;
+  summary: string;
+  relevanceScore: number;
+  alignedGoals: string[];
+  reasonForFit: string;
+  risksOrUnverifiedClaims: string[];
+  recommendedNextAction: 'draft_article' | 'draft_event' | 'human_review' | 'ignore';
+}
+
+export interface NewsletterResearchCache {
+  generatedAt: string;
+  coopId: string;
+  contextHash: string;
+  sources: NewsletterResearchSource[];
+  results: NewsletterResearchResult[];
+  expiresAt: string;
+}
+
+const agentLabels: Record<NewsletterAgentId, string> = {
+  'article-writer': 'Article Writer Agent',
+  'event-writer': 'Event Writer Agent',
+};
+const NEWSLETTER_RESEARCH_CACHE_KEY = 'newsletter-research';
+
+interface NewsletterAgentSchedule {
+  agentId: NewsletterAgentId;
+  enabled: boolean;
+  intervalHours: number;
+  lastRunAt?: string;
+  lastRunStatus?: 'success' | 'empty' | 'error';
+  lastRunMessage?: string;
+  lastCreatedCount?: number;
+  updatedAt?: string;
+}
+
+const defaultAgentSchedules: Record<NewsletterAgentId, NewsletterAgentSchedule> = {
+  'article-writer': {
+    agentId: 'article-writer',
+    enabled: true,
+    intervalHours: 168,
+  },
+  'event-writer': {
+    agentId: 'event-writer',
+    enabled: true,
+    intervalHours: 168,
+  },
+};
 
 function normalizePreviewOverrides(value: unknown): PreviewOverrides {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -57,6 +135,892 @@ function normalizeNewsletterSubmissions(value: unknown): NewsletterSubmission[] 
       typeof submission.summary === 'string'
     );
   });
+}
+
+function normalizeAgentSchedule(agentId: NewsletterAgentId, value: unknown): NewsletterAgentSchedule {
+  const fallback = defaultAgentSchedules[agentId];
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return { ...fallback };
+  }
+
+  const record = value as Record<string, unknown>;
+  const intervalHours = typeof record.intervalHours === 'number' && Number.isFinite(record.intervalHours)
+    ? Math.min(Math.max(Math.round(record.intervalHours), 1), 24 * 60)
+    : fallback.intervalHours;
+  const lastRunStatus = ['success', 'empty', 'error'].includes(String(record.lastRunStatus))
+    ? record.lastRunStatus as NewsletterAgentSchedule['lastRunStatus']
+    : undefined;
+
+  return {
+    agentId,
+    enabled: typeof record.enabled === 'boolean' ? record.enabled : fallback.enabled,
+    intervalHours,
+    lastRunAt: typeof record.lastRunAt === 'string' ? record.lastRunAt : undefined,
+    lastRunStatus,
+    lastRunMessage: typeof record.lastRunMessage === 'string' ? record.lastRunMessage : undefined,
+    lastCreatedCount: typeof record.lastCreatedCount === 'number' && Number.isFinite(record.lastCreatedCount)
+      ? Math.max(Math.round(record.lastCreatedCount), 0)
+      : undefined,
+    updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : undefined,
+  };
+}
+
+function normalizeAgentSchedules(value: unknown): Record<NewsletterAgentId, NewsletterAgentSchedule> {
+  const record = typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+
+  return {
+    'article-writer': normalizeAgentSchedule('article-writer', record['article-writer']),
+    'event-writer': normalizeAgentSchedule('event-writer', record['event-writer']),
+  };
+}
+
+function withAgentRunStatus(params: {
+  overrides: PreviewOverrides;
+  agentId: NewsletterAgentId;
+  createdCount: number;
+  message: string;
+}) {
+  const schedules = normalizeAgentSchedules(params.overrides.newsletterAgentSchedules);
+  const previous = schedules[params.agentId];
+  const now = new Date().toISOString();
+
+  return {
+    ...params.overrides,
+    newsletterAgentSchedules: {
+      ...schedules,
+      [params.agentId]: {
+        ...previous,
+        lastRunAt: now,
+        lastRunStatus: params.createdCount > 0 ? 'success' : 'empty',
+        lastRunMessage: params.message,
+        lastCreatedCount: params.createdCount,
+        updatedAt: now,
+      },
+    },
+  };
+}
+
+function normalizeResearchSources(value: unknown): NewsletterResearchSource[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((source) => {
+      if (typeof source === 'string') {
+        return { url: source.trim() };
+      }
+
+      if (typeof source === 'object' && source !== null) {
+        const record = source as Record<string, unknown>;
+        return {
+          url: typeof record.url === 'string' ? record.url.trim() : '',
+          label: typeof record.label === 'string' ? record.label.trim() : undefined,
+        };
+      }
+
+      return { url: '' };
+    })
+    .filter((source) => {
+      try {
+        const url = new URL(source.url);
+        return ['http:', 'https:'].includes(url.protocol);
+      } catch {
+        return false;
+      }
+    })
+    .slice(0, 12);
+}
+
+function normalizeResearchCache(value: unknown): NewsletterResearchCache | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+
+  if (
+    typeof record.generatedAt !== 'string' ||
+    typeof record.coopId !== 'string' ||
+    typeof record.contextHash !== 'string' ||
+    typeof record.expiresAt !== 'string' ||
+    !Array.isArray(record.sources) ||
+    !Array.isArray(record.results)
+  ) {
+    return null;
+  }
+
+  return {
+    generatedAt: record.generatedAt,
+    coopId: record.coopId,
+    contextHash: record.contextHash,
+    sources: normalizeResearchSources(record.sources),
+    results: record.results.filter((result): result is NewsletterResearchResult => {
+      return (
+        typeof result === 'object' &&
+        result !== null &&
+        'id' in result &&
+        'type' in result &&
+        'title' in result &&
+        'sourceUrl' in result &&
+        'summary' in result &&
+        typeof result.id === 'string' &&
+        ['event', 'article_source', 'organization', 'news'].includes(String(result.type)) &&
+        typeof result.title === 'string' &&
+        typeof result.sourceUrl === 'string' &&
+        typeof result.summary === 'string'
+      );
+    }),
+    expiresAt: record.expiresAt,
+  };
+}
+
+function textFromJsonList(value: unknown, fallback: string[] = []) {
+  if (!Array.isArray(value)) return fallback;
+
+  return value
+    .map((item) => {
+      if (typeof item === 'string') return item;
+      if (typeof item === 'object' && item !== null) {
+        const record = item as Record<string, unknown>;
+        if (typeof record.label === 'string') return record.label;
+        if (typeof record.title === 'string') return record.title;
+        if (typeof record.description === 'string') return record.description;
+      }
+      return '';
+    })
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function firstSentence(value: string | null | undefined) {
+  if (!value) return '';
+  return value
+    .replace(/\s+/g, ' ')
+    .split(/(?<=[.!?])\s+/)[0]
+    ?.trim() || '';
+}
+
+function researchContextHash(params: {
+  coopId: string;
+  coopName: string;
+  coopDescription: string;
+  charterText: string;
+  missionGoals: string[];
+  sectorExclusions: string[];
+  sources: NewsletterResearchSource[];
+}) {
+  return createHash('sha256')
+    .update(JSON.stringify({
+      coopId: params.coopId,
+      coopName: params.coopName,
+      coopDescription: params.coopDescription,
+      charterText: params.charterText,
+      missionGoals: params.missionGoals,
+      sectorExclusions: params.sectorExclusions,
+      sources: params.sources.map((source) => source.url).sort(),
+    }))
+    .digest('hex');
+}
+
+function stripHtml(html: string) {
+  return decodeHtmlEntities(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+}
+
+function tokenSet(value: string) {
+  return new Set(
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, ' ')
+      .split(/\s+/)
+      .filter((token) => token.length > 3)
+  );
+}
+
+function goalMatches(text: string, goals: string[]) {
+  const textTokens = tokenSet(text);
+
+  return goals.filter((goal) => {
+    const goalTokens = [...tokenSet(goal)];
+    if (goalTokens.length === 0) return false;
+    const hits = goalTokens.filter((token) => textTokens.has(token)).length;
+    return hits / goalTokens.length >= 0.25 || goalTokens.some((token) => text.toLowerCase().includes(token));
+  });
+}
+
+function inferResearchType(text: string, url: string): NewsletterResearchResult['type'] {
+  const haystack = `${text} ${url}`.toLowerCase();
+  if (/\b(event|calendar|workshop|meetup|summit|webinar|conference|festival|market|orientation)\b/.test(haystack)) {
+    return 'event';
+  }
+  if (/\b(news|press|story|article|blog|report)\b/.test(haystack)) return 'news';
+  if (/\b(co-?op|cooperative|association|nonprofit|organization|collective)\b/.test(haystack)) return 'organization';
+  return 'article_source';
+}
+
+function inferEventDate(text: string) {
+  const monthDate = text.match(/\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}(?:,\s+\d{4})?\b/i);
+  if (monthDate?.[0]) return monthDate[0];
+
+  const numericDate = text.match(/\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/);
+  return numericDate?.[0];
+}
+
+function inferLocation(text: string) {
+  const online = text.match(/\b(online|virtual|webinar|zoom)\b/i);
+  if (online?.[0]) return 'Online';
+
+  const cityState = text.match(/\b[A-Z][a-zA-Z .'-]+,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/);
+  return cityState?.[0];
+}
+
+function extractCandidateLinks(html: string, baseUrl: string) {
+  const candidates: NewsletterResearchSource[] = [];
+  const seen = new Set<string>();
+  const anchorPattern = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = anchorPattern.exec(html)) && candidates.length < 8) {
+    const href = match[1];
+    const label = stripHtml(match[2] || '').slice(0, 140);
+    const haystack = `${href} ${label}`.toLowerCase();
+    if (!/\b(event|calendar|workshop|meetup|summit|webinar|conference|festival|market|article|story|news|blog|press|report)\b/.test(haystack)) {
+      continue;
+    }
+
+    try {
+      const url = new URL(href, baseUrl);
+      if (!['http:', 'https:'].includes(url.protocol)) continue;
+      const normalizedUrl = url.toString();
+      if (seen.has(normalizedUrl)) continue;
+      seen.add(normalizedUrl);
+      candidates.push({
+        url: normalizedUrl,
+        label: label || url.hostname,
+      });
+    } catch {
+      // Ignore malformed hrefs from source pages.
+    }
+  }
+
+  return candidates;
+}
+
+function scoreResearchResult(params: {
+  text: string;
+  url: string;
+  type: NewsletterResearchResult['type'];
+  alignedGoals: string[];
+  missionGoals: string[];
+}) {
+  const missionFit = params.missionGoals.length
+    ? Math.min(1, params.alignedGoals.length / Math.min(params.missionGoals.length, 3))
+    : 0.5;
+  const sourceTrust = params.url.startsWith('https://') ? 0.9 : 0.65;
+  const dateRelevance = params.type === 'event' && inferEventDate(params.text) ? 0.9 : params.type === 'event' ? 0.45 : 0.7;
+  const communityUsefulness = /\b(member|community|business|local|cooperative|workshop|market|ownership|education|funding|mutual|economic)\b/i.test(params.text)
+    ? 0.85
+    : 0.55;
+
+  return Number((
+    missionFit * 0.4 +
+    sourceTrust * 0.2 +
+    dateRelevance * 0.15 +
+    communityUsefulness * 0.25
+  ).toFixed(2));
+}
+
+async function fetchResearchResult(params: {
+  source: NewsletterResearchSource;
+  coopName: string;
+  missionGoals: string[];
+}): Promise<NewsletterResearchResult & { discoveredSources?: NewsletterResearchSource[] }> {
+  const response = await fetch(params.source.url, {
+    headers: {
+      'user-agent': 'CahootzResearchBrain/1.0 (+https://cahootz.coop)',
+      accept: 'text/html,application/xhtml+xml,text/plain',
+    },
+    redirect: 'follow',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Could not fetch source (${response.status})`);
+  }
+
+  const raw = (await response.text()).slice(0, 300_000);
+  const finalUrl = response.url || params.source.url;
+  const discoveredSources = extractCandidateLinks(raw, finalUrl);
+  const title =
+    getMetaContent(raw, ['og:title', 'twitter:title']) ||
+    getTitleTag(raw) ||
+    params.source.label ||
+    new URL(finalUrl).hostname;
+  const description =
+    getMetaContent(raw, ['og:description', 'twitter:description', 'description']) ||
+    stripHtml(raw).slice(0, 900);
+  const text = `${title} ${description} ${stripHtml(raw).slice(0, 20_000)}`;
+  const type = inferResearchType(text, finalUrl);
+  const alignedGoals = goalMatches(text, params.missionGoals);
+  const relevanceScore = scoreResearchResult({
+    text,
+    url: finalUrl,
+    type,
+    alignedGoals,
+    missionGoals: params.missionGoals,
+  });
+  const risksOrUnverifiedClaims = [
+    type === 'event' && !inferEventDate(text) ? 'Event date was not found in the source preview.' : '',
+    type === 'event' && !inferLocation(text) ? 'Event location was not found in the source preview.' : '',
+  ].filter(Boolean);
+
+  return {
+    id: randomUUID(),
+    type,
+    title: title.slice(0, 160),
+    sourceUrl: finalUrl,
+    sourceName: params.source.label || new URL(finalUrl).hostname,
+    dateFound: new Date().toISOString(),
+    eventDate: type === 'event' ? inferEventDate(text) : undefined,
+    location: type === 'event' ? inferLocation(text) : undefined,
+    summary: description.slice(0, 1200),
+    relevanceScore,
+    alignedGoals,
+    reasonForFit: alignedGoals.length > 0
+      ? `Matches ${params.coopName} goals: ${alignedGoals.slice(0, 3).join(', ')}.`
+      : `Needs admin review for fit with ${params.coopName}.`,
+    risksOrUnverifiedClaims,
+    recommendedNextAction: type === 'event'
+      ? 'draft_event'
+      : relevanceScore >= 0.6
+        ? 'draft_article'
+        : 'human_review',
+    discoveredSources,
+  } satisfies NewsletterResearchResult & { discoveredSources: NewsletterResearchSource[] };
+}
+
+async function buildResearchCache(params: {
+  coopId: string;
+  coopName: string;
+  coopDescription: string;
+  charterText: string;
+  missionGoals: string[];
+  sectorExclusions: string[];
+  sources: NewsletterResearchSource[];
+}) {
+  const now = new Date();
+  const contextHash = researchContextHash(params);
+  const results: NewsletterResearchResult[] = [];
+  const queuedSources = [...params.sources];
+  const seenSources = new Set(params.sources.map((source) => source.url));
+
+  for (let index = 0; index < queuedSources.length && results.length < 24; index++) {
+    const source = queuedSources[index];
+    try {
+      const result = await fetchResearchResult({
+        source,
+        coopName: params.coopName,
+        missionGoals: params.missionGoals,
+      });
+      const { discoveredSources, ...researchResult } = result;
+      results.push(researchResult);
+
+      for (const discoveredSource of discoveredSources ?? []) {
+        if (seenSources.has(discoveredSource.url) || queuedSources.length >= 24) continue;
+        seenSources.add(discoveredSource.url);
+        queuedSources.push(discoveredSource);
+      }
+    } catch (error) {
+      results.push({
+        id: randomUUID(),
+        type: 'article_source',
+        title: source.label || source.url,
+        sourceUrl: source.url,
+        sourceName: source.label || source.url,
+        dateFound: now.toISOString(),
+        summary: 'This source could not be fetched. Admins should verify the URL or try again later.',
+        relevanceScore: 0,
+        alignedGoals: [],
+        reasonForFit: 'Fetch failed before relevance could be scored.',
+        risksOrUnverifiedClaims: [error instanceof Error ? error.message : 'Unknown fetch error'],
+        recommendedNextAction: 'human_review',
+      });
+    }
+  }
+
+  return {
+    generatedAt: now.toISOString(),
+    coopId: params.coopId,
+    contextHash,
+    sources: queuedSources,
+    results: results.sort((a, b) => b.relevanceScore - a.relevanceScore),
+    expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+  } satisfies NewsletterResearchCache;
+}
+
+function isUsableResearchCache(cache: NewsletterResearchCache | null, contextHash: string) {
+  if (!cache) return false;
+  return cache.contextHash === contextHash && new Date(cache.expiresAt).getTime() > Date.now();
+}
+
+function makeAgentSubmission(params: {
+  coopId: string;
+  agentId: NewsletterAgentId;
+  type: NewsletterSubmissionType;
+  title: string;
+  summary: string;
+  contentMarkdown?: string;
+  date?: string;
+  location?: string;
+  byline?: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+  sourceUrl?: string;
+  imageUrl?: string;
+  recommendedBecause: string;
+  agentPrompt?: string;
+}): NewsletterSubmission {
+  return {
+    id: randomUUID(),
+    type: params.type,
+    title: params.title,
+    summary: params.summary,
+    contentMarkdown: params.contentMarkdown,
+    date: params.date,
+    location: params.location,
+    byline: params.byline || (params.type === 'event' ? 'Events Desk' : 'Editorial Desk'),
+    ctaLabel: params.ctaLabel,
+    ctaUrl: params.ctaUrl,
+    sourceUrl: params.sourceUrl,
+    imageUrl: params.imageUrl,
+    submittedByUserId: 'agent',
+    submittedByName: agentLabels[params.agentId],
+    submittedByWallet: 'agent',
+    submittedAt: new Date().toISOString(),
+    status: 'pending',
+    source: 'agent',
+    agentId: params.agentId,
+    agentName: agentLabels[params.agentId],
+    recommendedBecause: params.recommendedBecause,
+    agentPrompt: params.agentPrompt,
+    approvalRequired: true,
+  };
+}
+
+interface EventCandidate {
+  sourceTitle: string;
+  sourceUrl: string;
+  sourceName: string;
+  possibleEventTitle: string;
+  possibleDate: string;
+  whyItMayFitGoals: string;
+}
+
+interface VerifiedEventDraft {
+  title: string;
+  summary: string;
+  contentMarkdown: string;
+  date: string;
+  location: string;
+  sourceUrl: string;
+  ctaUrl: string;
+  sourceTitle: string;
+  sourceName: string;
+  goalFit: string;
+}
+
+const EventCandidateSchema = z.object({
+  sourceTitle: z.string(),
+  sourceUrl: z.string(),
+  sourceName: z.string(),
+  possibleEventTitle: z.string(),
+  possibleDate: z.string(),
+  whyItMayFitGoals: z.string(),
+});
+
+const EventDiscoverySchema = z.object({
+  candidates: z.array(EventCandidateSchema),
+});
+
+const EventVerificationSchema = z.object({
+  approved: z.boolean(),
+  eventTitle: z.string(),
+  sourceTitle: z.string(),
+  sourceUrl: z.string(),
+  sourceName: z.string(),
+  eventDate: z.string(),
+  eventTime: z.string(),
+  organizer: z.string(),
+  locationOrOnline: z.string(),
+  registrationUrl: z.string(),
+  summary: z.string(),
+  goalFit: z.string(),
+  verifiedFacts: z.array(z.string()),
+  rejectionReason: z.string(),
+});
+
+function sanitizeAgentText(value: string) {
+  return value
+    .replace(/cite[^]*/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function normalizeHttpUrl(value: string) {
+  try {
+    const parsedUrl = new URL(value.trim());
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) return null;
+    return parsedUrl.toString();
+  } catch {
+    return null;
+  }
+}
+
+function hasConcreteValue(value: string) {
+  const normalized = sanitizeAgentText(value).toLowerCase();
+  if (!normalized) return false;
+  return ![
+    'unknown',
+    'tbd',
+    'n/a',
+    'na',
+    'none',
+    'not listed',
+    'not available',
+    'needs source',
+    'needs confirmation',
+    'needs confirmed date',
+    'needs confirmed location',
+    'to be announced',
+    'coming soon',
+  ].some((placeholder) => normalized === placeholder || normalized.includes(placeholder));
+}
+
+async function discoverEventCandidatesWithAgent(params: {
+  coopName: string;
+  coopDescription: string;
+  missionGoals: string[];
+  cachedEvents: NewsletterResearchResult[];
+}): Promise<EventCandidate[]> {
+  if (!process.env.OPENAI_API_KEY) return [];
+
+  const cachedLines = params.cachedEvents
+    .slice(0, 6)
+    .map((result) => [
+      `Title: ${result.title}`,
+      `URL: ${result.sourceUrl}`,
+      `Source: ${result.sourceName}`,
+      `Date hint: ${result.eventDate || 'none'}`,
+      `Location hint: ${result.location || 'none'}`,
+      `Summary: ${result.summary}`,
+      `Goal fit hint: ${result.reasonForFit}`,
+    ].join('\n'))
+    .join('\n\n');
+
+  const model = process.env.NEWSLETTER_EVENT_MODEL || process.env.NEWSLETTER_ARTICLE_MODEL || 'gpt-5.2';
+  const discoveryAgent = new Agent({
+    name: 'Newsletter Event Discovery Agent',
+    instructions: [
+      'Find a small set of real, current event candidates for a co-op newsletter.',
+      'Use web_search when cached candidates are missing, stale, too thin, or not clearly event pages.',
+      'Prefer primary event pages, organizer pages, official calendar listings, ticket/registration pages, or credible community calendars.',
+      'Do not return evergreen resources, generic workshops without dates, recurring pages without a specific upcoming occurrence, articles about past events, or vague networking listings.',
+      'Specific co-op usefulness must come from the provided goals. Do not invent usefulness outside those goals.',
+      'Return at most 4 candidates. Fewer is better when quality is thin.',
+    ].join('\n'),
+    model,
+    outputType: EventDiscoverySchema,
+    tools: [webSearchTool()],
+    modelSettings: { toolChoice: 'auto' },
+  });
+
+  const result = await run(discoveryAgent, [
+    `Today: ${new Date().toISOString().slice(0, 10)}`,
+    `Co-op: ${params.coopName}`,
+    `Co-op context: ${firstSentence(params.coopDescription) || params.coopName}`,
+    `Goals that define usefulness: ${params.missionGoals.join(', ') || 'member ownership, local economic power, community participation'}`,
+    '',
+    'Cached event candidates, if any:',
+    cachedLines || 'None.',
+  ].join('\n')) as unknown as {
+    finalOutput?: z.infer<typeof EventDiscoverySchema>;
+    output?: z.infer<typeof EventDiscoverySchema>;
+  };
+
+  return (result.finalOutput ?? result.output)?.candidates
+    ?.map((candidate) => ({
+      sourceTitle: sanitizeAgentText(candidate.sourceTitle),
+      sourceUrl: sanitizeAgentText(candidate.sourceUrl),
+      sourceName: sanitizeAgentText(candidate.sourceName),
+      possibleEventTitle: sanitizeAgentText(candidate.possibleEventTitle),
+      possibleDate: sanitizeAgentText(candidate.possibleDate),
+      whyItMayFitGoals: sanitizeAgentText(candidate.whyItMayFitGoals),
+    }))
+    .filter((candidate) => candidate.sourceTitle && normalizeHttpUrl(candidate.sourceUrl))
+    .slice(0, 4) ?? [];
+}
+
+async function verifyEventCandidateWithAgent(params: {
+  coopName: string;
+  coopDescription: string;
+  missionGoals: string[];
+  candidate: EventCandidate;
+}): Promise<VerifiedEventDraft | null> {
+  if (!process.env.OPENAI_API_KEY) return null;
+
+  const sourceUrl = normalizeHttpUrl(params.candidate.sourceUrl);
+  if (!sourceUrl) return null;
+
+  const model = process.env.NEWSLETTER_EVENT_MODEL || process.env.NEWSLETTER_ARTICLE_MODEL || 'gpt-5.2';
+  const verifierAgent = new Agent({
+    name: 'Newsletter EventVerifier Agent',
+    instructions: [
+      'Verify whether one event candidate is good enough for a co-op newsletter queue.',
+      'Use web_search and the candidate URL to verify facts from public sources.',
+      'Approve only if there is a specific upcoming event occurrence, a real source URL, date, time or all-day indication, organizer, location or online access, registration/details URL, summary, and goal-based fit.',
+      'Reject evergreen pages, past events, vague event series without a specific upcoming date, generic networking, motivational content with no practical member utility, thin listings with missing organizer/date/location, or anything where facts conflict.',
+      'Specific co-op usefulness must come from the provided goals. Do not add an actionable next step.',
+      'Return verifiedFacts as short facts traceable to the source. If any required field is missing, approved must be false and rejectionReason must explain why.',
+    ].join('\n'),
+    model,
+    outputType: EventVerificationSchema,
+    tools: [webSearchTool()],
+    modelSettings: { toolChoice: 'auto' },
+  });
+
+  const result = await run(verifierAgent, [
+    `Today: ${new Date().toISOString().slice(0, 10)}`,
+    `Co-op: ${params.coopName}`,
+    `Co-op context: ${firstSentence(params.coopDescription) || params.coopName}`,
+    `Goals that define usefulness: ${params.missionGoals.join(', ') || 'member ownership, local economic power, community participation'}`,
+    '',
+    'Candidate to verify:',
+    `Source title: ${params.candidate.sourceTitle}`,
+    `Source URL: ${sourceUrl}`,
+    `Source name: ${params.candidate.sourceName}`,
+    `Possible event title: ${params.candidate.possibleEventTitle}`,
+    `Possible date: ${params.candidate.possibleDate}`,
+    `Why it may fit goals: ${params.candidate.whyItMayFitGoals}`,
+  ].join('\n')) as unknown as {
+    finalOutput?: z.infer<typeof EventVerificationSchema>;
+    output?: z.infer<typeof EventVerificationSchema>;
+  };
+
+  const verification = result.finalOutput ?? result.output;
+  if (!verification?.approved) return null;
+
+  const verifiedSourceUrl = normalizeHttpUrl(verification.sourceUrl) || sourceUrl;
+  const registrationUrl = normalizeHttpUrl(verification.registrationUrl) || verifiedSourceUrl;
+  const title = sanitizeAgentText(verification.eventTitle);
+  const summary = sanitizeAgentText(verification.summary);
+  const eventDate = sanitizeAgentText(verification.eventDate);
+  const eventTime = sanitizeAgentText(verification.eventTime);
+  const organizer = sanitizeAgentText(verification.organizer);
+  const locationOrOnline = sanitizeAgentText(verification.locationOrOnline);
+  const goalFit = sanitizeAgentText(verification.goalFit);
+  const verifiedFacts = verification.verifiedFacts.map(sanitizeAgentText).filter(Boolean).slice(0, 6);
+
+  if (
+    !hasConcreteValue(title) ||
+    !hasConcreteValue(summary) ||
+    !hasConcreteValue(eventDate) ||
+    !hasConcreteValue(eventTime) ||
+    !hasConcreteValue(organizer) ||
+    !hasConcreteValue(locationOrOnline) ||
+    !hasConcreteValue(goalFit) ||
+    verifiedFacts.length < 3
+  ) {
+    return null;
+  }
+
+  const sourceTitle = sanitizeAgentText(verification.sourceTitle || params.candidate.sourceTitle);
+  const sourceName = sanitizeAgentText(verification.sourceName || params.candidate.sourceName);
+  return {
+    title: title.slice(0, 120),
+    summary: summary.slice(0, 1200),
+    contentMarkdown: [
+      '## Verified event facts',
+      `- Date: ${eventDate}`,
+      `- Time: ${eventTime}`,
+      `- Organizer: ${organizer}`,
+      `- Location/online: ${locationOrOnline}`,
+      `- Source: ${sourceTitle || sourceName || verifiedSourceUrl}`,
+      '',
+      '## Why it fits this co-op',
+      goalFit,
+      '',
+      '## Source-backed notes',
+      verifiedFacts.map((fact) => `- ${fact}`).join('\n'),
+    ].join('\n'),
+    date: `${eventDate}${eventTime ? `, ${eventTime}` : ''}`.slice(0, 180),
+    location: locationOrOnline.slice(0, 180),
+    sourceUrl: verifiedSourceUrl,
+    ctaUrl: registrationUrl,
+    sourceTitle: (sourceTitle || title).slice(0, 180),
+    sourceName: (sourceName || new URL(verifiedSourceUrl).hostname).slice(0, 120),
+    goalFit: goalFit.slice(0, 1000),
+  };
+}
+
+async function generateVerifiedEventSubmissions(params: {
+  agentId: NewsletterAgentId;
+  coopId: string;
+  coopName: string;
+  coopDescription: string;
+  missionGoals: string[];
+  existingTitles: string[];
+  researchResults: NewsletterResearchResult[];
+}) {
+  const cachedEvents = params.researchResults
+    .filter((result) => result.type === 'event' || result.recommendedNextAction === 'draft_event')
+    .filter((result) => !params.existingTitles.some((title) => title.toLowerCase() === result.title.toLowerCase()))
+    .slice(0, 6);
+
+  const cacheCandidates: EventCandidate[] = cachedEvents.map((result) => ({
+    sourceTitle: result.title,
+    sourceUrl: result.sourceUrl,
+    sourceName: result.sourceName,
+    possibleEventTitle: result.title,
+    possibleDate: result.eventDate || '',
+    whyItMayFitGoals: result.reasonForFit,
+  }));
+
+  const discoveredCandidates = await discoverEventCandidatesWithAgent({
+    coopName: params.coopName,
+    coopDescription: params.coopDescription,
+    missionGoals: params.missionGoals,
+    cachedEvents,
+  });
+
+  const seenUrls = new Set<string>();
+  const candidates = [...cacheCandidates, ...discoveredCandidates]
+    .filter((candidate) => {
+      const normalizedUrl = normalizeHttpUrl(candidate.sourceUrl);
+      if (!normalizedUrl || seenUrls.has(normalizedUrl)) return false;
+      seenUrls.add(normalizedUrl);
+      candidate.sourceUrl = normalizedUrl;
+      return true;
+    })
+    .slice(0, 6);
+
+  const verifiedEvents: NewsletterSubmission[] = [];
+  for (const candidate of candidates) {
+    if (verifiedEvents.length >= 2) break;
+
+    const verifiedEvent = await verifyEventCandidateWithAgent({
+      coopName: params.coopName,
+      coopDescription: params.coopDescription,
+      missionGoals: params.missionGoals,
+      candidate,
+    });
+
+    if (!verifiedEvent) continue;
+    if (params.existingTitles.some((title) => title.toLowerCase() === verifiedEvent.title.toLowerCase())) continue;
+    if (verifiedEvents.some((event) => event.title.toLowerCase() === verifiedEvent.title.toLowerCase())) continue;
+
+    verifiedEvents.push(makeAgentSubmission({
+      coopId: params.coopId,
+      agentId: params.agentId,
+      type: 'event',
+      title: verifiedEvent.title,
+      summary: verifiedEvent.summary,
+      contentMarkdown: verifiedEvent.contentMarkdown,
+      date: verifiedEvent.date,
+      location: verifiedEvent.location,
+      sourceUrl: verifiedEvent.sourceUrl,
+      ctaLabel: 'Event details',
+      ctaUrl: verifiedEvent.ctaUrl,
+      recommendedBecause: `Verified by the EventVerifier Agent from "${verifiedEvent.sourceTitle}" (${verifiedEvent.sourceName}). ${verifiedEvent.goalFit}`,
+    }));
+  }
+
+  return verifiedEvents;
+}
+
+async function buildAgentSubmissions(params: {
+  agentId: NewsletterAgentId;
+  coopId: string;
+  coopName: string;
+  coopDescription: string;
+  missionGoals: string[];
+  existingTitles: string[];
+  articleSamples?: ArticleSample[];
+  researchResults?: NewsletterResearchResult[];
+}) {
+  const titleExists = new Set(params.existingTitles.map((title) => title.toLowerCase()));
+  const unique = (items: NewsletterSubmission[]) =>
+    items
+      .filter((item) => !titleExists.has(item.title.toLowerCase()))
+      .filter((item) => item.type !== 'article' || !hasSubjectOverlap(item.title, params.existingTitles))
+      .slice(0, 3);
+  const usefulResearch = (params.researchResults ?? [])
+    .filter((result) => result.relevanceScore >= 0.45 && result.recommendedNextAction !== 'ignore')
+    .sort((a, b) => b.relevanceScore - a.relevanceScore);
+  const articleBrief = buildArticleWriterBrief({
+    coopName: params.coopName,
+    coopDescription: params.coopDescription,
+    missionGoals: params.missionGoals,
+    articleSamples: params.articleSamples ?? [],
+    researchResults: usefulResearch,
+  });
+
+  if (params.agentId === 'article-writer') {
+    const articleSources = usefulResearch
+      .filter((result) => result.recommendedNextAction === 'draft_article' || result.type === 'news' || result.type === 'article_source')
+      .filter((result) => !hasSubjectOverlap(result.title, params.existingTitles))
+      .slice(0, 3);
+
+    const generatedDrafts: NewsletterSubmission[] = [];
+    const sourcesToTry: Array<NewsletterResearchResult | undefined> = articleSources.length > 0
+      ? articleSources
+      : [undefined];
+
+    for (const result of sourcesToTry) {
+      const llmDraft = await generateArticleDraftWithAgentOrchestration({
+        briefPrompt: articleBrief.prompt,
+        source: result,
+        existingTitles: [...params.existingTitles, ...generatedDrafts.map((draft) => draft.title)],
+        coopName: params.coopName,
+        coopDescription: params.coopDescription,
+        missionGoals: params.missionGoals,
+      });
+
+      if (llmDraft) {
+        generatedDrafts.push(makeAgentSubmission({
+          coopId: params.coopId,
+          agentId: params.agentId,
+          type: 'article',
+          title: llmDraft.title,
+          summary: llmDraft.summary,
+          contentMarkdown: llmDraft.contentMarkdown,
+          date: 'Story',
+          sourceUrl: llmDraft.sourceUrl,
+          ctaLabel: llmDraft.ctaLabel || 'Read source',
+          ctaUrl: llmDraft.sourceUrl,
+          recommendedBecause: `Written by the Article Writer Agent after the Research Curator Agent selected "${llmDraft.sourceTitle}" from ${llmDraft.sourceName}. ${llmDraft.reasonForFit}`,
+          agentPrompt: articleBrief.prompt,
+        }));
+      }
+    }
+
+    return unique(generatedDrafts);
+  }
+
+  const verifiedEvents = await generateVerifiedEventSubmissions({
+    agentId: params.agentId,
+    coopId: params.coopId,
+    coopName: params.coopName,
+    coopDescription: params.coopDescription,
+    missionGoals: params.missionGoals,
+    existingTitles: params.existingTitles,
+    researchResults: usefulResearch,
+  });
+
+  return unique(verifiedEvents).slice(0, 2);
 }
 
 function decodeHtmlEntities(value: string): string {
@@ -503,6 +1467,393 @@ export const publicCoopInfoRouter = router({
       }
 
       return { success: true, submission };
+    }),
+
+  getNewsletterResearch: privateProcedure
+    .input(z.object({ coopId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      if (ctx.coopId && ctx.coopId !== input.coopId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Cannot access research for a different coop',
+        });
+      }
+
+      const cache = await ctx.db.coopResearchCache.findUnique({
+        where: {
+          coopId_cacheKey: {
+            coopId: input.coopId,
+            cacheKey: NEWSLETTER_RESEARCH_CACHE_KEY,
+          },
+        },
+      });
+
+      return {
+        cache: cache ? normalizeResearchCache(cache.data) : null,
+        updatedAt: cache?.updatedAt ?? null,
+        expiresAt: cache?.expiresAt ?? null,
+      };
+    }),
+
+  getNewsletterAgentBrief: privateProcedure
+    .input(z.object({ coopId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      if (ctx.coopId && ctx.coopId !== input.coopId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Cannot access newsletter agent brief for a different coop',
+        });
+      }
+
+      const [publicInfo, coopConfig, researchCacheRecord] = await Promise.all([
+        ctx.db.publicCoopInfo.findUnique({
+          where: { coopId: input.coopId },
+          select: {
+            name: true,
+            previewOverrides: true,
+          },
+        }),
+        ctx.db.coopConfig.findFirst({
+          where: { coopId: input.coopId, isActive: true },
+          orderBy: { version: 'desc' },
+          select: {
+            name: true,
+            description: true,
+            displayMission: true,
+            missionGoals: true,
+          },
+        }),
+        ctx.db.coopResearchCache.findUnique({
+          where: {
+            coopId_cacheKey: {
+              coopId: input.coopId,
+              cacheKey: NEWSLETTER_RESEARCH_CACHE_KEY,
+            },
+          },
+        }),
+      ]);
+
+      if (!publicInfo) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Public newsletter is not set up yet' });
+      }
+
+      const overrides = normalizePreviewOverrides(publicInfo.previewOverrides);
+      const existingPosts = Array.isArray(overrides.communityPosts) ? overrides.communityPosts : [];
+      const researchCache = normalizeResearchCache(researchCacheRecord?.data);
+      const researchResults =
+        researchCache && new Date(researchCache.expiresAt).getTime() > Date.now()
+          ? researchCache.results
+          : [];
+      const brief = buildArticleWriterBrief({
+        coopName: publicInfo.name || coopConfig?.name || input.coopId,
+        coopDescription: coopConfig?.displayMission || coopConfig?.description || '',
+        missionGoals: textFromJsonList(coopConfig?.missionGoals, [
+          'member ownership',
+          'local economic power',
+          'community participation',
+        ]),
+        articleSamples: extractArticleSamples(existingPosts),
+        researchResults,
+      });
+
+      return {
+        articleWriterPrompt: brief.prompt,
+        styleGuide: brief.styleGuide,
+        previousSubjects: brief.previousSubjects,
+        researchResultCount: researchResults.length,
+      };
+    }),
+
+  runNewsletterResearch: privateProcedure
+    .input(z.object({
+      coopId: z.string().min(1),
+      sources: z.array(z.object({
+        url: z.string().trim().url().max(500),
+        label: z.string().trim().max(120).optional(),
+      })).max(12).optional(),
+      forceRefresh: z.boolean().optional().default(false),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      if (ctx.coopId && ctx.coopId !== input.coopId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Cannot run research for a different coop',
+        });
+      }
+
+      const [publicInfo, coopConfig, existingCache] = await Promise.all([
+        ctx.db.publicCoopInfo.findUnique({
+          where: { coopId: input.coopId },
+          select: {
+            name: true,
+            previewOverrides: true,
+          },
+        }),
+        ctx.db.coopConfig.findFirst({
+          where: { coopId: input.coopId, isActive: true },
+          orderBy: { version: 'desc' },
+          select: {
+            name: true,
+            description: true,
+            displayMission: true,
+            charterText: true,
+            missionGoals: true,
+            sectorExclusions: true,
+          },
+        }),
+        ctx.db.coopResearchCache.findUnique({
+          where: {
+            coopId_cacheKey: {
+              coopId: input.coopId,
+              cacheKey: NEWSLETTER_RESEARCH_CACHE_KEY,
+            },
+          },
+        }),
+      ]);
+
+      if (!publicInfo) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Public newsletter is not set up yet' });
+      }
+
+      const overrides = normalizePreviewOverrides(publicInfo.previewOverrides);
+      const cachedData = normalizeResearchCache(existingCache?.data);
+      const requestedSources = normalizeResearchSources(input.sources ?? overrides.newsletterResearchSources);
+      const sources = requestedSources.length > 0 ? requestedSources : cachedData?.sources ?? [];
+      if (sources.length === 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Add at least one research source URL before refreshing research.',
+        });
+      }
+
+      const coopName = publicInfo.name || coopConfig?.name || input.coopId;
+      const missionGoals = textFromJsonList(coopConfig?.missionGoals, [
+        'member ownership',
+        'local economic power',
+        'community participation',
+      ]);
+      const sectorExclusions = textFromJsonList(coopConfig?.sectorExclusions);
+      const coopDescription = coopConfig?.displayMission || coopConfig?.description || '';
+      const charterText = coopConfig?.charterText || '';
+      const contextHash = researchContextHash({
+        coopId: input.coopId,
+        coopName,
+        coopDescription,
+        charterText,
+        missionGoals,
+        sectorExclusions,
+        sources,
+      });
+      if (!input.forceRefresh && cachedData && isUsableResearchCache(cachedData, contextHash)) {
+        return {
+          success: true,
+          cache: cachedData,
+          cached: true,
+          message: `Using cached research with ${cachedData.results.length} result(s).`,
+        };
+      }
+
+      const nextCache = await buildResearchCache({
+        coopId: input.coopId,
+        coopName,
+        coopDescription,
+        charterText,
+        missionGoals,
+        sectorExclusions,
+        sources,
+      });
+
+      await ctx.db.coopResearchCache.upsert({
+        where: {
+          coopId_cacheKey: {
+            coopId: input.coopId,
+            cacheKey: NEWSLETTER_RESEARCH_CACHE_KEY,
+          },
+        },
+        create: {
+          coopId: input.coopId,
+          cacheKey: NEWSLETTER_RESEARCH_CACHE_KEY,
+          contextHash,
+          data: nextCache as any,
+          expiresAt: new Date(nextCache.expiresAt),
+          updatedBy: ctx.walletAddress,
+        },
+        update: {
+          contextHash,
+          data: nextCache as any,
+          expiresAt: new Date(nextCache.expiresAt),
+          updatedBy: ctx.walletAddress,
+        },
+      });
+
+      return {
+        success: true,
+        cache: nextCache,
+        cached: false,
+        message: `Research refreshed with ${nextCache.results.length} result(s).`,
+      };
+    }),
+
+  /**
+   * Admin-only starter runner for newsletter agents. It writes generated
+   * suggestions into the existing newsletter submission queue, so admins use
+   * the same publish/dismiss review flow already built for articles and events.
+   */
+  runNewsletterAgent: privateProcedure
+    .input(z.object({
+      coopId: z.string().min(1),
+      agentId: z.enum(['article-writer', 'event-writer']),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      if (ctx.coopId && ctx.coopId !== input.coopId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Cannot run newsletter agents for a different coop',
+        });
+      }
+
+      const [publicInfo, coopConfig, researchCacheRecord] = await Promise.all([
+        ctx.db.publicCoopInfo.findUnique({
+          where: { coopId: input.coopId },
+          select: {
+            name: true,
+            previewOverrides: true,
+          },
+        }),
+        ctx.db.coopConfig.findFirst({
+          where: { coopId: input.coopId, isActive: true },
+          orderBy: { version: 'desc' },
+          select: {
+            name: true,
+            description: true,
+            displayMission: true,
+            missionGoals: true,
+          },
+        }),
+        ctx.db.coopResearchCache.findUnique({
+          where: {
+            coopId_cacheKey: {
+              coopId: input.coopId,
+              cacheKey: NEWSLETTER_RESEARCH_CACHE_KEY,
+            },
+          },
+        }),
+      ]);
+
+      if (!publicInfo) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Public newsletter is not set up yet' });
+      }
+
+      const overrides = normalizePreviewOverrides(publicInfo.previewOverrides);
+      const existingSubmissions = normalizeNewsletterSubmissions(overrides.newsletterSubmissions)
+        .filter((submission) => submission.status === 'pending');
+      const existingPosts = Array.isArray(overrides.communityPosts) ? overrides.communityPosts : [];
+      const existingTitles = [
+        ...existingSubmissions.map((submission) => submission.title),
+        ...existingPosts
+          .map((post) => {
+            if (typeof post === 'object' && post !== null && 'title' in post) {
+              return typeof post.title === 'string' ? post.title : '';
+            }
+            return '';
+          })
+          .filter(Boolean),
+      ];
+
+      const coopName = publicInfo.name || coopConfig?.name || input.coopId;
+      const missionGoals = textFromJsonList(coopConfig?.missionGoals, [
+        'member ownership',
+        'local economic power',
+        'community participation',
+      ]);
+      const coopDescription = coopConfig?.displayMission || coopConfig?.description || '';
+      const researchCache = normalizeResearchCache(researchCacheRecord?.data);
+      const researchResults =
+        researchCache && new Date(researchCache.expiresAt).getTime() > Date.now()
+          ? researchCache.results
+          : [];
+
+      const generatedSubmissions = await buildAgentSubmissions({
+        agentId: input.agentId,
+        coopId: input.coopId,
+        coopName,
+        coopDescription,
+        missionGoals,
+        existingTitles,
+        articleSamples: extractArticleSamples(existingPosts),
+        researchResults,
+      });
+
+      const runMessage = generatedSubmissions.length === 0
+        ? `${agentLabels[input.agentId]} did not add any verified newsletter drafts.`
+        : `${agentLabels[input.agentId]} added ${generatedSubmissions.length} draft(s) to the newsletter queue.`;
+      const overridesWithRunStatus = withAgentRunStatus({
+        overrides,
+        agentId: input.agentId,
+        createdCount: generatedSubmissions.length,
+        message: runMessage,
+      });
+
+      if (generatedSubmissions.length === 0) {
+        await ctx.db.publicCoopInfo.update({
+          where: { coopId: input.coopId },
+          data: {
+            previewOverrides: overridesWithRunStatus as any,
+            updatedBy: ctx.walletAddress,
+          },
+        });
+
+        return {
+          success: true,
+          createdCount: 0,
+          submissions: [],
+          message: runMessage,
+        };
+      }
+
+      await ctx.db.publicCoopInfo.update({
+        where: { coopId: input.coopId },
+        data: {
+          previewOverrides: {
+            ...overridesWithRunStatus,
+            newsletterSubmissions: [...generatedSubmissions, ...existingSubmissions].slice(0, 100),
+          } as any,
+          updatedBy: ctx.walletAddress,
+        },
+      });
+
+      const adminMemberships = await ctx.db.userCoopMembership.findMany({
+        where: {
+          coopId: input.coopId,
+          status: 'ACTIVE',
+          roles: { hasSome: ['admin', 'governor'] },
+        },
+        select: { userId: true },
+      });
+
+      if (adminMemberships.length > 0) {
+        await ctx.db.notification.createMany({
+          data: adminMemberships.map((membership) => ({
+            userId: membership.userId,
+            coopId: input.coopId,
+            type: 'NEWSLETTER_AGENT_SUBMISSION',
+            title: `${agentLabels[input.agentId]} added draft(s)`,
+            body: `${generatedSubmissions.length} pending newsletter draft(s) are ready for admin review.`,
+            data: {
+              agentId: input.agentId,
+              submissionIds: generatedSubmissions.map((submission) => submission.id),
+              source: 'agent',
+            },
+          })),
+        });
+      }
+
+      return {
+        success: true,
+        createdCount: generatedSubmissions.length,
+        submissions: generatedSubmissions,
+        message: runMessage,
+      };
     }),
 
   /**

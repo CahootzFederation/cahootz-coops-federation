@@ -746,6 +746,9 @@ importers:
 
   packages/trpc:
     dependencies:
+      '@openai/agents':
+        specifier: ^0.3.9
+        version: 0.3.9(ws@8.21.0)(zod@3.25.76)
       '@react-email/components':
         specifier: ^1.0.12
         version: 1.0.12(react-dom@19.1.0(react@19.1.0))(react@19.1.0)

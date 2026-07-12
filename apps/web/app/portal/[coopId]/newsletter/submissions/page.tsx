@@ -59,6 +59,12 @@ interface NewsletterSubmission {
   submittedByWallet?: string;
   submittedAt?: string;
   status?: "pending" | "published" | "dismissed";
+  source?: "member" | "public-contributor" | "agent";
+  agentId?: "article-writer" | "event-writer";
+  agentName?: string;
+  recommendedBecause?: string;
+  agentPrompt?: string;
+  approvalRequired?: boolean;
 }
 
 interface PreviewOverrides {
@@ -444,7 +450,7 @@ export default function NewsletterSubmissionsPage() {
                       )}
 
                       <div className="mt-4 flex flex-wrap gap-3 text-xs text-zinc-500">
-                        {submission.submittedByName && (
+                        {submission.submittedByName && submission.source !== "agent" && (
                           <span className="inline-flex items-center gap-1">
                             <User className="h-3.5 w-3.5" />
                             {submission.submittedByName}

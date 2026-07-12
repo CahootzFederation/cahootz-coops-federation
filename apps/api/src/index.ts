@@ -1,6 +1,7 @@
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import cors from "cors";
 import { trpcExpress } from "@repo/trpc/server";
+import { appRouter } from "@repo/trpc/router";
 import type { Application, Request, Response } from "express";
 import express from "express";
 import os from "os";
@@ -193,6 +194,96 @@ app.post("/api/test-email/order-confirmation", async (req: Request, res: Respons
     return res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : "Failed to send test email.",
+    });
+  }
+});
+
+app.post("/dev/newsletter-agent/run", async (req: Request, res: Response) => {
+  if (env.NODE_ENV === "production") {
+    return res.status(404).json({ success: false, message: "Not found" });
+  }
+
+  const configuredToken = process.env.DEV_AGENT_TOKEN;
+  const providedToken = req.headers["x-dev-agent-token"];
+  if (configuredToken && providedToken !== configuredToken) {
+    return res.status(403).json({
+      success: false,
+      message: "Invalid X-Dev-Agent-Token.",
+    });
+  }
+
+  const {
+    coopId,
+    agentId = "article-writer",
+    walletAddress,
+    refreshResearch = false,
+    sources,
+  } = req.body ?? {};
+
+  if (typeof coopId !== "string" || !coopId.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: "coopId is required.",
+    });
+  }
+
+  if (!["article-writer", "event-writer"].includes(agentId)) {
+    return res.status(400).json({
+      success: false,
+      message: "agentId must be article-writer or event-writer.",
+    });
+  }
+
+  const devWalletAddress =
+    typeof walletAddress === "string" && walletAddress.trim()
+      ? walletAddress.trim()
+      : process.env.DEV_AGENT_WALLET_ADDRESS;
+
+  if (!devWalletAddress) {
+    return res.status(400).json({
+      success: false,
+      message: "Provide walletAddress in the JSON body or set DEV_AGENT_WALLET_ADDRESS.",
+    });
+  }
+
+  try {
+    const { db } = await import("@repo/db");
+    const caller = appRouter.createCaller({
+      db,
+      req: {
+        headers: {
+          "x-coop-id": coopId,
+          "x-wallet-address": devWalletAddress,
+        },
+      },
+      res: {},
+      coopId,
+    });
+
+    let researchResult: Awaited<ReturnType<typeof caller.publicCoopInfo.runNewsletterResearch>> | null = null;
+    if (refreshResearch) {
+      researchResult = await caller.publicCoopInfo.runNewsletterResearch({
+        coopId,
+        forceRefresh: true,
+        sources: Array.isArray(sources) ? sources : undefined,
+      });
+    }
+
+    const agentResult = await caller.publicCoopInfo.runNewsletterAgent({
+      coopId,
+      agentId,
+    });
+
+    return res.json({
+      success: true,
+      research: researchResult,
+      agent: agentResult,
+    });
+  } catch (error) {
+    console.error("❌ Dev newsletter agent run failed:", error);
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Failed to run newsletter agent.",
     });
   }
 });

@@ -109,6 +109,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@openai/agents": "^0.3.9",
     "@react-email/components": "^1.0.12",
     "@react-email/render": "^2.0.8",
     "@repo/db": "workspace:*",

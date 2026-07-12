@@ -90,6 +90,55 @@ pnpm db:migrate       # Run database migrations
 pnpm db:studio        # Open Prisma Studio
 ```
 
+## Testing Newsletter Agents In Dev
+
+Newsletter agents do not have a normal admin UI. In development, run them through the API-only test endpoint:
+
+```text
+POST http://localhost:3001/dev/newsletter-agent/run
+```
+Run the Article Writer Agent:
+
+```bash
+curl -s -X POST http://localhost:3001/dev/newsletter-agent/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "coopId": "soulaan",
+    "agentId": "article-writer",
+    "walletAddress": "0xYOUR_ADMIN_WALLET"
+  }' | jq
+```
+
+The Article Writer Agent runs the full article pipeline internally: Article Research Curator, Article Source Verifier, Article Angle Selector, Article Writer, and Article Editor/Quality Gate. It returns fewer drafts by design; `createdCount: 0` is valid when no source can support a specific, source-backed, goal-relevant article.
+
+Refresh research first, then run the Article Writer Agent:
+
+```bash
+curl -s -X POST http://localhost:3001/dev/newsletter-agent/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "coopId": "soulaan",
+    "agentId": "article-writer",
+    "walletAddress": "0xYOUR_ADMIN_WALLET",
+    "refreshResearch": true,
+    "sources": [
+      { "url": "https://example.org/community-news" },
+      { "url": "https://example.org/events" }
+    ]
+  }' | jq
+```
+
+Run the Event Writer Agent:
+
+```bash
+curl -s -X POST http://localhost:3001/dev/newsletter-agent/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "coopId": "soulaan",
+    "agentId": "event-writer",
+    "walletAddress": "0xYOUR_ADMIN_WALLET"
+  }' | jq
+```
 ## Charter Compliance Check
 
 The automated Charter Compliance Check is disabled for now while Cahootz documentation and governance language are being reset. The placeholder Cahootz charter lives at [documents/cahootz-charter.md](documents/cahootz-charter.md).

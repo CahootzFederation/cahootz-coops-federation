@@ -409,6 +409,25 @@ model PublicCoopInfo {
   @@schema("public")
 }
 
+// Cached research packets for co-op agents. The JSON data column keeps the
+// first version flexible; specialized/vector tables can be added later.
+model CoopResearchCache {
+  id          String    @id @default(cuid())
+  coopId      String
+  cacheKey    String    @default("newsletter-research")
+  contextHash String?
+  data        Json
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  updatedBy   String? // wallet address or system identifier
+
+  @@unique([coopId, cacheKey])
+  @@index([coopId])
+  @@index([expiresAt])
+  @@schema("public")
+}
+
 // ── Proposal Engine Models ────────────────────────────
 model Proposal {
   id        String         @id @default(cuid())

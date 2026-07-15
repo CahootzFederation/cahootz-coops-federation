@@ -82,6 +82,72 @@ export async function sendApplicationSubmittedNotification(params: {
   });
 }
 
+export async function sendNewsletterSubscriptionNotification(params: {
+  coopId: string;
+  coopName?: string;
+  subscriberEmail: string;
+  subscriberName?: string;
+  subscriptionId: string;
+  source?: string;
+  applyIntent?: boolean;
+}) {
+  const {
+    coopId,
+    coopName,
+    subscriberEmail,
+    subscriberName,
+    subscriptionId,
+    source,
+    applyIntent,
+  } = params;
+
+  await sendSlackNotification({
+    text: `🗞️ New Newsletter Subscription`,
+    attachments: [
+      {
+        color: "good",
+        fields: [
+          {
+            title: "Co-op",
+            value: coopName || coopId,
+            short: true,
+          },
+          {
+            title: "Subscriber",
+            value: subscriberName || subscriberEmail,
+            short: true,
+          },
+          {
+            title: "Email",
+            value: subscriberEmail,
+            short: true,
+          },
+          {
+            title: "Wants to apply later",
+            value: applyIntent ? "Yes" : "Not specified",
+            short: true,
+          },
+          {
+            title: "Source",
+            value: source || "public-newsletter",
+            short: true,
+          },
+          {
+            title: "Subscription ID",
+            value: subscriptionId,
+            short: true,
+          },
+          {
+            title: "Time",
+            value: new Date().toLocaleString(),
+            short: false,
+          },
+        ],
+      },
+    ],
+  });
+}
+
 export async function sendApiHealthNotification(params: {
   status: "up" | "down" | "degraded";
   service: "api" | "web" | "database";

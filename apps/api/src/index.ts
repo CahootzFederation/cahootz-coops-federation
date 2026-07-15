@@ -23,14 +23,19 @@ const corsOrigins = [
   // Production domains
   "https://soulaan-api-production.up.railway.app",
   "https://www.soulaan.com",
+  "https://soulaan.com",
+  "https://soulaancoop.com",
+  "https://www.soulaancoop.com",
   "https://cahootzcoop.com",
   "https://cahootzcoops.com",
   "https://www.cahootzcoops.com",
+  "https://www.cahootzcoop.com",
   "https://mobile.cahootzcoops.com",
 ];
 
 // Import webhook handlers
 import { handleStripeWebhookNew, handlePayPalWebhook, handleSquareWebhook } from './webhooks';
+import newsletterSubscriptionsRouter from './routes/newsletter-subscriptions.js';
 import uploadRouter from './routes/upload.js';
 // IMPORTANT: Stripe webhooks need raw body for signature verification
 // So we add this route BEFORE the general JSON parser
@@ -294,6 +299,7 @@ app.post('/webhooks/square', handleSquareWebhook);
 
 // File upload endpoints
 app.use('/api/upload', uploadRouter);
+app.use('/api/newsletter-subscriptions', newsletterSubscriptionsRouter);
 
 app.use("/trpc", trpcExpress);
 

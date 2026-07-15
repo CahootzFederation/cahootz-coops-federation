@@ -55,7 +55,15 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Cahootz Coop to access your camera for QR code scanning."
+          "cameraPermission": "Cahootz Coop uses your camera to scan QR codes and let you take profile, store, or product photos and short videos for upload."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cahootz Coop uses your photo library so you can choose profile, store, product, or gallery photos and short videos to upload.",
+          "cameraPermission": "Cahootz Coop uses your camera to let you take profile, store, or product photos and short videos for upload.",
+          "microphonePermission": "Cahootz Coop uses your microphone only when you record a short video, so the uploaded clip can include audio."
         }
       ],
       [

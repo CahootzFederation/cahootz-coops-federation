@@ -4,20 +4,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   ArrowRight,
-  BadgeCheck,
   CalendarDays,
   CheckCircle,
-  HeartHandshake,
-  Landmark,
   Megaphone,
   Newspaper,
   Store,
-  Sparkles,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { FallbackImage } from "@/components/ui/fallback-image";
 import { FeaturedProducts } from "./components/featured-products";
+import { NewsletterSubscribeForm } from "./components/newsletter-subscribe-form";
 import { TrackPageView } from "./components/track-page-view";
 import {
   communityTypeLabels,
@@ -30,14 +27,14 @@ import { env } from "@/env";
 
 const TEMP_PUBLIC_MEMBER_COUNT_FALLBACK = 320;
 
-interface PublicFeature {
-  title: string;
-  description: string;
-}
-
 interface PublicFAQ {
   question: string;
   answer: string;
+}
+
+interface PublicFeature {
+  title: string;
+  description: string;
 }
 
 function normalizeFeatures(value: unknown): PublicFeature[] {
@@ -267,7 +264,6 @@ export default async function CoopPublicPage({ params }: PageProps) {
   const recruitmentFeatures = normalizeFeatures(coopConfig?.displayFeatures);
   const faqs = normalizeFaqs(publicInfo.faqs);
   const aboutBody = publicInfo.aboutBody || '';
-  const eligibilityTitle = publicInfo.eligibilityTitle || '';
   const eligibilityBody = publicInfo.eligibilityBody || '';
   const previewOverrides = normalizePreviewOverrides(publicInfo.previewOverrides);
   const communityPosts = withDevSampleCommunityPosts(
@@ -378,6 +374,7 @@ export default async function CoopPublicPage({ params }: PageProps) {
             <a href="#stories" className="shrink-0 no-underline hover:text-[color:var(--newsletter-kicker)] hover:no-underline">Stories</a>
             <a href="#events" className="shrink-0 no-underline hover:text-[color:var(--newsletter-kicker)] hover:no-underline">Events</a>
             <a href="#classifieds" className="shrink-0 no-underline hover:text-[color:var(--newsletter-kicker)] hover:no-underline">Classifieds</a>
+            <a href="#subscribe" className="shrink-0 no-underline hover:text-[color:var(--newsletter-kicker)] hover:no-underline">Subscribe</a>
             <a href="#apply" className="shrink-0 no-underline hover:text-[color:var(--newsletter-kicker)] hover:no-underline">Apply</a>
           </nav>
         </div>
@@ -733,54 +730,69 @@ export default async function CoopPublicPage({ params }: PageProps) {
         </section>
       )}
 
-      <section id="apply" className="border-t-2 border-[color:var(--newsletter-ink)] bg-[var(--newsletter-panel)] px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="grid gap-7 md:grid-cols-[1.1fr_0.9fr] md:items-center">
-            <div>
-              <div className="text-xs font-black uppercase tracking-[0.22em] text-[color:var(--newsletter-kicker)]">
-                Membership Desk
-              </div>
-              <h2 className="mt-3 text-3xl font-black tracking-normal md:text-4xl">
-                Become a {coop.name} Member
-              </h2>
-              <p className="mt-4 max-w-3xl text-base leading-7 text-[color:var(--newsletter-muted)] md:text-lg">
-                {eligibilityBody ||
-                  "Apply to join the co-op, help shape what gets built, and stay connected to the people and businesses moving the community forward."}
-              </p>
-              {recruitmentFeatures.length > 0 && (
-                <div className="mt-6 border-t-2 border-[color:var(--newsletter-ink)] pt-5">
-                  <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.14em]">
-                    <Sparkles className="h-4 w-4 text-[color:var(--newsletter-kicker)]" />
-                    Why Apply
-                  </div>
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    {recruitmentFeatures.slice(0, 4).map((feature, index) => {
-                      const icons = [Landmark, HeartHandshake, BadgeCheck, CheckCircle];
-                      const Icon = icons[index] || CheckCircle;
-                      return (
-                        <div key={`${feature.title}-apply-${index}`} className="grid grid-cols-[auto_1fr] gap-3">
-                          <Icon className="mt-1 h-4 w-4 text-[color:var(--newsletter-kicker)]" />
-                          <div>
-                            <h3 className="font-black">{feature.title}</h3>
-                            <p className="mt-1 text-sm leading-5 text-[color:var(--newsletter-muted)]">{feature.description}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+      <section id="apply" className="border-y-2 border-[color:var(--newsletter-ink)] bg-[var(--newsletter-panel)] px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,0.8fr)] lg:items-start">
+          <div>
+            <div className="inline-flex bg-[var(--coop-accent)] px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[color:var(--newsletter-ink)]">
+              Membership Desk
             </div>
-            <div className="border-2 border-[color:var(--newsletter-ink)] bg-[var(--newsletter-panel)] p-5 shadow-[6px_6px_0_var(--newsletter-ink)]">
-              <p className="text-sm font-black uppercase tracking-[0.16em] text-[color:var(--newsletter-kicker)]">
-                {eligibilityTitle || "Who Should Apply"}
+            <h2 className="mt-3 text-3xl font-black leading-tight tracking-normal md:text-4xl">
+              Stay close. Apply when ready.
+            </h2>
+            <p className="mt-3 max-w-2xl text-base font-semibold leading-7 text-[color:var(--newsletter-muted)]">
+              {eligibilityBody ||
+                "Get the newsletter first, then take the full application step when the timing feels right."}
+            </p>
+
+            {recruitmentFeatures.length > 0 && (
+              <div className="mt-5">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-[color:var(--newsletter-kicker)]">
+                  What members get
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {recruitmentFeatures.slice(0, 4).map((feature) => (
+                    <div
+                      key={feature.title}
+                      className="flex gap-2 border border-[color:var(--newsletter-rule)] bg-[var(--newsletter-soft)] px-3 py-2"
+                    >
+                      <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--coop-primary)]" />
+                      <div>
+                        <h3 className="text-sm font-black leading-5">{feature.title}</h3>
+                        <p className="mt-0.5 text-xs leading-5 text-[color:var(--newsletter-muted)]">
+                          {feature.description}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div id="subscribe" className="grid gap-4">
+            <div className="border-2 border-[color:var(--newsletter-ink)] bg-[var(--newsletter-panel)] p-4 shadow-[4px_4px_0_var(--newsletter-ink)]">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-[color:var(--newsletter-kicker)]">
+                Easy first step
               </p>
-              <h3 className="mt-3 text-xl font-black md:text-2xl">Ready to build with us?</h3>
-              <p className="mt-3 text-sm leading-6 text-[color:var(--newsletter-muted)]">
-                The application takes a few minutes. Tell the co-op who you are, why you want in, and how you want to participate.
+              <h3 className="mt-2 text-xl font-black">Subscribe to the newsletter</h3>
+              <p className="mt-1 text-sm leading-6 text-[color:var(--newsletter-muted)]">
+                Keep getting stories, event notes, and gentle reminders without starting the full application today.
+              </p>
+              <div className="mt-3">
+                <NewsletterSubscribeForm coopId={coopId} coopName={coop.name} />
+              </div>
+            </div>
+
+            <div className="border-2 border-[color:var(--newsletter-ink)] bg-[var(--newsletter-soft)] p-4">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-[color:var(--newsletter-kicker)]">
+                Ready now
+              </p>
+              <h3 className="mt-2 text-xl font-black">Apply to join</h3>
+              <p className="mt-1 text-sm leading-6 text-[color:var(--newsletter-muted)]">
+                The application is for people ready to introduce themselves and participate in the co-op.
               </p>
               <Button
-                className="mt-6 w-full no-underline hover:no-underline"
+                className="mt-3 h-11 rounded-none border-2 border-[color:var(--newsletter-ink)] px-5 text-sm font-black no-underline hover:no-underline"
                 size="lg"
                 asChild
                 style={{ backgroundColor: coop.bgColor }}

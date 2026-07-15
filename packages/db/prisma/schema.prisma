@@ -117,6 +117,22 @@ model BusinessWaitlist {
   @@schema("public")
 }
 
+model NewsletterSubscription {
+  id          String   @id @default(cuid())
+  email       String
+  coopId      String
+  name        String?
+  source      String   @default("public-newsletter")
+  applyIntent Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([coopId, email])
+  @@index([coopId])
+  @@index([email])
+  @@schema("public")
+}
+
 // ── Application Models ────────────────────────────────
 model Application {
   id     String            @id @default(cuid())

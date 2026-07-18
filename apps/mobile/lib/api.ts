@@ -2193,7 +2193,7 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/trpc/proposal.create`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, coopId: resolveCoopId() }),
     });
     const result = await response.json();
     if (result.error) throw new Error(result.error.message || 'Failed to submit proposal');

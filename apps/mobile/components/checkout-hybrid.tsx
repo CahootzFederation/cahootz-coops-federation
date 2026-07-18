@@ -293,7 +293,24 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
         throw new Error(checkoutResult.error.message);
       }
 
-      const { transactionId, clientSecret, totalChargedCents } = checkoutResult.result.data;
+      const { transactionId, clientSecret, totalChargedCents, isDemoMode, storeOrderId } = checkoutResult.result.data;
+
+      if (isDemoMode) {
+        clearStoreItems(storeId);
+        let successMsg = `Demo purchase of $${((totalChargedCents ?? totalCents) / 100).toFixed(2)} recorded.`;
+        if (preview?.customerReward?.eligible) {
+          successMsg += `\n\nYou would earn ${formatScAmount(preview.customerReward.estimatedAmount)} ${coin.symbol} on a real purchase!`;
+        }
+        const orderId = storeOrderId ?? transactionId;
+        Alert.alert('Demo Purchase Complete', successMsg, [
+          {
+            text: 'View Order',
+            onPress: () => router.replace(`/(authenticated)/order-detail?id=${orderId}` as any),
+          },
+          { text: 'OK', onPress: () => router.back() },
+        ]);
+        return;
+      }
 
       setPaymentSession({
         transactionId,

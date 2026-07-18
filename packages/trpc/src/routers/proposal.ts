@@ -69,8 +69,58 @@ export const proposalRouter = router({
         configData.expertCalibration = await fetchExpertCalibration(ctx.db, coopId);
       }
 
-      // Process proposal through engine with config
-      const processedProposal = await proposalEngine.processProposal(input, configData);
+      // Process proposal through AI engine — save raw proposal first if engine fails
+      let processedProposal: Awaited<ReturnType<typeof proposalEngine.processProposal>> | null = null;
+      let aiError: unknown = null;
+      try {
+        processedProposal = await proposalEngine.processProposal(input, configData);
+      } catch (err) {
+        aiError = err;
+        console.error(`⚠️ [proposal.create] AI engine failed — saving raw proposal for async review:`, err);
+      }
+
+      if (aiError || !processedProposal) {
+        // Save raw proposal with SUBMITTED status so it can be re-evaluated async
+        const titleMatch = input.text.match(/Proposal Title:\s*(.+)/i);
+        const summaryMatch = input.text.match(/Summary:\s*(.+)/i);
+        const budgetMatch = input.text.match(/Budget Requested:\s*\$?([\d,\.]+)/i);
+        const categoryMatch = input.text.match(/Category Key:\s*(.+)/i);
+
+        const fallbackTitle = titleMatch?.[1]?.trim() ?? 'Untitled Proposal';
+        const fallbackSummary = summaryMatch?.[1]?.trim() ?? input.text.slice(0, 200);
+        const fallbackBudget = parseFloat((budgetMatch?.[1] ?? '0').replace(/,/g, '')) || 0;
+        const fallbackCategoryKey = categoryMatch?.[1]?.trim() ?? 'other';
+
+        const savedProposal = await ctx.db.proposal.create({
+          data: {
+            title: fallbackTitle,
+            summary: fallbackSummary,
+            category: normalizeDbCategory(fallbackCategoryKey),
+            categoryKey: fallbackCategoryKey,
+            proposerWallet: walletAddress,
+            proposerRole: ProposerRole.MEMBER,
+            regionCode: 'US',
+            regionName: 'United States',
+            budgetCurrency: Currency.USD,
+            budgetAmount: fallbackBudget,
+            quorumPercent: coopConfig?.quorumPercent ?? 60,
+            approvalThresholdPercent: coopConfig?.approvalThresholdPercent ?? 51,
+            votingWindowDays: coopConfig?.votingWindowDays ?? 7,
+            engineVersion: '0.0.0-pending',
+            status: ProposalStatus.SUBMITTED,
+            councilRequired: false,
+            evaluation: undefined,
+            charterVersionId: coopConfig?.id ?? undefined,
+            coopId,
+            rawText: input.text,
+            decision: 'pending',
+            decisionReasons: [],
+          },
+          include: { kpis: true, auditChecks: true },
+        });
+
+        return mapDbToOutput(savedProposal);
+      }
 
       // Determine final status using 3-tier approval logic:
       //   Tier 1: budget < aiAutoApproveThreshold  → AI auto-approved, no vote needed

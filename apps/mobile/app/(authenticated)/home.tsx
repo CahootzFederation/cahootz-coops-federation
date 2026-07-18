@@ -37,6 +37,7 @@ export default function HomeScreen() {
   const config = coopConfig();
   const primaryColor = resolveBrandColor(user?.coop?.primaryColor || config.primaryColor, '#B45309');
   const accentColor = resolveBrandColor(user?.coop?.accentColor || config.accentColor, '#16A34A');
+  const isDemoAccount = user?.coop?.id === 'demo';
   const [scBalance, setScBalance] = useState<string>('0');
   const [ucBalance, setUcBalance] = useState<string>('0');
   const [isLoading, setIsLoading] = useState(true);
@@ -278,7 +279,7 @@ export default function HomeScreen() {
             </LinearGradient>
           </View>
 
-          <TouchableOpacity
+          {!isDemoAccount && <TouchableOpacity
             onPress={() => router.push('/(authenticated)/submit-newsletter' as any)}
             className="mb-4 rounded-2xl border border-gray-100 bg-white p-4"
             activeOpacity={0.85}
@@ -298,7 +299,7 @@ export default function HomeScreen() {
               </View>
               <Text className="text-2xl text-gray-300">›</Text>
             </View>
-          </TouchableOpacity>
+          </TouchableOpacity>}
 
           {/* Recent Activity */}
           <View className="mb-4">

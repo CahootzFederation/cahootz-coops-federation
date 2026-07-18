@@ -13,7 +13,7 @@
  * - Platform retains treasury/platform fees automatically
  */
 
-import { db } from '@repo/db';
+import { db, PaymentType, PaymentStatus, FulfillmentStatus } from '@repo/db';
 import type Stripe from 'stripe';
 import { TRPCError } from '@trpc/server';
 import { calculateCheckoutPricing } from './checkout-pricing-service.js';
@@ -94,6 +94,8 @@ export async function createCommerceTransaction(params: {
     amount: number;
     currency: string;
   };
+  isDemoMode: boolean;
+  storeOrderId?: string;
 }> {
   const { customerId, businessId, listedAmountCents, applyTreasuryFee = true, currency = 'usd', metadata } = params;
 
@@ -166,6 +168,71 @@ export async function createCommerceTransaction(params: {
 
   console.log(`✅ [Payment Orchestration] Transaction created: ${transaction.id}`);
 
+  // Demo coop bypasses Stripe entirely — demo stores don't have real Stripe accounts
+  const isDemoAccount = params.coopId === 'demo';
+  if (isDemoAccount) {
+    console.log(`🎭 [Payment Orchestration] Demo account detected — skipping Stripe, marking transaction complete`);
+    await db.commerceTransaction.update({
+      where: { id: transaction.id },
+      data: {
+        stripePaymentIntentId: `demo_pi_${transaction.id}`,
+        stripeDestinationAccountId: business.stripeAccount.stripeAccountId,
+        status: 'COMPLETED',
+        completedAt: new Date(),
+      },
+    });
+
+    // Create a StoreOrder so the orders list and detail screens have real data to show
+    const store = await db.store.findFirst({ where: { businessId } });
+    let storeOrderId: string | undefined;
+    if (store) {
+      const cartItems = (metadata?.items as Array<{ productId: string; quantity: number; priceUSD: number }> | undefined) ?? [];
+      const shippingAddress = (metadata?.shippingAddress as string | undefined) ?? '';
+      const note = (metadata?.note as string | undefined) ?? '';
+      const storeOrder = await db.storeOrder.create({
+        data: {
+          storeId: store.id,
+          buyerId: customerId,
+          subtotalUSD: breakdown.listedAmount / 100,
+          totalUSD: breakdown.chargedAmount / 100,
+          paymentMethod: PaymentType.CARD,
+          paymentStatus: PaymentStatus.COMPLETED,
+          fulfillmentStatus: FulfillmentStatus.PENDING,
+          shippingAddress: shippingAddress || undefined,
+          note: note || undefined,
+          items: cartItems.length > 0 ? {
+            create: cartItems.map(item => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              priceUSD: item.priceUSD,
+              totalUSD: item.priceUSD * item.quantity,
+            })),
+          } : undefined,
+        },
+      });
+      storeOrderId = storeOrder.id;
+      console.log(`🎭 [Payment Orchestration] Demo StoreOrder created: ${storeOrderId}`);
+    }
+
+    return {
+      transaction: {
+        id: transaction.id,
+        listedAmount: breakdown.listedAmount / 100,
+        chargedAmount: breakdown.chargedAmount / 100,
+        merchantSettlementAmount: breakdown.merchantSettlementAmount / 100,
+        treasuryFeeAmount: breakdown.treasuryFeeAmount / 100,
+      },
+      paymentIntent: {
+        id: `demo_pi_${transaction.id}`,
+        clientSecret: `demo_pi_${transaction.id}_secret`,
+        amount: breakdown.chargedAmount,
+        currency,
+      },
+      isDemoMode: true,
+      storeOrderId,
+    };
+  }
+
   // Create Stripe payment intent with destination charge
   const Stripe = (await import('stripe')).default;
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -217,6 +284,7 @@ export async function createCommerceTransaction(params: {
       amount: paymentIntent.amount,
       currency: paymentIntent.currency,
     },
+    isDemoMode: false,
   };
 }
 

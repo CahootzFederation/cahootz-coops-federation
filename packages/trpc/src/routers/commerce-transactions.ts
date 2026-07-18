@@ -277,6 +277,8 @@ export const commerceTransactionsRouter = router({
         merchantSettlementCents: Math.round(result.transaction.merchantSettlementAmount * 100),
         platformFeeCents: Math.round((result.transaction.chargedAmount - result.transaction.merchantSettlementAmount) * 100),
         treasuryFeeCents: Math.round(result.transaction.treasuryFeeAmount * 100),
+        isDemoMode: result.isDemoMode,
+        storeOrderId: result.storeOrderId,
       };
     }),
 

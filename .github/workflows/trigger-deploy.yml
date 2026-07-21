@@ -1,0 +1,43 @@
+name: Deploy Trigger.dev
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FORCE_COLOR: 3
+  TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+  TRIGGER_PROJECT_REF: ${{ vars.TRIGGER_PROJECT_REF }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./tooling/github/setup
+
+      - name: Check Trigger.dev environment
+        shell: bash
+        run: |
+          if [ -z "$TRIGGER_ACCESS_TOKEN" ]; then
+            echo "Missing GitHub Actions secret: TRIGGER_ACCESS_TOKEN"
+            exit 1
+          fi
+
+          if [ -z "$TRIGGER_PROJECT_REF" ]; then
+            echo "Missing GitHub Actions repository variable: TRIGGER_PROJECT_REF"
+            exit 1
+          fi
+
+      - name: Deploy Trigger.dev tasks
+        run: pnpm deploy:trigger

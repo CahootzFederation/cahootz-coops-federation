@@ -57,7 +57,9 @@
     "setup:dev": "bash scripts/setup-dev.sh"
   },
   "devDependencies": {
+    "@prisma/instrumentation": "^7.9.0",
     "@repo/prettier-config": "workspace:*",
+    "@traceloop/instrumentation-openai": "^0.27.0",
     "@trigger.dev/build": "4.5.4",
     "@trigger.dev/sdk": "4.5.4",
     "@turbo/gen": "^2.6.3",

@@ -39,5 +39,8 @@ jobs:
             exit 1
           fi
 
+      - name: Generate Prisma client
+        run: pnpm -F @repo/db db:generate
+
       - name: Deploy Trigger.dev tasks
         run: pnpm deploy:trigger

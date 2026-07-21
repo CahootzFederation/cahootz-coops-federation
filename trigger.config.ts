@@ -1,3 +1,4 @@
+import { prismaExtension } from "@trigger.dev/build/extensions/prisma";
 import { defineConfig } from "@trigger.dev/sdk";
 
 const project = process.env.TRIGGER_PROJECT_REF;
@@ -14,6 +15,14 @@ export default defineConfig({
   tsconfig: "./apps/api/tsconfig.json",
   runtime: "node-22",
   maxDuration: 3600,
+  build: {
+    extensions: [
+      prismaExtension({
+        mode: "legacy",
+        schema: "packages/db/prisma/schema.prisma",
+      }),
+    ],
+  },
   retries: {
     enabledInDev: false,
     default: {

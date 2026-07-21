@@ -16,6 +16,7 @@
     "@repo/db": "workspace:*",
     "@repo/trpc": "workspace:*",
     "@t3-oss/env-core": "^0.9.2",
+    "@trigger.dev/sdk": "4.5.4",
     "@trpc/server": "catalog:",
     "@vercel/blob": "^0.27.0",
     "body-parser": "^2.2.2",

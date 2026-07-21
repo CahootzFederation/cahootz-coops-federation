@@ -1,21 +1,26 @@
-import { z } from 'zod';
-import { Agent, run, webSearchTool } from '@openai/agents';
-import { createHash, randomUUID } from 'crypto';
-import { TRPCError } from '@trpc/server';
-import { authenticatedProcedure, publicProcedure, privateProcedure } from '../procedures';
-import { router } from '../trpc';
-import type { AuthenticatedContext } from '../context.js';
+import { createHash, randomUUID } from "crypto";
+import { Agent, run, webSearchTool } from "@openai/agents";
+import { TRPCError } from "@trpc/server";
+import { z } from "zod";
+
+import type { AuthenticatedContext } from "../context.js";
+import type { ArticleSample } from "../services/newsletter-article-agent";
+import {
+  authenticatedProcedure,
+  privateProcedure,
+  publicProcedure,
+} from "../procedures";
 import {
   buildArticleWriterBrief,
   extractArticleSamples,
   generateArticleDraftWithAgentOrchestration,
   hasSubjectOverlap,
-  type ArticleSample,
-} from '../services/newsletter-article-agent';
+} from "../services/newsletter-article-agent";
+import { router } from "../trpc";
 
-type NewsletterSubmissionType = 'article' | 'event';
-type NewsletterSubmissionStatus = 'pending' | 'published' | 'dismissed';
-type NewsletterAgentId = 'article-writer' | 'event-writer';
+type NewsletterSubmissionType = "article" | "event";
+type NewsletterSubmissionStatus = "pending" | "published" | "dismissed";
+type NewsletterAgentId = "article-writer" | "event-writer";
 
 interface PreviewOverrides {
   newsletterSubmissions?: unknown;
@@ -43,7 +48,7 @@ export interface NewsletterSubmission {
   submittedByWallet: string;
   submittedAt: string;
   status: NewsletterSubmissionStatus;
-  source?: 'member' | 'public-contributor' | 'agent';
+  source?: "member" | "public-contributor" | "agent";
   agentId?: NewsletterAgentId;
   agentName?: string;
   recommendedBecause?: string;
@@ -58,7 +63,7 @@ export interface NewsletterResearchSource {
 
 export interface NewsletterResearchResult {
   id: string;
-  type: 'event' | 'article_source' | 'organization' | 'news';
+  type: "event" | "article_source" | "organization" | "news";
   title: string;
   sourceUrl: string;
   sourceName: string;
@@ -70,7 +75,11 @@ export interface NewsletterResearchResult {
   alignedGoals: string[];
   reasonForFit: string;
   risksOrUnverifiedClaims: string[];
-  recommendedNextAction: 'draft_article' | 'draft_event' | 'human_review' | 'ignore';
+  recommendedNextAction:
+    | "draft_article"
+    | "draft_event"
+    | "human_review"
+    | "ignore";
 }
 
 export interface NewsletterResearchCache {
@@ -83,96 +92,125 @@ export interface NewsletterResearchCache {
 }
 
 const agentLabels: Record<NewsletterAgentId, string> = {
-  'article-writer': 'Article Writer Agent',
-  'event-writer': 'Event Writer Agent',
+  "article-writer": "Article Writer Agent",
+  "event-writer": "Event Writer Agent",
 };
-const NEWSLETTER_RESEARCH_CACHE_KEY = 'newsletter-research';
+const NEWSLETTER_RESEARCH_CACHE_KEY = "newsletter-research";
 
 interface NewsletterAgentSchedule {
   agentId: NewsletterAgentId;
   enabled: boolean;
   intervalHours: number;
   lastRunAt?: string;
-  lastRunStatus?: 'success' | 'empty' | 'error';
+  lastRunStatus?: "success" | "empty" | "error";
   lastRunMessage?: string;
   lastCreatedCount?: number;
   updatedAt?: string;
 }
 
-const defaultAgentSchedules: Record<NewsletterAgentId, NewsletterAgentSchedule> = {
-  'article-writer': {
-    agentId: 'article-writer',
+const defaultAgentSchedules: Record<
+  NewsletterAgentId,
+  NewsletterAgentSchedule
+> = {
+  "article-writer": {
+    agentId: "article-writer",
     enabled: true,
     intervalHours: 168,
   },
-  'event-writer': {
-    agentId: 'event-writer',
+  "event-writer": {
+    agentId: "event-writer",
     enabled: true,
     intervalHours: 168,
   },
 };
 
 function normalizePreviewOverrides(value: unknown): PreviewOverrides {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as PreviewOverrides)
     : {};
 }
 
-function normalizeNewsletterSubmissions(value: unknown): NewsletterSubmission[] {
+function normalizeNewsletterSubmissions(
+  value: unknown,
+): NewsletterSubmission[] {
   if (!Array.isArray(value)) return [];
 
   return value.filter((submission): submission is NewsletterSubmission => {
     return (
-      typeof submission === 'object' &&
+      typeof submission === "object" &&
       submission !== null &&
-      'id' in submission &&
-      'type' in submission &&
-      'title' in submission &&
-      'summary' in submission &&
-      typeof submission.id === 'string' &&
-      (submission.type === 'article' || submission.type === 'event') &&
-      typeof submission.title === 'string' &&
-      typeof submission.summary === 'string'
+      "id" in submission &&
+      "type" in submission &&
+      "title" in submission &&
+      "summary" in submission &&
+      typeof submission.id === "string" &&
+      (submission.type === "article" || submission.type === "event") &&
+      typeof submission.title === "string" &&
+      typeof submission.summary === "string"
     );
   });
 }
 
-function normalizeAgentSchedule(agentId: NewsletterAgentId, value: unknown): NewsletterAgentSchedule {
+function normalizeAgentSchedule(
+  agentId: NewsletterAgentId,
+  value: unknown,
+): NewsletterAgentSchedule {
   const fallback = defaultAgentSchedules[agentId];
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { ...fallback };
   }
 
   const record = value as Record<string, unknown>;
-  const intervalHours = typeof record.intervalHours === 'number' && Number.isFinite(record.intervalHours)
-    ? Math.min(Math.max(Math.round(record.intervalHours), 1), 24 * 60)
-    : fallback.intervalHours;
-  const lastRunStatus = ['success', 'empty', 'error'].includes(String(record.lastRunStatus))
-    ? record.lastRunStatus as NewsletterAgentSchedule['lastRunStatus']
+  const intervalHours =
+    typeof record.intervalHours === "number" &&
+    Number.isFinite(record.intervalHours)
+      ? Math.min(Math.max(Math.round(record.intervalHours), 1), 24 * 60)
+      : fallback.intervalHours;
+  const lastRunStatus = ["success", "empty", "error"].includes(
+    String(record.lastRunStatus),
+  )
+    ? (record.lastRunStatus as NewsletterAgentSchedule["lastRunStatus"])
     : undefined;
 
   return {
     agentId,
-    enabled: typeof record.enabled === 'boolean' ? record.enabled : fallback.enabled,
+    enabled:
+      typeof record.enabled === "boolean" ? record.enabled : fallback.enabled,
     intervalHours,
-    lastRunAt: typeof record.lastRunAt === 'string' ? record.lastRunAt : undefined,
+    lastRunAt:
+      typeof record.lastRunAt === "string" ? record.lastRunAt : undefined,
     lastRunStatus,
-    lastRunMessage: typeof record.lastRunMessage === 'string' ? record.lastRunMessage : undefined,
-    lastCreatedCount: typeof record.lastCreatedCount === 'number' && Number.isFinite(record.lastCreatedCount)
-      ? Math.max(Math.round(record.lastCreatedCount), 0)
-      : undefined,
-    updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : undefined,
+    lastRunMessage:
+      typeof record.lastRunMessage === "string"
+        ? record.lastRunMessage
+        : undefined,
+    lastCreatedCount:
+      typeof record.lastCreatedCount === "number" &&
+      Number.isFinite(record.lastCreatedCount)
+        ? Math.max(Math.round(record.lastCreatedCount), 0)
+        : undefined,
+    updatedAt:
+      typeof record.updatedAt === "string" ? record.updatedAt : undefined,
   };
 }
 
-function normalizeAgentSchedules(value: unknown): Record<NewsletterAgentId, NewsletterAgentSchedule> {
-  const record = typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
+function normalizeAgentSchedules(
+  value: unknown,
+): Record<NewsletterAgentId, NewsletterAgentSchedule> {
+  const record =
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
 
   return {
-    'article-writer': normalizeAgentSchedule('article-writer', record['article-writer']),
-    'event-writer': normalizeAgentSchedule('event-writer', record['event-writer']),
+    "article-writer": normalizeAgentSchedule(
+      "article-writer",
+      record["article-writer"],
+    ),
+    "event-writer": normalizeAgentSchedule(
+      "event-writer",
+      record["event-writer"],
+    ),
   };
 }
 
@@ -182,7 +220,9 @@ function withAgentRunStatus(params: {
   createdCount: number;
   message: string;
 }) {
-  const schedules = normalizeAgentSchedules(params.overrides.newsletterAgentSchedules);
+  const schedules = normalizeAgentSchedules(
+    params.overrides.newsletterAgentSchedules,
+  );
   const previous = schedules[params.agentId];
   const now = new Date().toISOString();
 
@@ -193,7 +233,7 @@ function withAgentRunStatus(params: {
       [params.agentId]: {
         ...previous,
         lastRunAt: now,
-        lastRunStatus: params.createdCount > 0 ? 'success' : 'empty',
+        lastRunStatus: params.createdCount > 0 ? "success" : "empty",
         lastRunMessage: params.message,
         lastCreatedCount: params.createdCount,
         updatedAt: now,
@@ -207,24 +247,25 @@ function normalizeResearchSources(value: unknown): NewsletterResearchSource[] {
 
   return value
     .map((source) => {
-      if (typeof source === 'string') {
+      if (typeof source === "string") {
         return { url: source.trim() };
       }
 
-      if (typeof source === 'object' && source !== null) {
+      if (typeof source === "object" && source !== null) {
         const record = source as Record<string, unknown>;
         return {
-          url: typeof record.url === 'string' ? record.url.trim() : '',
-          label: typeof record.label === 'string' ? record.label.trim() : undefined,
+          url: typeof record.url === "string" ? record.url.trim() : "",
+          label:
+            typeof record.label === "string" ? record.label.trim() : undefined,
         };
       }
 
-      return { url: '' };
+      return { url: "" };
     })
     .filter((source) => {
       try {
         const url = new URL(source.url);
-        return ['http:', 'https:'].includes(url.protocol);
+        return ["http:", "https:"].includes(url.protocol);
       } catch {
         return false;
       }
@@ -232,15 +273,18 @@ function normalizeResearchSources(value: unknown): NewsletterResearchSource[] {
     .slice(0, 12);
 }
 
-function normalizeResearchCache(value: unknown): NewsletterResearchCache | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+function normalizeResearchCache(
+  value: unknown,
+): NewsletterResearchCache | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return null;
   const record = value as Record<string, unknown>;
 
   if (
-    typeof record.generatedAt !== 'string' ||
-    typeof record.coopId !== 'string' ||
-    typeof record.contextHash !== 'string' ||
-    typeof record.expiresAt !== 'string' ||
+    typeof record.generatedAt !== "string" ||
+    typeof record.coopId !== "string" ||
+    typeof record.contextHash !== "string" ||
+    typeof record.expiresAt !== "string" ||
     !Array.isArray(record.sources) ||
     !Array.isArray(record.results)
   ) {
@@ -252,22 +296,26 @@ function normalizeResearchCache(value: unknown): NewsletterResearchCache | null 
     coopId: record.coopId,
     contextHash: record.contextHash,
     sources: normalizeResearchSources(record.sources),
-    results: record.results.filter((result): result is NewsletterResearchResult => {
-      return (
-        typeof result === 'object' &&
-        result !== null &&
-        'id' in result &&
-        'type' in result &&
-        'title' in result &&
-        'sourceUrl' in result &&
-        'summary' in result &&
-        typeof result.id === 'string' &&
-        ['event', 'article_source', 'organization', 'news'].includes(String(result.type)) &&
-        typeof result.title === 'string' &&
-        typeof result.sourceUrl === 'string' &&
-        typeof result.summary === 'string'
-      );
-    }),
+    results: record.results.filter(
+      (result): result is NewsletterResearchResult => {
+        return (
+          typeof result === "object" &&
+          result !== null &&
+          "id" in result &&
+          "type" in result &&
+          "title" in result &&
+          "sourceUrl" in result &&
+          "summary" in result &&
+          typeof result.id === "string" &&
+          ["event", "article_source", "organization", "news"].includes(
+            String(result.type),
+          ) &&
+          typeof result.title === "string" &&
+          typeof result.sourceUrl === "string" &&
+          typeof result.summary === "string"
+        );
+      },
+    ),
     expiresAt: record.expiresAt,
   };
 }
@@ -277,25 +325,27 @@ function textFromJsonList(value: unknown, fallback: string[] = []) {
 
   return value
     .map((item) => {
-      if (typeof item === 'string') return item;
-      if (typeof item === 'object' && item !== null) {
+      if (typeof item === "string") return item;
+      if (typeof item === "object" && item !== null) {
         const record = item as Record<string, unknown>;
-        if (typeof record.label === 'string') return record.label;
-        if (typeof record.title === 'string') return record.title;
-        if (typeof record.description === 'string') return record.description;
+        if (typeof record.label === "string") return record.label;
+        if (typeof record.title === "string") return record.title;
+        if (typeof record.description === "string") return record.description;
       }
-      return '';
+      return "";
     })
     .map((item) => item.trim())
     .filter(Boolean);
 }
 
 function firstSentence(value: string | null | undefined) {
-  if (!value) return '';
-  return value
-    .replace(/\s+/g, ' ')
-    .split(/(?<=[.!?])\s+/)[0]
-    ?.trim() || '';
+  if (!value) return "";
+  return (
+    value
+      .replace(/\s+/g, " ")
+      .split(/(?<=[.!?])\s+/)[0]
+      ?.trim() || ""
+  );
 }
 
 function researchContextHash(params: {
@@ -307,27 +357,29 @@ function researchContextHash(params: {
   sectorExclusions: string[];
   sources: NewsletterResearchSource[];
 }) {
-  return createHash('sha256')
-    .update(JSON.stringify({
-      coopId: params.coopId,
-      coopName: params.coopName,
-      coopDescription: params.coopDescription,
-      charterText: params.charterText,
-      missionGoals: params.missionGoals,
-      sectorExclusions: params.sectorExclusions,
-      sources: params.sources.map((source) => source.url).sort(),
-    }))
-    .digest('hex');
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        coopId: params.coopId,
+        coopName: params.coopName,
+        coopDescription: params.coopDescription,
+        charterText: params.charterText,
+        missionGoals: params.missionGoals,
+        sectorExclusions: params.sectorExclusions,
+        sources: params.sources.map((source) => source.url).sort(),
+      }),
+    )
+    .digest("hex");
 }
 
 function stripHtml(html: string) {
   return decodeHtmlEntities(
     html
-      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
   );
 }
 
@@ -335,9 +387,9 @@ function tokenSet(value: string) {
   return new Set(
     value
       .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, ' ')
+      .replace(/[^a-z0-9\s-]/g, " ")
       .split(/\s+/)
-      .filter((token) => token.length > 3)
+      .filter((token) => token.length > 3),
   );
 }
 
@@ -348,22 +400,40 @@ function goalMatches(text: string, goals: string[]) {
     const goalTokens = [...tokenSet(goal)];
     if (goalTokens.length === 0) return false;
     const hits = goalTokens.filter((token) => textTokens.has(token)).length;
-    return hits / goalTokens.length >= 0.25 || goalTokens.some((token) => text.toLowerCase().includes(token));
+    return (
+      hits / goalTokens.length >= 0.25 ||
+      goalTokens.some((token) => text.toLowerCase().includes(token))
+    );
   });
 }
 
-function inferResearchType(text: string, url: string): NewsletterResearchResult['type'] {
+function inferResearchType(
+  text: string,
+  url: string,
+): NewsletterResearchResult["type"] {
   const haystack = `${text} ${url}`.toLowerCase();
-  if (/\b(event|calendar|workshop|meetup|summit|webinar|conference|festival|market|orientation)\b/.test(haystack)) {
-    return 'event';
+  if (
+    /\b(event|calendar|workshop|meetup|summit|webinar|conference|festival|market|orientation)\b/.test(
+      haystack,
+    )
+  ) {
+    return "event";
   }
-  if (/\b(news|press|story|article|blog|report)\b/.test(haystack)) return 'news';
-  if (/\b(co-?op|cooperative|association|nonprofit|organization|collective)\b/.test(haystack)) return 'organization';
-  return 'article_source';
+  if (/\b(news|press|story|article|blog|report)\b/.test(haystack))
+    return "news";
+  if (
+    /\b(co-?op|cooperative|association|nonprofit|organization|collective)\b/.test(
+      haystack,
+    )
+  )
+    return "organization";
+  return "article_source";
 }
 
 function inferEventDate(text: string) {
-  const monthDate = text.match(/\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}(?:,\s+\d{4})?\b/i);
+  const monthDate = text.match(
+    /\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2}(?:,\s+\d{4})?\b/i,
+  );
   if (monthDate?.[0]) return monthDate[0];
 
   const numericDate = text.match(/\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/);
@@ -372,9 +442,11 @@ function inferEventDate(text: string) {
 
 function inferLocation(text: string) {
   const online = text.match(/\b(online|virtual|webinar|zoom)\b/i);
-  if (online?.[0]) return 'Online';
+  if (online?.[0]) return "Online";
 
-  const cityState = text.match(/\b[A-Z][a-zA-Z .'-]+,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/);
+  const cityState = text.match(
+    /\b[A-Z][a-zA-Z .'-]+,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/,
+  );
   return cityState?.[0];
 }
 
@@ -386,15 +458,19 @@ function extractCandidateLinks(html: string, baseUrl: string) {
 
   while ((match = anchorPattern.exec(html)) && candidates.length < 8) {
     const href = match[1];
-    const label = stripHtml(match[2] || '').slice(0, 140);
+    const label = stripHtml(match[2] || "").slice(0, 140);
     const haystack = `${href} ${label}`.toLowerCase();
-    if (!/\b(event|calendar|workshop|meetup|summit|webinar|conference|festival|market|article|story|news|blog|press|report)\b/.test(haystack)) {
+    if (
+      !/\b(event|calendar|workshop|meetup|summit|webinar|conference|festival|market|article|story|news|blog|press|report)\b/.test(
+        haystack,
+      )
+    ) {
       continue;
     }
 
     try {
       const url = new URL(href, baseUrl);
-      if (!['http:', 'https:'].includes(url.protocol)) continue;
+      if (!["http:", "https:"].includes(url.protocol)) continue;
       const normalizedUrl = url.toString();
       if (seen.has(normalizedUrl)) continue;
       seen.add(normalizedUrl);
@@ -413,38 +489,53 @@ function extractCandidateLinks(html: string, baseUrl: string) {
 function scoreResearchResult(params: {
   text: string;
   url: string;
-  type: NewsletterResearchResult['type'];
+  type: NewsletterResearchResult["type"];
   alignedGoals: string[];
   missionGoals: string[];
 }) {
   const missionFit = params.missionGoals.length
-    ? Math.min(1, params.alignedGoals.length / Math.min(params.missionGoals.length, 3))
+    ? Math.min(
+        1,
+        params.alignedGoals.length / Math.min(params.missionGoals.length, 3),
+      )
     : 0.5;
-  const sourceTrust = params.url.startsWith('https://') ? 0.9 : 0.65;
-  const dateRelevance = params.type === 'event' && inferEventDate(params.text) ? 0.9 : params.type === 'event' ? 0.45 : 0.7;
-  const communityUsefulness = /\b(member|community|business|local|cooperative|workshop|market|ownership|education|funding|mutual|economic)\b/i.test(params.text)
-    ? 0.85
-    : 0.55;
+  const sourceTrust = params.url.startsWith("https://") ? 0.9 : 0.65;
+  const dateRelevance =
+    params.type === "event" && inferEventDate(params.text)
+      ? 0.9
+      : params.type === "event"
+        ? 0.45
+        : 0.7;
+  const communityUsefulness =
+    /\b(member|community|business|local|cooperative|workshop|market|ownership|education|funding|mutual|economic)\b/i.test(
+      params.text,
+    )
+      ? 0.85
+      : 0.55;
 
-  return Number((
-    missionFit * 0.4 +
-    sourceTrust * 0.2 +
-    dateRelevance * 0.15 +
-    communityUsefulness * 0.25
-  ).toFixed(2));
+  return Number(
+    (
+      missionFit * 0.4 +
+      sourceTrust * 0.2 +
+      dateRelevance * 0.15 +
+      communityUsefulness * 0.25
+    ).toFixed(2),
+  );
 }
 
 async function fetchResearchResult(params: {
   source: NewsletterResearchSource;
   coopName: string;
   missionGoals: string[];
-}): Promise<NewsletterResearchResult & { discoveredSources?: NewsletterResearchSource[] }> {
+}): Promise<
+  NewsletterResearchResult & { discoveredSources?: NewsletterResearchSource[] }
+> {
   const response = await fetch(params.source.url, {
     headers: {
-      'user-agent': 'CahootzResearchBrain/1.0 (+https://cahootz.coop)',
-      accept: 'text/html,application/xhtml+xml,text/plain',
+      "user-agent": "CahootzResearchBrain/1.0 (+https://cahootz.coop)",
+      accept: "text/html,application/xhtml+xml,text/plain",
     },
-    redirect: 'follow',
+    redirect: "follow",
   });
 
   if (!response.ok) {
@@ -455,13 +546,16 @@ async function fetchResearchResult(params: {
   const finalUrl = response.url || params.source.url;
   const discoveredSources = extractCandidateLinks(raw, finalUrl);
   const title =
-    getMetaContent(raw, ['og:title', 'twitter:title']) ||
+    getMetaContent(raw, ["og:title", "twitter:title"]) ||
     getTitleTag(raw) ||
     params.source.label ||
     new URL(finalUrl).hostname;
   const description =
-    getMetaContent(raw, ['og:description', 'twitter:description', 'description']) ||
-    stripHtml(raw).slice(0, 900);
+    getMetaContent(raw, [
+      "og:description",
+      "twitter:description",
+      "description",
+    ]) || stripHtml(raw).slice(0, 900);
   const text = `${title} ${description} ${stripHtml(raw).slice(0, 20_000)}`;
   const type = inferResearchType(text, finalUrl);
   const alignedGoals = goalMatches(text, params.missionGoals);
@@ -473,8 +567,12 @@ async function fetchResearchResult(params: {
     missionGoals: params.missionGoals,
   });
   const risksOrUnverifiedClaims = [
-    type === 'event' && !inferEventDate(text) ? 'Event date was not found in the source preview.' : '',
-    type === 'event' && !inferLocation(text) ? 'Event location was not found in the source preview.' : '',
+    type === "event" && !inferEventDate(text)
+      ? "Event date was not found in the source preview."
+      : "",
+    type === "event" && !inferLocation(text)
+      ? "Event location was not found in the source preview."
+      : "",
   ].filter(Boolean);
 
   return {
@@ -484,22 +582,26 @@ async function fetchResearchResult(params: {
     sourceUrl: finalUrl,
     sourceName: params.source.label || new URL(finalUrl).hostname,
     dateFound: new Date().toISOString(),
-    eventDate: type === 'event' ? inferEventDate(text) : undefined,
-    location: type === 'event' ? inferLocation(text) : undefined,
+    eventDate: type === "event" ? inferEventDate(text) : undefined,
+    location: type === "event" ? inferLocation(text) : undefined,
     summary: description.slice(0, 1200),
     relevanceScore,
     alignedGoals,
-    reasonForFit: alignedGoals.length > 0
-      ? `Matches ${params.coopName} goals: ${alignedGoals.slice(0, 3).join(', ')}.`
-      : `Needs admin review for fit with ${params.coopName}.`,
+    reasonForFit:
+      alignedGoals.length > 0
+        ? `Matches ${params.coopName} goals: ${alignedGoals.slice(0, 3).join(", ")}.`
+        : `Needs admin review for fit with ${params.coopName}.`,
     risksOrUnverifiedClaims,
-    recommendedNextAction: type === 'event'
-      ? 'draft_event'
-      : relevanceScore >= 0.6
-        ? 'draft_article'
-        : 'human_review',
+    recommendedNextAction:
+      type === "event"
+        ? "draft_event"
+        : relevanceScore >= 0.6
+          ? "draft_article"
+          : "human_review",
     discoveredSources,
-  } satisfies NewsletterResearchResult & { discoveredSources: NewsletterResearchSource[] };
+  } satisfies NewsletterResearchResult & {
+    discoveredSources: NewsletterResearchSource[];
+  };
 }
 
 async function buildResearchCache(params: {
@@ -517,7 +619,11 @@ async function buildResearchCache(params: {
   const queuedSources = [...params.sources];
   const seenSources = new Set(params.sources.map((source) => source.url));
 
-  for (let index = 0; index < queuedSources.length && results.length < 24; index++) {
+  for (
+    let index = 0;
+    index < queuedSources.length && results.length < 24;
+    index++
+  ) {
     const source = queuedSources[index];
     try {
       const result = await fetchResearchResult({
@@ -529,24 +635,28 @@ async function buildResearchCache(params: {
       results.push(researchResult);
 
       for (const discoveredSource of discoveredSources ?? []) {
-        if (seenSources.has(discoveredSource.url) || queuedSources.length >= 24) continue;
+        if (seenSources.has(discoveredSource.url) || queuedSources.length >= 24)
+          continue;
         seenSources.add(discoveredSource.url);
         queuedSources.push(discoveredSource);
       }
     } catch (error) {
       results.push({
         id: randomUUID(),
-        type: 'article_source',
+        type: "article_source",
         title: source.label || source.url,
         sourceUrl: source.url,
         sourceName: source.label || source.url,
         dateFound: now.toISOString(),
-        summary: 'This source could not be fetched. Admins should verify the URL or try again later.',
+        summary:
+          "This source could not be fetched. Admins should verify the URL or try again later.",
         relevanceScore: 0,
         alignedGoals: [],
-        reasonForFit: 'Fetch failed before relevance could be scored.',
-        risksOrUnverifiedClaims: [error instanceof Error ? error.message : 'Unknown fetch error'],
-        recommendedNextAction: 'human_review',
+        reasonForFit: "Fetch failed before relevance could be scored.",
+        risksOrUnverifiedClaims: [
+          error instanceof Error ? error.message : "Unknown fetch error",
+        ],
+        recommendedNextAction: "human_review",
       });
     }
   }
@@ -561,9 +671,15 @@ async function buildResearchCache(params: {
   } satisfies NewsletterResearchCache;
 }
 
-function isUsableResearchCache(cache: NewsletterResearchCache | null, contextHash: string) {
+function isUsableResearchCache(
+  cache: NewsletterResearchCache | null,
+  contextHash: string,
+) {
   if (!cache) return false;
-  return cache.contextHash === contextHash && new Date(cache.expiresAt).getTime() > Date.now();
+  return (
+    cache.contextHash === contextHash &&
+    new Date(cache.expiresAt).getTime() > Date.now()
+  );
 }
 
 function makeAgentSubmission(params: {
@@ -591,17 +707,19 @@ function makeAgentSubmission(params: {
     contentMarkdown: params.contentMarkdown,
     date: params.date,
     location: params.location,
-    byline: params.byline || (params.type === 'event' ? 'Events Desk' : 'Editorial Desk'),
+    byline:
+      params.byline ||
+      (params.type === "event" ? "Events Desk" : "Editorial Desk"),
     ctaLabel: params.ctaLabel,
     ctaUrl: params.ctaUrl,
     sourceUrl: params.sourceUrl,
     imageUrl: params.imageUrl,
-    submittedByUserId: 'agent',
+    submittedByUserId: "agent",
     submittedByName: agentLabels[params.agentId],
-    submittedByWallet: 'agent',
+    submittedByWallet: "agent",
     submittedAt: new Date().toISOString(),
-    status: 'pending',
-    source: 'agent',
+    status: "pending",
+    source: "agent",
     agentId: params.agentId,
     agentName: agentLabels[params.agentId],
     recommendedBecause: params.recommendedBecause,
@@ -664,16 +782,16 @@ const EventVerificationSchema = z.object({
 
 function sanitizeAgentText(value: string) {
   return value
-    .replace(/cite[^]*/g, '')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
+    .replace(/cite[^]*/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
 function normalizeHttpUrl(value: string) {
   try {
     const parsedUrl = new URL(value.trim());
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) return null;
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) return null;
     return parsedUrl.toString();
   } catch {
     return null;
@@ -684,20 +802,23 @@ function hasConcreteValue(value: string) {
   const normalized = sanitizeAgentText(value).toLowerCase();
   if (!normalized) return false;
   return ![
-    'unknown',
-    'tbd',
-    'n/a',
-    'na',
-    'none',
-    'not listed',
-    'not available',
-    'needs source',
-    'needs confirmation',
-    'needs confirmed date',
-    'needs confirmed location',
-    'to be announced',
-    'coming soon',
-  ].some((placeholder) => normalized === placeholder || normalized.includes(placeholder));
+    "unknown",
+    "tbd",
+    "n/a",
+    "na",
+    "none",
+    "not listed",
+    "not available",
+    "needs source",
+    "needs confirmation",
+    "needs confirmed date",
+    "needs confirmed location",
+    "to be announced",
+    "coming soon",
+  ].some(
+    (placeholder) =>
+      normalized === placeholder || normalized.includes(placeholder),
+  );
 }
 
 async function discoverEventCandidatesWithAgent(params: {
@@ -710,58 +831,71 @@ async function discoverEventCandidatesWithAgent(params: {
 
   const cachedLines = params.cachedEvents
     .slice(0, 6)
-    .map((result) => [
-      `Title: ${result.title}`,
-      `URL: ${result.sourceUrl}`,
-      `Source: ${result.sourceName}`,
-      `Date hint: ${result.eventDate || 'none'}`,
-      `Location hint: ${result.location || 'none'}`,
-      `Summary: ${result.summary}`,
-      `Goal fit hint: ${result.reasonForFit}`,
-    ].join('\n'))
-    .join('\n\n');
+    .map((result) =>
+      [
+        `Title: ${result.title}`,
+        `URL: ${result.sourceUrl}`,
+        `Source: ${result.sourceName}`,
+        `Date hint: ${result.eventDate || "none"}`,
+        `Location hint: ${result.location || "none"}`,
+        `Summary: ${result.summary}`,
+        `Goal fit hint: ${result.reasonForFit}`,
+      ].join("\n"),
+    )
+    .join("\n\n");
 
-  const model = process.env.NEWSLETTER_EVENT_MODEL || process.env.NEWSLETTER_ARTICLE_MODEL || 'gpt-5.2';
+  const model =
+    process.env.NEWSLETTER_EVENT_MODEL ||
+    process.env.NEWSLETTER_ARTICLE_MODEL ||
+    "gpt-5.2";
   const discoveryAgent = new Agent({
-    name: 'Newsletter Event Discovery Agent',
+    name: "Newsletter Event Discovery Agent",
     instructions: [
-      'Find a small set of real, current event candidates for a co-op newsletter.',
-      'Use web_search when cached candidates are missing, stale, too thin, or not clearly event pages.',
-      'Prefer primary event pages, organizer pages, official calendar listings, ticket/registration pages, or credible community calendars.',
-      'Do not return evergreen resources, generic workshops without dates, recurring pages without a specific upcoming occurrence, articles about past events, or vague networking listings.',
-      'Specific co-op usefulness must come from the provided goals. Do not invent usefulness outside those goals.',
-      'Return at most 4 candidates. Fewer is better when quality is thin.',
-    ].join('\n'),
+      "Find a small set of real, current event candidates for a co-op newsletter.",
+      "Use web_search when cached candidates are missing, stale, too thin, or not clearly event pages.",
+      "Prefer primary event pages, organizer pages, official calendar listings, ticket/registration pages, or credible community calendars.",
+      "Do not return evergreen resources, generic workshops without dates, recurring pages without a specific upcoming occurrence, articles about past events, or vague networking listings.",
+      "Specific co-op usefulness must come from the provided goals. Do not invent usefulness outside those goals.",
+      "Return at most 4 candidates. Fewer is better when quality is thin.",
+    ].join("\n"),
     model,
     outputType: EventDiscoverySchema,
     tools: [webSearchTool()],
-    modelSettings: { toolChoice: 'auto' },
+    modelSettings: { toolChoice: "auto" },
   });
 
-  const result = await run(discoveryAgent, [
-    `Today: ${new Date().toISOString().slice(0, 10)}`,
-    `Co-op: ${params.coopName}`,
-    `Co-op context: ${firstSentence(params.coopDescription) || params.coopName}`,
-    `Goals that define usefulness: ${params.missionGoals.join(', ') || 'member ownership, local economic power, community participation'}`,
-    '',
-    'Cached event candidates, if any:',
-    cachedLines || 'None.',
-  ].join('\n')) as unknown as {
+  const result = (await run(
+    discoveryAgent,
+    [
+      `Today: ${new Date().toISOString().slice(0, 10)}`,
+      `Co-op: ${params.coopName}`,
+      `Co-op context: ${firstSentence(params.coopDescription) || params.coopName}`,
+      `Goals that define usefulness: ${params.missionGoals.join(", ") || "member ownership, local economic power, community participation"}`,
+      "",
+      "Cached event candidates, if any:",
+      cachedLines || "None.",
+    ].join("\n"),
+  )) as unknown as {
     finalOutput?: z.infer<typeof EventDiscoverySchema>;
     output?: z.infer<typeof EventDiscoverySchema>;
   };
 
-  return (result.finalOutput ?? result.output)?.candidates
-    ?.map((candidate) => ({
-      sourceTitle: sanitizeAgentText(candidate.sourceTitle),
-      sourceUrl: sanitizeAgentText(candidate.sourceUrl),
-      sourceName: sanitizeAgentText(candidate.sourceName),
-      possibleEventTitle: sanitizeAgentText(candidate.possibleEventTitle),
-      possibleDate: sanitizeAgentText(candidate.possibleDate),
-      whyItMayFitGoals: sanitizeAgentText(candidate.whyItMayFitGoals),
-    }))
-    .filter((candidate) => candidate.sourceTitle && normalizeHttpUrl(candidate.sourceUrl))
-    .slice(0, 4) ?? [];
+  return (
+    (result.finalOutput ?? result.output)?.candidates
+      ?.map((candidate) => ({
+        sourceTitle: sanitizeAgentText(candidate.sourceTitle),
+        sourceUrl: sanitizeAgentText(candidate.sourceUrl),
+        sourceName: sanitizeAgentText(candidate.sourceName),
+        possibleEventTitle: sanitizeAgentText(candidate.possibleEventTitle),
+        possibleDate: sanitizeAgentText(candidate.possibleDate),
+        whyItMayFitGoals: sanitizeAgentText(candidate.whyItMayFitGoals),
+      }))
+      .filter(
+        (candidate) =>
+          candidate.sourceTitle && normalizeHttpUrl(candidate.sourceUrl),
+      )
+      .slice(0, 4) ?? []
+  );
 }
 
 async function verifyEventCandidateWithAgent(params: {
@@ -775,37 +909,43 @@ async function verifyEventCandidateWithAgent(params: {
   const sourceUrl = normalizeHttpUrl(params.candidate.sourceUrl);
   if (!sourceUrl) return null;
 
-  const model = process.env.NEWSLETTER_EVENT_MODEL || process.env.NEWSLETTER_ARTICLE_MODEL || 'gpt-5.2';
+  const model =
+    process.env.NEWSLETTER_EVENT_MODEL ||
+    process.env.NEWSLETTER_ARTICLE_MODEL ||
+    "gpt-5.2";
   const verifierAgent = new Agent({
-    name: 'Newsletter EventVerifier Agent',
+    name: "Newsletter EventVerifier Agent",
     instructions: [
-      'Verify whether one event candidate is good enough for a co-op newsletter queue.',
-      'Use web_search and the candidate URL to verify facts from public sources.',
-      'Approve only if there is a specific upcoming event occurrence, a real source URL, date, time or all-day indication, organizer, location or online access, registration/details URL, summary, and goal-based fit.',
-      'Reject evergreen pages, past events, vague event series without a specific upcoming date, generic networking, motivational content with no practical member utility, thin listings with missing organizer/date/location, or anything where facts conflict.',
-      'Specific co-op usefulness must come from the provided goals. Do not add an actionable next step.',
-      'Return verifiedFacts as short facts traceable to the source. If any required field is missing, approved must be false and rejectionReason must explain why.',
-    ].join('\n'),
+      "Verify whether one event candidate is good enough for a co-op newsletter queue.",
+      "Use web_search and the candidate URL to verify facts from public sources.",
+      "Approve only if there is a specific upcoming event occurrence, a real source URL, date, time or all-day indication, organizer, location or online access, registration/details URL, summary, and goal-based fit.",
+      "Reject evergreen pages, past events, vague event series without a specific upcoming date, generic networking, motivational content with no practical member utility, thin listings with missing organizer/date/location, or anything where facts conflict.",
+      "Specific co-op usefulness must come from the provided goals. Do not add an actionable next step.",
+      "Return verifiedFacts as short facts traceable to the source. If any required field is missing, approved must be false and rejectionReason must explain why.",
+    ].join("\n"),
     model,
     outputType: EventVerificationSchema,
     tools: [webSearchTool()],
-    modelSettings: { toolChoice: 'auto' },
+    modelSettings: { toolChoice: "auto" },
   });
 
-  const result = await run(verifierAgent, [
-    `Today: ${new Date().toISOString().slice(0, 10)}`,
-    `Co-op: ${params.coopName}`,
-    `Co-op context: ${firstSentence(params.coopDescription) || params.coopName}`,
-    `Goals that define usefulness: ${params.missionGoals.join(', ') || 'member ownership, local economic power, community participation'}`,
-    '',
-    'Candidate to verify:',
-    `Source title: ${params.candidate.sourceTitle}`,
-    `Source URL: ${sourceUrl}`,
-    `Source name: ${params.candidate.sourceName}`,
-    `Possible event title: ${params.candidate.possibleEventTitle}`,
-    `Possible date: ${params.candidate.possibleDate}`,
-    `Why it may fit goals: ${params.candidate.whyItMayFitGoals}`,
-  ].join('\n')) as unknown as {
+  const result = (await run(
+    verifierAgent,
+    [
+      `Today: ${new Date().toISOString().slice(0, 10)}`,
+      `Co-op: ${params.coopName}`,
+      `Co-op context: ${firstSentence(params.coopDescription) || params.coopName}`,
+      `Goals that define usefulness: ${params.missionGoals.join(", ") || "member ownership, local economic power, community participation"}`,
+      "",
+      "Candidate to verify:",
+      `Source title: ${params.candidate.sourceTitle}`,
+      `Source URL: ${sourceUrl}`,
+      `Source name: ${params.candidate.sourceName}`,
+      `Possible event title: ${params.candidate.possibleEventTitle}`,
+      `Possible date: ${params.candidate.possibleDate}`,
+      `Why it may fit goals: ${params.candidate.whyItMayFitGoals}`,
+    ].join("\n"),
+  )) as unknown as {
     finalOutput?: z.infer<typeof EventVerificationSchema>;
     output?: z.infer<typeof EventVerificationSchema>;
   };
@@ -813,8 +953,10 @@ async function verifyEventCandidateWithAgent(params: {
   const verification = result.finalOutput ?? result.output;
   if (!verification?.approved) return null;
 
-  const verifiedSourceUrl = normalizeHttpUrl(verification.sourceUrl) || sourceUrl;
-  const registrationUrl = normalizeHttpUrl(verification.registrationUrl) || verifiedSourceUrl;
+  const verifiedSourceUrl =
+    normalizeHttpUrl(verification.sourceUrl) || sourceUrl;
+  const registrationUrl =
+    normalizeHttpUrl(verification.registrationUrl) || verifiedSourceUrl;
   const title = sanitizeAgentText(verification.eventTitle);
   const summary = sanitizeAgentText(verification.summary);
   const eventDate = sanitizeAgentText(verification.eventDate);
@@ -822,7 +964,10 @@ async function verifyEventCandidateWithAgent(params: {
   const organizer = sanitizeAgentText(verification.organizer);
   const locationOrOnline = sanitizeAgentText(verification.locationOrOnline);
   const goalFit = sanitizeAgentText(verification.goalFit);
-  const verifiedFacts = verification.verifiedFacts.map(sanitizeAgentText).filter(Boolean).slice(0, 6);
+  const verifiedFacts = verification.verifiedFacts
+    .map(sanitizeAgentText)
+    .filter(Boolean)
+    .slice(0, 6);
 
   if (
     !hasConcreteValue(title) ||
@@ -837,31 +982,38 @@ async function verifyEventCandidateWithAgent(params: {
     return null;
   }
 
-  const sourceTitle = sanitizeAgentText(verification.sourceTitle || params.candidate.sourceTitle);
-  const sourceName = sanitizeAgentText(verification.sourceName || params.candidate.sourceName);
+  const sourceTitle = sanitizeAgentText(
+    verification.sourceTitle || params.candidate.sourceTitle,
+  );
+  const sourceName = sanitizeAgentText(
+    verification.sourceName || params.candidate.sourceName,
+  );
   return {
     title: title.slice(0, 120),
     summary: summary.slice(0, 1200),
     contentMarkdown: [
-      '## Verified event facts',
+      "## Verified event facts",
       `- Date: ${eventDate}`,
       `- Time: ${eventTime}`,
       `- Organizer: ${organizer}`,
       `- Location/online: ${locationOrOnline}`,
       `- Source: ${sourceTitle || sourceName || verifiedSourceUrl}`,
-      '',
-      '## Why it fits this co-op',
+      "",
+      "## Why it fits this co-op",
       goalFit,
-      '',
-      '## Source-backed notes',
-      verifiedFacts.map((fact) => `- ${fact}`).join('\n'),
-    ].join('\n'),
-    date: `${eventDate}${eventTime ? `, ${eventTime}` : ''}`.slice(0, 180),
+      "",
+      "## Source-backed notes",
+      verifiedFacts.map((fact) => `- ${fact}`).join("\n"),
+    ].join("\n"),
+    date: `${eventDate}${eventTime ? `, ${eventTime}` : ""}`.slice(0, 180),
     location: locationOrOnline.slice(0, 180),
     sourceUrl: verifiedSourceUrl,
     ctaUrl: registrationUrl,
     sourceTitle: (sourceTitle || title).slice(0, 180),
-    sourceName: (sourceName || new URL(verifiedSourceUrl).hostname).slice(0, 120),
+    sourceName: (sourceName || new URL(verifiedSourceUrl).hostname).slice(
+      0,
+      120,
+    ),
     goalFit: goalFit.slice(0, 1000),
   };
 }
@@ -876,8 +1028,17 @@ async function generateVerifiedEventSubmissions(params: {
   researchResults: NewsletterResearchResult[];
 }) {
   const cachedEvents = params.researchResults
-    .filter((result) => result.type === 'event' || result.recommendedNextAction === 'draft_event')
-    .filter((result) => !params.existingTitles.some((title) => title.toLowerCase() === result.title.toLowerCase()))
+    .filter(
+      (result) =>
+        result.type === "event" ||
+        result.recommendedNextAction === "draft_event",
+    )
+    .filter(
+      (result) =>
+        !params.existingTitles.some(
+          (title) => title.toLowerCase() === result.title.toLowerCase(),
+        ),
+    )
     .slice(0, 6);
 
   const cacheCandidates: EventCandidate[] = cachedEvents.map((result) => ({
@@ -885,7 +1046,7 @@ async function generateVerifiedEventSubmissions(params: {
     sourceUrl: result.sourceUrl,
     sourceName: result.sourceName,
     possibleEventTitle: result.title,
-    possibleDate: result.eventDate || '',
+    possibleDate: result.eventDate || "",
     whyItMayFitGoals: result.reasonForFit,
   }));
 
@@ -919,23 +1080,36 @@ async function generateVerifiedEventSubmissions(params: {
     });
 
     if (!verifiedEvent) continue;
-    if (params.existingTitles.some((title) => title.toLowerCase() === verifiedEvent.title.toLowerCase())) continue;
-    if (verifiedEvents.some((event) => event.title.toLowerCase() === verifiedEvent.title.toLowerCase())) continue;
+    if (
+      params.existingTitles.some(
+        (title) => title.toLowerCase() === verifiedEvent.title.toLowerCase(),
+      )
+    )
+      continue;
+    if (
+      verifiedEvents.some(
+        (event) =>
+          event.title.toLowerCase() === verifiedEvent.title.toLowerCase(),
+      )
+    )
+      continue;
 
-    verifiedEvents.push(makeAgentSubmission({
-      coopId: params.coopId,
-      agentId: params.agentId,
-      type: 'event',
-      title: verifiedEvent.title,
-      summary: verifiedEvent.summary,
-      contentMarkdown: verifiedEvent.contentMarkdown,
-      date: verifiedEvent.date,
-      location: verifiedEvent.location,
-      sourceUrl: verifiedEvent.sourceUrl,
-      ctaLabel: 'Event details',
-      ctaUrl: verifiedEvent.ctaUrl,
-      recommendedBecause: `Verified by the EventVerifier Agent from "${verifiedEvent.sourceTitle}" (${verifiedEvent.sourceName}). ${verifiedEvent.goalFit}`,
-    }));
+    verifiedEvents.push(
+      makeAgentSubmission({
+        coopId: params.coopId,
+        agentId: params.agentId,
+        type: "event",
+        title: verifiedEvent.title,
+        summary: verifiedEvent.summary,
+        contentMarkdown: verifiedEvent.contentMarkdown,
+        date: verifiedEvent.date,
+        location: verifiedEvent.location,
+        sourceUrl: verifiedEvent.sourceUrl,
+        ctaLabel: "Event details",
+        ctaUrl: verifiedEvent.ctaUrl,
+        recommendedBecause: `Verified by the EventVerifier Agent from "${verifiedEvent.sourceTitle}" (${verifiedEvent.sourceName}). ${verifiedEvent.goalFit}`,
+      }),
+    );
   }
 
   return verifiedEvents;
@@ -951,14 +1125,24 @@ async function buildAgentSubmissions(params: {
   articleSamples?: ArticleSample[];
   researchResults?: NewsletterResearchResult[];
 }) {
-  const titleExists = new Set(params.existingTitles.map((title) => title.toLowerCase()));
+  const titleExists = new Set(
+    params.existingTitles.map((title) => title.toLowerCase()),
+  );
   const unique = (items: NewsletterSubmission[]) =>
     items
       .filter((item) => !titleExists.has(item.title.toLowerCase()))
-      .filter((item) => item.type !== 'article' || !hasSubjectOverlap(item.title, params.existingTitles))
+      .filter(
+        (item) =>
+          item.type !== "article" ||
+          !hasSubjectOverlap(item.title, params.existingTitles),
+      )
       .slice(0, 3);
   const usefulResearch = (params.researchResults ?? [])
-    .filter((result) => result.relevanceScore >= 0.45 && result.recommendedNextAction !== 'ignore')
+    .filter(
+      (result) =>
+        result.relevanceScore >= 0.45 &&
+        result.recommendedNextAction !== "ignore",
+    )
     .sort((a, b) => b.relevanceScore - a.relevanceScore);
   const articleBrief = buildArticleWriterBrief({
     coopName: params.coopName,
@@ -968,42 +1152,53 @@ async function buildAgentSubmissions(params: {
     researchResults: usefulResearch,
   });
 
-  if (params.agentId === 'article-writer') {
+  if (params.agentId === "article-writer") {
     const articleSources = usefulResearch
-      .filter((result) => result.recommendedNextAction === 'draft_article' || result.type === 'news' || result.type === 'article_source')
-      .filter((result) => !hasSubjectOverlap(result.title, params.existingTitles))
+      .filter(
+        (result) =>
+          result.recommendedNextAction === "draft_article" ||
+          result.type === "news" ||
+          result.type === "article_source",
+      )
+      .filter(
+        (result) => !hasSubjectOverlap(result.title, params.existingTitles),
+      )
       .slice(0, 3);
 
     const generatedDrafts: NewsletterSubmission[] = [];
-    const sourcesToTry: Array<NewsletterResearchResult | undefined> = articleSources.length > 0
-      ? articleSources
-      : [undefined];
+    const sourcesToTry: Array<NewsletterResearchResult | undefined> =
+      articleSources.length > 0 ? articleSources : [undefined];
 
     for (const result of sourcesToTry) {
       const llmDraft = await generateArticleDraftWithAgentOrchestration({
         briefPrompt: articleBrief.prompt,
         source: result,
-        existingTitles: [...params.existingTitles, ...generatedDrafts.map((draft) => draft.title)],
+        existingTitles: [
+          ...params.existingTitles,
+          ...generatedDrafts.map((draft) => draft.title),
+        ],
         coopName: params.coopName,
         coopDescription: params.coopDescription,
         missionGoals: params.missionGoals,
       });
 
       if (llmDraft) {
-        generatedDrafts.push(makeAgentSubmission({
-          coopId: params.coopId,
-          agentId: params.agentId,
-          type: 'article',
-          title: llmDraft.title,
-          summary: llmDraft.summary,
-          contentMarkdown: llmDraft.contentMarkdown,
-          date: 'Story',
-          sourceUrl: llmDraft.sourceUrl,
-          ctaLabel: llmDraft.ctaLabel || 'Read source',
-          ctaUrl: llmDraft.sourceUrl,
-          recommendedBecause: `Written by the Article Writer Agent after the Research Curator Agent selected "${llmDraft.sourceTitle}" from ${llmDraft.sourceName}. ${llmDraft.reasonForFit}`,
-          agentPrompt: articleBrief.prompt,
-        }));
+        generatedDrafts.push(
+          makeAgentSubmission({
+            coopId: params.coopId,
+            agentId: params.agentId,
+            type: "article",
+            title: llmDraft.title,
+            summary: llmDraft.summary,
+            contentMarkdown: llmDraft.contentMarkdown,
+            date: "Story",
+            sourceUrl: llmDraft.sourceUrl,
+            ctaLabel: llmDraft.ctaLabel || "Read source",
+            ctaUrl: llmDraft.sourceUrl,
+            recommendedBecause: `Written by the Article Writer Agent after the Research Curator Agent selected "${llmDraft.sourceTitle}" from ${llmDraft.sourceName}. ${llmDraft.reasonForFit}`,
+            agentPrompt: articleBrief.prompt,
+          }),
+        );
       }
     }
 
@@ -1025,16 +1220,19 @@ async function buildAgentSubmissions(params: {
 
 function decodeHtmlEntities(value: string): string {
   return value
-    .replace(/&amp;/g, '&')
+    .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
-function resolveUrl(value: string | undefined, baseUrl: string): string | undefined {
+function resolveUrl(
+  value: string | undefined,
+  baseUrl: string,
+): string | undefined {
   if (!value) return undefined;
   try {
     return new URL(value, baseUrl).toString();
@@ -1045,10 +1243,16 @@ function resolveUrl(value: string | undefined, baseUrl: string): string | undefi
 
 function getMetaContent(html: string, keys: string[]): string | undefined {
   for (const key of keys) {
-    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const patterns = [
-      new RegExp(`<meta[^>]+(?:property|name)=["']${escapedKey}["'][^>]+content=["']([^"']+)["'][^>]*>`, 'i'),
-      new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${escapedKey}["'][^>]*>`, 'i'),
+      new RegExp(
+        `<meta[^>]+(?:property|name)=["']${escapedKey}["'][^>]+content=["']([^"']+)["'][^>]*>`,
+        "i",
+      ),
+      new RegExp(
+        `<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${escapedKey}["'][^>]*>`,
+        "i",
+      ),
     ];
     for (const pattern of patterns) {
       const match = html.match(pattern);
@@ -1068,36 +1272,217 @@ async function fetchLinkPreview(url: string) {
   try {
     parsedUrl = new URL(url);
   } catch {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Enter a valid URL' });
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Enter a valid URL" });
   }
 
-  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only http and https links are supported' });
+  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Only http and https links are supported",
+    });
   }
 
   const response = await fetch(parsedUrl.toString(), {
     headers: {
-      'user-agent': 'CahootzNewsletterBot/1.0 (+https://cahootz.coop)',
-      accept: 'text/html,application/xhtml+xml',
+      "user-agent": "CahootzNewsletterBot/1.0 (+https://cahootz.coop)",
+      accept: "text/html,application/xhtml+xml",
     },
-    redirect: 'follow',
+    redirect: "follow",
   });
 
   if (!response.ok) {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Could not load that link' });
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Could not load that link",
+    });
   }
 
   const html = (await response.text()).slice(0, 250_000);
   const finalUrl = response.url || parsedUrl.toString();
-  const title = getMetaContent(html, ['og:title', 'twitter:title']) || getTitleTag(html) || parsedUrl.hostname;
-  const description = getMetaContent(html, ['og:description', 'twitter:description', 'description']) || '';
-  const imageUrl = resolveUrl(getMetaContent(html, ['og:image', 'twitter:image']), finalUrl);
+  const title =
+    getMetaContent(html, ["og:title", "twitter:title"]) ||
+    getTitleTag(html) ||
+    parsedUrl.hostname;
+  const description =
+    getMetaContent(html, [
+      "og:description",
+      "twitter:description",
+      "description",
+    ]) || "";
+  const imageUrl = resolveUrl(
+    getMetaContent(html, ["og:image", "twitter:image"]),
+    finalUrl,
+  );
 
   return {
     url: finalUrl,
     title: title.slice(0, 160),
     description: description.slice(0, 1200),
     imageUrl,
+  };
+}
+
+export async function runNewsletterAgentForCoop(params: {
+  db: AuthenticatedContext["db"];
+  coopId: string;
+  agentId: NewsletterAgentId;
+  updatedBy?: string;
+}) {
+  const [publicInfo, coopConfig, researchCacheRecord] = await Promise.all([
+    params.db.publicCoopInfo.findUnique({
+      where: { coopId: params.coopId },
+      select: {
+        name: true,
+        previewOverrides: true,
+      },
+    }),
+    params.db.coopConfig.findFirst({
+      where: { coopId: params.coopId, isActive: true },
+      orderBy: { version: "desc" },
+      select: {
+        name: true,
+        description: true,
+        displayMission: true,
+        missionGoals: true,
+      },
+    }),
+    params.db.coopResearchCache.findUnique({
+      where: {
+        coopId_cacheKey: {
+          coopId: params.coopId,
+          cacheKey: NEWSLETTER_RESEARCH_CACHE_KEY,
+        },
+      },
+    }),
+  ]);
+
+  if (!publicInfo) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Public newsletter is not set up yet",
+    });
+  }
+
+  const updatedBy = params.updatedBy || "trigger.dev";
+  const overrides = normalizePreviewOverrides(publicInfo.previewOverrides);
+  const existingSubmissions = normalizeNewsletterSubmissions(
+    overrides.newsletterSubmissions,
+  ).filter((submission) => submission.status === "pending");
+  const existingPosts = Array.isArray(overrides.communityPosts)
+    ? overrides.communityPosts
+    : [];
+  const existingTitles = [
+    ...existingSubmissions.map((submission) => submission.title),
+    ...existingPosts
+      .map((post) => {
+        if (typeof post === "object" && post !== null && "title" in post) {
+          return typeof post.title === "string" ? post.title : "";
+        }
+        return "";
+      })
+      .filter(Boolean),
+  ];
+
+  const coopName = publicInfo.name || coopConfig?.name || params.coopId;
+  const missionGoals = textFromJsonList(coopConfig?.missionGoals, [
+    "member ownership",
+    "local economic power",
+    "community participation",
+  ]);
+  const coopDescription =
+    coopConfig?.displayMission || coopConfig?.description || "";
+  const researchCache = normalizeResearchCache(researchCacheRecord?.data);
+  const researchResults =
+    researchCache && new Date(researchCache.expiresAt).getTime() > Date.now()
+      ? researchCache.results
+      : [];
+
+  const generatedSubmissions = await buildAgentSubmissions({
+    agentId: params.agentId,
+    coopId: params.coopId,
+    coopName,
+    coopDescription,
+    missionGoals,
+    existingTitles,
+    articleSamples: extractArticleSamples(existingPosts),
+    researchResults,
+  });
+
+  const runMessage =
+    generatedSubmissions.length === 0
+      ? `${agentLabels[params.agentId]} did not add any verified newsletter drafts.`
+      : `${agentLabels[params.agentId]} added ${generatedSubmissions.length} draft(s) to the newsletter queue.`;
+  const overridesWithRunStatus = withAgentRunStatus({
+    overrides,
+    agentId: params.agentId,
+    createdCount: generatedSubmissions.length,
+    message: runMessage,
+  });
+
+  if (generatedSubmissions.length === 0) {
+    await params.db.publicCoopInfo.update({
+      where: { coopId: params.coopId },
+      data: {
+        previewOverrides: overridesWithRunStatus as any,
+        updatedBy,
+      },
+    });
+
+    return {
+      success: true,
+      createdCount: 0,
+      submissions: [],
+      message: runMessage,
+    };
+  }
+
+  await params.db.publicCoopInfo.update({
+    where: { coopId: params.coopId },
+    data: {
+      previewOverrides: {
+        ...overridesWithRunStatus,
+        newsletterSubmissions: [
+          ...generatedSubmissions,
+          ...existingSubmissions,
+        ].slice(0, 100),
+      } as any,
+      updatedBy,
+    },
+  });
+
+  const adminMemberships = await params.db.userCoopMembership.findMany({
+    where: {
+      coopId: params.coopId,
+      status: "ACTIVE",
+      roles: { hasSome: ["admin", "governor"] },
+    },
+    select: { userId: true },
+  });
+
+  if (adminMemberships.length > 0) {
+    await params.db.notification.createMany({
+      data: adminMemberships.map((membership) => ({
+        userId: membership.userId,
+        coopId: params.coopId,
+        type: "NEWSLETTER_AGENT_SUBMISSION",
+        title: `${agentLabels[params.agentId]} added draft(s)`,
+        body: `${generatedSubmissions.length} pending newsletter draft(s) are ready for admin review.`,
+        data: {
+          agentId: params.agentId,
+          submissionIds: generatedSubmissions.map(
+            (submission) => submission.id,
+          ),
+          source: "agent",
+        },
+      })),
+    });
+  }
+
+  return {
+    success: true,
+    createdCount: generatedSubmissions.length,
+    submissions: generatedSubmissions,
+    message: runMessage,
   };
 }
 
@@ -1114,8 +1499,8 @@ export const publicCoopInfoRouter = router({
 
       if (!publicInfo || !publicInfo.isPublished || publicInfo.isDemo) {
         throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Public coop page not found or not published',
+          code: "NOT_FOUND",
+          message: "Public coop page not found or not published",
         });
       }
 
@@ -1128,7 +1513,7 @@ export const publicCoopInfoRouter = router({
   getByCoopIdWithUnpublished: publicProcedure
     .input(z.object({ coopId: z.string() }))
     .query(async ({ input, ctx }) => {
-      console.log('check coopId with unpublished', input.coopId);
+      console.log("check coopId with unpublished", input.coopId);
       const publicInfo = await ctx.db.publicCoopInfo.findUnique({
         where: { coopId: input.coopId },
       });
@@ -1140,20 +1525,22 @@ export const publicCoopInfoRouter = router({
    * Get preview data for public page (stores and proposals)
    */
   getPreviewData: publicProcedure
-    .input(z.object({
-      coopId: z.string(),
-      previewMode: z.enum(['live', 'curated', 'hybrid']),
-      storeLimit: z.number().min(1).max(50).optional().default(12),
-      proposalLimit: z.number().min(1).max(20).optional().default(3),
-    }))
+    .input(
+      z.object({
+        coopId: z.string(),
+        previewMode: z.enum(["live", "curated", "hybrid"]),
+        storeLimit: z.number().min(1).max(50).optional().default(12),
+        proposalLimit: z.number().min(1).max(20).optional().default(3),
+      }),
+    )
     .query(async ({ input, ctx }) => {
-      if (input.previewMode === 'curated') {
+      if (input.previewMode === "curated") {
         return null;
       }
 
       const storeWhere = {
         coopId: input.coopId,
-        status: 'APPROVED' as const,
+        status: "APPROVED" as const,
         // Only surface stores whose Stripe Connect account is fully ready
         // to accept charges; otherwise customers would hit an error at
         // checkout. SC verification is purely a badge, not a filter.
@@ -1169,60 +1556,64 @@ export const publicCoopInfoRouter = router({
         store: storeWhere,
       };
 
-      const [stores, proposals, memberCount, storeCount, productCount] = await Promise.all([
-        ctx.db.store.findMany({
-          where: storeWhere,
-          take: input.storeLimit,
-          orderBy: [
-            { isFeatured: 'desc' },
-            { isScVerified: 'desc' },
-            { createdAt: 'desc' },
-          ],
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            category: true,
-            imageUrl: true,
-            isScVerified: true,
-            isFeatured: true,
-            _count: {
-              select: {
-                products: {
-                  where: {
-                    isActive: true,
+      const [stores, proposals, memberCount, storeCount, productCount] =
+        await Promise.all([
+          ctx.db.store.findMany({
+            where: storeWhere,
+            take: input.storeLimit,
+            orderBy: [
+              { isFeatured: "desc" },
+              { isScVerified: "desc" },
+              { createdAt: "desc" },
+            ],
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              category: true,
+              imageUrl: true,
+              isScVerified: true,
+              isFeatured: true,
+              _count: {
+                select: {
+                  products: {
+                    where: {
+                      isActive: true,
+                    },
                   },
                 },
               },
             },
-          },
-        }),
-        ctx.db.proposal.findMany({
-          where: { coopId: input.coopId, status: { in: ['VOTABLE', 'APPROVED', 'FUNDED'] } },
-          take: input.proposalLimit,
-          orderBy: { createdAt: 'desc' },
-          select: {
-            id: true,
-            title: true,
-            summary: true,
-            status: true,
-            budgetAmount: true,
-            budgetCurrency: true,
-          },
-        }),
-        ctx.db.userCoopMembership.count({
-          where: {
-            coopId: input.coopId,
-            status: 'ACTIVE',
-          },
-        }),
-        ctx.db.store.count({
-          where: storeWhere,
-        }),
-        ctx.db.product.count({
-          where: productWhere,
-        }),
-      ]);
+          }),
+          ctx.db.proposal.findMany({
+            where: {
+              coopId: input.coopId,
+              status: { in: ["VOTABLE", "APPROVED", "FUNDED"] },
+            },
+            take: input.proposalLimit,
+            orderBy: { createdAt: "desc" },
+            select: {
+              id: true,
+              title: true,
+              summary: true,
+              status: true,
+              budgetAmount: true,
+              budgetCurrency: true,
+            },
+          }),
+          ctx.db.userCoopMembership.count({
+            where: {
+              coopId: input.coopId,
+              status: "ACTIVE",
+            },
+          }),
+          ctx.db.store.count({
+            where: storeWhere,
+          }),
+          ctx.db.product.count({
+            where: productWhere,
+          }),
+        ]);
 
       return {
         stores: stores.map(({ _count, ...store }) => ({
@@ -1247,24 +1638,29 @@ export const publicCoopInfoRouter = router({
    * Submissions are kept pending in previewOverrides until an admin publishes them.
    */
   submitNewsletterSubmission: authenticatedProcedure
-    .input(z.object({
-      coopId: z.string().min(1),
-      type: z.enum(['article', 'event']),
-      title: z.string().trim().min(3).max(120),
-      summary: z.string().trim().min(10).max(2000),
-      contentMarkdown: z.string().trim().max(20000).optional(),
-      date: z.string().trim().max(80).optional(),
-      location: z.string().trim().max(160).optional(),
-      byline: z.string().trim().max(120).optional(),
-      ctaLabel: z.string().trim().max(60).optional(),
-      ctaUrl: z.string().trim().max(500).optional(),
-      sourceUrl: z.string().trim().max(500).optional(),
-      imageUrl: z.string().trim().max(500).optional(),
-    }))
+    .input(
+      z.object({
+        coopId: z.string().min(1),
+        type: z.enum(["article", "event"]),
+        title: z.string().trim().min(3).max(120),
+        summary: z.string().trim().min(10).max(2000),
+        contentMarkdown: z.string().trim().max(20000).optional(),
+        date: z.string().trim().max(80).optional(),
+        location: z.string().trim().max(160).optional(),
+        byline: z.string().trim().max(120).optional(),
+        ctaLabel: z.string().trim().max(60).optional(),
+        ctaUrl: z.string().trim().max(500).optional(),
+        sourceUrl: z.string().trim().max(500).optional(),
+        imageUrl: z.string().trim().max(500).optional(),
+      }),
+    )
     .mutation(async ({ input, ctx }) => {
       const { walletAddress } = ctx as AuthenticatedContext;
       if (!walletAddress) {
-        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'No wallet address provided' });
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "No wallet address provided",
+        });
       }
 
       const user = await ctx.db.user.findFirst({
@@ -1281,7 +1677,7 @@ export const publicCoopInfoRouter = router({
           memberships: {
             where: {
               coopId: input.coopId,
-              status: 'ACTIVE',
+              status: "ACTIVE",
             },
             select: { id: true },
           },
@@ -1289,13 +1685,16 @@ export const publicCoopInfoRouter = router({
       });
 
       if (!user) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found for wallet' });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "User not found for wallet",
+        });
       }
 
       if (user.memberships.length === 0) {
         throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Only active co-op members can submit to the newsletter',
+          code: "FORBIDDEN",
+          message: "Only active co-op members can submit to the newsletter",
         });
       }
 
@@ -1305,12 +1704,16 @@ export const publicCoopInfoRouter = router({
       });
 
       if (!publicInfo) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Public newsletter is not set up yet' });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Public newsletter is not set up yet",
+        });
       }
 
       const overrides = normalizePreviewOverrides(publicInfo.previewOverrides);
-      const existingSubmissions = normalizeNewsletterSubmissions(overrides.newsletterSubmissions)
-        .filter((submission) => submission.status === 'pending');
+      const existingSubmissions = normalizeNewsletterSubmissions(
+        overrides.newsletterSubmissions,
+      ).filter((submission) => submission.status === "pending");
 
       const submission: NewsletterSubmission = {
         id: randomUUID(),
@@ -1329,7 +1732,7 @@ export const publicCoopInfoRouter = router({
         submittedByName: user.name || user.email || undefined,
         submittedByWallet: walletAddress,
         submittedAt: new Date().toISOString(),
-        status: 'pending',
+        status: "pending",
       };
 
       await ctx.db.publicCoopInfo.update({
@@ -1337,7 +1740,10 @@ export const publicCoopInfoRouter = router({
         data: {
           previewOverrides: {
             ...overrides,
-            newsletterSubmissions: [submission, ...existingSubmissions].slice(0, 100),
+            newsletterSubmissions: [submission, ...existingSubmissions].slice(
+              0,
+              100,
+            ),
           } as any,
           updatedBy: walletAddress,
         },
@@ -1346,8 +1752,8 @@ export const publicCoopInfoRouter = router({
       const adminMemberships = await ctx.db.userCoopMembership.findMany({
         where: {
           coopId: input.coopId,
-          status: 'ACTIVE',
-          roles: { hasSome: ['admin', 'governor'] },
+          status: "ACTIVE",
+          roles: { hasSome: ["admin", "governor"] },
         },
         select: { userId: true },
       });
@@ -1357,9 +1763,12 @@ export const publicCoopInfoRouter = router({
           data: adminMemberships.map((membership) => ({
             userId: membership.userId,
             coopId: input.coopId,
-            type: 'NEWSLETTER_SUBMISSION',
-            title: input.type === 'event' ? 'New event submitted' : 'New story submitted',
-            body: `${submission.submittedByName || 'A member'} submitted "${submission.title}" for the newsletter.`,
+            type: "NEWSLETTER_SUBMISSION",
+            title:
+              input.type === "event"
+                ? "New event submitted"
+                : "New story submitted",
+            body: `${submission.submittedByName || "A member"} submitted "${submission.title}" for the newsletter.`,
             data: {
               submissionId: submission.id,
               submissionType: submission.type,
@@ -1377,22 +1786,24 @@ export const publicCoopInfoRouter = router({
    * until a co-op admin reviews them.
    */
   submitPublicNewsletterSubmission: publicProcedure
-    .input(z.object({
-      coopId: z.string().min(1),
-      type: z.enum(['article', 'event']),
-      title: z.string().trim().min(3).max(120),
-      summary: z.string().trim().min(10).max(2000),
-      contentMarkdown: z.string().trim().max(20000).optional(),
-      contributorName: z.string().trim().min(2).max(120),
-      contributorEmail: z.string().trim().email().max(200),
-      date: z.string().trim().max(80).optional(),
-      location: z.string().trim().max(160).optional(),
-      byline: z.string().trim().max(120).optional(),
-      ctaLabel: z.string().trim().max(60).optional(),
-      ctaUrl: z.string().trim().max(500).optional(),
-      sourceUrl: z.string().trim().max(500).optional(),
-      imageUrl: z.string().trim().max(500).optional(),
-    }))
+    .input(
+      z.object({
+        coopId: z.string().min(1),
+        type: z.enum(["article", "event"]),
+        title: z.string().trim().min(3).max(120),
+        summary: z.string().trim().min(10).max(2000),
+        contentMarkdown: z.string().trim().max(20000).optional(),
+        contributorName: z.string().trim().min(2).max(120),
+        contributorEmail: z.string().trim().email().max(200),
+        date: z.string().trim().max(80).optional(),
+        location: z.string().trim().max(160).optional(),
+        byline: z.string().trim().max(120).optional(),
+        ctaLabel: z.string().trim().max(60).optional(),
+        ctaUrl: z.string().trim().max(500).optional(),
+        sourceUrl: z.string().trim().max(500).optional(),
+        imageUrl: z.string().trim().max(500).optional(),
+      }),
+    )
     .mutation(async ({ input, ctx }) => {
       const publicInfo = await ctx.db.publicCoopInfo.findUnique({
         where: { coopId: input.coopId },
@@ -1400,12 +1811,16 @@ export const publicCoopInfoRouter = router({
       });
 
       if (!publicInfo) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Public newsletter is not set up yet' });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Public newsletter is not set up yet",
+        });
       }
 
       const overrides = normalizePreviewOverrides(publicInfo.previewOverrides);
-      const existingSubmissions = normalizeNewsletterSubmissions(overrides.newsletterSubmissions)
-        .filter((submission) => submission.status === 'pending');
+      const existingSubmissions = normalizeNewsletterSubmissions(
+        overrides.newsletterSubmissions,
+      ).filter((submission) => submission.status === "pending");
 
       const submission: NewsletterSubmission = {
         id: randomUUID(),
@@ -1420,12 +1835,12 @@ export const publicCoopInfoRouter = router({
         ctaUrl: input.ctaUrl?.trim() || undefined,
         sourceUrl: input.sourceUrl?.trim() || undefined,
         imageUrl: input.imageUrl?.trim() || undefined,
-        submittedByUserId: 'public-contributor',
+        submittedByUserId: "public-contributor",
         submittedByName: input.contributorName.trim(),
         submittedByEmail: input.contributorEmail.trim(),
-        submittedByWallet: 'public-contributor',
+        submittedByWallet: "public-contributor",
         submittedAt: new Date().toISOString(),
-        status: 'pending',
+        status: "pending",
       };
 
       await ctx.db.publicCoopInfo.update({
@@ -1433,7 +1848,10 @@ export const publicCoopInfoRouter = router({
         data: {
           previewOverrides: {
             ...overrides,
-            newsletterSubmissions: [submission, ...existingSubmissions].slice(0, 100),
+            newsletterSubmissions: [submission, ...existingSubmissions].slice(
+              0,
+              100,
+            ),
           } as any,
           updatedBy: input.contributorEmail.trim(),
         },
@@ -1442,8 +1860,8 @@ export const publicCoopInfoRouter = router({
       const adminMemberships = await ctx.db.userCoopMembership.findMany({
         where: {
           coopId: input.coopId,
-          status: 'ACTIVE',
-          roles: { hasSome: ['admin', 'governor'] },
+          status: "ACTIVE",
+          roles: { hasSome: ["admin", "governor"] },
         },
         select: { userId: true },
       });
@@ -1453,14 +1871,17 @@ export const publicCoopInfoRouter = router({
           data: adminMemberships.map((membership) => ({
             userId: membership.userId,
             coopId: input.coopId,
-            type: 'NEWSLETTER_SUBMISSION',
-            title: input.type === 'event' ? 'New public event submission' : 'New public story submission',
+            type: "NEWSLETTER_SUBMISSION",
+            title:
+              input.type === "event"
+                ? "New public event submission"
+                : "New public story submission",
             body: `${submission.submittedByName} submitted "${submission.title}" for the newsletter.`,
             data: {
               submissionId: submission.id,
               submissionType: submission.type,
               contributorEmail: submission.submittedByEmail,
-              source: 'public-contributor',
+              source: "public-contributor",
             },
           })),
         });
@@ -1474,8 +1895,8 @@ export const publicCoopInfoRouter = router({
     .query(async ({ input, ctx }) => {
       if (ctx.coopId && ctx.coopId !== input.coopId) {
         throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Cannot access research for a different coop',
+          code: "FORBIDDEN",
+          message: "Cannot access research for a different coop",
         });
       }
 
@@ -1500,8 +1921,8 @@ export const publicCoopInfoRouter = router({
     .query(async ({ input, ctx }) => {
       if (ctx.coopId && ctx.coopId !== input.coopId) {
         throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Cannot access newsletter agent brief for a different coop',
+          code: "FORBIDDEN",
+          message: "Cannot access newsletter agent brief for a different coop",
         });
       }
 
@@ -1515,7 +1936,7 @@ export const publicCoopInfoRouter = router({
         }),
         ctx.db.coopConfig.findFirst({
           where: { coopId: input.coopId, isActive: true },
-          orderBy: { version: 'desc' },
+          orderBy: { version: "desc" },
           select: {
             name: true,
             description: true,
@@ -1534,23 +1955,30 @@ export const publicCoopInfoRouter = router({
       ]);
 
       if (!publicInfo) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Public newsletter is not set up yet' });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Public newsletter is not set up yet",
+        });
       }
 
       const overrides = normalizePreviewOverrides(publicInfo.previewOverrides);
-      const existingPosts = Array.isArray(overrides.communityPosts) ? overrides.communityPosts : [];
+      const existingPosts = Array.isArray(overrides.communityPosts)
+        ? overrides.communityPosts
+        : [];
       const researchCache = normalizeResearchCache(researchCacheRecord?.data);
       const researchResults =
-        researchCache && new Date(researchCache.expiresAt).getTime() > Date.now()
+        researchCache &&
+        new Date(researchCache.expiresAt).getTime() > Date.now()
           ? researchCache.results
           : [];
       const brief = buildArticleWriterBrief({
         coopName: publicInfo.name || coopConfig?.name || input.coopId,
-        coopDescription: coopConfig?.displayMission || coopConfig?.description || '',
+        coopDescription:
+          coopConfig?.displayMission || coopConfig?.description || "",
         missionGoals: textFromJsonList(coopConfig?.missionGoals, [
-          'member ownership',
-          'local economic power',
-          'community participation',
+          "member ownership",
+          "local economic power",
+          "community participation",
         ]),
         articleSamples: extractArticleSamples(existingPosts),
         researchResults,
@@ -1565,19 +1993,26 @@ export const publicCoopInfoRouter = router({
     }),
 
   runNewsletterResearch: privateProcedure
-    .input(z.object({
-      coopId: z.string().min(1),
-      sources: z.array(z.object({
-        url: z.string().trim().url().max(500),
-        label: z.string().trim().max(120).optional(),
-      })).max(12).optional(),
-      forceRefresh: z.boolean().optional().default(false),
-    }))
+    .input(
+      z.object({
+        coopId: z.string().min(1),
+        sources: z
+          .array(
+            z.object({
+              url: z.string().trim().url().max(500),
+              label: z.string().trim().max(120).optional(),
+            }),
+          )
+          .max(12)
+          .optional(),
+        forceRefresh: z.boolean().optional().default(false),
+      }),
+    )
     .mutation(async ({ input, ctx }) => {
       if (ctx.coopId && ctx.coopId !== input.coopId) {
         throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Cannot run research for a different coop',
+          code: "FORBIDDEN",
+          message: "Cannot run research for a different coop",
         });
       }
 
@@ -1591,7 +2026,7 @@ export const publicCoopInfoRouter = router({
         }),
         ctx.db.coopConfig.findFirst({
           where: { coopId: input.coopId, isActive: true },
-          orderBy: { version: 'desc' },
+          orderBy: { version: "desc" },
           select: {
             name: true,
             description: true,
@@ -1612,29 +2047,39 @@ export const publicCoopInfoRouter = router({
       ]);
 
       if (!publicInfo) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Public newsletter is not set up yet' });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Public newsletter is not set up yet",
+        });
       }
 
       const overrides = normalizePreviewOverrides(publicInfo.previewOverrides);
       const cachedData = normalizeResearchCache(existingCache?.data);
-      const requestedSources = normalizeResearchSources(input.sources ?? overrides.newsletterResearchSources);
-      const sources = requestedSources.length > 0 ? requestedSources : cachedData?.sources ?? [];
+      const requestedSources = normalizeResearchSources(
+        input.sources ?? overrides.newsletterResearchSources,
+      );
+      const sources =
+        requestedSources.length > 0
+          ? requestedSources
+          : (cachedData?.sources ?? []);
       if (sources.length === 0) {
         throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Add at least one research source URL before refreshing research.',
+          code: "BAD_REQUEST",
+          message:
+            "Add at least one research source URL before refreshing research.",
         });
       }
 
       const coopName = publicInfo.name || coopConfig?.name || input.coopId;
       const missionGoals = textFromJsonList(coopConfig?.missionGoals, [
-        'member ownership',
-        'local economic power',
-        'community participation',
+        "member ownership",
+        "local economic power",
+        "community participation",
       ]);
       const sectorExclusions = textFromJsonList(coopConfig?.sectorExclusions);
-      const coopDescription = coopConfig?.displayMission || coopConfig?.description || '';
-      const charterText = coopConfig?.charterText || '';
+      const coopDescription =
+        coopConfig?.displayMission || coopConfig?.description || "";
+      const charterText = coopConfig?.charterText || "";
       const contextHash = researchContextHash({
         coopId: input.coopId,
         coopName,
@@ -1644,7 +2089,11 @@ export const publicCoopInfoRouter = router({
         sectorExclusions,
         sources,
       });
-      if (!input.forceRefresh && cachedData && isUsableResearchCache(cachedData, contextHash)) {
+      if (
+        !input.forceRefresh &&
+        cachedData &&
+        isUsableResearchCache(cachedData, contextHash)
+      ) {
         return {
           success: true,
           cache: cachedData,
@@ -1700,160 +2149,26 @@ export const publicCoopInfoRouter = router({
    * the same publish/dismiss review flow already built for articles and events.
    */
   runNewsletterAgent: privateProcedure
-    .input(z.object({
-      coopId: z.string().min(1),
-      agentId: z.enum(['article-writer', 'event-writer']),
-    }))
+    .input(
+      z.object({
+        coopId: z.string().min(1),
+        agentId: z.enum(["article-writer", "event-writer"]),
+      }),
+    )
     .mutation(async ({ input, ctx }) => {
       if (ctx.coopId && ctx.coopId !== input.coopId) {
         throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Cannot run newsletter agents for a different coop',
+          code: "FORBIDDEN",
+          message: "Cannot run newsletter agents for a different coop",
         });
       }
 
-      const [publicInfo, coopConfig, researchCacheRecord] = await Promise.all([
-        ctx.db.publicCoopInfo.findUnique({
-          where: { coopId: input.coopId },
-          select: {
-            name: true,
-            previewOverrides: true,
-          },
-        }),
-        ctx.db.coopConfig.findFirst({
-          where: { coopId: input.coopId, isActive: true },
-          orderBy: { version: 'desc' },
-          select: {
-            name: true,
-            description: true,
-            displayMission: true,
-            missionGoals: true,
-          },
-        }),
-        ctx.db.coopResearchCache.findUnique({
-          where: {
-            coopId_cacheKey: {
-              coopId: input.coopId,
-              cacheKey: NEWSLETTER_RESEARCH_CACHE_KEY,
-            },
-          },
-        }),
-      ]);
-
-      if (!publicInfo) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Public newsletter is not set up yet' });
-      }
-
-      const overrides = normalizePreviewOverrides(publicInfo.previewOverrides);
-      const existingSubmissions = normalizeNewsletterSubmissions(overrides.newsletterSubmissions)
-        .filter((submission) => submission.status === 'pending');
-      const existingPosts = Array.isArray(overrides.communityPosts) ? overrides.communityPosts : [];
-      const existingTitles = [
-        ...existingSubmissions.map((submission) => submission.title),
-        ...existingPosts
-          .map((post) => {
-            if (typeof post === 'object' && post !== null && 'title' in post) {
-              return typeof post.title === 'string' ? post.title : '';
-            }
-            return '';
-          })
-          .filter(Boolean),
-      ];
-
-      const coopName = publicInfo.name || coopConfig?.name || input.coopId;
-      const missionGoals = textFromJsonList(coopConfig?.missionGoals, [
-        'member ownership',
-        'local economic power',
-        'community participation',
-      ]);
-      const coopDescription = coopConfig?.displayMission || coopConfig?.description || '';
-      const researchCache = normalizeResearchCache(researchCacheRecord?.data);
-      const researchResults =
-        researchCache && new Date(researchCache.expiresAt).getTime() > Date.now()
-          ? researchCache.results
-          : [];
-
-      const generatedSubmissions = await buildAgentSubmissions({
-        agentId: input.agentId,
+      return runNewsletterAgentForCoop({
+        db: ctx.db,
         coopId: input.coopId,
-        coopName,
-        coopDescription,
-        missionGoals,
-        existingTitles,
-        articleSamples: extractArticleSamples(existingPosts),
-        researchResults,
-      });
-
-      const runMessage = generatedSubmissions.length === 0
-        ? `${agentLabels[input.agentId]} did not add any verified newsletter drafts.`
-        : `${agentLabels[input.agentId]} added ${generatedSubmissions.length} draft(s) to the newsletter queue.`;
-      const overridesWithRunStatus = withAgentRunStatus({
-        overrides,
         agentId: input.agentId,
-        createdCount: generatedSubmissions.length,
-        message: runMessage,
+        updatedBy: ctx.walletAddress,
       });
-
-      if (generatedSubmissions.length === 0) {
-        await ctx.db.publicCoopInfo.update({
-          where: { coopId: input.coopId },
-          data: {
-            previewOverrides: overridesWithRunStatus as any,
-            updatedBy: ctx.walletAddress,
-          },
-        });
-
-        return {
-          success: true,
-          createdCount: 0,
-          submissions: [],
-          message: runMessage,
-        };
-      }
-
-      await ctx.db.publicCoopInfo.update({
-        where: { coopId: input.coopId },
-        data: {
-          previewOverrides: {
-            ...overridesWithRunStatus,
-            newsletterSubmissions: [...generatedSubmissions, ...existingSubmissions].slice(0, 100),
-          } as any,
-          updatedBy: ctx.walletAddress,
-        },
-      });
-
-      const adminMemberships = await ctx.db.userCoopMembership.findMany({
-        where: {
-          coopId: input.coopId,
-          status: 'ACTIVE',
-          roles: { hasSome: ['admin', 'governor'] },
-        },
-        select: { userId: true },
-      });
-
-      if (adminMemberships.length > 0) {
-        await ctx.db.notification.createMany({
-          data: adminMemberships.map((membership) => ({
-            userId: membership.userId,
-            coopId: input.coopId,
-            type: 'NEWSLETTER_AGENT_SUBMISSION',
-            title: `${agentLabels[input.agentId]} added draft(s)`,
-            body: `${generatedSubmissions.length} pending newsletter draft(s) are ready for admin review.`,
-            data: {
-              agentId: input.agentId,
-              submissionIds: generatedSubmissions.map((submission) => submission.id),
-              source: 'agent',
-            },
-          })),
-        });
-      }
-
-      return {
-        success: true,
-        createdCount: generatedSubmissions.length,
-        submissions: generatedSubmissions,
-        message: runMessage,
-      };
     }),
 
   /**
@@ -1868,17 +2183,18 @@ export const publicCoopInfoRouter = router({
         where: { isPublished: true, isDemo: false },
       });
 
-      const publicInfo = allPublicInfo.find(info => {
+      const publicInfo = allPublicInfo.find((info) => {
         if (info.primaryDomain === input.domain) return true;
         const additionalDomains = info.additionalDomains as string[] | null;
-        if (additionalDomains && additionalDomains.includes(input.domain)) return true;
+        if (additionalDomains && additionalDomains.includes(input.domain))
+          return true;
         return false;
       });
 
       if (!publicInfo) {
         throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'No coop found for this domain',
+          code: "NOT_FOUND",
+          message: "No coop found for this domain",
         });
       }
 
@@ -1894,8 +2210,8 @@ export const publicCoopInfoRouter = router({
       // Verify the requested coopId matches the authenticated coop context
       if (ctx.coopId && ctx.coopId !== input.coopId) {
         throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Cannot modify public info for a different coop',
+          code: "FORBIDDEN",
+          message: "Cannot modify public info for a different coop",
         });
       }
 
@@ -1906,14 +2222,14 @@ export const publicCoopInfoRouter = router({
           isActive: true,
         },
         orderBy: {
-          version: 'desc',
+          version: "desc",
         },
       });
 
       if (!config) {
         throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'CoopConfig not found',
+          code: "NOT_FOUND",
+          message: "CoopConfig not found",
         });
       }
 
@@ -1924,8 +2240,8 @@ export const publicCoopInfoRouter = router({
 
       if (existing) {
         throw new TRPCError({
-          code: 'CONFLICT',
-          message: 'PublicCoopInfo already exists for this coop',
+          code: "CONFLICT",
+          message: "PublicCoopInfo already exists for this coop",
         });
       }
 
@@ -1941,42 +2257,42 @@ export const publicCoopInfoRouter = router({
           aboutBody: config.description || undefined,
           missionBody: config.displayMission || undefined,
           eligibilityBody: config.eligibility || undefined,
-          primaryCtaLabel: 'Apply to Join',
+          primaryCtaLabel: "Apply to Join",
           primaryCtaUrl: `/${input.coopId}/application`,
           previewOverrides: {
             newspaperTitle: `${config.name || input.coopId} Newsletter`,
             newspaperIntro:
-              'Stories, events, classifieds, business notes, and public notices from the co-op.',
+              "Stories, events, classifieds, business notes, and public notices from the co-op.",
             newsletterEmailEnabled: false,
             newsletterEmailSubject: `${config.name || input.coopId} Weekly Newsletter`,
             newsletterEmailPreheader:
-              'Stories, events, classifieds, business notes, and public notices from the co-op.',
+              "Stories, events, classifieds, business notes, and public notices from the co-op.",
             communityPosts: [
               {
-                type: 'article',
-                title: `Why ${config.name || 'this co-op'} is organizing now`,
+                type: "article",
+                title: `Why ${config.name || "this co-op"} is organizing now`,
                 summary:
-                  'A front-page note on what the co-op is building, who it is for, and why members are being invited to apply.',
-                date: 'From the co-op desk',
-                byline: 'Membership committee',
+                  "A front-page note on what the co-op is building, who it is for, and why members are being invited to apply.",
+                date: "From the co-op desk",
+                byline: "Membership committee",
               },
               {
-                type: 'event',
-                title: 'Next member orientation',
+                type: "event",
+                title: "Next member orientation",
                 summary:
-                  'Invite applicants, business owners, and neighbors to learn how membership, proposals, and the marketplace work.',
-                date: 'Upcoming',
+                  "Invite applicants, business owners, and neighbors to learn how membership, proposals, and the marketplace work.",
+                date: "Upcoming",
               },
               {
-                type: 'business',
-                title: 'Member business spotlight',
+                type: "business",
+                title: "Member business spotlight",
                 summary:
-                  'Use this space to feature a business, creator, service, or project moving the co-op economy forward.',
+                  "Use this space to feature a business, creator, service, or project moving the co-op economy forward.",
               },
             ],
           },
-          primaryColor: config.bgColor || '#f59e0b',
-          accentColor: config.accentColor || '#ea580c',
+          primaryColor: config.bgColor || "#f59e0b",
+          accentColor: config.accentColor || "#ea580c",
           isDemo: config.isDemo,
           isPublished: false,
           createdBy: ctx.walletAddress,
@@ -1998,8 +2314,8 @@ export const publicCoopInfoRouter = router({
       // Verify the requested coopId matches the authenticated coop context
       if (ctx.coopId && ctx.coopId !== input.coopId) {
         throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Cannot modify public info for a different coop',
+          code: "FORBIDDEN",
+          message: "Cannot modify public info for a different coop",
         });
       }
 
@@ -2010,8 +2326,8 @@ export const publicCoopInfoRouter = router({
 
       if (existing) {
         throw new TRPCError({
-          code: 'CONFLICT',
-          message: 'PublicCoopInfo already exists for this coop',
+          code: "CONFLICT",
+          message: "PublicCoopInfo already exists for this coop",
         });
       }
 
@@ -2021,45 +2337,45 @@ export const publicCoopInfoRouter = router({
         data: {
           coopId: input.coopId,
           name: input.coopId,
-          primaryColor: '#f59e0b',
-          accentColor: '#ea580c',
-          backgroundColor: '#1a1a1a',
-          primaryCtaLabel: 'Apply to Join',
+          primaryColor: "#f59e0b",
+          accentColor: "#ea580c",
+          backgroundColor: "#1a1a1a",
+          primaryCtaLabel: "Apply to Join",
           primaryCtaUrl: `/${input.coopId}/application`,
-          mobileAppUrl: 'https://mobile.cahootzcoops.com',
+          mobileAppUrl: "https://mobile.cahootzcoops.com",
           previewOverrides: {
             newspaperTitle: `${input.coopId} Newsletter`,
             newspaperIntro:
-              'Stories, events, classifieds, business notes, and public notices from the co-op.',
+              "Stories, events, classifieds, business notes, and public notices from the co-op.",
             newsletterEmailEnabled: false,
             newsletterEmailSubject: `${input.coopId} Weekly Newsletter`,
             newsletterEmailPreheader:
-              'Stories, events, classifieds, business notes, and public notices from the co-op.',
+              "Stories, events, classifieds, business notes, and public notices from the co-op.",
             communityPosts: [
               {
-                type: 'article',
-                title: 'Why we are organizing now',
+                type: "article",
+                title: "Why we are organizing now",
                 summary:
-                  'A front-page note on what the co-op is building, who it is for, and why members are being invited to apply.',
-                date: 'From the co-op desk',
-                byline: 'Membership committee',
+                  "A front-page note on what the co-op is building, who it is for, and why members are being invited to apply.",
+                date: "From the co-op desk",
+                byline: "Membership committee",
               },
               {
-                type: 'event',
-                title: 'Next member orientation',
+                type: "event",
+                title: "Next member orientation",
                 summary:
-                  'Invite applicants, business owners, and neighbors to learn how membership, proposals, and the marketplace work.',
-                date: 'Upcoming',
+                  "Invite applicants, business owners, and neighbors to learn how membership, proposals, and the marketplace work.",
+                date: "Upcoming",
               },
               {
-                type: 'business',
-                title: 'Member business spotlight',
+                type: "business",
+                title: "Member business spotlight",
                 summary:
-                  'Use this space to feature a business, creator, service, or project moving the co-op economy forward.',
+                  "Use this space to feature a business, creator, service, or project moving the co-op economy forward.",
               },
             ],
           },
-          previewMode: 'hybrid',
+          previewMode: "hybrid",
           isPublished: false,
           createdBy: ctx.walletAddress,
         },
@@ -2094,26 +2410,38 @@ export const publicCoopInfoRouter = router({
           missionBody: z.string().optional(),
           eligibilityTitle: z.string().optional(),
           eligibilityBody: z.string().optional(),
-          features: z.array(z.object({
-            title: z.string(),
-            description: z.string(),
-            iconName: z.string().optional(),
-          })).optional(),
-          faqs: z.array(z.object({
-            question: z.string(),
-            answer: z.string(),
-          })).optional(),
+          features: z
+            .array(
+              z.object({
+                title: z.string(),
+                description: z.string(),
+                iconName: z.string().optional(),
+              }),
+            )
+            .optional(),
+          faqs: z
+            .array(
+              z.object({
+                question: z.string(),
+                answer: z.string(),
+              }),
+            )
+            .optional(),
           contactEmail: z.string().email().optional().nullable(),
-          contactLinks: z.array(z.object({
-            label: z.string(),
-            url: z.string(),
-            type: z.enum(['email', 'phone', 'social']).optional(),
-          })).optional(),
+          contactLinks: z
+            .array(
+              z.object({
+                label: z.string(),
+                url: z.string(),
+                type: z.enum(["email", "phone", "social"]).optional(),
+              }),
+            )
+            .optional(),
           newsletterUrl: z.string().url().optional().nullable(),
           primaryCtaLabel: z.string().optional(),
           primaryCtaUrl: z.string().min(1).optional().nullable(),
           mobileAppUrl: z.string().url().optional().nullable(),
-          previewMode: z.enum(['live', 'curated', 'hybrid']).optional(),
+          previewMode: z.enum(["live", "curated", "hybrid"]).optional(),
           previewOverrides: z.any().optional(),
           showStatsBar: z.boolean().optional(),
           isPublished: z.boolean().optional(),
@@ -2122,14 +2450,14 @@ export const publicCoopInfoRouter = router({
           primaryDomain: z.string().optional().nullable(),
           additionalDomains: z.array(z.string()).optional(),
         }),
-      })
+      }),
     )
     .mutation(async ({ input, ctx }) => {
       // Verify the requested coopId matches the authenticated coop context
       if (ctx.coopId && ctx.coopId !== input.coopId) {
         throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Cannot modify public info for a different coop',
+          code: "FORBIDDEN",
+          message: "Cannot modify public info for a different coop",
         });
       }
 
@@ -2156,9 +2484,24 @@ export const publicCoopInfoRouter = router({
     .input(z.object({ coopId: z.string() }))
     .query(({ input }) => {
       return [
-        { key: 'wealth', label: 'Generational Wealth', description: 'High-energy member pitch for co-ops building shared ownership and legacy.' },
-        { key: 'ownership', label: 'Local Ownership', description: 'Community-first pitch focused on pooling demand and funding local priorities.' },
-        { key: 'business', label: 'Business Builder', description: 'Recruit people who want to back, buy from, and grow co-op businesses.' },
+        {
+          key: "wealth",
+          label: "Generational Wealth",
+          description:
+            "High-energy member pitch for co-ops building shared ownership and legacy.",
+        },
+        {
+          key: "ownership",
+          label: "Local Ownership",
+          description:
+            "Community-first pitch focused on pooling demand and funding local priorities.",
+        },
+        {
+          key: "business",
+          label: "Business Builder",
+          description:
+            "Recruit people who want to back, buy from, and grow co-op businesses.",
+        },
       ];
     }),
 
@@ -2167,80 +2510,102 @@ export const publicCoopInfoRouter = router({
    * All template content is defined and maintained here on the server.
    */
   applyRecruitmentTemplate: privateProcedure
-    .input(z.object({
-      coopId: z.string(),
-      template: z.enum(['wealth', 'ownership', 'business']),
-    }))
+    .input(
+      z.object({
+        coopId: z.string(),
+        template: z.enum(["wealth", "ownership", "business"]),
+      }),
+    )
     .mutation(async ({ input, ctx }) => {
       if (ctx.coopId && ctx.coopId !== input.coopId) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Cannot modify public info for a different coop' });
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Cannot modify public info for a different coop",
+        });
       }
 
-      const existing = await ctx.db.publicCoopInfo.findUnique({ where: { coopId: input.coopId } });
+      const existing = await ctx.db.publicCoopInfo.findUnique({
+        where: { coopId: input.coopId },
+      });
       if (!existing) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Public page not found — create it first' });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Public page not found — create it first",
+        });
       }
 
       const coopName = existing.name || input.coopId;
-      let patch: Parameters<typeof ctx.db.publicCoopInfo.update>[0]['data'] = {};
+      let patch: Parameters<typeof ctx.db.publicCoopInfo.update>[0]["data"] =
+        {};
 
-      if (input.template === 'wealth') {
+      if (input.template === "wealth") {
         patch = {
-          tagline: 'Build generational wealth together',
+          tagline: "Build generational wealth together",
           heroTitle: `Apply to ${coopName}`,
           heroSubtitle: `This is for people who want more than inspiration. ${coopName} is building a member-owned economy where our spending, businesses, votes, and collective power can become real generational wealth.`,
-          aboutTitle: 'Why Join',
+          aboutTitle: "Why Join",
           aboutBody: `Join ${coopName} if you are ready to help build something our people can own. Members back co-op businesses, help decide what gets funded, and grow a shared economic engine designed for stability, opportunity, and legacy.`,
           missionBody: [
-            'Grow a member-owned marketplace where everyday spending strengthens the co-op.',
-            'Build a community wealth fund that can support businesses, services, projects, and long-term assets.',
-            'Give members a voice in how resources move, who gets backed, and what future the co-op is building.',
-          ].join('\n'),
-          eligibilityTitle: 'Who Should Apply',
-          eligibilityBody: 'Apply if you want ownership, accountability, and a seat at the table while this co-op builds economic power for members and the next generation.',
+            "Grow a member-owned marketplace where everyday spending strengthens the co-op.",
+            "Build a community wealth fund that can support businesses, services, projects, and long-term assets.",
+            "Give members a voice in how resources move, who gets backed, and what future the co-op is building.",
+          ].join("\n"),
+          eligibilityTitle: "Who Should Apply",
+          eligibilityBody:
+            "Apply if you want ownership, accountability, and a seat at the table while this co-op builds economic power for members and the next generation.",
           faqs: [
-            { question: 'What happens after I apply?', answer: 'Your application goes to the co-op for review. If approved, you can participate as a member and help shape what gets built next.' },
-            { question: 'Do I need co-op experience?', answer: 'No. You need alignment, seriousness, and a willingness to participate in a member-owned economy.' },
+            {
+              question: "What happens after I apply?",
+              answer:
+                "Your application goes to the co-op for review. If approved, you can participate as a member and help shape what gets built next.",
+            },
+            {
+              question: "Do I need co-op experience?",
+              answer:
+                "No. You need alignment, seriousness, and a willingness to participate in a member-owned economy.",
+            },
           ],
-          primaryCtaLabel: 'Apply to Join',
+          primaryCtaLabel: "Apply to Join",
           primaryCtaUrl: `/${input.coopId}/application`,
           seoTitle: `${coopName} membership application`,
           seoDescription: `Apply to ${coopName} and help build a member-owned economy for generational wealth.`,
         };
-      } else if (input.template === 'ownership') {
+      } else if (input.template === "ownership") {
         patch = {
-          tagline: 'Own more of what your community already makes possible',
+          tagline: "Own more of what your community already makes possible",
           heroTitle: `Join ${coopName}`,
           heroSubtitle: `${coopName} brings members together to pool demand, support local businesses, fund shared priorities, and make decisions as owners.`,
-          aboutTitle: 'A Co-op Built for Members',
+          aboutTitle: "A Co-op Built for Members",
           aboutBody: `Membership in ${coopName} is a way to turn community participation into shared leverage. Apply to help grow an economy where members can support each other, vote on priorities, and build useful local infrastructure.`,
           missionBody: [
-            'Organize member demand so more value stays connected to the community.',
-            'Fund projects and services members actually want.',
-            'Create a practical governance path for people who want more say in their local economy.',
-          ].join('\n'),
-          eligibilityTitle: 'Who Should Apply',
-          eligibilityBody: 'Apply if you want to participate, vote, support member businesses, and help turn shared priorities into funded action.',
+            "Organize member demand so more value stays connected to the community.",
+            "Fund projects and services members actually want.",
+            "Create a practical governance path for people who want more say in their local economy.",
+          ].join("\n"),
+          eligibilityTitle: "Who Should Apply",
+          eligibilityBody:
+            "Apply if you want to participate, vote, support member businesses, and help turn shared priorities into funded action.",
           faqs: [],
-          primaryCtaLabel: 'Apply to Join',
+          primaryCtaLabel: "Apply to Join",
           primaryCtaUrl: `/${input.coopId}/application`,
         };
       } else {
         patch = {
-          tagline: 'Help grow the businesses your co-op believes in',
+          tagline: "Help grow the businesses your co-op believes in",
           heroTitle: `Build with ${coopName}`,
           heroSubtitle: `${coopName} is recruiting members who want to buy from, promote, fund, and grow a stronger co-op marketplace.`,
-          aboutTitle: 'Turn Support into Ownership',
+          aboutTitle: "Turn Support into Ownership",
           aboutBody: `Apply to ${coopName} if you want your support for local businesses to become part of a bigger ownership strategy. Members help bring customers, proposals, rewards, and governance into one co-op economy.`,
           missionBody: [
-            'Help member businesses find customers and community support.',
-            'Use co-op activity to fund tools, services, and new ventures.',
-            'Create a marketplace where members can see their participation compound.',
-          ].join('\n'),
-          eligibilityTitle: 'Who Should Apply',
-          eligibilityBody: 'Apply if you are ready to support member businesses, invite serious builders, and help the co-op marketplace grow.',
+            "Help member businesses find customers and community support.",
+            "Use co-op activity to fund tools, services, and new ventures.",
+            "Create a marketplace where members can see their participation compound.",
+          ].join("\n"),
+          eligibilityTitle: "Who Should Apply",
+          eligibilityBody:
+            "Apply if you are ready to support member businesses, invite serious builders, and help the co-op marketplace grow.",
           faqs: [],
-          primaryCtaLabel: 'Apply to Join',
+          primaryCtaLabel: "Apply to Join",
           primaryCtaUrl: `/${input.coopId}/application`,
         };
       }
@@ -2262,8 +2627,8 @@ export const publicCoopInfoRouter = router({
       // Verify the requested coopId matches the authenticated coop context
       if (ctx.coopId && ctx.coopId !== input.coopId) {
         throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Cannot access public info for a different coop',
+          code: "FORBIDDEN",
+          message: "Cannot access public info for a different coop",
         });
       }
 

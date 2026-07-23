@@ -10,6 +10,9 @@ import { router } from "../trpc.js";
 import { getUserWallet, createWalletForUser, getUserWalletInfo } from "../services/wallet-service.js";
 import type { AuthenticatedContext } from "../context.js";
 
+const DEMO_LOGIN_EMAIL = "demo@cahootz.coop";
+const DEMO_COOP_ID = "demo";
+
 // Blockchain client for fetching balances
 const publicClient = createPublicClient({
   chain: baseSepolia,
@@ -31,7 +34,7 @@ export const userRouter = router({
   // Public procedures
   getAllUsers: publicProcedure.query(({ ctx }) => {
     const context = ctx as Context;
-    return context.db.user.findMany();
+    return context.db.user.findMany({ where: { deletedAt: null } });
   }),
 
   /**
@@ -145,6 +148,7 @@ export const userRouter = router({
 
       const user = await context.db.user.findFirst({
         where: {
+          deletedAt: null,
           OR: [
             {
               walletAddress: {
@@ -250,6 +254,7 @@ export const userRouter = router({
           walletAddress: true,
           phone: true,
           createdAt: true,
+          deletedAt: true,
         },
       });
 
@@ -260,7 +265,117 @@ export const userRouter = router({
         });
       }
 
+      if (user.deletedAt) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "This account has been deleted.",
+        });
+      }
+
       return user;
+    }),
+
+  /**
+   * Soft delete the current account. Demo review accounts return success
+   * without mutating the shared demo user.
+   */
+  deleteAccount: authenticatedProcedure
+    .input(z.object({
+      userId: z.string(),
+    }))
+    .output(z.object({
+      success: z.boolean(),
+      message: z.string(),
+      isDemoMode: z.boolean(),
+      deletedAt: z.string().nullable(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as Context;
+      const { walletAddress: authenticatedWalletAddress } = ctx as AuthenticatedContext;
+
+      const user = await context.db.user.findUnique({
+        where: { id: input.userId },
+        select: {
+          id: true,
+          email: true,
+          deletedAt: true,
+          walletAddress: true,
+          wallets: {
+            select: { address: true },
+          },
+          memberships: {
+            where: { coopId: DEMO_COOP_ID },
+            select: { coopId: true },
+            take: 1,
+          },
+        },
+      });
+
+      if (!user) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "User not found",
+        });
+      }
+
+      const normalizedWalletAddress = authenticatedWalletAddress.toLowerCase();
+      const ownsWallet =
+        user.walletAddress?.toLowerCase() === normalizedWalletAddress ||
+        user.wallets.some((wallet) => wallet.address.toLowerCase() === normalizedWalletAddress);
+
+      if (!ownsWallet) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You can only delete your own account",
+        });
+      }
+
+      const isDemoAccount =
+        user.email.toLowerCase() === DEMO_LOGIN_EMAIL ||
+        user.memberships.some((membership) => membership.coopId === DEMO_COOP_ID);
+
+      if (isDemoAccount) {
+        return {
+          success: true,
+          message: "Demo account deletion completed for review. The shared demo account was not changed.",
+          isDemoMode: true,
+          deletedAt: null,
+        };
+      }
+
+      if (user.deletedAt) {
+        return {
+          success: true,
+          message: "Account is already deleted.",
+          isDemoMode: false,
+          deletedAt: user.deletedAt.toISOString(),
+        };
+      }
+
+      const deletedAt = new Date();
+      await context.db.user.update({
+        where: { id: user.id },
+        data: {
+          deletedAt,
+          deletedBy: user.id,
+        },
+      });
+
+      await context.db.session.updateMany({
+        where: { userId: user.id, isRevoked: false },
+        data: {
+          isRevoked: true,
+          revokedAt: deletedAt,
+          revokedReason: "account_deleted",
+        },
+      });
+
+      return {
+        success: true,
+        message: "Account deleted.",
+        isDemoMode: false,
+        deletedAt: deletedAt.toISOString(),
+      };
     }),
 
   /**

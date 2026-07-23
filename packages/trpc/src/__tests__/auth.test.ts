@@ -176,6 +176,24 @@ describe('auth.requestLoginCode', () => {
     ).rejects.toThrow('suspended');
   });
 
+  it('blocks deleted users', async () => {
+    const db = makeDb({
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          ...ACTIVE_USER,
+          deletedAt: new Date('2026-07-01T00:00:00.000Z'),
+          wallets: [],
+          memberships: [],
+        }),
+      },
+    });
+
+    await expect(
+      callerFor(db).requestLoginCode({ email: 'alice@example.com' }),
+    ).rejects.toThrow('account has been deleted');
+    expect(db.loginCode.create).not.toHaveBeenCalled();
+  });
+
   it('normalises email to lowercase before lookup', async () => {
     const db = makeDb({
       user: {
@@ -238,6 +256,29 @@ describe('auth.verifyLoginCode', () => {
       where: { id: 'code_1' },
       data: { used: true },
     });
+  });
+
+  it('blocks deleted users from verifying a login code', async () => {
+    const db = makeDb({
+      loginCode: {
+        findFirst: vi.fn().mockResolvedValue(VALID_LOGIN_CODE),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          ...ACTIVE_USER,
+          deletedAt: new Date('2026-07-01T00:00:00.000Z'),
+          memberships: [],
+        }),
+      },
+    });
+
+    await expect(
+      callerFor(db).verifyLoginCode({
+        email: 'alice@example.com',
+        code: '123456',
+      }),
+    ).rejects.toThrow('account has been deleted');
   });
 
   it('returns user WITH coop data when an active membership and config exist', async () => {

@@ -337,6 +337,8 @@ async function seedMembers() {
         status: "ACTIVE",
         walletAddress: member.walletAddress,
         profileCompleted: true,
+        deletedAt: null,
+        deletedBy: null,
       },
       create: {
         email: member.email,
@@ -345,6 +347,8 @@ async function seedMembers() {
         status: "ACTIVE",
         walletAddress: member.walletAddress,
         profileCompleted: true,
+        deletedAt: null,
+        deletedBy: null,
       },
     });
 

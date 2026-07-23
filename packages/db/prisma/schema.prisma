@@ -24,6 +24,8 @@ model User {
   profileCompleted    Boolean    @default(false)
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
+  deletedAt           DateTime?
+  deletedBy           String?
 
   // Stripe integration for P2P payments
   stripeCustomerId       String? @unique
@@ -49,6 +51,7 @@ model User {
   scMintEvents         SCMintEvent[]
   scBurnEvents         SCBurnEvent[]
 
+  @@index([deletedAt])
   @@schema("public")
 }
 

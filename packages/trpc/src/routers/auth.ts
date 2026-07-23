@@ -13,6 +13,7 @@ const DEMO_COOP_ID = "demo";
 const DEMO_LOGIN_EMAIL = "demo@cahootz.coop";
 const DEMO_LOGIN_CODE = "000000";
 const isProduction = process.env.NODE_ENV === "production";
+const deletedAccountMessage = "This account has been deleted. Contact support if you need help.";
 
 function isDemoLogin(email: string, code?: string, coopId?: string) {
   if (normalizeEmail(email) !== DEMO_LOGIN_EMAIL) {
@@ -66,6 +67,13 @@ export const authRouter = router({
         }
 
         console.log('🔍 User logging in:', user);
+
+        if (user.deletedAt) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: deletedAccountMessage,
+          });
+        }
 
         // Check if user has a password (should exist for new applications)
         if (!user.password) {
@@ -151,7 +159,7 @@ export const authRouter = router({
       
       const user = await context.db.user.findUnique({
         where: { email: input.email },
-        select: { status: true },
+        select: { status: true, deletedAt: true },
       });
 
       if (!user) {
@@ -159,6 +167,14 @@ export const authRouter = router({
           canLogin: false,
           status: "NOT_FOUND",
           message: "User not found",
+        };
+      }
+
+      if (user.deletedAt) {
+        return {
+          canLogin: false,
+          status: "DELETED",
+          message: deletedAccountMessage,
         };
       }
 
@@ -220,6 +236,7 @@ export const authRouter = router({
           select: {
             id: true,
             status: true,
+            deletedAt: true,
             walletAddress: true,
             wallets: {
               where: { isPrimary: true },
@@ -238,6 +255,13 @@ export const authRouter = router({
           throw new TRPCError({
             code: "NOT_FOUND",
             message: "No account found with this email address",
+          });
+        }
+
+        if (user.deletedAt) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: deletedAccountMessage,
           });
         }
 
@@ -286,7 +310,7 @@ export const authRouter = router({
         if (isDemoLogin(email, undefined, input.coopId)) {
           return {
             success: true,
-            message: "Use the demo code to sign in.",
+            message: "Login code sent to your email",
           };
         }
 
@@ -423,6 +447,13 @@ export const authRouter = router({
           throw new TRPCError({
             code: "NOT_FOUND",
             message: "User not found",
+          });
+        }
+
+        if (user.deletedAt) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: deletedAccountMessage,
           });
         }
 

@@ -1,3 +1,5 @@
+import { PrismaInstrumentation } from "@prisma/instrumentation";
+import { OpenAIInstrumentation } from "@traceloop/instrumentation-openai";
 import { prismaExtension } from "@trigger.dev/build/extensions/prisma";
 import { defineConfig } from "@trigger.dev/sdk";
 
@@ -21,6 +23,12 @@ export default defineConfig({
         mode: "legacy",
         schema: "packages/db/prisma/schema.prisma",
       }),
+    ],
+  },
+  telemetry: {
+    instrumentations: [
+      new PrismaInstrumentation(),
+      new OpenAIInstrumentation(),
     ],
   },
   retries: {

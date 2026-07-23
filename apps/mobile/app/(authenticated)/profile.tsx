@@ -1,12 +1,13 @@
 import React from 'react';
-import { ScrollView, View, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, View, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { LogOut, Copy, Check, ChevronRight, Shield, HelpCircle, Package, CreditCard } from 'lucide-react-native';
+import { LogOut, Copy, Check, ChevronRight, Shield, HelpCircle, Package, CreditCard, Trash2 } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import * as Clipboard from 'expo-clipboard';
+import { api } from '@/lib/api';
 import { coopConfig } from '@/lib/coop-config';
 import { resolveBrandColor, withAlpha } from '@/lib/brand-colors';
 
@@ -16,6 +17,7 @@ export default function ProfileScreen() {
   const primaryColor = resolveBrandColor(user?.coop?.primaryColor || config.primaryColor, '#B45309');
   const accentColor = resolveBrandColor(user?.coop?.accentColor || config.accentColor, '#16A34A');
   const [copiedAddress, setCopiedAddress] = React.useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = React.useState(false);
 
   const handleCopyAddress = async () => {
     if (user?.walletAddress) {
@@ -35,6 +37,64 @@ export default function ProfileScreen() {
       console.error('Logout error:', error);
       alert('Failed to logout. Please try again.');
     }
+  };
+
+  const performDeleteAccount = async () => {
+    if (!user) {
+      Alert.alert('Sign in required', 'Please sign in before deleting your account.');
+      return;
+    }
+
+    if (!user.walletAddress) {
+      Alert.alert('Wallet required', 'Your account needs a linked wallet before account deletion can be verified.');
+      return;
+    }
+
+    setIsDeletingAccount(true);
+    try {
+      const result = await api.deleteAccount(user.id, user.walletAddress);
+      if (result.isDemoMode) {
+        await logout();
+        return;
+      }
+
+      Alert.alert(
+        'Account Deleted',
+        result.message || 'Your account has been deleted.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              void logout();
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Delete account error:', error);
+      Alert.alert('Deletion failed', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    if (isDeletingAccount) return;
+
+    Alert.alert(
+      'Delete Account?',
+      'This will deactivate your Cahootz account and sign you out.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: () => {
+            void performDeleteAccount();
+          },
+        },
+      ]
+    );
   };
 
   const shortenAddress = (address: string) => {
@@ -168,6 +228,27 @@ export default function ProfileScreen() {
                 <Text className="text-base text-gray-900 font-medium">{user.coop.name}</Text>
               </View>
             )}
+
+            <TouchableOpacity
+              onPress={handleDeleteAccount}
+              disabled={isDeletingAccount}
+              className="flex-row items-center px-5 py-4 border-t border-red-100 active:bg-red-50"
+            >
+              <View className="w-11 h-11 rounded-xl bg-red-50 items-center justify-center mr-4">
+                {isDeletingAccount ? (
+                  <ActivityIndicator size="small" color="#DC2626" />
+                ) : (
+                  <Trash2 size={22} color="#DC2626" />
+                )}
+              </View>
+              <View className="flex-1">
+                <Text className="text-base text-red-700 font-semibold">
+                  {isDeletingAccount ? 'Deleting Account...' : 'Delete Account'}
+                </Text>
+                <Text className="text-sm text-red-500">Deactivate this account</Text>
+              </View>
+              <ChevronRight size={20} color="#FCA5A5" />
+            </TouchableOpacity>
           </View>
 
           {/* Support & Help */}

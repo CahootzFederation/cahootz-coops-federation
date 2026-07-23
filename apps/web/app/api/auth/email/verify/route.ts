@@ -83,6 +83,13 @@ export async function POST(request: NextRequest) {
     });
 
     const membership = user?.memberships[0];
+    if (user?.deletedAt) {
+      return NextResponse.json(
+        { error: 'This account has been deleted. Contact support if you need help.' },
+        { status: 403 }
+      );
+    }
+
     if (user?.status !== 'ACTIVE' || membership?.status !== 'ACTIVE') {
       return NextResponse.json(
         { error: 'No active portal account was found for that email.' },

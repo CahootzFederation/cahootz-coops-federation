@@ -27,6 +27,29 @@ const isAuthenticated = t.middleware(async ({ ctx, next }) => {
     });
   }
 
+  const user = await context.db.user.findFirst({
+    where: {
+      OR: [
+        { walletAddress: { equals: walletAddress, mode: "insensitive" } },
+        {
+          wallets: {
+            some: {
+              address: { equals: walletAddress, mode: "insensitive" },
+            },
+          },
+        },
+      ],
+    },
+    select: { deletedAt: true },
+  });
+
+  if (user?.deletedAt) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "This account has been deleted. Contact support if you need help.",
+    });
+  }
+
   return next({
     ctx: {
       ...ctx,

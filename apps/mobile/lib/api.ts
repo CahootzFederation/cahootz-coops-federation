@@ -362,6 +362,29 @@ export const api = {
     return result.result?.data as { address: string; privateKey: string; warning: string };
   },
 
+  async deleteAccount(userId: string, walletAddress?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/user.deleteAccount`, {
+      method: 'POST',
+      headers: createApiHeaders(walletAddress),
+      body: JSON.stringify({ userId })
+    });
+
+    const result = await response.json();
+    if (result.error) {
+      throw new Error(result.error.message || 'Failed to delete account');
+    }
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return result.result?.data as {
+      success: boolean;
+      message: string;
+      isDemoMode: boolean;
+      deletedAt: string | null;
+    };
+  },
+
   async requestWalletChallenge(data: {
     userId: string;
     walletAddress: string;

@@ -144,6 +144,8 @@ async function main() {
       roles: ["member"],
       walletAddress: DEMO_WALLET_ADDRESS,
       profileCompleted: true,
+      deletedAt: null,
+      deletedBy: null,
     },
     create: {
       email: DEMO_LOGIN_EMAIL,
@@ -152,6 +154,8 @@ async function main() {
       roles: ["member"],
       walletAddress: DEMO_WALLET_ADDRESS,
       profileCompleted: true,
+      deletedAt: null,
+      deletedBy: null,
     },
   });
 

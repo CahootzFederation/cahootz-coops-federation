@@ -92,7 +92,7 @@ async function checkDatabasePortalAccess(address: string, coopId?: string) {
   const user = await findUserByWalletAddress(address, coopId);
   const membership = user?.memberships[0];
   const role = membership ? getAdminRoleFromRoles(membership.roles) : undefined;
-  const hasAccess = user?.status === 'ACTIVE' && membership?.status === 'ACTIVE';
+  const hasAccess = !user?.deletedAt && user?.status === 'ACTIVE' && membership?.status === 'ACTIVE';
 
   return {
     hasAccess,
@@ -270,6 +270,18 @@ export async function getSession(): Promise<AuthSession | null> {
   if (!session.isLoggedIn) {
     return null;
   }
+
+  if (session.userId) {
+    const user = await db.user.findUnique({
+      where: { id: session.userId },
+      select: { deletedAt: true },
+    });
+
+    if (user?.deletedAt) {
+      session.destroy();
+      return null;
+    }
+  }
   
   return session;
 }
@@ -295,6 +307,9 @@ export async function createSession(address: string, coopId?: string): Promise<A
   let membershipAdminRole: string | undefined = undefined;
   if (coopId) {
     user = await findUserByWalletAddress(address, coopId);
+    if (user?.deletedAt) {
+      throw new Error('This account has been deleted. Contact support if you need help.');
+    }
     const membership = user?.memberships[0];
     membershipAdminRole = membership ? getAdminRoleFromRoles(membership.roles) : undefined;
     if (user && !user.walletAddress) {
@@ -304,7 +319,7 @@ export async function createSession(address: string, coopId?: string): Promise<A
       });
     }
     // User has profile if they have a User record with name and a membership for this coop
-    hasProfile = !!user && !!user.name && membership?.status === 'ACTIVE';
+    hasProfile = !!user && !user.deletedAt && !!user.name && membership?.status === 'ACTIVE';
     console.log('🔒 Has profile:', hasProfile, 'User name:', user?.name, 'Memberships:', user?.memberships.length);
   }
 
@@ -397,6 +412,10 @@ export async function createUserSession(userId: string, coopId: string): Promise
 
   if (!user) {
     throw new Error('User not found');
+  }
+
+  if (user.deletedAt) {
+    throw new Error('This account has been deleted. Contact support if you need help.');
   }
 
   const membership = user.memberships[0];

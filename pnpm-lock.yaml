@@ -113,6 +113,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      zod:
+        specifier: ^3.25.49
+        version: 3.25.76
 
   apps/api:
     dependencies:

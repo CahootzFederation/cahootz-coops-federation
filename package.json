@@ -67,7 +67,8 @@
     "prettier": "catalog:",
     "trigger.dev": "4.5.4",
     "turbo": "^2.6.3",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "zod": "^3.25.49"
   },
   "prettier": "@repo/prettier-config",
   "pnpm": {

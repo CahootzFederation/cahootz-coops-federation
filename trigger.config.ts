@@ -1,5 +1,6 @@
 import { PrismaInstrumentation } from "@prisma/instrumentation";
 import { OpenAIInstrumentation } from "@traceloop/instrumentation-openai";
+import { additionalPackages } from "@trigger.dev/build/extensions/core";
 import { prismaExtension } from "@trigger.dev/build/extensions/prisma";
 import { defineConfig } from "@trigger.dev/sdk";
 
@@ -20,6 +21,9 @@ export default defineConfig({
   maxDuration: 3600,
   build: {
     extensions: [
+      additionalPackages({
+        packages: ["zod@3.25.76"],
+      }),
       prismaExtension({
         mode: "legacy",
         schema: "packages/db/prisma/schema.prisma",

@@ -3,8 +3,9 @@ import { OpenAIInstrumentation } from "@traceloop/instrumentation-openai";
 import { prismaExtension } from "@trigger.dev/build/extensions/prisma";
 import { defineConfig } from "@trigger.dev/sdk";
 
-const project = process.env.TRIGGER_PROJECT_REF;
-
+//@ts-ignore
+const project = process.env.TRIGGER_PROJECT_REF ?? 'proj_ftqkgqaijkmjsgrqgegp';
+//
 if (!project) {
   throw new Error(
     "TRIGGER_PROJECT_REF must be set to deploy Trigger.dev tasks.",

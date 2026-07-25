@@ -75,7 +75,6 @@
       [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": "merchant.com.cahootzcoop.mobile",
           "enableGooglePay": true
         }
       ]

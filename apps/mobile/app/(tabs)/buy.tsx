@@ -68,8 +68,8 @@ export default function BuyScreen() {
 
       // TODO: Implement actual payment flow
       // For Stripe:
-      // - Use @stripe/stripe-react-native
-      // - Call presentPaymentSheet() with clientSecret
+      // - Create a hosted Checkout Session on the API
+      // - Open the returned Stripe Checkout URL
       //
       // For PayPal:
       // - Use react-native-paypal
@@ -185,15 +185,11 @@ export default function BuyScreen() {
           </View>
         </View>
 
-        {/* Payment SDK Notice */}
+        {/* Payment Notice */}
         <View className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
-          <Text className="text-yellow-800 font-semibold mb-2">⚠️ Payment SDK Required</Text>
+          <Text className="text-yellow-800 font-semibold mb-2">Payment flow required</Text>
           <Text className="text-yellow-700 text-sm">
-            To enable actual payments, install the payment processor SDKs:{'\n'}
-            {'\n'}
-            • npm install @stripe/stripe-react-native{'\n'}
-            • npm install react-native-paypal{'\n'}
-            • npm install react-native-square-in-app-payments
+            To enable actual payments, create hosted checkout flows through the API and open the processor checkout URL.
           </Text>
         </View>
 

@@ -144,6 +144,15 @@ function demoTxHash(index: number) {
   return `0x${index.toString(16).padStart(64, "0")}`;
 }
 
+function getDemoStripeAccountId(businessKey: string) {
+  const envSuffix = businessKey.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+  const accountId =
+    process.env[`DEMO_STRIPE_ACCOUNT_ID_${envSuffix}`] ||
+    (businessKey === "studio" ? process.env.DEMO_STRIPE_ACCOUNT_ID : undefined);
+
+  return accountId?.trim() || `acct_demo_${businessKey}`;
+}
+
 async function ensureDemoCoop() {
   await prisma.coopConfig.upsert({
     where: { coopId_version: { coopId: DEMO_COOP_ID, version: 1 } },
@@ -450,6 +459,7 @@ async function seedStores(users: Map<string, any>) {
 
   for (const businessSeed of demoBusinesses) {
     const owner = users.get(businessSeed.ownerKey);
+    const stripeAccountId = getDemoStripeAccountId(businessSeed.key);
     const business = await prisma.business.create({
       data: {
         ownerId: owner.id,
@@ -464,7 +474,7 @@ async function seedStores(users: Map<string, any>) {
     await prisma.stripeAccount.create({
       data: {
         businessId: business.id,
-        stripeAccountId: `acct_demo_${businessSeed.key}`,
+        stripeAccountId,
         accountType: "express",
         chargesEnabled: true,
         payoutsEnabled: true,

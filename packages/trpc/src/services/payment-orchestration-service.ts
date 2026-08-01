@@ -13,7 +13,7 @@
  * - Platform retains treasury/platform fees automatically
  */
 
-import { db, PaymentType, PaymentStatus, FulfillmentStatus } from '@repo/db';
+import { db } from '@repo/db';
 import type Stripe from 'stripe';
 import { TRPCError } from '@trpc/server';
 import { calculateCheckoutPricing } from './checkout-pricing-service.js';
@@ -168,71 +168,6 @@ export async function createCommerceTransaction(params: {
 
   console.log(`✅ [Payment Orchestration] Transaction created: ${transaction.id}`);
 
-  // Demo coop bypasses Stripe entirely — demo stores don't have real Stripe accounts
-  const isDemoAccount = params.coopId === 'demo';
-  if (isDemoAccount) {
-    console.log(`🎭 [Payment Orchestration] Demo account detected — skipping Stripe, marking transaction complete`);
-    await db.commerceTransaction.update({
-      where: { id: transaction.id },
-      data: {
-        stripePaymentIntentId: `demo_pi_${transaction.id}`,
-        stripeDestinationAccountId: business.stripeAccount.stripeAccountId,
-        status: 'COMPLETED',
-        completedAt: new Date(),
-      },
-    });
-
-    // Create a StoreOrder so the orders list and detail screens have real data to show
-    const store = await db.store.findFirst({ where: { businessId } });
-    let storeOrderId: string | undefined;
-    if (store) {
-      const cartItems = (metadata?.items as Array<{ productId: string; quantity: number; priceUSD: number }> | undefined) ?? [];
-      const shippingAddress = (metadata?.shippingAddress as string | undefined) ?? '';
-      const note = (metadata?.note as string | undefined) ?? '';
-      const storeOrder = await db.storeOrder.create({
-        data: {
-          storeId: store.id,
-          buyerId: customerId,
-          subtotalUSD: breakdown.listedAmount / 100,
-          totalUSD: breakdown.chargedAmount / 100,
-          paymentMethod: PaymentType.CARD,
-          paymentStatus: PaymentStatus.COMPLETED,
-          fulfillmentStatus: FulfillmentStatus.PENDING,
-          shippingAddress: shippingAddress || undefined,
-          note: note || undefined,
-          items: cartItems.length > 0 ? {
-            create: cartItems.map(item => ({
-              productId: item.productId,
-              quantity: item.quantity,
-              priceUSD: item.priceUSD,
-              totalUSD: item.priceUSD * item.quantity,
-            })),
-          } : undefined,
-        },
-      });
-      storeOrderId = storeOrder.id;
-      console.log(`🎭 [Payment Orchestration] Demo StoreOrder created: ${storeOrderId}`);
-    }
-
-    return {
-      transaction: {
-        id: transaction.id,
-        listedAmount: breakdown.listedAmount / 100,
-        chargedAmount: breakdown.chargedAmount / 100,
-        merchantSettlementAmount: breakdown.merchantSettlementAmount / 100,
-        treasuryFeeAmount: breakdown.treasuryFeeAmount / 100,
-      },
-      paymentIntent: {
-        id: `demo_pi_${transaction.id}`,
-        clientSecret: `demo_pi_${transaction.id}_secret`,
-        amount: breakdown.chargedAmount,
-        currency,
-      },
-      isDemoMode: true,
-      storeOrderId,
-    };
-  }
-
   // Create Stripe payment intent with destination charge
   const Stripe = (await import('stripe')).default;
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -288,6 +223,218 @@ export async function createCommerceTransaction(params: {
   };
 }
 
+function appendCheckoutReturnParams(url: string, transactionId: string) {
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}transactionId=${encodeURIComponent(transactionId)}&checkoutSessionId={CHECKOUT_SESSION_ID}`;
+}
+
+function buildCheckoutLineItems(params: {
+  businessName: string;
+  breakdown: {
+    listedAmount: number;
+    chargedAmount: number;
+    platformMarkupAmount: number;
+  };
+  currency: string;
+}): Stripe.Checkout.SessionCreateParams.LineItem[] {
+  const { businessName, breakdown, currency } = params;
+  const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
+    {
+      quantity: 1,
+      price_data: {
+        currency,
+        unit_amount: breakdown.listedAmount,
+        product_data: {
+          name: `${businessName} order`,
+        },
+      },
+    },
+  ];
+
+  if (breakdown.platformMarkupAmount > 0) {
+    lineItems.push({
+      quantity: 1,
+      price_data: {
+        currency,
+        unit_amount: breakdown.platformMarkupAmount,
+        product_data: {
+          name: 'Checkout fee',
+        },
+      },
+    });
+  }
+
+  return lineItems;
+}
+
+/**
+ * Create a commerce transaction and Stripe-hosted Checkout Session.
+ *
+ * This avoids native Stripe SDK usage in mobile apps while keeping the same
+ * destination-charge settlement model used by PaymentIntents.
+ */
+export async function createHostedCommerceCheckoutSession(params: {
+  customerId: string;
+  businessId: string;
+  listedAmountCents: number;
+  coopId: string;
+  successUrl: string;
+  cancelUrl: string;
+  applyTreasuryFee?: boolean;
+  currency?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<{
+  transaction: {
+    id: string;
+    listedAmount: number;
+    chargedAmount: number;
+    merchantSettlementAmount: number;
+    treasuryFeeAmount: number;
+  };
+  checkoutSession: {
+    id: string;
+    url: string;
+    amount: number;
+    currency: string;
+  };
+  isDemoMode: false;
+}> {
+  const {
+    customerId,
+    businessId,
+    listedAmountCents,
+    applyTreasuryFee = true,
+    currency = 'usd',
+    metadata,
+  } = params;
+  const stripeCurrency = currency.toLowerCase();
+
+  console.log(`💳 [Payment Orchestration] Creating hosted checkout: $${listedAmountCents / 100} for business ${businessId}`);
+
+  const business = await db.business.findUnique({
+    where: { id: businessId },
+    include: {
+      stripeAccount: true,
+    },
+  });
+
+  if (!business) {
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: 'Business not found',
+    });
+  }
+
+  if (!business.stripeAccount) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: 'Business does not have a Stripe Connect account',
+    });
+  }
+
+  if (!business.stripeAccount.chargesEnabled) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: 'Business is not yet enabled to accept charges',
+    });
+  }
+
+  const feeConfig = await getActiveFeeConfig();
+  const pricing = calculateCheckoutPricing({
+    listedAmountCents,
+    feeConfig,
+    applyTreasuryFee,
+  });
+  const breakdown = pricing.breakdown;
+
+  const transaction = await db.commerceTransaction.create({
+    data: {
+      customerId,
+      businessId,
+      coopId: params.coopId,
+      listedAmount: breakdown.listedAmount / 100,
+      chargedAmount: breakdown.chargedAmount / 100,
+      merchantSettlementAmount: breakdown.merchantSettlementAmount / 100,
+      treasuryFeeAmount: breakdown.treasuryFeeAmount / 100,
+      currency: currency.toUpperCase(),
+      status: 'PENDING',
+      metadata: metadata as any,
+      platformMarkupBps: pricing.feeConfig.platformMarkupBps,
+      treasuryFeeBps: pricing.feeConfig.treasuryFeeBps,
+    },
+  });
+
+  const Stripe = (await import('stripe')).default;
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: '2026-02-25.clover',
+  });
+
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    success_url: appendCheckoutReturnParams(params.successUrl, transaction.id),
+    cancel_url: appendCheckoutReturnParams(params.cancelUrl, transaction.id),
+    client_reference_id: transaction.id,
+    customer_email: typeof metadata?.guestEmail === 'string' ? metadata.guestEmail : undefined,
+    line_items: buildCheckoutLineItems({
+      businessName: business.name,
+      breakdown,
+      currency: stripeCurrency,
+    }),
+    metadata: {
+      commerceTransactionId: transaction.id,
+      customerId,
+      businessId,
+    },
+    payment_intent_data: {
+      transfer_data: {
+        destination: business.stripeAccount.stripeAccountId,
+        amount: breakdown.merchantSettlementAmount,
+      },
+      metadata: {
+        commerceTransactionId: transaction.id,
+        customerId,
+        businessId,
+      },
+    },
+    expand: ['payment_intent'],
+  });
+
+  const paymentIntent = session.payment_intent;
+  const paymentIntentId = typeof paymentIntent === 'string' ? paymentIntent : paymentIntent?.id;
+
+  await db.commerceTransaction.update({
+    where: { id: transaction.id },
+    data: {
+      stripePaymentIntentId: paymentIntentId,
+      stripeDestinationAccountId: business.stripeAccount.stripeAccountId,
+      status: 'PROCESSING',
+      metadata: {
+        ...(metadata ?? {}),
+        stripeCheckoutSessionId: session.id,
+      } as any,
+    },
+  });
+
+  console.log(`✅ [Payment Orchestration] Checkout Session created: ${session.id}`);
+
+  return {
+    transaction: {
+      id: transaction.id,
+      listedAmount: breakdown.listedAmount / 100,
+      chargedAmount: breakdown.chargedAmount / 100,
+      merchantSettlementAmount: breakdown.merchantSettlementAmount / 100,
+      treasuryFeeAmount: breakdown.treasuryFeeAmount / 100,
+    },
+    checkoutSession: {
+      id: session.id,
+      url: session.url!,
+      amount: breakdown.chargedAmount,
+      currency: stripeCurrency,
+    },
+    isDemoMode: false,
+  };
+}
+
 /**
  * Process successful payment (called from webhook handler)
  * 
@@ -297,6 +444,7 @@ export async function createCommerceTransaction(params: {
 export async function processSuccessfulPayment(params: {
   stripePaymentIntentId: string;
   stripeChargeId: string;
+  commerceTransactionId?: string;
 }): Promise<{
   transactionId: string;
   customerId: string;
@@ -304,18 +452,28 @@ export async function processSuccessfulPayment(params: {
   amountUSD: number;
   treasuryFeeUSD: number;
 }> {
-  const { stripePaymentIntentId, stripeChargeId } = params;
+  const { stripePaymentIntentId, stripeChargeId, commerceTransactionId } = params;
 
   console.log(`✅ [Payment Orchestration] Processing successful payment: ${stripePaymentIntentId}`);
 
   // Find transaction
-  const transaction = await db.commerceTransaction.findUnique({
+  let transaction = await db.commerceTransaction.findUnique({
     where: { stripePaymentIntentId },
     include: {
       customer: true,
       business: true,
     },
   });
+
+  if (!transaction && commerceTransactionId) {
+    transaction = await db.commerceTransaction.findUnique({
+      where: { id: commerceTransactionId },
+      include: {
+        customer: true,
+        business: true,
+      },
+    });
+  }
 
   if (!transaction) {
     throw new Error(`Transaction not found for payment intent: ${stripePaymentIntentId}`);
@@ -338,6 +496,7 @@ export async function processSuccessfulPayment(params: {
     where: { id: transaction.id },
     data: {
       status: 'COMPLETED',
+      stripePaymentIntentId,
       stripeChargeId,
       completedAt: new Date(),
     },

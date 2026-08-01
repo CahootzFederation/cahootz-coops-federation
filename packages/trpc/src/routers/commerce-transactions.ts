@@ -5,6 +5,7 @@ import { db } from '@repo/db';
 import { 
   getActiveFeeConfig, 
   createCommerceTransaction,
+  createHostedCommerceCheckoutSession,
   getTransactionByPaymentIntent 
 } from '../services/payment-orchestration-service.js';
 import { calculateCheckoutPricing } from '../services/checkout-pricing-service.js';
@@ -243,11 +244,14 @@ export const commerceTransactionsRouter = router({
       businessId: z.string(),
       listedAmountCents: z.number().int().positive(),
       currency: z.string().default('USD'),
+      paymentUi: z.enum(['payment_intent', 'hosted_checkout']).default('payment_intent'),
+      successUrl: z.string().optional(),
+      cancelUrl: z.string().optional(),
       metadata: z.record(z.unknown()).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const context = ctx as AuthenticatedContext;
-      const { coopId, businessId, listedAmountCents, currency, metadata } = input;
+      const { coopId, businessId, listedAmountCents, currency, metadata, paymentUi, successUrl, cancelUrl } = input;
 
       const user = await getUserForWallet(context.walletAddress);
       if (!user) {
@@ -255,6 +259,42 @@ export const commerceTransactionsRouter = router({
       }
       const membershipStatus = await getCoopMembershipStatus(user.id, coopId);
       const applyTreasuryFee = membershipStatus === 'ACTIVE';
+      const checkoutMetadata = {
+        ...metadata,
+        isGuestCheckout: false,
+        checkoutMode: applyTreasuryFee ? 'COOP_MEMBER' : 'SIGNED_IN_NON_MEMBER',
+      };
+
+      if (paymentUi === 'hosted_checkout') {
+        if (!successUrl || !cancelUrl) {
+          throw new Error('Hosted checkout requires successUrl and cancelUrl');
+        }
+
+        const result = await createHostedCommerceCheckoutSession({
+          customerId: user.id,
+          businessId,
+          listedAmountCents,
+          coopId,
+          applyTreasuryFee,
+          currency,
+          successUrl,
+          cancelUrl,
+          metadata: checkoutMetadata,
+        });
+
+        return {
+          transactionId: result.transaction.id,
+          clientSecret: null,
+          checkoutUrl: result.checkoutSession.url,
+          checkoutSessionId: result.checkoutSession.id,
+          totalChargedCents: Math.round(result.transaction.chargedAmount * 100),
+          merchantSettlementCents: Math.round(result.transaction.merchantSettlementAmount * 100),
+          platformFeeCents: Math.round((result.transaction.chargedAmount - result.transaction.merchantSettlementAmount) * 100),
+          treasuryFeeCents: Math.round(result.transaction.treasuryFeeAmount * 100),
+          isDemoMode: result.isDemoMode,
+          storeOrderId: undefined,
+        };
+      }
 
       const result = await createCommerceTransaction({
         customerId: user.id,
@@ -263,16 +303,14 @@ export const commerceTransactionsRouter = router({
         coopId,
         applyTreasuryFee,
         currency,
-        metadata: {
-          ...metadata,
-          isGuestCheckout: false,
-          checkoutMode: applyTreasuryFee ? 'COOP_MEMBER' : 'SIGNED_IN_NON_MEMBER',
-        },
+        metadata: checkoutMetadata,
       });
 
       return {
         transactionId: result.transaction.id,
         clientSecret: result.paymentIntent.clientSecret,
+        checkoutUrl: null,
+        checkoutSessionId: null,
         totalChargedCents: Math.round(result.transaction.chargedAmount * 100),
         merchantSettlementCents: Math.round(result.transaction.merchantSettlementAmount * 100),
         platformFeeCents: Math.round((result.transaction.chargedAmount - result.transaction.merchantSettlementAmount) * 100),

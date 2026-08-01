@@ -22,10 +22,25 @@ function handleDeepLink(url: string) {
   try {
     const parsed = Linking.parse(url);
     console.log('Deep link received:', url, parsed);
+    const path = parsed.path?.replace(/^\/+/, '') ?? '';
+
+    if (path === 'checkout/success') {
+      const transactionId = parsed.queryParams?.transactionId;
+      router.replace(
+        transactionId
+          ? (`/(authenticated)/order-detail?id=${transactionId}` as any)
+          : ('/(authenticated)/orders' as any)
+      );
+      return;
+    }
+
+    if (path === 'checkout/cancel') {
+      return;
+    }
 
     // Handle coop://pay/r/{token} - Payment request
-    if (parsed.path?.startsWith('pay/r/')) {
-      const token = parsed.path.replace('pay/r/', '');
+    if (path.startsWith('pay/r/')) {
+      const token = path.replace('pay/r/', '');
       if (token) {
         router.push({ pathname: '/(authenticated)/quick-pay', params: { token } } as any);
         return;
@@ -33,8 +48,8 @@ function handleDeepLink(url: string) {
     }
 
     // Handle coop://pay/s/{code} - Store code
-    if (parsed.path?.startsWith('pay/s/')) {
-      const code = parsed.path.replace('pay/s/', '');
+    if (path.startsWith('pay/s/')) {
+      const code = path.replace('pay/s/', '');
       if (code) {
         router.push({ pathname: '/(authenticated)/quick-pay', params: { code } } as any);
         return;

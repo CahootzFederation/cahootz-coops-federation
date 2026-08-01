@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   TextInput,
+  Platform,
 } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +25,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useCoin } from '@/contexts/platform-config-context';
 import { useCart } from '@/contexts/cart-context';
 import { coopConfig } from '@/lib/coop-config';
+import { getWebUrl } from '@/lib/config';
 import { resolveBrandColor, withAlpha } from '@/lib/brand-colors';
 import CommercePaymentConfirmation from '@/components/commerce-payment-confirmation';
 
@@ -33,7 +35,8 @@ interface CheckoutHybridProps {
 
 interface PaymentSession {
   transactionId: string;
-  clientSecret: string;
+  clientSecret?: string | null;
+  checkoutUrl?: string | null;
   totalCents: number;
 }
 
@@ -107,6 +110,11 @@ function formatStatus(status?: string | null): string {
 function shortenAddress(address?: string | null): string {
   if (!address) return '';
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+function buildStripeReturnUrl(path: string): string {
+  const baseUrl = getWebUrl().replace(/\/+$/, '');
+  return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
 export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
@@ -265,6 +273,9 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
 
     try {
       // Create commerce transaction
+      const useHostedCheckout = Platform.OS !== 'web';
+      const successUrl = useHostedCheckout ? buildStripeReturnUrl('/checkout/success') : undefined;
+      const cancelUrl = useHostedCheckout ? buildStripeReturnUrl('/checkout/cancel') : undefined;
       const checkoutResult = await fetch(`${API_BASE_URL}/trpc/commerce.createMemberCheckout`, {
         method: 'POST',
         headers: {
@@ -276,6 +287,9 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
           businessId: checkoutBusinessId,
           listedAmountCents: Math.round(subtotal * 100),
           currency: 'USD',
+          paymentUi: useHostedCheckout ? 'hosted_checkout' : 'payment_intent',
+          successUrl,
+          cancelUrl,
           metadata: {
             items: cartItems.map(item => ({
               productId: item.productId,
@@ -293,28 +307,16 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
         throw new Error(checkoutResult.error.message);
       }
 
-      const { transactionId, clientSecret, totalChargedCents, isDemoMode, storeOrderId } = checkoutResult.result.data;
+      const { transactionId, clientSecret, checkoutUrl, totalChargedCents } = checkoutResult.result.data;
 
-      if (isDemoMode) {
-        clearStoreItems(storeId);
-        let successMsg = `Demo purchase of $${((totalChargedCents ?? totalCents) / 100).toFixed(2)} recorded.`;
-        if (preview?.customerReward?.eligible) {
-          successMsg += `\n\nYou would earn ${formatScAmount(preview.customerReward.estimatedAmount)} ${coin.symbol} on a real purchase!`;
-        }
-        const orderId = storeOrderId ?? transactionId;
-        Alert.alert('Demo Purchase Complete', successMsg, [
-          {
-            text: 'View Order',
-            onPress: () => router.replace(`/(authenticated)/order-detail?id=${orderId}` as any),
-          },
-          { text: 'OK', onPress: () => router.back() },
-        ]);
-        return;
+      if (!clientSecret && !checkoutUrl) {
+        throw new Error('Checkout did not return a payment method.');
       }
 
       setPaymentSession({
         transactionId,
         clientSecret,
+        checkoutUrl,
         totalCents: totalChargedCents ?? totalCents,
       });
     } catch (error: any) {
@@ -635,6 +637,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
         {paymentSession && (
           <CommercePaymentConfirmation
             clientSecret={paymentSession.clientSecret}
+            checkoutUrl={paymentSession.checkoutUrl}
             merchantName={store.name}
             amountLabel={`$${(paymentSession.totalCents / 100).toFixed(2)}`}
             accentColor={accentColor}

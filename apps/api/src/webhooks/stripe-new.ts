@@ -112,6 +112,7 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
   const paymentResult = await processSuccessfulPayment({
     stripePaymentIntentId: paymentIntent.id,
     stripeChargeId: paymentIntent.latest_charge as string,
+    commerceTransactionId: paymentIntent.metadata?.commerceTransactionId,
   });
 
   console.log(`✅ [Stripe Webhook] Payment processed: transaction ${paymentResult.transactionId}`);

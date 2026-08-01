@@ -71,13 +71,6 @@
         {
           "faceIDPermission": "Allow Cahootz Coop to use Face ID for authentication."
         }
-      ],
-      [
-        "@stripe/stripe-react-native",
-        {
-          "merchantIdentifier": "merchant.com.cahootzcoop.mobile",
-          "enableGooglePay": true
-        }
       ]
     ],
     "owner": "cahootz-coop"

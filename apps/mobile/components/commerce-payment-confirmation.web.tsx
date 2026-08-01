@@ -8,7 +8,8 @@ const publishableKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
 const stripePromise = publishableKey ? loadStripe(publishableKey) : Promise.resolve(null);
 
 interface CommercePaymentConfirmationProps {
-  clientSecret: string;
+  clientSecret?: string | null;
+  checkoutUrl?: string | null;
   merchantName?: string;
   amountLabel: string;
   accentColor: string;
@@ -23,7 +24,7 @@ function CommercePaymentForm({
   accentColor,
   onSuccess,
   onError,
-}: Omit<CommercePaymentConfirmationProps, 'merchantName'>) {
+}: Omit<CommercePaymentConfirmationProps, 'merchantName' | 'checkoutUrl'> & { clientSecret: string }) {
   const stripe = useStripe();
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
@@ -129,7 +130,7 @@ export default function CommercePaymentConfirmation({
   onError,
 }: CommercePaymentConfirmationProps) {
   const options = useMemo(() => ({
-    clientSecret,
+    clientSecret: clientSecret || '',
     appearance: {
       theme: 'stripe' as const,
       variables: {
@@ -138,6 +139,17 @@ export default function CommercePaymentConfirmation({
       },
     },
   }), [accentColor, clientSecret]);
+
+  if (!clientSecret) {
+    return (
+      <View className="mx-6 mt-4 mb-3 rounded-2xl border border-red-100 bg-red-50 p-4">
+        <Text className="text-red-700 font-semibold">Payment could not be prepared.</Text>
+        <Text className="text-red-700 text-sm mt-1">
+          Stripe did not return a client secret for web checkout.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View className="mx-6 mt-4 mb-3 rounded-2xl border border-gray-100 bg-white p-4">

@@ -69,7 +69,7 @@ export default function CommercePaymentConfirmation({
         <View className="flex-1">
           <Text className="text-gray-900 font-semibold">Secure Stripe Checkout</Text>
           <Text className="text-gray-500 text-sm mt-1">
-            Complete payment for {merchantName || 'this order'} on Stripe's hosted checkout page.
+            Complete payment for {merchantName || 'this order'} on Stripe-hosted checkout.
           </Text>
         </View>
       </View>

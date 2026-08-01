@@ -5,12 +5,14 @@ import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   Activity,
+  AlertCircle,
   ArrowLeft,
   Bot,
   CalendarClock,
   CheckCircle2,
   Clock,
   Loader2,
+  PlayCircle,
   Save,
 } from "lucide-react";
 
@@ -54,11 +56,11 @@ const agentCopy: Record<NewsletterAgentId, {
   description: string;
 }> = {
   "article-writer": {
-    label: "Article Writer",
-    description: "Researches sources, verifies an angle, writes, and quality-checks newsletter articles.",
+    label: "News Agent",
+    description: "Researches sources, verifies an angle, writes, and quality-checks newsletter news drafts.",
   },
   "event-writer": {
-    label: "Event Writer",
+    label: "Event Agent",
     description: "Finds events, verifies facts, checks goal fit, and drafts event listings.",
   },
 };
@@ -159,7 +161,11 @@ export default function AgentsStatusPage() {
   const params = useParams();
   const coopId = params.coopId as string;
   const { isAdmin } = useWeb3Auth();
-  const [savedMessage, setSavedMessage] = useState("");
+  const [statusMessage, setStatusMessage] = useState<{
+    tone: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [runningAgentId, setRunningAgentId] = useState<NewsletterAgentId | null>(null);
 
   const { data: publicInfo, isLoading, refetch } = api.publicCoopInfo.getForEdit.useQuery(
     { coopId },
@@ -170,6 +176,7 @@ export default function AgentsStatusPage() {
       refetch();
     },
   });
+  const runNewsletterAgent = api.publicCoopInfo.runNewsletterAgent.useMutation();
 
   const editablePublicInfo = publicInfo as any;
   const previewOverrides = normalizePreviewOverrides(editablePublicInfo?.previewOverrides);
@@ -199,7 +206,31 @@ export default function AgentsStatusPage() {
         },
       },
     });
-    setSavedMessage(`${agentCopy[agentId].label} schedule updated.`);
+    setStatusMessage({
+      tone: "success",
+      text: `${agentCopy[agentId].label} schedule updated.`,
+    });
+  };
+
+  const runAgentNow = async (agentId: NewsletterAgentId) => {
+    setRunningAgentId(agentId);
+    setStatusMessage(null);
+
+    try {
+      const result = await runNewsletterAgent.mutateAsync({ coopId, agentId });
+      await refetch();
+      setStatusMessage({
+        tone: "success",
+        text: result.message,
+      });
+    } catch (error) {
+      setStatusMessage({
+        tone: "error",
+        text: error instanceof Error ? error.message : `Could not run ${agentCopy[agentId].label}.`,
+      });
+    } finally {
+      setRunningAgentId(null);
+    }
   };
 
   if (!isAdmin) {
@@ -238,7 +269,7 @@ export default function AgentsStatusPage() {
             Agent schedules
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-            Review automated editorial agent timing and adjust cadence without manually triggering runs.
+            Review automated editorial agent timing, adjust cadence, and trigger the news or event agent when admins need fresh drafts.
           </p>
         </div>
 
@@ -249,18 +280,27 @@ export default function AgentsStatusPage() {
               Automation status
             </CardTitle>
             <CardDescription className="text-zinc-500">
-              {isLoading ? "Loading schedules" : "Manual runs are not available from this page"}
+              {isLoading ? "Loading schedules" : "Admin-triggered runs write to the newsletter review queue"}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {savedMessage ? (
-              <div className="flex items-start gap-3 rounded-md border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-100">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-300" />
-                <span>{savedMessage}</span>
+            {statusMessage ? (
+              <div className={cn(
+                "flex items-start gap-3 rounded-md border p-3 text-sm",
+                statusMessage.tone === "success"
+                  ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100"
+                  : "border-red-400/30 bg-red-400/10 text-red-100",
+              )}>
+                {statusMessage.tone === "success" ? (
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-300" />
+                ) : (
+                  <AlertCircle className="mt-0.5 h-4 w-4 text-red-300" />
+                )}
+                <span>{statusMessage.text}</span>
               </div>
             ) : (
               <div className="rounded-md border border-zinc-800 bg-zinc-900/60 p-3 text-sm text-zinc-400">
-                Runs update automatically when the scheduled worker or dev endpoint completes.
+                Runs update automatically when the scheduled worker or an admin trigger completes.
               </div>
             )}
           </CardContent>
@@ -348,10 +388,10 @@ export default function AgentsStatusPage() {
                       <Select
                         value={String(schedule.intervalHours)}
                         onValueChange={(value) => {
-                          setSavedMessage("");
+                          setStatusMessage(null);
                           saveSchedule(agentId, { intervalHours: Number(value) });
                         }}
-                        disabled={updatePublicInfo.isPending}
+                        disabled={updatePublicInfo.isPending || runNewsletterAgent.isPending}
                       >
                         <SelectTrigger className="border-zinc-700 bg-zinc-900 text-zinc-100">
                           <SelectValue />
@@ -370,14 +410,28 @@ export default function AgentsStatusPage() {
                       <Label className="text-sm text-zinc-300">Enabled</Label>
                       <Switch
                         checked={schedule.enabled}
-                        disabled={updatePublicInfo.isPending}
+                        disabled={updatePublicInfo.isPending || runNewsletterAgent.isPending}
                         onCheckedChange={(checked) => {
-                          setSavedMessage("");
+                          setStatusMessage(null);
                           saveSchedule(agentId, { enabled: checked });
                         }}
                       />
                     </div>
                   </div>
+
+                  <Button
+                    type="button"
+                    className="w-full bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
+                    disabled={runNewsletterAgent.isPending || updatePublicInfo.isPending}
+                    onClick={() => runAgentNow(agentId)}
+                  >
+                    {runningAgentId === agentId ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <PlayCircle className="h-4 w-4" />
+                    )}
+                    {runningAgentId === agentId ? "Running..." : `Run ${agentCopy[agentId].label}`}
+                  </Button>
                 </CardContent>
               </Card>
             );

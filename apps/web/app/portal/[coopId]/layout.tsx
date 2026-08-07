@@ -122,7 +122,7 @@ function PortalLayoutContent({ children, coopId }: { children: React.ReactNode; 
       <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
         <div className="flex flex-col items-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          <p className="text-slate-400">Validating co-op...</p>
+          <p className="text-slate-400">Validating commons...</p>
         </div>
       </div>
     );
@@ -138,17 +138,17 @@ function PortalLayoutContent({ children, coopId }: { children: React.ReactNode; 
             </div>
           </div>
           <div className="space-y-2">
-            <h1 className="text-2xl font-bold">Co-op Not Found</h1>
+            <h1 className="text-2xl font-bold">Commons Not Found</h1>
             <p className="text-slate-400">
-              The co-op ID <span className="font-mono text-amber-500">{coopId}</span> does not exist or is not active.
+              The commons ID <span className="font-mono text-amber-500">{coopId}</span> does not exist or is not active.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button 
-              variant="default" 
+            <Button
+              variant="default"
               onClick={() => router.push('/onboarding')}
             >
-              View Available Co-ops
+              View Available Commons
             </Button>
             <Button 
               variant="outline" 
@@ -189,7 +189,7 @@ export default function PortalLayout({
   if (!coopId) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
-        <p>Invalid coop ID</p>
+        <p>Invalid commons ID</p>
       </div>
     );
   }

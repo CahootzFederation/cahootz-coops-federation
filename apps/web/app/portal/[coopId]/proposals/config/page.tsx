@@ -155,7 +155,7 @@ export default function CoopConfigPage() {
       <div className="max-w-4xl mx-auto py-12 text-center space-y-4">
         <ShieldAlert className="h-12 w-12 text-red-400 mx-auto" />
         <h2 className="text-xl font-bold text-white">Admin Access Required</h2>
-        <p className="text-gray-400">You need admin privileges to manage co-op configuration.</p>
+        <p className="text-gray-400">You need admin privileges to manage commons configuration.</p>
         <Link href={`/portal/${coopId}/proposals`} className="text-amber-500 hover:underline">
           Back to proposals
         </Link>
@@ -180,7 +180,7 @@ export default function CoopConfigPage() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-white">Coop Configuration</h1>
+            <h1 className="text-2xl font-bold text-white">Commons Configuration</h1>
             <p className="text-gray-400 text-sm mt-0.5">No active configuration found</p>
           </div>
         </div>
@@ -193,13 +193,13 @@ export default function CoopConfigPage() {
                 Create Initial Configuration
               </CardTitle>
               <p className="text-gray-400 text-sm">
-                Bootstrap the coop with sensible defaults. All settings can be edited after creation.
+                Bootstrap the commons with sensible defaults. All settings can be edited after creation.
               </p>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <label className="text-sm font-medium text-gray-300">Coop ID</label>
+                  <label className="text-sm font-medium text-gray-300">Commons ID</label>
                   <Input
                     value={createCoopId}
                     onChange={(e) => setCreateCoopId(e.target.value)}
@@ -227,7 +227,7 @@ export default function CoopConfigPage() {
                   onChange={(e) => setCreateCharterText(e.target.value)}
                   rows={4}
                   className="bg-[#0d0d1a] border-gray-700 text-white resize-none"
-                  placeholder="Describe the coop's charter and mission..."
+                  placeholder="Describe the commons' charter and mission..."
                 />
               </div>
 
@@ -239,7 +239,7 @@ export default function CoopConfigPage() {
                   <li>Score mix: Mission 60% / Structural 40%</li>
                   <li>Screening threshold: 60%</li>
                   <li>Quorum: 15% · Approval: 51% · Voting window: 7 days</li>
-                  <li>Approval tiers: AI auto-approve &lt; $500 · Council vote $500–$5,000 · Full coop vote ≥ $5,000</li>
+                  <li>Approval tiers: AI auto-approve &lt; $500 · Council vote $500–$5,000 · Full commons vote ≥ $5,000</li>
                 </ul>
               </div>
 
@@ -283,7 +283,7 @@ export default function CoopConfigPage() {
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Co-op Configuration</h1>
+          <h1 className="text-2xl font-bold text-white">Commons Configuration</h1>
           <p className="text-gray-400 text-sm mt-1">
             Version {config.version} | {config.coopId} | Last updated by {config.createdBy}
           </p>
@@ -305,7 +305,7 @@ export default function CoopConfigPage() {
       {/* Charter — uses ConfigSectionEditor for consistent propose/review flow */}
       <ConfigSectionEditor
         title="Charter Text"
-        description="The founding document of the coop. Changes require acknowledgement before going live."
+        description="The founding document of the commons. Changes require acknowledgement before going live."
         isDirty={charterProposedText !== config.charterText && charterProposedText !== ""}
         onSave={async (reason) => {
           await proposeCharter.mutateAsync({
@@ -417,7 +417,7 @@ export default function CoopConfigPage() {
                     setEditGoals(base.map((g, j) => j === i ? { ...g, description: e.target.value } : g));
                   }}
                   rows={2}
-                  placeholder="Describe this goal for the AI — e.g. 'Proposals that directly increase recurring income for coop members through employment, cooperative returns, or revenue-sharing...'"
+                  placeholder="Describe this goal for the AI — e.g. 'Proposals that directly increase recurring income for commons members through employment, commons returns, or revenue-sharing...'"
                   className="bg-slate-800 border-slate-600 text-white text-xs resize-none placeholder:text-gray-600"
                 />
               </div>
@@ -590,7 +590,7 @@ export default function CoopConfigPage() {
       {/* Voting Rules */}
       <ConfigSectionEditor
         title="Voting Rules"
-        description="Quorum, approval threshold, and voting window applied to all coop votes."
+        description="Quorum, approval threshold, and voting window applied to all commons votes."
         isDirty={!!(editQuorum || editApproval || editWindow)}
         onSave={async (reason) => {
           const changes = {
@@ -705,10 +705,10 @@ export default function CoopConfigPage() {
             {
               icon: <Globe className="h-4 w-4 text-blue-400" />,
               color: "border-blue-700/40 bg-blue-900/10",
-              label: "Full Coop Vote",
+              label: "Full Commons Vote",
               labelColor: "text-blue-400",
               range: `≥ $${(editCouncilThreshold ? parseFloat(editCouncilThreshold) : config.councilVoteThresholdUSD ?? 5000).toLocaleString()}`,
-              desc: "Passes screening + above council threshold → all coop members vote using governance rules.",
+              desc: "Passes screening + above council threshold → all commons members vote using governance rules.",
             },
           ].map((tier) => (
             <div key={tier.label} className={`flex items-start gap-3 rounded-lg border p-3 ${tier.color}`}>
@@ -742,9 +742,9 @@ export default function CoopConfigPage() {
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
               <Globe className="h-3.5 w-3.5 text-blue-400" />
-              <span className="text-gray-400 font-medium">Full Coop Vote Limit (USD)</span>
+              <span className="text-gray-400 font-medium">Full Commons Vote Limit (USD)</span>
             </div>
-            <p className="text-xs text-gray-600">Proposals at or above this amount require a full coop vote.</p>
+            <p className="text-xs text-gray-600">Proposals at or above this amount require a full commons vote.</p>
             <Input
               type="number"
               defaultValue={config.councilVoteThresholdUSD ?? 5000}
@@ -758,7 +758,7 @@ export default function CoopConfigPage() {
       {/* Member Benefits */}
       <ConfigSectionEditor
         title="Member Benefits"
-        description="Benefits shown to applicants and on the public newsletter page. Update them here so the co-op config stays the source of truth."
+        description="Benefits shown to applicants and on the public newsletter page. Update them here so the commons config stays the source of truth."
         isDirty={editFeatures !== null}
         onSave={propose("displayFeatures", { displayFeatures: editFeatures ?? config.displayFeatures ?? [] }, { displayFeatures: config.displayFeatures ?? [] })}
         isSaving={proposeChange.isPending}
@@ -852,7 +852,7 @@ export default function CoopConfigPage() {
       {/* Eligibility */}
       <ConfigSectionEditor
         title="Eligibility Requirements"
-        description="Who can join this coop? Shown during onboarding to help potential members understand if they qualify."
+        description="Who can join this commons? Shown during onboarding to help potential members understand if they qualify."
         isDirty={editEligibility !== null}
         onSave={propose("eligibility", { eligibility: editEligibility ?? config.eligibility ?? "" }, { eligibility: config.eligibility ?? "" })}
         isSaving={proposeChange.isPending}

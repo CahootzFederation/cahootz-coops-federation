@@ -192,7 +192,7 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
           Introduction Video
         </Text>
         <Text className="text-sm text-gray-600">
-          Record a 5-10 second video introducing yourself to the co-op
+          Record a 5-10 second video introducing yourself to the commons
         </Text>
       </View>
 

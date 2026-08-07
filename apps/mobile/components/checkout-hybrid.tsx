@@ -99,7 +99,7 @@ function formatCurrencyFromCents(amountCents?: number | null): string {
 }
 
 function formatStatus(status?: string | null): string {
-  if (!status) return 'No coop membership';
+  if (!status) return 'No commons membership';
   return status
     .toLowerCase()
     .split('_')
@@ -381,17 +381,17 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
           </LinearGradient>
         </View>
 
-        {/* Coop Member Info */}
+        {/* Commons Member Info */}
         <View className="mx-6 mt-4 rounded-2xl border border-gray-200 bg-white p-4">
           <View className="flex-row items-start justify-between gap-3">
             <View className="flex-1">
               <Text className="text-gray-900 text-base font-bold">
-                {isActiveCoopMember ? 'Coop member checkout' : 'Guest checkout'}
+                {isActiveCoopMember ? 'Commons member checkout' : 'Guest checkout'}
               </Text>
               <Text className="text-gray-500 text-sm mt-1">
                 {isActiveCoopMember
-                  ? 'This purchase will use your coop membership for checkout.'
-                  : 'Guest checkout has no coop membership status.'}
+                  ? 'This purchase will use your commons membership for checkout.'
+                  : 'Guest checkout has no commons membership status.'}
               </Text>
             </View>
             <View
@@ -418,7 +418,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
               </Text>
             </View>
             <View className="flex-row justify-between gap-4">
-              <Text className="text-gray-500">Coop</Text>
+              <Text className="text-gray-500">Commons</Text>
               <Text className="text-gray-900 font-semibold text-right flex-1" numberOfLines={1}>
                 {coopName}
               </Text>

@@ -165,7 +165,7 @@ export default function InitializePage() {
     const tokenSymbol = coopConfig.scTokenSymbol.trim() || "SC";
     const steps: DeploymentStepType[] = [
       { id: "sc", name: `Deploy ${tokenName}`, description: `Governance token (${tokenSymbol}) - REQUIRED`, status: "pending" },
-      { id: "ally", name: "Deploy AllyCoin", description: "Cross-coop membership token (REQUIRED)", status: "pending" },
+      { id: "ally", name: "Deploy AllyCoin", description: "Cross-commons membership token (REQUIRED)", status: "pending" },
       { id: "uc", name: "Deploy UnityCoin", description: "Main payment currency (REQUIRED)", status: "pending" },
     ];
 
@@ -189,7 +189,7 @@ export default function InitializePage() {
 
     // Always add member initialization and database save steps
     steps.push({ id: "init-member", name: "Initialize Admin", description: "Register deployer as member & mint initial SC", status: "pending" });
-    steps.push({ id: "save-db", name: "Save to Database", description: "Register co-op in system", status: "pending" });
+    steps.push({ id: "save-db", name: "Save to Database", description: "Register commons in system", status: "pending" });
 
     return steps;
   };
@@ -864,11 +864,11 @@ export default function InitializePage() {
         console.log("Saving co-op configuration to database...");
         
         // Ensure required fields have values
-        const coopName = coopConfig.name.trim() || "New Co-op";
+        const coopName = coopConfig.name.trim() || "New Commons";
         const coopShortName = coopConfig.shortName.trim() || coopName.substring(0, 20);
         const coopId = coopShortName.toLowerCase().replace(/\s+/g, "-");
         const coopTagline = coopConfig.tagline.trim() || "Building economic empowerment together";
-        const coopDescription = coopConfig.description.trim() || `${coopName} - A cooperative for economic empowerment.`;
+        const coopDescription = coopConfig.description.trim() || `${coopName} - A commons for economic empowerment.`;
         
         // Convert hex colors to Tailwind classes for consistency, or keep hex for custom colors
         const bgColor = coopConfig.primaryColor || "#2563eb";
@@ -925,12 +925,12 @@ export default function InitializePage() {
               id: "whyJoin",
               type: "textarea",
               label: "Why do you want to join?",
-              description: "Tell us about your interest in the cooperative",
+              description: "Tell us about your interest in the commons",
               placeholder: "Share your motivation...",
               required: true,
             },
           ],
-          charterText: `${coopName} Charter - Building economic empowerment through cooperative ownership.`,
+          charterText: `${coopName} Charter - Building economic empowerment through commons ownership.`,
           quorumPercent: coopConfig.quorumPercent,
           approvalThresholdPercent: coopConfig.approvalThresholdPercent,
           votingWindowDays: coopConfig.votingWindowDays,
@@ -1075,10 +1075,10 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
 
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Initialize Your Co-op
+            Initialize Your Commons
           </h1>
           <p className="text-lg text-muted-foreground">
-            Deploy smart contracts and configure your cooperative in one seamless flow
+            Deploy smart contracts and configure your commons in one seamless flow
           </p>
         </div>
 
@@ -1190,8 +1190,8 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
               <>
                 <Card>
                   <CardHeader>
-                    <CardTitle>Co-op Identity</CardTitle>
-                    <CardDescription>Basic information about your cooperative</CardDescription>
+                    <CardTitle>Commons Identity</CardTitle>
+                    <CardDescription>Basic information about your commons</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -1199,7 +1199,7 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
                         <Label htmlFor="name">Full Name *</Label>
                         <Input
                           id="name"
-                          placeholder="Cahootz Co-operative"
+                          placeholder="Cahootz Commons"
                           value={coopConfig.name}
                           onChange={(e) => setCoopConfig({ ...coopConfig, name: e.target.value })}
                           className={!coopConfig.name.trim() ? "border-red-500" : ""}
@@ -1233,7 +1233,7 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
                         className={!coopConfig.tagline.trim() ? "border-red-500" : ""}
                       />
                       <p className="text-xs text-muted-foreground mt-1">
-                        Required - appears in mobile app co-op list
+                        Required - appears in mobile app commons list
                       </p>
                     </div>
 
@@ -1241,7 +1241,7 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
                       <Label htmlFor="description">Description</Label>
                       <Textarea
                         id="description"
-                        placeholder="A brief description of your co-op's mission and purpose..."
+                        placeholder="A brief description of your commons' mission and purpose..."
                         rows={4}
                         value={coopConfig.description}
                         onChange={(e) => setCoopConfig({ ...coopConfig, description: e.target.value })}
@@ -1670,8 +1670,8 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Required Fields Missing</AlertTitle>
                     <AlertDescription>
-                      Please fill in the <strong>Co-op Name</strong>, <strong>Short Name</strong>, <strong>Tagline</strong>, <strong>Token Name</strong>, and <strong>Token Symbol</strong> fields above. 
-                      These are required for your co-op to appear in the mobile app.
+                      Please fill in the <strong>Commons Name</strong>, <strong>Short Name</strong>, <strong>Tagline</strong>, <strong>Token Name</strong>, and <strong>Token Symbol</strong> fields above.
+                      These are required for your commons to appear in the mobile app.
                     </AlertDescription>
                   </Alert>
                 )}
@@ -1748,7 +1748,7 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
                   <div>
                     <CardTitle className="text-green-900 dark:text-green-100">Deployment Successful!</CardTitle>
                     <CardDescription className="text-green-700 dark:text-green-300">
-                      Your co-op contracts are now live on {network === "baseSepolia" ? "Base Sepolia" : "Base Mainnet"}
+                      Your commons contracts are now live on {network === "baseSepolia" ? "Base Sepolia" : "Base Mainnet"}
                     </CardDescription>
                   </div>
                 </div>
@@ -1759,7 +1759,7 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
                   <div className="space-y-3">
                     {[
                       { name: "SoulaaniCoin (SC)", address: deployedContracts.soulaaniCoin, description: "Governance token", required: true },
-                      { name: "AllyCoin (ALLY)", address: deployedContracts.allyCoin, description: "Cross-coop membership", required: true },
+                      { name: "AllyCoin (ALLY)", address: deployedContracts.allyCoin, description: "Cross-commons membership", required: true },
                       { name: "UnityCoin (UC)", address: deployedContracts.unityCoin, description: "Main payment currency", required: true },
                       { name: "RedemptionVault", address: deployedContracts.redemptionVault, description: "Handles redemptions", required: false },
                       { name: "VerifiedStoreRegistry", address: deployedContracts.verifiedStoreRegistry, description: "Store verification", required: false },
@@ -1780,7 +1780,7 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
                 </div>
 
                 <div>
-                  <h3 className="font-semibold mb-3">Co-op Configuration</h3>
+                  <h3 className="font-semibold mb-3">Commons Configuration</h3>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div className="p-3 bg-muted/50 rounded">
                       <p className="text-muted-foreground">Name</p>
@@ -1812,10 +1812,10 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
                 {deploymentSteps.find(s => s.id === "save-db")?.status === "completed" && (
                   <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
                     <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    <AlertTitle className="text-green-900 dark:text-green-100">Co-op Registered!</AlertTitle>
+                    <AlertTitle className="text-green-900 dark:text-green-100">Commons Registered!</AlertTitle>
                     <AlertDescription className="text-green-800 dark:text-green-200">
-                      Your co-op <strong>{coopConfig.name}</strong> is now visible in the mobile app. 
-                      New members can discover and join your co-op through the onboarding flow.
+                      Your commons <strong>{coopConfig.name}</strong> is now visible in the mobile app.
+                      New members can discover and join your commons through the onboarding flow.
                     </AlertDescription>
                   </Alert>
                 )}
@@ -1825,8 +1825,8 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Database Save Failed</AlertTitle>
                     <AlertDescription>
-                      Your contracts deployed successfully, but we couldn't save your co-op to the database. 
-                      Your co-op won't appear in the mobile app until this is resolved. 
+                      Your contracts deployed successfully, but we couldn't save your commons to the database.
+                      Your commons won't appear in the mobile app until this is resolved.
                       Contact support with your deployment details.
                     </AlertDescription>
                   </Alert>
@@ -1836,7 +1836,7 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
                   <Info className="h-4 w-4 text-blue-600" />
                   <AlertTitle className="text-blue-900 dark:text-blue-100">Access Your Portal</AlertTitle>
                   <AlertDescription className="text-blue-800 dark:text-blue-200">
-                    <p className="mb-3">Your co-op portal is now ready! Log in to manage members, proposals, and treasury.</p>
+                    <p className="mb-3">Your commons portal is now ready! Log in to manage members, proposals, and treasury.</p>
                     <Button 
                       onClick={() => window.location.href = `/login?coopId=${coopConfig.shortName.toLowerCase()}`}
                       className="bg-blue-600 hover:bg-blue-700"

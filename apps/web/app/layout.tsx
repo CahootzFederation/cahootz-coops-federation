@@ -17,14 +17,14 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://cahootz.coop"),
   title: "Cahootz | The App for Community-Owned Economies",
   description:
-    "Join a co-op, support local businesses, earn participation rewards, vote on proposals, and fund the tools your community needs.",
+    "Join a commons, support local businesses, earn participation rewards, vote on proposals, and fund the tools your community needs.",
   keywords: [
-    "cooperative economy",
+    "commons economy",
     "community wealth building",
-    "cooperative economics",
+    "commons economics",
     "member-owned marketplace",
     "local businesses",
-    "co-op membership",
+    "commons membership",
     "community governance",
     "community investment",
     "shared ownership",
@@ -50,13 +50,13 @@ export const metadata: Metadata = {
     siteName: "Cahootz",
     title: "Cahootz | The App for Community-Owned Economies",
     description:
-      "Join a co-op, support local businesses, earn participation rewards, vote on proposals, and fund the tools your community needs.",
+      "Join a commons, support local businesses, earn participation rewards, vote on proposals, and fund the tools your community needs.",
   },
   twitter: {
     card: "summary_large_image",
     title: "Cahootz | The App for Community-Owned Economies",
     description:
-      "Join a co-op, support local businesses, earn participation rewards, vote on proposals, and fund the tools your community needs.",
+      "Join a commons, support local businesses, earn participation rewards, vote on proposals, and fund the tools your community needs.",
   },
   alternates: {
     canonical: "https://cahootz.coop",
@@ -98,7 +98,7 @@ export default function RootLayout({
               "@type": "Organization",
               name: "Cahootz",
               description:
-                "A platform for member-owned co-ops that connects applications, local marketplaces, governance, rewards, and shared community investment.",
+                "A platform for member-owned commons that connects applications, local marketplaces, governance, rewards, and shared community investment.",
               url: "https://cahootz.coop",
               logo: "https://cahootz.coop/cahootz-coops-mark.svg",
               foundingDate: "2024",
@@ -110,7 +110,7 @@ export default function RootLayout({
               },
               areaServed: "United States",
               knowsAbout: [
-                "Cooperative Economics",
+                "Commons Economics",
                 "Community Wealth Building",
                 "Member-Owned Marketplaces",
                 "Community Governance",

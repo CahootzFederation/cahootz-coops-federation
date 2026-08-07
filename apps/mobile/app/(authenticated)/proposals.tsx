@@ -470,7 +470,7 @@ function SubmitModal({ visible, onClose, walletAddress, primaryColor, accentColo
                     { n: 1, label: 'AI Review', desc: 'Our AI reviews for community alignment and feasibility', active: true },
                     { n: 2, label: 'Community Deliberation', desc: 'Members discuss, ask questions, and provide feedback', active: false },
                     { n: 3, label: 'Admin Decision', desc: 'Community admins approve or reject based on feedback', active: false },
-                    { n: 4, label: 'Funding', desc: 'Approved proposals receive funding from the co-op treasury', active: false },
+                    { n: 4, label: 'Funding', desc: 'Approved proposals receive funding from the commons treasury', active: false },
                   ].map(item => (
                     <View key={item.n} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
                       <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: item.active ? accentColor : C.cream200 }}>
@@ -832,7 +832,7 @@ export default function ProposalsScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View>
             <Text style={{ color: C.white, fontWeight: '700', fontSize: 20 }}>Community Proposals</Text>
-            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 2 }}>Submit and deliberate on co-op initiatives</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 2 }}>Submit and deliberate on commons initiatives</Text>
           </View>
           <TouchableOpacity onPress={() => setShowSubmit(true)} style={{ backgroundColor: C.whiteA20, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Plus size={16} color={C.white} />

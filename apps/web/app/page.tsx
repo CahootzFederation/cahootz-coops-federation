@@ -66,7 +66,7 @@ const CARD_GRADIENTS = [
 export const metadata: Metadata = {
   title: "Cahootz | The App for Community-Owned Economies",
   description:
-    "Join a co-op, support local businesses, earn participation rewards, vote on proposals, and fund the tools your community needs.",
+    "Join a commons, support local businesses, earn participation rewards, vote on proposals, and fund the tools your community needs.",
   alternates: {
     canonical: "https://cahootz.coop",
   },
@@ -78,7 +78,7 @@ const proofPoints = [
   {
     icon: <Store className="h-5 w-5" />,
     value: "Shop local",
-    label: "Find businesses in your co-op network and keep spending close to home.",
+    label: "Find businesses in your commons network and keep spending close to home.",
   },
   {
     icon: <Vote className="h-5 w-5" />,
@@ -104,7 +104,7 @@ const features: Feature[] = [
   {
     icon: <Smartphone className="h-6 w-6" />,
     label: "Member App",
-    title: "Your co-op in your pocket",
+    title: "Your commons in your pocket",
     description:
       "Join a network, see activity, manage your profile, and stay connected to the people and businesses building with you.",
     status: "live",
@@ -130,15 +130,15 @@ const features: Feature[] = [
     label: "SoulCoin & Rewards",
     title: "Membership people can verify",
     description:
-      "SoulCoin represents co-op membership, reputation, and governance rights without tying the page to one specific co-op token.",
+      "SoulCoin represents commons membership, reputation, and governance rights without tying the page to one specific commons token.",
     status: "live",
   },
   {
     icon: <Globe className="h-6 w-6" />,
-    label: "Public Co-op Pages",
+    label: "Public Commons Pages",
     title: "A front door people can share",
     description:
-      "Each co-op can publish its mission, stores, products, and join path so neighbors know where to plug in.",
+      "Each commons can publish its mission, stores, products, and join path so neighbors know where to plug in.",
     status: "live",
   },
   {
@@ -146,13 +146,13 @@ const features: Feature[] = [
     label: "Vendor Roadmap",
     title: "Fund features like a startup",
     description:
-      "Members can approve budgets for vendors to build new tools, integrations, pages, and workflows the co-op needs next.",
+      "Members can approve budgets for vendors to build new tools, integrations, pages, and workflows the commons needs next.",
     status: "coming-soon",
   },
 ];
 
 const memberBenefits = [
-  "Find co-op businesses and community activity in one place",
+  "Find commons businesses and community activity in one place",
   "Earn rewards for spending and participating in the network",
   "Vote on proposals that can fund real local projects and new features",
   "Follow decisions, treasury activity, and member updates",
@@ -162,7 +162,7 @@ const memberBenefits = [
 const businessBenefits = [
   "Reach members already looking for local places to support",
   "Accept community-powered payments and rewards",
-  "Show up on your co-op's public page and marketplace",
+  "Show up on your commons' public page and marketplace",
   "Build customer loyalty around ownership, not coupons",
   "Request support or paid feature work through transparent member proposals",
 ];
@@ -170,23 +170,23 @@ const businessBenefits = [
 const faqs = [
   {
     q: "What does Cahootz actually do?",
-    a: "Cahootz is the app layer for a cooperative economy. Members use it to join a co-op, find local businesses, earn participation rewards, submit and vote on proposals, and help fund the tools, vendors, and shared resources the co-op needs.",
+    a: "Cahootz is the app layer for a commons economy. Members use it to join a commons, find local businesses, earn participation rewards, submit and vote on proposals, and help fund the tools, vendors, and shared resources the commons needs.",
   },
   {
     q: "Is this just a loyalty app?",
-    a: "No. Rewards are only one part. The important difference is that the network also has membership, governance, a shared treasury, public co-op pages, and a way for members to fund vendors who can build useful features for the co-op.",
+    a: "No. Rewards are only one part. The important difference is that the network also has membership, governance, a shared treasury, public commons pages, and a way for members to fund vendors who can build useful features for the commons.",
   },
   {
     q: "What is SoulCoin?",
-    a: "SoulCoin is the membership and governance token model for a co-op. Each co-op can use its own SoulCoin to represent membership, reputation, and voting rights.",
+    a: "SoulCoin is the membership and governance token model for a commons. Each commons can use its own SoulCoin to represent membership, reputation, and voting rights.",
   },
   {
-    q: "Can a co-op fund new software or services?",
-    a: "Yes. A co-op can use proposals to define what it needs, vote on the budget, and hire vendors to build features, integrations, public pages, internal tools, events, or services that help the co-op grow like a member-owned startup.",
+    q: "Can a commons fund new software or services?",
+    a: "Yes. A commons can use proposals to define what it needs, vote on the budget, and hire vendors to build features, integrations, public pages, internal tools, events, or services that help the commons grow like a member-owned startup.",
   },
   {
     q: "Does AI control the money?",
-    a: "No. The AI helps evaluate proposals against rules the co-op sets. Members still define the rules, change the rules, and make the governing decisions.",
+    a: "No. The AI helps evaluate proposals against rules the commons sets. Members still define the rules, change the rules, and make the governing decisions.",
   },
   {
     q: "Why would a business join?",
@@ -194,7 +194,7 @@ const faqs = [
   },
   {
     q: "How do I start?",
-    a: "Join the waitlist as a member or add your business. If your co-op is already live, you can visit its public page and start there.",
+    a: "Join the waitlist as a member or add your business. If your commons is already live, you can visit its public page and start there.",
   },
 ];
 
@@ -217,7 +217,7 @@ export default async function HomePage() {
             />
             <div className="flex flex-col">
               <span className="text-xl font-bold leading-tight tracking-tight">Cahootz</span>
-              <span className="text-xs leading-tight text-slate-400">Cooperative network</span>
+              <span className="text-xs leading-tight text-slate-400">Commons network</span>
             </div>
           </Link>
 
@@ -293,8 +293,8 @@ export default async function HomePage() {
                 <div className="rounded-lg border border-[#f0975b]/25 bg-[#121212] p-4 text-white">
                   <div className="flex items-center justify-between border-b border-white/10 pb-4">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-widest text-[#ffb36f]">Today in your co-op</p>
-                      <h2 className="mt-1 text-xl font-black">Artist Co-op</h2>
+                      <p className="text-xs font-bold uppercase tracking-widest text-[#ffb36f]">Today in your commons</p>
+                      <h2 className="mt-1 text-xl font-black">Artist Commons</h2>
                     </div>
                     <div className="rounded-lg bg-[#f0975b] px-3 py-1 text-xs font-bold text-[#111111]">LIVE</div>
                   </div>
@@ -368,7 +368,7 @@ export default async function HomePage() {
             <div className="max-w-3xl">
               <p className="text-sm font-bold uppercase tracking-widest text-[#ffb36f]">What people use it for</p>
               <h2 className="mt-3 text-3xl font-black tracking-tight md:text-5xl">
-                One app for the work a co-op already has to do.
+                One app for the work a commons already has to do.
               </h2>
               <p className="mt-4 text-lg leading-8 text-slate-400">
                 Cahootz is where members, businesses, proposals, purchases, and public
@@ -414,7 +414,7 @@ export default async function HomePage() {
               <p className="mt-5 text-lg leading-8 text-slate-400">
                 Right now, you do the work, bring the customers, and someone else owns the system.
                 Cahootz is designed so the activity of the network strengthens the network:
-                members support businesses, businesses serve members, and the co-op treasury
+                members support businesses, businesses serve members, and the commons treasury
                 funds vendors, tools, and projects the community can see and govern.
               </p>
               <Link
@@ -428,7 +428,7 @@ export default async function HomePage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               {[
-                ["1", "Join", "Members join a co-op and get a clear place to participate."],
+                ["1", "Join", "Members join a commons and get a clear place to participate."],
                 ["2", "Spend", "Local purchases and business activity happen inside the network."],
                 ["3", "Decide", "Members propose, debate, and vote on what should be funded."],
                 ["4", "Build", "The treasury can pay vendors to ship features, services, and projects."],
@@ -457,7 +457,7 @@ export default async function HomePage() {
                   You write the rules. The AI follows them.
                 </h2>
                 <p className="mt-5 text-lg leading-8 text-slate-400">
-                  AI helps screen proposals against the co-op's charter, budget, and reserve
+                  AI helps screen proposals against the commons' charter, budget, and reserve
                   rules. It does not replace members. It makes the reasoning visible so people
                   can make better decisions faster.
                 </p>
@@ -470,7 +470,7 @@ export default async function HomePage() {
                     "Submit funding proposals with budget and impact details",
                     "Comment before a vote so objections are visible early",
                     "Hire vendors to build member-approved tools and services",
-                    "Vote according to the co-op's membership rules",
+                    "Vote according to the commons' membership rules",
                     "Review AI scoring, charter alignment, and decision history",
                   ].map((item) => (
                     <li key={item} className="flex items-start gap-3">
@@ -540,10 +540,10 @@ export default async function HomePage() {
               <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
                 <div>
                   <p className="text-sm font-bold uppercase tracking-widest text-[#ffb36f]">Active networks</p>
-                  <h2 className="mt-3 text-3xl font-black tracking-tight md:text-5xl">Visit a live co-op.</h2>
+                  <h2 className="mt-3 text-3xl font-black tracking-tight md:text-5xl">Visit a live commons.</h2>
                 </div>
                 <p className="max-w-xl text-slate-400">
-                  Apply to join any active co-op. When a co-op has published its public page,
+                  Apply to join any active commons. When a commons has published its public page,
                   you can also read its community newsletter.
                 </p>
               </div>
@@ -600,7 +600,7 @@ export default async function HomePage() {
                     Notes from the work of building Cahootz.
                   </h2>
                   <p className="mt-4 text-lg leading-8 text-slate-400">
-                    Product updates, co-op playbooks, and practical thinking about
+                    Product updates, commons playbooks, and practical thinking about
                     community-owned economies. Draft in Notion, publish on the site.
                   </p>
                 </div>
@@ -630,16 +630,16 @@ export default async function HomePage() {
             <div>
               <p className="text-sm font-black uppercase tracking-widest text-[#111111]/70">Join Cahootz</p>
               <h2 className="mt-3 text-4xl font-black tracking-tight md:text-5xl">
-                Apply to a co-op from the website.
+                Apply to a commons from the website.
               </h2>
               <p className="mt-5 text-lg leading-8 text-[#111111]/75">
-                Pick a live co-op, answer the questions that community configured,
-                and get a real application reference for your records. If your co-op
+                Pick a live commons, answer the questions that community configured,
+                and get a real application reference for your records. If your commons
                 is not live yet, the waitlist can capture the one you want to create.
               </p>
               <div className="mt-8 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
                 {[
-                  "Choose a co-op",
+                  "Choose a commons",
                   "Answer its questions",
                   "Submit for review",
                 ].map((step) => (
@@ -659,9 +659,9 @@ export default async function HomePage() {
 
               <div className="grid gap-6 lg:grid-cols-2">
                 <div className="rounded-lg border border-[#111111]/10 bg-white/35 p-6">
-                  <h3 className="text-2xl font-black">Not seeing your co-op?</h3>
+                  <h3 className="text-2xl font-black">Not seeing your commons?</h3>
                   <p className="mt-2 text-sm leading-6 text-[#111111]/70">
-                    Join the list and tell us the co-op you want to join or create next.
+                    Join the list and tell us the commons you want to join or create next.
                   </p>
                   <div className="mt-5">
                     <Suspense fallback={<div className="h-80 animate-pulse rounded-lg bg-white/30" />}>
@@ -713,7 +713,7 @@ export default async function HomePage() {
           </div>
           <div className="flex flex-col items-center gap-3 text-center md:items-end md:text-right">
             <p className="text-sm text-slate-400">
-              The community platform for co-ops that want local spending, governance, and ownership in one loop.
+              The community platform for commons that want local spending, governance, and ownership in one loop.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4 md:justify-end">
               <Link

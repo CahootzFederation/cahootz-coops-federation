@@ -566,7 +566,7 @@ export function WealthCalculator() {
                       Years 3-5: Housing Access
                     </div>
                     <div className="text-xs text-slate-300">
-                      Convert SC into housing equity or co-op shares
+                      Convert SC into housing equity or commons shares
                     </div>
                   </div>
                   <div className="rounded bg-slate-600 p-3">

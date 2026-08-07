@@ -148,7 +148,7 @@ export default function NewsletterSubmitPage() {
             Submit to the newsletter
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-            Send articles, interviews, recaps, announcements, and events for this co-op's community paper.
+            Send articles, interviews, recaps, announcements, and events for this commons' community paper.
           </p>
         </div>
 
@@ -231,7 +231,7 @@ export default function NewsletterSubmitPage() {
               {type === "event" ? "Event Submission" : "Article Submission"}
             </CardTitle>
             <CardDescription className="text-zinc-500">
-              This goes to the co-op newsletter editor queue.
+              This goes to the commons newsletter editor queue.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -342,7 +342,7 @@ export default function NewsletterSubmitPage() {
                 onChange={(event) => updateField("summary", event.target.value)}
                 placeholder={
                   type === "event"
-                    ? "What is happening, who should show up, and why it matters to the co-op..."
+                    ? "What is happening, who should show up, and why it matters to the commons..."
                     : "Tell the story with the key people, business names, outcomes, and next step..."
                 }
                 maxLength={2000}

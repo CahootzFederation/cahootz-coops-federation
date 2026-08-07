@@ -274,7 +274,7 @@ export default function NewsletterSubmissionsPage() {
       <div className="mx-auto max-w-3xl">
         <Card className="border-zinc-800 bg-zinc-950/70 shadow-none">
           <CardContent className="p-6 text-sm text-zinc-400">
-            Only co-op admins can review newsletter submissions.
+            Only commons admins can review newsletter submissions.
           </CardContent>
         </Card>
       </div>

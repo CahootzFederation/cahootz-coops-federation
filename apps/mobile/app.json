@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "Cahootz Coop",
+    "name": "Cahootz Commons",
     "slug": "cahootz-coop",
     "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "newArchEnabled": true,
-    "scheme": "coop",
+    "scheme": "commons",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/splash.png",
@@ -55,21 +55,21 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Cahootz Coop uses your camera to scan QR codes and let you take profile, store, or product photos and short videos for upload."
+          "cameraPermission": "Cahootz Commons uses your camera to scan QR codes and let you take profile, store, or product photos and short videos for upload."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Cahootz Coop uses your photo library so you can choose profile, store, product, or gallery photos and short videos to upload.",
-          "cameraPermission": "Cahootz Coop uses your camera to let you take profile, store, or product photos and short videos for upload.",
-          "microphonePermission": "Cahootz Coop uses your microphone only when you record a short video, so the uploaded clip can include audio."
+          "photosPermission": "Cahootz Commons uses your photo library so you can choose profile, store, product, or gallery photos and short videos to upload.",
+          "cameraPermission": "Cahootz Commons uses your camera to let you take profile, store, or product photos and short videos for upload.",
+          "microphonePermission": "Cahootz Commons uses your microphone only when you record a short video, so the uploaded clip can include audio."
         }
       ],
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Allow Cahootz Coop to use Face ID for authentication."
+          "faceIDPermission": "Allow Cahootz Commons to use Face ID for authentication."
         }
       ]
     ],

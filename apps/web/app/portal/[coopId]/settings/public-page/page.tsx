@@ -53,7 +53,7 @@ type RecruitmentTemplate = "wealth" | "ownership" | "business";
 const recruitmentTemplates: Record<RecruitmentTemplate, { label: string; description: string }> = {
   wealth: {
     label: "Generational Wealth",
-    description: "High-energy member pitch for co-ops building shared ownership and legacy.",
+    description: "High-energy member pitch for commons building shared ownership and legacy.",
   },
   ownership: {
     label: "Local Ownership",
@@ -61,7 +61,7 @@ const recruitmentTemplates: Record<RecruitmentTemplate, { label: string; descrip
   },
   business: {
     label: "Business Builder",
-    description: "Recruit people who want to back, buy from, and grow co-op businesses.",
+    description: "Recruit people who want to back, buy from, and grow commons businesses.",
   },
 };
 
@@ -356,7 +356,7 @@ export default function PublicPageSettingsPage() {
   };
 
   const applyRecruitmentTemplate = (template: RecruitmentTemplate) => {
-    const coopName = name || "your co-op";
+    const coopName = name || "your commons";
 
     setPrimaryCtaLabel("Apply to Join");
     setPrimaryCtaUrl(`/${coopId}/application`);
@@ -371,33 +371,33 @@ export default function PublicPageSettingsPage() {
       );
       setAboutTitle("Why Join");
       setAboutBody(
-        `Join ${coopName} if you are ready to help build something our people can own. Members back co-op businesses, help decide what gets funded, and grow a shared economic engine designed for stability, opportunity, and legacy.`
+        `Join ${coopName} if you are ready to help build something our people can own. Members back commons businesses, help decide what gets funded, and grow a shared economic engine designed for stability, opportunity, and legacy.`
       );
       setMissionBody(
         [
-          "Grow a member-owned marketplace where everyday spending strengthens the co-op.",
+          "Grow a member-owned marketplace where everyday spending strengthens the commons.",
           "Build a community wealth fund that can support businesses, services, projects, and long-term assets.",
-          "Give members a voice in how resources move, who gets backed, and what future the co-op is building.",
+          "Give members a voice in how resources move, who gets backed, and what future the commons is building.",
         ].join("\n")
       );
       setEligibilityTitle("Who Should Apply");
       setEligibilityBody(
-        "Apply if you want ownership, accountability, and a seat at the table while this co-op builds economic power for members and the next generation."
+        "Apply if you want ownership, accountability, and a seat at the table while this commons builds economic power for members and the next generation."
       );
       setFaqs([
         {
           question: "What happens after I apply?",
           answer:
-            "Your application goes to the co-op for review. If approved, you can participate as a member and help shape what gets built next.",
+            "Your application goes to the commons for review. If approved, you can participate as a member and help shape what gets built next.",
         },
         {
-          question: "Do I need co-op experience?",
+          question: "Do I need commons experience?",
           answer:
             "No. You need alignment, seriousness, and a willingness to participate in a member-owned economy.",
         },
       ]);
       setNewspaperIntro(
-        "Stories, events, classifieds, business notes, and public notices from the co-op."
+        "Stories, events, classifieds, business notes, and public notices from the commons."
       );
       setNewsletterEmailPreheader(
         `This week's stories, events, and business notes from ${coopName}.`
@@ -407,8 +407,8 @@ export default function PublicPageSettingsPage() {
           type: "article",
           title: `Why ${coopName} is organizing now`,
           summary:
-            "A front-page note on what the co-op is building, who it is for, and why members are being invited to apply.",
-          date: "From the co-op desk",
+            "A front-page note on what the commons is building, who it is for, and why members are being invited to apply.",
+          date: "From the commons desk",
           byline: "Membership committee",
         },
         {
@@ -422,7 +422,7 @@ export default function PublicPageSettingsPage() {
           type: "business",
           title: "Member business spotlight",
           summary:
-            "Use this space to feature a business, creator, service, or project moving the co-op economy forward.",
+            "Use this space to feature a business, creator, service, or project moving the commons economy forward.",
         },
       ]);
       setSeoTitle(`${coopName} membership application`);
@@ -436,7 +436,7 @@ export default function PublicPageSettingsPage() {
       setHeroSubtitle(
         `${coopName} brings members together to pool demand, support local businesses, fund shared priorities, and make decisions as owners.`
       );
-      setAboutTitle("A Co-op Built for Members");
+      setAboutTitle("A Commons Built for Members");
       setAboutBody(
         `Membership in ${coopName} is a way to turn community participation into shared leverage. Apply to help grow an economy where members can support each other, vote on priorities, and build useful local infrastructure.`
       );
@@ -461,41 +461,41 @@ export default function PublicPageSettingsPage() {
           type: "article",
           title: `What ${coopName} is building this month`,
           summary:
-            "A public update on member priorities, funded ideas, and the work happening inside the co-op.",
+            "A public update on member priorities, funded ideas, and the work happening inside the commons.",
           date: "Latest issue",
         },
         {
           type: "announcement",
           title: "Proposal window open",
           summary:
-            "Members and applicants can follow what the co-op is considering next.",
+            "Members and applicants can follow what the commons is considering next.",
         },
       ]);
       return;
     }
 
-    setTagline("Help grow the businesses your co-op believes in");
+    setTagline("Help grow the businesses your commons believes in");
     setHeroTitle(`Build with ${coopName}`);
     setHeroSubtitle(
-      `${coopName} is recruiting members who want to buy from, promote, fund, and grow a stronger co-op marketplace.`
+      `${coopName} is recruiting members who want to buy from, promote, fund, and grow a stronger commons marketplace.`
     );
     setAboutTitle("Turn Support into Ownership");
     setAboutBody(
-      `Apply to ${coopName} if you want your support for local businesses to become part of a bigger ownership strategy. Members help bring customers, proposals, rewards, and governance into one co-op economy.`
+      `Apply to ${coopName} if you want your support for local businesses to become part of a bigger ownership strategy. Members help bring customers, proposals, rewards, and governance into one commons economy.`
     );
     setMissionBody(
       [
         "Help member businesses find customers and community support.",
-        "Use co-op activity to fund tools, services, and new ventures.",
+        "Use commons activity to fund tools, services, and new ventures.",
         "Create a marketplace where members can see their participation compound.",
       ].join("\n")
     );
     setEligibilityTitle("Who Should Apply");
     setEligibilityBody(
-      "Apply if you are ready to support member businesses, invite serious builders, and help the co-op marketplace grow."
+      "Apply if you are ready to support member businesses, invite serious builders, and help the commons marketplace grow."
     );
     setFaqs([]);
-    setNewspaperIntro("Stories, classifieds, and business updates from the co-op marketplace.");
+    setNewspaperIntro("Stories, classifieds, and business updates from the commons marketplace.");
     setNewsletterEmailPreheader(
       `Business updates, classifieds, and marketplace stories from ${coopName}.`
     );
@@ -510,13 +510,13 @@ export default function PublicPageSettingsPage() {
         type: "article",
         title: "How member spending grows the marketplace",
         summary:
-          "Explain how buying from co-op businesses helps create more leverage for members and operators.",
+          "Explain how buying from commons businesses helps create more leverage for members and operators.",
       },
       {
         type: "event",
         title: "Vendor and member mixer",
         summary:
-          "Invite business owners, applicants, and members to connect around what the co-op needs next.",
+          "Invite business owners, applicants, and members to connect around what the commons needs next.",
         date: "Upcoming",
       },
     ]);
@@ -553,16 +553,16 @@ export default function PublicPageSettingsPage() {
         <div>
           <h1 className="text-3xl font-bold">Public Page Not Set Up</h1>
           <p className="text-gray-500 mt-1">
-            Create your coop&apos;s public page newsletter to get started
+            Create your commons&apos; public page newsletter to get started
           </p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Bootstrap from CoopConfig</CardTitle>
+              <CardTitle>Bootstrap from Commons Configuration</CardTitle>
               <CardDescription>
-                Copy existing settings from your CoopConfig to pre-fill the newsletter with your coop&apos;s name, tagline, mission, and branding.
+                Copy existing settings from your commons configuration to pre-fill the newsletter with your commons&apos; name, tagline, mission, and branding.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -571,7 +571,7 @@ export default function PublicPageSettingsPage() {
                 disabled={bootstrap.isPending || createBlank.isPending}
                 className="w-full"
               >
-                {bootstrap.isPending ? "Bootstrapping..." : "Bootstrap from CoopConfig"}
+                {bootstrap.isPending ? "Bootstrapping..." : "Bootstrap from Commons Configuration"}
               </Button>
             </CardContent>
           </Card>
@@ -613,7 +613,7 @@ export default function PublicPageSettingsPage() {
         <div>
           <h1 className="text-3xl font-bold">Public Page Settings</h1>
           <p className="text-gray-500 mt-1">
-            Manage your coop&apos;s public newsletter and application pitch
+            Manage your commons&apos; public newsletter and application pitch
           </p>
         </div>
         <div className="flex gap-3">
@@ -713,7 +713,7 @@ export default function PublicPageSettingsPage() {
             Newsletter
           </CardTitle>
           <CardDescription>
-            Publish co-op stories, event notices, announcements, classifieds, and business notes on the newsletter.
+            Publish commons stories, event notices, announcements, classifieds, and business notes on the newsletter.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -730,7 +730,7 @@ export default function PublicPageSettingsPage() {
             <Textarea
               value={newspaperIntro}
               onChange={(e) => setNewspaperIntro(e.target.value)}
-              placeholder="Stories, events, business updates, classifieds, and notices from the co-op."
+              placeholder="Stories, events, business updates, classifieds, and notices from the commons."
               rows={3}
             />
           </div>
@@ -852,7 +852,7 @@ export default function PublicPageSettingsPage() {
                   <Input
                     value={post.title}
                     onChange={(e) => updateCommunityPost(index, "title", e.target.value)}
-                    placeholder="Co-op launches youth business night"
+                    placeholder="Commons launches youth business night"
                   />
                 </div>
               </div>
@@ -946,11 +946,11 @@ export default function PublicPageSettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label>Coop Name</Label>
+            <Label>Commons Name</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Cahootz Co-op"
+              placeholder="Cahootz Commons"
             />
           </div>
           <div>
@@ -1084,7 +1084,7 @@ export default function PublicPageSettingsPage() {
             <Textarea
               value={aboutBody}
               onChange={(e) => setAboutBody(e.target.value)}
-              placeholder="Tell future members why this co-op matters..."
+              placeholder="Tell future members why this commons matters..."
               rows={6}
             />
           </div>
@@ -1110,7 +1110,7 @@ export default function PublicPageSettingsPage() {
             <Textarea
               value={eligibilityBody}
               onChange={(e) => setEligibilityBody(e.target.value)}
-              placeholder="Describe the people this co-op wants to recruit..."
+              placeholder="Describe the people this commons wants to recruit..."
               rows={6}
             />
           </div>
@@ -1122,13 +1122,13 @@ export default function PublicPageSettingsPage() {
         <CardHeader>
           <CardTitle>Member Benefits</CardTitle>
           <CardDescription>
-            These are controlled by the co-op config so every application and newsletter uses the same benefits.
+            These are controlled by the commons config so every application and newsletter uses the same benefits.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Button type="button" variant="outline" asChild>
             <Link href={`/portal/${coopId}/proposals/config`}>
-              Edit Member Benefits in Co-op Config
+              Edit Member Benefits in Commons Config
             </Link>
           </Button>
         </CardContent>
@@ -1300,7 +1300,7 @@ export default function PublicPageSettingsPage() {
             <Input
               value={seoTitle}
               onChange={(e) => setSeoTitle(e.target.value)}
-              placeholder="Leave empty to use coop name"
+              placeholder="Leave empty to use commons name"
             />
           </div>
           <div>

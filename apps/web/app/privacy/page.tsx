@@ -13,7 +13,7 @@ interface PrivacySection {
 export const metadata: Metadata = {
   title: "Privacy Policy | Cahootz",
   description:
-    "Privacy policy for the Cahootz Coops app for mobile devices, web browsers, and related services.",
+    "Privacy policy for the Cahootz Commons app for mobile devices, web browsers, and related services.",
   alternates: {
     canonical: "https://cahootz.coop/privacy",
   },
@@ -154,10 +154,10 @@ export default function PrivacyPage() {
               Privacy Policy
             </h1>
             <p className="mt-5 text-lg leading-8 text-slate-400">
-              This privacy policy applies to the Cahootz Coops app for mobile
+              This privacy policy applies to the Cahootz Commons app for mobile
               devices and web browsers, together with any related services
-              operated by Cahootz Coop (collectively, the &quot;Application&quot;).
-              Cahootz Coop is hereby referred to as the &quot;Service Provider&quot;.
+              operated by Cahootz Commons (collectively, the &quot;Application&quot;).
+              Cahootz Commons is hereby referred to as the &quot;Service Provider&quot;.
             </p>
           </div>
         </section>

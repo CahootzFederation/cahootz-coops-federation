@@ -18,7 +18,7 @@ const statusTabs: { value: StatusFilter; label: string; description: string }[] 
   { value: "active",    label: "Active",    description: "Proposals in review or currently being funded" },
   { value: "submitted", label: "New",       description: "Freshly submitted, awaiting AI review" },
   { value: "votable",   label: "Voting",    description: "Passed AI review, open for community deliberation" },
-  { value: "approved",  label: "Approved",  description: "Approved by the coop, awaiting funding" },
+  { value: "approved",  label: "Approved",  description: "Approved by the commons, awaiting funding" },
   { value: "funded",    label: "Funded",    description: "Funded and in progress" },
   { value: "rejected",  label: "Rejected",  description: "Did not pass review or vote" },
   { value: "all",       label: "Archive",   description: "All proposals including withdrawn and failed" },

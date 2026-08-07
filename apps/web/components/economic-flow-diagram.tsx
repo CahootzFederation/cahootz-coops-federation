@@ -44,7 +44,7 @@ export function EconomicFlowDiagram() {
                   fontSize="14"
                   fontWeight="bold"
                 >
-                  Cahootz Co-op
+                  Cahootz Commons
                 </text>
                 <text
                   x="500"

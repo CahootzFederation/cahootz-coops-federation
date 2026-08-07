@@ -22,11 +22,11 @@ export function MobileAppRedirect({
           <div className="rounded-full bg-orange-500/20 p-3">
             <Users className="h-6 w-6 text-orange-400" />
           </div>
-          <h3 className="text-xl font-semibold text-white">Join a Cooperative</h3>
+          <h3 className="text-xl font-semibold text-white">Join a Commons</h3>
         </div>
-        
+
         <p className="mb-6 text-slate-300">
-          Ready to join? Submit an application for a live co-op directly from the website.
+          Ready to join? Submit an application for a live commons directly from the website.
         </p>
 
         <button
@@ -38,7 +38,7 @@ export function MobileAppRedirect({
         </button>
 
         <p className="mt-4 text-center text-sm text-slate-400">
-          Choose a co-op, answer its questions, and get a reference number.
+          Choose a commons, answer its questions, and get a reference number.
         </p>
       </div>
     );

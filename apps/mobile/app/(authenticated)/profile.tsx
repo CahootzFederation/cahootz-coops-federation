@@ -224,7 +224,7 @@ export default function ProfileScreen() {
 
             {user?.coop && (
               <View className="px-5 py-4">
-                <Text className="text-xs text-gray-400 uppercase tracking-wide mb-1">Cooperative</Text>
+                <Text className="text-xs text-gray-400 uppercase tracking-wide mb-1">Commons</Text>
                 <Text className="text-base text-gray-900 font-medium">{user.coop.name}</Text>
               </View>
             )}

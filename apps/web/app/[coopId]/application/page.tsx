@@ -32,7 +32,7 @@ interface CoopConfigInfo {
 }
 
 const DEFAULT_CAHOOTZ_DESCRIPTION =
-  "Cahootz Co-ops are member-owned economic communities built to help people create more stability, ownership, and opportunity together. Members support businesses, projects, and services inside their co-op while helping fund long-term investments like housing, infrastructure, education, and new businesses. By joining, you become part of a network focused on building shared economic power instead of isolated survival.";
+  "Cahootz Commons are member-owned economic communities built to help people create more stability, ownership, and opportunity together. Members support businesses, projects, and services inside their commons while helping fund long-term investments like housing, infrastructure, education, and new businesses. By joining, you become part of a network focused on building shared economic power instead of isolated survival.";
 
 async function fetchTrpc<T>(path: string, input: Record<string, unknown>): Promise<T | null> {
   try {
@@ -125,7 +125,7 @@ export default async function CoopApplicationPage({ params }: PageProps) {
   const tagline =
     publicInfo?.heroSubtitle ||
     coopConfig?.tagline ||
-    "Apply for membership in a cooperative built around shared ownership.";
+    "Apply for membership in a commons built around shared ownership.";
   const description = publicInfo?.aboutBody || coopConfig?.description || DEFAULT_CAHOOTZ_DESCRIPTION;
   const mission = publicInfo?.missionBody || coopConfig?.displayMission || description;
   const configFeatures = normalizeFeatures(coopConfig?.displayFeatures);
@@ -141,7 +141,7 @@ export default async function CoopApplicationPage({ params }: PageProps) {
     features,
     eligibility:
       coopConfig?.eligibility ||
-      "Open to applicants who align with the cooperative mission and community standards.",
+      "Open to applicants who align with the commons mission and community standards.",
     bgColor: coopConfig?.bgColor || "#0f766e",
     accentColor,
   };
@@ -182,8 +182,8 @@ export default async function CoopApplicationPage({ params }: PageProps) {
             <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
               {[
                 { icon: BadgeCheck, title: "Apply", body: "Share your basic profile and member answers." },
-                { icon: Route, title: "Review", body: "Your co-op receives it in the application queue." },
-                { icon: Landmark, title: "Join", body: "Approved members can participate in the co-op economy." },
+                { icon: Route, title: "Review", body: "Your commons receives it in the application queue." },
+                { icon: Landmark, title: "Join", body: "Approved members can participate in the commons economy." },
               ].map((item) => (
                 <div key={item.title} className="rounded-lg border border-[#121212]/10 bg-white p-4">
                   <item.icon className="h-5 w-5" style={{ color: accentColor }} />

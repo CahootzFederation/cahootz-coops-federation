@@ -16,7 +16,7 @@ type EmailStep = 'email' | 'code';
 type OnboardingStep = 'connect' | 'verify' | 'profile' | 'complete';
 
 const MISSING_COOP_ID_MESSAGE =
-  'This login link is missing a co-op ID. Please open the login link from your co-op portal.';
+  'This login link is missing a commons ID. Please open the login link from your commons portal.';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -67,7 +67,7 @@ export default function LoginPage() {
     }
   }, [isConnected, address, currentStep]);
 
-  const coopName = coopConfig?.name || 'Co-op';
+  const coopName = coopConfig?.name || 'Commons';
 
   const requireCoopId = () => {
     if (coopId) {
@@ -289,9 +289,9 @@ export default function LoginPage() {
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardTitle className="text-2xl">Missing Co-op ID</CardTitle>
+            <CardTitle className="text-2xl">Missing Commons ID</CardTitle>
             <CardDescription>
-              We need to know which co-op you are signing in to before showing the login form.
+              We need to know which commons you are signing in to before showing the login form.
             </CardDescription>
           </CardHeader>
           <CardContent>

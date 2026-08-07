@@ -63,7 +63,7 @@ export default function ProfileForm({ coopId }: ProfileFormProps) {
       const targetCoopId = coopId;
 
       if (!targetCoopId) {
-        setError('No co-op ID found. Please return to the login page and try again.');
+        setError('No commons ID found. Please return to the login page and try again.');
         setIsSubmitting(false);
         return;
       }

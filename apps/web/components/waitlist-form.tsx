@@ -114,7 +114,7 @@ function WaitlistFormContent({
                   type="text"
                   name="suggestedCoop"
                   list={`coop-options-${variant}`}
-                  placeholder="Which coop do you want to join? *"
+                  placeholder="Which commons do you want to join? *"
                   value={suggestedCoop}
                   onChange={(event) => setSuggestedCoop(event.target.value)}
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-300/50"
@@ -142,7 +142,7 @@ function WaitlistFormContent({
               <input
                 type="text"
                 name="customCoopSuggestion"
-                placeholder="Or suggest a new coop idea (optional)"
+                placeholder="Or suggest a new commons idea (optional)"
                 value={customCoopSuggestion}
                 onChange={(event) => setCustomCoopSuggestion(event.target.value)}
                 className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-300/50"
@@ -199,7 +199,7 @@ function WaitlistFormContent({
           )}
 
           <p className="text-center text-xs text-slate-500">
-            * Required: Choose an active coop or suggest a new coop below.
+            * Required: Choose an active commons or suggest a new commons below.
           </p>
         </form>
       </div>
@@ -231,7 +231,7 @@ function WaitlistFormContent({
             type="text"
             name="suggestedCoop"
             list={`coop-options-${variant}`}
-            placeholder="Which coop do you want to join? *"
+            placeholder="Which commons do you want to join? *"
             value={suggestedCoop}
             onChange={(event) => setSuggestedCoop(event.target.value)}
             className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-300/50"
@@ -249,7 +249,7 @@ function WaitlistFormContent({
           <input
             type="text"
             name="customCoopSuggestion"
-            placeholder="Or suggest a new coop idea (optional)"
+            placeholder="Or suggest a new commons idea (optional)"
             value={customCoopSuggestion}
             onChange={(event) => setCustomCoopSuggestion(event.target.value)}
             className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-300/50"
@@ -335,7 +335,7 @@ function WaitlistFormContent({
         )}
 
         <p className="text-xs leading-6 text-slate-500">
-          * Required: Pick an active coop or suggest a new coop above.
+          * Required: Pick an active commons or suggest a new commons above.
         </p>
       </form>
     </div>

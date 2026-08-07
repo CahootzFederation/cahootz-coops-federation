@@ -39,7 +39,7 @@ const emptyShippingAddress: ShippingAddressFields = {
 };
 
 function formatStatus(value?: string | null) {
-  if (!value) return "No coop membership";
+  if (!value) return "No commons membership";
   return value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
@@ -265,7 +265,7 @@ export default function CheckoutPage() {
   const appliesTreasuryFee = previewCheckout.data?.appliesTreasuryFee ?? false;
   const isCoopCheckout = isSignedInCheckout && (isActiveCoopMember || appliesTreasuryFee);
   const checkoutMode = isCoopCheckout
-    ? "Coop member checkout"
+    ? "Commons member checkout"
     : auth.isAuthenticated
       ? "Signed-in checkout"
       : "Guest checkout";
@@ -273,14 +273,14 @@ export default function CheckoutPage() {
     ? "Checking portal session"
     : auth.isAuthenticated
       ? isActiveCoopMember
-        ? "Coop member checkout"
+        ? "Commons member checkout"
         : "Signed-in checkout"
       : "Guest shopper";
   const identityDescription = auth.isLoading
     ? "Looking for an active portal session."
     : auth.isAuthenticated
       ? isActiveCoopMember
-        ? "This purchase will use your coop membership for checkout."
+        ? "This purchase will use your commons membership for checkout."
         : "This purchase will use your signed-in account without a Wealth Fund treasury fee."
       : "No portal session detected. This public purchase will check out as a guest.";
   const displayName = checkoutUser?.name || checkoutUser?.email || shortenAddress(auth.address);
@@ -336,7 +336,7 @@ export default function CheckoutPage() {
               </span>
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Coop status</span>
+              <span className="text-muted-foreground">Commons status</span>
               <Badge variant="outline" className={getStatusClasses(coopStatus)}>
                 {userStatusLoading ? "Loading..." : formatStatus(coopStatus)}
               </Badge>
@@ -344,7 +344,7 @@ export default function CheckoutPage() {
           </>
         ) : (
           <div className="rounded-md border bg-muted/40 p-3 text-muted-foreground">
-            <p>Guest checkout has no coop membership status.</p>
+            <p>Guest checkout has no commons membership status.</p>
             <Link href="/" className="mt-2 inline-flex font-medium text-foreground underline underline-offset-4">
               Apply on the home page
             </Link>

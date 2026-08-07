@@ -134,17 +134,17 @@ function mapConfigToCoopOption(config: {
   return {
     id: config.coopId,
     name: config.name || config.coopId,
-    tagline: config.tagline || "A member-owned cooperative powered by Cahootz.",
+    tagline: config.tagline || "A member-owned commons powered by Cahootz.",
     description:
       config.description ||
-      "Apply to join this cooperative and participate in a member-owned local economy.",
+      "Apply to join this commons and participate in a member-owned local economy.",
     mission: config.displayMission || config.description || "",
     features: Array.isArray(config.displayFeatures)
       ? (config.displayFeatures as CoopOption["features"])
       : [],
     eligibility:
       config.eligibility ||
-      "Open to applicants who align with the cooperative mission and community standards.",
+      "Open to applicants who align with the commons mission and community standards.",
     bgColor: config.bgColor || "#111111",
     accentColor: config.accentColor || "#f59e0b",
   };
@@ -288,7 +288,7 @@ export function MemberApplicationFlow({
 
   const validateAgreements = () => {
     if (!formData.agreeToCoopValues || !formData.agreeToTerms || !formData.agreeToPrivacy) {
-      setErrorMessage("Please accept the co-op values, terms, and privacy policy.");
+      setErrorMessage("Please accept the commons values, terms, and privacy policy.");
       return false;
     }
     return true;
@@ -298,7 +298,7 @@ export function MemberApplicationFlow({
     const currentStep = stepKeys[step];
 
     if (currentStep === "choose" && !selectedCoopId) {
-      setErrorMessage("Choose the co-op you want to apply to.");
+      setErrorMessage("Choose the commons you want to apply to.");
       return;
     }
 
@@ -316,7 +316,7 @@ export function MemberApplicationFlow({
 
   const handleSubmit = async () => {
     if (!selectedCoopId) {
-      setErrorMessage("Choose the co-op you want to apply to.");
+      setErrorMessage("Choose the commons you want to apply to.");
       setStep(0);
       return;
     }
@@ -420,7 +420,7 @@ export function MemberApplicationFlow({
               Member application
             </p>
             <h3 className="mt-2 text-2xl font-black">
-              {lockedCoopId ? `Apply to ${selectedCoop?.name ?? "this co-op"}` : "Apply to a live co-op"}
+              {lockedCoopId ? `Apply to ${selectedCoop?.name ?? "this commons"}` : "Apply to a live commons"}
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-300">
               {lockedCoopId
@@ -565,7 +565,7 @@ function CoopSelectionStep({
       <div className="flex min-h-64 items-center justify-center rounded-lg border border-[#111111]/10 bg-[#111111]/[0.03]">
         <div className="flex items-center gap-3 text-sm font-semibold text-[#111111]/70">
           <Loader2 className="h-5 w-5 animate-spin" />
-          Loading available co-ops
+          Loading available commons
         </div>
       </div>
     );
@@ -576,7 +576,7 @@ function CoopSelectionStep({
       <div className="rounded-lg border border-[#111111]/10 bg-[#111111]/[0.03] p-5">
         <h4 className="text-lg font-black">No live applications yet</h4>
         <p className="mt-2 text-sm leading-6 text-[#111111]/65">
-          Join the waitlist below and tell us which co-op you want to create or join.
+          Join the waitlist below and tell us which commons you want to create or join.
         </p>
       </div>
     );
@@ -584,9 +584,9 @@ function CoopSelectionStep({
 
   return (
     <div>
-      <h4 className="text-lg font-black">Choose your co-op</h4>
+      <h4 className="text-lg font-black">Choose your commons</h4>
       <p className="mt-2 text-sm leading-6 text-[#111111]/65">
-        Each co-op can ask its own application questions, so start with the community that fits you best.
+        Each commons can ask its own application questions, so start with the community that fits you best.
       </p>
       <div className="mt-5 grid gap-3">
         {coops.map((coop) => {
@@ -772,13 +772,13 @@ function QuestionsStep({
     <div>
       <h4 className="text-lg font-black">{coopName ? `${coopName} questions` : "Application questions"}</h4>
       <p className="mt-2 text-sm leading-6 text-[#111111]/65">
-        These questions are configured by the individual co-op.
+        These questions are configured by the individual commons.
       </p>
 
       {questions.length === 0 ? (
         <div className="mt-5 rounded-lg border border-[#111111]/10 bg-[#111111]/[0.03] p-5">
           <p className="text-sm leading-6 text-[#111111]/70">
-            This co-op does not have extra questions right now.
+            This commons does not have extra questions right now.
           </p>
         </div>
       ) : (
@@ -817,11 +817,11 @@ function ReviewStep({
     <div>
       <h4 className="text-lg font-black">Review and submit</h4>
       <p className="mt-2 text-sm leading-6 text-[#111111]/65">
-        Your application will be sent to the co-op review queue.
+        Your application will be sent to the commons review queue.
       </p>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <SummaryTile label="Co-op" value={selectedCoop?.name ?? "Selected"} />
+        <SummaryTile label="Commons" value={selectedCoop?.name ?? "Selected"} />
         <SummaryTile label="Applicant" value={`${formData.firstName} ${formData.lastName}`.trim()} />
         <SummaryTile label="Questions" value={`${answeredCount}/${questions.length}`} />
       </div>
@@ -831,7 +831,7 @@ function ReviewStep({
           id="agreeToCoopValues"
           checked={formData.agreeToCoopValues}
           onCheckedChange={(checked) => onChange("agreeToCoopValues", checked)}
-          label="I align with this co-op's values and mission"
+          label="I align with this commons' values and mission"
         />
         <AgreementCheckbox
           id="agreeToTerms"

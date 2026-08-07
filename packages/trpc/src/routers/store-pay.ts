@@ -95,7 +95,7 @@ export const storePayRouter = router({
 
       return {
         shortCode,
-        qrCodeData: `coop://pay/s/${shortCode}`,
+        qrCodeData: `commons://pay/s/${shortCode}`,
       };
     }),
 
@@ -172,7 +172,7 @@ export const storePayRouter = router({
         hasStore: true,
         shortCode: store.shortCode,
         acceptsQuickPay: store.acceptsQuickPay,
-        qrCodeData: store.shortCode ? `coop://pay/s/${store.shortCode}` : null,
+        qrCodeData: store.shortCode ? `commons://pay/s/${store.shortCode}` : null,
         storeName: store.name,
       };
     }),

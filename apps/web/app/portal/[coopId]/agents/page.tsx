@@ -238,7 +238,7 @@ export default function AgentsStatusPage() {
       <div className="mx-auto max-w-3xl">
         <Card className="border-zinc-800 bg-zinc-950/70 shadow-none">
           <CardContent className="p-6 text-sm text-zinc-400">
-            Only co-op admins can view agent status.
+            Only commons admins can view agent status.
           </CardContent>
         </Card>
       </div>

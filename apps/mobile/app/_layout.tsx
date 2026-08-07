@@ -38,7 +38,7 @@ function handleDeepLink(url: string) {
       return;
     }
 
-    // Handle coop://pay/r/{token} - Payment request
+    // Handle commons://pay/r/{token} - Payment request
     if (path.startsWith('pay/r/')) {
       const token = path.replace('pay/r/', '');
       if (token) {
@@ -47,7 +47,7 @@ function handleDeepLink(url: string) {
       }
     }
 
-    // Handle coop://pay/s/{code} - Store code
+    // Handle commons://pay/s/{code} - Store code
     if (path.startsWith('pay/s/')) {
       const code = path.replace('pay/s/', '');
       if (code) {

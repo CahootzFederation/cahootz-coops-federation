@@ -113,7 +113,7 @@ export function WaitlistSignupForm({ coops: initialCoops = [] }: WaitlistSignupF
 
       <div className="space-y-2">
         <Label htmlFor="suggestedCoop" className="text-[#1a1a1a] font-semibold">
-          Co-op you want to join or create
+          Commons you want to join or create
         </Label>
         <Input
           id="suggestedCoop"
@@ -122,7 +122,7 @@ export function WaitlistSignupForm({ coops: initialCoops = [] }: WaitlistSignupF
           list="member-waitlist-coop-options"
           value={suggestedCoop}
           onChange={(event) => setSuggestedCoop(event.target.value)}
-          placeholder="Choose a co-op from the list, or describe your own idea"
+          placeholder="Choose a commons from the list, or describe your own idea"
           className="bg-white border-white/30 text-[#1a1a1a] placeholder:text-slate-400"
         />
         <datalist id="member-waitlist-coop-options">

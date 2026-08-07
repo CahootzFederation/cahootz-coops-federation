@@ -14,7 +14,7 @@ interface TermsSection {
 export const metadata: Metadata = {
   title: "Terms & Conditions | Cahootz",
   description:
-    "Terms and conditions for the Cahootz Coops app for mobile devices, web browsers, and related services.",
+    "Terms and conditions for the Cahootz Commons app for mobile devices, web browsers, and related services.",
   alternates: {
     canonical: "https://cahootz.coop/terms",
   },
@@ -298,10 +298,10 @@ export default function TermsPage() {
             </h1>
             <div className="mt-5 space-y-4 text-lg leading-8 text-slate-400">
               <p>
-                These terms and conditions apply to the Cahootz Coops app for
+                These terms and conditions apply to the Cahootz Commons app for
                 mobile devices and web browsers, together with any related
-                services operated by Cahootz Coop (collectively, the
-                &quot;Application&quot;). Cahootz Coop is hereby referred to as
+                services operated by Cahootz Commons (collectively, the
+                &quot;Application&quot;). Cahootz Commons is hereby referred to as
                 the &quot;Service Provider&quot;.
               </p>
               <p>

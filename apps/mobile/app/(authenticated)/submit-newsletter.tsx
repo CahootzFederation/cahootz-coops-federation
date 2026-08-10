@@ -72,7 +72,7 @@ export default function SubmitNewsletterScreen() {
 
       Alert.alert(
         'Submitted',
-        'Thanks. Your submission went to the co-op newsletter inbox for review.',
+        'Thanks. Your submission went to the commons newsletter inbox for review.',
         [{ text: 'Done', onPress: () => router.back() }]
       );
     } catch (error: any) {
@@ -101,7 +101,7 @@ export default function SubmitNewsletterScreen() {
               <View className="flex-1">
                 <Text className="text-2xl font-bold text-gray-900">Submit to Newsletter</Text>
                 <Text className="mt-1 text-sm text-gray-500">
-                  Send a story or event to the co-op paper.
+                  Send a story or event to the commons paper.
                 </Text>
               </View>
             </View>
@@ -117,7 +117,7 @@ export default function SubmitNewsletterScreen() {
                 <View className="flex-1">
                   <Text className="font-semibold text-gray-900">Community paper inbox</Text>
                   <Text className="text-sm leading-5 text-gray-500">
-                    The co-op can review, edit, and publish your submission.
+                    The commons can review, edit, and publish your submission.
                   </Text>
                 </View>
               </View>
@@ -167,7 +167,7 @@ export default function SubmitNewsletterScreen() {
                 placeholder={
                   type === 'event'
                     ? 'What is happening, who should come, and why it matters.'
-                    : 'Tell the co-op what happened, who is involved, and why members should care.'
+                    : 'Tell the commons what happened, who is involved, and why members should care.'
                 }
                 placeholderTextColor="#9CA3AF"
                 className="min-h-[140px] rounded-xl border border-gray-200 px-4 py-3 text-base text-gray-900"
@@ -257,7 +257,7 @@ export default function SubmitNewsletterScreen() {
               ) : (
                 <>
                   <Send size={18} color="#FFFFFF" />
-                  <Text className="ml-2 font-semibold text-white">Send to Co-op</Text>
+                  <Text className="ml-2 font-semibold text-white">Send to Commons</Text>
                 </>
               )}
             </TouchableOpacity>

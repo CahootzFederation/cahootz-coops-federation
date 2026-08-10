@@ -132,7 +132,7 @@ function WealthFundLegacyPage() {
       <div>
         <h1 className="text-3xl font-bold text-white mb-2">Wealth Fund</h1>
         <p className="text-gray-400">
-          Manage the cooperative's wealth fund tax rate and track accumulated funds
+          Manage the commons' wealth fund tax rate and track accumulated funds
         </p>
       </div>
 
@@ -276,7 +276,7 @@ function WealthFundLegacyPage() {
                     is automatically set aside for the Wealth Fund.
                   </p>
                   <p className="text-xs text-gray-500">
-                    This fund supports cooperative initiatives, member benefits, and community development.
+                    This fund supports commons initiatives, member benefits, and community development.
                   </p>
                 </div>
               </div>

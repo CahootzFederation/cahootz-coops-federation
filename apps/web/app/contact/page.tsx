@@ -8,7 +8,7 @@ import { ContactForm } from "@/components/contact-form";
 export const metadata: Metadata = {
   title: "Contact Cahootz",
   description:
-    "Reach the Cahootz team about co-op launches, business partnerships, support, or community-owned economy tools.",
+    "Reach the Cahootz team about commons launches, business partnerships, support, or community-owned economy tools.",
   alternates: {
     canonical: "https://cahootz.coop/contact",
   },
@@ -30,7 +30,7 @@ export default function ContactPage() {
             />
             <div className="flex flex-col">
               <span className="text-xl font-bold leading-tight tracking-tight">Cahootz</span>
-              <span className="text-xs leading-tight text-slate-400">Cooperative network</span>
+              <span className="text-xs leading-tight text-slate-400">Commons network</span>
             </div>
           </Link>
 
@@ -56,7 +56,7 @@ export default function ContactPage() {
                 Bring us the thing you are trying to coordinate.
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-                Questions about launching a co-op, bringing in businesses, member support,
+                Questions about launching a commons, bringing in businesses, member support,
                 partnerships, or the product itself all land with the team.
               </p>
 

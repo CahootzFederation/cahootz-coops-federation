@@ -7,7 +7,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>Cahootz Coop</string>
+    <string>Cahootz Commons</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -27,7 +27,7 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>coop</string>
+          <string>commons</string>
           <string>com.cahootzcoops.mobile</string>
         </array>
       </dict>
@@ -48,13 +48,13 @@
       <true/>
     </dict>
     <key>NSCameraUsageDescription</key>
-    <string>Cahootz Coop uses your camera to scan QR codes and let you take profile, store, or product photos and short videos for upload.</string>
+    <string>Cahootz Commons uses your camera to scan QR codes and let you take profile, store, or product photos and short videos for upload.</string>
     <key>NSFaceIDUsageDescription</key>
-    <string>Allow Cahootz Coop to use Face ID for authentication.</string>
+    <string>Allow Cahootz Commons to use Face ID for authentication.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Cahootz Coop uses your microphone only when you record a short video, so the uploaded clip can include audio.</string>
+    <string>Cahootz Commons uses your microphone only when you record a short video, so the uploaded clip can include audio.</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>Cahootz Coop uses your photo library so you can choose profile, store, product, or gallery photos and short videos to upload.</string>
+    <string>Cahootz Commons uses your photo library so you can choose profile, store, product, or gallery photos and short videos to upload.</string>
     <key>NSUserActivityTypes</key>
     <array>
       <string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>

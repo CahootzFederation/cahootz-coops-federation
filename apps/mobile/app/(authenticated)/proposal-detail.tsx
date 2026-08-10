@@ -360,7 +360,7 @@ export default function ProposalDetailScreen() {
         icon: <Clock size={18} color="#B45309" />,
         bg: '#FEF3C7',
         label: 'AI Scoring',
-        detail: 'Checking alignment with co-op goals & charter',
+        detail: 'Checking alignment with commons goals & charter',
         done: false,
       });
       return steps;
@@ -384,7 +384,7 @@ export default function ProposalDetailScreen() {
         bg: '#FEF2F2',
         label: 'Proposal Closed',
         detail: proposal.decision === 'block'
-          ? 'Not aligned with co-op goals — see AI notes below'
+          ? 'Not aligned with commons goals — see AI notes below'
           : 'Requires significant revision — see AI notes below',
         done: true,
       });

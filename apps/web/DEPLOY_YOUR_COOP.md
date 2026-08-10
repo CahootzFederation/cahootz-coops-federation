@@ -1,8 +1,8 @@
-# 🚀 Deploy Your Own Co-op
+# 🚀 Deploy Your Own Commons
 
 ## Quick Start
 
-Visit the initialize page to deploy your own co-op instance in minutes:
+Visit the initialize page to deploy your own commons instance in minutes:
 
 ```
 https://your-domain.com/initialize
@@ -31,12 +31,12 @@ pnpm dev:web
 
 ## Step-by-Step Process
 
-### Phase 1: Configure Your Co-op
+### Phase 1: Configure Your Commons
 
-Fill in the form with your co-op details:
+Fill in the form with your commons details:
 
 **Identity:**
-- What's your co-op called?
+- What's your commons called?
 - What's your tagline?
 - What colors represent your brand?
 
@@ -65,7 +65,7 @@ Choose which contracts to deploy based on your needs:
 
 **Required (always deployed):**
 - ✅ **SoulaaniCoin (SC)** - Governance token
-- ✅ **AllyCoin (ALLY)** - Cross-coop membership
+- ✅ **AllyCoin (ALLY)** - Cross-commons membership
 - ✅ **UnityCoin (UC)** - Payment currency
 
 **Optional (check to deploy):**
@@ -88,7 +88,7 @@ Click "Start Deployment" and watch the process:
 3. ✅ **UnityCoin** deploys
 4. ✅ Optional contracts deploy (if selected)
 5. ✅ **Roles granted** (permissions configured)
-6. ✅ **Saved to database** (co-op registered in system)
+6. ✅ **Saved to database** (commons registered in system)
 
 Each step shows:
 - Real-time status
@@ -97,7 +97,7 @@ Each step shows:
 
 ### Phase 4: Complete & Download
 
-**Your co-op is now live!** It's registered in the database and visible in the mobile app.
+**Your commons is now live!** It's registered in the database and visible in the mobile app.
 
 Download two files:
 
@@ -113,9 +113,9 @@ Download two files:
    - You're ready to go!
 
 **Mobile App Integration:**
-- Your co-op now appears in the mobile app's onboarding flow
+- Your commons now appears in the mobile app's onboarding flow
 - New members can discover and apply to join
-- Existing members can switch to your co-op
+- Existing members can switch to your commons
 
 ## What Gets Deployed
 
@@ -124,7 +124,7 @@ Download two files:
 | Contract | Purpose | Required | Size |
 |----------|---------|----------|------|
 | SoulaaniCoin | Governance token | ✅ Yes | 85KB |
-| AllyCoin | Cross-coop membership | ✅ Yes | 78KB |
+| AllyCoin | Cross-commons membership | ✅ Yes | 78KB |
 | UnityCoin | Main payment currency | ✅ Yes | 92KB |
 | SoulaaniCoin | Governance token (voting power) | 141KB |
 | RedemptionVault | Converts UC back to USD | ⬜ Optional | 71KB |
@@ -141,10 +141,10 @@ The page automatically configures:
 
 ## After Deployment
 
-### Your Co-op is Live!
+### Your Commons is Live!
 
 ✅ **Contracts deployed** to blockchain  
-✅ **Co-op registered** in database  
+✅ **Commons registered** in database  
 ✅ **Visible in mobile app** - new members can discover and join
 
 ### Immediate Next Steps
@@ -157,7 +157,7 @@ The page automatically configures:
 2. **Add to backend**
    ```bash
    # Copy .env file to your API server
-   cp .env.your-coop apps/api/.env
+   cp .env.your-commons apps/api/.env
    
    # Restart API
    pnpm dev:api
@@ -165,8 +165,8 @@ The page automatically configures:
 
 3. **Test in mobile app**
    - Open the mobile app
-   - Go to onboarding/co-op selection
-   - Your co-op should appear in the list!
+   - Go to onboarding/commons selection
+   - Your commons should appear in the list!
 
 3. **Verify contracts** (optional but recommended)
    ```bash
@@ -190,9 +190,9 @@ The page automatically configures:
 
 ## Example Configuration
 
-### Community Co-op
+### Community Commons
 ```
-Name: Oakland Community Co-op
+Name: Oakland Community Commons
 Short Name: Oakland
 Tagline: Building Economic Power Together
 Quorum: 20%
@@ -200,7 +200,7 @@ Approval: 60%
 Voting Window: 10 days
 ```
 
-### Artist Co-op
+### Artist Commons
 ```
 Name: SF Artist Collective
 Short Name: SFAC
@@ -210,7 +210,7 @@ Approval: 51%
 Voting Window: 7 days
 ```
 
-### Worker Co-op
+### Worker Commons
 ```
 Name: Tech Workers United
 Short Name: TWU
@@ -283,4 +283,4 @@ Need help?
 
 ---
 
-**Ready to build your co-op?** Visit `/initialize` and get started! 🎉
+**Ready to build your commons?** Visit `/initialize` and get started! 🎉

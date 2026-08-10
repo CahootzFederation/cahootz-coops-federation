@@ -174,18 +174,18 @@ export default function OnboardingFlow() {
   // Generic platform introduction screens
   const splashScreens = [
     {
-      title: 'Welcome to Cahootz Coop Network',
+      title: 'Welcome to Cahootz Commons Network',
       subtitle: 'Where Communities Build Together',
       description:
-        'Join cooperative communities that invest together, support local businesses, and build shared wealth through collective economic power.',
+        'Join commons communities that invest together, support local businesses, and build shared wealth through collective economic power.',
       icon: Heart,
       bgColor: 'bg-gold-600',
     },
     {
-      title: 'What is a Co-op?',
+      title: 'What is a Commons?',
       subtitle: 'Democracy Meets Economics',
       description:
-        'A cooperative is owned and governed by its members. Your voice matters, your spending builds community wealth, and everyone shares in the success.',
+        'A commons is owned and governed by its members. Your voice matters, your spending builds community wealth, and everyone shares in the success.',
       icon: Users,
       bgColor: 'bg-red-700',
     },
@@ -193,7 +193,7 @@ export default function OnboardingFlow() {
       title: 'Pool Your Power',
       subtitle: 'Collective Buying Strength',
       description:
-        'By combining resources with others in your co-op, you unlock better prices, support local businesses, and create jobs in your community.',
+        'By combining resources with others in your commons, you unlock better prices, support local businesses, and create jobs in your community.',
       icon: TrendingUp,
       bgColor: 'bg-gold-600',
     },
@@ -201,7 +201,7 @@ export default function OnboardingFlow() {
       title: 'AI-Powered Governance',
       subtitle: 'Smart Proposals, Better Decisions',
       description:
-        'Every co-op has an AI proposal engine that helps members create, evaluate, and vote on projects. Make informed decisions backed by data and community wisdom.',
+        'Every commons has an AI proposal engine that helps members create, evaluate, and vote on projects. Make informed decisions backed by data and community wisdom.',
       icon: Vote,
       bgColor: 'bg-red-700',
     },
@@ -483,7 +483,7 @@ export default function OnboardingFlow() {
         }
       });
       
-      if (!formData.agreeToCoopValues) missingFields.push('Co-op Values Agreement');
+      if (!formData.agreeToCoopValues) missingFields.push('Commons Values Agreement');
       if (!formData.agreeToTerms) missingFields.push('Terms of Service Agreement');
       if (!formData.agreeToPrivacy) missingFields.push('Privacy Policy Agreement');
       
@@ -726,7 +726,7 @@ export default function OnboardingFlow() {
               className="bg-gold-600"
             >
               <Text className="text-white font-semibold">
-                {index === splashScreens.length - 1 ? 'Browse Co-ops' : 'Next'}
+                {index === splashScreens.length - 1 ? 'Browse Commons' : 'Next'}
               </Text>
               <Icon as={ChevronRight} size={16} className="text-white ml-1" />
             </Button>
@@ -754,7 +754,7 @@ export default function OnboardingFlow() {
           <View className="flex-1">
             <Text className="text-white text-xl font-black">Join the waitlist</Text>
             <Text className="text-charcoal-100 text-sm leading-5 mt-1">
-              Not sure which co-op fits yet? Get early access and updates first.
+              Not sure which commons fits yet? Get early access and updates first.
             </Text>
           </View>
         </View>
@@ -816,7 +816,7 @@ export default function OnboardingFlow() {
             <View className="bg-gold-600/15 p-3 rounded-2xl mb-4 self-start">
               <Icon as={Store} size={28} className="text-gold-400" />
             </View>
-            <Text className="text-3xl font-black text-white mb-2">Choose Your Co-op</Text>
+            <Text className="text-3xl font-black text-white mb-2">Choose Your Commons</Text>
             <Text className="text-charcoal-100 leading-6">
               Explore live communities, then apply when one feels aligned with your goals.
             </Text>
@@ -824,7 +824,7 @@ export default function OnboardingFlow() {
         </View>
       </View>
 
-      {/* Scrollable Co-op List */}
+      {/* Scrollable Commons List */}
       <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 24, paddingVertical: 16 }}>
         <View className="w-full max-w-md mx-auto">
           <View className="mb-4">
@@ -835,11 +835,11 @@ export default function OnboardingFlow() {
           {isLoadingCoops && (
             <View className="items-center py-8">
               <ActivityIndicator size="large" color="#D4AF37" />
-              <Text className="text-charcoal-100 mt-4">Loading available co-ops...</Text>
+              <Text className="text-charcoal-100 mt-4">Loading available commons...</Text>
             </View>
           )}
 
-          {/* Co-op Cards */}
+          {/* Commons Cards */}
           {!isLoadingCoops && coopsWithIcons.length > 0 && (
             <View className="gap-4">
               {coopsWithIcons.map((coop) => {
@@ -905,10 +905,10 @@ export default function OnboardingFlow() {
             </View>
           )}
 
-          {/* No Coops Available */}
+          {/* No Commons Available */}
           {!isLoadingCoops && coopsWithIcons.length === 0 && (
             <View className="items-center py-8">
-              <Text className="text-charcoal-100 text-center">No cooperatives available at this time.</Text>
+              <Text className="text-charcoal-100 text-center">No commons available at this time.</Text>
             </View>
           )}
         </View>
@@ -945,7 +945,7 @@ export default function OnboardingFlow() {
               <View className="flex-row items-center justify-between mb-5">
                 <Button variant="ghost" onPress={prevStep} className="px-0">
                   <Icon as={ChevronLeft} size={16} className="text-charcoal-100" />
-                  <Text className="text-charcoal-100 ml-1">Co-ops</Text>
+                  <Text className="text-charcoal-100 ml-1">Commons</Text>
                 </Button>
                 <Button variant="ghost" onPress={goToLogin} className="px-0">
                   <Text className="text-gold-400 font-semibold">Sign in</Text>
@@ -1007,7 +1007,7 @@ export default function OnboardingFlow() {
               </Button>
               <Button variant="outline" onPress={prevStep} className="border-white/15 bg-white/5 h-12 rounded-xl">
                 <Icon as={ChevronLeft} size={16} className="text-white" />
-                <Text className="text-white ml-1">Back to Co-ops</Text>
+                <Text className="text-white ml-1">Back to Commons</Text>
               </Button>
             </View>
 
@@ -1037,7 +1037,7 @@ export default function OnboardingFlow() {
               <Icon as={Building} size={32} className="text-white" />
             </View>
             <Text className="text-2xl font-bold text-charcoal-800 mb-2 text-center">
-              Join {selectedCoop?.name || 'Co-op'}
+              Join {selectedCoop?.name || 'Commons'}
             </Text>
             <Text className="text-charcoal-600 text-center">Step 1 of 4: Personal Information</Text>
           </View>
@@ -1213,7 +1213,7 @@ export default function OnboardingFlow() {
                   
                   {applicationQuestions.length === 0 && (
                     <View className="items-center py-8">
-                      <Text className="text-charcoal-600">No questions available for this cooperative.</Text>
+                      <Text className="text-charcoal-600">No questions available for this commons.</Text>
                     </View>
                   )}
                 </View>
@@ -1302,7 +1302,7 @@ export default function OnboardingFlow() {
                   <Text className="text-sm text-charcoal-600">
                     • Helps community members get to know you{'\n'}
                     • Increases your application approval chances{'\n'}
-                    • Builds trust in the cooperative{'\n'}
+                    • Builds trust in the commons{'\n'}
                     • Shows commitment to transparency
                   </Text>
                 </View>
@@ -1360,7 +1360,7 @@ export default function OnboardingFlow() {
                       onCheckedChange={(checked) => handleInputChange('agreeToCoopValues', !!checked)}
                     />
                     <Text className="text-charcoal-800 font-medium flex-1">
-                      I align with this co-op&apos;s values and mission
+                      I align with this commons&apos; values and mission
                     </Text>
                   </View>
 
@@ -1542,7 +1542,7 @@ export default function OnboardingFlow() {
             </View>
             <Text className="text-3xl font-bold text-charcoal-900 mb-2 text-center">Welcome Back</Text>
             <Text className="text-charcoal-700 text-center leading-6">
-              {codeSent ? 'Enter the code sent to your email' : 'Sign in to access your co-op membership'}
+              {codeSent ? 'Enter the code sent to your email' : 'Sign in to access your commons membership'}
             </Text>
           </View>
 
@@ -1643,7 +1643,7 @@ export default function OnboardingFlow() {
           <View className="items-center mt-6">
             <Button variant="ghost" onPress={goToBrowseCoops}>
               <Text className="text-charcoal-700">Don&apos;t have an account? </Text>
-              <Text className="font-semibold text-gold-700">Join a Co-op</Text>
+              <Text className="font-semibold text-gold-700">Join a Commons</Text>
             </Button>
           </View>
 
@@ -1659,7 +1659,7 @@ export default function OnboardingFlow() {
   );
 
   // Determine which step to render
-  // Flow: Splash Screens → Browse Co-ops → Co-op Details → Personal Info → Questions → Media Upload → Commitment → Success → Login
+  // Flow: Splash Screens → Browse Commons → Commons Details → Personal Info → Questions → Media Upload → Commitment → Success → Login
   const renderCurrentStep = () => {
     const splashEnd = splashScreens.length;
     const browseCoopsStep = splashEnd;

@@ -10,9 +10,9 @@ export default function CoopNotFound() {
         <div className="mb-6 rounded-full bg-amber-500/10 p-4 text-amber-400">
           <SearchX className="h-10 w-10" />
         </div>
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Co-op page not found</h1>
+        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Commons page not found</h1>
         <p className="mt-4 text-base text-slate-300">
-          We could not find a public co-op page for that address. The link may be wrong, or the page may not be published yet.
+          We could not find a public commons page for that address. The link may be wrong, or the page may not be published yet.
         </p>
         <div className="mt-8">
           <Button asChild className="bg-amber-600 hover:bg-amber-700">

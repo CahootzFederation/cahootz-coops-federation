@@ -21,7 +21,7 @@ type ContactMessage = z.infer<typeof contactSchema>;
 function topicLabel(topic: ContactMessage["topic"]) {
   switch (topic) {
     case "start-coop":
-      return "Start a co-op";
+      return "Start a commons";
     case "business":
       return "Business interest";
     case "support":

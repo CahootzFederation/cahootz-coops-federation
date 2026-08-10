@@ -105,7 +105,7 @@ export function ContactForm() {
             name="organization"
             type="text"
             disabled={isSubmitting}
-            placeholder="Co-op, business, or group"
+            placeholder="Commons, business, or group"
             className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#f0975b]/60"
           />
         </div>
@@ -122,7 +122,7 @@ export function ContactForm() {
             className="w-full rounded-lg border border-white/10 bg-[#171717] px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#f0975b]/60"
           >
             <option value="general">General</option>
-            <option value="start-coop">Start a co-op</option>
+            <option value="start-coop">Start a commons</option>
             <option value="business">Business interest</option>
             <option value="support">Support</option>
             <option value="partnership">Partnership</option>

@@ -124,7 +124,7 @@ export default function ApplyScVerificationScreen() {
             <Text className="text-gray-900 dark:text-white font-semibold ml-2">Apply to earn {coin.symbol} rewards</Text>
           </View>
           <Text className="text-gray-600 dark:text-gray-300 leading-6">
-            {coin.name} ({coin.symbol}) is a non-transferable membership token. Once your store is verified, every qualifying purchase earns customers {coin.symbol} tokens that reflect their co-op participation and give them a voice in governance.
+            {coin.name} ({coin.symbol}) is a non-transferable membership token. Once your store is verified, every qualifying purchase earns customers {coin.symbol} tokens that reflect their commons participation and give them a voice in governance.
           </Text>
         </View>
 
@@ -135,7 +135,7 @@ export default function ApplyScVerificationScreen() {
             <Text className="text-gray-900 dark:text-white font-semibold ml-2">How transaction fees work</Text>
           </View>
           <Text className="text-gray-500 dark:text-gray-400 text-sm leading-5 mb-4">
-            Every sale through the platform has two fee layers that fund the co-op:
+            Every sale through the platform has two fee layers that fund the commons:
           </Text>
 
           {/* Platform markup */}
@@ -165,7 +165,7 @@ export default function ApplyScVerificationScreen() {
                 <Text className="text-green-600 dark:text-green-400 font-bold">{treasuryFeePct}</Text>
               </View>
               <Text className="text-gray-500 dark:text-gray-400 text-xs mt-1 leading-4">
-                Deducted from what you receive. Goes directly to the co-op Wealth Fund — a shared pool that reinvests in the community.
+                Deducted from what you receive. Goes directly to the commons Wealth Fund — a shared pool that reinvests in the community.
               </Text>
             </View>
           </View>
@@ -273,7 +273,7 @@ export default function ApplyScVerificationScreen() {
               </Text>
               <TextInput
                 className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-gray-900 dark:text-white h-36"
-                placeholder={`Explain how your store fits the cooperative mission, how customers benefit, and why it should participate in the ${coin.symbol} rewards network.`}
+                placeholder={`Explain how your store fits the commons mission, how customers benefit, and why it should participate in the ${coin.symbol} rewards network.`}
                 placeholderTextColor="#9CA3AF"
                 multiline
                 textAlignVertical="top"
@@ -299,7 +299,7 @@ export default function ApplyScVerificationScreen() {
                 <Square size={22} color="#9CA3AF" style={{ marginTop: 1 }} />
               )}
               <Text className="flex-1 ml-3 text-sm text-gray-700 dark:text-gray-300 leading-5">
-                I understand that a <Text className="font-semibold text-amber-600 dark:text-amber-400">{platformMarkupPct} platform markup</Text> is added to my listed prices (paid by customers), and a <Text className="font-semibold text-green-600 dark:text-green-400">{treasuryFeePct} community treasury fee</Text> is deducted from my payouts to fund the co-op Wealth Fund.
+                I understand that a <Text className="font-semibold text-amber-600 dark:text-amber-400">{platformMarkupPct} platform markup</Text> is added to my listed prices (paid by customers), and a <Text className="font-semibold text-green-600 dark:text-green-400">{treasuryFeePct} community treasury fee</Text> is deducted from my payouts to fund the commons Wealth Fund.
               </Text>
             </TouchableOpacity>
           </>

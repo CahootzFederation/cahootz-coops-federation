@@ -88,7 +88,7 @@ export default function BuyPage() {
           </div>
           <h1 className="text-4xl font-bold text-white mb-2">Buy Unity Coins</h1>
           <p className="text-slate-400">
-            Purchase UC tokens to participate in the co-op economy
+            Purchase UC tokens to participate in the commons economy
           </p>
         </div>
 

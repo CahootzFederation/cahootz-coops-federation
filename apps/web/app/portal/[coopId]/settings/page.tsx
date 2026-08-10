@@ -207,12 +207,12 @@ export default function SettingsPage() {
               Public Page
             </CardTitle>
             <CardDescription>
-              Manage your coop&apos;s public page, newsletter, and email format
+              Manage your commons&apos; public page, newsletter, and email format
             </CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-gray-300 mb-4">
-              Create and customize the public page for your coop at /c/{coopId}, including stories, events, classifieds, and business notes.
+              Create and customize the public page for your commons at /c/{coopId}, including stories, events, classifieds, and business notes.
             </p>
             <Button asChild className="bg-blue-600 hover:bg-blue-700">
               <Link href={`/portal/${coopId}/settings/public-page`} className="inline-flex items-center gap-2">
@@ -233,7 +233,7 @@ export default function SettingsPage() {
               Coin & Platform Config
             </CardTitle>
             <CardDescription>
-              Change the reward token metadata used throughout this coop.
+              Change the reward token metadata used throughout this commons.
               Current: <span className="text-amber-400 font-semibold">{coin.name} ({coin.symbol})</span>
             </CardDescription>
           </CardHeader>
@@ -278,7 +278,7 @@ export default function SettingsPage() {
               <Label className="text-gray-400">Description</Label>
               <Input
                 className="mt-1 bg-slate-800 border-slate-700 text-white"
-                placeholder={coopConfig?.description || coin.description || "Short description of the coop coin"}
+                placeholder={coopConfig?.description || coin.description || "Short description of the commons coin"}
                 value={editDescription}
                 onChange={(e) => setEditDescription(e.target.value)}
                 maxLength={300}

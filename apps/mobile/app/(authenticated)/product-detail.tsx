@@ -279,7 +279,7 @@ export default function ProductDetailScreen() {
               </View>
               <Text className="text-amber-700 dark:text-amber-300 text-sm">
                 When you purchase from this store, customers earn {coin.name} ({coin.symbol}) tokens which help
-                build community wealth and strengthen our cooperative economy.
+                build community wealth and strengthen our commons economy.
               </Text>
             </View>
           )}

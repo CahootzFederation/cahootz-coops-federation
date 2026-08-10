@@ -81,9 +81,9 @@ const soulaanSampleCommunityPosts: CommunityPost[] = [
       "A front-page look at how Soulaan can turn membership, local spending, and shared decision-making into a practical engine for generational wealth.",
     contentMarkdown: [
       "## Ownership is the headline",
-      "Soulaan is not just asking people to join another group chat, marketplace, or event list. The point is ownership. The co-op gives members a place to organize demand, back businesses, and decide what kind of economic power the community wants to build.",
+      "Soulaan is not just asking people to join another group chat, marketplace, or event list. The point is ownership. The commons gives members a place to organize demand, back businesses, and decide what kind of economic power the community wants to build.",
       "When members apply, they are stepping into a structure that can make everyday participation mean more. Buying from a member business, showing up to an event, voting on a priority, or sharing a skill can all point toward the same goal: keeping more value moving through the people who created it.",
-      "## What the co-op is trying to prove",
+      "## What the commons is trying to prove",
       "- Black communities can pool demand without waiting for outside permission.",
       "- Local businesses can be promoted, funded, and protected by the people they serve.",
       "- Members can build a shared economic memory instead of starting from zero every generation.",
@@ -101,14 +101,14 @@ const soulaanSampleCommunityPosts: CommunityPost[] = [
       "A simple model for pooling member participation into funds that can support businesses, tools, emergency needs, and community projects.",
     contentMarkdown: [
       "## Small money needs a place to gather",
-      "A block fund is the kind of idea that sounds simple because it is. Members make manageable commitments, the co-op tracks priorities, and the community decides where support should go first.",
+      "A block fund is the kind of idea that sounds simple because it is. Members make manageable commitments, the commons tracks priorities, and the community decides where support should go first.",
       "The goal is not to pretend every member can write a large check. The goal is to build a trusted container where smaller commitments can add up, stay visible, and move with intention.",
       "## What it could fund",
       "- Launch support for a member business.",
       "- Shared tools, pop-up equipment, or event infrastructure.",
       "- Emergency relief for members in good standing.",
       "- Youth programs, business education, or financial workshops.",
-      "The bigger win is the habit. Once members can see their participation become something real, the co-op starts feeling less abstract and more like a community balance sheet.",
+      "The bigger win is the habit. Once members can see their participation become something real, the commons starts feeling less abstract and more like a community balance sheet.",
     ].join("\n\n"),
     date: "Wealth Desk",
     byline: "Community Finance Team",
@@ -119,11 +119,11 @@ const soulaanSampleCommunityPosts: CommunityPost[] = [
     type: "article",
     title: "Inside the first Soulaan vendor circle",
     summary:
-      "Vendors, service providers, and members map what they need from the co-op marketplace before the next public push.",
+      "Vendors, service providers, and members map what they need from the commons marketplace before the next public push.",
     contentMarkdown: [
       "## The marketplace starts with listening",
-      "Before a co-op marketplace can feel alive, the businesses inside it need to be heard. The first vendor circle is designed to collect practical needs from people selling food, services, art, care work, home goods, and professional support.",
-      "The questions are direct: What brings you customers? What blocks you from taking more orders? What would make the co-op useful this month, not someday?",
+      "Before a commons marketplace can feel alive, the businesses inside it need to be heard. The first vendor circle is designed to collect practical needs from people selling food, services, art, care work, home goods, and professional support.",
+      "The questions are direct: What brings you customers? What blocks you from taking more orders? What would make the commons useful this month, not someday?",
       "## What vendors are asking for",
       "- Clear listings that make it easy to book or buy.",
       "- Better promotion before events and seasonal moments.",
@@ -140,7 +140,7 @@ const soulaanSampleCommunityPosts: CommunityPost[] = [
     type: "article",
     title: "A practical guide to buying Black and buying together",
     summary:
-      "The co-op can make support more coordinated by helping members know what to buy, who to book, and when to show up.",
+      "The commons can make support more coordinated by helping members know what to buy, who to book, and when to show up.",
     contentMarkdown: [
       "## Support gets stronger when it is organized",
       '"Buy Black" can become more than a slogan when members have a shared directory, a calendar, and a reason to move together. Soulaan\'s newsletter can make that visible every week.',
@@ -164,7 +164,7 @@ const soulaanSampleCommunityPosts: CommunityPost[] = [
       "Applicants, members, and business owners meet to learn how membership, proposals, classifieds, and the marketplace connect.",
     contentMarkdown: [
       "## Orientation plus connection",
-      "This session is for people who want to understand the co-op before they apply and for business owners who want to know how the marketplace can work for them.",
+      "This session is for people who want to understand the commons before they apply and for business owners who want to know how the marketplace can work for them.",
       "The night includes a quick walkthrough of membership, a business intro round, and time for people to name what they want Soulaan to build next.",
     ].join("\n\n"),
     date: "Thursday, 6:30 PM",
@@ -180,8 +180,8 @@ const soulaanSampleCommunityPosts: CommunityPost[] = [
     contentMarkdown: [
       "## Wealth education has to start early",
       "The youth money circle is built around a simple belief: young people should hear about ownership before they only hear about debt.",
-      "Members will help create sessions on saving, cooperative economics, business planning, and the difference between looking rich and building real stability.",
-      "The circle also gives younger members a way to see the co-op as something they can inherit, improve, and eventually lead.",
+      "Members will help create sessions on saving, commons economics, business planning, and the difference between looking rich and building real stability.",
+      "The circle also gives younger members a way to see the commons as something they can inherit, improve, and eventually lead.",
     ].join("\n\n"),
     date: "Youth Desk",
     byline: "Education Circle",
@@ -192,10 +192,10 @@ const soulaanSampleCommunityPosts: CommunityPost[] = [
     type: "business",
     title: "Business spotlight: member services that keep value local",
     summary:
-      "From bookkeeping to meal prep to design help, the co-op can make it easier for members to find trusted local services.",
+      "From bookkeeping to meal prep to design help, the commons can make it easier for members to find trusted local services.",
     contentMarkdown: [
       "## The service economy is already here",
-      "Some of the most useful businesses in a co-op are not always storefronts. They are bookkeepers, barbers, designers, cleaners, tutors, drivers, cooks, consultants, and caregivers.",
+      "Some of the most useful businesses in a commons are not always storefronts. They are bookkeepers, barbers, designers, cleaners, tutors, drivers, cooks, consultants, and caregivers.",
       "The business spotlight is a recurring space for Soulaan to show members who they can hire before defaulting to a platform that extracts value from the community.",
     ].join("\n\n"),
     date: "Business Notes",
@@ -240,7 +240,7 @@ const soulaanSampleCommunityPosts: CommunityPost[] = [
       "A plain-language look at how Soulaan can make decisions without turning every choice into a confusing meeting.",
     contentMarkdown: [
       "## Governance should feel usable",
-      "A co-op needs member voice, but it also needs a process people can actually use. Kitchen table governance means decisions are explained in plain language, priorities are visible, and members know when their input matters.",
+      "A commons needs member voice, but it also needs a process people can actually use. Kitchen table governance means decisions are explained in plain language, priorities are visible, and members know when their input matters.",
       "The newsletter can help by publishing proposal windows, summaries, voting reminders, and post-decision updates. That turns governance into a rhythm instead of a mystery.",
       "## What members should expect",
       "- Clear proposals.",

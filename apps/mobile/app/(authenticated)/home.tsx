@@ -294,7 +294,7 @@ export default function HomeScreen() {
               <View className="flex-1">
                 <Text className="text-base font-semibold text-gray-900">Submit to the Newsletter</Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-500">
-                  Send a story or event to the co-op paper.
+                  Send a story or event to the commons paper.
                 </Text>
               </View>
               <Text className="text-2xl text-gray-300">›</Text>
@@ -409,7 +409,7 @@ export default function HomeScreen() {
             )}
           </View>
 
-          {/* Coop Info */}
+          {/* Commons Info */}
           {user?.coop && (
             <View className="bg-white rounded-2xl p-4 mb-4">
               <Text className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-1">Member of</Text>

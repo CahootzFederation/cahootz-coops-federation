@@ -237,7 +237,7 @@ export function PortalNav({ coopId }: { coopId?: string }) {
                 {coin.symbol}
               </div>
               <div className="min-w-0">
-                <p className="truncate text-base font-semibold leading-5">Co-op Portal</p>
+                <p className="truncate text-base font-semibold leading-5">Commons Portal</p>
                 <p className="truncate text-xs text-zinc-500">{coopName}</p>
               </div>
             </Link>

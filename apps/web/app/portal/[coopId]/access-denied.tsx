@@ -65,7 +65,7 @@ export default function AccessDenied() {
           <>
             <p className="mb-6 text-slate-300">
               You need to have SoulaaniCoin (SC) to access the admin panel. 
-              SoulCoin is the governance token for Cahootz co-op members.
+              SoulCoin is the governance token for Cahootz Commons members.
             </p>
             <div className="flex flex-col space-y-4">
               <Button 

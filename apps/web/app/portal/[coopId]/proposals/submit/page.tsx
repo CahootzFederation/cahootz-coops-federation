@@ -61,7 +61,7 @@ export default function SubmitProposalPage() {
             <p className="font-medium">AI-Powered Analysis</p>
             <p className="text-blue-300/80 mt-1">
               Write your proposal in plain text. Our AI engine will automatically extract structured details
-              (category, budget, impact) and score it against the co-op charter goals.
+              (category, budget, impact) and score it against the commons charter goals.
               The more detail you provide, the better the analysis.
             </p>
           </div>
@@ -112,7 +112,7 @@ export default function SubmitProposalPage() {
             <Textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Describe your proposal in detail. Include what you want to build/fund, the budget needed, expected impact (jobs, revenue, leakage reduction), and how it serves the co-op mission..."
+              placeholder="Describe your proposal in detail. Include what you want to build/fund, the budget needed, expected impact (jobs, revenue, leakage reduction), and how it serves the commons mission..."
               className="bg-slate-900 border-slate-700 text-white placeholder:text-gray-500 min-h-[250px]"
               maxLength={10000}
             />

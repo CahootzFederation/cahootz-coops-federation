@@ -88,13 +88,13 @@ const actionLinks: ActionLink[] = [
   },
   {
     title: "Vote on proposals",
-    description: "Review decisions shaping the co-op.",
+    description: "Review decisions shaping the commons.",
     href: "/proposals",
     icon: Vote,
   },
   {
     title: "Submit story",
-    description: "Send articles and events to the co-op paper.",
+    description: "Send articles and events to the commons paper.",
     href: "/newsletter/submit",
     icon: Newspaper,
   },
@@ -106,7 +106,7 @@ const actionLinks: ActionLink[] = [
   },
   {
     title: "Portal settings",
-    description: "Update account, wallet, and co-op settings.",
+    description: "Update account, wallet, and commons settings.",
     href: "/settings",
     icon: Settings,
   },
@@ -213,7 +213,7 @@ export default function DashboardHybrid() {
                 )}
               </div>
               <h1 className="mt-4 text-3xl font-semibold tracking-normal text-zinc-50">
-                {isAdmin ? "Run the co-op with less hunting around." : "Your co-op home base."}
+                {isAdmin ? "Run the commons with less hunting around." : "Your commons home base."}
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
                 {isAdmin

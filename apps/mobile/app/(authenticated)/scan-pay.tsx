@@ -41,16 +41,16 @@ export default function ScanPayScreen() {
 
     try {
       // Parse the QR code data
-      // Format: coop://pay/r/{token} or coop://pay/s/{code}
+      // Format: commons://pay/r/{token} or commons://pay/s/{code}
       // Or web URL: https://app.cahootz.coop/pay?r={token}
 
       let token: string | null = null;
       let code: string | null = null;
 
-      if (data.startsWith('coop://pay/r/')) {
-        token = data.replace('coop://pay/r/', '');
-      } else if (data.startsWith('coop://pay/s/')) {
-        code = data.replace('coop://pay/s/', '');
+      if (data.startsWith('commons://pay/r/')) {
+        token = data.replace('commons://pay/r/', '');
+      } else if (data.startsWith('commons://pay/s/')) {
+        code = data.replace('commons://pay/s/', '');
       } else if (data.includes('app.cahootz.coop/pay')) {
         const url = new URL(data);
         token = url.searchParams.get('r');

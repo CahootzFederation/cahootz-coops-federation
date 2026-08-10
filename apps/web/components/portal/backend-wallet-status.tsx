@@ -127,7 +127,7 @@ export default function BackendWalletStatus() {
                   <p className="font-medium text-red-900 dark:text-red-100">Not Configured</p>
                 </div>
                 <p className="text-sm text-red-700 dark:text-red-300">
-                  {data?.warningMessage || 'No coop backend wallet address is configured.'}
+                  {data?.warningMessage || 'No commons backend wallet address is configured.'}
                 </p>
               </div>
             ) : (

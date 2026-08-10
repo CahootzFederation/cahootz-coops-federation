@@ -206,7 +206,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   if (!publicInfo) {
     return {
-      title: "Coop Not Found",
+      title: "Commons Not Found",
     };
   }
 
@@ -496,7 +496,7 @@ export default async function CoopPublicPage({ params }: PageProps) {
                   Latest
                 </p>
                 <h2 className="mt-1 text-3xl font-black tracking-normal md:text-5xl">
-                  {hasStoryPosts ? "Stories from the co-op." : "Latest from the co-op."}
+                  {hasStoryPosts ? "Stories from the commons." : "Latest from the commons."}
                 </h2>
                 {!hasStoryPosts && (
                   <p className="mt-3 max-w-3xl text-base leading-7 text-[color:var(--newsletter-muted)] md:text-lg">
@@ -685,7 +685,7 @@ export default async function CoopPublicPage({ params }: PageProps) {
                 Classifieds
               </h3>
               <p className="mt-1 text-sm text-[color:var(--newsletter-muted)]">
-                Things to buy, book, support, or share from the co-op marketplace.
+                Things to buy, book, support, or share from the commons marketplace.
               </p>
             </div>
             <Button variant="outline" asChild className="border-[color:var(--newsletter-rule)] bg-transparent no-underline transition-colors hover:border-[color:var(--coop-accent)] hover:text-[color:var(--coop-accent)] hover:no-underline">
@@ -701,7 +701,7 @@ export default async function CoopPublicPage({ params }: PageProps) {
               <Megaphone className="h-9 w-9 text-[color:var(--newsletter-muted)]" />
               <h4 className="mt-3 text-lg font-black">No classifieds yet</h4>
               <p className="mt-2 max-w-md text-sm text-[color:var(--newsletter-muted)]">
-                Products, services, and offers from co-op businesses will appear here.
+                Products, services, and offers from commons businesses will appear here.
               </p>
             </div>
           ) : (
@@ -789,7 +789,7 @@ export default async function CoopPublicPage({ params }: PageProps) {
               </p>
               <h3 className="mt-2 text-xl font-black">Apply to join</h3>
               <p className="mt-1 text-sm leading-6 text-[color:var(--newsletter-muted)]">
-                The application is for people ready to introduce themselves and participate in the co-op.
+                The application is for people ready to introduce themselves and participate in the commons.
               </p>
               <Button
                 className="mt-3 h-11 rounded-none border-2 border-[color:var(--newsletter-ink)] px-5 text-sm font-black no-underline hover:no-underline"

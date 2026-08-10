@@ -136,7 +136,7 @@ export async function createPaymentRequest(
   });
 
   // Generate QR code data (deep link URL)
-  const qrCodeData = `coop://pay/r/${request.token}`;
+  const qrCodeData = `commons://pay/r/${request.token}`;
   const paymentUrl = `https://app.cahootz.coop/pay?r=${request.token}`;
 
   return {

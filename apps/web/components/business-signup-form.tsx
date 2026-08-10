@@ -138,7 +138,7 @@ function BusinessSignupFormContent({ coops: initialCoops = [] }: BusinessSignupF
           </h2>
         </div>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          Tell us about your business, the coop you want to support, and how
+          Tell us about your business, the commons you want to support, and how
           you want to participate in the network.
         </p>
       </div>
@@ -146,14 +146,14 @@ function BusinessSignupFormContent({ coops: initialCoops = [] }: BusinessSignupF
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <label htmlFor="coopInterest" className="block text-sm text-white">
-              Coop you want to support
+              Commons you want to support
             </label>
             <input
               id="coopInterest"
               name="coopInterest"
               type="text"
               list="business-coop-options"
-              placeholder="Choose a co-op from the list, or describe your own idea"
+              placeholder="Choose a commons from the list, or describe your own idea"
               value={coopInterest}
               onChange={handleCoopInterestChange}
               disabled={isSubmitting}
@@ -312,8 +312,8 @@ function BusinessSignupFormContent({ coops: initialCoops = [] }: BusinessSignupF
           )}
 
           <p className="text-xs leading-6 text-slate-500">
-            * Required fields. You can choose an active coop above or type the
-            coop you want your business to help build.
+            * Required fields. You can choose an active commons above or type the
+            commons you want your business to help build.
           </p>
         </form>
       </div>

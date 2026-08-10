@@ -133,7 +133,7 @@ export default function ApplicationFormEditor() {
         <h2 className="text-xl font-bold">Admin Access Required</h2>
         <p className="text-muted-foreground">Only admins can manage application forms.</p>
         <Button asChild variant="outline">
-          <Link href={`/portal/${coopId}/proposals/config`}>Back to Coop Config</Link>
+          <Link href={`/portal/${coopId}/proposals/config`}>Back to Commons Config</Link>
         </Button>
       </div>
     );

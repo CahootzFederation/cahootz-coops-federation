@@ -7,7 +7,7 @@ import { getPublishedBlogPosts } from "@/lib/blog";
 export const metadata: Metadata = {
   title: "Blog | Cahootz",
   description:
-    "Updates, product notes, and practical writing on community-owned economies, co-op governance, and local commerce.",
+    "Updates, product notes, and practical writing on community-owned economies, commons governance, and local commerce.",
   alternates: {
     canonical: "https://cahootz.coop/blog",
   },
@@ -29,7 +29,7 @@ export default function BlogPage() {
                 Notes on building community-owned economies.
               </h1>
               <p className="mt-5 text-lg leading-8 text-slate-400">
-                Product updates, founder thinking, co-op playbooks, and practical
+                Product updates, founder thinking, commons playbooks, and practical
                 essays drafted in Notion and published here where the community can
                 find them.
               </p>
@@ -50,7 +50,7 @@ export default function BlogPage() {
                 <p className="text-sm font-bold uppercase tracking-widest text-[#facc15]">Coming soon</p>
                 <h2 className="mt-4 text-2xl font-black tracking-tight md:text-4xl">No posts yet.</h2>
                 <p className="mt-4 max-w-md text-slate-400">
-                  We&apos;re working on it. Check back soon for product updates, co-op playbooks,
+                  We&apos;re working on it. Check back soon for product updates, commons playbooks,
                   and practical writing on community-owned economies.
                 </p>
               </div>

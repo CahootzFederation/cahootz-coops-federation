@@ -20,7 +20,7 @@ export function SiteShell({ children }: SiteShellProps) {
                 Cahootz
               </span>
               <span className="text-xs leading-tight text-slate-400">
-                Cooperative network
+                Commons network
               </span>
             </div>
           </Link>
@@ -59,7 +59,7 @@ export function SiteShell({ children }: SiteShellProps) {
           </div>
           <div className="flex flex-col items-center gap-3 text-center md:items-end md:text-right">
             <p className="text-sm text-slate-400">
-              The community platform for co-ops that want local spending, governance, and ownership in one loop.
+              The community platform for commons that want local spending, governance, and ownership in one loop.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4 md:justify-end">
               <Link

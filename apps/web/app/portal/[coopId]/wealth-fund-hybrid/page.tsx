@@ -65,7 +65,7 @@ export default function WealthFundHybridPage() {
         <div>
           <h1 className="text-3xl font-semibold tracking-normal text-zinc-50">Wealth Fund</h1>
           <p className="mt-1 text-zinc-400">
-            Cooperative treasury funded by store purchase contributions
+            Commons treasury funded by store purchase contributions
           </p>
         </div>
         <div className="flex items-center gap-2">

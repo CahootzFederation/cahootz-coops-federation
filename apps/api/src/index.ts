@@ -8,7 +8,7 @@ import os from "os";
 import { fileURLToPath } from "url";
 import { resolve } from "path";
 import { env } from "./env.js";
-import { startHealthMonitoring } from "./health-monitor.js";
+import { getHealthStatus, startHealthMonitoring } from "./health-monitor.js";
 
 const app: Application = express();
 
@@ -111,23 +111,35 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoint with database connectivity check
-app.get("/health", async (req, res) => {
+// Lightweight liveness check for load balancers and hosting platforms.
+app.get("/health", (req, res) => {
+  const health = getHealthStatus();
+
+  res.json({
+    status: "OK",
+    timestamp: new Date().toISOString(),
+    database: health.isHealthy ? "healthy" : "unhealthy",
+    lastDatabaseCheck: health.lastCheck.toISOString(),
+    consecutiveDatabaseFailures: health.consecutiveFailures,
+    uptime: process.uptime(),
+  });
+});
+
+// Readiness check for callers that explicitly need live database connectivity.
+app.get("/health/db", async (req, res) => {
   try {
-    // Dynamically import db to avoid circular dependency issues
     const { db } = await import("@repo/db");
-    
-    // Check database connectivity
+
     await db.$queryRaw`SELECT 1`;
-    
-    res.json({ 
+
+    res.json({
       status: "OK",
       timestamp: new Date().toISOString(),
       database: "connected",
       uptime: process.uptime(),
     });
   } catch (error) {
-    console.error("❌ Health check failed:", error);
+    console.error("❌ Database readiness check failed:", error);
     res.status(503).json({
       status: "error",
       timestamp: new Date().toISOString(),
@@ -350,20 +362,7 @@ async function testDatabaseConnection() {
   } catch (error) {
     console.error('❌ Database connection failed:', error);
     console.error('⚠️  Server will start but may not function correctly\n');
-    
-    // Send Slack notification about database connection failure
-    try {
-      const { sendApiHealthNotification } = await import("@repo/trpc/services/slack-notification-service");
-      await sendApiHealthNotification({
-        status: "down",
-        service: "database",
-        error: error instanceof Error ? error.message : "Unknown error",
-        environment: process.env.NODE_ENV || "unknown",
-      });
-    } catch (slackError) {
-      console.error('Failed to send Slack notification:', slackError);
-    }
-    
+
     return false;
   }
 }

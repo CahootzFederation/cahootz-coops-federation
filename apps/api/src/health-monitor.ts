@@ -18,9 +18,23 @@ const status: HealthStatus = {
   consecutiveFailures: 0,
 };
 
+const startedAt = Date.now();
+let healthCheckInProgress = false;
+
+function readPositiveInt(value: string | undefined, fallback: number) {
+  if (!value) return fallback;
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 // Only send notifications if status changes or every N failures
-const NOTIFICATION_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
-const MAX_FAILURES_BEFORE_ALERT = 3;
+const NOTIFICATION_COOLDOWN_MS = readPositiveInt(
+  process.env.HEALTHCHECK_NOTIFICATION_COOLDOWN_MS,
+  5 * 60 * 1000,
+);
+const MAX_FAILURES_BEFORE_ALERT = readPositiveInt(process.env.HEALTHCHECK_FAILURES_BEFORE_ALERT, 3);
+const STARTUP_GRACE_MS = readPositiveInt(process.env.HEALTHCHECK_STARTUP_GRACE_MS, 2 * 60 * 1000);
 
 /**
  * Check database health
@@ -45,15 +59,16 @@ async function sendHealthNotificationIfNeeded(isHealthy: boolean, error?: string
     ? now.getTime() - status.lastNotificationSent.getTime()
     : Infinity;
 
-  // Only send if:
-  // 1. Status changed from healthy to unhealthy or vice versa
-  // 2. Reached max consecutive failures
-  // 3. Cooldown period has passed
-  const statusChanged = status.isHealthy !== isHealthy;
-  const reachedMaxFailures = !isHealthy && status.consecutiveFailures >= MAX_FAILURES_BEFORE_ALERT;
+  const withinStartupGrace = now.getTime() - startedAt < STARTUP_GRACE_MS;
+  const recovered = isHealthy && !status.isHealthy;
   const cooldownExpired = timeSinceLastNotification > NOTIFICATION_COOLDOWN_MS;
+  const reachedMaxFailures =
+    !isHealthy &&
+    !withinStartupGrace &&
+    status.consecutiveFailures >= MAX_FAILURES_BEFORE_ALERT &&
+    cooldownExpired;
 
-  if (statusChanged || (reachedMaxFailures && cooldownExpired)) {
+  if (recovered || reachedMaxFailures) {
     try {
       await sendApiHealthNotification({
         status: isHealthy ? "up" : "down",
@@ -74,7 +89,15 @@ async function sendHealthNotificationIfNeeded(isHealthy: boolean, error?: string
  * Perform health check
  */
 async function performHealthCheck() {
-  const dbHealthy = await checkDatabaseHealth();
+  if (healthCheckInProgress) {
+    console.warn("⚠️  Skipping database health check because the previous check is still running");
+    return;
+  }
+
+  healthCheckInProgress = true;
+  const dbHealthy = await checkDatabaseHealth().finally(() => {
+    healthCheckInProgress = false;
+  });
   
   status.lastCheck = new Date();
 

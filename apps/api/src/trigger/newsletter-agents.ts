@@ -237,6 +237,16 @@ export const newsletterAgentSweep = schedules.task({
       take: 100,
     });
 
+    if (coopIds.length > 0 && publicInfos.length === 0) {
+      logger.warn(
+        "Newsletter agent sweep found no matching public newsletter pages",
+        {
+          checkedCoopCount: coopIds.length,
+          coopIds,
+        },
+      );
+    }
+
     const outcomes: Array<{
       coopId: string;
       agentId: NewsletterAgentId;
@@ -251,7 +261,17 @@ export const newsletterAgentSweep = schedules.task({
       const schedules = normalizeSchedules(overrides.newsletterAgentSchedules);
 
       for (const agentId of AGENT_IDS) {
-        if (!isDue(schedules[agentId], now)) continue;
+        if (!isDue(schedules[agentId], now)) {
+          logger.info("Newsletter agent skipped because it is not due", {
+            coopId: publicInfo.coopId,
+            agentId,
+            enabled: schedules[agentId].enabled,
+            intervalHours: schedules[agentId].intervalHours,
+            lastRunAt: schedules[agentId].lastRunAt,
+            updatedAt: schedules[agentId].updatedAt,
+          });
+          continue;
+        }
 
         try {
           const result = await runAgent({

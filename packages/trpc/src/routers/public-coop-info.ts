@@ -788,6 +788,73 @@ function sanitizeAgentText(value: string) {
     .trim();
 }
 
+function safeErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function sourceHost(value: string | undefined) {
+  if (!value) return undefined;
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+function logNewsletterAgent(
+  level: "info" | "warn" | "error",
+  event: string,
+  props: Record<string, unknown> = {},
+) {
+  const logProps = {
+    area: "newsletter-agent",
+    event,
+    ...props,
+  };
+
+  console[level](`[newsletter-agent] ${event}`, logProps);
+}
+
+async function runNewsletterAgentStep<T>(params: {
+  pipeline: "event";
+  step: string;
+  agent: Parameters<typeof run>[0];
+  input: string;
+  props?: Record<string, unknown>;
+}): Promise<T | undefined> {
+  const startedAt = Date.now();
+  logNewsletterAgent("info", "openai_step_started", {
+    pipeline: params.pipeline,
+    step: params.step,
+    ...params.props,
+  });
+
+  try {
+    const result = (await run(params.agent, params.input)) as unknown as {
+      finalOutput?: T;
+      output?: T;
+    };
+    const output = result.finalOutput ?? result.output;
+    logNewsletterAgent("info", "openai_step_completed", {
+      pipeline: params.pipeline,
+      step: params.step,
+      durationMs: Date.now() - startedAt,
+      hasOutput: Boolean(output),
+      ...params.props,
+    });
+    return output;
+  } catch (error) {
+    logNewsletterAgent("error", "openai_step_failed", {
+      pipeline: params.pipeline,
+      step: params.step,
+      durationMs: Date.now() - startedAt,
+      error: safeErrorMessage(error),
+      ...params.props,
+    });
+    throw error;
+  }
+}
+
 function normalizeHttpUrl(value: string) {
   try {
     const parsedUrl = new URL(value.trim());
@@ -827,7 +894,15 @@ async function discoverEventCandidatesWithAgent(params: {
   missionGoals: string[];
   cachedEvents: NewsletterResearchResult[];
 }): Promise<EventCandidate[]> {
-  if (!process.env.OPENAI_API_KEY) return [];
+  if (!process.env.OPENAI_API_KEY) {
+    logNewsletterAgent("warn", "skipped_missing_openai_api_key", {
+      pipeline: "event",
+      step: "event_discovery",
+      coopName: params.coopName,
+      cachedEventCount: params.cachedEvents.length,
+    });
+    return [];
+  }
 
   const cachedLines = params.cachedEvents
     .slice(0, 6)
@@ -864,24 +939,32 @@ async function discoverEventCandidatesWithAgent(params: {
     modelSettings: { toolChoice: "auto" },
   });
 
-  const result = (await run(
-    discoveryAgent,
-    [
-      `Today: ${new Date().toISOString().slice(0, 10)}`,
-      `Co-op: ${params.coopName}`,
-      `Co-op context: ${firstSentence(params.coopDescription) || params.coopName}`,
-      `Goals that define usefulness: ${params.missionGoals.join(", ") || "member ownership, local economic power, community participation"}`,
-      "",
-      "Cached event candidates, if any:",
-      cachedLines || "None.",
-    ].join("\n"),
-  )) as unknown as {
-    finalOutput?: z.infer<typeof EventDiscoverySchema>;
-    output?: z.infer<typeof EventDiscoverySchema>;
-  };
+  const discoveryInput = [
+    `Today: ${new Date().toISOString().slice(0, 10)}`,
+    `Co-op: ${params.coopName}`,
+    `Co-op context: ${firstSentence(params.coopDescription) || params.coopName}`,
+    `Goals that define usefulness: ${params.missionGoals.join(", ") || "member ownership, local economic power, community participation"}`,
+    "",
+    "Cached event candidates, if any:",
+    cachedLines || "None.",
+  ].join("\n");
 
-  return (
-    (result.finalOutput ?? result.output)?.candidates
+  const output = await runNewsletterAgentStep<
+    z.infer<typeof EventDiscoverySchema>
+  >({
+    pipeline: "event",
+    step: "event_discovery",
+    agent: discoveryAgent,
+    input: discoveryInput,
+    props: {
+      model,
+      coopName: params.coopName,
+      cachedEventCount: params.cachedEvents.length,
+    },
+  });
+
+  const candidates =
+    output?.candidates
       ?.map((candidate) => ({
         sourceTitle: sanitizeAgentText(candidate.sourceTitle),
         sourceUrl: sanitizeAgentText(candidate.sourceUrl),
@@ -894,8 +977,17 @@ async function discoverEventCandidatesWithAgent(params: {
         (candidate) =>
           candidate.sourceTitle && normalizeHttpUrl(candidate.sourceUrl),
       )
-      .slice(0, 4) ?? []
-  );
+      .slice(0, 4) ?? [];
+
+  logNewsletterAgent("info", "event_candidates_discovered", {
+    pipeline: "event",
+    step: "event_discovery",
+    coopName: params.coopName,
+    rawCandidateCount: output?.candidates?.length ?? 0,
+    usableCandidateCount: candidates.length,
+  });
+
+  return candidates;
 }
 
 async function verifyEventCandidateWithAgent(params: {
@@ -904,10 +996,28 @@ async function verifyEventCandidateWithAgent(params: {
   missionGoals: string[];
   candidate: EventCandidate;
 }): Promise<VerifiedEventDraft | null> {
-  if (!process.env.OPENAI_API_KEY) return null;
+  if (!process.env.OPENAI_API_KEY) {
+    logNewsletterAgent("warn", "skipped_missing_openai_api_key", {
+      pipeline: "event",
+      step: "event_verifier",
+      coopName: params.coopName,
+      sourceTitle: params.candidate.sourceTitle,
+      sourceHost: sourceHost(params.candidate.sourceUrl),
+    });
+    return null;
+  }
 
   const sourceUrl = normalizeHttpUrl(params.candidate.sourceUrl);
-  if (!sourceUrl) return null;
+  if (!sourceUrl) {
+    logNewsletterAgent("warn", "rejected", {
+      pipeline: "event",
+      step: "event_verifier",
+      reason: "invalid_candidate_url",
+      coopName: params.coopName,
+      sourceTitle: params.candidate.sourceTitle,
+    });
+    return null;
+  }
 
   const model =
     process.env.NEWSLETTER_EVENT_MODEL ||
@@ -929,29 +1039,46 @@ async function verifyEventCandidateWithAgent(params: {
     modelSettings: { toolChoice: "auto" },
   });
 
-  const result = (await run(
-    verifierAgent,
-    [
-      `Today: ${new Date().toISOString().slice(0, 10)}`,
-      `Co-op: ${params.coopName}`,
-      `Co-op context: ${firstSentence(params.coopDescription) || params.coopName}`,
-      `Goals that define usefulness: ${params.missionGoals.join(", ") || "member ownership, local economic power, community participation"}`,
-      "",
-      "Candidate to verify:",
-      `Source title: ${params.candidate.sourceTitle}`,
-      `Source URL: ${sourceUrl}`,
-      `Source name: ${params.candidate.sourceName}`,
-      `Possible event title: ${params.candidate.possibleEventTitle}`,
-      `Possible date: ${params.candidate.possibleDate}`,
-      `Why it may fit goals: ${params.candidate.whyItMayFitGoals}`,
-    ].join("\n"),
-  )) as unknown as {
-    finalOutput?: z.infer<typeof EventVerificationSchema>;
-    output?: z.infer<typeof EventVerificationSchema>;
-  };
+  const verificationInput = [
+    `Today: ${new Date().toISOString().slice(0, 10)}`,
+    `Co-op: ${params.coopName}`,
+    `Co-op context: ${firstSentence(params.coopDescription) || params.coopName}`,
+    `Goals that define usefulness: ${params.missionGoals.join(", ") || "member ownership, local economic power, community participation"}`,
+    "",
+    "Candidate to verify:",
+    `Source title: ${params.candidate.sourceTitle}`,
+    `Source URL: ${sourceUrl}`,
+    `Source name: ${params.candidate.sourceName}`,
+    `Possible event title: ${params.candidate.possibleEventTitle}`,
+    `Possible date: ${params.candidate.possibleDate}`,
+    `Why it may fit goals: ${params.candidate.whyItMayFitGoals}`,
+  ].join("\n");
 
-  const verification = result.finalOutput ?? result.output;
-  if (!verification?.approved) return null;
+  const verification = await runNewsletterAgentStep<
+    z.infer<typeof EventVerificationSchema>
+  >({
+    pipeline: "event",
+    step: "event_verifier",
+    agent: verifierAgent,
+    input: verificationInput,
+    props: {
+      model,
+      coopName: params.coopName,
+      sourceTitle: params.candidate.sourceTitle,
+      sourceHost: sourceHost(sourceUrl),
+    },
+  });
+  if (!verification?.approved) {
+    logNewsletterAgent("warn", "rejected", {
+      pipeline: "event",
+      step: "event_verifier",
+      reason: verification?.rejectionReason || "not_approved",
+      coopName: params.coopName,
+      sourceTitle: params.candidate.sourceTitle,
+      sourceHost: sourceHost(sourceUrl),
+    });
+    return null;
+  }
 
   const verifiedSourceUrl =
     normalizeHttpUrl(verification.sourceUrl) || sourceUrl;
@@ -979,6 +1106,20 @@ async function verifyEventCandidateWithAgent(params: {
     !hasConcreteValue(goalFit) ||
     verifiedFacts.length < 3
   ) {
+    logNewsletterAgent("warn", "rejected", {
+      pipeline: "event",
+      step: "event_verifier",
+      reason: "verified_event_failed_local_validation",
+      coopName: params.coopName,
+      sourceTitle: params.candidate.sourceTitle,
+      sourceHost: sourceHost(sourceUrl),
+      hasTitle: hasConcreteValue(title),
+      hasDate: hasConcreteValue(eventDate),
+      hasTime: hasConcreteValue(eventTime),
+      hasOrganizer: hasConcreteValue(organizer),
+      hasLocation: hasConcreteValue(locationOrOnline),
+      factCount: verifiedFacts.length,
+    });
     return null;
   }
 
@@ -988,6 +1129,16 @@ async function verifyEventCandidateWithAgent(params: {
   const sourceName = sanitizeAgentText(
     verification.sourceName || params.candidate.sourceName,
   );
+
+  logNewsletterAgent("info", "event_candidate_approved", {
+    pipeline: "event",
+    step: "event_verifier",
+    coopName: params.coopName,
+    title,
+    sourceTitle: sourceTitle || params.candidate.sourceTitle,
+    sourceHost: sourceHost(verifiedSourceUrl),
+  });
+
   return {
     title: title.slice(0, 120),
     summary: summary.slice(0, 1200),
@@ -1050,6 +1201,15 @@ async function generateVerifiedEventSubmissions(params: {
     whyItMayFitGoals: result.reasonForFit,
   }));
 
+  logNewsletterAgent("info", "event_pipeline_started", {
+    pipeline: "event",
+    coopId: params.coopId,
+    coopName: params.coopName,
+    researchResultCount: params.researchResults.length,
+    cachedEventCount: cachedEvents.length,
+    existingTitleCount: params.existingTitles.length,
+  });
+
   const discoveredCandidates = await discoverEventCandidatesWithAgent({
     coopName: params.coopName,
     coopDescription: params.coopDescription,
@@ -1067,6 +1227,15 @@ async function generateVerifiedEventSubmissions(params: {
       return true;
     })
     .slice(0, 6);
+
+  logNewsletterAgent("info", "event_candidates_ready", {
+    pipeline: "event",
+    coopId: params.coopId,
+    coopName: params.coopName,
+    cacheCandidateCount: cacheCandidates.length,
+    discoveredCandidateCount: discoveredCandidates.length,
+    candidateCount: candidates.length,
+  });
 
   const verifiedEvents: NewsletterSubmission[] = [];
   for (const candidate of candidates) {
@@ -1112,6 +1281,14 @@ async function generateVerifiedEventSubmissions(params: {
     );
   }
 
+  logNewsletterAgent("info", "event_pipeline_completed", {
+    pipeline: "event",
+    coopId: params.coopId,
+    coopName: params.coopName,
+    candidateCount: candidates.length,
+    createdCount: verifiedEvents.length,
+  });
+
   return verifiedEvents;
 }
 
@@ -1144,6 +1321,17 @@ async function buildAgentSubmissions(params: {
         result.recommendedNextAction !== "ignore",
     )
     .sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+  logNewsletterAgent("info", "build_agent_submissions_started", {
+    pipeline: params.agentId === "article-writer" ? "article" : "event",
+    coopId: params.coopId,
+    coopName: params.coopName,
+    agentId: params.agentId,
+    researchResultCount: params.researchResults?.length ?? 0,
+    usefulResearchCount: usefulResearch.length,
+    existingTitleCount: params.existingTitles.length,
+  });
+
   const articleBrief = buildArticleWriterBrief({
     coopName: params.coopName,
     coopDescription: params.coopDescription,
@@ -1164,6 +1352,14 @@ async function buildAgentSubmissions(params: {
         (result) => !hasSubjectOverlap(result.title, params.existingTitles),
       )
       .slice(0, 3);
+
+    logNewsletterAgent("info", "article_sources_ready", {
+      pipeline: "article",
+      coopId: params.coopId,
+      coopName: params.coopName,
+      sourceCount: articleSources.length,
+      willColdSearch: articleSources.length === 0,
+    });
 
     const generatedDrafts: NewsletterSubmission[] = [];
     const sourcesToTry: Array<NewsletterResearchResult | undefined> =
@@ -1202,7 +1398,17 @@ async function buildAgentSubmissions(params: {
       }
     }
 
-    return unique(generatedDrafts);
+    const uniqueDrafts = unique(generatedDrafts);
+    logNewsletterAgent("info", "article_pipeline_completed", {
+      pipeline: "article",
+      coopId: params.coopId,
+      coopName: params.coopName,
+      attemptedSourceCount: sourcesToTry.length,
+      generatedCount: generatedDrafts.length,
+      createdCount: uniqueDrafts.length,
+    });
+
+    return uniqueDrafts;
   }
 
   const verifiedEvents = await generateVerifiedEventSubmissions({
@@ -1215,7 +1421,16 @@ async function buildAgentSubmissions(params: {
     researchResults: usefulResearch,
   });
 
-  return unique(verifiedEvents).slice(0, 2);
+  const uniqueEvents = unique(verifiedEvents).slice(0, 2);
+  logNewsletterAgent("info", "event_unique_filter_completed", {
+    pipeline: "event",
+    coopId: params.coopId,
+    coopName: params.coopName,
+    verifiedCount: verifiedEvents.length,
+    createdCount: uniqueEvents.length,
+  });
+
+  return uniqueEvents;
 }
 
 function decodeHtmlEntities(value: string): string {
@@ -1397,6 +1612,22 @@ export async function runNewsletterAgentForCoop(params: {
       ? researchCache.results
       : [];
 
+  logNewsletterAgent("info", "run_started", {
+    coopId: params.coopId,
+    coopName,
+    agentId: params.agentId,
+    hasOpenAiApiKey: Boolean(process.env.OPENAI_API_KEY),
+    hasResearchCache: Boolean(researchCache),
+    researchCacheExpired: researchCache
+      ? new Date(researchCache.expiresAt).getTime() <= Date.now()
+      : undefined,
+    researchResultCount: researchResults.length,
+    existingPendingSubmissionCount: existingSubmissions.length,
+    existingPostCount: existingPosts.length,
+    existingTitleCount: existingTitles.length,
+    updatedBy,
+  });
+
   const generatedSubmissions = await buildAgentSubmissions({
     agentId: params.agentId,
     coopId: params.coopId,
@@ -1412,6 +1643,16 @@ export async function runNewsletterAgentForCoop(params: {
     generatedSubmissions.length === 0
       ? `${agentLabels[params.agentId]} did not add any verified newsletter drafts.`
       : `${agentLabels[params.agentId]} added ${generatedSubmissions.length} draft(s) to the newsletter queue.`;
+
+  logNewsletterAgent("info", "run_completed", {
+    coopId: params.coopId,
+    coopName,
+    agentId: params.agentId,
+    createdCount: generatedSubmissions.length,
+    status: generatedSubmissions.length > 0 ? "success" : "empty",
+    message: runMessage,
+  });
+
   const overridesWithRunStatus = withAgentRunStatus({
     overrides,
     agentId: params.agentId,

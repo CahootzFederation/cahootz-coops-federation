@@ -1,24 +1,18 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import {
-  Activity,
-  AlertCircle,
-  ArrowLeft,
-  Bot,
-  CalendarClock,
-  CheckCircle2,
-  Clock,
-  Loader2,
-  PlayCircle,
-  Save,
-} from "lucide-react";
-
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -28,9 +22,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useWeb3Auth } from "@/hooks/use-web3-auth";
 import { api } from "@/lib/trpc/client";
 import { cn } from "@/lib/utils";
-import { useWeb3Auth } from "@/hooks/use-web3-auth";
+import {
+  Activity,
+  AlertCircle,
+  ArrowLeft,
+  Bot,
+  CalendarClock,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  Loader2,
+  PlayCircle,
+  Plus,
+  RefreshCw,
+  Save,
+  Trash2,
+} from "lucide-react";
 
 type NewsletterAgentId = "article-writer" | "event-writer";
 type AgentRunStatus = "success" | "empty" | "error";
@@ -46,22 +56,33 @@ interface NewsletterAgentSchedule {
   updatedAt?: string;
 }
 
+interface NewsletterResearchSource {
+  url: string;
+  label?: string;
+}
+
 interface PreviewOverrides {
   newsletterAgentSchedules?: unknown;
+  newsletterResearchSources?: unknown;
   [key: string]: unknown;
 }
 
-const agentCopy: Record<NewsletterAgentId, {
-  label: string;
-  description: string;
-}> = {
+const agentCopy: Record<
+  NewsletterAgentId,
+  {
+    label: string;
+    description: string;
+  }
+> = {
   "article-writer": {
     label: "News Agent",
-    description: "Researches sources, verifies an angle, writes, and quality-checks newsletter news drafts.",
+    description:
+      "Researches sources, verifies an angle, writes, and quality-checks newsletter news drafts.",
   },
   "event-writer": {
     label: "Event Agent",
-    description: "Finds events, verifies facts, checks goal fit, and drafts event listings.",
+    description:
+      "Finds events, verifies facts, checks goal fit, and drafts event listings.",
   },
 };
 
@@ -92,43 +113,112 @@ function normalizePreviewOverrides(value: unknown): PreviewOverrides {
     : {};
 }
 
-function normalizeSchedule(agentId: NewsletterAgentId, value: unknown): NewsletterAgentSchedule {
+function normalizeSchedule(
+  agentId: NewsletterAgentId,
+  value: unknown,
+): NewsletterAgentSchedule {
   const fallback = defaultSchedules[agentId];
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { ...fallback };
   }
 
   const record = value as Record<string, unknown>;
-  const intervalHours = typeof record.intervalHours === "number" && Number.isFinite(record.intervalHours)
-    ? Math.min(Math.max(Math.round(record.intervalHours), 1), 24 * 60)
-    : fallback.intervalHours;
-  const lastRunStatus = ["success", "empty", "error"].includes(String(record.lastRunStatus))
-    ? record.lastRunStatus as AgentRunStatus
+  const intervalHours =
+    typeof record.intervalHours === "number" &&
+    Number.isFinite(record.intervalHours)
+      ? Math.min(Math.max(Math.round(record.intervalHours), 1), 24 * 60)
+      : fallback.intervalHours;
+  const lastRunStatus = ["success", "empty", "error"].includes(
+    String(record.lastRunStatus),
+  )
+    ? (record.lastRunStatus as AgentRunStatus)
     : undefined;
 
   return {
     agentId,
-    enabled: typeof record.enabled === "boolean" ? record.enabled : fallback.enabled,
+    enabled:
+      typeof record.enabled === "boolean" ? record.enabled : fallback.enabled,
     intervalHours,
-    lastRunAt: typeof record.lastRunAt === "string" ? record.lastRunAt : undefined,
+    lastRunAt:
+      typeof record.lastRunAt === "string" ? record.lastRunAt : undefined,
     lastRunStatus,
-    lastRunMessage: typeof record.lastRunMessage === "string" ? record.lastRunMessage : undefined,
-    lastCreatedCount: typeof record.lastCreatedCount === "number" && Number.isFinite(record.lastCreatedCount)
-      ? Math.max(Math.round(record.lastCreatedCount), 0)
-      : undefined,
-    updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : undefined,
+    lastRunMessage:
+      typeof record.lastRunMessage === "string"
+        ? record.lastRunMessage
+        : undefined,
+    lastCreatedCount:
+      typeof record.lastCreatedCount === "number" &&
+      Number.isFinite(record.lastCreatedCount)
+        ? Math.max(Math.round(record.lastCreatedCount), 0)
+        : undefined,
+    updatedAt:
+      typeof record.updatedAt === "string" ? record.updatedAt : undefined,
   };
 }
 
-function normalizeSchedules(value: unknown): Record<NewsletterAgentId, NewsletterAgentSchedule> {
-  const record = typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
+function normalizeSchedules(
+  value: unknown,
+): Record<NewsletterAgentId, NewsletterAgentSchedule> {
+  const record =
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
 
   return {
-    "article-writer": normalizeSchedule("article-writer", record["article-writer"]),
+    "article-writer": normalizeSchedule(
+      "article-writer",
+      record["article-writer"],
+    ),
     "event-writer": normalizeSchedule("event-writer", record["event-writer"]),
   };
+}
+
+function normalizeResearchSources(value: unknown): NewsletterResearchSource[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((source) => {
+      if (typeof source === "string") {
+        return { url: source.trim() };
+      }
+
+      if (typeof source === "object" && source !== null) {
+        const record = source as Record<string, unknown>;
+        return {
+          url: typeof record.url === "string" ? record.url.trim() : "",
+          label:
+            typeof record.label === "string" ? record.label.trim() : undefined,
+        };
+      }
+
+      return { url: "" };
+    })
+    .filter((source) => source.url.length > 0);
+}
+
+function cleanResearchSources(sources: NewsletterResearchSource[]) {
+  const seen = new Set<string>();
+
+  return sources
+    .map((source) => ({
+      url: source.url.trim(),
+      label: source.label?.trim() || undefined,
+    }))
+    .filter((source) => {
+      if (!source.url) return false;
+      try {
+        const parsedUrl = new URL(source.url);
+        if (!["http:", "https:"].includes(parsedUrl.protocol)) return false;
+        const normalizedUrl = parsedUrl.toString();
+        if (seen.has(normalizedUrl)) return false;
+        seen.add(normalizedUrl);
+        source.url = normalizedUrl;
+        return true;
+      } catch {
+        return false;
+      }
+    })
+    .slice(0, 12);
 }
 
 function formatDateTime(value?: string) {
@@ -146,15 +236,21 @@ function formatDateTime(value?: string) {
 
 function getNextRunAt(schedule: NewsletterAgentSchedule) {
   if (!schedule.enabled) return null;
-  const anchor = schedule.lastRunAt || schedule.updatedAt || new Date().toISOString();
+  const anchor =
+    schedule.lastRunAt || schedule.updatedAt || new Date().toISOString();
   const anchorDate = new Date(anchor);
   if (Number.isNaN(anchorDate.getTime())) return null;
-  return new Date(anchorDate.getTime() + schedule.intervalHours * 60 * 60 * 1000).toISOString();
+  return new Date(
+    anchorDate.getTime() + schedule.intervalHours * 60 * 60 * 1000,
+  ).toISOString();
 }
 
 function cadenceDescription(intervalHours: number) {
-  return cadenceOptions.find((option) => Number(option.value) === intervalHours)?.description
-    || `Every ${intervalHours} hour${intervalHours === 1 ? "" : "s"}`;
+  return (
+    cadenceOptions.find((option) => Number(option.value) === intervalHours)
+      ?.description ||
+    `Every ${intervalHours} hour${intervalHours === 1 ? "" : "s"}`
+  );
 }
 
 export default function AgentsStatusPage() {
@@ -165,27 +261,154 @@ export default function AgentsStatusPage() {
     tone: "success" | "error";
     text: string;
   } | null>(null);
-  const [runningAgentId, setRunningAgentId] = useState<NewsletterAgentId | null>(null);
+  const [runningAgentId, setRunningAgentId] =
+    useState<NewsletterAgentId | null>(null);
+  const [researchSources, setResearchSources] = useState<
+    NewsletterResearchSource[]
+  >([]);
+  const [sourcesDirty, setSourcesDirty] = useState(false);
 
-  const { data: publicInfo, isLoading, refetch } = api.publicCoopInfo.getForEdit.useQuery(
+  const {
+    data: publicInfo,
+    isLoading,
+    refetch,
+  } = api.publicCoopInfo.getForEdit.useQuery({ coopId }, { enabled: isAdmin });
+  const researchQuery = api.publicCoopInfo.getNewsletterResearch.useQuery(
     { coopId },
-    { enabled: isAdmin }
+    { enabled: isAdmin },
   );
   const updatePublicInfo = api.publicCoopInfo.update.useMutation({
     onSuccess: () => {
       refetch();
     },
   });
-  const runNewsletterAgent = api.publicCoopInfo.runNewsletterAgent.useMutation();
+  const runNewsletterAgent =
+    api.publicCoopInfo.runNewsletterAgent.useMutation();
+  const runNewsletterResearch =
+    api.publicCoopInfo.runNewsletterResearch.useMutation({
+      onSuccess: async (result) => {
+        await researchQuery.refetch();
+        setStatusMessage({
+          tone: "success",
+          text: result.message,
+        });
+      },
+    });
 
   const editablePublicInfo = publicInfo as any;
-  const previewOverrides = normalizePreviewOverrides(editablePublicInfo?.previewOverrides);
+  const previewOverrides = normalizePreviewOverrides(
+    editablePublicInfo?.previewOverrides,
+  );
   const schedules = useMemo(
     () => normalizeSchedules(previewOverrides.newsletterAgentSchedules),
-    [previewOverrides.newsletterAgentSchedules]
+    [previewOverrides.newsletterAgentSchedules],
+  );
+  const savedResearchSources = useMemo(
+    () => normalizeResearchSources(previewOverrides.newsletterResearchSources),
+    [previewOverrides.newsletterResearchSources],
+  );
+  const cachedResearchSources = useMemo(
+    () => researchQuery.data?.cache?.sources ?? [],
+    [researchQuery.data?.cache?.sources],
+  );
+  const researchResultCount = researchQuery.data?.cache?.results.length ?? 0;
+  const cleanSources = useMemo(
+    () => cleanResearchSources(researchSources),
+    [researchSources],
   );
 
-  const saveSchedule = async (agentId: NewsletterAgentId, patch: Partial<NewsletterAgentSchedule>) => {
+  useEffect(() => {
+    if (sourcesDirty) return;
+    if (savedResearchSources.length > 0) {
+      setResearchSources(savedResearchSources);
+      return;
+    }
+    if (cachedResearchSources.length > 0) {
+      setResearchSources(cachedResearchSources);
+      return;
+    }
+    setResearchSources([{ url: "", label: "" }]);
+  }, [cachedResearchSources, savedResearchSources, sourcesDirty]);
+
+  const updateResearchSource = (
+    index: number,
+    field: keyof NewsletterResearchSource,
+    value: string,
+  ) => {
+    setSourcesDirty(true);
+    setStatusMessage(null);
+    setResearchSources((current) => {
+      const next = [...current];
+      next[index] = {
+        ...next[index],
+        [field]: value,
+      };
+      return next;
+    });
+  };
+
+  const addResearchSource = () => {
+    setSourcesDirty(true);
+    setStatusMessage(null);
+    setResearchSources((current) =>
+      [...current, { url: "", label: "" }].slice(0, 12),
+    );
+  };
+
+  const removeResearchSource = (index: number) => {
+    setSourcesDirty(true);
+    setStatusMessage(null);
+    setResearchSources((current) => {
+      const next = current.filter((_, itemIndex) => itemIndex !== index);
+      return next.length > 0 ? next : [{ url: "", label: "" }];
+    });
+  };
+
+  const saveResearchSources = async () => {
+    await updatePublicInfo.mutateAsync({
+      coopId,
+      data: {
+        previewOverrides: {
+          ...previewOverrides,
+          newsletterResearchSources: cleanSources,
+        },
+      },
+    });
+    setResearchSources(
+      cleanSources.length > 0 ? cleanSources : [{ url: "", label: "" }],
+    );
+    setSourcesDirty(false);
+    setStatusMessage({
+      tone: "success",
+      text: `${cleanSources.length} research source${cleanSources.length === 1 ? "" : "s"} saved.`,
+    });
+  };
+
+  const refreshResearch = async () => {
+    if (cleanSources.length === 0) {
+      setStatusMessage({
+        tone: "error",
+        text: "Add at least one valid source URL before refreshing research.",
+      });
+      return;
+    }
+
+    if (sourcesDirty) {
+      await saveResearchSources();
+    }
+
+    await runNewsletterResearch.mutateAsync({
+      coopId,
+      sources: cleanSources,
+      forceRefresh: true,
+    });
+    setSourcesDirty(false);
+  };
+
+  const saveSchedule = async (
+    agentId: NewsletterAgentId,
+    patch: Partial<NewsletterAgentSchedule>,
+  ) => {
     const now = new Date().toISOString();
     const nextSchedules: Record<NewsletterAgentId, NewsletterAgentSchedule> = {
       ...schedules,
@@ -226,7 +449,10 @@ export default function AgentsStatusPage() {
     } catch (error) {
       setStatusMessage({
         tone: "error",
-        text: error instanceof Error ? error.message : `Could not run ${agentCopy[agentId].label}.`,
+        text:
+          error instanceof Error
+            ? error.message
+            : `Could not run ${agentCopy[agentId].label}.`,
       });
     } finally {
       setRunningAgentId(null);
@@ -269,7 +495,8 @@ export default function AgentsStatusPage() {
             Agent schedules
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-            Review automated editorial agent timing, adjust cadence, and trigger the news or event agent when admins need fresh drafts.
+            Review automated editorial agent timing, adjust cadence, and trigger
+            the news or event agent when admins need fresh drafts.
           </p>
         </div>
 
@@ -280,17 +507,21 @@ export default function AgentsStatusPage() {
               Automation status
             </CardTitle>
             <CardDescription className="text-zinc-500">
-              {isLoading ? "Loading schedules" : "Admin-triggered runs write to the newsletter review queue"}
+              {isLoading
+                ? "Loading schedules"
+                : "Admin-triggered runs write to the newsletter review queue"}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {statusMessage ? (
-              <div className={cn(
-                "flex items-start gap-3 rounded-md border p-3 text-sm",
-                statusMessage.tone === "success"
-                  ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100"
-                  : "border-red-400/30 bg-red-400/10 text-red-100",
-              )}>
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-md border p-3 text-sm",
+                  statusMessage.tone === "success"
+                    ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100"
+                    : "border-red-400/30 bg-red-400/10 text-red-100",
+                )}
+              >
                 {statusMessage.tone === "success" ? (
                   <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-300" />
                 ) : (
@@ -300,7 +531,8 @@ export default function AgentsStatusPage() {
               </div>
             ) : (
               <div className="rounded-md border border-zinc-800 bg-zinc-900/60 p-3 text-sm text-zinc-400">
-                Runs update automatically when the scheduled worker or an admin trigger completes.
+                Runs update automatically when the scheduled worker or an admin
+                trigger completes.
               </div>
             )}
           </CardContent>
@@ -316,16 +548,20 @@ export default function AgentsStatusPage() {
           {(Object.keys(agentCopy) as NewsletterAgentId[]).map((agentId) => {
             const schedule = schedules[agentId];
             const nextRunAt = getNextRunAt(schedule);
-            const statusTone = schedule.lastRunStatus === "success"
-              ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100"
-              : schedule.lastRunStatus === "empty"
-                ? "border-sky-400/30 bg-sky-400/10 text-sky-100"
-                : schedule.lastRunStatus === "error"
-                  ? "border-red-400/30 bg-red-400/10 text-red-100"
-                  : "border-zinc-700 bg-zinc-900 text-zinc-300";
+            const statusTone =
+              schedule.lastRunStatus === "success"
+                ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100"
+                : schedule.lastRunStatus === "empty"
+                  ? "border-sky-400/30 bg-sky-400/10 text-sky-100"
+                  : schedule.lastRunStatus === "error"
+                    ? "border-red-400/30 bg-red-400/10 text-red-100"
+                    : "border-zinc-700 bg-zinc-900 text-zinc-300";
 
             return (
-              <Card key={agentId} className="border-zinc-800 bg-zinc-950/70 shadow-none">
+              <Card
+                key={agentId}
+                className="border-zinc-800 bg-zinc-950/70 shadow-none"
+              >
                 <CardHeader className="space-y-3">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex min-w-0 items-start gap-3">
@@ -333,14 +569,25 @@ export default function AgentsStatusPage() {
                         <Bot className="h-5 w-5" />
                       </div>
                       <div className="min-w-0">
-                        <CardTitle className="text-zinc-100">{agentCopy[agentId].label}</CardTitle>
+                        <CardTitle className="text-zinc-100">
+                          {agentCopy[agentId].label}
+                        </CardTitle>
                         <CardDescription className="mt-1 text-zinc-500">
                           {agentCopy[agentId].description}
                         </CardDescription>
                       </div>
                     </div>
-                    <Badge className={cn("shrink-0 border", schedule.enabled ? statusTone : "border-zinc-700 bg-zinc-900 text-zinc-400")}>
-                      {schedule.enabled ? schedule.lastRunStatus || "scheduled" : "paused"}
+                    <Badge
+                      className={cn(
+                        "shrink-0 border",
+                        schedule.enabled
+                          ? statusTone
+                          : "border-zinc-700 bg-zinc-900 text-zinc-400",
+                      )}
+                    >
+                      {schedule.enabled
+                        ? schedule.lastRunStatus || "scheduled"
+                        : "paused"}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -368,10 +615,14 @@ export default function AgentsStatusPage() {
                         Next run
                       </div>
                       <p className="mt-2 text-sm font-medium text-zinc-100">
-                        {schedule.enabled ? formatDateTime(nextRunAt || undefined) : "Paused"}
+                        {schedule.enabled
+                          ? formatDateTime(nextRunAt || undefined)
+                          : "Paused"}
                       </p>
                       <p className="mt-1 text-xs text-zinc-500">
-                        {schedule.enabled ? cadenceDescription(schedule.intervalHours) : "Automation off"}
+                        {schedule.enabled
+                          ? cadenceDescription(schedule.intervalHours)
+                          : "Automation off"}
                       </p>
                     </div>
                   </div>
@@ -389,9 +640,14 @@ export default function AgentsStatusPage() {
                         value={String(schedule.intervalHours)}
                         onValueChange={(value) => {
                           setStatusMessage(null);
-                          saveSchedule(agentId, { intervalHours: Number(value) });
+                          void saveSchedule(agentId, {
+                            intervalHours: Number(value),
+                          });
                         }}
-                        disabled={updatePublicInfo.isPending || runNewsletterAgent.isPending}
+                        disabled={
+                          updatePublicInfo.isPending ||
+                          runNewsletterAgent.isPending
+                        }
                       >
                         <SelectTrigger className="border-zinc-700 bg-zinc-900 text-zinc-100">
                           <SelectValue />
@@ -410,10 +666,13 @@ export default function AgentsStatusPage() {
                       <Label className="text-sm text-zinc-300">Enabled</Label>
                       <Switch
                         checked={schedule.enabled}
-                        disabled={updatePublicInfo.isPending || runNewsletterAgent.isPending}
+                        disabled={
+                          updatePublicInfo.isPending ||
+                          runNewsletterAgent.isPending
+                        }
                         onCheckedChange={(checked) => {
                           setStatusMessage(null);
-                          saveSchedule(agentId, { enabled: checked });
+                          void saveSchedule(agentId, { enabled: checked });
                         }}
                       />
                     </div>
@@ -422,7 +681,9 @@ export default function AgentsStatusPage() {
                   <Button
                     type="button"
                     className="w-full bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
-                    disabled={runNewsletterAgent.isPending || updatePublicInfo.isPending}
+                    disabled={
+                      runNewsletterAgent.isPending || updatePublicInfo.isPending
+                    }
                     onClick={() => runAgentNow(agentId)}
                   >
                     {runningAgentId === agentId ? (
@@ -430,7 +691,9 @@ export default function AgentsStatusPage() {
                     ) : (
                       <PlayCircle className="h-4 w-4" />
                     )}
-                    {runningAgentId === agentId ? "Running..." : `Run ${agentCopy[agentId].label}`}
+                    {runningAgentId === agentId
+                      ? "Running..."
+                      : `Run ${agentCopy[agentId].label}`}
                   </Button>
                 </CardContent>
               </Card>
@@ -440,8 +703,166 @@ export default function AgentsStatusPage() {
       )}
 
       <Card className="border-zinc-800 bg-zinc-950/70 shadow-none">
+        <CardHeader className="space-y-2">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-zinc-100">
+                <RefreshCw className="h-5 w-5 text-amber-300" />
+                Research sources
+              </CardTitle>
+              <CardDescription className="mt-1 text-zinc-500">
+                Saved URLs are used when admins refresh cached newsletter
+                research.
+              </CardDescription>
+            </div>
+            <Badge variant="outline" className="border-zinc-700 text-zinc-300">
+              {researchQuery.isLoading
+                ? "Loading"
+                : `${researchResultCount} cached result${researchResultCount === 1 ? "" : "s"}`}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-3">
+            {researchSources.map((source, index) => (
+              <div
+                key={index}
+                className="grid gap-2 rounded-md border border-zinc-800 bg-zinc-950 p-3 md:grid-cols-[0.7fr_1.3fr_auto]"
+              >
+                <Input
+                  value={source.label || ""}
+                  onChange={(event) =>
+                    updateResearchSource(index, "label", event.target.value)
+                  }
+                  placeholder="Source label"
+                  className="border-zinc-700 bg-zinc-900 text-zinc-100 placeholder:text-zinc-600"
+                />
+                <Input
+                  value={source.url}
+                  onChange={(event) =>
+                    updateResearchSource(index, "url", event.target.value)
+                  }
+                  placeholder="https://example.org/events"
+                  className="border-zinc-700 bg-zinc-900 font-mono text-sm text-zinc-100 placeholder:text-zinc-600"
+                />
+                <div className="flex gap-2 md:justify-end">
+                  {source.url ? (
+                    <Button
+                      asChild
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="border-zinc-700 text-zinc-200 hover:bg-zinc-900"
+                    >
+                      <a
+                        href={source.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="Open source"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => removeResearchSource(index)}
+                    disabled={
+                      updatePublicInfo.isPending ||
+                      runNewsletterResearch.isPending
+                    }
+                    className="border-zinc-700 text-zinc-200 hover:bg-zinc-900"
+                    aria-label="Remove source"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={addResearchSource}
+              disabled={
+                researchSources.length >= 12 ||
+                updatePublicInfo.isPending ||
+                runNewsletterResearch.isPending
+              }
+              className="border-zinc-700 text-zinc-200 hover:bg-zinc-900"
+            >
+              <Plus className="h-4 w-4" />
+              Add Source
+            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={saveResearchSources}
+                disabled={
+                  updatePublicInfo.isPending || runNewsletterResearch.isPending
+                }
+                className="border-zinc-700 text-zinc-200 hover:bg-zinc-900"
+              >
+                {updatePublicInfo.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                Save Sources
+              </Button>
+              <Button
+                type="button"
+                onClick={refreshResearch}
+                disabled={
+                  updatePublicInfo.isPending ||
+                  runNewsletterResearch.isPending ||
+                  cleanSources.length === 0
+                }
+                className="bg-amber-400 text-zinc-950 hover:bg-amber-300"
+              >
+                {runNewsletterResearch.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Refresh Research
+              </Button>
+            </div>
+          </div>
+
+          {researchQuery.data?.updatedAt ? (
+            <div className="grid gap-3 text-sm sm:grid-cols-2">
+              <div className="rounded-md border border-zinc-800 bg-zinc-900/50 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  Last refreshed
+                </p>
+                <p className="mt-1 text-zinc-100">
+                  {formatDateTime(String(researchQuery.data.updatedAt))}
+                </p>
+              </div>
+              <div className="rounded-md border border-zinc-800 bg-zinc-900/50 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  Expires
+                </p>
+                <p className="mt-1 text-zinc-100">
+                  {formatDateTime(String(researchQuery.data.expiresAt || ""))}
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card className="border-zinc-800 bg-zinc-950/70 shadow-none">
         <CardContent className="flex flex-col gap-3 p-4 text-sm text-zinc-400 sm:flex-row sm:items-center sm:justify-between">
-          <span>Agent drafts still land in the existing newsletter review queue.</span>
+          <span>
+            Agent drafts still land in the existing newsletter review queue.
+          </span>
           <Button
             asChild
             variant="outline"

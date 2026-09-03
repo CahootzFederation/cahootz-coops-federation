@@ -1,0 +1,80 @@
+name: Mobile EAS Build and Submit
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: EAS build profile to use
+        required: true
+        default: production
+        type: choice
+        options:
+          - development
+          - preview
+          - production
+      platform:
+        description: Platform to build
+        required: true
+        default: ios
+        type: choice
+        options:
+          - ios
+          - android
+          - all
+      submit:
+        description: Submit the iOS production build after it completes
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.profile }}-${{ inputs.platform }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Start EAS build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup repo
+        uses: ./tooling/github/setup
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v9
+        with:
+          eas-version: latest
+          packager: pnpm
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Validate submit profile
+        if: ${{ inputs.submit && inputs.profile != 'production' }}
+        shell: bash
+        run: |
+          echo "::error::Auto-submit is configured for the production profile only."
+          exit 1
+
+      - name: Validate submit platform
+        if: ${{ inputs.submit && inputs.platform != 'ios' }}
+        shell: bash
+        run: |
+          echo "::error::Auto-submit currently supports iOS only. Add submit.production.android in apps/mobile/eas.json before submitting Android builds from CI."
+          exit 1
+
+      - name: Start build
+        if: ${{ !inputs.submit }}
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL || secrets.EXPO_PUBLIC_API_BASE_URL }}
+        run: eas build --profile "${{ inputs.profile }}" --platform "${{ inputs.platform }}" --non-interactive --no-wait
+
+      - name: Start build and submit
+        if: ${{ inputs.submit }}
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL || secrets.EXPO_PUBLIC_API_BASE_URL }}
+        run: eas build --profile "${{ inputs.profile }}" --platform "${{ inputs.platform }}" --auto-submit --non-interactive --no-wait

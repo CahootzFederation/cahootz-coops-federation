@@ -11,23 +11,27 @@
       },
       "android": {
         "resourceClass": "medium"
-      }
+      },
+      "channel": "base"
     },
     "development": {
       "extends": "base",
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "channel": "development"
     },
     "preview": {
       "extends": "base",
       "distribution": "internal",
       "ios": {
         "simulator": true
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "extends": "base",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "channel": "production"
     }
   },
   "submit": {
@@ -35,7 +39,6 @@
       "ios": {
         "appleTeamId": "9GTZ7ZJYMX",
         "ascAppId": "6772781102"
-
       }
     }
   }

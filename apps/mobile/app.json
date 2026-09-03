@@ -14,7 +14,8 @@
       "backgroundColor": "#FBF7E7"
     },
     "updates": {
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/d6eac9aa-edde-46f3-b75e-6fcad6e89359"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -31,7 +32,13 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#FBF7E7"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -73,6 +80,7 @@
         }
       ]
     ],
-    "owner": "cahootz-coop"
+    "owner": "cahootz-coop",
+    "runtimeVersion": "1.0.0"
   }
 }

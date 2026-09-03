@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ScrollView, View, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { router } from 'expo-router';
 import { useSubmitApplication } from '@/hooks/use-api';
 import { useAuth } from '@/contexts/auth-context';
 import { getApiUrl } from '@/lib/config';
@@ -64,8 +65,18 @@ interface ApplicationQuestion {
   validation?: Record<string, unknown>;
 }
 
-export default function OnboardingFlow() {
-  const [currentStep, setCurrentStep] = useState(0);
+type OnboardingFlowProps = {
+  initialStep?: 'intro' | 'browse' | 'login';
+};
+
+const getInitialStep = (initialStep: OnboardingFlowProps['initialStep']) => {
+  if (initialStep === 'browse') return 4;
+  if (initialStep === 'login') return 11;
+  return 0;
+};
+
+export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlowProps = {}) {
+  const [currentStep, setCurrentStep] = useState(getInitialStep(initialStep));
   const [selectedCoopId, setSelectedCoopId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -174,7 +185,7 @@ export default function OnboardingFlow() {
   // Generic platform introduction screens
   const splashScreens = [
     {
-      title: 'Welcome to Cahootz Commons Network',
+      title: 'Welcome to Cahootz Commons',
       subtitle: 'Where Communities Build Together',
       description:
         'Join commons communities that invest together, support local businesses, and build shared wealth through collective economic power.',
@@ -606,27 +617,15 @@ export default function OnboardingFlow() {
     setLoginError('');
 
     try {
-      const response = await fetch(`${getApiUrl()}/trpc/auth.requestLoginCode`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: loginData.email.trim().toLowerCase(),
-          ...(isDemoLoginEmail ? { coopId: DEMO_COOP_ID } : {}),
-        }),
-      });
+      const result = await api.requestLoginCode(
+        loginData.email,
+        isDemoLoginEmail ? DEMO_COOP_ID : undefined
+      );
 
-      const data = await response.json();
-
-      if (data.result?.data?.success) {
-        setCodeSent(true);
-        setCanResend(false);
-        setResendTimer(60); // 60 second cooldown
-        Alert.alert('Code Sent', data.result.data.message || 'Check your email for the login code');
-      } else {
-        setLoginError(data.error?.message || 'Failed to send code');
-      }
+      setCodeSent(true);
+      setCanResend(false);
+      setResendTimer(60); // 60 second cooldown
+      Alert.alert('Code Sent', result.message || 'Check your email for the login code');
     } catch (error) {
       console.error('Request code error:', error);
       setLoginError('Failed to send code. Please try again.');
@@ -643,32 +642,28 @@ export default function OnboardingFlow() {
 
     try {
       const isDemoEmail = loginData.email.trim().toLowerCase() === DEMO_LOGIN_EMAIL;
-      const response = await fetch(`${getApiUrl()}/trpc/auth.verifyLoginCode`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: loginData.email.trim().toLowerCase(),
-          code: loginData.code,
-          ...(isDemoEmail ? { coopId: DEMO_COOP_ID } : {}),
-        }),
-      });
-
-      const data = await response.json();
+      const data = await api.verifyLoginCode(
+        loginData.email,
+        loginData.code,
+        isDemoEmail ? DEMO_COOP_ID : undefined
+      );
       console.log('📥 Verify code response:', JSON.stringify(data, null, 2));
 
-      if (data.result?.data?.success && data.result?.data?.user) {
+      if (data.success && data.user) {
         console.log('✅ Code verified successfully, logging in...');
-        const user = data.result.data.user;
-        // Convert createdAt to Date object
-        user.createdAt = new Date(user.createdAt);
+        const user = {
+          ...data.user,
+          createdAt: new Date(data.user.createdAt),
+          profileOnboardingCompletedAt: data.user.profileOnboardingCompletedAt
+            ? new Date(data.user.profileOnboardingCompletedAt)
+            : null,
+        };
         console.log('👤 User data:', user);
         await login(user);
         console.log('🎉 Login complete!');
-        // Navigation is handled by AuthContext
+        router.replace(user.profileOnboardingCompletedAt ? '/(tabs)' as any : '/profile-onboarding' as any);
       } else {
-        const errorMsg = data.error?.message || 'Invalid code';
+        const errorMsg = 'Invalid code';
         console.error('❌ Verification failed:', errorMsg);
         console.error('📦 Full response:', data);
         setLoginError(errorMsg);

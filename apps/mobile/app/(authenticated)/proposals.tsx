@@ -27,8 +27,9 @@ import {
   Lightbulb,
   DollarSign,
   Clock,
+  Lock,
 } from 'lucide-react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
@@ -292,10 +293,12 @@ const EMPTY_FORM: FormData = {
   impact: '', budget: '', timeline: '', milestones: '', team: '', communityBenefit: '',
 };
 
-function SubmitModal({ visible, onClose, walletAddress, primaryColor, accentColor }: {
+function SubmitModal({ visible, onClose, walletAddress, coopId, coopName, primaryColor, accentColor }: {
   visible: boolean;
   onClose: () => void;
   walletAddress: string;
+  coopId: string;
+  coopName: string;
   primaryColor: string;
   accentColor: string;
 }) {
@@ -308,7 +311,8 @@ function SubmitModal({ visible, onClose, walletAddress, primaryColor, accentColo
   const TOTAL = 4;
 
   useEffect(() => {
-    api.getCoopConfig('soulaan').then(cfg => {
+    setCategories([]);
+    api.getCoopConfig(coopId).then(cfg => {
       if (cfg?.proposalCategories) {
         setCategories(
           cfg.proposalCategories
@@ -317,7 +321,7 @@ function SubmitModal({ visible, onClose, walletAddress, primaryColor, accentColo
         );
       }
     }).catch(() => {/* silently ignore — user can still type category into proposal text */});
-  }, []);
+  }, [coopId]);
 
   function set<K extends keyof FormData>(field: K, value: FormData[K]) {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -352,11 +356,12 @@ function SubmitModal({ visible, onClose, walletAddress, primaryColor, accentColo
         form.team ? `Team: ${form.team}` : '',
       ].filter(Boolean).join('\n\n');
 
-      await api.createProposal(text, walletAddress);
-    } catch (e: unknown) {
-      console.warn('Proposal submission error (proceeding to success screen):', e);
-    } finally {
+      await api.createProposal(text, walletAddress, coopId);
       setSubmitted(true);
+    } catch (e: unknown) {
+      console.warn('Proposal submission error:', e);
+      setError(e instanceof Error ? e.message : 'Could not submit this proposal.');
+    } finally {
       setSubmitting(false);
     }
   }
@@ -434,7 +439,7 @@ function SubmitModal({ visible, onClose, walletAddress, primaryColor, accentColo
                 </View>
                 <Text style={{ color: C.charcoal800, fontWeight: '700', fontSize: 20, marginBottom: 8 }}>Proposal Submitted</Text>
                 <Text style={{ color: C.charcoal400, fontSize: 13, textAlign: 'center', maxWidth: 280, marginBottom: 24 }}>
-                  Your proposal is now under AI review. You will be notified when it moves to community deliberation.
+                  Your proposal for {coopName} is now under AI review. You will be notified when it moves to community deliberation.
                 </Text>
 
                 {/* Submitted proposal card */}
@@ -757,8 +762,13 @@ function SubmitModal({ visible, onClose, walletAddress, primaryColor, accentColo
 const PAGE_LIMIT = 20;
 
 export default function ProposalsScreen() {
-  const { user } = useAuth();
+  const params = useLocalSearchParams<{ coopId?: string }>();
+  const { sessionToken, user } = useAuth();
   const config = coopConfig();
+  const scopedCoopId = params.coopId || user?.coop?.id || (config.id && config.id !== 'default' ? config.id : 'cahootz');
+  const [coopName, setCoopName] = useState(scopedCoopId);
+  const [membershipChecked, setMembershipChecked] = useState(false);
+  const [hasProposalAccess, setHasProposalAccess] = useState(false);
   const primaryColor = resolveBrandColor(user?.coop?.primaryColor || config.primaryColor, C.red700);
   const accentColor = resolveBrandColor(user?.coop?.accentColor || config.accentColor, C.gold600);
   const [activeTab, setActiveTab] = useState<TabKey>('submitted');
@@ -770,17 +780,66 @@ export default function ProposalsScreen() {
   const [offset, setOffset] = useState(0);
   const [showSubmit, setShowSubmit] = useState(false);
 
+  useEffect(() => {
+    let mounted = true;
+    api.getCoopConfig(scopedCoopId)
+      .then((cfg) => {
+        if (mounted) setCoopName(cfg?.name || cfg?.slug || scopedCoopId);
+      })
+      .catch(() => {
+        if (mounted) setCoopName(scopedCoopId);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [scopedCoopId]);
+
+  useEffect(() => {
+    let mounted = true;
+    setMembershipChecked(false);
+    setHasProposalAccess(false);
+
+    if (!sessionToken) {
+      setMembershipChecked(true);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    api.listCommonsDirectory(sessionToken)
+      .then((result) => {
+        if (!mounted) return;
+        setHasProposalAccess(
+          result.coops.some((commons) => commons.id === scopedCoopId && commons.accessStatus === 'ACTIVE')
+        );
+      })
+      .catch(() => {
+        if (mounted) setHasProposalAccess(false);
+      })
+      .finally(() => {
+        if (mounted) setMembershipChecked(true);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [scopedCoopId, sessionToken]);
+
   const loadProposals = useCallback(async (currentOffset = 0, append = false) => {
-    if (!user) return;
+    if (!user || !membershipChecked || !hasProposalAccess) {
+      setLoading(false);
+      return;
+    }
     try {
       if (activeTab === 'mine') {
         if (!user.walletAddress) { setProposals([]); setHasMore(false); return; }
-        const result = await api.getMyProposals(user.walletAddress, PAGE_LIMIT, currentOffset);
+        const result = await api.getMyProposals(user.walletAddress, PAGE_LIMIT, currentOffset, scopedCoopId);
         const newItems = result?.proposals ?? [];
         setProposals(append ? prev => [...prev, ...newItems] : newItems);
         setHasMore(currentOffset + PAGE_LIMIT < (result?.total ?? 0));
       } else {
-        const result = await api.listProposals({ status: activeTab, limit: PAGE_LIMIT, offset: currentOffset }, user.walletAddress);
+        const result = await api.listProposals({ coopId: scopedCoopId, status: activeTab, limit: PAGE_LIMIT, offset: currentOffset }, user.walletAddress);
         const newItems = result?.proposals ?? [];
         setProposals(append ? prev => [...prev, ...newItems] : newItems);
         setHasMore(result?.hasMore ?? false);
@@ -793,7 +852,7 @@ export default function ProposalsScreen() {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [activeTab, user]);
+  }, [activeTab, hasProposalAccess, membershipChecked, scopedCoopId, user]);
 
   useEffect(() => {
     setLoading(true);
@@ -825,14 +884,35 @@ export default function ProposalsScreen() {
     setTimeout(() => loadProposals(0, false), 300);
   }
 
+  if (membershipChecked && !hasProposalAccess) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: C.cream100 }}>
+        <View style={{ padding: 16 }}>
+          <TouchableOpacity onPress={() => router.back()} style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+            <ArrowLeft size={20} color={C.charcoal800} />
+          </TouchableOpacity>
+          <View style={{ backgroundColor: C.white, borderRadius: 16, borderWidth: 1, borderColor: C.cream200, padding: 20 }}>
+            <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: C.gold50, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <Lock size={28} color={accentColor} />
+            </View>
+            <Text style={{ color: C.charcoal800, fontWeight: '700', fontSize: 20 }}>{coopName} proposals are locked</Text>
+            <Text style={{ color: C.charcoal500, fontSize: 14, lineHeight: 21, marginTop: 8 }}>
+              You can view and submit proposals after your membership in this commons is approved.
+            </Text>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.cream100 }}>
       {/* Header */}
       <LinearGradient colors={['#111827', primaryColor, accentColor]} style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View>
-            <Text style={{ color: C.white, fontWeight: '700', fontSize: 20 }}>Community Proposals</Text>
-            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 2 }}>Submit and deliberate on commons initiatives</Text>
+            <Text style={{ color: C.white, fontWeight: '700', fontSize: 20 }}>{coopName} Proposals</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 2 }}>Submit and deliberate inside this commons</Text>
           </View>
           <TouchableOpacity onPress={() => setShowSubmit(true)} style={{ backgroundColor: C.whiteA20, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Plus size={16} color={C.white} />
@@ -913,6 +993,8 @@ export default function ProposalsScreen() {
           visible={showSubmit}
           onClose={handleSubmitClose}
           walletAddress={user.walletAddress}
+          coopId={scopedCoopId}
+          coopName={coopName}
           primaryColor={primaryColor}
           accentColor={accentColor}
         />

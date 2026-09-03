@@ -7,6 +7,7 @@ import { publicProcedure, privateProcedure } from "../procedures/index.js";
 import { router } from "../trpc.js";
 import Stripe from "stripe";
 import { sendApplicationAcceptedEmail, isEmailConfigured } from "../services/email-service.js";
+import { createNotificationAndPush } from "../services/push-notification-service.js";
 
 // Initialize Stripe (optional - only if key is configured)
 const stripe = process.env.STRIPE_SECRET_KEY
@@ -20,6 +21,138 @@ function getPortalUrl(coopId: string): string | undefined {
 }
 
 export const adminRouter = router({
+  getCahootzOperatorOverview: privateProcedure
+    .input(z.object({
+      coopId: z.literal("cahootz"),
+    }))
+    .query(async ({ input, ctx }) => {
+      const context = ctx as Context;
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+      const [
+        totalUsers,
+        onboardedUsers,
+        missingWallets,
+        activeMembers,
+        pendingApplications,
+        pushDevices,
+        recentUsers,
+        recentPosts,
+        postClassifications,
+        mediaPosts,
+        commonsSuggestions,
+      ] = await Promise.all([
+        context.db.user.count({ where: { deletedAt: null } }),
+        context.db.user.count({
+          where: {
+            deletedAt: null,
+            profileOnboardingCompletedAt: { not: null },
+          },
+        }),
+        context.db.user.count({
+          where: {
+            deletedAt: null,
+            status: "ACTIVE",
+            walletAddress: null,
+          },
+        }),
+        context.db.userCoopMembership.count({
+          where: {
+            coopId: input.coopId,
+            status: "ACTIVE",
+          },
+        }),
+        context.db.userCoopMembership.count({
+          where: {
+            coopId: input.coopId,
+            status: "PENDING",
+          },
+        }),
+        context.db.pushDevice.count({
+          where: {
+            coopId: input.coopId,
+            enabled: true,
+          },
+        }),
+        context.db.user.findMany({
+          where: { deletedAt: null },
+          orderBy: { createdAt: "desc" },
+          take: 8,
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            status: true,
+            walletAddress: true,
+            skills: true,
+            interests: true,
+            resourcesOffered: true,
+            resourcesNeeded: true,
+            profileOnboardingCompletedAt: true,
+            createdAt: true,
+          },
+        }),
+        context.db.commonsPost.findMany({
+          where: {
+            coopId: input.coopId,
+            createdAt: { gte: sevenDaysAgo },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+          include: {
+            author: { select: { name: true, email: true } },
+            _count: { select: { comments: true, supports: true, media: true } },
+          },
+        }),
+        context.db.commonsPost.groupBy({
+          by: ["classification"],
+          where: { coopId: input.coopId },
+          _count: { _all: true },
+        }),
+        context.db.commonsPost.count({
+          where: {
+            coopId: input.coopId,
+            media: { some: {} },
+          },
+        }),
+        context.db.commonsSuggestion.count({
+          where: {
+            coopId: input.coopId,
+            status: "NEW",
+          },
+        }),
+      ]);
+
+      return {
+        stats: {
+          totalUsers,
+          onboardedUsers,
+          activeMembers,
+          pendingApplications,
+          missingWallets,
+          pushDevices,
+          mediaPosts,
+          commonsSuggestions,
+          onboardingRate: totalUsers ? Math.round((onboardedUsers / totalUsers) * 100) : 0,
+        },
+        postClassifications: postClassifications.map((item) => ({
+          classification: item.classification || "social",
+          count: item._count._all,
+        })),
+        recentUsers,
+        recentPosts: recentPosts.map((post) => ({
+          id: post.id,
+          title: post.title,
+          author: post.author.name || post.author.email.split("@")[0],
+          classification: post.classification,
+          createdAt: post.createdAt,
+          commentCount: post._count.comments,
+          supportCount: post._count.supports,
+          mediaCount: post._count.media,
+        })),
+      };
+    }),
+
   /**
    * Get all users with their applications for a specific coop
    * TODO: Add proper authentication - only admins should access this
@@ -229,6 +362,19 @@ export const adminRouter = router({
             console.error('Failed to send application acceptance email:', emailError);
           }
         })();
+      }
+
+      if (input.status === 'ACTIVE') {
+        void createNotificationAndPush(context.db, {
+          userId: input.userId,
+          coopId: input.coopId,
+          type: "COMMONS_APPLICATION_APPROVED",
+          title: "You are in",
+          body: "Your commons application was approved.",
+          data: {
+            coopId: input.coopId,
+          },
+        });
       }
 
       return membership;

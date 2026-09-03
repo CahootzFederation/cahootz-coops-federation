@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { View, ScrollView, RefreshControl, TouchableOpacity, Image } from "react-native";
+import { useState, useEffect, useMemo } from "react";
+import { View, ScrollView, RefreshControl, TouchableOpacity, Image, TextInput } from "react-native";
 import { router } from "expo-router";
 import { Search, MapPin, Star, ShoppingBag } from "lucide-react-native";
 
@@ -29,6 +29,7 @@ export default function StoreScreen() {
   const [coopCoin, setCoopCoin] = useState(platformCoin);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [storeCategories, setStoreCategories] = useState<{ key: string; label: string }[]>([]);
   const [featuredStores, setFeaturedStores] = useState<{
     id: string;
@@ -85,6 +86,26 @@ export default function StoreScreen() {
     setRefreshing(false);
   };
 
+  const visibleStores = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return featuredStores;
+
+    return featuredStores.filter((store) => {
+      const haystack = [
+        store.name,
+        store.category,
+        store.city,
+        store.state,
+        store.isScVerified ? coopCoin.symbol : '',
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [coopCoin.symbol, featuredStores, searchQuery]);
+
   return (
     <ScrollView
       className="flex-1"
@@ -101,13 +122,22 @@ export default function StoreScreen() {
 
       {/* Search Bar */}
       <View className="px-4 mb-4">
-        <TouchableOpacity
-          className="flex-row items-center bg-white rounded-xl px-4 py-3 border border-amber-200"
-          activeOpacity={0.7}
-        >
+        <View className="flex-row items-center bg-white rounded-xl px-4 py-2 border border-amber-200">
           <Search size={20} color="#9CA3AF" />
-          <Text className="ml-3 text-gray-400 flex-1">Search stores...</Text>
-        </TouchableOpacity>
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search stores..."
+            placeholderTextColor="#9CA3AF"
+            autoCapitalize="none"
+            className="ml-3 h-10 flex-1 text-base text-gray-800"
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Text className="text-sm font-semibold text-amber-700">Clear</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
 
       {/* Categories */}
@@ -162,7 +192,14 @@ export default function StoreScreen() {
       <View className="px-4">
         <Text className="text-lg font-semibold text-gray-800 mb-3">Featured Stores</Text>
 
-        {featuredStores.map((store) => (
+        {visibleStores.length === 0 ? (
+          <View className="bg-white rounded-2xl p-4 mb-3 border border-dashed border-amber-200">
+            <Text className="text-base font-semibold text-gray-800">No stores found</Text>
+            <Text className="mt-1 text-sm text-gray-500">Clear search or try another store name.</Text>
+          </View>
+        ) : null}
+
+        {visibleStores.map((store) => (
           <TouchableOpacity
             key={store.id}
             className="bg-white rounded-2xl p-4 mb-3 border border-amber-100"

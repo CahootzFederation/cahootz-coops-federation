@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter, useSegments } from 'expo-router';
 import { secureStorage } from '@/lib/secure-storage';
 import { setActiveCoopConfig, resetCoopConfig, type CoopConfig } from '@/lib/coop-config';
+import { registerForNativePushNotifications } from '@/lib/push-notifications';
 
 interface User {
   id: string;
@@ -12,6 +13,18 @@ interface User {
   walletAddress: string | null;
   phone: string | null;
   createdAt: Date;
+  selfDescription?: string | null;
+  shortTermGoals?: string | null;
+  longTermGoals?: string | null;
+  skills?: string[];
+  interests?: string[];
+  resourcesOffered?: string[];
+  resourcesNeeded?: string[];
+  businessSummary?: string | null;
+  locationSummary?: string | null;
+  profileSignals?: unknown;
+  profileOnboardingCompletedAt?: Date | null;
+  sessionToken?: string;
   // Coop membership info (set after application approval)
   coop?: {
     id: string;
@@ -29,6 +42,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  sessionToken: string | null;
   login: (user: User) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -37,6 +51,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const segments = useSegments();
@@ -46,18 +61,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadSession();
   }, []);
 
+  useEffect(() => {
+    if (!user?.profileOnboardingCompletedAt || !sessionToken) return;
+
+    registerForNativePushNotifications(sessionToken, user.coop?.id || 'cahootz').catch((error) => {
+      console.warn('Native push registration skipped:', error);
+    });
+  }, [sessionToken, user?.profileOnboardingCompletedAt, user?.coop?.id]);
+
   // Handle navigation based on auth state
   useEffect(() => {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === '(authenticated)';
+    const inProfileOnboarding = segments[0] === 'profile-onboarding';
+    const profileOnboardingComplete = !!user?.profileOnboardingCompletedAt;
 
-    if (user && !inAuthGroup) {
-      // User is logged in but not in authenticated routes, redirect to home
-      router.replace('/(authenticated)/home');
-    } else if (!user && inAuthGroup) {
+    if (!user && inAuthGroup) {
       // User is not logged in but in authenticated routes, redirect to onboarding
       router.replace('/');
+      return;
+    }
+
+    if (user && !profileOnboardingComplete && !inProfileOnboarding) {
+      router.replace('/profile-onboarding' as any);
+      return;
+    }
+
+    if (user && profileOnboardingComplete && inProfileOnboarding) {
+      router.replace('/(tabs)' as any);
     }
   }, [user, segments, isLoading, router]);
 
@@ -68,7 +100,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const parsedUser = JSON.parse(userData);
         // Convert createdAt string back to Date
         parsedUser.createdAt = new Date(parsedUser.createdAt);
+        if (parsedUser.profileOnboardingCompletedAt) {
+          parsedUser.profileOnboardingCompletedAt = new Date(parsedUser.profileOnboardingCompletedAt);
+        }
         setUser(parsedUser);
+        const storedSessionToken =
+          parsedUser.sessionToken ||
+          (await secureStorage.getItem(secureStorage.keys.SESSION_TOKEN));
+        setSessionToken(storedSessionToken);
 
         // Set coop config if user has coop membership
         if (parsedUser.coop) {
@@ -102,6 +141,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         secureStorage.keys.LOGIN_TIME,
         new Date().toISOString()
       );
+      if (userData.sessionToken) {
+        await secureStorage.setItem(
+          secureStorage.keys.SESSION_TOKEN,
+          userData.sessionToken
+        );
+      }
 
       // Set coop config if user has coop membership
       if (userData.coop) {
@@ -118,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setUser(userData);
+      setSessionToken(userData.sessionToken || null);
     } catch (error) {
       console.error('Error saving session:', error);
       throw new Error('Failed to save login session');
@@ -132,6 +178,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       resetCoopConfig();
       console.log('Coop config reset');
       setUser(null);
+      setSessionToken(null);
       console.log('User state cleared, should redirect to /');
     } catch (error) {
       console.error('Error during logout:', error);
@@ -145,6 +192,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         isLoading,
         isAuthenticated: !!user,
+        sessionToken,
         login,
         logout,
       }}

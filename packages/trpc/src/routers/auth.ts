@@ -6,6 +6,12 @@ import { Context } from "../context.js";
 import { publicProcedure, privateProcedure } from "../procedures/index.js";
 import { router } from "../trpc.js";
 import { sendLoginCode, generateLoginCode, isEmailConfigured } from "../lib/email.js";
+import {
+  COMMONS_COOP_ID,
+  createAccountSession,
+  ensureCommonsMembership,
+  getCoopSessionData,
+} from "../lib/commons.js";
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
@@ -48,6 +54,28 @@ export const authRouter = router({
         walletAddress: z.string().nullable(),
         phone: z.string().nullable(),
         createdAt: z.date(),
+        selfDescription: z.string().nullable(),
+        shortTermGoals: z.string().nullable(),
+        longTermGoals: z.string().nullable(),
+        skills: z.array(z.string()),
+        interests: z.array(z.string()),
+        resourcesOffered: z.array(z.string()),
+        resourcesNeeded: z.array(z.string()),
+        businessSummary: z.string().nullable(),
+        locationSummary: z.string().nullable(),
+        profileSignals: z.any(),
+        profileOnboardingCompletedAt: z.date().nullable(),
+        sessionToken: z.string().optional(),
+        coop: z.object({
+          id: z.string(),
+          name: z.string(),
+          shortName: z.string(),
+          apiUrl: z.string(),
+          webUrl: z.string(),
+          primaryColor: z.string().optional(),
+          accentColor: z.string().optional(),
+          logoUrl: z.string().optional(),
+        }).optional(),
       }).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
@@ -93,14 +121,6 @@ export const authRouter = router({
           });
         }
 
-        // Check user status
-        if (user.status === "PENDING") {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Your application is still under review. You will be notified once it's approved.",
-          });
-        }
-
         if (user.status === "REJECTED") {
           throw new TRPCError({
             code: "FORBIDDEN",
@@ -115,19 +135,48 @@ export const authRouter = router({
           });
         }
 
+        const activeUser =
+          user.status === "PENDING"
+            ? await context.db.user.update({
+                where: { id: user.id },
+                data: { status: "ACTIVE" },
+              })
+            : user;
+
+        await ensureCommonsMembership(context.db, activeUser.id);
+        const sessionToken = await createAccountSession(
+          context.db,
+          context,
+          activeUser.id,
+        );
+        const coopData = await getCoopSessionData(context.db, COMMONS_COOP_ID);
+
         // User is active, allow login
         return {
           success: true,
           message: "Login successful",
           user: {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            roles: user.roles,
-            status: user.status,
-            walletAddress: user.walletAddress,
-            phone: user.phone,
-            createdAt: user.createdAt,
+            id: activeUser.id,
+            email: activeUser.email,
+            name: activeUser.name,
+            roles: activeUser.roles,
+            status: activeUser.status,
+            walletAddress: activeUser.walletAddress,
+            phone: activeUser.phone,
+            createdAt: activeUser.createdAt,
+            selfDescription: activeUser.selfDescription,
+            shortTermGoals: activeUser.shortTermGoals,
+            longTermGoals: activeUser.longTermGoals,
+            skills: activeUser.skills,
+            interests: activeUser.interests,
+            resourcesOffered: activeUser.resourcesOffered,
+            resourcesNeeded: activeUser.resourcesNeeded,
+            businessSummary: activeUser.businessSummary,
+            locationSummary: activeUser.locationSummary,
+            profileSignals: activeUser.profileSignals,
+            profileOnboardingCompletedAt: activeUser.profileOnboardingCompletedAt,
+            sessionToken,
+            coop: coopData,
           },
         };
       } catch (error) {
@@ -187,9 +236,9 @@ export const authRouter = router({
           };
         case "PENDING":
           return {
-            canLogin: false,
+            canLogin: true,
             status: user.status,
-            message: "Application is under review",
+            message: "Account can use Cahootz Commons",
           };
         case "REJECTED":
           return {
@@ -228,10 +277,10 @@ export const authRouter = router({
       const context = ctx as Context;
 
       try {
-        // Find user by email
         const email = normalizeEmail(input.email);
+        const isCommonsLogin = !input.coopId || input.coopId === COMMONS_COOP_ID;
 
-        const user = await context.db.user.findUnique({
+        let user = await context.db.user.findUnique({
           where: { email },
           select: {
             id: true,
@@ -251,6 +300,32 @@ export const authRouter = router({
           },
         });
 
+        if (!user && isCommonsLogin) {
+          user = await context.db.user.create({
+            data: {
+              email,
+              roles: ["member"],
+              status: "ACTIVE",
+            },
+            select: {
+              id: true,
+              status: true,
+              deletedAt: true,
+              walletAddress: true,
+              wallets: {
+                where: { isPrimary: true },
+                select: { address: true },
+                take: 1,
+              },
+              memberships: {
+                where: { coopId: COMMONS_COOP_ID },
+                select: { status: true },
+                take: 1,
+              },
+            },
+          });
+        }
+
         if (!user) {
           throw new TRPCError({
             code: "NOT_FOUND",
@@ -262,14 +337,6 @@ export const authRouter = router({
           throw new TRPCError({
             code: "FORBIDDEN",
             message: deletedAccountMessage,
-          });
-        }
-
-        // Check user status
-        if (user.status === "PENDING") {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Your application is still under review. You will be notified once it's approved.",
           });
         }
 
@@ -287,7 +354,15 @@ export const authRouter = router({
           });
         }
 
-        if (input.coopId) {
+        if (isCommonsLogin) {
+          await context.db.user.updateMany({
+            where: { id: user.id, status: "PENDING" },
+            data: { status: "ACTIVE" },
+          });
+          await ensureCommonsMembership(context.db, user.id);
+        }
+
+        if (input.coopId && input.coopId !== COMMONS_COOP_ID) {
           const membership = user.memberships[0];
           const hasWallet = !!(user.walletAddress || user.wallets[0]?.address);
 
@@ -375,6 +450,18 @@ export const authRouter = router({
         walletAddress: z.string().nullable(),
         phone: z.string().nullable(),
         createdAt: z.date(),
+        selfDescription: z.string().nullable(),
+        shortTermGoals: z.string().nullable(),
+        longTermGoals: z.string().nullable(),
+        skills: z.array(z.string()),
+        interests: z.array(z.string()),
+        resourcesOffered: z.array(z.string()),
+        resourcesNeeded: z.array(z.string()),
+        businessSummary: z.string().nullable(),
+        locationSummary: z.string().nullable(),
+        profileSignals: z.any(),
+        profileOnboardingCompletedAt: z.date().nullable(),
+        sessionToken: z.string(),
         coop: z.object({
           id: z.string(),
           name: z.string(),
@@ -423,14 +510,18 @@ export const authRouter = router({
           });
         }
 
+        const isCommonsLogin = !input.coopId || input.coopId === COMMONS_COOP_ID;
+
         // Get user with memberships (select only needed fields to avoid column-not-found errors)
-        const user = await context.db.user.findUnique({
+        let user = await context.db.user.findUnique({
           where: { email },
           include: {
             memberships: {
               where: {
                 status: "ACTIVE",
-                ...(isDemoCode ? { coopId: DEMO_COOP_ID } : {}),
+                ...(input.coopId
+                  ? { coopId: input.coopId }
+                  : { coopId: COMMONS_COOP_ID }),
               },
               orderBy: {
                 joinedAt: 'desc',
@@ -457,43 +548,54 @@ export const authRouter = router({
           });
         }
 
-        // Final status check
-        if (user.status !== "ACTIVE") {
+        if (user.status === "SUSPENDED" || user.status === "REJECTED") {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: "Account is not active",
+            message: "Account is not available",
           });
         }
 
-        // Get coop membership data if available
-        let coopData = undefined;
-        if (user.memberships.length > 0) {
-          const membership = user.memberships[0];
-          
-          // Get coop config
-          const coopConfig = await context.db.coopConfig.findFirst({
-            where: {
-              coopId: membership.coopId,
-              isActive: true,
-            },
-            orderBy: {
-              version: 'desc',
+        if (isCommonsLogin) {
+          await context.db.user.updateMany({
+            where: { id: user.id, status: "PENDING" },
+            data: { status: "ACTIVE" },
+          });
+          await ensureCommonsMembership(context.db, user.id);
+
+          user = await context.db.user.findUniqueOrThrow({
+            where: { id: user.id },
+            include: {
+              memberships: {
+                where: {
+                  status: "ACTIVE",
+                  coopId: COMMONS_COOP_ID,
+                },
+                orderBy: {
+                  joinedAt: "desc",
+                },
+                take: 1,
+                select: {
+                  coopId: true,
+                },
+              },
             },
           });
-
-          if (coopConfig) {
-            coopData = {
-              id: membership.coopId,
-              name: coopConfig.name || membership.coopId,
-              shortName: coopConfig.slug || membership.coopId,
-              apiUrl: process.env.API_BASE_URL || 'https://soulaan-api-production.up.railway.app',
-              webUrl: process.env.WEB_BASE_URL || 'https://www.soulaan.com',
-              primaryColor: coopConfig.bgColor || undefined,
-              accentColor: coopConfig.accentColor || undefined,
-              logoUrl: undefined, // Not stored in CoopConfig yet
-            };
-          }
+        } else if (user.status !== "ACTIVE" || user.memberships.length === 0) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "No active portal account was found for that email.",
+          });
         }
+
+        const activeCoopId =
+          user.memberships[0]?.coopId ||
+          (isDemoCode ? DEMO_COOP_ID : COMMONS_COOP_ID);
+        const coopData = await getCoopSessionData(context.db, activeCoopId);
+        const sessionToken = await createAccountSession(
+          context.db,
+          context,
+          user.id,
+        );
 
         return {
           success: true,
@@ -507,6 +609,18 @@ export const authRouter = router({
             walletAddress: user.walletAddress,
             phone: user.phone,
             createdAt: user.createdAt,
+            selfDescription: user.selfDescription,
+            shortTermGoals: user.shortTermGoals,
+            longTermGoals: user.longTermGoals,
+            skills: user.skills,
+            interests: user.interests,
+            resourcesOffered: user.resourcesOffered,
+            resourcesNeeded: user.resourcesNeeded,
+            businessSummary: user.businessSummary,
+            locationSummary: user.locationSummary,
+            profileSignals: user.profileSignals,
+            profileOnboardingCompletedAt: user.profileOnboardingCompletedAt,
+            sessionToken,
             coop: coopData,
           },
         };

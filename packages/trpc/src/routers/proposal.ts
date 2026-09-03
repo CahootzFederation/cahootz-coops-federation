@@ -7,10 +7,62 @@ import type { CoopConfigData } from "@repo/validators";
 import { ProposalCategory, ProposalStatus, ProposerRole, Currency, VoteType } from "@repo/db";
 import type { AuthenticatedContext } from "../context.js";
 
+const COMMONS_COOP_ID = "cahootz";
+
 function normalizeDbCategory(categoryKey: string): ProposalCategory {
   const key = categoryKey.toUpperCase();
   const values = Object.values(ProposalCategory) as string[];
   return values.includes(key) ? (key as ProposalCategory) : ProposalCategory.OTHER;
+}
+
+async function userIdForWallet(db: any, walletAddress: string) {
+  const user = await db.user.findFirst({
+    where: {
+      OR: [
+        { walletAddress: { equals: walletAddress, mode: "insensitive" } },
+        {
+          wallets: {
+            some: {
+              address: { equals: walletAddress, mode: "insensitive" },
+            },
+          },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+
+  return user?.id as string | undefined;
+}
+
+async function requireProposalMembership(db: any, walletAddress: string, coopId: string) {
+  const userId = await userIdForWallet(db, walletAddress);
+
+  if (!userId) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Create an account before submitting proposals.",
+    });
+  }
+
+  const membership = await db.userCoopMembership.findUnique({
+    where: {
+      userId_coopId: {
+        userId,
+        coopId,
+      },
+    },
+    select: { status: true },
+  });
+
+  if (membership?.status !== "ACTIVE") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: coopId === COMMONS_COOP_ID
+        ? "Your Cahootz Commons membership is not active yet."
+        : "Join this commons before submitting proposals here.",
+    });
+  }
 }
 
 export const proposalRouter = router({
@@ -33,6 +85,7 @@ export const proposalRouter = router({
       }
       
       const coopId = input.coopId;
+      await requireProposalMembership(ctx.db, walletAddress, coopId);
 
       // Fetch active CoopConfig
       let configData: CoopConfigData | undefined;
@@ -429,6 +482,7 @@ export const proposalRouter = router({
   getByProposer: publicProcedure
     .input(z.object({
       wallet: z.string(),
+      coopId: z.string().optional(),
       limit: z.number().min(1).max(50).default(10),
       offset: z.number().min(0).default(0)
     }))
@@ -437,9 +491,14 @@ export const proposalRouter = router({
       total: z.number()
     }))
     .query(async ({ input, ctx }) => {
+      const where = {
+        proposerWallet: input.wallet,
+        ...(input.coopId && { coopId: input.coopId }),
+      };
+
       const [proposals, total] = await Promise.all([
         ctx.db.proposal.findMany({
-          where: { proposerWallet: input.wallet },
+          where,
           skip: input.offset,
           take: input.limit,
           orderBy: { createdAt: 'desc' },
@@ -449,7 +508,7 @@ export const proposalRouter = router({
           }
         }),
         ctx.db.proposal.count({
-          where: { proposerWallet: input.wallet }
+          where
         })
       ]);
 

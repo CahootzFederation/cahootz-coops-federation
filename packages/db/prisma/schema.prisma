@@ -22,6 +22,17 @@ model User {
   encryptedPrivateKey String? // DEPRECATED: Use Wallet model instead
   walletCreatedAt     DateTime? // DEPRECATED: Use Wallet model instead
   profileCompleted    Boolean    @default(false)
+  selfDescription     String?
+  shortTermGoals      String?
+  longTermGoals       String?
+  skills              String[]   @default([])
+  interests           String[]   @default([])
+  resourcesOffered    String[]   @default([])
+  resourcesNeeded     String[]   @default([])
+  businessSummary     String?
+  locationSummary     String?
+  profileSignals      Json       @default("{}")
+  profileOnboardingCompletedAt DateTime?
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
   deletedAt           DateTime?
@@ -45,11 +56,18 @@ model User {
   bankAccounts         BankAccount[]
   withdrawals          Withdrawal[] // UC-era: preserved
   notifications        Notification[]
+  pushDevices          PushDevice[]
   stores               Store[]
   scRewards            SCRewardTransaction[] // UC-era: preserved
   commerceTransactions CommerceTransaction[]
   scMintEvents         SCMintEvent[]
   scBurnEvents         SCBurnEvent[]
+  commonsPosts         CommonsPost[]
+  commonsComments      CommonsComment[]
+  commonsPostSupports  CommonsPostSupport[]
+  commonsSuggestions   CommonsSuggestion[]
+  sentDirectMessages   DirectMessage[]       @relation("DirectMessageSender")
+  receivedDirectMessages DirectMessage[]     @relation("DirectMessageReceiver")
 
   @@index([deletedAt])
   @@schema("public")
@@ -674,6 +692,146 @@ model CommentAIEvaluation {
   @@schema("public")
 }
 
+// ── Cahootz Commons Social Models ─────────────────────
+model CommonsPost {
+  id       String @id @default(cuid())
+  coopId   String @default("cahootz")
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  title   String
+  content String @db.Text
+  tag     String @default("Need")
+  classification           String @default("social")
+  classificationConfidence Float?
+  classificationSignals    Json   @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  media    CommonsPostMedia[]
+  comments CommonsComment[]
+  supports CommonsPostSupport[]
+
+  @@index([coopId, createdAt])
+  @@index([coopId, classification, createdAt])
+  @@index([authorId, createdAt])
+  @@schema("public")
+}
+
+model CommonsPostMedia {
+  id              String      @id @default(cuid())
+  postId          String
+  post            CommonsPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  storageProvider String      @default("vercel-blob")
+  pathname        String
+  url             String
+  mediaType       String
+  mimeType        String
+  fileName        String?
+  width           Int?
+  height          Int?
+  durationMs      Int?
+  sizeBytes       Int?
+  order           Int         @default(0)
+  createdAt       DateTime    @default(now())
+
+  @@unique([pathname])
+  @@index([postId, order])
+  @@schema("public")
+}
+
+model CommonsComment {
+  id       String      @id @default(cuid())
+  postId   String
+  post     CommonsPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId String
+  author   User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content  String      @db.Text
+  media    CommonsCommentMedia[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId, createdAt])
+  @@index([authorId, createdAt])
+  @@schema("public")
+}
+
+model CommonsCommentMedia {
+  id              String         @id @default(cuid())
+  commentId       String
+  comment         CommonsComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  storageProvider String         @default("vercel-blob")
+  pathname        String
+  url             String
+  mediaType       String
+  mimeType        String
+  fileName        String?
+  width           Int?
+  height          Int?
+  durationMs      Int?
+  sizeBytes       Int?
+  order           Int            @default(0)
+  createdAt       DateTime       @default(now())
+
+  @@unique([pathname])
+  @@index([commentId, order])
+  @@schema("public")
+}
+
+model CommonsPostSupport {
+  id        String      @id @default(cuid())
+  postId    String
+  post      CommonsPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId, createdAt])
+  @@schema("public")
+}
+
+model CommonsSuggestion {
+  id               String   @id @default(cuid())
+  coopId           String   @default("cahootz")
+  name             String
+  reason           String?  @db.Text
+  suggestedByEmail String
+  suggestedByName  String?
+  userId           String?
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status           String   @default("NEW")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([coopId, createdAt])
+  @@index([suggestedByEmail, createdAt])
+  @@index([status, createdAt])
+  @@schema("public")
+}
+
+model DirectMessage {
+  id         String @id @default(cuid())
+  coopId     String @default("cahootz")
+  senderId   String
+  sender     User   @relation("DirectMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  receiver   User   @relation("DirectMessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  content    String @db.Text
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([coopId, createdAt])
+  @@index([senderId, receiverId, createdAt])
+  @@index([receiverId, createdAt])
+  @@schema("public")
+}
+
 // ── Admin Authentication Models ────────────────────────────────
 model AuthChallenge {
   id        String   @id @default(cuid())
@@ -1120,6 +1278,27 @@ model Notification {
 
   @@index([userId, coopId, read, createdAt])
   @@index([coopId])
+  @@schema("public")
+}
+
+model PushDevice {
+  id        String @id @default(cuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coopId    String @default("cahootz")
+
+  expoPushToken String  @unique
+  platform      String
+  deviceName    String?
+  appVersion    String?
+  enabled       Boolean @default(true)
+
+  lastRegisteredAt DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId, enabled])
+  @@index([coopId, enabled])
   @@schema("public")
 }
 

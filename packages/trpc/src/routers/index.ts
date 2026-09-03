@@ -31,6 +31,7 @@ import { platformConfigRouter } from "./platform-config.js";
 import { publicCoopInfoRouter } from "./public-coop-info.js";
 import { walletAuthRouter } from "./wallet-auth.js";
 import { waitlistRouter } from "./waitlist.js";
+import { commonsRouter } from "./commons.js";
 
 export const appRouter = router({
   user: userRouter,
@@ -64,6 +65,7 @@ export const appRouter = router({
   publicCoopInfo: publicCoopInfoRouter,
   walletAuth: walletAuthRouter,
   waitlist: waitlistRouter,
+  commons: commonsRouter,
 });
 
 export type AppRouter = typeof appRouter;

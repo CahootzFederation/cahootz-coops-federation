@@ -22,17 +22,28 @@ const ACTIVE_USER = {
   walletAddress: '0xabcdef1234567890abcdef1234567890abcdef12',
   phone: null,
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  selfDescription: null,
+  shortTermGoals: null,
+  longTermGoals: null,
+  skills: [],
+  interests: [],
+  resourcesOffered: [],
+  resourcesNeeded: [],
+  businessSummary: null,
+  locationSummary: null,
+  profileSignals: {},
+  profileOnboardingCompletedAt: null,
 };
 
 const ACTIVE_MEMBERSHIP = {
-  coopId: 'coop_1',
+  coopId: 'cahootz',
 };
 
 const COOP_CONFIG = {
   id: 'cfg_1',
-  coopId: 'coop_1',
-  name: 'Cahootz Coop',
-  slug: 'soulaan',
+  coopId: 'cahootz',
+  name: 'Unity Coop',
+  slug: 'unity-coop',
   bgColor: '#B45309',
   accentColor: '#16A34A',
   isActive: true,
@@ -44,7 +55,24 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
     user: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        ...ACTIVE_USER,
+        memberships: [ACTIVE_MEMBERSHIP],
+      }),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       ...overrides.user,
+    },
+    userCoopMembership: {
+      upsert: vi.fn().mockResolvedValue({ id: 'membership_1' }),
+      ...overrides.userCoopMembership,
+    },
+    session: {
+      create: vi.fn().mockResolvedValue({ id: 'session_1' }),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      ...overrides.session,
     },
     loginCode: {
       create: vi.fn().mockResolvedValue({ id: 'code_1' }),
@@ -60,7 +88,6 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
       findFirst: vi.fn().mockResolvedValue(null),
       ...overrides.wallet,
     },
-    ...overrides,
   };
 }
 
@@ -127,29 +154,57 @@ describe('auth.requestLoginCode', () => {
     expect(sendLoginCode).toHaveBeenCalledWith('alice@example.com', '123456', undefined);
   });
 
-  it('throws NOT_FOUND when user does not exist', async () => {
+  it('creates a Commons account when email does not exist', async () => {
+    const createdUser = {
+      id: 'new_user_1',
+      status: 'ACTIVE',
+      deletedAt: null,
+      walletAddress: null,
+      wallets: [],
+      memberships: [],
+    };
     const db = makeDb({
       user: { findUnique: vi.fn().mockResolvedValue(null) },
     });
+    db.user.create.mockResolvedValue(createdUser);
 
-    await expect(
-      callerFor(db).requestLoginCode({ email: 'nobody@example.com' }),
-    ).rejects.toThrow(TRPCError);
-    await expect(
-      callerFor(db).requestLoginCode({ email: 'nobody@example.com' }),
-    ).rejects.toThrow('No account found with this email address');
+    const result = await callerFor(db).requestLoginCode({ email: 'nobody@example.com' });
+
+    expect(result.success).toBe(true);
+    expect(db.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          email: 'nobody@example.com',
+          status: 'ACTIVE',
+          roles: ['member'],
+        }),
+      }),
+    );
+    expect(db.userCoopMembership.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          coopId: 'cahootz',
+          status: 'ACTIVE',
+        }),
+      }),
+    );
   });
 
-  it('blocks PENDING users', async () => {
+  it('promotes PENDING users into Commons access', async () => {
     const db = makeDb({
       user: {
         findUnique: vi.fn().mockResolvedValue({ ...ACTIVE_USER, status: 'PENDING', wallets: [], memberships: [] }),
       },
     });
 
-    await expect(
-      callerFor(db).requestLoginCode({ email: 'alice@example.com' }),
-    ).rejects.toThrow('still under review');
+    const result = await callerFor(db).requestLoginCode({ email: 'alice@example.com' });
+
+    expect(result.success).toBe(true);
+    expect(db.user.updateMany).toHaveBeenCalledWith({
+      where: { id: ACTIVE_USER.id, status: 'PENDING' },
+      data: { status: 'ACTIVE' },
+    });
+    expect(db.userCoopMembership.upsert).toHaveBeenCalled();
   });
 
   it('blocks REJECTED users', async () => {
@@ -232,7 +287,7 @@ describe('auth.verifyLoginCode', () => {
     vi.clearAllMocks();
   });
 
-  it('returns user without coop data when no active membership exists', async () => {
+  it('defaults verified login to the configured Commons coop', async () => {
     const db = makeDb({
       loginCode: {
         findFirst: vi.fn().mockResolvedValue(VALID_LOGIN_CODE),
@@ -240,6 +295,9 @@ describe('auth.verifyLoginCode', () => {
       },
       user: {
         findUnique: vi.fn().mockResolvedValue({ ...ACTIVE_USER, memberships: [] }),
+      },
+      coopConfig: {
+        findFirst: vi.fn().mockResolvedValue(COOP_CONFIG),
       },
     });
 
@@ -251,11 +309,15 @@ describe('auth.verifyLoginCode', () => {
     expect(result.success).toBe(true);
     expect(result.user?.id).toBe(ACTIVE_USER.id);
     expect(result.user?.email).toBe(ACTIVE_USER.email);
-    expect(result.user?.coop).toBeUndefined();
+    expect(result.user?.sessionToken).toEqual(expect.any(String));
+    expect(result.user?.coop?.id).toBe('cahootz');
+    expect(result.user?.coop?.name).toBe('Unity Coop');
     expect(db.loginCode.update).toHaveBeenCalledWith({
       where: { id: 'code_1' },
       data: { used: true },
     });
+    expect(db.userCoopMembership.upsert).toHaveBeenCalled();
+    expect(db.session.create).toHaveBeenCalled();
   });
 
   it('blocks deleted users from verifying a login code', async () => {
@@ -304,9 +366,9 @@ describe('auth.verifyLoginCode', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.user?.coop?.id).toBe('coop_1');
-    expect(result.user?.coop?.name).toBe('Cahootz Coop');
-    expect(result.user?.coop?.shortName).toBe('soulaan');
+    expect(result.user?.coop?.id).toBe('cahootz');
+    expect(result.user?.coop?.name).toBe('Unity Coop');
+    expect(result.user?.coop?.shortName).toBe('unity-coop');
   });
 
   it('rejects an expired or already-used login code', async () => {
@@ -322,7 +384,7 @@ describe('auth.verifyLoginCode', () => {
     ).rejects.toThrow('Invalid or expired code');
   });
 
-  it('rejects a non-ACTIVE user even with a valid code', async () => {
+  it('allows a PENDING user to verify into Commons access', async () => {
     const db = makeDb({
       loginCode: {
         findFirst: vi.fn().mockResolvedValue(VALID_LOGIN_CODE),
@@ -337,9 +399,13 @@ describe('auth.verifyLoginCode', () => {
       },
     });
 
-    await expect(
-      callerFor(db).verifyLoginCode({ email: 'alice@example.com', code: '123456' }),
-    ).rejects.toThrow('Account is not active');
+    const result = await callerFor(db).verifyLoginCode({ email: 'alice@example.com', code: '123456' });
+
+    expect(result.success).toBe(true);
+    expect(db.user.updateMany).toHaveBeenCalledWith({
+      where: { id: ACTIVE_USER.id, status: 'PENDING' },
+      data: { status: 'ACTIVE' },
+    });
   });
 
   it('throws NOT_FOUND when user disappears after code validation', async () => {
@@ -429,7 +495,8 @@ describe('auth.verifyLoginCode', () => {
     });
 
     expect(result.success).toBe(true);
-    // No coopData because config was not found
-    expect(result.user?.coop).toBeUndefined();
+    expect(result.user?.coop?.id).toBe('cahootz');
+    expect(result.user?.coop?.name).toBe('Cahootz Commons');
+    expect(result.user?.coop?.shortName).toBe('Cahootz');
   });
 });

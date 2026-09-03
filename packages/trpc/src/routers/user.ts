@@ -17,6 +17,12 @@ const mobileProfileOnboardingInput = z.object({
   selfDescription: z.string().trim().min(120, "Write at least a strong paragraph about yourself.").max(5000),
   shortTermGoals: z.string().trim().min(50, "Share a little more about what you are working toward soon.").max(3000),
   longTermGoals: z.string().trim().min(50, "Share a little more about the future you are building toward.").max(3000),
+  skills: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
+  interests: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
+  resourcesOffered: z.array(z.string().trim().min(1).max(120)).max(30).default([]),
+  resourcesNeeded: z.array(z.string().trim().min(1).max(120)).max(30).default([]),
+  businessSummary: z.string().trim().max(2000).optional(),
+  locationSummary: z.string().trim().max(500).optional(),
 });
 
 const mobileProfileUserOutput = z.object({
@@ -31,6 +37,13 @@ const mobileProfileUserOutput = z.object({
   selfDescription: z.string().nullable(),
   shortTermGoals: z.string().nullable(),
   longTermGoals: z.string().nullable(),
+  skills: z.array(z.string()),
+  interests: z.array(z.string()),
+  resourcesOffered: z.array(z.string()),
+  resourcesNeeded: z.array(z.string()),
+  businessSummary: z.string().nullable(),
+  locationSummary: z.string().nullable(),
+  profileSignals: z.any(),
   profileOnboardingCompletedAt: z.date().nullable(),
 });
 
@@ -46,6 +59,13 @@ const mobileProfileUserSelect = {
   selfDescription: true,
   shortTermGoals: true,
   longTermGoals: true,
+  skills: true,
+  interests: true,
+  resourcesOffered: true,
+  resourcesNeeded: true,
+  businessSummary: true,
+  locationSummary: true,
+  profileSignals: true,
   profileOnboardingCompletedAt: true,
 } as const;
 
@@ -337,6 +357,23 @@ export const userRouter = router({
           selfDescription: input.selfDescription,
           shortTermGoals: input.shortTermGoals,
           longTermGoals: input.longTermGoals,
+          skills: input.skills,
+          interests: input.interests,
+          resourcesOffered: input.resourcesOffered,
+          resourcesNeeded: input.resourcesNeeded,
+          businessSummary: input.businessSummary || null,
+          locationSummary: input.locationSummary || null,
+          profileSignals: {
+            onboardingVersion: 2,
+            lastUpdatedFrom: "mobile_onboarding",
+            completedAt: new Date().toISOString(),
+            signalCounts: {
+              skills: input.skills.length,
+              interests: input.interests.length,
+              resourcesOffered: input.resourcesOffered.length,
+              resourcesNeeded: input.resourcesNeeded.length,
+            },
+          },
           profileOnboardingCompletedAt: new Date(),
           profileCompleted: true,
         },

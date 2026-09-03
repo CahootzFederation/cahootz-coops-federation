@@ -1,10 +1,45 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { authenticatedProcedure } from "../procedures/index.js";
+import { accountAuthenticatedProcedure, authenticatedProcedure } from "../procedures/index.js";
 import { router } from "../trpc.js";
-import type { Context, AuthenticatedContext } from "../context.js";
+import type { AccountAuthenticatedContext, Context, AuthenticatedContext } from "../context.js";
 
 export const notificationRouter = router({
+  registerPushDevice: accountAuthenticatedProcedure
+    .input(z.object({
+      expoPushToken: z.string().min(10).max(300),
+      platform: z.string().min(1).max(40),
+      coopId: z.string().min(1).default("cahootz"),
+      deviceName: z.string().max(120).nullable().optional(),
+      appVersion: z.string().max(40).nullable().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+
+      await context.db.pushDevice.upsert({
+        where: { expoPushToken: input.expoPushToken },
+        create: {
+          userId: context.accountUser.id,
+          coopId: input.coopId,
+          expoPushToken: input.expoPushToken,
+          platform: input.platform,
+          deviceName: input.deviceName || null,
+          appVersion: input.appVersion || null,
+        },
+        update: {
+          userId: context.accountUser.id,
+          coopId: input.coopId,
+          platform: input.platform,
+          deviceName: input.deviceName || null,
+          appVersion: input.appVersion || null,
+          enabled: true,
+          lastRegisteredAt: new Date(),
+        },
+      });
+
+      return { success: true };
+    }),
+
   /**
    * Get user's notifications
    */

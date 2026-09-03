@@ -25,6 +25,13 @@ model User {
   selfDescription     String?
   shortTermGoals      String?
   longTermGoals       String?
+  skills              String[]   @default([])
+  interests           String[]   @default([])
+  resourcesOffered    String[]   @default([])
+  resourcesNeeded     String[]   @default([])
+  businessSummary     String?
+  locationSummary     String?
+  profileSignals      Json       @default("{}")
   profileOnboardingCompletedAt DateTime?
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
@@ -49,6 +56,7 @@ model User {
   bankAccounts         BankAccount[]
   withdrawals          Withdrawal[] // UC-era: preserved
   notifications        Notification[]
+  pushDevices          PushDevice[]
   stores               Store[]
   scRewards            SCRewardTransaction[] // UC-era: preserved
   commerceTransactions CommerceTransaction[]
@@ -694,15 +702,42 @@ model CommonsPost {
   title   String
   content String @db.Text
   tag     String @default("Need")
+  classification           String @default("social")
+  classificationConfidence Float?
+  classificationSignals    Json   @default("{}")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  media    CommonsPostMedia[]
   comments CommonsComment[]
   supports CommonsPostSupport[]
 
   @@index([coopId, createdAt])
+  @@index([coopId, classification, createdAt])
   @@index([authorId, createdAt])
+  @@schema("public")
+}
+
+model CommonsPostMedia {
+  id              String      @id @default(cuid())
+  postId          String
+  post            CommonsPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  storageProvider String      @default("vercel-blob")
+  pathname        String
+  url             String
+  mediaType       String
+  mimeType        String
+  fileName        String?
+  width           Int?
+  height          Int?
+  durationMs      Int?
+  sizeBytes       Int?
+  order           Int         @default(0)
+  createdAt       DateTime    @default(now())
+
+  @@unique([pathname])
+  @@index([postId, order])
   @@schema("public")
 }
 
@@ -1220,6 +1255,27 @@ model Notification {
 
   @@index([userId, coopId, read, createdAt])
   @@index([coopId])
+  @@schema("public")
+}
+
+model PushDevice {
+  id        String @id @default(cuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coopId    String @default("cahootz")
+
+  expoPushToken String  @unique
+  platform      String
+  deviceName    String?
+  appVersion    String?
+  enabled       Boolean @default(true)
+
+  lastRegisteredAt DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId, enabled])
+  @@index([coopId, enabled])
   @@schema("public")
 }
 

@@ -25,7 +25,7 @@ function getExtensionFromContentType(contentType: string): string {
 }
 
 export function generateFileKey(
-  uploadType: 'profile' | 'store' | 'product',
+  uploadType: 'profile' | 'store' | 'product' | 'post',
   resourceId: string,
   filename: string
 ): string {
@@ -39,6 +39,8 @@ export function generateFileKey(
       return `stores/${resourceId}/${timestamp}-${sanitizedFilename}`;
     case 'product':
       return `products/${resourceId}/${timestamp}-${sanitizedFilename}`;
+    case 'post':
+      return `posts/${resourceId}/${timestamp}-${sanitizedFilename}`;
     default:
       return `uploads/${timestamp}-${sanitizedFilename}`;
   }

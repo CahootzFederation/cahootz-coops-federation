@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter, useSegments } from 'expo-router';
 import { secureStorage } from '@/lib/secure-storage';
 import { setActiveCoopConfig, resetCoopConfig, type CoopConfig } from '@/lib/coop-config';
+import { registerForNativePushNotifications } from '@/lib/push-notifications';
 
 interface User {
   id: string;
@@ -15,6 +16,13 @@ interface User {
   selfDescription?: string | null;
   shortTermGoals?: string | null;
   longTermGoals?: string | null;
+  skills?: string[];
+  interests?: string[];
+  resourcesOffered?: string[];
+  resourcesNeeded?: string[];
+  businessSummary?: string | null;
+  locationSummary?: string | null;
+  profileSignals?: unknown;
   profileOnboardingCompletedAt?: Date | null;
   sessionToken?: string;
   // Coop membership info (set after application approval)
@@ -52,6 +60,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     loadSession();
   }, []);
+
+  useEffect(() => {
+    if (!user?.profileOnboardingCompletedAt || !sessionToken) return;
+
+    registerForNativePushNotifications(sessionToken, user.coop?.id || 'cahootz').catch((error) => {
+      console.warn('Native push registration skipped:', error);
+    });
+  }, [sessionToken, user?.profileOnboardingCompletedAt, user?.coop?.id]);
 
   // Handle navigation based on auth state
   useEffect(() => {

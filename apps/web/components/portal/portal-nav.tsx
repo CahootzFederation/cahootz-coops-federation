@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   BarChart3,
+  Activity,
   Bot,
   ClipboardList,
   Coins,
@@ -83,6 +84,14 @@ const adminReviewLinks: NavItem[] = [
     title: "Rules",
     href: "/portal/proposals/config",
     icon: FileText,
+  },
+];
+
+const cahootzOperatorLinks: NavItem[] = [
+  {
+    title: "Operator",
+    href: "/portal/operator",
+    icon: Activity,
   },
 ];
 
@@ -217,6 +226,9 @@ export function PortalNav({ coopId }: { coopId?: string }) {
     ...(isAdmin
       ? [
           { label: "Admin", items: adminReviewLinks, tone: "admin" as const },
+          ...(coopId === "cahootz"
+            ? [{ label: "Cahootz", items: cahootzOperatorLinks, tone: "admin" as const }]
+            : []),
           { label: "Money & commerce", items: commerceLinks, tone: "admin" as const },
         ]
       : []),

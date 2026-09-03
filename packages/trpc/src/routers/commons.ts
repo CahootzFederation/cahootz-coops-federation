@@ -14,6 +14,7 @@ import {
   sendApplicationSubmittedNotification,
   sendCommonsSuggestionNotification,
 } from "../services/slack-notification-service.js";
+import { createNotificationAndPush } from "../services/push-notification-service.js";
 import { router } from "../trpc.js";
 
 const postTagSchema = z.enum([
@@ -26,6 +27,20 @@ const postTagSchema = z.enum([
   "Resource",
   "Opportunity",
 ]);
+
+const postMediaTypeSchema = z.enum(["image", "video"]);
+
+const uploadedPostMediaSchema = z.object({
+  pathname: z.string().min(1).max(1024),
+  url: z.string().url(),
+  mediaType: postMediaTypeSchema,
+  mimeType: z.string().min(1).max(120),
+  fileName: z.string().min(1).max(240).nullable().optional(),
+  width: z.number().int().positive().nullable().optional(),
+  height: z.number().int().positive().nullable().optional(),
+  durationMs: z.number().int().positive().nullable().optional(),
+  sizeBytes: z.number().int().positive().nullable().optional(),
+});
 
 type ApplicationQuestion = {
   id: string;
@@ -75,6 +90,9 @@ async function loadFeedPosts(db: any, coopId: string | string[], limit: number) 
         take: 2,
         include: { author: { select: { name: true, email: true } } },
       },
+      media: {
+        orderBy: { order: "asc" },
+      },
       _count: { select: { comments: true, supports: true } },
     },
   });
@@ -98,6 +116,54 @@ function titleFromContent(content: string) {
   return sentence.slice(0, 84) || "Community post";
 }
 
+function classifyPost(input: {
+  title?: string;
+  content: string;
+  tag: z.infer<typeof postTagSchema>;
+  mediaCount: number;
+}) {
+  const text = `${input.title || ""} ${input.content}`.toLowerCase();
+  const hits: string[] = [];
+  let classification = "social";
+
+  const match = (label: string, terms: string[]) => {
+    const found = terms.some((term) => text.includes(term));
+    if (found) hits.push(label);
+    return found;
+  };
+
+  if (input.tag === "Vote" || match("proposal", ["proposal", "vote", "decide", "approve", "policy"])) {
+    classification = "proposal_seed";
+  } else if (match("event", ["event", "meetup", "meeting", "pull up", "rsvp", "tomorrow", "tonight"])) {
+    classification = "event";
+  } else if (input.tag === "Need" || match("need", ["need", "looking for", "help with", "does anyone have", "who can"])) {
+    classification = "need";
+  } else if (input.tag === "Resource" || match("resource", ["resource", "template", "guide", "link", "toolkit"])) {
+    classification = "resource";
+  } else if (input.tag === "Opportunity" || match("market", ["job", "gig", "hiring", "selling", "available", "vendor", "client"])) {
+    classification = "market";
+  } else if (match("support", ["support", "congratulations", "proud", "show love", "celebrate"])) {
+    classification = "support";
+  } else if (input.tag === "Win") {
+    classification = "win";
+  } else if (input.tag === "Meme") {
+    classification = "social";
+    hits.push("meme");
+  }
+
+  return {
+    classification,
+    classificationConfidence: Math.min(0.95, 0.55 + hits.length * 0.12 + (input.mediaCount > 0 ? 0.05 : 0)),
+    classificationSignals: toJsonValue({
+      version: 1,
+      source: "keyword_rule",
+      matchedSignals: hits,
+      tag: input.tag,
+      mediaCount: input.mediaCount,
+    }),
+  };
+}
+
 function mapPostWithGroup(record: any, groupName: string) {
   return {
     id: record.id,
@@ -108,9 +174,23 @@ function mapPostWithGroup(record: any, groupName: string) {
     title: record.title,
     body: record.content,
     tag: record.tag,
+    classification: record.classification ?? "social",
     replies: record._count?.comments ?? record.comments?.length ?? 0,
     support: record._count?.supports ?? record.supports?.length ?? 0,
     pledges: undefined as string | undefined,
+    media:
+      record.media?.map((item: any) => ({
+        id: item.id,
+        pathname: item.pathname,
+        url: item.url,
+        mediaType: item.mediaType,
+        mimeType: item.mimeType,
+        fileName: item.fileName,
+        width: item.width,
+        height: item.height,
+        durationMs: item.durationMs,
+        sizeBytes: item.sizeBytes,
+      })) ?? [],
     comments:
       record.comments?.map((comment: any) => ({
         id: comment.id,
@@ -660,6 +740,58 @@ export const commonsRouter = router({
       };
     }),
 
+  getPost: publicProcedure
+    .input(
+      z.object({
+        postId: z.string().min(1),
+        coopId: z.string().min(1).optional(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const context = ctx as Context;
+      const post = await context.db.commonsPost.findUnique({
+        where: { id: input.postId },
+        include: {
+          author: { select: { name: true, email: true } },
+          media: {
+            orderBy: { order: "asc" },
+          },
+          comments: {
+            orderBy: { createdAt: "asc" },
+            take: 100,
+            include: { author: { select: { name: true, email: true } } },
+          },
+          _count: { select: { comments: true, supports: true } },
+        },
+      });
+
+      if (!post || (input.coopId && post.coopId !== input.coopId)) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Post not found.",
+        });
+      }
+
+      const accountUser = await resolveOptionalAccountUser(context);
+      const canRead =
+        post.coopId === COMMONS_COOP_ID ||
+        (!!accountUser && (await hasActiveCommonsMembership(context.db, accountUser.id, post.coopId)));
+
+      if (!canRead) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Join this commons to view this post.",
+        });
+      }
+
+      const coop = await loadCoopSummary(context.db, post.coopId);
+
+      return {
+        coop,
+        post: mapPostWithGroup(post, coop.name),
+      };
+    }),
+
   ask: publicProcedure
     .input(
       z.object({
@@ -707,13 +839,23 @@ export const commonsRouter = router({
       z.object({
         coopId: z.string().min(1).default(COMMONS_COOP_ID),
         title: z.string().trim().min(1).max(120).optional(),
-        content: z.string().trim().min(1).max(5000),
+        content: z.string().trim().max(5000).default(""),
         tag: postTagSchema.default("Social"),
+        media: z.array(uploadedPostMediaSchema).max(4).default([]),
+      }).refine((input) => input.content.length > 0 || input.media.length > 0, {
+        message: "Write something or attach media before posting.",
+        path: ["content"],
       }),
     )
     .mutation(async ({ input, ctx }) => {
       const { accountUser } = ctx as AccountAuthenticatedContext;
       await requireActiveCommonsMembership(ctx.db, accountUser.id, input.coopId);
+      const classification = classifyPost({
+        title: input.title,
+        content: input.content,
+        tag: input.tag,
+        mediaCount: input.media.length,
+      });
 
       const post = await ctx.db.commonsPost.create({
         data: {
@@ -722,9 +864,32 @@ export const commonsRouter = router({
           title: input.title || titleFromContent(input.content),
           content: input.content,
           tag: input.tag,
+          classification: classification.classification,
+          classificationConfidence: classification.classificationConfidence,
+          classificationSignals: classification.classificationSignals,
+          media: input.media.length
+            ? {
+                create: input.media.map((media, index) => ({
+                  storageProvider: "vercel-blob",
+                  pathname: media.pathname,
+                  url: media.url,
+                  mediaType: media.mediaType,
+                  mimeType: media.mimeType,
+                  fileName: media.fileName,
+                  width: media.width,
+                  height: media.height,
+                  durationMs: media.durationMs,
+                  sizeBytes: media.sizeBytes,
+                  order: index,
+                })),
+              }
+            : undefined,
         },
         include: {
           author: { select: { name: true, email: true } },
+          media: {
+            orderBy: { order: "asc" },
+          },
           comments: {
             orderBy: { createdAt: "asc" },
             take: 2,
@@ -747,7 +912,6 @@ export const commonsRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const { accountUser } = ctx as AccountAuthenticatedContext;
-      await ensureCommonsMembership(ctx.db, accountUser.id);
       const postId = input.postId;
 
       const post = await ctx.db.commonsPost.findUnique({
@@ -759,6 +923,7 @@ export const commonsRouter = router({
           message: "Post not found.",
         });
       }
+      await requireActiveCommonsMembership(ctx.db, accountUser.id, post.coopId);
 
       const comment = await ctx.db.commonsComment.create({
         data: {
@@ -768,6 +933,20 @@ export const commonsRouter = router({
         },
         include: { author: { select: { name: true, email: true } } },
       });
+
+      if (post.authorId !== accountUser.id) {
+        void createNotificationAndPush(ctx.db, {
+          userId: post.authorId,
+          coopId: post.coopId,
+          type: "COMMONS_COMMENT",
+          title: "New comment",
+          body: `${displayName(comment.author)} replied to your post.`,
+          data: {
+            postId: post.id,
+            coopId: post.coopId,
+          },
+        });
+      }
 
       return {
         comment: {
@@ -792,6 +971,7 @@ export const commonsRouter = router({
           message: "Post not found.",
         });
       }
+      await requireActiveCommonsMembership(ctx.db, accountUser.id, post.coopId);
 
       const existing = await ctx.db.commonsPostSupport.findUnique({
         where: {
@@ -810,6 +990,20 @@ export const commonsRouter = router({
       await ctx.db.commonsPostSupport.create({
         data: { postId: input.postId, userId: accountUser.id },
       });
+
+      if (post.authorId !== accountUser.id) {
+        void createNotificationAndPush(ctx.db, {
+          userId: post.authorId,
+          coopId: post.coopId,
+          type: "COMMONS_SUPPORT",
+          title: "Someone liked your post",
+          body: "A commons member liked what you shared.",
+          data: {
+            postId: post.id,
+            coopId: post.coopId,
+          },
+        });
+      }
       return { supported: true };
     }),
 

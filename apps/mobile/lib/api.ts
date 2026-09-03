@@ -91,6 +91,13 @@ export interface EmailCodeAuthResult {
     selfDescription: string | null;
     shortTermGoals: string | null;
     longTermGoals: string | null;
+    skills: string[];
+    interests: string[];
+    resourcesOffered: string[];
+    resourcesNeeded: string[];
+    businessSummary: string | null;
+    locationSummary: string | null;
+    profileSignals?: unknown;
     profileOnboardingCompletedAt: string | null;
     sessionToken: string;
     coop?: {
@@ -148,6 +155,19 @@ export interface CommonsComment {
   body: string;
 }
 
+export interface CommonsPostMedia {
+  id?: string;
+  pathname: string;
+  url: string;
+  mediaType: 'image' | 'video';
+  mimeType: string;
+  fileName?: string | null;
+  width?: number | null;
+  height?: number | null;
+  durationMs?: number | null;
+  sizeBytes?: number | null;
+}
+
 export interface CommonsPost {
   id: string;
   coopId?: string;
@@ -157,9 +177,11 @@ export interface CommonsPost {
   title: string;
   body: string;
   tag: 'Social' | 'Meme' | 'Win' | 'Need' | 'Idea' | 'Vote' | 'Resource' | 'Opportunity';
+  classification?: string;
   replies: number;
   support: number;
   pledges?: string;
+  media: CommonsPostMedia[];
   comments: CommonsComment[];
 }
 
@@ -378,6 +400,16 @@ export const api = {
     return readTrpcResult<{ coop: CommonsProfile; posts: CommonsPost[] }>(response, 'Failed to load Commons feed');
   },
 
+  async getCommonsPost(data: { coopId?: string; postId: string }, sessionToken?: string | null) {
+    const input = encodeURIComponent(JSON.stringify(data));
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.getPost?input=${input}`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<{ coop: CommonsProfile; post: CommonsPost }>(response, 'Failed to load post');
+  },
+
   async listCommonsDirectory(sessionToken?: string | null) {
     const response = await fetch(`${API_BASE_URL}/trpc/commons.listDirectory`, {
       method: 'GET',
@@ -442,6 +474,7 @@ export const api = {
       title?: string;
       tag?: CommonsPost['tag'];
       coopId?: string;
+      media?: CommonsPostMedia[];
     },
     sessionToken?: string | null
   ) {
@@ -453,10 +486,82 @@ export const api = {
         title: data.title,
         content: data.content,
         tag: data.tag || 'Social',
+        media: data.media || [],
       }),
     });
 
     return readTrpcResult<{ post: CommonsPost }>(response, 'Create an account to post');
+  },
+
+  async uploadCommonsPostMedia(data: {
+    coopId: string;
+    uri: string;
+    fileName?: string | null;
+    mimeType: string;
+    mediaType: 'image' | 'video';
+    width?: number | null;
+    height?: number | null;
+    durationMs?: number | null;
+    sizeBytes?: number | null;
+  }): Promise<CommonsPostMedia> {
+    const fileName =
+      data.fileName ||
+      data.uri.split('/').pop() ||
+      (data.mediaType === 'video' ? 'post-video.mp4' : 'post-image.jpg');
+
+    const tokenResponse = await fetch(`${API_BASE_URL}/api/upload/presigned`, {
+      method: 'POST',
+      headers: {
+        ...networkConfig.defaultHeaders,
+        'X-Coop-Id': data.coopId,
+      },
+      body: JSON.stringify({
+        filename: fileName,
+        contentType: data.mimeType,
+        uploadType: 'post',
+        resourceId: data.coopId,
+      }),
+    });
+
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenData.success) {
+      throw new Error(tokenData.error || 'Failed to get upload token');
+    }
+
+    if (!tokenResponse.ok) {
+      throw new Error(`HTTP error! status: ${tokenResponse.status}`);
+    }
+
+    const fileResponse = await fetch(data.uri);
+    const fileBlob = await fileResponse.blob();
+    const uploadResponse = await fetch(tokenData.uploadUrl, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${tokenData.clientToken}`,
+        'x-api-version': '7',
+        'x-content-type': data.mimeType,
+      },
+      body: fileBlob,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(`Upload failed with status: ${uploadResponse.status}`);
+    }
+
+    const blobResult = await uploadResponse.json();
+
+    return {
+      pathname: tokenData.pathname,
+      url: blobResult.url,
+      mediaType: data.mediaType,
+      mimeType: data.mimeType,
+      fileName,
+      width: data.width ?? null,
+      height: data.height ?? null,
+      durationMs: data.durationMs ?? null,
+      sizeBytes: data.sizeBytes ?? null,
+    };
   },
 
   async createCommonsComment(
@@ -565,6 +670,12 @@ export const api = {
       selfDescription: string;
       shortTermGoals: string;
       longTermGoals: string;
+      skills?: string[];
+      interests?: string[];
+      resourcesOffered?: string[];
+      resourcesNeeded?: string[];
+      businessSummary?: string;
+      locationSummary?: string;
     },
     sessionToken?: string | null
   ) {
@@ -578,6 +689,25 @@ export const api = {
       success: boolean;
       user: Omit<NonNullable<EmailCodeAuthResult['user']>, 'sessionToken' | 'coop'>;
     }>(response, 'Could not save your profile');
+  },
+
+  async registerPushDevice(
+    data: {
+      expoPushToken: string;
+      platform: string;
+      coopId?: string;
+      deviceName?: string | null;
+      appVersion?: string | null;
+    },
+    sessionToken?: string | null
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/notification.registerPushDevice`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{ success: boolean }>(response, 'Could not register notifications');
   },
 
   /**

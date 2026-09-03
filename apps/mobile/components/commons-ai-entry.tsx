@@ -12,11 +12,13 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import {
   Bell,
   BookOpen,
   CheckCircle2,
   ChevronDown,
+  Image as ImageIcon,
   Lightbulb,
   Lock,
   LogOut,
@@ -31,6 +33,7 @@ import {
   SmilePlus,
   Sparkles,
   Store,
+  Trash2,
   UserCircle,
   Users,
   Vote,
@@ -40,8 +43,12 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
-import { api, type CommonsDirectoryItem, type CommonsPost, type CommonsProfile } from '@/lib/api';
+import { api, type CommonsDirectoryItem, type CommonsPost, type CommonsPostMedia, type CommonsProfile } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import {
+  COMPOSER_MEDIA_TILE_SIZE,
+  CommonsMediaTile,
+} from '@/components/commons-media-viewer';
 
 type Message = {
   id: string;
@@ -52,6 +59,7 @@ type Message = {
 type PendingAction = (sessionToken: string) => Promise<void>;
 type ComposerNotice = { type: 'success' | 'error' | 'info'; body: string } | null;
 type SuggestionStatus = 'idle' | 'submitting' | 'success' | 'error';
+type ComposerMedia = Omit<CommonsPostMedia, 'pathname' | 'url' | 'id'> & { uri: string };
 
 type CommonsAiEntryProps = {
   feedCoopId?: string;
@@ -81,6 +89,18 @@ type FeedFilter = (typeof FEED_FILTERS)[number];
 
 const EMOJI_SHORTCUTS = ['😂', '🔥', '👏', '🙏', '💡', '🎨', '📍', '💼', '🤝', '❤️', '👀', '🙌'] as const;
 const PRIMARY_EMOJI_COUNT = 6;
+const MAX_MEDIA_ATTACHMENTS = 4;
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
+const ALLOWED_POST_MEDIA_MIMES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
+]);
 
 const COMMONS_RULES = [
   'A commons is a social space for a real group, place, identity, craft, or shared economic interest.',
@@ -177,7 +197,18 @@ function buildAiResponse(input: string, selectedPost?: CommonsPost): string {
   ].join('\n');
 }
 
-export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, onSignInPress }: CommonsAiEntryProps) {
+function mimeFromFileName(fileName: string | null | undefined, mediaType: 'image' | 'video') {
+  const lower = fileName?.toLowerCase() || '';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.mov')) return 'video/quicktime';
+  if (lower.endsWith('.webm')) return 'video/webm';
+  if (lower.endsWith('.mp4')) return 'video/mp4';
+  return mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+}
+
+export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: CommonsAiEntryProps) {
   const scrollRef = useRef<ScrollView>(null);
   const searchInputRef = useRef<TextInput>(null);
   const pendingActionRef = useRef<PendingAction | null>(null);
@@ -195,9 +226,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
   const [composerPickerOpen, setComposerPickerOpen] = useState(false);
   const [selectedComposerCoopId, setSelectedComposerCoopId] = useState(feedCoopId === 'all' ? 'cahootz' : feedCoopId);
   const [feedError, setFeedError] = useState('');
-  const [commentingPostId, setCommentingPostId] = useState<string | null>(null);
-  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [isPosting, setIsPosting] = useState(false);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [selectedMediaItems, setSelectedMediaItems] = useState<ComposerMedia[]>([]);
   const [, setIsAskingAi] = useState(false);
   const [emojiExpanded, setEmojiExpanded] = useState(false);
   const [composerNotice, setComposerNotice] = useState<ComposerNotice>(null);
@@ -433,9 +464,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
 
   const postDraft = () => {
     const trimmed = draft.trim();
-    if (isPosting) return;
-    if (!trimmed) {
-      setComposerNotice({ type: 'error', body: 'Write something first.' });
+    if (isPosting || isUploadingMedia) return;
+    if (!trimmed && selectedMediaItems.length === 0) {
+      setComposerNotice({ type: 'error', body: 'Write something or add a photo/video first.' });
       return;
     }
 
@@ -452,7 +483,32 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
       setIsPosting(true);
       setComposerNotice(null);
       try {
-        const result = await api.createCommonsPost({ content: trimmed, coopId: selectedComposerCommons.id }, token);
+        const uploadedMedia = selectedMediaItems.length
+          ? await (async () => {
+              setIsUploadingMedia(true);
+              setComposerNotice({ type: 'info', body: `Uploading ${selectedMediaItems.length} attachment${selectedMediaItems.length === 1 ? '' : 's'}...` });
+              return Promise.all(
+                selectedMediaItems.map((media) =>
+                  api.uploadCommonsPostMedia({
+                    coopId: selectedComposerCommons.id,
+                    uri: media.uri,
+                    fileName: media.fileName,
+                    mimeType: media.mimeType,
+                    mediaType: media.mediaType,
+                    width: media.width,
+                    height: media.height,
+                    durationMs: media.durationMs,
+                    sizeBytes: media.sizeBytes,
+                  })
+                )
+              );
+            })()
+          : [];
+        const result = await api.createCommonsPost({
+          content: trimmed,
+          coopId: selectedComposerCommons.id,
+          media: uploadedMedia,
+        }, token);
         const belongsInCurrentFeed = feedCoopId === 'all' || result.post.coopId === feedCoopId;
         if (belongsInCurrentFeed) {
           setFeedPosts((current) => [result.post, ...current]);
@@ -460,6 +516,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
           setActiveFilter('New');
         }
         setDraft('');
+        clearSelectedMedia();
         setComposerNotice({
           type: 'success',
           body: belongsInCurrentFeed
@@ -472,9 +529,69 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
         setAuthError(message);
         setComposerNotice({ type: 'error', body: message });
       } finally {
+        setIsUploadingMedia(false);
         setIsPosting(false);
       }
     });
+  };
+
+  const pickPostMedia = async () => {
+    try {
+      const remainingSlots = MAX_MEDIA_ATTACHMENTS - selectedMediaItems.length;
+      if (remainingSlots <= 0) {
+        setComposerNotice({ type: 'error', body: `You can attach up to ${MAX_MEDIA_ATTACHMENTS} media items.` });
+        return;
+      }
+
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        setComposerNotice({ type: 'error', body: 'Allow photo library access to attach media.' });
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images', 'videos'],
+        allowsEditing: false,
+        allowsMultipleSelection: true,
+        selectionLimit: remainingSlots,
+        quality: 0.85,
+        videoMaxDuration: 120,
+      });
+
+      if (result.canceled || !result.assets[0]) return;
+
+      const acceptedMedia: ComposerMedia[] = [];
+      for (const asset of result.assets.slice(0, remainingSlots)) {
+        const resolvedMediaType = asset.type === 'video' ? 'video' : 'image';
+        const media: ComposerMedia = {
+          uri: asset.uri,
+          mediaType: resolvedMediaType,
+          mimeType: asset.mimeType || mimeFromFileName(asset.fileName, resolvedMediaType),
+          fileName: asset.fileName || null,
+          width: asset.width || null,
+          height: asset.height || null,
+          durationMs: asset.duration || null,
+          sizeBytes: asset.fileSize || null,
+        };
+        const validationError = validateComposerMedia(media);
+
+        if (validationError) {
+          setComposerNotice({ type: 'error', body: validationError });
+          continue;
+        }
+
+        acceptedMedia.push(media);
+      }
+
+      if (acceptedMedia.length === 0) {
+        return;
+      }
+
+      addComposerMedia(acceptedMedia);
+    } catch (error) {
+      console.error('Failed to pick post media:', error);
+      setComposerNotice({ type: 'error', body: 'Could not attach that media.' });
+    }
   };
 
   const appendEmoji = (emoji: string) => {
@@ -490,6 +607,58 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
     if (composerNotice.type === 'error') return '#DC2626';
     if (composerNotice.type === 'success') return '#047857';
     return SOCIAL_THEME.muted;
+  };
+
+  const revokeComposerMediaUri = (media: ComposerMedia) => {
+    if (Platform.OS === 'web' && media.uri.startsWith('blob:') && typeof URL !== 'undefined') {
+      URL.revokeObjectURL(media.uri);
+    }
+  };
+
+  const removeSelectedMedia = (index: number) => {
+    setSelectedMediaItems((current) => {
+      const media = current[index];
+      if (media) revokeComposerMediaUri(media);
+      return current.filter((_, itemIndex) => itemIndex !== index);
+    });
+  };
+
+  const clearSelectedMedia = () => {
+    selectedMediaItems.forEach(revokeComposerMediaUri);
+    setSelectedMediaItems([]);
+  };
+
+  const addComposerMedia = (mediaItems: ComposerMedia[]) => {
+    if (mediaItems.length === 0) return;
+
+    setSelectedMediaItems((current) => {
+      const remainingSlots = MAX_MEDIA_ATTACHMENTS - current.length;
+      const accepted = mediaItems.slice(0, remainingSlots);
+      const rejected = mediaItems.slice(remainingSlots);
+      rejected.forEach(revokeComposerMediaUri);
+
+      if (rejected.length > 0) {
+        setComposerNotice({ type: 'error', body: `You can attach up to ${MAX_MEDIA_ATTACHMENTS} media items.` });
+      } else {
+        setComposerNotice(null);
+      }
+
+      return [...current, ...accepted];
+    });
+  };
+
+  const validateComposerMedia = (media: ComposerMedia) => {
+    if (!ALLOWED_POST_MEDIA_MIMES.has(media.mimeType)) {
+      return 'Use JPG, PNG, WebP, MP4, MOV, or WebM files.';
+    }
+
+    const maxSize = media.mediaType === 'video' ? MAX_VIDEO_SIZE_BYTES : MAX_IMAGE_SIZE_BYTES;
+    if (media.sizeBytes && media.sizeBytes > maxSize) {
+      const maxMb = Math.round(maxSize / 1024 / 1024);
+      return `${media.mediaType === 'video' ? 'Video' : 'Image'} must be under ${maxMb}MB.`;
+    }
+
+    return null;
   };
 
   const openSuggestCommons = () => {
@@ -588,36 +757,6 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
     }
   };
 
-  const submitComment = (post: CommonsPost) => {
-    const content = commentDrafts[post.id]?.trim();
-    if (!content) {
-      setCommentingPostId(post.id);
-      return;
-    }
-
-    void requireAccount(async (token) => {
-      try {
-        const result = await api.createCommonsComment({ postId: post.id, content }, token);
-        setFeedPosts((current) =>
-          current.map((item) =>
-            item.id === post.id
-              ? {
-                  ...item,
-                  replies: item.replies + 1,
-                  comments: [...item.comments, result.comment].slice(-3),
-                }
-              : item
-          )
-        );
-        setCommentDrafts((current) => ({ ...current, [post.id]: '' }));
-        setCommentingPostId(null);
-      } catch (error) {
-        console.error('Failed to comment:', error);
-        setAuthError(error instanceof Error ? error.message : 'Could not add comment.');
-      }
-    });
-  };
-
   const supportPost = (post: CommonsPost) => {
     void requireAccount(async (token) => {
       try {
@@ -636,10 +775,14 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
     });
   };
 
-  const openMessages = () => {
-    void requireAccount(async () => {
-      onMessagesPress?.();
-    });
+  const openPostDetail = (post: CommonsPost) => {
+    router.push({
+      pathname: '/[coopId]/posts/[postId]',
+      params: {
+        coopId: post.coopId || feedCoopId || 'cahootz',
+        postId: post.id,
+      },
+    } as any);
   };
 
   const handleFilterPress = (filter: FeedFilter) => {
@@ -860,9 +1003,49 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
               </View>
               <ChevronDown size={18} color={SOCIAL_THEME.primary} />
             </TouchableOpacity>
+            {selectedMediaItems.length > 0 ? (
+              <View className="mt-3 rounded-xl border border-gray-200 bg-white p-2">
+                <Text className="px-1 text-xs font-black uppercase text-gray-500">
+                  {selectedMediaItems.length} attachment{selectedMediaItems.length === 1 ? '' : 's'}
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2">
+                  <View className="flex-row gap-2">
+                    {selectedMediaItems.map((media, index) => (
+                      <View
+                        key={`${media.uri}-${index}`}
+                        className="overflow-hidden rounded-xl border border-gray-100 bg-white"
+                        style={{ width: COMPOSER_MEDIA_TILE_SIZE, height: COMPOSER_MEDIA_TILE_SIZE }}
+                      >
+                        <CommonsMediaTile media={media} size={COMPOSER_MEDIA_TILE_SIZE} />
+                        {media.mediaType === 'video' ? (
+                          <View className="absolute bottom-1 left-1 rounded-md bg-black/65 px-1.5 py-0.5">
+                            <Text className="text-[10px] font-black text-white">Video</Text>
+                          </View>
+                        ) : null}
+                        <TouchableOpacity
+                          onPress={() => removeSelectedMedia(index)}
+                          className="absolute right-1 top-1 h-7 w-7 items-center justify-center rounded-full bg-white/95"
+                          accessibilityLabel="Remove attached media"
+                        >
+                          <Trash2 size={13} color="#DC2626" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+            ) : null}
             <View className="mt-3 flex-row items-center gap-2">
               <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-1">
                 <View className="flex-row gap-2">
+                  <TouchableOpacity
+                    onPress={() => void pickPostMedia()}
+                    className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white"
+                    activeOpacity={0.75}
+                    accessibilityLabel="Attach photo or video"
+                  >
+                    <ImageIcon size={15} color={SOCIAL_THEME.primary} />
+                  </TouchableOpacity>
                   {visibleEmojiShortcuts.map((emoji) => (
                     <TouchableOpacity
                       key={emoji}
@@ -893,13 +1076,15 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
             <View className="mt-3">
               <TouchableOpacity
                 onPress={postDraft}
-                disabled={isPosting}
+                disabled={isPosting || isUploadingMedia}
                 className="h-11 flex-row items-center justify-center gap-2 rounded-xl"
-                style={{ backgroundColor: draft.trim() ? SOCIAL_THEME.primary : '#FDBA74' }}
+                style={{ backgroundColor: draft.trim() || selectedMediaItems.length > 0 ? SOCIAL_THEME.primary : '#FDBA74' }}
                 activeOpacity={0.82}
               >
-                {isPosting ? <ActivityIndicator size="small" color="white" /> : <Send size={16} color="white" />}
-                <Text className="font-black text-white">{isPosting ? 'Posting...' : 'Post'}</Text>
+                {isPosting || isUploadingMedia ? <ActivityIndicator size="small" color="white" /> : <Send size={16} color="white" />}
+                <Text className="font-black text-white">
+                  {isUploadingMedia ? 'Uploading...' : isPosting ? 'Posting...' : 'Post'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -980,150 +1165,100 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
 
             {visiblePosts.map((post) => {
               const colors = tagColor(post.tag);
-              const selected = selectedPostId === post.id;
-              const commentDraft = commentDrafts[post.id] || '';
-              const isCommenting = commentingPostId === post.id;
               return (
                 <TouchableOpacity
                   key={post.id}
-                  onPress={() => setSelectedPostId(post.id)}
+                  onPress={() => openPostDetail(post)}
                   className="rounded-xl border bg-white p-3"
-                  style={{ borderColor: selected ? SOCIAL_THEME.primary : SOCIAL_THEME.border }}
+                  style={{ borderColor: SOCIAL_THEME.border }}
                   activeOpacity={0.75}
                 >
-                  <View className="flex-row gap-3">
-                    <View className="w-9 items-center">
-                      <TouchableOpacity
-                        onPress={(event) => {
-                          event.stopPropagation();
-                          supportPost(post);
-                        }}
-                        className="h-8 w-8 items-center justify-center rounded-lg border"
-                        style={{ backgroundColor: SOCIAL_THEME.primarySoft, borderColor: SOCIAL_THEME.primaryBorder }}
-                      >
-                        <Text className="text-lg font-black" style={{ color: SOCIAL_THEME.primary }}>
-                          ⌃
+                  <View className="min-w-0">
+                    <View className="mb-2 flex-row items-start justify-between gap-2">
+                      <View className="min-w-0 flex-1">
+                        <Text className="text-xs font-semibold text-stone-500">
+                          {post.group} · {post.author} · {post.time}
                         </Text>
-                      </TouchableOpacity>
-                      <Text className="my-1 text-xs font-black" style={{ color: SOCIAL_THEME.primary }}>
-                        {post.support}
-                      </Text>
-                      <View className="h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-gray-50">
-                        <Text className="text-lg font-black text-stone-400">⌄</Text>
+                      </View>
+                      <View className="rounded-full px-3 py-1" style={{ backgroundColor: colors.bg }}>
+                        <Text className="text-xs font-bold" style={{ color: colors.fg }}>
+                          {post.tag}
+                        </Text>
                       </View>
                     </View>
 
-                    <View className="min-w-0 flex-1">
-                      <View className="mb-2 flex-row items-start justify-between gap-2">
-                        <View className="min-w-0 flex-1">
-                          <Text className="text-xs font-semibold text-stone-500">
-                            {post.group} · {post.author} · {post.time}
-                          </Text>
-                        </View>
-                        <View className="rounded-full px-3 py-1" style={{ backgroundColor: colors.bg }}>
-                          <Text className="text-xs font-bold" style={{ color: colors.fg }}>
-                            {post.tag}
-                          </Text>
-                        </View>
-                      </View>
-
-                      <Text className="text-lg font-black leading-6 text-gray-900">{post.title}</Text>
+                    <Text className="text-lg font-black leading-6 text-gray-900">{post.title}</Text>
+                    {post.body ? (
                       <Text className="mt-2 text-sm leading-5 text-gray-600">{post.body}</Text>
+                    ) : null}
 
-                      {isOrganizedPost(post) ? (
-                        <View
-                          className="mt-3 flex-row items-center gap-2 rounded-xl border px-3 py-2"
-                          style={{ backgroundColor: SOCIAL_THEME.primarySoft, borderColor: SOCIAL_THEME.primaryBorder }}
+                    {isOrganizedPost(post) ? (
+                      <View
+                        className="mt-3 flex-row items-center gap-2 rounded-xl border px-3 py-2"
+                        style={{ backgroundColor: SOCIAL_THEME.primarySoft, borderColor: SOCIAL_THEME.primaryBorder }}
+                      >
+                        <Sparkles size={14} color={SOCIAL_THEME.primary} />
+                        <Text className="flex-1 text-xs font-semibold leading-4" style={{ color: '#9A3412' }}>
+                          Auto-linked with related posts.
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    <View className="mt-3 flex-row items-center gap-4">
+                      <View className="flex-row items-center gap-1">
+                        <Text className="text-xs font-black" style={{ color: SOCIAL_THEME.primary }}>
+                          {post.support}
+                        </Text>
+                        <Text className="text-xs font-semibold text-stone-600">
+                          {post.support === 1 ? 'like' : 'likes'}
+                        </Text>
+                      </View>
+                      <View className="flex-row items-center gap-1">
+                        <Text className="text-xs font-black text-stone-700">{post.replies}</Text>
+                        <Text className="text-xs font-semibold text-stone-600">
+                          {post.replies === 1 ? 'comment' : 'comments'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View className="mt-3 flex-row items-center justify-between border-t border-stone-100 pt-3">
+                      <View className="flex-row gap-5">
+                        <TouchableOpacity
+                          onPress={(event) => {
+                            event.stopPropagation();
+                            supportPost(post);
+                          }}
+                          className="flex-row items-center gap-1"
                         >
-                          <Sparkles size={14} color={SOCIAL_THEME.primary} />
-                          <Text className="flex-1 text-xs font-semibold leading-4" style={{ color: '#9A3412' }}>
-                            Auto-linked with related posts.
-                          </Text>
-                        </View>
-                      ) : null}
-
-                      <View className="mt-4 flex-row items-center justify-between border-t border-stone-100 pt-3">
-                        <View className="flex-row gap-4">
-                          <View className="flex-row items-center gap-1">
-                            <MessageCircle size={15} color="#78716C" />
-                            <Text className="text-xs font-semibold text-stone-600">{post.replies}</Text>
-                          </View>
-                          {post.pledges ? (
-                            <View className="flex-row items-center gap-1">
-                              <CheckCircle2 size={15} color="#15803D" />
-                              <Text className="text-xs font-semibold text-stone-600">{post.pledges}</Text>
-                            </View>
-                          ) : null}
-                          <TouchableOpacity
-                            onPress={(event) => {
-                              event.stopPropagation();
-                              void sharePost(post);
-                            }}
-                            className="flex-row items-center gap-1"
-                          >
-                            <Share2 size={15} color="#78716C" />
-                            <Text className="text-xs font-semibold text-stone-600">Share</Text>
-                          </TouchableOpacity>
+                          <CheckCircle2 size={15} color={SOCIAL_THEME.primary} />
+                          <Text className="text-xs font-semibold text-stone-700">Like</Text>
+                        </TouchableOpacity>
+                        <View className="flex-row items-center gap-1">
+                          <MessageCircle size={15} color="#78716C" />
+                          <Text className="text-xs font-semibold text-stone-700">Comment</Text>
                         </View>
                         <TouchableOpacity
                           onPress={(event) => {
                             event.stopPropagation();
-                            setSelectedPostId(post.id);
-                            runAiAction(isOrganizedPost(post) ? 'Draft next step' : 'Summarize thread', post);
+                            void sharePost(post);
                           }}
-                          className="h-8 w-8 items-center justify-center rounded-lg"
-                          style={{ backgroundColor: SOCIAL_THEME.primarySoft }}
+                          className="flex-row items-center gap-1"
                         >
-                          <Lightbulb size={15} color={SOCIAL_THEME.primary} />
+                          <Share2 size={15} color="#78716C" />
+                          <Text className="text-xs font-semibold text-stone-600">Share</Text>
                         </TouchableOpacity>
                       </View>
-
-                      <View className="mt-3 gap-2 rounded-xl bg-stone-50 p-3">
-                        {post.comments.map((comment) => (
-                          <View key={comment.id || `${post.id}-${comment.author}`} className="flex-row gap-2">
-                            <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
-                            <Text className="flex-1 text-xs leading-4 text-stone-600">{comment.body}</Text>
-                          </View>
-                        ))}
-
-                        {isCommenting ? (
-                          <View className="mt-1 flex-row items-end gap-2">
-                            <TextInput
-                              value={commentDraft}
-                              onChangeText={(text) =>
-                                setCommentDrafts((current) => ({ ...current, [post.id]: text }))
-                              }
-                              placeholder="Write a comment..."
-                              placeholderTextColor={SOCIAL_THEME.muted}
-                              multiline
-                              className="min-h-10 flex-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-gray-900"
-                              style={{ maxHeight: 86, textAlignVertical: 'top' }}
-                            />
-                            <TouchableOpacity
-                              onPress={() => submitComment(post)}
-                              className="h-10 w-10 items-center justify-center rounded-xl"
-                              style={{ backgroundColor: SOCIAL_THEME.primary }}
-                            >
-                              <Send size={15} color="white" />
-                            </TouchableOpacity>
-                          </View>
-                        ) : (
-                          <View className="mt-1 flex-row gap-2">
-                            <TouchableOpacity
-                              onPress={() => setCommentingPostId(post.id)}
-                              className="flex-1 rounded-xl bg-white px-3 py-2"
-                            >
-                              <Text className="text-xs font-bold text-stone-700">Reply</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={openMessages}
-                              className="rounded-xl border border-stone-200 bg-white px-3 py-2"
-                            >
-                              <Text className="text-xs font-bold text-stone-700">Message</Text>
-                            </TouchableOpacity>
-                          </View>
-                        )}
-                      </View>
+                      <TouchableOpacity
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          setSelectedPostId(post.id);
+                          runAiAction(isOrganizedPost(post) ? 'Draft next step' : 'Summarize thread', post);
+                        }}
+                        className="h-8 w-8 items-center justify-center rounded-lg"
+                        style={{ backgroundColor: SOCIAL_THEME.primarySoft }}
+                      >
+                        <Lightbulb size={15} color={SOCIAL_THEME.primary} />
+                      </TouchableOpacity>
                     </View>
                   </View>
                 </TouchableOpacity>

@@ -22,6 +22,10 @@ model User {
   encryptedPrivateKey String? // DEPRECATED: Use Wallet model instead
   walletCreatedAt     DateTime? // DEPRECATED: Use Wallet model instead
   profileCompleted    Boolean    @default(false)
+  selfDescription     String?
+  shortTermGoals      String?
+  longTermGoals       String?
+  profileOnboardingCompletedAt DateTime?
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
   deletedAt           DateTime?
@@ -50,6 +54,12 @@ model User {
   commerceTransactions CommerceTransaction[]
   scMintEvents         SCMintEvent[]
   scBurnEvents         SCBurnEvent[]
+  commonsPosts         CommonsPost[]
+  commonsComments      CommonsComment[]
+  commonsPostSupports  CommonsPostSupport[]
+  commonsSuggestions   CommonsSuggestion[]
+  sentDirectMessages   DirectMessage[]       @relation("DirectMessageSender")
+  receivedDirectMessages DirectMessage[]     @relation("DirectMessageReceiver")
 
   @@index([deletedAt])
   @@schema("public")
@@ -671,6 +681,96 @@ model CommentAIEvaluation {
   goalsImpacted String[]
   createdAt     DateTime         @default(now())
 
+  @@schema("public")
+}
+
+// ── Cahootz Commons Social Models ─────────────────────
+model CommonsPost {
+  id       String @id @default(cuid())
+  coopId   String @default("cahootz")
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  title   String
+  content String @db.Text
+  tag     String @default("Need")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  comments CommonsComment[]
+  supports CommonsPostSupport[]
+
+  @@index([coopId, createdAt])
+  @@index([authorId, createdAt])
+  @@schema("public")
+}
+
+model CommonsComment {
+  id       String      @id @default(cuid())
+  postId   String
+  post     CommonsPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId String
+  author   User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content  String      @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId, createdAt])
+  @@index([authorId, createdAt])
+  @@schema("public")
+}
+
+model CommonsPostSupport {
+  id        String      @id @default(cuid())
+  postId    String
+  post      CommonsPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId, createdAt])
+  @@schema("public")
+}
+
+model CommonsSuggestion {
+  id               String   @id @default(cuid())
+  coopId           String   @default("cahootz")
+  name             String
+  reason           String?  @db.Text
+  suggestedByEmail String
+  suggestedByName  String?
+  userId           String?
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status           String   @default("NEW")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([coopId, createdAt])
+  @@index([suggestedByEmail, createdAt])
+  @@index([status, createdAt])
+  @@schema("public")
+}
+
+model DirectMessage {
+  id         String @id @default(cuid())
+  coopId     String @default("cahootz")
+  senderId   String
+  sender     User   @relation("DirectMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  receiver   User   @relation("DirectMessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  content    String @db.Text
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([coopId, createdAt])
+  @@index([senderId, receiverId, createdAt])
+  @@index([receiverId, createdAt])
   @@schema("public")
 }
 

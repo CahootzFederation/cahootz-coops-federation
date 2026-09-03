@@ -32,7 +32,7 @@ function truncateAddress(address: string): string {
 }
 
 export default function HomeScreen() {
-  const { user } = useAuth();
+  const { user, sessionToken, login } = useAuth();
   const coin = useCoin();
   const config = coopConfig();
   const primaryColor = resolveBrandColor(user?.coop?.primaryColor || config.primaryColor, '#B45309');
@@ -70,7 +70,7 @@ export default function HomeScreen() {
 
     try {
       // First get wallet info to ensure we have the latest address
-      const walletResult = await api.getWalletInfo(user.id, user.walletAddress);
+      const walletResult = await api.getWalletInfo(user.id, user.walletAddress, sessionToken);
       let currentWalletAddress = user.walletAddress;
 
       // If user has a wallet but our session doesn't have it, update the address
@@ -160,14 +160,19 @@ export default function HomeScreen() {
   }, [user?.id]);
 
   const handleCreateWallet = async () => {
-    if (!user?.id) return;
+    if (!user?.id || !sessionToken) return;
     setIsCreatingWallet(true);
     try {
-      const result = await api.createWallet(user.id);
+      const result = await api.createWallet(user.id, sessionToken, user.walletAddress);
       if (result?.address) {
         setWalletAddress(result.address);
         setWalletType('MANAGED');
         setLocalSigningEnabled(false);
+        await login({
+          ...user,
+          walletAddress: result.address,
+          sessionToken,
+        });
       }
     } catch (error) {
       console.error('Failed to create wallet:', error);

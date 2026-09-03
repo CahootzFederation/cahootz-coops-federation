@@ -5,13 +5,49 @@ import { createPublicClient, http, formatUnits } from "viem";
 import { baseSepolia } from "viem/chains";
 
 import { Context } from "../context.js";
-import { publicProcedure, authenticatedProcedure } from "../procedures/index.js";
+import { publicProcedure, authenticatedProcedure, accountAuthenticatedProcedure } from "../procedures/index.js";
 import { router } from "../trpc.js";
 import { getUserWallet, createWalletForUser, getUserWalletInfo } from "../services/wallet-service.js";
-import type { AuthenticatedContext } from "../context.js";
+import type { AccountAuthenticatedContext, AuthenticatedContext } from "../context.js";
 
 const DEMO_LOGIN_EMAIL = "demo@cahootz.coop";
 const DEMO_COOP_ID = "demo";
+
+const mobileProfileOnboardingInput = z.object({
+  selfDescription: z.string().trim().min(120, "Write at least a strong paragraph about yourself.").max(5000),
+  shortTermGoals: z.string().trim().min(50, "Share a little more about what you are working toward soon.").max(3000),
+  longTermGoals: z.string().trim().min(50, "Share a little more about the future you are building toward.").max(3000),
+});
+
+const mobileProfileUserOutput = z.object({
+  id: z.string(),
+  email: z.string(),
+  name: z.string().nullable(),
+  roles: z.array(z.string()),
+  status: z.string(),
+  walletAddress: z.string().nullable(),
+  phone: z.string().nullable(),
+  createdAt: z.date(),
+  selfDescription: z.string().nullable(),
+  shortTermGoals: z.string().nullable(),
+  longTermGoals: z.string().nullable(),
+  profileOnboardingCompletedAt: z.date().nullable(),
+});
+
+const mobileProfileUserSelect = {
+  id: true,
+  email: true,
+  name: true,
+  roles: true,
+  status: true,
+  walletAddress: true,
+  phone: true,
+  createdAt: true,
+  selfDescription: true,
+  shortTermGoals: true,
+  longTermGoals: true,
+  profileOnboardingCompletedAt: true,
+} as const;
 
 // Blockchain client for fetching balances
 const publicClient = createPublicClient({
@@ -239,6 +275,10 @@ export const userRouter = router({
       walletAddress: z.string().nullable(),
       phone: z.string().nullable(),
       createdAt: z.date(),
+      selfDescription: z.string().nullable(),
+      shortTermGoals: z.string().nullable(),
+      longTermGoals: z.string().nullable(),
+      profileOnboardingCompletedAt: z.date().nullable(),
     }))
     .query(async ({ input, ctx }) => {
       const context = ctx as Context;
@@ -254,6 +294,10 @@ export const userRouter = router({
           walletAddress: true,
           phone: true,
           createdAt: true,
+          selfDescription: true,
+          shortTermGoals: true,
+          longTermGoals: true,
+          profileOnboardingCompletedAt: true,
           deletedAt: true,
         },
       });
@@ -273,6 +317,36 @@ export const userRouter = router({
       }
 
       return user;
+    }),
+
+  /**
+   * Store the first-run mobile profile answers used for AI-assisted organization.
+   */
+  completeProfileOnboarding: accountAuthenticatedProcedure
+    .input(mobileProfileOnboardingInput)
+    .output(z.object({
+      success: z.boolean(),
+      user: mobileProfileUserOutput,
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+
+      const user = await context.db.user.update({
+        where: { id: context.accountUser.id },
+        data: {
+          selfDescription: input.selfDescription,
+          shortTermGoals: input.shortTermGoals,
+          longTermGoals: input.longTermGoals,
+          profileOnboardingCompletedAt: new Date(),
+          profileCompleted: true,
+        },
+        select: mobileProfileUserSelect,
+      });
+
+      return {
+        success: true,
+        user,
+      };
     }),
 
   /**
@@ -493,7 +567,7 @@ export const userRouter = router({
    * Get wallet info (address and balance only, no private key)
    * Users can only access their own wallet info
    */
-  getWalletInfo: authenticatedProcedure
+  getWalletInfo: accountAuthenticatedProcedure
     .input(z.object({
       userId: z.string(),
     }))
@@ -507,7 +581,14 @@ export const userRouter = router({
       walletCreatedAt: z.string().optional(),
     }))
     .query(async ({ input, ctx }) => {
-      const context = ctx as Context;
+      const context = ctx as AccountAuthenticatedContext;
+
+      if (input.userId !== context.accountUser.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You can only view your own wallet.",
+        });
+      }
 
       try {
         const walletInfo = await getUserWalletInfo(input.userId, context.db);
@@ -540,7 +621,7 @@ export const userRouter = router({
   /**
    * Create a wallet for a user
    */
-  createWallet: publicProcedure
+  createWallet: accountAuthenticatedProcedure
     .input(z.object({
       userId: z.string(),
     }))
@@ -549,7 +630,14 @@ export const userRouter = router({
       created: z.boolean(),
     }))
     .mutation(async ({ input, ctx }) => {
-      const context = ctx as Context;
+      const context = ctx as AccountAuthenticatedContext;
+
+      if (input.userId !== context.accountUser.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You can only create a wallet for your own account.",
+        });
+      }
 
       // Check if user exists
       const user = await context.db.user.findUnique({

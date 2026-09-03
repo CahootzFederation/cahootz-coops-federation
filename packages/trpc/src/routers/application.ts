@@ -11,6 +11,7 @@ import { syncMembershipToContract } from "../services/blockchain.js";
 import { toE164 } from "../lib/phone.js";
 import { sendApplicationAcceptedEmail, isEmailConfigured } from "../services/email-service.js";
 import { sendApplicationSubmittedNotification } from "../services/slack-notification-service.js";
+import { COMMONS_COOP_ID, ensureCommonsMembership } from "../lib/commons.js";
 
 // Backend wallet is now stored in CoopConfig per-coop
 
@@ -36,8 +37,8 @@ const applicationSchema = z.object({
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email("Invalid email address"),
   phone: z.string().min(1, "Phone number is required"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  confirmPassword: z.string(),
+  password: z.string().min(8, "Password must be at least 8 characters").optional(),
+  confirmPassword: z.string().optional(),
   
   // Media uploads (optional)
   videoCID: z.string().optional(),
@@ -51,7 +52,7 @@ const applicationSchema = z.object({
   agreeToTerms: z.boolean().refine(val => val === true, "Must agree to terms of service"),
   agreeToPrivacy: z.boolean().refine(val => val === true, "Must agree to privacy policy"),
 }).passthrough() // Allow additional dynamic fields from application questions
-.refine(data => data.password === data.confirmPassword, {
+.refine(data => !data.password || data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
 });
@@ -96,10 +97,9 @@ export const applicationRouter = router({
         }
         console.log('✅ No existing application found for this coop');
 
-        // Hash the password
-        console.log('🔒 Hashing password...');
-        const hashedPassword = await bcrypt.hash(input.password, 12);
-        console.log('✅ Password hashed');
+        const hashedPassword = input.password
+          ? await bcrypt.hash(input.password, 12)
+          : undefined;
 
         // Create user and application in a transaction
         console.log('💾 Starting database transaction...');
@@ -120,7 +120,7 @@ export const applicationRouter = router({
                 phone: normalizedPhone,
                 password: hashedPassword,
                 roles: ["member"],
-                status: "PENDING",
+                status: "ACTIVE",
               },
               include: {
                 applications: true,
@@ -129,6 +129,19 @@ export const applicationRouter = router({
             console.log('✅ User created:', user.id);
           } else {
             console.log('✅ Using existing user:', user.id);
+            if (
+              "status" in user &&
+              user.status === "PENDING" &&
+              typeof tx.user?.update === "function"
+            ) {
+              user = await tx.user.update({
+                where: { id: user.id },
+                data: { status: "ACTIVE" },
+                include: {
+                  applications: true,
+                },
+              });
+            }
           }
 
           if (!user) {
@@ -156,8 +169,12 @@ export const applicationRouter = router({
           });
           console.log('✅ Application created:', application.id);
 
-          // Create PENDING membership record for this coop
-          console.log('👥 Creating PENDING membership record...');
+          await ensureCommonsMembership(tx, user.id);
+
+          // Create membership record for the target coop only.
+          const targetMembershipStatus =
+            input.coopId === COMMONS_COOP_ID ? "ACTIVE" : "PENDING";
+          console.log('👥 Creating membership record for target coop...');
           await tx.userCoopMembership.upsert({
             where: {
               userId_coopId: {
@@ -168,14 +185,15 @@ export const applicationRouter = router({
             create: {
               userId: user.id,
               coopId: input.coopId,
-              status: "PENDING",
+              status: targetMembershipStatus,
               roles: ["member"],
+              joinedAt: targetMembershipStatus === "ACTIVE" ? new Date() : undefined,
             },
             update: {
-              status: "PENDING",
+              status: targetMembershipStatus,
             },
           });
-          console.log('✅ PENDING membership record created');
+          console.log('✅ Target membership record created');
 
           return { user, application };
         });

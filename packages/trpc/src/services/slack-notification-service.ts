@@ -148,6 +148,63 @@ export async function sendNewsletterSubscriptionNotification(params: {
   });
 }
 
+export async function sendCommonsSuggestionNotification(params: {
+  suggestionId: string;
+  coopId: string;
+  commonsName: string;
+  reason?: string | null;
+  suggestedByEmail: string;
+  suggestedByName?: string | null;
+}) {
+  const { suggestionId, coopId, commonsName, reason, suggestedByEmail, suggestedByName } = params;
+
+  await sendSlackNotification({
+    text: "New Commons Suggestion",
+    attachments: [
+      {
+        color: "#F97316",
+        fields: [
+          {
+            title: "Suggested commons",
+            value: commonsName,
+            short: true,
+          },
+          {
+            title: "Suggested by",
+            value: suggestedByName || suggestedByEmail,
+            short: true,
+          },
+          {
+            title: "Email",
+            value: suggestedByEmail,
+            short: true,
+          },
+          {
+            title: "Co-op",
+            value: coopId,
+            short: true,
+          },
+          {
+            title: "Reason",
+            value: reason || "Not provided",
+            short: false,
+          },
+          {
+            title: "Suggestion ID",
+            value: suggestionId,
+            short: false,
+          },
+          {
+            title: "Time",
+            value: new Date().toLocaleString(),
+            short: false,
+          },
+        ],
+      },
+    ],
+  });
+}
+
 export async function sendApiHealthNotification(params: {
   status: "up" | "down" | "degraded";
   service: "api" | "web" | "database";

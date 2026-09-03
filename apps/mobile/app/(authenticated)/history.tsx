@@ -33,7 +33,7 @@ interface Transaction {
 }
 
 export default function HistoryScreen() {
-  const { user } = useAuth();
+  const { user, sessionToken } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -54,7 +54,7 @@ export default function HistoryScreen() {
     let currentWalletAddress = user.walletAddress;
     if (!currentWalletAddress) {
       try {
-        const walletResult = await api.getWalletInfo(user.id, null);
+        const walletResult = await api.getWalletInfo(user.id, user.walletAddress, sessionToken);
         if (walletResult?.hasWallet && walletResult?.address) {
           currentWalletAddress = walletResult.address;
           setWalletAddress(currentWalletAddress);

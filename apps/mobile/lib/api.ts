@@ -22,7 +22,10 @@ export const API_BASE_URL = getApiUrl();
  * Helper to create headers with optional wallet address
  * Used for authenticated requests that require wallet verification
  */
-export function createApiHeaders(walletAddress?: string | null): HeadersInit {
+export function createApiHeaders(
+  walletAddress?: string | null,
+  sessionToken?: string | null
+): HeadersInit {
   const headers: Record<string, string> = {
     ...networkConfig.defaultHeaders,
   };
@@ -30,6 +33,10 @@ export function createApiHeaders(walletAddress?: string | null): HeadersInit {
   // Add wallet address header if provided (for privateProcedure endpoints)
   if (walletAddress) {
     headers['x-wallet-address'] = walletAddress;
+  }
+
+  if (sessionToken) {
+    headers['x-session-token'] = sessionToken;
   }
 
   return headers;
@@ -45,8 +52,8 @@ export interface ApplicationData {
   lastName: string;
   email: string;
   phone: string;
-  password: string;
-  confirmPassword: string;
+  password?: string;
+  confirmPassword?: string;
 
   // Media Uploads (optional)
   videoCID?: string;
@@ -69,6 +76,36 @@ export interface LoginData {
   password: string;
 }
 
+export interface EmailCodeAuthResult {
+  success: boolean;
+  message: string;
+  user?: {
+    id: string;
+    email: string;
+    name: string | null;
+    roles: string[];
+    status: string;
+    walletAddress: string | null;
+    phone: string | null;
+    createdAt: string;
+    selfDescription: string | null;
+    shortTermGoals: string | null;
+    longTermGoals: string | null;
+    profileOnboardingCompletedAt: string | null;
+    sessionToken: string;
+    coop?: {
+      id: string;
+      name: string;
+      shortName: string;
+      apiUrl: string;
+      webUrl: string;
+      primaryColor?: string;
+      accentColor?: string;
+      logoUrl?: string;
+    };
+  };
+}
+
 export interface WalletInfo {
   walletId: string | null;
   address: string;
@@ -85,6 +122,14 @@ export interface WaitlistSignupData {
   suggestedCoop?: string;
 }
 
+export interface CommonsSuggestionData {
+  name: string;
+  reason?: string;
+  email: string;
+  suggestedByName?: string;
+  coopId?: string;
+}
+
 export interface NewsletterSubmissionData {
   coopId: string;
   type: 'article' | 'event';
@@ -95,6 +140,148 @@ export interface NewsletterSubmissionData {
   ctaLabel?: string;
   ctaUrl?: string;
   imageUrl?: string;
+}
+
+export interface CommonsComment {
+  id: string;
+  author: string;
+  body: string;
+}
+
+export interface CommonsPost {
+  id: string;
+  coopId?: string;
+  author: string;
+  group: string;
+  time: string;
+  title: string;
+  body: string;
+  tag: 'Social' | 'Meme' | 'Win' | 'Need' | 'Idea' | 'Vote' | 'Resource' | 'Opportunity';
+  replies: number;
+  support: number;
+  pledges?: string;
+  comments: CommonsComment[];
+}
+
+export interface CommonsProfile {
+  id: string;
+  name: string;
+  shortName: string;
+  description: string;
+}
+
+export type CommonsAccessStatus = 'ACTIVE' | 'PENDING' | 'REJECTED' | 'LOCKED';
+
+export interface CommonsDirectoryItem extends CommonsProfile {
+  tagline?: string | null;
+  mission?: string | null;
+  eligibility?: string | null;
+  accessStatus: CommonsAccessStatus;
+  isMember: boolean;
+  isLocked: boolean;
+  canApply: boolean;
+  applicationId?: string | null;
+  applicationStatus?: string | null;
+}
+
+export interface CommonsMissionGoal {
+  key: string;
+  label: string;
+  priorityWeight: number;
+  description?: string;
+}
+
+export interface CommonsProposalCategory {
+  key: string;
+  label: string;
+  isActive: boolean;
+  description?: string;
+}
+
+export interface ApplicationQuestion {
+  id: string;
+  type: string;
+  label: string;
+  description?: string;
+  placeholder?: string;
+  required: boolean;
+  options?: { value: string; label: string }[];
+  validation?: Record<string, unknown>;
+}
+
+export interface CoopConfigDetail {
+  coopId: string;
+  name?: string;
+  slug?: string;
+  tagline?: string;
+  description?: string;
+  eligibility?: string;
+  displayMission?: string;
+  charterText: string;
+  missionGoals: CommonsMissionGoal[];
+  proposalCategories: CommonsProposalCategory[];
+  applicationQuestions?: ApplicationQuestion[] | null;
+  quorumPercent: number;
+  approvalThresholdPercent: number;
+  votingWindowDays: number;
+  aiAutoApproveThresholdUSD: number;
+  councilVoteThresholdUSD: number;
+  treasurySafeAddress?: string;
+  scTokenSymbol?: string;
+  scTokenName?: string;
+}
+
+export interface ProposalSummary {
+  id: string;
+  createdAt: string;
+  status: string;
+  title: string;
+  summary: string;
+  category: string;
+  budget?: {
+    amount?: number;
+    currency?: string;
+  };
+  proposer?: {
+    displayName?: string | null;
+    wallet?: string;
+  };
+}
+
+export interface DirectThread {
+  id: string;
+  name: string;
+  role: string;
+  time: string;
+  unread: number;
+  preview: string;
+  online?: boolean;
+  messages: {
+    id: string;
+    fromMe: boolean;
+    body: string;
+    time: string;
+  }[];
+}
+
+export interface DirectMember {
+  id: string;
+  name: string;
+  role: string;
+}
+
+async function readTrpcResult<T>(response: Response, fallbackMessage: string): Promise<T> {
+  const result = await response.json();
+
+  if (result.error) {
+    throw new Error(result.error.message || fallbackMessage);
+  }
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  return result.result?.data as T;
 }
 
 // Helper functions for API calls
@@ -179,6 +366,218 @@ export const api = {
     }
 
     return result.result?.data;
+  },
+
+  async listCommonsFeed(coopId = 'cahootz', sessionToken?: string | null) {
+    const input = encodeURIComponent(JSON.stringify({ coopId, limit: 30 }));
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.listFeed?input=${input}`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<{ coop: CommonsProfile; posts: CommonsPost[] }>(response, 'Failed to load Commons feed');
+  },
+
+  async listCommonsDirectory(sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.listDirectory`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<{ coops: CommonsDirectoryItem[] }>(response, 'Failed to load commons');
+  },
+
+  async applyToCommons(
+    data: {
+      coopId: string;
+      displayName?: string;
+      phone?: string;
+      dynamicAnswers?: Record<string, unknown>;
+    },
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.applyToCommons`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{ success: boolean; message: string; applicationId: string }>(response, 'Failed to apply to commons');
+  },
+
+  async askCommonsAi(prompt: string, postId?: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.ask`, {
+      method: 'POST',
+      headers: {
+        ...networkConfig.defaultHeaders,
+      },
+      body: JSON.stringify({ prompt, postId }),
+    });
+
+    return readTrpcResult<{ answer: string }>(response, 'Failed to ask Cahootz AI');
+  },
+
+  async suggestCommons(data: CommonsSuggestionData, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.suggestCommons`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({
+        coopId: data.coopId || 'cahootz',
+        name: data.name,
+        reason: data.reason,
+        email: data.email,
+        suggestedByName: data.suggestedByName,
+      }),
+    });
+
+    return readTrpcResult<{ success: boolean; suggestionId: string }>(
+      response,
+      'Could not send the commons suggestion'
+    );
+  },
+
+  async createCommonsPost(
+    data: {
+      content: string;
+      title?: string;
+      tag?: CommonsPost['tag'];
+      coopId?: string;
+    },
+    sessionToken?: string | null
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.createPost`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({
+        coopId: data.coopId || 'cahootz',
+        title: data.title,
+        content: data.content,
+        tag: data.tag || 'Social',
+      }),
+    });
+
+    return readTrpcResult<{ post: CommonsPost }>(response, 'Create an account to post');
+  },
+
+  async createCommonsComment(
+    data: {
+      postId: string;
+      content: string;
+    },
+    sessionToken?: string | null
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.createComment`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{ comment: CommonsComment }>(response, 'Create an account to comment');
+  },
+
+  async toggleCommonsSupport(postId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.toggleSupport`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ postId }),
+    });
+
+    return readTrpcResult<{ supported: boolean }>(response, 'Create an account to support posts');
+  },
+
+  async listDirectThreads(sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.listDirectThreads`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<{ threads: DirectThread[] }>(response, 'Create an account to view DMs');
+  },
+
+  async listDirectMembers(sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.listDirectMembers`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<{ members: DirectMember[] }>(
+      response,
+      'Create an account to view Commons members'
+    );
+  },
+
+  async sendDirectMessage(
+    data: {
+      receiverId: string;
+      content: string;
+      coopId?: string;
+    },
+    sessionToken?: string | null
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.sendDirectMessage`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ ...data, coopId: data.coopId || 'cahootz' }),
+    });
+
+    return readTrpcResult<{ message: { id: string; body: string; createdAt: string } }>(
+      response,
+      'Create an account to send DMs'
+    );
+  },
+
+  async requestLoginCode(email: string, coopId?: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/auth.requestLoginCode`, {
+      method: 'POST',
+      headers: {
+        ...networkConfig.defaultHeaders,
+      },
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        ...(coopId ? { coopId } : {}),
+      }),
+    });
+
+    return readTrpcResult<{ success: boolean; message: string }>(
+      response,
+      'Failed to send login code'
+    );
+  },
+
+  async verifyLoginCode(email: string, code: string, coopId?: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/auth.verifyLoginCode`, {
+      method: 'POST',
+      headers: {
+        ...networkConfig.defaultHeaders,
+      },
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        code: code.trim(),
+        ...(coopId ? { coopId } : {}),
+      }),
+    });
+
+    return readTrpcResult<EmailCodeAuthResult>(response, 'Failed to verify login code');
+  },
+
+  async completeProfileOnboarding(
+    data: {
+      selfDescription: string;
+      shortTermGoals: string;
+      longTermGoals: string;
+    },
+    sessionToken?: string | null
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/user.completeProfileOnboarding`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{
+      success: boolean;
+      user: Omit<NonNullable<EmailCodeAuthResult['user']>, 'sessionToken' | 'coop'>;
+    }>(response, 'Could not save your profile');
   },
 
   /**
@@ -326,11 +725,15 @@ export const api = {
   /**
    * Get wallet info for a user
    */
-  async getWalletInfo(userId: string, walletAddress?: string | null): Promise<WalletInfo> {
+  async getWalletInfo(
+    userId: string,
+    walletAddress?: string | null,
+    sessionToken?: string | null
+  ): Promise<WalletInfo> {
     const input = encodeURIComponent(JSON.stringify({ userId }));
     const response = await fetch(`${API_BASE_URL}/trpc/user.getWalletInfo?input=${input}`, {
       method: 'GET',
-      headers: createApiHeaders(walletAddress),
+      headers: createApiHeaders(walletAddress, sessionToken),
     });
 
     const result = await response.json();
@@ -442,12 +845,14 @@ export const api = {
   /**
    * Create a wallet for a user
    */
-  async createWallet(userId: string) {
+  async createWallet(
+    userId: string,
+    sessionToken?: string | null,
+    walletAddress?: string | null
+  ) {
     const response = await fetch(`${API_BASE_URL}/trpc/user.createWallet`, {
       method: 'POST',
-      headers: {
-        ...networkConfig.defaultHeaders,
-      },
+      headers: createApiHeaders(walletAddress, sessionToken),
       body: JSON.stringify({ userId })
     });
 
@@ -2153,11 +2558,7 @@ export const api = {
     });
     const result = await response.json();
     if (result.error) return null;
-    return result.result?.data as {
-      proposalCategories: { key: string; label: string; isActive: boolean }[];
-      scTokenSymbol?: string;
-      scTokenName?: string;
-    } | null;
+    return result.result?.data as CoopConfigDetail | null;
   },
 
   // ── Proposals ──────────────────────────────────────────────────────────────
@@ -2166,11 +2567,16 @@ export const api = {
    * List proposals with optional status filter
    */
   async listProposals(
-    options: { status?: string; limit?: number; offset?: number } = {},
+    options: { coopId?: string; status?: string; limit?: number; offset?: number } = {},
     walletAddress?: string | null,
   ) {
     const input = encodeURIComponent(
-      JSON.stringify({ status: options.status, limit: options.limit ?? 20, offset: options.offset ?? 0 }),
+      JSON.stringify({
+        coopId: options.coopId || resolveCoopId(),
+        status: options.status,
+        limit: options.limit ?? 20,
+        offset: options.offset ?? 0,
+      }),
     );
     const response = await fetch(`${API_BASE_URL}/trpc/proposal.list?input=${input}`, {
       method: 'GET',
@@ -2178,7 +2584,7 @@ export const api = {
     });
     const result = await response.json();
     if (result.error) throw new Error(result.error.message || 'Failed to load proposals');
-    return result.result?.data as { proposals: any[]; total: number; hasMore: boolean };
+    return result.result?.data as { proposals: ProposalSummary[]; total: number; hasMore: boolean };
   },
 
   /**
@@ -2198,8 +2604,8 @@ export const api = {
   /**
    * Get proposals submitted by a specific wallet address
    */
-  async getMyProposals(walletAddress: string, limit = 20, offset = 0) {
-    const input = encodeURIComponent(JSON.stringify({ wallet: walletAddress, limit, offset }));
+  async getMyProposals(walletAddress: string, limit = 20, offset = 0, coopId?: string) {
+    const input = encodeURIComponent(JSON.stringify({ wallet: walletAddress, coopId, limit, offset }));
     const response = await fetch(`${API_BASE_URL}/trpc/proposal.getByProposer?input=${input}`, {
       method: 'GET',
       headers: createApiHeaders(walletAddress),
@@ -2212,11 +2618,11 @@ export const api = {
   /**
    * Submit a new proposal (authenticated — requires wallet)
    */
-  async createProposal(text: string, walletAddress: string) {
+  async createProposal(text: string, walletAddress: string, coopId?: string) {
     const response = await fetch(`${API_BASE_URL}/trpc/proposal.create`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ text, coopId: resolveCoopId() }),
+      body: JSON.stringify({ text, coopId: coopId || resolveCoopId() }),
     });
     const result = await response.json();
     if (result.error) throw new Error(result.error.message || 'Failed to submit proposal');
@@ -2433,17 +2839,6 @@ export const api = {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
   
-      return result.result?.data as {
-        questions: {
-          id: string;
-          type: string;
-          label: string;
-          description?: string;
-          placeholder?: string;
-          required: boolean;
-          options?: { value: string; label: string }[];
-          validation?: Record<string, unknown>;
-        }[];
-      };
+      return result.result?.data as { questions: ApplicationQuestion[] };
     }
 };

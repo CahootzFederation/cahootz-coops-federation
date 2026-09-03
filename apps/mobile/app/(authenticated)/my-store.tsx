@@ -178,7 +178,7 @@ export default function MyStoreScreen() {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#B45309" />
+          <ActivityIndicator size="large" color="#FF6B00" />
           <Text className="text-gray-500 dark:text-gray-400 mt-4">Loading your store...</Text>
         </View>
       </SafeAreaView>
@@ -208,10 +208,10 @@ export default function MyStoreScreen() {
           </Text>
           <TouchableOpacity
             onPress={() => router.push(storeId ? '/(authenticated)/my-stores' as any : '/(authenticated)/apply-store' as any)}
-            className="bg-amber-500 px-8 py-4 rounded-xl mt-6"
+            className="bg-primary px-8 py-4 rounded-xl mt-6"
           >
             <Text className="text-white font-bold">
-              {storeId ? 'View All Stores' : 'Apply to Become a Store'}
+              {storeId ? 'View All Commons Stores' : 'Apply to Become a Commons Store'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -235,7 +235,7 @@ export default function MyStoreScreen() {
       <ScrollView
         className="flex-1"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#B45309" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF6B00" />
         }
         showsVerticalScrollIndicator={false}
       >
@@ -244,7 +244,7 @@ export default function MyStoreScreen() {
           <View className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-sm">
             {/* Store Header */}
             <LinearGradient
-              colors={['#D97706', '#B45309']}
+              colors={['#FF8A2A', '#FF6B00']}
               className="p-5"
             >
               <View className="flex-row items-center">
@@ -331,7 +331,7 @@ export default function MyStoreScreen() {
                 </View>
                 <View className="flex-1 items-center border-x border-gray-100 dark:border-gray-700">
                   <View className="flex-row items-center">
-                    <Package size={16} color="#B45309" />
+                    <Package size={16} color="#FF6B00" />
                     <Text className="text-xl font-bold text-gray-900 dark:text-white ml-1">
                       {store.totalOrders}
                     </Text>
@@ -340,7 +340,7 @@ export default function MyStoreScreen() {
                 </View>
                 <View className="flex-1 items-center">
                   <View className="flex-row items-center">
-                    <ShoppingBag size={16} color="#B45309" />
+                    <ShoppingBag size={16} color="#FF6B00" />
                     <Text className="text-xl font-bold text-gray-900 dark:text-white ml-1">
                       {store.productCount}
                     </Text>
@@ -357,7 +357,7 @@ export default function MyStoreScreen() {
           {store.status !== 'APPROVED' && (
             <View className="bg-white dark:bg-gray-800 rounded-2xl p-5">
               <View className="flex-row items-start">
-                <AlertCircle size={20} color="#B45309" />
+                <AlertCircle size={20} color="#FF6B00" />
                 <View className="flex-1 ml-3">
                   <Text className="text-gray-900 dark:text-white font-semibold">Finish Stripe Connect to go live</Text>
                   <Text className="text-gray-600 dark:text-gray-300 text-sm mt-1">
@@ -367,7 +367,7 @@ export default function MyStoreScreen() {
               </View>
               <TouchableOpacity
                 onPress={() => router.push({ pathname: '/stripe-onboarding', params: { storeId: store.id } })}
-                className="bg-amber-500 py-3 rounded-xl mt-4"
+                className="bg-primary py-3 rounded-xl mt-4"
               >
                 <Text className="text-center text-white font-semibold">
                   {store.businessId ? 'Continue Stripe Connect' : 'Start Stripe Connect'}
@@ -379,7 +379,7 @@ export default function MyStoreScreen() {
           {store.status === 'APPROVED' && !store.isScVerified && (
             <View className="bg-white dark:bg-gray-800 rounded-2xl p-5">
               <View className="flex-row items-start">
-                <BadgeCheck size={20} color="#B45309" />
+                <BadgeCheck size={20} color="#FF6B00" />
                 <View className="flex-1 ml-3">
                   <Text className="text-gray-900 dark:text-white font-semibold">
                     {store.scApplicationStatus === 'PENDING' ? `${coin.symbol} rewards application under review` : `Apply to earn ${coin.symbol} rewards`}
@@ -436,7 +436,7 @@ export default function MyStoreScreen() {
               onPress={() => router.push({ pathname: '/(authenticated)/store-orders', params: { storeId: store.id } } as any)}
             >
               <LinearGradient
-                colors={['#D97706', '#B45309']}
+                colors={['#FF8A2A', '#FF6B00']}
                 className="rounded-2xl p-5 flex-row items-center"
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
@@ -467,7 +467,7 @@ export default function MyStoreScreen() {
               </Text>
               <TouchableOpacity
                 onPress={() => router.push({ pathname: '/add-product', params: { storeId: store.id } })}
-                className="bg-amber-500 px-4 py-2 rounded-full flex-row items-center"
+                className="bg-primary px-4 py-2 rounded-full flex-row items-center"
               >
                 <Plus size={18} color="white" />
                 <Text className="text-white font-semibold ml-1">Add</Text>
@@ -482,7 +482,7 @@ export default function MyStoreScreen() {
                 </Text>
                 <TouchableOpacity
                   onPress={() => router.push({ pathname: '/add-product', params: { storeId: store.id } })}
-                  className="bg-amber-500 px-6 py-3 rounded-xl mt-4"
+                  className="bg-primary px-6 py-3 rounded-xl mt-4"
                 >
                   <Text className="text-white font-semibold">Add First Product</Text>
                 </TouchableOpacity>
@@ -528,7 +528,7 @@ export default function MyStoreScreen() {
                       <Text className="text-xs text-gray-500 dark:text-gray-400">
                         {product.quantity} in stock • {product.totalSold} sold
                       </Text>
-                      <Edit3 size={16} color="#B45309" />
+                      <Edit3 size={16} color="#FF6B00" />
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -540,11 +540,11 @@ export default function MyStoreScreen() {
         {/* Pending Store Message */}
         {store.status === 'PENDING' && (
           <View className="px-5 mt-6 pb-8">
-            <View className="bg-amber-50 dark:bg-amber-900/30 rounded-xl p-5">
+            <View className="bg-secondary dark:bg-amber-900/30 rounded-xl p-5">
               <Text className="text-amber-800 dark:text-amber-200 font-semibold text-center">
                 What happens next?
               </Text>
-              <Text className="text-amber-700 dark:text-amber-300 text-sm text-center mt-2">
+              <Text className="text-primary dark:text-amber-300 text-sm text-center mt-2">
                 Complete Stripe Connect onboarding and refresh your status. Your store will go live as soon as Stripe enables charges.
               </Text>
             </View>

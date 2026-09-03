@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useRouter, useSegments } from 'expo-router';
+import { usePathname, useRouter, useSegments } from 'expo-router';
 import { secureStorage } from '@/lib/secure-storage';
 import { setActiveCoopConfig, resetCoopConfig, type CoopConfig } from '@/lib/coop-config';
 import { registerForNativePushNotifications } from '@/lib/push-notifications';
@@ -55,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const segments = useSegments();
+  const pathname = usePathname();
 
   // Load session on mount
   useEffect(() => {
@@ -75,23 +76,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const inAuthGroup = segments[0] === '(authenticated)';
     const inProfileOnboarding = segments[0] === 'profile-onboarding';
-    const profileOnboardingComplete = !!user?.profileOnboardingCompletedAt;
-
+    const atRoot = pathname === '/';
     if (!user && inAuthGroup) {
       // User is not logged in but in authenticated routes, redirect to onboarding
       router.replace('/');
       return;
     }
 
-    if (user && !profileOnboardingComplete && !inProfileOnboarding) {
-      router.replace('/profile-onboarding' as any);
+    if (user && atRoot) {
+      router.replace('/(tabs)' as any);
       return;
     }
 
-    if (user && profileOnboardingComplete && inProfileOnboarding) {
+    if (user?.profileOnboardingCompletedAt && inProfileOnboarding) {
       router.replace('/(tabs)' as any);
     }
-  }, [user, segments, isLoading, router]);
+  }, [user, segments, isLoading, router, pathname]);
 
   const loadSession = async () => {
     try {

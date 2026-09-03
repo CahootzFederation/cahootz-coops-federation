@@ -12,7 +12,7 @@ const THEME = {
   paper: '#F6F7F8',
   ink: '#111827',
   muted: '#6B7280',
-  primary: '#F97316',
+  primary: '#FF6B00',
   primarySoft: '#FFF7ED',
   primaryBorder: '#FED7AA',
   greenSoft: '#ECFDF5',

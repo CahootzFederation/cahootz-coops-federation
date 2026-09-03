@@ -109,7 +109,7 @@ export default function ProductDetailScreen() {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#B45309" />
+          <ActivityIndicator size="large" color="#FF6B00" />
           <Text className="text-gray-500 dark:text-gray-400 mt-4">Loading product...</Text>
         </View>
       </SafeAreaView>
@@ -131,7 +131,7 @@ export default function ProductDetailScreen() {
         <TouchableOpacity onPress={() => router.push('/cart')} className="relative">
           <ShoppingCart size={24} color="#374151" />
           {totalItems > 0 && (
-            <View className="absolute -top-2 -right-2 bg-amber-500 w-5 h-5 rounded-full items-center justify-center">
+            <View className="absolute -top-2 -right-2 bg-primary w-5 h-5 rounded-full items-center justify-center">
               <Text className="text-white text-xs font-bold">{totalItems > 99 ? '99+' : totalItems}</Text>
             </View>
           )}
@@ -204,8 +204,8 @@ export default function ProductDetailScreen() {
             </Text>
             {product.store.isScVerified && (
               <View className="ml-2 flex-row items-center">
-                <BadgeCheck size={14} color="#B45309" />
-                <Text className="text-amber-600 text-xs ml-1">SC Verified</Text>
+                <BadgeCheck size={14} color="#FF6B00" />
+                <Text className="text-primary text-xs ml-1">SC Verified</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -242,8 +242,8 @@ export default function ProductDetailScreen() {
                 </>
               ) : product.allowBackorder ? (
                 <>
-                  <View className="w-2 h-2 rounded-full bg-amber-500 mr-2" />
-                  <Text className="text-amber-600 dark:text-amber-400">
+                  <View className="w-2 h-2 rounded-full bg-primary mr-2" />
+                  <Text className="text-primary dark:text-amber-400">
                     Available for backorder
                   </Text>
                 </>
@@ -270,14 +270,14 @@ export default function ProductDetailScreen() {
 
           {/* SC Verified Info */}
           {product.store.isScVerified && (
-            <View className="mt-6 bg-amber-50 dark:bg-amber-900/30 rounded-xl p-4">
+            <View className="mt-6 bg-secondary dark:bg-amber-900/30 rounded-xl p-4">
               <View className="flex-row items-center mb-2">
-                <BadgeCheck size={20} color="#B45309" />
+                <BadgeCheck size={20} color="#FF6B00" />
                 <Text className="text-amber-800 dark:text-amber-200 font-semibold ml-2">
                   {coin.symbol} Verified Purchase
                 </Text>
               </View>
-              <Text className="text-amber-700 dark:text-amber-300 text-sm">
+              <Text className="text-primary dark:text-amber-300 text-sm">
                 When you purchase from this store, customers earn {coin.name} ({coin.symbol}) tokens which help
                 build community wealth and strengthen our commons economy.
               </Text>
@@ -327,7 +327,7 @@ export default function ProductDetailScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleBuyNow}
-            className="flex-1 bg-amber-500 py-4 rounded-xl flex-row items-center justify-center"
+            className="flex-1 bg-primary py-4 rounded-xl flex-row items-center justify-center"
             disabled={product.trackInventory && product.quantity === 0 && !product.allowBackorder}
           >
             <Text className="text-white font-bold">Buy Now</Text>

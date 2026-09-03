@@ -145,7 +145,7 @@ export default function StoreDetailScreen() {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#B45309" />
+          <ActivityIndicator size="large" color="#FF6B00" />
           <Text className="text-gray-500 dark:text-gray-400 mt-4">Loading store...</Text>
         </View>
       </SafeAreaView>
@@ -157,7 +157,7 @@ export default function StoreDetailScreen() {
       <ScrollView
         className="flex-1"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#B45309" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF6B00" />
         }
         showsVerticalScrollIndicator={false}
       >
@@ -173,7 +173,7 @@ export default function StoreDetailScreen() {
               />
             ) : (
               <LinearGradient
-                colors={['#D97706', '#B45309']}
+                colors={['#FF8A2A', '#FF6B00']}
                 className="w-full h-full"
               />
             )}
@@ -191,7 +191,7 @@ export default function StoreDetailScreen() {
             >
               <ShoppingCart size={24} color="white" />
               {totalItems > 0 && (
-                <View className="absolute -top-1 -right-1 bg-amber-500 rounded-full min-w-[20px] h-5 items-center justify-center">
+                <View className="absolute -top-1 -right-1 bg-primary rounded-full min-w-[20px] h-5 items-center justify-center">
                   <Text className="text-white text-xs font-bold">
                     {totalItems > 99 ? '99+' : totalItems}
                   </Text>
@@ -210,7 +210,7 @@ export default function StoreDetailScreen() {
                   resizeMode="cover"
                 />
               ) : (
-                <ShoppingBag size={40} color="#B45309" />
+                <ShoppingBag size={40} color="#FF6B00" />
               )}
             </View>
           </View>
@@ -240,9 +240,9 @@ export default function StoreDetailScreen() {
           {/* Badges */}
           {store.isScVerified && (
             <View className="flex-row flex-wrap gap-2 mt-3">
-              <View className="bg-amber-100 dark:bg-amber-900/30 px-3 py-2 rounded-full flex-row items-center">
-                <BadgeCheck size={16} color="#B45309" />
-                <Text className="text-amber-700 dark:text-amber-300 font-semibold ml-1">
+              <View className="bg-secondary dark:bg-amber-900/30 px-3 py-2 rounded-full flex-row items-center">
+                <BadgeCheck size={16} color="#FF6B00" />
+                <Text className="text-primary dark:text-amber-300 font-semibold ml-1">
                   SC Verified - Earns SC
                 </Text>
               </View>
@@ -302,7 +302,7 @@ export default function StoreDetailScreen() {
                 onPress={() => Linking.openURL(store.website)}
               >
                 <Globe size={20} color="#6B7280" />
-                <Text className="text-amber-600 dark:text-amber-400 ml-3">
+                <Text className="text-primary dark:text-amber-400 ml-3">
                   Visit Website
                 </Text>
               </TouchableOpacity>
@@ -326,7 +326,7 @@ export default function StoreDetailScreen() {
               onPress={() => setSelectedCategory(null)}
               className={`mr-2 px-4 py-2 rounded-full ${
                 !selectedCategory
-                  ? 'bg-amber-500'
+                  ? 'bg-primary'
                   : 'bg-gray-100 dark:bg-gray-700'
               }`}
             >
@@ -346,7 +346,7 @@ export default function StoreDetailScreen() {
                 onPress={() => setSelectedCategory(cat.key)}
                 className={`mr-2 px-4 py-2 rounded-full ${
                   selectedCategory === cat.key
-                    ? 'bg-amber-500'
+                    ? 'bg-primary'
                     : 'bg-gray-100 dark:bg-gray-700'
                 }`}
               >
@@ -416,7 +416,7 @@ export default function StoreDetailScreen() {
 
                       <View className="mt-2 flex-row items-center justify-between">
                         <View>
-                          <Text className="text-lg font-bold text-amber-600 dark:text-amber-400">
+                          <Text className="text-lg font-bold text-primary dark:text-amber-400">
                             {formatPrice(product.priceUSD)}
                           </Text>
                           {product.compareAtPrice && product.compareAtPrice > product.priceUSD && (
@@ -439,9 +439,9 @@ export default function StoreDetailScreen() {
                               className="p-2"
                               activeOpacity={0.7}
                             >
-                              <Minus size={14} color="#B45309" />
+                              <Minus size={14} color="#FF6B00" />
                             </TouchableOpacity>
-                            <Text className="text-amber-700 dark:text-amber-400 font-bold text-sm min-w-[20px] text-center">
+                            <Text className="text-primary dark:text-amber-400 font-bold text-sm min-w-[20px] text-center">
                               {getCartQuantity(product.id)}
                             </Text>
                             <TouchableOpacity
@@ -452,13 +452,13 @@ export default function StoreDetailScreen() {
                               className="p-2"
                               activeOpacity={0.7}
                             >
-                              <Plus size={14} color="#B45309" />
+                              <Plus size={14} color="#FF6B00" />
                             </TouchableOpacity>
                           </View>
                         ) : (
                           <TouchableOpacity
                             onPress={() => handleAddToCart(product)}
-                            className="bg-amber-500 p-2 rounded-full"
+                            className="bg-primary p-2 rounded-full"
                             activeOpacity={0.7}
                           >
                             <Plus size={18} color="white" />

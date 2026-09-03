@@ -31,7 +31,7 @@ interface OrderDetailHybridProps {
 }
 
 const STATUS_CONFIG: Record<string, { color: string; bgColor: string; icon: any; label: string }> = {
-  PENDING: { color: '#D97706', bgColor: 'bg-amber-100 dark:bg-amber-900/30', icon: Clock, label: 'Pending' },
+  PENDING: { color: '#FF8A2A', bgColor: 'bg-secondary dark:bg-amber-900/30', icon: Clock, label: 'Pending' },
   PROCESSING: { color: '#2563EB', bgColor: 'bg-blue-100 dark:bg-blue-900/30', icon: CreditCard, label: 'Paid' },
   COMPLETED: { color: '#16A34A', bgColor: 'bg-green-100 dark:bg-green-900/30', icon: CheckCircle, label: 'Completed' },
   FAILED: { color: '#DC2626', bgColor: 'bg-red-100 dark:bg-red-900/30', icon: XCircle, label: 'Failed' },
@@ -40,7 +40,7 @@ const STATUS_CONFIG: Record<string, { color: string; bgColor: string; icon: any;
 
 const SC_STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   COMPLETED: { color: '#16A34A', label: 'Rewarded' },
-  PENDING: { color: '#D97706', label: 'Processing' },
+  PENDING: { color: '#FF8A2A', label: 'Processing' },
   FAILED: { color: '#DC2626', label: 'Failed' },
 };
 

@@ -76,7 +76,7 @@ export default function HistoryScreen() {
       case 'PENDING':
       case 'PROCESSING':
       case 'PENDING_CLAIM':
-        return 'text-amber-600';
+        return 'text-primary';
       case 'FAILED':
       case 'EXPIRED':
         return 'text-red-600';
@@ -124,7 +124,7 @@ export default function HistoryScreen() {
   if (loading) {
     return (
       <View className="flex-1 items-center justify-center bg-gray-50">
-        <ActivityIndicator size="large" color="#D97706" />
+        <ActivityIndicator size="large" color="#FF8A2A" />
         <Text className="mt-4 text-gray-600">Loading history...</Text>
       </View>
     );
@@ -137,7 +137,7 @@ export default function HistoryScreen() {
         <Text className="text-center text-gray-600 mb-6">{error}</Text>
         <TouchableOpacity
           onPress={loadHistory}
-          className="bg-amber-600 px-6 py-3 rounded-lg"
+          className="bg-primary px-6 py-3 rounded-lg"
         >
           <Text className="text-white font-semibold">Retry</Text>
         </TouchableOpacity>
@@ -178,11 +178,11 @@ export default function HistoryScreen() {
                     {/* Icon */}
                     <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${
                       transfer.type === 'received' ? 'bg-green-100' :
-                      transfer.type === 'pending' ? 'bg-amber-100' : 'bg-gray-100'
+                      transfer.type === 'pending' ? 'bg-secondary' : 'bg-gray-100'
                     }`}>
                       <Text className={`text-lg ${
                         transfer.type === 'received' ? 'text-green-600' :
-                        transfer.type === 'pending' ? 'text-amber-600' : 'text-gray-600'
+                        transfer.type === 'pending' ? 'text-primary' : 'text-gray-600'
                       }`}>
                         {getTransferIcon(transfer.type)}
                       </Text>

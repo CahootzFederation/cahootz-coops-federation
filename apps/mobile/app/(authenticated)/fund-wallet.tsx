@@ -204,7 +204,7 @@ export default function FundWalletScreen() {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#B45309" />
+          <ActivityIndicator size="large" color="#FF6B00" />
           <Text className="text-gray-500 dark:text-gray-400 mt-4">Loading...</Text>
         </View>
       </SafeAreaView>
@@ -234,7 +234,7 @@ export default function FundWalletScreen() {
             Wallet Balance
           </Text>
           <View className="flex-row items-center">
-            <Wallet size={24} color="#B45309" />
+            <Wallet size={24} color="#FF6B00" />
             <Text className="text-2xl font-bold text-gray-900 dark:text-white ml-2">
               ${currentBalance.toFixed(2)}
             </Text>
@@ -255,14 +255,14 @@ export default function FundWalletScreen() {
                 onPress={() => handlePresetAmount(preset)}
                 className={`flex-1 min-w-[45%] py-4 rounded-xl border-2 items-center ${
                   amount === preset
-                    ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-500'
+                    ? 'bg-secondary dark:bg-amber-900/30 border-amber-500'
                     : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
                 }`}
               >
                 <Text
                   className={`text-xl font-bold ${
                     amount === preset
-                      ? 'text-amber-600'
+                      ? 'text-primary'
                       : 'text-gray-900 dark:text-white'
                   }`}
                 >
@@ -307,8 +307,8 @@ export default function FundWalletScreen() {
               onPress={handleAddCard}
               className="bg-white dark:bg-gray-800 rounded-xl p-4 border-2 border-dashed border-gray-300 dark:border-gray-600 flex-row items-center justify-center"
             >
-              <Plus size={20} color="#B45309" />
-              <Text className="text-amber-600 font-medium ml-2">
+              <Plus size={20} color="#FF6B00" />
+              <Text className="text-primary font-medium ml-2">
                 Add a Card
               </Text>
             </TouchableOpacity>
@@ -334,7 +334,7 @@ export default function FundWalletScreen() {
                     </Text>
                   </View>
                   {selectedMethodId === method.id && (
-                    <View className="w-6 h-6 bg-amber-500 rounded-full items-center justify-center">
+                    <View className="w-6 h-6 bg-primary rounded-full items-center justify-center">
                       <Check size={14} color="#FFFFFF" />
                     </View>
                   )}
@@ -401,7 +401,7 @@ export default function FundWalletScreen() {
           disabled={!isValidAmount || !selectedMethodId || processing}
           className={`py-4 rounded-xl items-center ${
             isValidAmount && selectedMethodId && !processing
-              ? 'bg-amber-500'
+              ? 'bg-primary'
               : 'bg-gray-300 dark:bg-gray-700'
           }`}
         >

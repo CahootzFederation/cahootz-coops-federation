@@ -168,7 +168,7 @@ export default function BlobMultiPhotoUpload({
       case 'pending':
         return <Ionicons name="ellipse-outline" size={16} color="#9CA3AF" />;
       case 'uploading':
-        return <ActivityIndicator size="small" color="#D97706" />;
+        return <ActivityIndicator size="small" color="#FF8A2A" />;
       case 'success':
         return <Ionicons name="checkmark-circle" size={16} color="#10B981" />;
       case 'error':
@@ -231,7 +231,7 @@ export default function BlobMultiPhotoUpload({
         /* Select button */
         <TouchableOpacity
           onPress={pickPhotos}
-          className="bg-amber-500 flex-row items-center justify-center py-4 rounded-xl"
+          className="bg-primary flex-row items-center justify-center py-4 rounded-xl"
         >
           <Ionicons name="images" size={20} color="white" />
           <Text className="text-white font-semibold ml-2">Select Photos</Text>
@@ -253,12 +253,12 @@ export default function BlobMultiPhotoUpload({
 
       {/* Upload progress */}
       {isUploading && (
-        <View className="bg-amber-50 dark:bg-amber-900/30 p-4 rounded-xl">
+        <View className="bg-secondary dark:bg-amber-900/30 p-4 rounded-xl">
           <View className="flex-row items-center justify-center mb-2">
-            <ActivityIndicator size="small" color="#D97706" />
-            <Text className="text-amber-700 dark:text-amber-400 ml-2">Uploading photos...</Text>
+            <ActivityIndicator size="small" color="#FF8A2A" />
+            <Text className="text-primary dark:text-amber-400 ml-2">Uploading photos...</Text>
           </View>
-          <Text className="text-xs text-amber-600 dark:text-amber-500 text-center">
+          <Text className="text-xs text-primary dark:text-amber-500 text-center">
             {photos.filter(p => p.status === 'success').length} of {photos.length} completed
           </Text>
         </View>

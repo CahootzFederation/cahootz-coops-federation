@@ -33,7 +33,7 @@ import { api, type CommonsPost, type CommonsProfile } from '@/lib/api';
 
 const THEME = {
   paper: '#F6F7F8',
-  primary: '#F97316',
+  primary: '#FF6B00',
   primarySoft: '#FFF7ED',
   primaryBorder: '#FED7AA',
   ink: '#111827',

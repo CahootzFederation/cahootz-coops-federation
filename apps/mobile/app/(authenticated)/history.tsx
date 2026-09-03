@@ -238,7 +238,7 @@ export default function HistoryScreen() {
             </Text>
             <TouchableOpacity
               onPress={() => router.push('/(authenticated)/pay' as any)}
-              className="mt-6 bg-amber-600 px-6 py-3 rounded-xl"
+              className="mt-6 bg-primary px-6 py-3 rounded-xl"
             >
               <Text className="text-white font-semibold">Send Money</Text>
             </TouchableOpacity>

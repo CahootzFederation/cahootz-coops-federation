@@ -1,25 +1,25 @@
 import { Tabs } from 'expo-router';
-import { Bell, MessageCircle, UserCircle } from 'lucide-react-native';
+import { Bell, LayoutGrid, Scale, UserCircle } from 'lucide-react-native';
 import { Platform } from 'react-native';
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#F97316',
-        tabBarInactiveTintColor: '#6B7280',
+        tabBarActiveTintColor: '#FF6B00',
+        tabBarInactiveTintColor: '#64748B',
         tabBarStyle: {
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          borderTopColor: '#E5E7EB',
+          backgroundColor: '#FFFFFF',
+          borderTopColor: '#F0F2F5',
           borderTopWidth: 1,
-          paddingTop: 8,
+          paddingTop: 7,
           paddingBottom: Platform.OS === 'ios' ? 24 : 8,
           height: Platform.OS === 'ios' ? 88 : 64,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '500',
-          marginTop: 4,
+          fontSize: 10,
+          fontWeight: '700',
+          marginTop: 3,
         },
         headerShown: false,
       }}
@@ -29,7 +29,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Commons',
-          tabBarIcon: ({ color, size }) => <MessageCircle size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <LayoutGrid size={size} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -37,6 +37,13 @@ export default function TabLayout() {
         options={{
           title: 'Alerts',
           tabBarIcon: ({ color, size }) => <Bell size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="proposals"
+        options={{
+          title: 'Proposals',
+          tabBarIcon: ({ color, size }) => <Scale size={size} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -48,8 +55,8 @@ export default function TabLayout() {
       />
 
       {/* ===== HIDDEN - Not ready yet ===== */}
-      <Tabs.Screen name="proposals" options={{ href: null }} />
       <Tabs.Screen name="messages" options={{ href: null }} />
+      <Tabs.Screen name="proposal-detail" options={{ href: null }} />
       <Tabs.Screen name="store" options={{ href: null }} />
       <Tabs.Screen name="community" options={{ href: null }} />
       <Tabs.Screen name="explore" options={{ href: null }} />

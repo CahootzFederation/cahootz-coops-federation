@@ -29,7 +29,7 @@ import {
   Clock,
   Lock,
 } from 'lucide-react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
@@ -44,8 +44,8 @@ const C = {
   gold50: '#FFFBEB',
   gold100: '#FEF3C7',
   gold200: '#FDE68A',
-  gold600: '#D97706',
-  gold700: '#B45309',
+  gold600: '#FF8A2A',
+  gold700: '#FF6B00',
   gold800: '#92400E',
   green50: '#F0FDF4',
   green100: '#DCFCE7',
@@ -57,7 +57,7 @@ const C = {
   blue600: '#2563EB',
   blue700: '#1D4ED8',
   amber50: '#FFFBEB',
-  amber700: '#B45309',
+  amber700: '#FF6B00',
   red50: '#FEF2F2',
   red200: '#FECACA',
   redText: '#DC2626',
@@ -157,7 +157,7 @@ function ProposalCard({ proposal, accentColor }: { proposal: ProposalSummary; ac
 
   return (
     <TouchableOpacity
-      onPress={() => router.push(`/(authenticated)/proposal-detail?id=${proposal.id}`)}
+      onPress={() => router.push(`/(tabs)/proposal-detail?id=${proposal.id}`)}
       activeOpacity={0.7}
       style={styles.card}
     >
@@ -293,7 +293,7 @@ const EMPTY_FORM: FormData = {
   impact: '', budget: '', timeline: '', milestones: '', team: '', communityBenefit: '',
 };
 
-function SubmitModal({ visible, onClose, walletAddress, coopId, coopName, primaryColor, accentColor }: {
+export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName, primaryColor, accentColor }: {
   visible: boolean;
   onClose: () => void;
   walletAddress: string;
@@ -761,8 +761,24 @@ function SubmitModal({ visible, onClose, walletAddress, coopId, coopName, primar
 
 const PAGE_LIMIT = 20;
 
-export default function ProposalsScreen() {
-  const params = useLocalSearchParams<{ coopId?: string }>();
+export default function ProposalsRedirect() {
+  const params = useLocalSearchParams<{ coopId?: string; submit?: string }>();
+
+  return (
+    <Redirect
+      href={{
+        pathname: '/(tabs)/proposals',
+        params: {
+          ...(params.coopId ? { coopId: params.coopId } : {}),
+          ...(params.submit ? { submit: params.submit } : {}),
+        },
+      } as any}
+    />
+  );
+}
+
+export function LegacyProposalsScreen() {
+  const params = useLocalSearchParams<{ coopId?: string; submit?: string }>();
   const { sessionToken, user } = useAuth();
   const config = coopConfig();
   const scopedCoopId = params.coopId || user?.coop?.id || (config.id && config.id !== 'default' ? config.id : 'cahootz');
@@ -779,6 +795,7 @@ export default function ProposalsScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [offset, setOffset] = useState(0);
   const [showSubmit, setShowSubmit] = useState(false);
+  const shouldOpenSubmit = params.submit === '1' || params.submit === 'true';
 
   useEffect(() => {
     let mounted = true;
@@ -861,6 +878,12 @@ export default function ProposalsScreen() {
     setHasMore(false);
     loadProposals(0, false);
   }, [loadProposals]);
+
+  useEffect(() => {
+    if (shouldOpenSubmit && membershipChecked && hasProposalAccess && user?.walletAddress) {
+      setShowSubmit(true);
+    }
+  }, [hasProposalAccess, membershipChecked, shouldOpenSubmit, user?.walletAddress]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

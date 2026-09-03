@@ -153,7 +153,7 @@ export default function ScanPayScreen() {
             </Text>
             <TouchableOpacity
               onPress={requestPermission}
-              className="bg-amber-600 px-6 py-3 rounded-xl"
+              className="bg-primary px-6 py-3 rounded-xl"
             >
               <Text className="text-white font-semibold">Grant Permission</Text>
             </TouchableOpacity>
@@ -283,7 +283,7 @@ export default function ScanPayScreen() {
                 onPress={handleLookupCode}
                 disabled={!storeCode.trim() || lookingUp}
                 className={`mt-4 py-4 rounded-xl items-center ${
-                  storeCode.trim() && !lookingUp ? 'bg-amber-600' : 'bg-gray-600'
+                  storeCode.trim() && !lookingUp ? 'bg-primary' : 'bg-gray-600'
                 }`}
               >
                 {lookingUp ? (

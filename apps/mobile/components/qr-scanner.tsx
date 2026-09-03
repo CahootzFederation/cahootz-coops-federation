@@ -74,7 +74,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
             const { status } = await Camera.requestCameraPermissionsAsync();
             setHasPermission(status === 'granted');
           }}
-          className="bg-amber-600 px-6 py-3 rounded-lg"
+          className="bg-primary px-6 py-3 rounded-lg"
         >
           <Text className="text-white font-semibold">Grant Permission</Text>
         </TouchableOpacity>

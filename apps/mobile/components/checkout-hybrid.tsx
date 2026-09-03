@@ -122,7 +122,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
   const coin = useCoin();
   const config = coopConfig();
   const coopId = resolveCoopId();
-  const primaryColor = resolveBrandColor(user?.coop?.primaryColor || config.primaryColor, '#B45309');
+  const primaryColor = resolveBrandColor(user?.coop?.primaryColor || config.primaryColor, '#FF6B00');
   const accentColor = resolveBrandColor(user?.coop?.accentColor || config.accentColor, '#16A34A');
   const { getStoreItems, clearStoreItems } = useCart();
 
@@ -445,7 +445,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
               <TouchableOpacity
                 className="mt-1 rounded-xl border px-4 py-3"
                 style={{ borderColor: withAlpha(accentColor, '35'), backgroundColor: withAlpha(accentColor, '08') }}
-                onPress={() => router.push(user ? '/(authenticated)/home' as any : '/' as any)}
+                onPress={() => router.push(user ? '/(tabs)' as any : '/' as any)}
               >
                 <Text className="text-center font-semibold" style={{ color: accentColor }}>
                   Apply on home

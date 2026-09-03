@@ -75,7 +75,7 @@ export default function CommercePaymentConfirmation({
       </View>
 
       {localError ? (
-        <View className="mt-4 rounded-xl bg-amber-50 p-3">
+        <View className="mt-4 rounded-xl bg-secondary p-3">
           <Text className="text-amber-800 text-sm">{localError}</Text>
         </View>
       ) : null}

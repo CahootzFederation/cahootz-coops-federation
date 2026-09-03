@@ -196,12 +196,12 @@ export default function AddProductScreen() {
                             setShowCategoryPicker(false);
                           }}
                           className={`px-4 py-3 border-b border-gray-100 dark:border-gray-700 ${
-                            formData.category === cat.key ? 'bg-amber-50 dark:bg-amber-900/30' : ''
+                            formData.category === cat.key ? 'bg-secondary dark:bg-amber-900/30' : ''
                           }`}
                         >
                           <Text className={`${
                             formData.category === cat.key
-                              ? 'text-amber-600 dark:text-amber-400 font-semibold'
+                              ? 'text-primary dark:text-amber-400 font-semibold'
                               : 'text-gray-700 dark:text-gray-300'
                           }`}>
                             {cat.label}
@@ -379,7 +379,7 @@ export default function AddProductScreen() {
                   value={formData.trackInventory}
                   onValueChange={(v) => updateField('trackInventory', v)}
                   trackColor={{ false: '#D1D5DB', true: '#FCD34D' }}
-                  thumbColor={formData.trackInventory ? '#B45309' : '#9CA3AF'}
+                  thumbColor={formData.trackInventory ? '#FF6B00' : '#9CA3AF'}
                 />
               </View>
               <View className="flex-row items-center justify-between px-4 py-4">
@@ -393,7 +393,7 @@ export default function AddProductScreen() {
                   value={formData.allowBackorder}
                   onValueChange={(v) => updateField('allowBackorder', v)}
                   trackColor={{ false: '#D1D5DB', true: '#FCD34D' }}
-                  thumbColor={formData.allowBackorder ? '#B45309' : '#9CA3AF'}
+                  thumbColor={formData.allowBackorder ? '#FF6B00' : '#9CA3AF'}
                 />
               </View>
             </View>
@@ -406,7 +406,7 @@ export default function AddProductScreen() {
           <TouchableOpacity
             onPress={handleSubmit}
             disabled={loading}
-            className="bg-amber-500 py-4 rounded-xl"
+            className="bg-primary py-4 rounded-xl"
           >
             {loading ? (
               <ActivityIndicator color="white" />

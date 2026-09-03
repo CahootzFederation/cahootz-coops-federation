@@ -88,7 +88,7 @@ export default function ApplyScVerificationScreen() {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#B45309" />
+          <ActivityIndicator size="large" color="#FF6B00" />
         </View>
       </SafeAreaView>
     );
@@ -120,7 +120,7 @@ export default function ApplyScVerificationScreen() {
         {/* What this means */}
         <View className="bg-white dark:bg-gray-800 rounded-2xl p-5 mb-4">
           <View className="flex-row items-center mb-3">
-            <ShieldCheck size={18} color="#B45309" />
+            <ShieldCheck size={18} color="#FF6B00" />
             <Text className="text-gray-900 dark:text-white font-semibold ml-2">Apply to earn {coin.symbol} rewards</Text>
           </View>
           <Text className="text-gray-600 dark:text-gray-300 leading-6">
@@ -131,7 +131,7 @@ export default function ApplyScVerificationScreen() {
         {/* Fee explanation */}
         <View className="bg-white dark:bg-gray-800 rounded-2xl p-5 mb-4">
           <View className="flex-row items-center mb-3">
-            <Info size={18} color="#B45309" />
+            <Info size={18} color="#FF6B00" />
             <Text className="text-gray-900 dark:text-white font-semibold ml-2">How transaction fees work</Text>
           </View>
           <Text className="text-gray-500 dark:text-gray-400 text-sm leading-5 mb-4">
@@ -140,13 +140,13 @@ export default function ApplyScVerificationScreen() {
 
           {/* Platform markup */}
           <View className="flex-row items-start mb-4">
-            <View className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 items-center justify-center mr-3 mt-0.5">
-              <TrendingUp size={14} color="#B45309" />
+            <View className="w-8 h-8 rounded-full bg-secondary dark:bg-amber-900/30 items-center justify-center mr-3 mt-0.5">
+              <TrendingUp size={14} color="#FF6B00" />
             </View>
             <View className="flex-1">
               <View className="flex-row items-center justify-between">
                 <Text className="text-gray-900 dark:text-white font-medium">Platform markup</Text>
-                <Text className="text-amber-600 dark:text-amber-400 font-bold">{platformMarkupPct}</Text>
+                <Text className="text-primary dark:text-amber-400 font-bold">{platformMarkupPct}</Text>
               </View>
               <Text className="text-gray-500 dark:text-gray-400 text-xs mt-1 leading-4">
                 Added on top of your listed price. The customer pays this. It covers platform operating costs and keeps the network running.
@@ -181,7 +181,7 @@ export default function ApplyScVerificationScreen() {
             </View>
             <View className="flex-row justify-between mb-1">
               <Text className="text-gray-600 dark:text-gray-300 text-sm">+ Platform markup ({platformMarkupPct})</Text>
-              <Text className="text-amber-600 dark:text-amber-400 text-sm">+${platformFee.toFixed(2)}</Text>
+              <Text className="text-primary dark:text-amber-400 text-sm">+${platformFee.toFixed(2)}</Text>
             </View>
             <View className="border-t border-gray-200 dark:border-gray-600 my-2" />
             <View className="flex-row justify-between mb-1">
@@ -202,17 +202,17 @@ export default function ApplyScVerificationScreen() {
 
         {/* Stripe Connect gate — must be payment-approved before applying */}
         {status && !stripeReady && applicationStatus !== 'APPROVED' && (
-          <View className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-4 mb-4 border border-amber-200 dark:border-amber-800">
+          <View className="bg-secondary dark:bg-amber-900/20 rounded-2xl p-4 mb-4 border border-border dark:border-amber-800">
             <View className="flex-row items-start">
-              <AlertTriangle size={20} color="#B45309" />
+              <AlertTriangle size={20} color="#FF6B00" />
               <View className="ml-3 flex-1">
-                <Text className="text-amber-700 dark:text-amber-300 font-semibold">Complete payment setup first</Text>
-                <Text className="text-amber-700 dark:text-amber-300 text-sm mt-1">
+                <Text className="text-primary dark:text-amber-300 font-semibold">Complete payment setup first</Text>
+                <Text className="text-primary dark:text-amber-300 text-sm mt-1">
                   Your payment account must be approved before you can apply for {coin.symbol} rewards. Finish setting up payments in My Store.
                 </Text>
                 <TouchableOpacity
                   onPress={() => router.replace('/my-store')}
-                  className="mt-3 bg-amber-500 py-2 px-4 rounded-lg self-start"
+                  className="mt-3 bg-primary py-2 px-4 rounded-lg self-start"
                 >
                   <Text className="text-white font-semibold text-sm">Go to My Store</Text>
                 </TouchableOpacity>
@@ -237,12 +237,12 @@ export default function ApplyScVerificationScreen() {
         )}
 
         {applicationStatus === 'PENDING' && (
-          <View className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-4 mb-4">
+          <View className="bg-secondary dark:bg-amber-900/20 rounded-2xl p-4 mb-4">
             <View className="flex-row items-start">
-              <Clock size={20} color="#B45309" />
+              <Clock size={20} color="#FF6B00" />
               <View className="ml-3 flex-1">
-                <Text className="text-amber-700 dark:text-amber-300 font-semibold">Application under review</Text>
-                <Text className="text-amber-700 dark:text-amber-300 text-sm mt-1">
+                <Text className="text-primary dark:text-amber-300 font-semibold">Application under review</Text>
+                <Text className="text-primary dark:text-amber-300 text-sm mt-1">
                   Admin review is still pending. You can come back later to check the status.
                 </Text>
               </View>
@@ -288,18 +288,18 @@ export default function ApplyScVerificationScreen() {
               onPress={() => setAgreedToFees(!agreedToFees)}
               className={`flex-row items-start p-4 rounded-2xl mb-6 border ${
                 agreedToFees
-                  ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-400 dark:border-amber-600'
+                  ? 'bg-secondary dark:bg-amber-900/20 border-amber-400 dark:border-amber-600'
                   : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
               }`}
               activeOpacity={0.7}
             >
               {agreedToFees ? (
-                <CheckSquare size={22} color="#B45309" style={{ marginTop: 1 }} />
+                <CheckSquare size={22} color="#FF6B00" style={{ marginTop: 1 }} />
               ) : (
                 <Square size={22} color="#9CA3AF" style={{ marginTop: 1 }} />
               )}
               <Text className="flex-1 ml-3 text-sm text-gray-700 dark:text-gray-300 leading-5">
-                I understand that a <Text className="font-semibold text-amber-600 dark:text-amber-400">{platformMarkupPct} platform markup</Text> is added to my listed prices (paid by customers), and a <Text className="font-semibold text-green-600 dark:text-green-400">{treasuryFeePct} community treasury fee</Text> is deducted from my payouts to fund the commons Wealth Fund.
+                I understand that a <Text className="font-semibold text-primary dark:text-amber-400">{platformMarkupPct} platform markup</Text> is added to my listed prices (paid by customers), and a <Text className="font-semibold text-green-600 dark:text-green-400">{treasuryFeePct} community treasury fee</Text> is deducted from my payouts to fund the commons Wealth Fund.
               </Text>
             </TouchableOpacity>
           </>
@@ -308,18 +308,18 @@ export default function ApplyScVerificationScreen() {
 
       <View className="px-5 py-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
         {applicationStatus === 'APPROVED' || applicationStatus === 'PENDING' ? (
-          <TouchableOpacity onPress={() => router.replace('/my-store')} className="bg-amber-500 py-4 rounded-xl">
+          <TouchableOpacity onPress={() => router.replace('/my-store')} className="bg-primary py-4 rounded-xl">
             <Text className="text-center text-white font-bold">Back to My Store</Text>
           </TouchableOpacity>
         ) : !stripeReady ? (
-          <TouchableOpacity onPress={() => router.replace('/my-store')} className="bg-amber-500 py-4 rounded-xl">
+          <TouchableOpacity onPress={() => router.replace('/my-store')} className="bg-primary py-4 rounded-xl">
             <Text className="text-center text-white font-bold">Set Up Payments First</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
             onPress={handleSubmit}
             disabled={submitting || !agreedToFees}
-            className={`py-4 rounded-xl ${submitting || !agreedToFees ? 'bg-gray-300 dark:bg-gray-700' : 'bg-amber-500'}`}
+            className={`py-4 rounded-xl ${submitting || !agreedToFees ? 'bg-gray-300 dark:bg-gray-700' : 'bg-primary'}`}
           >
             {submitting ? (
               <ActivityIndicator color="white" />

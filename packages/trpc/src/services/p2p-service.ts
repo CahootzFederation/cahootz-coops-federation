@@ -2,6 +2,7 @@ import { db } from '@repo/db';
 import { encodeFunctionData, formatUnits, type Address } from 'viem';
 import { sendTransaction, createWalletForUser, ensureWalletHasGas, mintUCToUser } from './wallet-service.js';
 import {
+  getSCBalance,
   getUCBalance,
   parseUCAmount,
   formatUCAmount,
@@ -13,9 +14,9 @@ import { coopConfig } from '../config/coop.js';
 import { convertUCToUSD, convertUSDToUC, createParityAmounts } from '../utils/currency-converter.js';
 
 /**
- * Get user's balance in USD (converts from UC)
+ * Get user's balance in USD-equivalent value from SC.
  */
-export async function getUSDBalance(userId: string): Promise<{
+export async function getUSDBalance(userId: string, coopId: string): Promise<{
   balanceUSD: number;
   balanceUC: string;
   formatted: string;
@@ -38,10 +39,10 @@ export async function getUSDBalance(userId: string): Promise<{
     };
   }
 
-  const { balance, formatted } = await getUCBalance(user.walletAddress, '???');
-  console.log(`   UC balance from blockchain: ${formatted} UC (raw: ${balance})`);
+  const { balance, formatted } = await getSCBalance(user.walletAddress, coopId);
+  console.log(`   SC balance from blockchain: ${formatted} SC (raw: ${balance})`);
 
-  const balanceUSD = convertUCToUSD(parseFloat(formatted));
+  const balanceUSD = parseFloat(formatted);
   console.log(`   USD balance: $${balanceUSD.toFixed(2)}`);
 
   return {

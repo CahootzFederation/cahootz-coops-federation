@@ -180,8 +180,8 @@ export default function WithdrawScreen() {
                   onPress={() => setShowAccountPicker(!showAccountPicker)}
                   className="bg-white rounded-xl p-4 flex-row items-center mb-2 border border-gray-200"
                 >
-                  <View className="w-12 h-12 rounded-full bg-amber-100 items-center justify-center mr-3">
-                    <Landmark size={24} color="#B45309" />
+                  <View className="w-12 h-12 rounded-full bg-secondary items-center justify-center mr-3">
+                    <Landmark size={24} color="#FF6B00" />
                   </View>
                   <View className="flex-1">
                     <Text className="text-gray-900 font-medium">
@@ -222,7 +222,7 @@ export default function WithdrawScreen() {
                           <Text className="text-gray-500 text-sm">****{account.last4}</Text>
                         </View>
                         {selectedAccount?.id === account.id && (
-                          <Check size={20} color="#B45309" />
+                          <Check size={20} color="#FF6B00" />
                         )}
                       </TouchableOpacity>
                     ))}
@@ -236,7 +236,7 @@ export default function WithdrawScreen() {
                       <View className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mr-3">
                         <Plus size={20} color="#6B7280" />
                       </View>
-                      <Text className="text-amber-700">Add New Account</Text>
+                      <Text className="text-primary">Add New Account</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -262,15 +262,15 @@ export default function WithdrawScreen() {
                   onPress={() => setAmount(balance.toString())}
                   className="mt-2"
                 >
-                  <Text className="text-amber-700 text-sm">Withdraw full balance</Text>
+                  <Text className="text-primary text-sm">Withdraw full balance</Text>
                 </TouchableOpacity>
               )}
             </View>
 
             {/* Info Box */}
-            <View className="bg-amber-50 rounded-lg p-4 mb-4">
+            <View className="bg-secondary rounded-lg p-4 mb-4">
               <Text className="text-amber-800 text-sm font-medium mb-1">Processing Time</Text>
-              <Text className="text-amber-700 text-sm">
+              <Text className="text-primary text-sm">
                 Withdrawals typically arrive in 1-3 business days. There are no fees for
                 standard withdrawals.
               </Text>
@@ -293,7 +293,7 @@ export default function WithdrawScreen() {
                 !selectedAccount ||
                 bankAccounts.length === 0
                   ? 'bg-gray-300'
-                  : 'bg-amber-600'
+                  : 'bg-primary'
               }`}
             >
               {submitting ? (

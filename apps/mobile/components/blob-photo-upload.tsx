@@ -181,7 +181,7 @@ export default function BlobPhotoUpload({
         <View className="space-y-2">
           <TouchableOpacity
             onPress={takePhoto}
-            className="bg-amber-500 flex-row items-center justify-center py-4 rounded-xl"
+            className="bg-primary flex-row items-center justify-center py-4 rounded-xl"
           >
             <Ionicons name="camera" size={20} color="white" />
             <Text className="text-white font-semibold ml-2">Take Photo</Text>
@@ -210,10 +210,10 @@ export default function BlobPhotoUpload({
 
       {/* Upload progress */}
       {isUploading && (
-        <View className="bg-amber-50 dark:bg-amber-900/30 p-4 rounded-xl">
+        <View className="bg-secondary dark:bg-amber-900/30 p-4 rounded-xl">
           <View className="flex-row items-center justify-center">
-            <ActivityIndicator size="small" color="#D97706" />
-            <Text className="text-amber-700 dark:text-amber-400 ml-2">Uploading...</Text>
+            <ActivityIndicator size="small" color="#FF8A2A" />
+            <Text className="text-primary dark:text-amber-400 ml-2">Uploading...</Text>
           </View>
         </View>
       )}

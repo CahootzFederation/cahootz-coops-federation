@@ -111,7 +111,7 @@ export default function ExportWalletScreen() {
             className="flex-row items-center mb-6"
           >
             <View className={`w-6 h-6 border-2 rounded mr-3 items-center justify-center ${
-              understood ? 'bg-amber-600 border-amber-600' : 'border-gray-400'
+              understood ? 'bg-primary border-amber-600' : 'border-gray-400'
             }`}>
               {understood && <Text className="text-white font-bold">✓</Text>}
             </View>
@@ -124,7 +124,7 @@ export default function ExportWalletScreen() {
             onPress={() => setStep('password')}
             disabled={!understood}
             className={`py-4 rounded-xl items-center mb-3 ${
-              understood ? 'bg-amber-600' : 'bg-gray-300'
+              understood ? 'bg-primary' : 'bg-gray-300'
             }`}
           >
             <Text className="text-white font-bold text-lg">Continue</Text>
@@ -169,7 +169,7 @@ export default function ExportWalletScreen() {
             onPress={handleExport}
             disabled={loading || !password}
             className={`py-4 rounded-xl items-center mb-3 ${
-              loading || !password ? 'bg-gray-300' : 'bg-amber-600'
+              loading || !password ? 'bg-gray-300' : 'bg-primary'
             }`}
           >
             {loading ? (
@@ -209,7 +209,7 @@ export default function ExportWalletScreen() {
           </Text>
           <TouchableOpacity
             onPress={() => copyToClipboard(walletAddress, 'Address')}
-            className="bg-amber-600 py-2 rounded-lg items-center"
+            className="bg-primary py-2 rounded-lg items-center"
           >
             <Text className="text-white font-semibold">Copy Address</Text>
           </TouchableOpacity>
@@ -240,7 +240,7 @@ export default function ExportWalletScreen() {
           {showKey && (
             <TouchableOpacity
               onPress={() => copyToClipboard(privateKey, 'Private key')}
-              className="bg-amber-600 py-2 rounded-lg items-center"
+              className="bg-primary py-2 rounded-lg items-center"
             >
               <Text className="text-white font-semibold">Copy Private Key</Text>
             </TouchableOpacity>
@@ -285,7 +285,7 @@ export default function ExportWalletScreen() {
               ]
             );
           }}
-          className="bg-amber-600 py-4 rounded-xl items-center"
+          className="bg-primary py-4 rounded-xl items-center"
         >
           <Text className="text-white font-bold text-lg">Done</Text>
         </TouchableOpacity>

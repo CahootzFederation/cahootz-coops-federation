@@ -29,7 +29,7 @@ export default function CardInput({ onCancel }: CardInputProps) {
         </Text>
         <TouchableOpacity
           onPress={onCancel}
-          className="mt-8 py-4 rounded-xl items-center bg-amber-600"
+          className="mt-8 py-4 rounded-xl items-center bg-primary"
         >
           <Text className="text-white font-bold text-lg">Done</Text>
         </TouchableOpacity>

@@ -34,8 +34,8 @@ export default function ExploreScreen() {
           className="mt-4 bg-white rounded-xl py-3 px-4 flex-row items-center justify-center"
           activeOpacity={0.85}
         >
-          <Plus size={18} color="#B45309" />
-          <Text className="text-amber-700 font-semibold ml-2">Add Money</Text>
+          <Plus size={18} color="#FF6B00" />
+          <Text className="text-primary font-semibold ml-2">Add Money</Text>
         </TouchableOpacity>
       </View>
 
@@ -45,8 +45,8 @@ export default function ExploreScreen() {
           className="p-4 flex-row items-center border-b border-gray-100"
           activeOpacity={0.75}
         >
-          <View className="w-10 h-10 rounded-full bg-amber-100 items-center justify-center mr-3">
-            <Wallet size={20} color="#B45309" />
+          <View className="w-10 h-10 rounded-full bg-secondary items-center justify-center mr-3">
+            <Wallet size={20} color="#FF6B00" />
           </View>
           <View className="flex-1">
             <Text className="text-gray-900 font-semibold">Wallet</Text>

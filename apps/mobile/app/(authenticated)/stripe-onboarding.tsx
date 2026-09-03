@@ -87,9 +87,9 @@ const COLOR_MAP = {
     icon: '#16A34A',
   },
   amber: {
-    bg: 'bg-amber-50 dark:bg-amber-900/20',
-    text: 'text-amber-700 dark:text-amber-300',
-    icon: '#B45309',
+    bg: 'bg-secondary dark:bg-amber-900/20',
+    text: 'text-primary dark:text-amber-300',
+    icon: '#FF6B00',
   },
   red: {
     bg: 'bg-red-50 dark:bg-red-900/20',
@@ -220,7 +220,7 @@ export default function StripeOnboardingScreen() {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#B45309" />
+          <ActivityIndicator size="large" color="#FF6B00" />
         </View>
       </SafeAreaView>
     );
@@ -252,8 +252,8 @@ export default function StripeOnboardingScreen() {
       <ScrollView className="flex-1 px-5 py-5" showsVerticalScrollIndicator={false}>
         {/* Intro card */}
         <View className="bg-white dark:bg-gray-800 rounded-2xl p-5 mb-4">
-          <View className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-900/30 items-center justify-center mb-4">
-            <CreditCard size={28} color="#B45309" />
+          <View className="w-14 h-14 rounded-2xl bg-secondary dark:bg-amber-900/30 items-center justify-center mb-4">
+            <CreditCard size={28} color="#FF6B00" />
           </View>
           <Text className="text-xl font-bold text-gray-900 dark:text-white">
             {stripeReady ? 'Your store is live!' : 'Set up payments to open your store'}
@@ -298,11 +298,11 @@ export default function StripeOnboardingScreen() {
                   onPress={() => setBusinessType('company')}
                   className={`flex-1 py-3 rounded-xl border-2 items-center ${
                     businessType === 'company'
-                      ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
+                      ? 'border-amber-500 bg-secondary dark:bg-amber-900/20'
                       : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
                   }`}
                 >
-                  <Text className={`font-semibold text-sm ${businessType === 'company' ? 'text-amber-700 dark:text-amber-300' : 'text-gray-600 dark:text-gray-300'}`}>
+                  <Text className={`font-semibold text-sm ${businessType === 'company' ? 'text-primary dark:text-amber-300' : 'text-gray-600 dark:text-gray-300'}`}>
                     Business
                   </Text>
                 </TouchableOpacity>
@@ -310,11 +310,11 @@ export default function StripeOnboardingScreen() {
                   onPress={() => setBusinessType('individual')}
                   className={`flex-1 py-3 rounded-xl border-2 items-center ${
                     businessType === 'individual'
-                      ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
+                      ? 'border-amber-500 bg-secondary dark:bg-amber-900/20'
                       : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
                   }`}
                 >
-                  <Text className={`font-semibold text-sm ${businessType === 'individual' ? 'text-amber-700 dark:text-amber-300' : 'text-gray-600 dark:text-gray-300'}`}>
+                  <Text className={`font-semibold text-sm ${businessType === 'individual' ? 'text-primary dark:text-amber-300' : 'text-gray-600 dark:text-gray-300'}`}>
                     Individual
                   </Text>
                 </TouchableOpacity>
@@ -329,7 +329,7 @@ export default function StripeOnboardingScreen() {
                 'A bank account for payouts',
               ].map((item) => (
                 <View key={item} className="flex-row items-center mb-2">
-                  <View className="w-2 h-2 rounded-full bg-amber-500 mr-3" />
+                  <View className="w-2 h-2 rounded-full bg-primary mr-3" />
                   <Text className="text-gray-600 dark:text-gray-300 text-sm">{item}</Text>
                 </View>
               ))}
@@ -341,7 +341,7 @@ export default function StripeOnboardingScreen() {
         {stripeReady && (
           <View className="bg-white dark:bg-gray-800 rounded-2xl p-5 mb-4">
             <View className="flex-row items-center mb-3">
-              <ShieldCheck size={18} color="#B45309" />
+              <ShieldCheck size={18} color="#FF6B00" />
               <Text className="text-gray-900 dark:text-white font-semibold ml-2">Optional: Earn rewards on sales</Text>
             </View>
             <Text className="text-gray-600 dark:text-gray-300 leading-6 text-sm">
@@ -358,7 +358,7 @@ export default function StripeOnboardingScreen() {
           <TouchableOpacity
             onPress={handleGetLink}
             disabled={starting}
-            className="bg-amber-500 py-4 rounded-xl flex-row items-center justify-center"
+            className="bg-primary py-4 rounded-xl flex-row items-center justify-center"
           >
             {starting ? (
               <ActivityIndicator color="white" />
@@ -381,7 +381,7 @@ export default function StripeOnboardingScreen() {
             </Text>
             <TouchableOpacity
               onPress={handleOpenInApp}
-              className="bg-amber-500 py-4 rounded-xl flex-row items-center justify-center"
+              className="bg-primary py-4 rounded-xl flex-row items-center justify-center"
             >
               <ExternalLink size={18} color="white" />
               <Text className="text-white font-bold ml-2">Open in App</Text>
@@ -391,14 +391,14 @@ export default function StripeOnboardingScreen() {
                 onPress={handleOpenInBrowser}
                 className="flex-1 bg-gray-100 dark:bg-gray-700 py-3 rounded-xl flex-row items-center justify-center"
               >
-                <Globe size={16} color="#B45309" />
+                <Globe size={16} color="#FF6B00" />
                 <Text className="text-gray-900 dark:text-white font-semibold ml-2 text-sm">Open in Browser</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleCopyLink}
                 className="flex-1 bg-gray-100 dark:bg-gray-700 py-3 rounded-xl flex-row items-center justify-center"
               >
-                <Copy size={16} color={copied ? '#16A34A' : '#B45309'} />
+                <Copy size={16} color={copied ? '#16A34A' : '#FF6B00'} />
                 <Text className={`font-semibold ml-2 text-sm ${copied ? 'text-green-600' : 'text-gray-900 dark:text-white'}`}>
                   {copied ? 'Copied!' : 'Copy Link'}
                 </Text>
@@ -415,10 +415,10 @@ export default function StripeOnboardingScreen() {
             className="bg-gray-100 dark:bg-gray-700 py-4 rounded-xl flex-row items-center justify-center"
           >
             {syncing ? (
-              <ActivityIndicator color="#B45309" />
+              <ActivityIndicator color="#FF6B00" />
             ) : (
               <>
-                <RefreshCw size={16} color="#B45309" />
+                <RefreshCw size={16} color="#FF6B00" />
                 <Text className="text-center text-gray-900 dark:text-white font-semibold ml-2">Check My Status</Text>
               </>
             )}
@@ -430,7 +430,7 @@ export default function StripeOnboardingScreen() {
           <>
             <TouchableOpacity
               onPress={() => router.push({ pathname: '/apply-sc-verification', params: { storeId: store.id } })}
-              className="bg-amber-500 py-4 rounded-xl"
+              className="bg-primary py-4 rounded-xl"
             >
               <Text className="text-center text-white font-bold">Apply for {coin.symbol} Rewards</Text>
             </TouchableOpacity>
@@ -438,7 +438,7 @@ export default function StripeOnboardingScreen() {
               onPress={() => router.replace('/my-store')}
               className="py-3"
             >
-              <Text className="text-center text-amber-600 dark:text-amber-400 font-semibold">Go to My Store</Text>
+              <Text className="text-center text-primary dark:text-amber-400 font-semibold">Go to My Store</Text>
             </TouchableOpacity>
           </>
         ) : (

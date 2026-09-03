@@ -224,7 +224,7 @@ export default function QuickPayScreen() {
   if (loading) {
     return (
       <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#D97706" />
+        <ActivityIndicator size="large" color="#FF8A2A" />
         <Text className="text-gray-500 mt-4">Loading payment info...</Text>
       </View>
     );
@@ -285,8 +285,8 @@ export default function QuickPayScreen() {
           {/* Store Info */}
           <View className="bg-white mx-4 mt-4 rounded-2xl p-6">
             <View className="items-center">
-              <View className="w-20 h-20 rounded-full bg-amber-100 items-center justify-center mb-4">
-                <Store size={40} color="#D97706" />
+              <View className="w-20 h-20 rounded-full bg-secondary items-center justify-center mb-4">
+                <Store size={40} color="#FF8A2A" />
               </View>
 
               <Text className="text-gray-900 text-xl font-bold text-center">
@@ -391,7 +391,7 @@ export default function QuickPayScreen() {
               onPress={handlePay}
               disabled={!canPay() || paying}
               className={`py-4 rounded-xl items-center ${
-                canPay() && !paying ? 'bg-amber-600' : 'bg-gray-300'
+                canPay() && !paying ? 'bg-primary' : 'bg-gray-300'
               }`}
             >
               {paying ? (

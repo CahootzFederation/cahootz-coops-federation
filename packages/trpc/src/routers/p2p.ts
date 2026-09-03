@@ -32,11 +32,12 @@ export const p2pRouter = router({
       balance: z.number(),
       formatted: z.string(),
     }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       console.log('\n🔷 p2p.getBalance - START');
 
       try {
-        const { balanceUSD, formatted } = await getUSDBalance(input.userId);
+        const coopId = (ctx as CoopScopedContext).coopId || 'cahootz';
+        const { balanceUSD, formatted } = await getUSDBalance(input.userId, coopId);
 
         console.log('✅ Balance:', formatted);
         return {
@@ -865,7 +866,8 @@ export const p2pRouter = router({
         }
 
         // Check balance
-        const { balanceUSD } = await getUSDBalance(input.userId);
+        const coopId = (ctx as CoopScopedContext).coopId || 'cahootz';
+        const { balanceUSD } = await getUSDBalance(input.userId, coopId);
 
         if (balanceUSD < input.amountUSD) {
           throw new TRPCError({
@@ -886,7 +888,7 @@ export const p2pRouter = router({
         });
 
         // TODO: Implement actual Stripe payout
-        // 1. Debit UC from user's wallet
+        // 1. Debit wallet balance from user's wallet
         // 2. Create Stripe payout to connected bank account
         // 3. Update withdrawal status based on payout result
 
@@ -897,7 +899,6 @@ export const p2pRouter = router({
         });
 
         // Create notification
-        const coopId = (ctx as CoopScopedContext).coopId || '???';
         await context.db.notification.create({
           data: {
             userId: input.userId,

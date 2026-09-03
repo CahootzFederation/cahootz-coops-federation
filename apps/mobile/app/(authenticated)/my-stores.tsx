@@ -149,7 +149,7 @@ export default function MyStoresScreen() {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#B45309" />
+          <ActivityIndicator size="large" color="#FF6B00" />
           <Text className="text-gray-500 dark:text-gray-400 mt-4">Loading your stores...</Text>
         </View>
       </SafeAreaView>
@@ -163,10 +163,10 @@ export default function MyStoresScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900 dark:text-white">My Stores</Text>
+        <Text className="text-lg font-semibold text-gray-900 dark:text-white">My Commons Stores</Text>
         <TouchableOpacity
           onPress={() => router.push('/apply-store')}
-          className="bg-amber-500 px-3 py-2 rounded-full flex-row items-center"
+          className="bg-primary px-3 py-2 rounded-full flex-row items-center"
         >
           <Plus size={16} color="white" />
           <Text className="text-white font-semibold ml-1 text-xs">New</Text>
@@ -176,7 +176,7 @@ export default function MyStoresScreen() {
       <ScrollView
         className="flex-1"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#B45309" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF6B00" />
         }
         showsVerticalScrollIndicator={false}
       >
@@ -184,14 +184,14 @@ export default function MyStoresScreen() {
           <View className="flex-1 items-center justify-center px-8 py-20">
             <Store size={64} color="#9CA3AF" />
             <Text className="text-xl font-bold text-gray-900 dark:text-white mt-4 text-center">
-              No Stores Yet
+              No Commons Stores Yet
             </Text>
             <Text className="text-gray-500 dark:text-gray-400 text-center mt-2">
               You haven&apos;t created any stores yet. Apply now to start selling.
             </Text>
             <TouchableOpacity
               onPress={() => router.push('/apply-store')}
-              className="bg-amber-500 px-8 py-4 rounded-xl mt-6"
+              className="bg-primary px-8 py-4 rounded-xl mt-6"
             >
               <Text className="text-white font-bold">Create Your First Store</Text>
             </TouchableOpacity>
@@ -206,7 +206,7 @@ export default function MyStoresScreen() {
               >
                 {/* Store Header */}
                 <LinearGradient
-                  colors={['#D97706', '#B45309']}
+                  colors={['#FF8A2A', '#FF6B00']}
                   className="p-4"
                 >
                   <View className="flex-row items-center justify-between">
@@ -247,7 +247,7 @@ export default function MyStoresScreen() {
                   <View className="flex-row p-3 border-t border-gray-100 dark:border-gray-700">
                     <View className="flex-1 items-center">
                       <View className="flex-row items-center">
-                        <DollarSign size={14} color="#B45309" />
+                        <DollarSign size={14} color="#FF6B00" />
                         <Text className="text-sm font-bold text-gray-900 dark:text-white">
                           {formatPrice(store.totalSales)}
                         </Text>
@@ -256,7 +256,7 @@ export default function MyStoresScreen() {
                     </View>
                     <View className="flex-1 items-center border-x border-gray-100 dark:border-gray-700">
                       <View className="flex-row items-center">
-                        <Package size={14} color="#B45309" />
+                        <Package size={14} color="#FF6B00" />
                         <Text className="text-sm font-bold text-gray-900 dark:text-white ml-1">
                           {store.totalOrders}
                         </Text>
@@ -265,7 +265,7 @@ export default function MyStoresScreen() {
                     </View>
                     <View className="flex-1 items-center">
                       <View className="flex-row items-center">
-                        <Package size={14} color="#B45309" />
+                        <Package size={14} color="#FF6B00" />
                         <Text className="text-sm font-bold text-gray-900 dark:text-white ml-1">
                           {store.productCount}
                         </Text>

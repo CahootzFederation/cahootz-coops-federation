@@ -111,7 +111,7 @@ function CardForm({ onSuccess, onCancel }: CardInputProps) {
           onPress={handleSubmit}
           disabled={adding || !stripe}
           style={{
-            backgroundColor: adding || !stripe ? '#D1D5DB' : '#D97706',
+            backgroundColor: adding || !stripe ? '#D1D5DB' : '#FF8A2A',
             paddingVertical: 16,
             borderRadius: 12,
             alignItems: 'center',

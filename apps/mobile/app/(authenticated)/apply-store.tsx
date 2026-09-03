@@ -203,12 +203,12 @@ export default function ApplyStoreScreen() {
                   setShowCategoryPicker(false);
                 }}
                 className={`px-4 py-3 border-b border-gray-100 dark:border-gray-700 ${
-                  formData.category === cat.key ? 'bg-amber-50 dark:bg-amber-900/30' : ''
+                  formData.category === cat.key ? 'bg-secondary dark:bg-amber-900/30' : ''
                 }`}
               >
                 <Text className={
                   formData.category === cat.key
-                    ? 'text-amber-600 dark:text-amber-400 font-semibold'
+                    ? 'text-primary dark:text-amber-400 font-semibold'
                     : 'text-gray-700 dark:text-gray-300'
                 }>
                   {cat.label}
@@ -368,7 +368,7 @@ export default function ApplyStoreScreen() {
       </Text>
 
       <View className="bg-white dark:bg-gray-800 rounded-xl p-4 mb-4">
-        <Text className="text-sm font-semibold text-amber-600 dark:text-amber-400 mb-2">
+        <Text className="text-sm font-semibold text-primary dark:text-amber-400 mb-2">
           Store Information
         </Text>
         <Text className="text-gray-900 dark:text-white font-medium">{formData.storeName}</Text>
@@ -381,7 +381,7 @@ export default function ApplyStoreScreen() {
       </View>
 
       <View className="bg-white dark:bg-gray-800 rounded-xl p-4 mb-4">
-        <Text className="text-sm font-semibold text-amber-600 dark:text-amber-400 mb-2">
+        <Text className="text-sm font-semibold text-primary dark:text-amber-400 mb-2">
           Your Information
         </Text>
         <Text className="text-gray-900 dark:text-white font-medium">{formData.ownerName}</Text>
@@ -389,14 +389,14 @@ export default function ApplyStoreScreen() {
         <Text className="text-gray-500 dark:text-gray-400 text-sm">{formData.ownerPhone}</Text>
       </View>
 
-      <View className="bg-amber-50 dark:bg-amber-900/30 rounded-xl p-4 mb-4">
+      <View className="bg-secondary dark:bg-amber-900/30 rounded-xl p-4 mb-4">
         <View className="flex-row items-center mb-2">
-          <BadgeCheck size={20} color="#B45309" />
+          <BadgeCheck size={20} color="#FF6B00" />
           <Text className="text-amber-800 dark:text-amber-200 font-semibold ml-2">
             What Happens Next
           </Text>
         </View>
-        <Text className="text-amber-700 dark:text-amber-300 text-sm">
+        <Text className="text-primary dark:text-amber-300 text-sm">
           After submitting, you&apos;ll complete Stripe Connect to verify your identity and set up payouts. Your store goes live as soon as Stripe enables charges.
         </Text>
       </View>
@@ -434,7 +434,7 @@ export default function ApplyStoreScreen() {
                     <View
                       className={`w-10 h-10 rounded-full items-center justify-center ${
                         isActive
-                          ? 'bg-amber-500'
+                          ? 'bg-primary'
                           : isCompleted
                           ? 'bg-green-500'
                           : 'bg-gray-200 dark:bg-gray-700'
@@ -449,7 +449,7 @@ export default function ApplyStoreScreen() {
                     <Text
                       className={`text-xs mt-1 ${
                         isActive
-                          ? 'text-amber-600 dark:text-amber-400 font-semibold'
+                          ? 'text-primary dark:text-amber-400 font-semibold'
                           : 'text-gray-500 dark:text-gray-400'
                       }`}
                     >
@@ -493,7 +493,7 @@ export default function ApplyStoreScreen() {
               <TouchableOpacity
                 onPress={handleSubmit}
                 disabled={loading}
-                className="flex-1 bg-amber-500 py-4 rounded-xl"
+                className="flex-1 bg-primary py-4 rounded-xl"
               >
                 {loading ? (
                   <ActivityIndicator color="white" />
@@ -504,7 +504,7 @@ export default function ApplyStoreScreen() {
             ) : (
               <TouchableOpacity
                 onPress={nextStep}
-                className="flex-1 bg-amber-500 py-4 rounded-xl flex-row items-center justify-center"
+                className="flex-1 bg-primary py-4 rounded-xl flex-row items-center justify-center"
               >
                 <Text className="text-white font-bold mr-2">Continue</Text>
                 <ChevronRight size={20} color="white" />

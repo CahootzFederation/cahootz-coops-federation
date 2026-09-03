@@ -45,6 +45,18 @@ export type AuthenticatedContext = Context & {
   walletAddress: string;
 };
 
+export type AccountAuthenticatedContext = Context & {
+  accountUser: {
+    id: string;
+    email: string;
+    name: string | null;
+    phone: string | null;
+    roles: string[];
+    status: string;
+  };
+  sessionToken: string;
+};
+
 /**
  * Coop-scoped context - requires coopId to be present
  */

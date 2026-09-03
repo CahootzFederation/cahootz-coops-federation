@@ -1,7 +1,7 @@
 import { View, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { router } from 'expo-router';
-import { QrCode, History, Key, Copy, Check, Plus, Package } from 'lucide-react-native';
+import { QrCode, History, Key, Copy, Check, Plus, Package, Wallet } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 
 import { Text } from '@/components/ui/text';
@@ -9,14 +9,15 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 
 export default function WalletScreen() {
-  const { user } = useAuth();
+  const { user, sessionToken, login } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [walletInfo, setWalletInfo] = useState<any>(null);
   const [balance, setBalance] = useState<string>('$0.00');
-  const [balanceNum, setBalanceNum] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [createWalletError, setCreateWalletError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [creatingWallet, setCreatingWallet] = useState(false);
 
   const loadWalletData = useCallback(async () => {
     if (!user?.id) {
@@ -26,13 +27,15 @@ export default function WalletScreen() {
 
     try {
       setError(null);
-      const wallet = await api.getWalletInfo(user.id);
+      setCreateWalletError(null);
+      const wallet = await api.getWalletInfo(user.id, user.walletAddress, sessionToken);
       setWalletInfo(wallet);
 
       if (wallet.hasWallet && wallet.address) {
         const balanceData = await api.getUSDBalance(user.id, wallet.address);
         setBalance(balanceData.formatted);
-        setBalanceNum(balanceData.balance || 0);
+      } else {
+        setBalance('$0.00');
       }
     } catch (err) {
       console.error('Error loading wallet:', err);
@@ -41,7 +44,7 @@ export default function WalletScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id]);
+  }, [sessionToken, user?.id, user?.walletAddress]);
 
   useEffect(() => {
     loadWalletData();
@@ -62,6 +65,36 @@ export default function WalletScreen() {
     await Clipboard.setStringAsync(walletInfo.address);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCreateWallet = async () => {
+    if (!user?.id || !sessionToken || creatingWallet) {
+      setCreateWalletError('Sign in again to create a wallet.');
+      return;
+    }
+
+    setCreatingWallet(true);
+    setCreateWalletError(null);
+    try {
+      const result = await api.createWallet(user.id, sessionToken, user.walletAddress);
+      if (!result?.address) {
+        throw new Error('Wallet was not created. Try again.');
+      }
+
+      const wallet = await api.getWalletInfo(user.id, result.address, sessionToken);
+      setWalletInfo(wallet);
+      setBalance('$0.00');
+      await login({
+        ...user,
+        walletAddress: result.address,
+        sessionToken,
+      });
+    } catch (err) {
+      console.error('Error creating wallet:', err);
+      setCreateWalletError(err instanceof Error ? err.message : 'Failed to create wallet');
+    } finally {
+      setCreatingWallet(false);
+    }
   };
 
   if (loading) {
@@ -90,12 +123,49 @@ export default function WalletScreen() {
 
   if (!walletInfo?.hasWallet) {
     return (
-      <View className="flex-1 items-center justify-center px-6" style={{ backgroundColor: '#FFFBEB' }}>
-        <Text className="text-xl font-bold text-gray-900 mb-4">No Wallet Yet</Text>
-        <Text className="text-center text-gray-600 mb-6">
-          Your wallet will be created automatically when your application is approved.
-        </Text>
-      </View>
+      <ScrollView
+        className="flex-1"
+        style={{ backgroundColor: '#FFFBEB' }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#B45309" />
+        }
+        contentContainerStyle={{ flexGrow: 1 }}
+      >
+        <View className="px-4 pt-14 pb-2">
+          <Text className="text-xl font-bold text-gray-800">Wallet</Text>
+        </View>
+
+        <View className="flex-1 items-center justify-center px-6 pb-16">
+          <View className="mb-5 h-16 w-16 items-center justify-center rounded-2xl bg-amber-100">
+            <Wallet size={30} color="#B45309" />
+          </View>
+          <Text className="mb-3 text-center text-2xl font-bold text-gray-900">Create your wallet</Text>
+          <Text className="mb-6 text-center text-base leading-6 text-gray-600">
+            This creates a fresh Cahootz managed wallet for payments, rewards, proposals, and member activity.
+          </Text>
+          {createWalletError ? (
+            <View className="mb-4 w-full rounded-xl border border-red-200 bg-red-50 p-3">
+              <Text className="text-center text-sm font-semibold text-red-700">{createWalletError}</Text>
+            </View>
+          ) : null}
+          <TouchableOpacity
+            onPress={handleCreateWallet}
+            disabled={creatingWallet}
+            className="w-full flex-row items-center justify-center rounded-xl px-6 py-4"
+            style={{ backgroundColor: creatingWallet ? '#FBBF24' : '#B45309' }}
+            activeOpacity={0.82}
+          >
+            {creatingWallet ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Wallet size={18} color="#FFFFFF" />
+            )}
+            <Text className="ml-2 font-bold text-white">
+              {creatingWallet ? 'Creating wallet...' : 'Create wallet'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     );
   }
 

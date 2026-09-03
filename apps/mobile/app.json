@@ -74,6 +74,14 @@
         }
       ],
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#F97316",
+          "defaultChannel": "commons"
+        }
+      ],
+      [
         "expo-local-authentication",
         {
           "faceIDPermission": "Allow Cahootz Commons to use Face ID for authentication."

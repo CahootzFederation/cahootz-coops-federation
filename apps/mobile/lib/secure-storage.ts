@@ -10,6 +10,7 @@ import { Platform } from 'react-native';
 const STORAGE_KEYS = {
   USER: 'soulaan.user',
   LOGIN_TIME: 'soulaan.loginTime',
+  SESSION_TOKEN: 'soulaan.sessionToken',
 } as const;
 
 const isWeb = Platform.OS === 'web';
@@ -88,12 +89,14 @@ export const secureStorage = {
         if (typeof window !== 'undefined' && window.localStorage) {
           window.localStorage.removeItem(STORAGE_KEYS.USER);
           window.localStorage.removeItem(STORAGE_KEYS.LOGIN_TIME);
+          window.localStorage.removeItem(STORAGE_KEYS.SESSION_TOKEN);
         }
       } else {
         // Clear on native
         await Promise.all([
           SecureStore.deleteItemAsync(STORAGE_KEYS.USER),
           SecureStore.deleteItemAsync(STORAGE_KEYS.LOGIN_TIME),
+          SecureStore.deleteItemAsync(STORAGE_KEYS.SESSION_TOKEN),
         ]);
       }
     } catch (error) {

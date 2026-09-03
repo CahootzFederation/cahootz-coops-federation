@@ -22,7 +22,7 @@ import { resolveBrandColor, withAlpha } from '@/lib/brand-colors';
 type SubmissionType = 'article' | 'event';
 
 export default function SubmitNewsletterScreen() {
-  const { user } = useAuth();
+  const { user, sessionToken } = useAuth();
   const config = coopConfig();
   const primaryColor = resolveBrandColor(user?.coop?.primaryColor || config.primaryColor, '#B45309');
   const accentColor = resolveBrandColor(user?.coop?.accentColor || config.accentColor, '#16A34A');
@@ -40,7 +40,7 @@ export default function SubmitNewsletterScreen() {
   const submit = async () => {
     let walletAddress = user?.walletAddress || null;
     if (!walletAddress && user?.id) {
-      const walletInfo = await api.getWalletInfo(user.id).catch(() => null);
+      const walletInfo = await api.getWalletInfo(user.id, user.walletAddress, sessionToken).catch(() => null);
       walletAddress = walletInfo?.address || null;
     }
 

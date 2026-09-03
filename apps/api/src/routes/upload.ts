@@ -3,16 +3,19 @@ import { generateUploadToken, generateBatchUploadTokens, generateFileKey, getExt
 
 const router = Router();
 
-const ALLOWED_UPLOAD_TYPES = ['profile', 'store', 'product'] as const;
+const ALLOWED_UPLOAD_TYPES = ['profile', 'store', 'product', 'post', 'comment'] as const;
 const ALLOWED_MIMES = [
   'image/jpeg',
   'image/jpg',
   'image/png',
   'image/webp',
+  'image/gif',
   'video/mp4',
   'video/quicktime',
   'video/webm',
 ];
+const IMAGE_MAX_SIZE_BYTES = 10 * 1024 * 1024;
+const POST_VIDEO_MAX_SIZE_BYTES = 100 * 1024 * 1024;
 
 /**
  * POST /api/upload/presigned
@@ -36,7 +39,11 @@ router.post('/presigned', async (req: Request, res: Response) => {
 
     const resolvedFilename = filename || `upload.${getExtensionFromContentType(contentType)}`;
     const pathname = generateFileKey(uploadType, resourceId || 'temp', resolvedFilename);
-    const { clientToken, uploadUrl } = await generateUploadToken(pathname, contentType);
+    const maxSizeBytes =
+      uploadType === 'post' && contentType.startsWith('video/')
+        ? POST_VIDEO_MAX_SIZE_BYTES
+        : IMAGE_MAX_SIZE_BYTES;
+    const { clientToken, uploadUrl } = await generateUploadToken(pathname, contentType, maxSizeBytes);
 
     return res.json({
       success: true,

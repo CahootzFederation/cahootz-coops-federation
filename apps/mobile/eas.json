@@ -18,11 +18,13 @@
       "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
+      "environment": "development",
       "channel": "development"
     },
     "preview": {
       "extends": "base",
       "distribution": "internal",
+      "environment": "preview",
       "ios": {
         "simulator": true
       },
@@ -31,6 +33,7 @@
     "production": {
       "extends": "base",
       "autoIncrement": true,
+      "environment": "production",
       "channel": "production"
     }
   },

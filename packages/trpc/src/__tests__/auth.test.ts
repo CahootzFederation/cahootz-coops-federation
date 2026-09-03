@@ -22,6 +22,17 @@ const ACTIVE_USER = {
   walletAddress: '0xabcdef1234567890abcdef1234567890abcdef12',
   phone: null,
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  selfDescription: null,
+  shortTermGoals: null,
+  longTermGoals: null,
+  skills: [],
+  interests: [],
+  resourcesOffered: [],
+  resourcesNeeded: [],
+  businessSummary: null,
+  locationSummary: null,
+  profileSignals: {},
+  profileOnboardingCompletedAt: null,
 };
 
 const ACTIVE_MEMBERSHIP = {

@@ -196,6 +196,19 @@ function mapPostWithGroup(record: any, groupName: string) {
         id: comment.id,
         author: displayName(comment.author),
         body: comment.content,
+        media:
+          comment.media?.map((item: any) => ({
+            id: item.id,
+            pathname: item.pathname,
+            url: item.url,
+            mediaType: item.mediaType,
+            mimeType: item.mimeType,
+            fileName: item.fileName,
+            width: item.width,
+            height: item.height,
+            durationMs: item.durationMs,
+            sizeBytes: item.sizeBytes,
+          })) ?? [],
       })) ?? [],
   };
 }
@@ -759,7 +772,10 @@ export const commonsRouter = router({
           comments: {
             orderBy: { createdAt: "asc" },
             take: 100,
-            include: { author: { select: { name: true, email: true } } },
+            include: {
+              author: { select: { name: true, email: true } },
+              media: { orderBy: { order: "asc" } },
+            },
           },
           _count: { select: { comments: true, supports: true } },
         },
@@ -907,7 +923,11 @@ export const commonsRouter = router({
     .input(
       z.object({
         postId: z.string().min(1),
-        content: z.string().trim().min(1).max(2000),
+        content: z.string().trim().max(2000).default(""),
+        media: z.array(uploadedPostMediaSchema).max(4).default([]),
+      }).refine((input) => input.content.length > 0 || input.media.length > 0, {
+        message: "Write something or attach an image before commenting.",
+        path: ["content"],
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -930,8 +950,28 @@ export const commonsRouter = router({
           postId,
           authorId: accountUser.id,
           content: input.content,
+          media: input.media.length
+            ? {
+                create: input.media.map((media, index) => ({
+                  storageProvider: "vercel-blob",
+                  pathname: media.pathname,
+                  url: media.url,
+                  mediaType: media.mediaType,
+                  mimeType: media.mimeType,
+                  fileName: media.fileName,
+                  width: media.width,
+                  height: media.height,
+                  durationMs: media.durationMs,
+                  sizeBytes: media.sizeBytes,
+                  order: index,
+                })),
+              }
+            : undefined,
         },
-        include: { author: { select: { name: true, email: true } } },
+        include: {
+          author: { select: { name: true, email: true } },
+          media: { orderBy: { order: "asc" } },
+        },
       });
 
       if (post.authorId !== accountUser.id) {
@@ -953,6 +993,19 @@ export const commonsRouter = router({
           id: comment.id,
           author: displayName(comment.author),
           body: comment.content,
+          media:
+            comment.media?.map((item: any) => ({
+              id: item.id,
+              pathname: item.pathname,
+              url: item.url,
+              mediaType: item.mediaType,
+              mimeType: item.mimeType,
+              fileName: item.fileName,
+              width: item.width,
+              height: item.height,
+              durationMs: item.durationMs,
+              sizeBytes: item.sizeBytes,
+            })) ?? [],
         },
       };
     }),

@@ -748,12 +748,35 @@ model CommonsComment {
   authorId String
   author   User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
   content  String      @db.Text
+  media    CommonsCommentMedia[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([postId, createdAt])
   @@index([authorId, createdAt])
+  @@schema("public")
+}
+
+model CommonsCommentMedia {
+  id              String         @id @default(cuid())
+  commentId       String
+  comment         CommonsComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  storageProvider String         @default("vercel-blob")
+  pathname        String
+  url             String
+  mediaType       String
+  mimeType        String
+  fileName        String?
+  width           Int?
+  height          Int?
+  durationMs      Int?
+  sizeBytes       Int?
+  order           Int            @default(0)
+  createdAt       DateTime       @default(now())
+
+  @@unique([pathname])
+  @@index([commentId, order])
   @@schema("public")
 }
 

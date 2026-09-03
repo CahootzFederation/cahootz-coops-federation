@@ -153,6 +153,7 @@ export interface CommonsComment {
   id: string;
   author: string;
   body: string;
+  media?: CommonsPostMedia[];
 }
 
 export interface CommonsPostMedia {
@@ -564,10 +565,80 @@ export const api = {
     };
   },
 
+  async uploadCommonsCommentMedia(data: {
+    postId: string;
+    uri: string;
+    fileName?: string | null;
+    mimeType: string;
+    mediaType: 'image';
+    width?: number | null;
+    height?: number | null;
+    sizeBytes?: number | null;
+  }): Promise<CommonsPostMedia> {
+    const fileName =
+      data.fileName ||
+      data.uri.split('/').pop() ||
+      (data.mimeType === 'image/gif' ? 'comment-image.gif' : 'comment-image.jpg');
+
+    const tokenResponse = await fetch(`${API_BASE_URL}/api/upload/presigned`, {
+      method: 'POST',
+      headers: {
+        ...networkConfig.defaultHeaders,
+      },
+      body: JSON.stringify({
+        filename: fileName,
+        contentType: data.mimeType,
+        uploadType: 'comment',
+        resourceId: data.postId,
+      }),
+    });
+
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenData.success) {
+      throw new Error(tokenData.error || 'Failed to get upload token');
+    }
+
+    if (!tokenResponse.ok) {
+      throw new Error(`HTTP error! status: ${tokenResponse.status}`);
+    }
+
+    const fileResponse = await fetch(data.uri);
+    const fileBlob = await fileResponse.blob();
+    const uploadResponse = await fetch(tokenData.uploadUrl, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${tokenData.clientToken}`,
+        'x-api-version': '7',
+        'x-content-type': data.mimeType,
+      },
+      body: fileBlob,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(`Upload failed with status: ${uploadResponse.status}`);
+    }
+
+    const blobResult = await uploadResponse.json();
+
+    return {
+      pathname: tokenData.pathname,
+      url: blobResult.url,
+      mediaType: 'image',
+      mimeType: data.mimeType,
+      fileName,
+      width: data.width ?? null,
+      height: data.height ?? null,
+      durationMs: null,
+      sizeBytes: data.sizeBytes ?? null,
+    };
+  },
+
   async createCommonsComment(
     data: {
       postId: string;
       content: string;
+      media?: CommonsPostMedia[];
     },
     sessionToken?: string | null
   ) {

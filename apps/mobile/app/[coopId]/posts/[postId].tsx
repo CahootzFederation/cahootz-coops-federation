@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import * as ImagePicker from 'expo-image-picker';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -13,13 +14,16 @@ import { router, useLocalSearchParams } from 'expo-router';
 import {
   ArrowLeft,
   CheckCircle2,
+  ImagePlus,
   Send,
   Share2,
+  X,
 } from 'lucide-react-native';
 
 import {
   CommonsMediaTile,
   CommonsMediaViewer,
+  COMPOSER_MEDIA_TILE_SIZE,
   FEED_MEDIA_TILE_SIZE,
   type CommonsMediaPreview,
 } from '@/components/commons-media-viewer';
@@ -49,6 +53,7 @@ export default function CommonsPostDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [commentDraft, setCommentDraft] = useState('');
+  const [commentMedia, setCommentMedia] = useState<CommonsMediaPreview[]>([]);
   const [isCommenting, setIsCommenting] = useState(false);
   const [viewerMedia, setViewerMedia] = useState<CommonsMediaPreview | null>(null);
 
@@ -111,7 +116,7 @@ export default function CommonsPostDetailScreen() {
   const submitComment = async () => {
     const content = commentDraft.trim();
     if (!post || isCommenting) return;
-    if (!content) return;
+    if (!content && commentMedia.length === 0) return;
     if (!sessionToken) {
       setError('Sign in to comment.');
       return;
@@ -120,7 +125,24 @@ export default function CommonsPostDetailScreen() {
     setIsCommenting(true);
     setError('');
     try {
-      const result = await api.createCommonsComment({ postId: post.id, content }, sessionToken);
+      const uploadedMedia = await Promise.all(
+        commentMedia.map((media) =>
+          api.uploadCommonsCommentMedia({
+            postId: post.id,
+            uri: media.uri || media.url || '',
+            fileName: media.fileName || null,
+            mimeType: media.mimeType,
+            mediaType: 'image',
+            width: media.width ?? null,
+            height: media.height ?? null,
+            sizeBytes: media.sizeBytes ?? null,
+          })
+        )
+      );
+      const result = await api.createCommonsComment(
+        { postId: post.id, content, media: uploadedMedia },
+        sessionToken
+      );
       setPost((current) =>
         current
           ? {
@@ -131,12 +153,54 @@ export default function CommonsPostDetailScreen() {
           : current
       );
       setCommentDraft('');
+      setCommentMedia([]);
     } catch (caughtError) {
       console.error('Failed to comment:', caughtError);
       setError(caughtError instanceof Error ? caughtError.message : 'Could not add comment.');
     } finally {
       setIsCommenting(false);
     }
+  };
+
+  const pickCommentMedia = async () => {
+    if (commentMedia.length >= 4) {
+      setError('You can add up to 4 images or GIFs to a comment.');
+      return;
+    }
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setError('Allow photo access to add images or GIFs.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: Math.max(1, 4 - commentMedia.length),
+      quality: 0.85,
+    });
+
+    if (result.canceled) return;
+
+    const selectedMedia = result.assets.map((asset) => ({
+      uri: asset.uri,
+      pathname: asset.uri,
+      url: asset.uri,
+      mediaType: 'image' as const,
+      mimeType: asset.mimeType || (asset.fileName?.toLowerCase().endsWith('.gif') ? 'image/gif' : 'image/jpeg'),
+      fileName: asset.fileName || asset.uri.split('/').pop() || null,
+      width: asset.width ?? null,
+      height: asset.height ?? null,
+      sizeBytes: asset.fileSize ?? null,
+    }));
+
+    setCommentMedia((current) => [...current, ...selectedMedia].slice(0, 4));
+    setError('');
+  };
+
+  const removeCommentMedia = (indexToRemove: number) => {
+    setCommentMedia((current) => current.filter((_, index) => index !== indexToRemove));
   };
 
   const sharePost = async () => {
@@ -255,7 +319,22 @@ export default function CommonsPostDetailScreen() {
                 {post.comments.map((comment) => (
                   <View key={comment.id || `${comment.author}-${comment.body}`} className="rounded-xl bg-stone-50 p-3">
                     <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
-                    <Text className="mt-1 text-sm leading-5 text-stone-700">{comment.body}</Text>
+                    {comment.body ? <Text className="mt-1 text-sm leading-5 text-stone-700">{comment.body}</Text> : null}
+                    {comment.media?.length ? (
+                      <View className="mt-2 flex-row flex-wrap gap-2">
+                        {comment.media.map((media) => (
+                          <TouchableOpacity
+                            key={media.id || media.pathname || media.url}
+                            onPress={() => setViewerMedia(media)}
+                            className="overflow-hidden rounded-xl bg-gray-100"
+                            style={{ width: COMPOSER_MEDIA_TILE_SIZE, height: COMPOSER_MEDIA_TILE_SIZE }}
+                            activeOpacity={0.85}
+                          >
+                            <CommonsMediaTile media={media} size={COMPOSER_MEDIA_TILE_SIZE} />
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : null}
                   </View>
                 ))}
               </View>
@@ -266,7 +345,35 @@ export default function CommonsPostDetailScreen() {
 
       {post ? (
         <View className="border-t border-gray-200 bg-white px-4 py-3">
+          {commentMedia.length ? (
+            <View className="mb-3 flex-row flex-wrap gap-2">
+              {commentMedia.map((media, index) => (
+                <View
+                  key={`${media.uri || media.url}-${index}`}
+                  className="overflow-hidden rounded-xl bg-gray-100"
+                  style={{ width: COMPOSER_MEDIA_TILE_SIZE, height: COMPOSER_MEDIA_TILE_SIZE }}
+                >
+                  <CommonsMediaTile media={media} size={COMPOSER_MEDIA_TILE_SIZE} />
+                  <TouchableOpacity
+                    onPress={() => removeCommentMedia(index)}
+                    className="absolute right-1 top-1 h-7 w-7 items-center justify-center rounded-full bg-black/70"
+                    accessibilityLabel="Remove comment media"
+                  >
+                    <X size={15} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ) : null}
           <View className="flex-row items-end gap-2">
+            <TouchableOpacity
+              onPress={pickCommentMedia}
+              disabled={isCommenting || commentMedia.length >= 4}
+              className="h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white"
+              accessibilityLabel="Add image or GIF"
+            >
+              <ImagePlus size={18} color={commentMedia.length >= 4 ? '#9CA3AF' : THEME.ink} />
+            </TouchableOpacity>
             <TextInput
               value={commentDraft}
               onChangeText={(text) => {
@@ -281,9 +388,9 @@ export default function CommonsPostDetailScreen() {
             />
             <TouchableOpacity
               onPress={submitComment}
-              disabled={isCommenting || !commentDraft.trim()}
+              disabled={isCommenting || (!commentDraft.trim() && commentMedia.length === 0)}
               className="h-11 w-11 items-center justify-center rounded-xl"
-              style={{ backgroundColor: commentDraft.trim() ? THEME.primary : '#FDBA74' }}
+              style={{ backgroundColor: commentDraft.trim() || commentMedia.length ? THEME.primary : '#FDBA74' }}
               accessibilityLabel="Send comment"
             >
               {isCommenting ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Send size={17} color="#FFFFFF" />}

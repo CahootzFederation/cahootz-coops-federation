@@ -31,7 +31,6 @@ import {
   Share2,
   ShoppingBag,
   SmilePlus,
-  Sparkles,
   Store,
   Trash2,
   UserCircle,
@@ -1190,18 +1189,6 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
                     <Text className="text-lg font-black leading-6 text-gray-900">{post.title}</Text>
                     {post.body ? (
                       <Text className="mt-2 text-sm leading-5 text-gray-600">{post.body}</Text>
-                    ) : null}
-
-                    {isOrganizedPost(post) ? (
-                      <View
-                        className="mt-3 flex-row items-center gap-2 rounded-xl border px-3 py-2"
-                        style={{ backgroundColor: SOCIAL_THEME.primarySoft, borderColor: SOCIAL_THEME.primaryBorder }}
-                      >
-                        <Sparkles size={14} color={SOCIAL_THEME.primary} />
-                        <Text className="flex-1 text-xs font-semibold leading-4" style={{ color: '#9A3412' }}>
-                          Auto-linked with related posts.
-                        </Text>
-                      </View>
                     ) : null}
 
                     <View className="mt-3 flex-row items-center gap-4">

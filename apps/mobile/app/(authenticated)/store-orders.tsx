@@ -129,7 +129,7 @@ export default function StoreOrdersScreen() {
     return (
       <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#B45309" />
+          <ActivityIndicator size="large" color="#FF6B00" />
           <Text className="text-gray-500 mt-4">Loading orders...</Text>
         </View>
       </SafeAreaView>
@@ -160,7 +160,7 @@ export default function StoreOrdersScreen() {
               onPress={() => setSelectedStatus(filter.value)}
               className={`px-4 py-2 rounded-lg border ${
                 selectedStatus === filter.value
-                  ? 'bg-amber-600 border-amber-600'
+                  ? 'bg-primary border-amber-600'
                   : 'bg-white border-gray-300'
               }`}
               style={{ minWidth: filter.value === 'ALL' ? 60 : undefined }}
@@ -181,7 +181,7 @@ export default function StoreOrdersScreen() {
       <ScrollView
         className="flex-1"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#B45309" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF6B00" />
         }
         showsVerticalScrollIndicator={false}
       >
@@ -233,12 +233,12 @@ export default function StoreOrdersScreen() {
 
                   {/* Price & Action */}
                   <View className="flex-row items-center justify-between pt-3 border-t border-gray-100">
-                    <Text className="text-lg font-bold text-amber-700">
+                    <Text className="text-lg font-bold text-primary">
                       ${formatPrice(order.totalUSD)}
                     </Text>
                     <View className="flex-row items-center">
-                      <Text className="text-sm text-amber-600 font-medium mr-1">View Details</Text>
-                      <ChevronRight size={16} color="#D97706" />
+                      <Text className="text-sm text-primary font-medium mr-1">View Details</Text>
+                      <ChevronRight size={16} color="#FF8A2A" />
                     </View>
                   </View>
                 </View>

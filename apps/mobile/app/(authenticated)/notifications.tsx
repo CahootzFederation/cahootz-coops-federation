@@ -37,14 +37,14 @@ interface Notification {
 
 const NOTIFICATION_ICONS: Record<string, { icon: any; color: string; bgColor: string }> = {
   ORDER_PLACED: { icon: Package, color: '#16A34A', bgColor: 'bg-green-100' },
-  ORDER_RECEIVED: { icon: ShoppingBag, color: '#B45309', bgColor: 'bg-amber-100' },
+  ORDER_RECEIVED: { icon: ShoppingBag, color: '#FF6B00', bgColor: 'bg-secondary' },
   ORDER_SHIPPED: { icon: Package, color: '#7C3AED', bgColor: 'bg-purple-100' },
   ORDER_DELIVERED: { icon: CheckCircle, color: '#16A34A', bgColor: 'bg-green-100' },
   PAYMENT_RECEIVED: { icon: Wallet, color: '#16A34A', bgColor: 'bg-green-100' },
   PAYMENT_SENT: { icon: CreditCard, color: '#2563EB', bgColor: 'bg-blue-100' },
   TRANSFER_RECEIVED: { icon: Wallet, color: '#16A34A', bgColor: 'bg-green-100' },
-  TRANSFER_SENT: { icon: Wallet, color: '#B45309', bgColor: 'bg-amber-100' },
-  SC_EARNED: { icon: Gift, color: '#B45309', bgColor: 'bg-amber-100' },
+  TRANSFER_SENT: { icon: Wallet, color: '#FF6B00', bgColor: 'bg-secondary' },
+  SC_EARNED: { icon: Gift, color: '#FF6B00', bgColor: 'bg-secondary' },
   STORE_APPROVED: { icon: Store, color: '#16A34A', bgColor: 'bg-green-100' },
   DEFAULT: { icon: Bell, color: '#6B7280', bgColor: 'bg-gray-100' },
 };
@@ -64,7 +64,7 @@ function NotificationItem({
     <TouchableOpacity
       onPress={onPress}
       className={`flex-row p-4 border-b border-gray-100 dark:border-gray-700 ${
-        !notification.read ? 'bg-amber-50 dark:bg-amber-900/10' : 'bg-white dark:bg-gray-800'
+        !notification.read ? 'bg-secondary dark:bg-amber-900/10' : 'bg-white dark:bg-gray-800'
       }`}
     >
       <View className={`w-10 h-10 rounded-full items-center justify-center ${config.bgColor}`}>
@@ -83,7 +83,7 @@ function NotificationItem({
             {notification.title}
           </Text>
           {!notification.read && (
-            <View className="w-2 h-2 rounded-full bg-amber-500 ml-2 mt-1.5" />
+            <View className="w-2 h-2 rounded-full bg-primary ml-2 mt-1.5" />
           )}
         </View>
         <Text
@@ -186,7 +186,7 @@ export default function NotificationsScreen() {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#B45309" />
+          <ActivityIndicator size="large" color="#FF6B00" />
           <Text className="text-gray-500 dark:text-gray-400 mt-4">Loading notifications...</Text>
         </View>
       </SafeAreaView>
@@ -205,14 +205,14 @@ export default function NotificationsScreen() {
             Notifications
           </Text>
           {unreadCount > 0 && (
-            <View className="bg-amber-500 rounded-full px-2 py-0.5 ml-2">
+            <View className="bg-primary rounded-full px-2 py-0.5 ml-2">
               <Text className="text-white text-xs font-bold">{unreadCount}</Text>
             </View>
           )}
         </View>
         {unreadCount > 0 && (
           <TouchableOpacity onPress={handleMarkAllRead}>
-            <Text className="text-amber-600 dark:text-amber-400 font-medium">
+            <Text className="text-primary dark:text-amber-400 font-medium">
               Mark all read
             </Text>
           </TouchableOpacity>
@@ -239,7 +239,7 @@ export default function NotificationsScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor="#B45309"
+              tintColor="#FF6B00"
             />
           }
         >

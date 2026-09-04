@@ -1,12 +1,11 @@
 // Hallmark - pre-emit critique: P4 H4 E4 S4 R4 V4
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
-  Share,
   TextInput,
   TouchableOpacity,
   View,
@@ -15,27 +14,27 @@ import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import {
   Bell,
-  BookOpen,
+  Bookmark,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
+  Compass,
+  Heart,
   Image as ImageIcon,
-  Lightbulb,
+  LayoutGrid,
   Lock,
   LogOut,
   Menu,
   MessageCircle,
-  Plus,
-  Search,
+  MoreHorizontal,
+  Repeat2,
+  Scale,
   Send,
-  Settings,
-  Share2,
-  ShoppingBag,
-  SmilePlus,
+  Sparkles,
   Store,
   Trash2,
   UserCircle,
   Users,
-  Vote,
   Wallet,
   X,
 } from 'lucide-react-native';
@@ -46,14 +45,9 @@ import { api, type CommonsDirectoryItem, type CommonsPost, type CommonsPostMedia
 import { useAuth } from '@/contexts/auth-context';
 import {
   COMPOSER_MEDIA_TILE_SIZE,
+  FEED_MEDIA_TILE_SIZE,
   CommonsMediaTile,
 } from '@/components/commons-media-viewer';
-
-type Message = {
-  id: string;
-  role: 'assistant' | 'visitor';
-  body: string;
-};
 
 type PendingAction = (sessionToken: string) => Promise<void>;
 type ComposerNotice = { type: 'success' | 'error' | 'info'; body: string } | null;
@@ -64,11 +58,12 @@ type CommonsAiEntryProps = {
   feedCoopId?: string;
   onMessagesPress?: () => void;
   onSignInPress?: () => void;
+  topBanner?: ReactNode;
 };
 
 const SOCIAL_THEME = {
   paper: '#F6F7F8',
-  primary: '#F97316',
+  primary: '#FF6B00',
   primarySoft: '#FFF7ED',
   primaryBorder: '#FED7AA',
   ink: '#111827',
@@ -83,11 +78,6 @@ const DEFAULT_COMMONS_PROFILE: CommonsProfile = {
   description: 'A social commons for conversation, resources, and coordinated action.',
 };
 
-const FEED_FILTERS = ['Trending', 'New', 'Market', 'Events', 'Support'] as const;
-type FeedFilter = (typeof FEED_FILTERS)[number];
-
-const EMOJI_SHORTCUTS = ['😂', '🔥', '👏', '🙏', '💡', '🎨', '📍', '💼', '🤝', '❤️', '👀', '🙌'] as const;
-const PRIMARY_EMOJI_COUNT = 6;
 const MAX_MEDIA_ATTACHMENTS = 4;
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
@@ -107,94 +97,12 @@ const COMMONS_RULES = [
   'Every commons should create value for its members. No scams, harassment, hate, extraction, or charity-only spaces.',
 ] as const;
 
-const EVENT_SEARCH_TERMS = [
-  'event',
-  'meetup',
-  'meeting',
-  'workshop',
-  'pop-up',
-  'popup',
-  'market',
-  'tonight',
-  'tomorrow',
-  'saturday',
-  'sunday',
-] as const;
-
-const MARKET_SEARCH_TERMS = [
-  'market',
-  'sell',
-  'selling',
-  'buy',
-  'shop',
-  'vendor',
-  'business',
-  'service',
-  'offer',
-  'available',
-  'hiring',
-] as const;
-
-const isEventPost = (post: CommonsPost) => {
-  if (post.tag === 'Opportunity') return true;
-  const text = `${post.title} ${post.body}`.toLowerCase();
-  return EVENT_SEARCH_TERMS.some((term) => text.includes(term));
-};
-
-const isSupportLanePost = (post: CommonsPost) =>
-  post.tag === 'Need' || post.tag === 'Resource' || post.tag === 'Vote';
-
-const isMarketPost = (post: CommonsPost) => {
-  if (post.tag === 'Opportunity' || post.tag === 'Resource') return true;
-  const text = `${post.title} ${post.body}`.toLowerCase();
-  return MARKET_SEARCH_TERMS.some((term) => text.includes(term));
-};
-
-const DRAWER_NAV_ITEMS = [
-  { label: 'Marketplace', description: 'Member businesses', icon: ShoppingBag, action: '/(tabs)/store' },
-  { label: 'Proposals', description: 'Votes and drafts', icon: Vote, action: '/cahootz/proposal' },
-  { label: 'Direct messages', description: 'Private follow-up', icon: MessageCircle, action: '/(tabs)/messages' },
+const DRAWER_SECTIONS = [
+  { label: 'Wallet', icon: Wallet, action: '/(tabs)/wallet' },
+  { label: 'Commons Stores & Shops', icon: Store, action: '/(tabs)/store' },
+  { label: 'Proposals & Governance', icon: Scale, action: '/(tabs)/proposals' },
+  { label: 'Messages & Direct Chat', icon: MessageCircle, action: '/(tabs)/messages' },
 ];
-
-function buildAiResponse(input: string, selectedPost?: CommonsPost): string {
-  const source = input.trim() || selectedPost?.body || '';
-  const lower = source.toLowerCase();
-
-  if (!source) {
-    return 'Pick a post or write a draft. I can summarize it, identify helpers, shape a vote, or turn it into a proposal.';
-  }
-
-  if (lower.includes('vote')) {
-    return [
-      'Vote shape:',
-      'Question: What exactly should the community decide?',
-      'Options: approve, revise, or decline.',
-      'Before opening: confirm budget, steward, deadline, and who is eligible to vote.',
-    ].join('\n');
-  }
-
-  if (lower.includes('fund') || lower.includes('cost') || lower.includes('pool') || lower.includes('$')) {
-    return [
-      'Resource read:',
-      'This needs a clear minimum target, acceptable non-money contributions, and a steward who reports back.',
-      'Start with pledges for dollars, tools, space, time, and local vendor quotes.',
-    ].join('\n');
-  }
-
-  if (lower.includes('food') || lower.includes('child') || lower.includes('school') || lower.includes('mentor')) {
-    return [
-      'Coordination read:',
-      'This should become a small working circle before a formal vote.',
-      'Next steps: list affected people, available helpers, timing, safety needs, and the first low-cost pilot.',
-    ].join('\n');
-  }
-
-  return [
-    'Cahootz read:',
-    'This can become a community thread first.',
-    'If people respond with support, the app can turn it into a helper list, resource plan, or proposal draft.',
-  ].join('\n');
-}
 
 function mimeFromFileName(fileName: string | null | undefined, mediaType: 'image' | 'video') {
   const lower = fileName?.toLowerCase() || '';
@@ -207,9 +115,8 @@ function mimeFromFileName(fileName: string | null | undefined, mediaType: 'image
   return mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
 }
 
-export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: CommonsAiEntryProps) {
+export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, onSignInPress, topBanner }: CommonsAiEntryProps) {
   const scrollRef = useRef<ScrollView>(null);
-  const searchInputRef = useRef<TextInput>(null);
   const pendingActionRef = useRef<PendingAction | null>(null);
   const { isAuthenticated, login, logout, sessionToken, user } = useAuth();
   const [draft, setDraft] = useState('');
@@ -217,10 +124,6 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
   const [commonsProfile, setCommonsProfile] = useState<CommonsProfile>(DEFAULT_COMMONS_PROFILE);
   const [memberCommons, setMemberCommons] = useState<CommonsDirectoryItem[]>([]);
   const [directoryLoaded, setDirectoryLoaded] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<FeedFilter>('Trending');
-  const [searchOpen, setSearchOpen] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [composerPickerOpen, setComposerPickerOpen] = useState(false);
   const [selectedComposerCoopId, setSelectedComposerCoopId] = useState(feedCoopId === 'all' ? 'cahootz' : feedCoopId);
@@ -228,8 +131,6 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
   const [isPosting, setIsPosting] = useState(false);
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const [selectedMediaItems, setSelectedMediaItems] = useState<ComposerMedia[]>([]);
-  const [, setIsAskingAi] = useState(false);
-  const [emojiExpanded, setEmojiExpanded] = useState(false);
   const [composerNotice, setComposerNotice] = useState<ComposerNotice>(null);
   const [accountPromptOpen, setAccountPromptOpen] = useState(false);
   const [accountEmail, setAccountEmail] = useState('');
@@ -243,20 +144,11 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
   const [suggestedCommonsEmail, setSuggestedCommonsEmail] = useState('');
   const [suggestionStatus, setSuggestionStatus] = useState<SuggestionStatus>('idle');
   const [suggestionMessage, setSuggestionMessage] = useState('');
-  const [, setMessages] = useState<Message[]>([
-    {
-      id: 'assistant-open',
-      role: 'assistant',
-      body:
-        'Ask me anything about the commons, or use me inside a thread to turn conversation into helpers, votes, budgets, and proposal drafts.',
-    },
-  ]);
   const hasAccountSession = isAuthenticated && !!sessionToken;
   const accountName = user?.name?.trim() || user?.email?.split('@')[0] || 'member';
-  const visibleEmojiShortcuts = emojiExpanded ? EMOJI_SHORTCUTS : EMOJI_SHORTCUTS.slice(0, PRIMARY_EMOJI_COUNT);
+  const accountHandle = (user?.email?.split('@')[0] || accountName).toLowerCase().replace(/[^a-z0-9]/g, '');
   const isScopedFeed = feedCoopId !== 'all';
-  const feedTitle = isScopedFeed ? commonsProfile.name : 'Home';
-  const feedShortName = isScopedFeed ? (commonsProfile.shortName || commonsProfile.name) : 'Home';
+  const headerCommonsName = isScopedFeed ? commonsProfile.name : 'Commons';
   const postableCommons = useMemo(() => {
     const byId = new Map<string, CommonsDirectoryItem>();
     const fallback = {
@@ -289,20 +181,13 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
             canApply: false,
           }];
 
-      return [
-      ...activeCommonsForDrawer.map((commons) => ({
+      return activeCommonsForDrawer.map((commons) => ({
         id: commons.id,
         label: commons.name,
         description: commons.description,
         icon: commons.name.slice(0, 1).toUpperCase(),
-      })),
-      {
-        id: 'discover-commons',
-        label: 'Discover commons',
-        description: 'Browse and apply',
-        icon: '+',
-      },
-    ];
+        accessStatus: commons.accessStatus,
+      }));
     },
     [memberCommons]
   );
@@ -316,7 +201,6 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
         if (!mounted) return;
         setCommonsProfile(result.coop || DEFAULT_COMMONS_PROFILE);
         setFeedPosts(result.posts);
-        setSelectedPostId((current) => current || result.posts[0]?.id || null);
         setFeedError('');
       })
       .catch((error) => {
@@ -373,49 +257,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
     setSelectedComposerCoopId(postableCommons[0].id);
   }, [feedCoopId, isScopedFeed, postableCommons, selectedComposerCoopId]);
 
-  const selectedPost = useMemo(
-    () => feedPosts.find((post) => post.id === selectedPostId),
-    [feedPosts, selectedPostId]
-  );
   const visiblePosts = useMemo(() => {
-    const groupPosts =
-      activeFilter === 'Events'
-        ? feedPosts.filter(isEventPost)
-        : activeFilter === 'Support'
-          ? feedPosts.filter(isSupportLanePost)
-          : activeFilter === 'Market'
-            ? feedPosts.filter(isMarketPost)
-            : activeFilter === 'Trending'
-              ? [...feedPosts].sort((a, b) => b.support - a.support || b.replies - a.replies)
-              : feedPosts;
-    const query = searchQuery.trim().toLowerCase();
-
-    if (!query) return groupPosts;
-
-    return groupPosts.filter((post) => {
-      const haystack = [
-        post.title,
-        post.body,
-        post.author,
-        post.group,
-        post.tag,
-        post.pledges,
-        ...post.comments.flatMap((comment) => [comment.author, comment.body]),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-
-      return haystack.includes(query);
-    });
-  }, [activeFilter, feedPosts, searchQuery]);
-
-  useEffect(() => {
-    if (visiblePosts.length === 0) return;
-    if (!visiblePosts.some((post) => post.id === selectedPostId)) {
-      setSelectedPostId(visiblePosts[0].id);
-    }
-  }, [selectedPostId, visiblePosts]);
+    return [...feedPosts].sort((a, b) => b.support - a.support || b.replies - a.replies);
+  }, [feedPosts]);
 
   const requireAccount = async (action: PendingAction) => {
     if (hasAccountSession) {
@@ -426,39 +270,6 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
     pendingActionRef.current = action;
     setAuthError('');
     setAccountPromptOpen(true);
-  };
-
-  const askAi = async (prompt: string, post?: CommonsPost) => {
-    const trimmed = prompt.trim();
-    if (!trimmed && !post) return;
-
-    setIsAskingAi(true);
-    const visitorMessage: Message = {
-      id: `visitor-${Date.now()}`,
-      role: 'visitor',
-      body: trimmed || `${post?.title}\n${post?.body}`,
-    };
-    setMessages((current) => [...current, visitorMessage]);
-
-    try {
-      const result = await api.askCommonsAi(
-        trimmed || `Help me understand this thread: ${post?.title}. ${post?.body}`,
-        post?.id
-      );
-      setMessages((current) => [
-        ...current,
-        { id: `assistant-${Date.now()}`, role: 'assistant', body: result.answer },
-      ]);
-    } catch (error) {
-      console.error('Commons AI request failed:', error);
-      setMessages((current) => [
-        ...current,
-        { id: `assistant-${Date.now()}`, role: 'assistant', body: buildAiResponse(trimmed, post) },
-      ]);
-    } finally {
-      setIsAskingAi(false);
-      setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 50);
-    }
   };
 
   const postDraft = () => {
@@ -511,8 +322,6 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
         const belongsInCurrentFeed = feedCoopId === 'all' || result.post.coopId === feedCoopId;
         if (belongsInCurrentFeed) {
           setFeedPosts((current) => [result.post, ...current]);
-          setSelectedPostId(result.post.id);
-          setActiveFilter('New');
         }
         setDraft('');
         clearSelectedMedia();
@@ -591,14 +400,6 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
       console.error('Failed to pick post media:', error);
       setComposerNotice({ type: 'error', body: 'Could not attach that media.' });
     }
-  };
-
-  const appendEmoji = (emoji: string) => {
-    setDraft((current) => {
-      const trimmed = current.trimEnd();
-      return trimmed ? `${trimmed} ${emoji}` : emoji;
-    });
-    setComposerNotice(null);
   };
 
   const composerNoticeColor = () => {
@@ -710,52 +511,6 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
       setSuggestionMessage(error instanceof Error ? error.message : 'Could not send the suggestion. Try again.');
     }
   };
-  const runAiAction = (action: string, post = selectedPost) => {
-    const prompt =
-      action === 'Draft next step'
-        ? `Draft a practical next step from this community conversation: ${post?.title || draft}. ${post?.body || draft}`
-        : `${action}: ${post?.title || draft}. ${post?.body || draft}`;
-    void askAi(prompt, post);
-  };
-
-  const sharePost = async (post: CommonsPost) => {
-    try {
-      await Share.share({
-        title: post.title,
-        message: `${post.title}\n\n${post.body}\n\n${post.group}`,
-      });
-    } catch (error) {
-      console.error('Failed to share post:', error);
-    }
-  };
-
-  const shareConversationInvite = async () => {
-    const post = selectedPost;
-    const message = post
-      ? [
-          `Can you look at this ${commonsProfile.name} conversation?`,
-          '',
-          post.title,
-          post.body,
-          '',
-          'You can read it first and make an account only when you want to comment, support, or help.',
-        ].join('\n')
-      : [
-          `Join me in ${commonsProfile.name}.`,
-          '',
-          'It is a social feed where community conversations can turn into coordinated help, votes, proposals, and shared resources.',
-        ].join('\n');
-
-    try {
-      await Share.share({
-        title: post?.title || commonsProfile.name,
-        message,
-      });
-    } catch (error) {
-      console.error('Failed to invite someone:', error);
-    }
-  };
-
   const supportPost = (post: CommonsPost) => {
     void requireAccount(async (token) => {
       try {
@@ -782,15 +537,6 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
         postId: post.id,
       },
     } as any);
-  };
-
-  const handleFilterPress = (filter: FeedFilter) => {
-    setActiveFilter(filter);
-  };
-
-  const openSearch = () => {
-    setSearchOpen(true);
-    setTimeout(() => searchInputRef.current?.focus(), 50);
   };
 
   const requestCode = async () => {
@@ -867,8 +613,6 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
     return { bg: '#E0F2FE', fg: '#075985' };
   };
 
-  const isOrganizedPost = (post: CommonsPost) => post.tag !== 'Social' && post.tag !== 'Meme';
-
   const goToDrawerItem = (href: string | null) => {
     if (!href) {
       setDrawerOpen(false);
@@ -877,6 +621,135 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
 
     setDrawerOpen(false);
     router.push(href as any);
+  };
+
+  const openMessages = () => {
+    if (onMessagesPress) {
+      onMessagesPress();
+      return;
+    }
+
+    router.push('/(tabs)/messages' as any);
+  };
+
+  const finishProfileBanner = topBanner ?? (
+    hasAccountSession && !user?.profileOnboardingCompletedAt ? (
+      <TouchableOpacity
+        accessibilityRole="button"
+        onPress={() => router.push('/profile-onboarding' as any)}
+        className="mb-5 overflow-hidden rounded-[28px]"
+        style={{ backgroundColor: SOCIAL_THEME.primary }}
+        activeOpacity={0.86}
+      >
+        <View className="flex-row items-center gap-3 px-4 py-4">
+          <View className="h-10 w-10 items-center justify-center rounded-2xl bg-white/20">
+            <Sparkles color="#FFFFFF" size={18} strokeWidth={2.8} />
+          </View>
+          <View className="min-w-0 flex-1">
+            <Text className="text-sm font-black leading-5 text-white">Finish your profile setup</Text>
+            <Text className="mt-0.5 text-xs leading-4 text-white">
+              Unlock AI matchmaking & commons voting power
+            </Text>
+          </View>
+          <View className="rounded-full bg-white px-3.5 py-2">
+            <Text className="text-xs font-black" style={{ color: SOCIAL_THEME.primary }}>
+              Complete
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    ) : null
+  );
+
+  const renderComposer = () => {
+    if (scopedFeedLocked) return null;
+
+    return (
+      <View className="border-t border-gray-200 bg-white px-4 pb-3 pt-3">
+        {selectedMediaItems.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2">
+            <View className="flex-row gap-2">
+              {selectedMediaItems.map((media, index) => (
+                <View
+                  key={`${media.uri}-${index}`}
+                  className="overflow-hidden rounded-xl border border-gray-100 bg-white"
+                  style={{ width: COMPOSER_MEDIA_TILE_SIZE, height: COMPOSER_MEDIA_TILE_SIZE }}
+                >
+                  <CommonsMediaTile media={media} size={COMPOSER_MEDIA_TILE_SIZE} />
+                  {media.mediaType === 'video' ? (
+                    <View className="absolute bottom-1 left-1 rounded-md bg-black/65 px-1.5 py-0.5">
+                      <Text className="text-[10px] font-black text-white">Video</Text>
+                    </View>
+                  ) : null}
+                  <TouchableOpacity
+                    onPress={() => removeSelectedMedia(index)}
+                    className="absolute right-1 top-1 h-7 w-7 items-center justify-center rounded-full bg-white/95"
+                    accessibilityLabel="Remove attached media"
+                  >
+                    <Trash2 size={13} color="#DC2626" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        ) : null}
+
+        {composerNotice ? (
+          <Text className="mb-2 text-xs font-semibold" style={{ color: composerNoticeColor() }}>
+            {composerNotice.body}
+          </Text>
+        ) : null}
+
+        <View className="flex-row items-center gap-2">
+          <TouchableOpacity
+            onPress={() => setComposerPickerOpen(true)}
+            className="h-10 w-10 items-center justify-center rounded-full bg-slate-400"
+            activeOpacity={0.8}
+            accessibilityLabel={`Posting to ${selectedComposerCommons?.shortName || selectedComposerCommons?.name || 'Commons'}. Tap to switch.`}
+          >
+            <Text className="text-base font-black text-white">
+              {accountName.slice(0, 1).toUpperCase()}
+            </Text>
+          </TouchableOpacity>
+          <View className="min-w-0 flex-1 flex-row items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5">
+            <TextInput
+              value={draft}
+              onChangeText={(text) => {
+                setDraft(text);
+                if (composerNotice) setComposerNotice(null);
+              }}
+              placeholder="Share what's happening..."
+              placeholderTextColor={SOCIAL_THEME.muted}
+              multiline
+              className="max-h-20 min-h-8 flex-1 text-left text-sm text-gray-900"
+              style={{ textAlignVertical: 'top' }}
+            />
+            <TouchableOpacity
+              onPress={() => void pickPostMedia()}
+              className="h-8 w-8 items-center justify-center rounded-full bg-gray-100"
+              activeOpacity={0.75}
+              accessibilityLabel="Attach photo or video"
+            >
+              <ImageIcon size={16} color="#475569" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={postDraft}
+              disabled={isPosting || isUploadingMedia}
+              className="h-8 w-8 items-center justify-center rounded-full"
+              style={{ backgroundColor: SOCIAL_THEME.primary }}
+              activeOpacity={0.82}
+              accessibilityLabel="Post"
+            >
+              {isPosting || isUploadingMedia ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Send size={16} color="#FFFFFF" fill="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
   };
 
   return (
@@ -888,72 +761,70 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
       <ScrollView
         ref={scrollRef}
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 24 }}
+        contentContainerStyle={{ paddingBottom: scopedFeedLocked ? 28 : 148 }}
         keyboardShouldPersistTaps="handled"
       >
-        <View className="border-b border-gray-200 bg-white px-4 pt-14 pb-3">
-          <View className="flex-row items-center gap-3">
+        <View className="border-b border-gray-200 bg-white px-3 pt-7 pb-2">
+          <View className="flex-row items-center gap-2">
             <TouchableOpacity
               onPress={() => setDrawerOpen(true)}
-              className="h-11 w-11 items-center justify-center rounded-xl"
-              style={{ backgroundColor: SOCIAL_THEME.primary }}
+              className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
               accessibilityLabel="Open menu"
             >
-              <Menu size={22} color="#FFFFFF" />
+              <Menu size={18} color="#1F2937" strokeWidth={2.6} />
             </TouchableOpacity>
-            <View className="min-w-0 flex-1">
-              <Text className="text-xs font-black uppercase text-gray-500">Commons</Text>
-              <Text className="text-xl font-black text-gray-950">{feedTitle}</Text>
+            <View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: SOCIAL_THEME.primary }}>
+              <LayoutGrid size={17} color="#FFFFFF" strokeWidth={2.6} />
             </View>
+            <View className="min-w-0 flex-1">
+              <View className="flex-row items-center gap-1.5">
+                <Text className="min-w-0 text-base font-black text-gray-950" numberOfLines={1}>
+                  {headerCommonsName}
+                </Text>
+                <View className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5">
+                  <Text className="text-[10px] font-black text-emerald-600">Member</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setDrawerOpen(true)}
+                className="mt-0.5 flex-row items-center"
+                activeOpacity={0.75}
+                accessibilityLabel="Switch commons"
+              >
+                <Text className="text-xs font-semibold text-slate-600">Switch commons</Text>
+                <ChevronDown size={13} color="#475569" />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              onPress={openMessages}
+              className="relative h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
+              accessibilityLabel="Open direct messages"
+            >
+              <MessageCircle size={16} color="#334155" />
+              <View className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white" style={{ backgroundColor: SOCIAL_THEME.primary }} />
+            </TouchableOpacity>
             <TouchableOpacity
               onPress={() => router.push('/(tabs)/notifications' as any)}
-              className="h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white"
-              accessibilityLabel="Open notifications"
+              className="relative h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
+              accessibilityLabel="Open alerts"
             >
-              <Bell size={20} color={SOCIAL_THEME.ink} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={openSearch}
-              className="h-11 w-11 items-center justify-center rounded-xl border border-gray-200"
-              style={{ backgroundColor: searchOpen ? SOCIAL_THEME.primarySoft : '#FFFFFF' }}
-              accessibilityLabel="Search"
-            >
-              <Search size={20} color={searchOpen ? SOCIAL_THEME.primary : SOCIAL_THEME.ink} />
+              <Bell size={16} color="#334155" />
+              <View className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white" style={{ backgroundColor: SOCIAL_THEME.primary }} />
             </TouchableOpacity>
           </View>
-
-          {searchOpen ? (
-            <View className="mt-3 flex-row items-center gap-2 rounded-xl px-3 py-2" style={{ backgroundColor: SOCIAL_THEME.paper }}>
-              <Search size={17} color={SOCIAL_THEME.muted} />
-              <TextInput
-                ref={searchInputRef}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder={`Search ${feedShortName}`}
-                placeholderTextColor={SOCIAL_THEME.muted}
-                autoCapitalize="none"
-                className="h-10 flex-1 text-base text-gray-900"
-              />
-              {searchQuery ? (
-                <TouchableOpacity onPress={() => setSearchQuery('')} className="px-2 py-1">
-                  <Text className="text-sm font-bold" style={{ color: SOCIAL_THEME.primary }}>
-                    Clear
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          ) : null}
         </View>
 
         <View className="px-4 py-3">
+          {finishProfileBanner}
+
           {feedError ? (
-            <View className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3">
+            <View className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4">
               <Text className="text-sm font-semibold text-red-700">{feedError}</Text>
             </View>
           ) : null}
 
           {scopedFeedLocked ? (
-            <View className="mb-3 rounded-xl border p-3" style={{ backgroundColor: SOCIAL_THEME.primarySoft, borderColor: SOCIAL_THEME.primaryBorder }}>
+            <View className="mb-4 rounded-2xl border p-4" style={{ backgroundColor: SOCIAL_THEME.primarySoft, borderColor: SOCIAL_THEME.primaryBorder }}>
               <View className="flex-row items-start gap-2">
                 <Lock size={18} color={SOCIAL_THEME.primary} />
                 <View className="min-w-0 flex-1">
@@ -966,311 +837,119 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
             </View>
           ) : null}
 
-          {!scopedFeedLocked ? (
-          <View className="rounded-xl border border-gray-200 bg-white p-3">
-            <View className="flex-row items-center gap-3">
-              <View className="h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: SOCIAL_THEME.primarySoft }}>
-                <Text className="font-black" style={{ color: SOCIAL_THEME.primary }}>
-                  {accountName.slice(0, 1).toUpperCase()}
-                </Text>
-              </View>
-              <TextInput
-                value={draft}
-                onChangeText={(text) => {
-                  setDraft(text);
-                  if (composerNotice) setComposerNotice(null);
-                }}
-                placeholder={`What's happening in ${selectedComposerCommons?.shortName || selectedComposerCommons?.name || 'this commons'}?`}
-                placeholderTextColor={SOCIAL_THEME.muted}
-                multiline
-                className="min-h-11 flex-1 rounded-xl border border-gray-200 px-4 py-3 text-base text-gray-900"
-                style={{ maxHeight: 112, textAlignVertical: 'top', backgroundColor: SOCIAL_THEME.paper }}
-              />
-            </View>
-            <TouchableOpacity
-              onPress={() => setComposerPickerOpen(true)}
-              className="mt-3 flex-row items-center justify-between rounded-xl border border-gray-200 px-3 py-3"
-              style={{ backgroundColor: SOCIAL_THEME.paper }}
-              activeOpacity={0.75}
-              accessibilityLabel="Choose commons to post in"
-            >
-              <View className="min-w-0 flex-1">
-                <Text className="text-xs font-black uppercase text-gray-500">Post in</Text>
-                <Text className="mt-0.5 text-sm font-black text-gray-950" numberOfLines={1}>
-                  {selectedComposerCommons?.name || 'Choose a commons'}
-                </Text>
-              </View>
-              <ChevronDown size={18} color={SOCIAL_THEME.primary} />
-            </TouchableOpacity>
-            {selectedMediaItems.length > 0 ? (
-              <View className="mt-3 rounded-xl border border-gray-200 bg-white p-2">
-                <Text className="px-1 text-xs font-black uppercase text-gray-500">
-                  {selectedMediaItems.length} attachment{selectedMediaItems.length === 1 ? '' : 's'}
-                </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2">
-                  <View className="flex-row gap-2">
-                    {selectedMediaItems.map((media, index) => (
-                      <View
-                        key={`${media.uri}-${index}`}
-                        className="overflow-hidden rounded-xl border border-gray-100 bg-white"
-                        style={{ width: COMPOSER_MEDIA_TILE_SIZE, height: COMPOSER_MEDIA_TILE_SIZE }}
-                      >
-                        <CommonsMediaTile media={media} size={COMPOSER_MEDIA_TILE_SIZE} />
-                        {media.mediaType === 'video' ? (
-                          <View className="absolute bottom-1 left-1 rounded-md bg-black/65 px-1.5 py-0.5">
-                            <Text className="text-[10px] font-black text-white">Video</Text>
-                          </View>
-                        ) : null}
-                        <TouchableOpacity
-                          onPress={() => removeSelectedMedia(index)}
-                          className="absolute right-1 top-1 h-7 w-7 items-center justify-center rounded-full bg-white/95"
-                          accessibilityLabel="Remove attached media"
-                        >
-                          <Trash2 size={13} color="#DC2626" />
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                </ScrollView>
-              </View>
-            ) : null}
-            <View className="mt-3 flex-row items-center gap-2">
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-1">
-                <View className="flex-row gap-2">
-                  <TouchableOpacity
-                    onPress={() => void pickPostMedia()}
-                    className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white"
-                    activeOpacity={0.75}
-                    accessibilityLabel="Attach photo or video"
-                  >
-                    <ImageIcon size={15} color={SOCIAL_THEME.primary} />
-                  </TouchableOpacity>
-                  {visibleEmojiShortcuts.map((emoji) => (
-                    <TouchableOpacity
-                      key={emoji}
-                      onPress={() => appendEmoji(emoji)}
-                      className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white"
-                      activeOpacity={0.75}
-                      accessibilityLabel={`Add ${emoji}`}
-                    >
-                      <Text className="text-lg">{emoji}</Text>
-                    </TouchableOpacity>
-                  ))}
-                  <TouchableOpacity
-                    onPress={() => setEmojiExpanded((current) => !current)}
-                    className="h-9 flex-row items-center gap-1 rounded-full border border-gray-200 bg-white px-3"
-                    activeOpacity={0.75}
-                  >
-                    <SmilePlus size={15} color={SOCIAL_THEME.primary} />
-                    <Text className="text-xs font-bold text-gray-700">{emojiExpanded ? 'Less' : 'More'}</Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            </View>
-            {composerNotice ? (
-              <Text className="mt-2 text-xs font-semibold" style={{ color: composerNoticeColor() }}>
-                {composerNotice.body}
-              </Text>
-            ) : null}
-            <View className="mt-3">
-              <TouchableOpacity
-                onPress={postDraft}
-                disabled={isPosting || isUploadingMedia}
-                className="h-11 flex-row items-center justify-center gap-2 rounded-xl"
-                style={{ backgroundColor: draft.trim() || selectedMediaItems.length > 0 ? SOCIAL_THEME.primary : '#FDBA74' }}
-                activeOpacity={0.82}
-              >
-                {isPosting || isUploadingMedia ? <ActivityIndicator size="small" color="white" /> : <Send size={16} color="white" />}
-                <Text className="font-black text-white">
-                  {isUploadingMedia ? 'Uploading...' : isPosting ? 'Posting...' : 'Post'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          ) : null}
-
-          <View className="mt-3">
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View className="flex-row gap-2">
-                <TouchableOpacity
-                  onPress={() => setActiveFilter('Trending')}
-                  className="w-40 rounded-xl border p-3"
-                  style={{
-                    backgroundColor: activeFilter === 'Trending' ? SOCIAL_THEME.primarySoft : '#FFFFFF',
-                    borderColor: activeFilter === 'Trending' ? SOCIAL_THEME.primaryBorder : SOCIAL_THEME.border,
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Text className="text-sm font-black text-gray-950">Trending now</Text>
-                  <Text className="mt-1 text-xs leading-4 text-gray-700">
-                    {isScopedFeed ? 'Top conversations in this commons.' : 'Top conversations across your commons.'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setActiveFilter('Market')}
-                  className="w-40 rounded-xl border border-gray-200 bg-white p-3"
-                  style={{
-                    backgroundColor: activeFilter === 'Market' ? SOCIAL_THEME.primarySoft : '#FFFFFF',
-                    borderColor: activeFilter === 'Market' ? SOCIAL_THEME.primaryBorder : SOCIAL_THEME.border,
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <View className="mb-1 flex-row items-center gap-1">
-                    <Store size={14} color={SOCIAL_THEME.primary} />
-                    <Text className="text-sm font-black text-gray-950">Market</Text>
-                  </View>
-                  <Text className="text-xs leading-4 text-gray-600">Member businesses and offers.</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </View>
-
-          <View className="mt-3 border-b border-gray-200 pb-3">
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View className="flex-row gap-2">
-                {FEED_FILTERS.map((filter) => {
-                  const selected = activeFilter === filter;
-                  return (
-                    <TouchableOpacity
-                      key={filter}
-                      onPress={() => handleFilterPress(filter)}
-                      className="rounded-full border px-4 py-2"
-                      style={{
-                        backgroundColor: selected ? SOCIAL_THEME.primary : '#FFFFFF',
-                        borderColor: selected ? SOCIAL_THEME.primary : SOCIAL_THEME.border,
-                      }}
-                    >
-                      <Text className={`text-sm font-semibold ${selected ? 'text-white' : 'text-gray-700'}`}>
-                        {filter}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </ScrollView>
-          </View>
-
-          <View className="mt-4 gap-3">
+          <View className="gap-5">
             {visiblePosts.length === 0 ? (
-              <View className="rounded-xl border border-dashed border-stone-300 bg-white p-5">
-                <Text className="text-base font-black text-gray-900">No {activeFilter.toLowerCase()} yet</Text>
+              <View className="rounded-[28px] border border-dashed border-gray-300 bg-white p-5">
+                <Text className="text-base font-black text-gray-900">No posts yet</Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">
-                  {searchQuery
-                    ? 'Try another search or clear the search box.'
-                    : 'Start with a normal post, question, shoutout, event, request, or offer.'}
+                  Start with a normal post, question, shoutout, event, request, or offer.
                 </Text>
               </View>
             ) : null}
 
             {visiblePosts.map((post) => {
               const colors = tagColor(post.tag);
+              const authorHandle = `@${post.author.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'member'}`;
+              const firstComment = post.comments[0];
               return (
                 <TouchableOpacity
                   key={post.id}
                   onPress={() => openPostDetail(post)}
-                  className="rounded-xl border bg-white p-3"
+                  className="overflow-hidden rounded-[28px] border bg-white"
                   style={{ borderColor: SOCIAL_THEME.border }}
                   activeOpacity={0.75}
                 >
-                  <View className="min-w-0">
-                    <View className="mb-2 flex-row items-start justify-between gap-2">
+                  <View className="p-4">
+                    <View className="flex-row items-start gap-2.5">
+                      <View className="h-11 w-11 items-center justify-center rounded-full bg-slate-200">
+                        <Text className="text-base font-black text-slate-600">
+                          {post.author.slice(0, 1).toUpperCase()}
+                        </Text>
+                      </View>
                       <View className="min-w-0 flex-1">
-                        <Text className="text-xs font-semibold text-stone-500">
-                          {post.group} · {post.author} · {post.time}
-                        </Text>
-                      </View>
-                      <View className="rounded-full px-3 py-1" style={{ backgroundColor: colors.bg }}>
-                        <Text className="text-xs font-bold" style={{ color: colors.fg }}>
-                          {post.tag}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <Text className="text-lg font-black leading-6 text-gray-900">{post.title}</Text>
-                    {post.body ? (
-                      <Text className="mt-2 text-sm leading-5 text-gray-600">{post.body}</Text>
-                    ) : null}
-
-                    <View className="mt-3 flex-row items-center gap-4">
-                      <View className="flex-row items-center gap-1">
-                        <Text className="text-xs font-black" style={{ color: SOCIAL_THEME.primary }}>
-                          {post.support}
-                        </Text>
-                        <Text className="text-xs font-semibold text-stone-600">
-                          {post.support === 1 ? 'like' : 'likes'}
-                        </Text>
-                      </View>
-                      <View className="flex-row items-center gap-1">
-                        <Text className="text-xs font-black text-stone-700">{post.replies}</Text>
-                        <Text className="text-xs font-semibold text-stone-600">
-                          {post.replies === 1 ? 'comment' : 'comments'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View className="mt-3 flex-row items-center justify-between border-t border-stone-100 pt-3">
-                      <View className="flex-row gap-5">
-                        <TouchableOpacity
-                          onPress={(event) => {
-                            event.stopPropagation();
-                            supportPost(post);
-                          }}
-                          className="flex-row items-center gap-1"
-                        >
-                          <CheckCircle2 size={15} color={SOCIAL_THEME.primary} />
-                          <Text className="text-xs font-semibold text-stone-700">Like</Text>
-                        </TouchableOpacity>
-                        <View className="flex-row items-center gap-1">
-                          <MessageCircle size={15} color="#78716C" />
-                          <Text className="text-xs font-semibold text-stone-700">Comment</Text>
+                        <View className="flex-row flex-wrap items-center gap-1.5">
+                          <Text className="text-sm font-black text-gray-950">{post.author}</Text>
+                          <Text className="text-xs font-semibold text-slate-500">{authorHandle}</Text>
+                          <Text className="text-xs font-semibold text-slate-400">·</Text>
+                          <Text className="text-xs font-semibold text-slate-500">{post.time}</Text>
                         </View>
-                        <TouchableOpacity
-                          onPress={(event) => {
-                            event.stopPropagation();
-                            void sharePost(post);
-                          }}
-                          className="flex-row items-center gap-1"
-                        >
-                          <Share2 size={15} color="#78716C" />
-                          <Text className="text-xs font-semibold text-stone-600">Share</Text>
-                        </TouchableOpacity>
+                        <View className="mt-1.5 self-start rounded-md px-2 py-0.5" style={{ backgroundColor: colors.bg }}>
+                          <Text className="text-[10px] font-black" style={{ color: colors.fg }}>
+                            {post.group || post.tag}
+                          </Text>
+                        </View>
                       </View>
+                      <MoreHorizontal size={18} color="#475569" />
+                    </View>
+
+                    {post.title && post.title !== post.body ? (
+                      <Text className="mt-3 text-sm font-black leading-5 text-gray-950">{post.title}</Text>
+                    ) : null}
+                    {post.body ? (
+                      <Text className="mt-3 text-sm leading-5 text-gray-800">{post.body}</Text>
+                    ) : null}
+                  </View>
+
+                  {post.media.length > 0 ? (
+                    <View className="border-y border-gray-100 bg-gray-50">
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        <View className="flex-row gap-2 p-2">
+                          {post.media.map((media) => (
+                            <View key={media.id || media.url} className="overflow-hidden rounded-2xl bg-gray-200">
+                              <CommonsMediaTile media={media} size={post.media.length === 1 ? 286 : FEED_MEDIA_TILE_SIZE} />
+                              {post.pledges ? (
+                                <View className="absolute bottom-3 right-3 flex-row items-center gap-1 rounded-full bg-slate-900/85 px-3 py-2">
+                                  <Bookmark size={15} color="#FFFFFF" />
+                                  <Text className="text-sm font-black text-white">{post.pledges}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                          ))}
+                        </View>
+                      </ScrollView>
+                    </View>
+                  ) : null}
+
+                  <View className="p-4 pt-3">
+                    <View className="flex-row items-center justify-between gap-2">
                       <TouchableOpacity
                         onPress={(event) => {
                           event.stopPropagation();
-                          setSelectedPostId(post.id);
-                          runAiAction(isOrganizedPost(post) ? 'Draft next step' : 'Summarize thread', post);
+                          supportPost(post);
                         }}
-                        className="h-8 w-8 items-center justify-center rounded-lg"
-                        style={{ backgroundColor: SOCIAL_THEME.primarySoft }}
+                        className="flex-row items-center gap-1.5"
                       >
-                        <Lightbulb size={15} color={SOCIAL_THEME.primary} />
+                        <Heart size={19} color={SOCIAL_THEME.primary} fill={SOCIAL_THEME.primary} />
+                        <Text className="text-sm font-black text-slate-800">{post.support}</Text>
                       </TouchableOpacity>
+                      <View className="flex-row items-center gap-1.5">
+                        <MessageCircle size={19} color="#334155" />
+                        <Text className="text-sm font-semibold text-slate-700">{post.replies}</Text>
+                      </View>
+                      <View className="flex-row items-center gap-1.5">
+                        <Repeat2 size={18} color="#334155" />
+                        <Text className="text-sm font-semibold text-slate-700">{Math.max(0, Math.round(post.replies / 2))}</Text>
+                      </View>
+                      <Bookmark size={19} color="#334155" />
                     </View>
+
+                    {firstComment ? (
+                      <View className="mt-3 rounded-full bg-gray-50 px-3 py-2">
+                        <Text className="text-xs text-slate-700" numberOfLines={2}>
+                          <Text className="font-black text-gray-950">@{firstComment.author.toLowerCase().replace(/[^a-z0-9]+/g, '')}: </Text>
+                          {firstComment.body}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                 </TouchableOpacity>
               );
             })}
           </View>
-
-          <TouchableOpacity
-            onPress={shareConversationInvite}
-            className="mt-4 rounded-xl border border-dashed border-stone-300 bg-white p-4"
-            activeOpacity={0.75}
-          >
-            <View className="flex-row items-center gap-3">
-              <View className="h-10 w-10 items-center justify-center rounded-xl bg-stone-100">
-                <Plus size={20} color="#57534E" />
-              </View>
-              <View className="flex-1">
-                <Text className="font-bold text-gray-900">Invite someone into Cahootz</Text>
-                <Text className="mt-1 text-sm text-gray-600">Share the commons before asking them to make an account.</Text>
-              </View>
-              <Share2 size={18} color="#78716C" />
-            </View>
-          </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {renderComposer()}
 
       <Modal
         visible={composerPickerOpen}
@@ -1342,170 +1021,146 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress }: Co
       <Modal visible={drawerOpen} transparent animationType="fade" onRequestClose={() => setDrawerOpen(false)}>
         <View className="flex-1 flex-row bg-black/35">
           <View className="w-4/5 bg-white pt-14">
-            <View className="border-b border-stone-200 px-5 pb-4">
+            <View className="border-b border-stone-200 px-4 pb-3">
               <View className="flex-row items-center justify-between">
-                <View className="flex-row items-center gap-3">
-                  <View className="h-11 w-11 items-center justify-center rounded-xl" style={{ backgroundColor: SOCIAL_THEME.primary }}>
-                    <Text className="font-black text-white">C</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setDrawerOpen(false);
+                    if (hasAccountSession) {
+                      router.push('/(tabs)/wallet' as any);
+                    } else {
+                      onSignInPress?.();
+                    }
+                  }}
+                  className="min-w-0 flex-1 flex-row items-center gap-2.5"
+                  activeOpacity={0.75}
+                >
+                  <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-400">
+                    <Text className="text-sm font-black text-white">{accountName.slice(0, 1).toUpperCase()}</Text>
                   </View>
-                  <View>
-                    <Text className="text-lg font-black text-gray-900">Cahootz</Text>
-                    <Text className="text-xs font-semibold text-gray-500">Feeds, alerts, wallet, spaces</Text>
+                  <View className="min-w-0 flex-1">
+                    <Text className="text-sm font-black text-gray-900" numberOfLines={1}>
+                      {hasAccountSession ? accountName : 'Sign in'}
+                    </Text>
+                    <Text className="text-xs font-semibold text-gray-500" numberOfLines={1}>
+                      {hasAccountSession ? `@${accountHandle} · Member` : 'Tap to sign in'}
+                    </Text>
                   </View>
-                </View>
+                </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => setDrawerOpen(false)}
-                  className="h-10 w-10 items-center justify-center rounded-xl bg-stone-100"
+                  className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100"
                   accessibilityLabel="Close menu"
                 >
-                  <X size={20} color="#44403C" />
+                  <X size={16} color="#44403C" />
                 </TouchableOpacity>
               </View>
             </View>
 
-            <ScrollView className="flex-1" contentContainerStyle={{ padding: 20, paddingBottom: 32 }}>
-              <Text className="mb-2 text-xs font-black uppercase tracking-wide text-stone-400">Commons</Text>
-              <View className="mb-5 overflow-hidden rounded-2xl border border-stone-200 bg-white">
-                {commonsDrawerItems.map((item) => (
-                  item.id === 'discover-commons' ? (
-                    <TouchableOpacity
-                      key={item.id}
-                      onPress={() => goToDrawerItem('/commons')}
-                      className="flex-row items-center gap-3 border-b border-stone-100 px-4 py-4"
-                    >
-                      <View className="h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: SOCIAL_THEME.primarySoft }}>
-                        <Text className="font-black" style={{ color: SOCIAL_THEME.primary }}>{item.icon}</Text>
-                      </View>
-                      <View className="min-w-0 flex-1">
-                        <Text className="font-black text-gray-900">{item.label}</Text>
-                        <Text className="text-xs font-semibold text-gray-500">{item.description}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ) : (
-                    <View key={item.id} className="border-b border-stone-100 px-4 py-4">
-                      <View className="flex-row items-center gap-3">
-                        <View className="h-10 w-10 items-center justify-center rounded-xl bg-stone-900">
-                          <Text className="font-black text-white">{item.icon}</Text>
-                        </View>
-                        <View className="min-w-0 flex-1">
-                          <Text className="font-black text-gray-900">{item.label}</Text>
-                          <Text className="text-xs font-semibold text-gray-500">{item.description}</Text>
-                        </View>
-                      </View>
-                      <View className="mt-3 flex-row gap-2">
-                        <TouchableOpacity
-                          onPress={() => goToDrawerItem(`/${item.id}/posts`)}
-                          className="h-10 flex-1 flex-row items-center justify-center gap-2 rounded-xl"
-                          style={{ backgroundColor: SOCIAL_THEME.primary }}
-                          activeOpacity={0.82}
-                        >
-                          <MessageCircle size={15} color="#FFFFFF" />
-                          <Text className="text-xs font-black text-white">Posts</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => goToDrawerItem(`/commons/${item.id}`)}
-                          className="h-10 flex-1 flex-row items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white"
-                          activeOpacity={0.75}
-                        >
-                          <BookOpen size={15} color={SOCIAL_THEME.primary} />
-                          <Text className="text-xs font-black text-gray-800">Wall</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )
-                ))}
-                <TouchableOpacity
-                  onPress={openSuggestCommons}
-                  className="flex-row items-center gap-3 border-t border-stone-100 px-4 py-4"
-                  activeOpacity={0.75}
-                >
-                  <View className="h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: SOCIAL_THEME.primarySoft }}>
-                    <Plus size={20} color={SOCIAL_THEME.primary} />
-                  </View>
-                  <View className="min-w-0 flex-1">
-                    <Text className="font-black text-gray-900">Suggest a commons</Text>
-                    <Text className="text-xs font-semibold text-gray-500">Tell us what group should open next</Text>
-                  </View>
+            <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 28 }}>
+              <View className="mb-2 flex-row items-center justify-between">
+                <Text className="text-[11px] font-black uppercase tracking-wide text-stone-400">Switch commons</Text>
+                <TouchableOpacity onPress={() => goToDrawerItem('/commons')} activeOpacity={0.75}>
+                  <Text className="text-[11px] font-black" style={{ color: SOCIAL_THEME.primary }}>Active Co-ops</Text>
                 </TouchableOpacity>
               </View>
-
-              <Text className="mb-2 text-xs font-black uppercase tracking-wide text-stone-400">Spaces</Text>
-              <View className="mb-5 overflow-hidden rounded-2xl border border-stone-200 bg-white">
-                {DRAWER_NAV_ITEMS.map((item) => {
-                  const Icon = item.icon;
+              <View className="mb-3 overflow-hidden rounded-2xl border border-stone-200 bg-white">
+                {commonsDrawerItems.map((item) => {
+                  const isActive = item.id === commonsProfile.id;
                   return (
                     <TouchableOpacity
-                      key={item.label}
-                      onPress={() => goToDrawerItem(item.action)}
-                      className="flex-row items-center gap-3 border-b border-stone-100 px-4 py-4"
+                      key={item.id}
+                      onPress={() => goToDrawerItem(`/${item.id}/posts`)}
+                      className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
+                      style={isActive ? { backgroundColor: SOCIAL_THEME.primarySoft } : undefined}
+                      activeOpacity={0.75}
                     >
-                      <View className="h-10 w-10 items-center justify-center rounded-xl bg-stone-100">
-                        <Icon size={20} color={SOCIAL_THEME.primary} />
+                      <View
+                        className="h-9 w-9 items-center justify-center rounded-xl"
+                        style={{ backgroundColor: isActive ? SOCIAL_THEME.primary : '#F5F5F4' }}
+                      >
+                        <Text className="text-sm font-black" style={{ color: isActive ? '#FFFFFF' : '#57534E' }}>{item.icon}</Text>
                       </View>
                       <View className="min-w-0 flex-1">
-                        <Text className="font-black text-gray-900">{item.label}</Text>
-                        <Text className="text-xs font-semibold text-gray-500">{item.description}</Text>
+                        <Text className="text-sm font-black text-gray-900" numberOfLines={1}>{item.label}</Text>
+                        <Text
+                          className="text-xs font-semibold"
+                          style={{ color: item.accessStatus === 'ACTIVE' ? '#059669' : '#6B7280' }}
+                        >
+                          {item.accessStatus === 'ACTIVE' ? (isActive ? 'Active Member' : 'Member') : 'Pending'}
+                        </Text>
                       </View>
+                      {isActive ? (
+                        <CheckCircle2 size={17} color={SOCIAL_THEME.primary} />
+                      ) : (
+                        <ChevronRight size={15} color="#A8A29E" />
+                      )}
                     </TouchableOpacity>
                   );
                 })}
               </View>
 
-              <Text className="mb-2 text-xs font-black uppercase tracking-wide text-stone-400">Account</Text>
-              <View className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
-                <TouchableOpacity
-                  onPress={() => goToDrawerItem('/(tabs)/wallet')}
-                  className="flex-row items-center gap-3 border-b border-stone-100 px-4 py-4"
-                >
-                  <View className="h-10 w-10 items-center justify-center rounded-xl bg-stone-100">
-                    <Wallet size={20} color={SOCIAL_THEME.primary} />
-                  </View>
-                  <View className="min-w-0 flex-1">
-                    <Text className="font-black text-gray-900">Wallet</Text>
-                    <Text className="text-xs font-semibold text-gray-500">Rewards, cards, payments</Text>
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => {
-                    setDrawerOpen(false);
-                    if (hasAccountSession) {
-                      router.push('/(authenticated)/profile' as any);
-                    } else {
-                      onSignInPress?.();
-                    }
-                  }}
-                  className="flex-row items-center gap-3 border-b border-stone-100 px-4 py-4"
-                >
-                  <View className="h-10 w-10 items-center justify-center rounded-xl bg-stone-100">
-                    <Settings size={20} color="#57534E" />
-                  </View>
-                  <View className="min-w-0 flex-1">
-                    <Text className="font-black text-gray-900">Settings</Text>
-                    <Text className="text-xs font-semibold text-gray-500">Profile and preferences</Text>
-                  </View>
-                </TouchableOpacity>
-                {hasAccountSession ? (
-                  <TouchableOpacity onPress={() => void logout()} className="flex-row items-center gap-3 px-4 py-4">
-                    <View className="h-10 w-10 items-center justify-center rounded-xl bg-red-50">
-                      <LogOut size={20} color="#DC2626" />
-                    </View>
-                    <View className="min-w-0 flex-1">
-                      <Text className="font-black text-gray-900">Sign out</Text>
-                      <Text className="text-xs font-semibold text-gray-500">Signed in as {accountName}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity onPress={onSignInPress} className="flex-row items-center gap-3 px-4 py-4">
-                    <View className="h-10 w-10 items-center justify-center rounded-xl bg-emerald-50">
-                      <UserCircle size={20} color="#047857" />
-                    </View>
-                    <View className="min-w-0 flex-1">
-                      <Text className="font-black text-gray-900">Sign in</Text>
-                      <Text className="text-xs font-semibold text-gray-500">Post, comment, message, and save</Text>
-                    </View>
-                  </TouchableOpacity>
-                )}
+              <TouchableOpacity
+                onPress={() => goToDrawerItem('/commons')}
+                className="flex-row items-center justify-center gap-1.5 py-1.5"
+                activeOpacity={0.75}
+              >
+                <Compass size={14} color={SOCIAL_THEME.primary} />
+                <Text className="text-xs font-black" style={{ color: SOCIAL_THEME.primary }}>Explore all Commons directory</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={openSuggestCommons} activeOpacity={0.75}>
+                <Text className="mb-4 mt-1 text-center text-[11px] font-semibold text-stone-400">
+                  Don&apos;t see your community? Suggest a commons
+                </Text>
+              </TouchableOpacity>
+
+              <Text className="mb-2 text-[11px] font-black uppercase tracking-wide text-stone-400">Sections</Text>
+              <View className="mb-5 overflow-hidden rounded-2xl border border-stone-200 bg-white">
+                {DRAWER_SECTIONS.map((item, index) => {
+                  const Icon = item.icon;
+                  return (
+                    <TouchableOpacity
+                      key={item.label}
+                      onPress={() => goToDrawerItem(item.action)}
+                      className={`flex-row items-center gap-2.5 px-3 py-3 ${
+                        index < DRAWER_SECTIONS.length - 1 ? 'border-b border-stone-100' : ''
+                      }`}
+                      activeOpacity={0.75}
+                    >
+                      <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
+                        <Icon size={17} color={SOCIAL_THEME.primary} />
+                      </View>
+                      <Text className="flex-1 text-sm font-black text-gray-900">{item.label}</Text>
+                      <ChevronRight size={15} color="#D6D3D1" />
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
+
+              {hasAccountSession ? (
+                <TouchableOpacity
+                  onPress={() => void logout()}
+                  className="flex-row items-center justify-center gap-2 rounded-2xl bg-stone-100 py-3"
+                  activeOpacity={0.8}
+                >
+                  <LogOut size={16} color="#DC2626" />
+                  <Text className="text-sm font-black text-red-600">Sign Out (@{accountHandle})</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={onSignInPress}
+                  className="flex-row items-center justify-center gap-2 rounded-2xl py-3"
+                  style={{ backgroundColor: SOCIAL_THEME.primary }}
+                  activeOpacity={0.85}
+                >
+                  <UserCircle size={16} color="#FFFFFF" />
+                  <Text className="text-sm font-black text-white">Sign In</Text>
+                </TouchableOpacity>
+              )}
+
+              <Text className="mt-4 text-center text-[11px] font-semibold text-stone-300">
+                Cahootz v1.1 · Powered by Expo 54
+              </Text>
             </ScrollView>
           </View>
           <TouchableOpacity className="flex-1" onPress={() => setDrawerOpen(false)} activeOpacity={1} />

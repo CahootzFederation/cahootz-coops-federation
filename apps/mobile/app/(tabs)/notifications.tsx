@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Bell, MessageCircle, Sparkles, UserCircle, Wallet } from 'lucide-react-native';
+import { Bell, CheckCircle2, HandCoins, Menu, MessageCircle, PackageSearch, Scale, UserCircle, Wallet } from 'lucide-react-native';
 import { ScrollView, TouchableOpacity, View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/auth-context';
 
 const SOCIAL_THEME = {
   paper: '#F6F7F8',
-  primary: '#F97316',
+  primary: '#FF6B00',
   primarySoft: '#FFF7ED',
   ink: '#111827',
   muted: '#6B7280',
@@ -15,22 +15,36 @@ const SOCIAL_THEME = {
 
 const alerts = [
   {
-    title: 'Someone replied to a social thread',
-    body: 'The conversation about what people are building this week has new comments.',
-    icon: MessageCircle,
+    title: 'Proposal #18 Passed!',
+    body: 'The Wood-fire Kiln Upgrade in Oakland Commons reached quorum with 92% YES votes.',
+    meta: '12m ago',
+    action: 'View Vote Tally',
+    icon: Scale,
     color: SOCIAL_THEME.primary,
   },
   {
-    title: 'A thread is ready for action',
-    body: 'A workspace post was connected to related artist and venue conversations.',
-    icon: Sparkles,
+    title: 'Received 15 SC Support',
+    body: 'Elena Rostova supported your shared cargo van logistics post.',
+    meta: '1h ago',
+    action: null,
+    icon: HandCoins,
     color: '#047857',
   },
   {
-    title: 'Member business activity',
-    body: 'A business shoutout is getting attention in Cahootz Commons.',
+    title: 'New Resource Match',
+    body: 'East Bay Bakery listed 40 sq ft cold storage matching your profile request.',
+    meta: '3h ago',
+    action: null,
+    icon: PackageSearch,
+    color: '#2563EB',
+  },
+  {
+    title: 'Kofi Mensah tagged you',
+    body: 'A rooftop harvest thread mentioned your packaging offer.',
+    meta: '5h ago',
+    action: null,
     icon: Bell,
-    color: '#DC2626',
+    color: '#64748B',
   },
 ];
 
@@ -40,31 +54,67 @@ export default function NotificationsScreen() {
 
   return (
     <ScrollView className="flex-1" style={{ backgroundColor: SOCIAL_THEME.paper }} contentContainerStyle={{ paddingBottom: 28 }}>
-      <View className="border-b border-gray-200 bg-white px-5 pt-14 pb-5">
-        <View className="flex-row items-center justify-between">
-          <View className="min-w-0 flex-1 pr-3">
-            <Text className="text-xs font-black uppercase text-gray-500">c/Cahootz</Text>
-            <Text className="text-2xl font-black text-gray-950">Alerts</Text>
-            <Text className="text-sm text-gray-600">Replies, mentions, trending threads, and wallet activity</Text>
+      <View className="border-b border-gray-200 bg-white px-3 pt-7 pb-2">
+        <View className="flex-row items-center gap-2">
+          <TouchableOpacity
+            onPress={() => router.push('/(tabs)' as any)}
+            className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
+            accessibilityLabel="Back to commons"
+          >
+            <Menu size={18} color="#1F2937" strokeWidth={2.6} />
+          </TouchableOpacity>
+          <View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: SOCIAL_THEME.primary }}>
+            <Bell size={17} color="#FFFFFF" strokeWidth={2.6} />
+          </View>
+          <View className="min-w-0 flex-1">
+            <Text className="min-w-0 text-base font-black text-gray-950" numberOfLines={1}>
+              Alerts
+            </Text>
+            <Text className="mt-0.5 text-xs font-semibold text-slate-600" numberOfLines={1}>
+              Governance, payments, matches & mentions
+            </Text>
           </View>
           <TouchableOpacity
-            onPress={() => router.push('/(tabs)/wallet' as any)}
-            className="h-11 w-11 items-center justify-center rounded-xl"
-            style={{ backgroundColor: SOCIAL_THEME.primary }}
+            onPress={() => router.push('/(tabs)/messages' as any)}
+            className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
+            accessibilityLabel="Open direct messages"
           >
-            <UserCircle size={22} color="#FFFFFF" />
+            <MessageCircle size={16} color="#334155" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/(tabs)/wallet' as any)}
+            className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
+            accessibilityLabel="Open profile"
+          >
+            <UserCircle size={16} color="#334155" />
           </TouchableOpacity>
         </View>
       </View>
 
       <View className="px-5 py-4">
         <View className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
-          <Text className="text-base font-black text-gray-900">
-            {isAuthenticated ? `Hey, ${accountName}` : 'Browse now, sign in when you want to act'}
-          </Text>
-          <Text className="mt-1 text-sm leading-5 text-gray-600">
-            Cahootz keeps the feed social and only nudges threads forward when something needs attention.
-          </Text>
+          <View className="flex-row items-center justify-between">
+            <Text className="text-base font-black text-gray-900">
+              {isAuthenticated ? `Hey, ${accountName}` : 'Browse now, sign in when you want to act'}
+            </Text>
+            <Text className="text-xs font-black" style={{ color: SOCIAL_THEME.primary }}>Mark all read</Text>
+          </View>
+          <View className="mt-3 flex-row gap-2">
+            {['All (4)', 'Governance', 'Payments', 'Matches'].map((filter, index) => (
+              <View
+                key={filter}
+                className="rounded-full border px-3 py-1.5"
+                style={{
+                  backgroundColor: index === 0 ? SOCIAL_THEME.primarySoft : '#FFFFFF',
+                  borderColor: index === 0 ? '#FED7AA' : '#E5E7EB',
+                }}
+              >
+                <Text className="text-xs font-bold" style={{ color: index === 0 ? SOCIAL_THEME.primary : SOCIAL_THEME.muted }}>
+                  {filter}
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
 
         <View className="gap-3">
@@ -81,8 +131,19 @@ export default function NotificationsScreen() {
                     <Icon size={21} color={alert.color} />
                   </View>
                   <View className="min-w-0 flex-1">
-                    <Text className="font-black text-gray-900">{alert.title}</Text>
+                    <View className="flex-row items-start justify-between gap-2">
+                      <Text className="flex-1 font-black text-gray-900">{alert.title}</Text>
+                      <Text className="text-xs font-semibold text-gray-500">{alert.meta}</Text>
+                    </View>
                     <Text className="mt-1 text-sm leading-5 text-gray-600">{alert.body}</Text>
+                    {alert.action ? (
+                      <View className="mt-3 flex-row items-center gap-1">
+                        <CheckCircle2 size={14} color={SOCIAL_THEME.primary} />
+                        <Text className="text-xs font-black" style={{ color: SOCIAL_THEME.primary }}>
+                          {alert.action}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
               </TouchableOpacity>

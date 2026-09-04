@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { View } from 'react-native';
-import { Home, User, Store, FileText } from 'lucide-react-native';
+import { User, FileText } from 'lucide-react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function AuthenticatedLayout() {
@@ -11,7 +11,7 @@ export default function AuthenticatedLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#B45309',
+        tabBarActiveTintColor: '#FF6B00',
         tabBarInactiveTintColor: isDark ? '#6B7280' : '#9CA3AF',
         tabBarStyle: {
           backgroundColor: isDark ? '#111827' : '#FFFFFF',
@@ -35,38 +35,6 @@ export default function AuthenticatedLayout() {
         },
       }}
     >
-      <Tabs.Screen
-        name="home"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? {
-              backgroundColor: '#FEF3C7',
-              borderRadius: 12,
-              padding: 8,
-            } : { padding: 8 }}>
-              <Home color={color} size={22} strokeWidth={focused ? 2.5 : 2} />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="stores"
-        options={{
-          title: 'Shop',
-          tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? {
-              backgroundColor: '#FEF3C7',
-              borderRadius: 12,
-              padding: 8,
-            } : { padding: 8 }}>
-              <Store color={color} size={22} strokeWidth={focused ? 2.5 : 2} />
-            </View>
-          ),
-        }}
-      />
-
-
       <Tabs.Screen
         name="proposals"
         options={{

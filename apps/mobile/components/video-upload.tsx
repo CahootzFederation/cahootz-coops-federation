@@ -224,7 +224,7 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
         <View className="space-y-2">
           <TouchableOpacity
             onPress={recordVideo}
-            className="bg-amber-500 flex-row items-center justify-center py-4 rounded-xl"
+            className="bg-primary flex-row items-center justify-center py-4 rounded-xl"
           >
             <Ionicons name="videocam" size={20} color="white" />
             <Text className="text-white font-semibold ml-2">Record Video</Text>
@@ -253,15 +253,15 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
 
       {/* Upload progress */}
       {isUploading && (
-        <View className="bg-amber-50 p-4 rounded-xl space-y-2">
+        <View className="bg-secondary p-4 rounded-xl space-y-2">
           <View className="flex-row items-center justify-center">
-            <ActivityIndicator size="small" color="#D97706" />
-            <Text className="text-amber-700 ml-2">Uploading...</Text>
+            <ActivityIndicator size="small" color="#FF8A2A" />
+            <Text className="text-primary ml-2">Uploading...</Text>
           </View>
           {uploadProgress > 0 && (
             <View className="bg-amber-200 h-2 rounded-full overflow-hidden">
               <View
-                className="bg-amber-600 h-full"
+                className="bg-primary h-full"
                 style={{ width: `${uploadProgress}%` }}
               />
             </View>

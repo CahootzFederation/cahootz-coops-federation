@@ -19,6 +19,7 @@ import { api } from '@/lib/api';
 
 const MIN_SELF_DESCRIPTION = 120;
 const MIN_GOALS = 50;
+const MIN_SIGNAL_ITEMS = 1;
 
 type FieldName = 'selfDescription' | 'shortTermGoals' | 'longTermGoals';
 type ListFieldName = 'skills' | 'interests' | 'resourcesOffered' | 'resourcesNeeded';
@@ -36,7 +37,7 @@ type FieldConfig = {
 const fields: FieldConfig[] = [
   {
     name: 'selfDescription',
-    label: 'Describe yourself',
+    label: 'Self Description',
     helper: 'Give a real paragraph or two: background, skills, interests, what you care about, what you can offer, and what you need.',
     placeholder: 'I am a designer and neighborhood organizer in Oakland. I care about...',
     minChars: MIN_SELF_DESCRIPTION,
@@ -44,7 +45,7 @@ const fields: FieldConfig[] = [
   },
   {
     name: 'shortTermGoals',
-    label: 'Short-term life goals',
+    label: 'Short-Term Goals',
     helper: 'What are you trying to move forward over the next few months?',
     placeholder: 'This season I want to...',
     minChars: MIN_GOALS,
@@ -52,7 +53,7 @@ const fields: FieldConfig[] = [
   },
   {
     name: 'longTermGoals',
-    label: 'Long-term life goals',
+    label: 'Long-Term Goals',
     helper: 'What kind of future are you building toward over the next few years?',
     placeholder: 'Long term, I want to build...',
     minChars: MIN_GOALS,
@@ -65,40 +66,51 @@ const signalFields: {
   label: string;
   helper: string;
   placeholder: string;
+  minItems: number;
+  maxItemLength: number;
 }[] = [
   {
     name: 'skills',
     label: 'Skills',
     helper: 'Separate with commas or new lines.',
     placeholder: 'design, childcare, grant writing, event planning',
+    minItems: MIN_SIGNAL_ITEMS,
+    maxItemLength: 80,
   },
   {
     name: 'interests',
     label: 'Interests',
     helper: 'Topics, scenes, causes, or culture you care about.',
     placeholder: 'music, housing, wellness, mutual aid, local business',
+    minItems: MIN_SIGNAL_ITEMS,
+    maxItemLength: 80,
   },
   {
     name: 'resourcesOffered',
     label: 'What you can offer',
     helper: 'People, space, tools, capital, experience, services.',
     placeholder: 'studio space, bookkeeping help, vendor contacts',
+    minItems: MIN_SIGNAL_ITEMS,
+    maxItemLength: 120,
   },
   {
     name: 'resourcesNeeded',
     label: 'What you need',
     helper: 'Things that would help you or your work move faster.',
     placeholder: 'venue access, marketing help, startup capital',
+    minItems: MIN_SIGNAL_ITEMS,
+    maxItemLength: 120,
   },
 ];
 
-function parseSignalList(value: string) {
+function parseSignalList(value: string, maxItemLength = 120) {
   return Array.from(
     new Set(
       value
-        .split(/[\n,]/)
+        .split(/[\n,;•]+/)
         .map((item) => item.trim())
         .filter(Boolean)
+        .map((item) => item.slice(0, maxItemLength))
     )
   ).slice(0, 30);
 }
@@ -136,7 +148,22 @@ export default function ProfileOnboardingScreen() {
     }, {} as Record<FieldName, boolean>);
   }, [values]);
 
-  const canSubmit = fields.every((field) => fieldProgress[field.name]) && !!sessionToken && !!user;
+  const signalProgress = useMemo(() => {
+    return signalFields.reduce<Record<ListFieldName, { count: number; complete: boolean }>>((acc, field) => {
+      const count = parseSignalList(signalValues[field.name], field.maxItemLength).length;
+      acc[field.name] = {
+        count,
+        complete: count >= field.minItems,
+      };
+      return acc;
+    }, {} as Record<ListFieldName, { count: number; complete: boolean }>);
+  }, [signalValues]);
+
+  const canSubmit =
+    fields.every((field) => fieldProgress[field.name]) &&
+    signalFields.every((field) => signalProgress[field.name].complete) &&
+    !!sessionToken &&
+    !!user;
 
   const updateField = (name: FieldName, value: string) => {
     setValues((current) => ({ ...current, [name]: value }));
@@ -162,6 +189,12 @@ export default function ProfileOnboardingScreen() {
       return;
     }
 
+    const missingSignalField = signalFields.find((field) => !signalProgress[field.name].complete);
+    if (missingSignalField) {
+      setError(`${missingSignalField.label} needs at least ${missingSignalField.minItems} item before you continue.`);
+      return;
+    }
+
     setIsSaving(true);
     setError('');
 
@@ -171,10 +204,10 @@ export default function ProfileOnboardingScreen() {
           selfDescription: values.selfDescription.trim(),
           shortTermGoals: values.shortTermGoals.trim(),
           longTermGoals: values.longTermGoals.trim(),
-          skills: parseSignalList(signalValues.skills),
-          interests: parseSignalList(signalValues.interests),
-          resourcesOffered: parseSignalList(signalValues.resourcesOffered),
-          resourcesNeeded: parseSignalList(signalValues.resourcesNeeded),
+          skills: parseSignalList(signalValues.skills, 80),
+          interests: parseSignalList(signalValues.interests, 80),
+          resourcesOffered: parseSignalList(signalValues.resourcesOffered, 120),
+          resourcesNeeded: parseSignalList(signalValues.resourcesNeeded, 120),
           businessSummary: optionalValues.businessSummary.trim(),
           locationSummary: optionalValues.locationSummary.trim(),
         },
@@ -204,7 +237,7 @@ export default function ProfileOnboardingScreen() {
   if (isLoading || !user) {
     return (
       <SafeAreaView style={styles.loadingScreen}>
-        <ActivityIndicator color="#F97316" size="large" />
+        <ActivityIndicator color="#FF6B00" size="large" />
       </SafeAreaView>
     );
   }
@@ -221,12 +254,12 @@ export default function ProfileOnboardingScreen() {
         >
           <View style={styles.header}>
             <View style={styles.badge}>
-              <Sparkles color="#F97316" size={18} strokeWidth={2.4} />
-              <Text style={styles.badgeText}>First profile signal</Text>
+              <Sparkles color="#FF6B00" size={18} strokeWidth={2.4} />
+              <Text style={styles.badgeText}>AI Matching Signal Setup</Text>
             </View>
-            <Text style={styles.title}>Tell Cahootz who you are.</Text>
+            <Text style={styles.title}>Your Co-op Profile</Text>
             <Text style={styles.subtitle}>
-              Cahootz helps communities organize people, skills, businesses, resources, and capital into coordinated action. Give the system enough signal to understand where you fit.
+              This one-time setup powers cooperative matching for local circles, resource sharing, and governance voting.
             </Text>
           </View>
 
@@ -259,26 +292,30 @@ export default function ProfileOnboardingScreen() {
             })}
 
             <View style={styles.signalGrid}>
-              {signalFields.map((field) => (
-                <View key={field.name} style={styles.fieldBlock}>
-                  <View style={styles.fieldHeader}>
-                    <Text style={styles.label}>{field.label}</Text>
-                    <Text style={styles.counter}>
-                      {parseSignalList(signalValues[field.name]).length || 'Add a few'}
-                    </Text>
+              {signalFields.map((field) => {
+                const progress = signalProgress[field.name];
+
+                return (
+                  <View key={field.name} style={styles.fieldBlock}>
+                    <View style={styles.fieldHeader}>
+                      <Text style={styles.label}>{field.label}</Text>
+                      <Text style={[styles.counter, progress.complete && styles.counterComplete]}>
+                        {progress.complete ? `${progress.count} added` : 'Add one'}
+                      </Text>
+                    </View>
+                    <Text style={styles.helper}>{field.helper}</Text>
+                    <TextInput
+                      value={signalValues[field.name]}
+                      onChangeText={(value) => updateSignalField(field.name, value)}
+                      placeholder={field.placeholder}
+                      placeholderTextColor="#9CA3AF"
+                      multiline
+                      textAlignVertical="top"
+                      style={[styles.input, styles.signalInput]}
+                    />
                   </View>
-                  <Text style={styles.helper}>{field.helper}</Text>
-                  <TextInput
-                    value={signalValues[field.name]}
-                    onChangeText={(value) => updateSignalField(field.name, value)}
-                    placeholder={field.placeholder}
-                    placeholderTextColor="#9CA3AF"
-                    multiline
-                    textAlignVertical="top"
-                    style={[styles.input, styles.signalInput]}
-                  />
-                </View>
-              ))}
+                );
+              })}
             </View>
 
             <View style={styles.fieldBlock}>
@@ -325,11 +362,11 @@ export default function ProfileOnboardingScreen() {
             ]}
           >
             {isSaving ? (
-              <ActivityIndicator color="#111827" />
+              <ActivityIndicator color="#FFFFFF" />
             ) : (
               <>
                 <Text style={styles.submitText}>Start using Cahootz</Text>
-                <ArrowRight color="#111827" size={20} strokeWidth={2.6} />
+                <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.6} />
               </>
             )}
           </Pressable>
@@ -342,7 +379,7 @@ export default function ProfileOnboardingScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: '#FFFFFF',
   },
   keyboardView: {
     flex: 1,
@@ -351,7 +388,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#111827',
+    backgroundColor: '#FFFFFF',
   },
   content: {
     flexGrow: 1,
@@ -369,27 +406,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     borderRadius: 999,
-    backgroundColor: 'rgba(249, 115, 22, 0.12)',
+    backgroundColor: '#FFF7ED',
     borderWidth: 1,
-    borderColor: 'rgba(249, 115, 22, 0.32)',
+    borderColor: '#FED7AA',
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginBottom: 18,
   },
   badgeText: {
-    color: '#FED7AA',
+    color: '#C2410C',
     fontSize: 13,
     fontWeight: '700',
   },
   title: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontSize: 34,
     lineHeight: 40,
     fontWeight: '900',
     letterSpacing: 0,
   },
   subtitle: {
-    color: '#D1D5DB',
+    color: '#64748B',
     fontSize: 16,
     lineHeight: 24,
     marginTop: 12,
@@ -398,10 +435,10 @@ const styles = StyleSheet.create({
     gap: 18,
   },
   fieldBlock: {
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#374151',
-    backgroundColor: '#1F2937',
+    borderColor: '#F0F2F5',
+    backgroundColor: '#FFFFFF',
     padding: 14,
   },
   fieldHeader: {
@@ -412,33 +449,33 @@ const styles = StyleSheet.create({
   },
   label: {
     flex: 1,
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontSize: 18,
     lineHeight: 24,
     fontWeight: '800',
   },
   counter: {
-    color: '#FDBA74',
+    color: '#FF6B00',
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '800',
   },
   counterComplete: {
-    color: '#86EFAC',
+    color: '#16A34A',
   },
   helper: {
-    color: '#CBD5E1',
+    color: '#64748B',
     fontSize: 14,
     lineHeight: 20,
     marginTop: 8,
     marginBottom: 12,
   },
   input: {
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#4B5563',
-    backgroundColor: '#FFFFFF',
-    color: '#111827',
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F8FAFC',
+    color: '#0F172A',
     fontSize: 16,
     lineHeight: 22,
     paddingHorizontal: 14,
@@ -454,15 +491,15 @@ const styles = StyleSheet.create({
     minHeight: 104,
   },
   error: {
-    color: '#FCA5A5',
+    color: '#DC2626',
     fontSize: 14,
     lineHeight: 20,
     marginTop: 16,
   },
   submitButton: {
     minHeight: 58,
-    borderRadius: 8,
-    backgroundColor: '#F97316',
+    borderRadius: 16,
+    backgroundColor: '#FF6B00',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -477,7 +514,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.99 }],
   },
   submitText: {
-    color: '#111827',
+    color: '#FFFFFF',
     fontSize: 17,
     lineHeight: 22,
     fontWeight: '900',

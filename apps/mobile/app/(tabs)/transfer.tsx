@@ -289,7 +289,7 @@ export default function PayScreen() {
               <View
                 className={`w-8 h-8 rounded-full items-center justify-center ${
                   step === s
-                    ? 'bg-amber-600'
+                    ? 'bg-primary'
                     : ['recipient', 'amount', 'confirm'].indexOf(step) > i
                     ? 'bg-green-500'
                     : 'bg-gray-200'
@@ -322,7 +322,7 @@ export default function PayScreen() {
               >
                 <Text
                   className={`text-center font-medium ${
-                    recipientType === 'username' ? 'text-amber-700' : 'text-gray-600'
+                    recipientType === 'username' ? 'text-primary' : 'text-gray-600'
                   }`}
                 >
                   Username
@@ -341,7 +341,7 @@ export default function PayScreen() {
               >
                 <Text
                   className={`text-center font-medium ${
-                    recipientType === 'phone' ? 'text-amber-700' : 'text-gray-600'
+                    recipientType === 'phone' ? 'text-primary' : 'text-gray-600'
                   }`}
                 >
                   Phone
@@ -368,7 +368,7 @@ export default function PayScreen() {
                   onPress={handleRecipientLookup}
                   disabled={isLookingUp || !recipientInput.trim()}
                   className={`ml-2 px-6 py-3 rounded-lg items-center justify-center ${
-                    isLookingUp || !recipientInput.trim() ? 'bg-gray-300' : 'bg-amber-600'
+                    isLookingUp || !recipientInput.trim() ? 'bg-gray-300' : 'bg-primary'
                   }`}
                 >
                   {isLookingUp ? (
@@ -419,7 +419,7 @@ export default function PayScreen() {
               onPress={handleContinueToAmount}
               disabled={!recipientInfo}
               className={`py-4 rounded-xl items-center ${
-                recipientInfo ? 'bg-amber-600' : 'bg-gray-300'
+                recipientInfo ? 'bg-primary' : 'bg-gray-300'
               }`}
             >
               <Text className="text-white font-bold text-lg">Continue</Text>
@@ -435,8 +435,8 @@ export default function PayScreen() {
               onPress={() => setStep('recipient')}
               className="flex-row items-center bg-white rounded-lg p-3 mb-6"
             >
-              <View className="w-10 h-10 rounded-full bg-amber-100 items-center justify-center mr-3">
-                <Text className="text-amber-700">
+              <View className="w-10 h-10 rounded-full bg-secondary items-center justify-center mr-3">
+                <Text className="text-primary">
                   {recipientInfo?.isSoulaanUser ? '👤' : '📱'}
                 </Text>
               </View>
@@ -504,7 +504,7 @@ export default function PayScreen() {
                 onPress={handleContinueToConfirm}
                 disabled={!amount || parseFloat(amount) <= 0}
                 className={`flex-1 py-4 rounded-xl items-center ${
-                  amount && parseFloat(amount) > 0 ? 'bg-amber-600' : 'bg-gray-300'
+                  amount && parseFloat(amount) > 0 ? 'bg-primary' : 'bg-gray-300'
                 }`}
               >
                 <Text className="text-white font-bold text-lg">Review</Text>
@@ -562,7 +562,7 @@ export default function PayScreen() {
 
               {/* Non-user notice */}
               {!recipientInfo?.isSoulaanUser && (
-                <View className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <View className="mt-4 bg-secondary border border-border rounded-lg p-3">
                   <Text className="text-amber-800 text-sm">
                     {recipientInfo?.value} is not on {config.shortName} yet. They&apos;ll receive a text
                     message to claim this payment within {config.claimExpirationDays} days.
@@ -572,7 +572,7 @@ export default function PayScreen() {
             </View>
 
             {/* Biometric indicator */}
-            <View className="bg-amber-50 rounded-lg p-3 mb-4 flex-row items-center justify-center">
+            <View className="bg-secondary rounded-lg p-3 mb-4 flex-row items-center justify-center">
               <Text className="text-amber-800 text-sm">
                 You&apos;ll use {biometricName} to confirm
               </Text>

@@ -265,14 +265,14 @@ export default function CartScreen() {
             Your cart is empty
           </Text>
           <Text className="text-gray-500 dark:text-gray-400 text-center mb-6">
-            Browse our stores and add some products to get started.
+            Browse commons stores and add some products to get started.
           </Text>
           <TouchableOpacity
-            onPress={() => router.push('/stores')}
+            onPress={() => router.push('/(tabs)/store' as any)}
             className="px-8 py-3 rounded-xl"
             style={{ backgroundColor: accentColor }}
           >
-            <Text className="text-white font-bold text-base">Browse Stores</Text>
+            <Text className="text-white font-bold text-base">Browse Commons Stores</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => router.push('/(authenticated)/orders' as any)}

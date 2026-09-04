@@ -82,10 +82,6 @@ const queryClient = new QueryClient({
   },
 });
 
-export const unstable_settings = {
-  anchor: 'index',
-};
-
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 

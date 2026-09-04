@@ -8,7 +8,20 @@ import {
 } from 'react-native';
 import { useState, useEffect } from 'react';
 import { router, Stack } from 'expo-router';
-import { ArrowLeft, Plus, CreditCard, Trash2, Check, CheckCircle, AlertCircle, X } from 'lucide-react-native';
+import * as Clipboard from 'expo-clipboard';
+import {
+  ArrowLeft,
+  Plus,
+  CreditCard,
+  Trash2,
+  Check,
+  CheckCircle,
+  AlertCircle,
+  X,
+  Coins,
+  Copy,
+  KeyRound,
+} from 'lucide-react-native';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import CardInput from '@/components/stripe/CardInput';
@@ -48,6 +61,8 @@ export default function PaymentMethodsScreen() {
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [removing, setRemoving] = useState(false);
+  const [scBalance, setScBalance] = useState<string | null>(null);
+  const [copiedAddress, setCopiedAddress] = useState(false);
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -64,7 +79,10 @@ export default function PaymentMethodsScreen() {
     if (user?.id) {
       loadMethods();
     }
-  }, [user?.id]);
+    if (user?.walletAddress) {
+      loadBalance();
+    }
+  }, [user?.id, user?.walletAddress]);
 
   const loadMethods = async () => {
     if (!user?.id) return;
@@ -78,6 +96,26 @@ export default function PaymentMethodsScreen() {
       setLoading(false);
     }
   };
+
+  const loadBalance = async () => {
+    if (!user?.walletAddress) return;
+
+    try {
+      const result = await api.getTokenBalances(user.walletAddress);
+      setScBalance(result.sc);
+    } catch (err) {
+      console.error('Error loading SC balance:', err);
+    }
+  };
+
+  const handleCopyAddress = async () => {
+    if (!user?.walletAddress) return;
+    await Clipboard.setStringAsync(user.walletAddress);
+    setCopiedAddress(true);
+    setTimeout(() => setCopiedAddress(false), 2000);
+  };
+
+  const shortenAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
 
   const handleAddSuccess = (card: { brand: string; last4: string }) => {
     setShowAddModal(false);
@@ -132,7 +170,7 @@ export default function PaymentMethodsScreen() {
               <ArrowLeft size={24} color="#111827" />
             </TouchableOpacity>
             <Text className="flex-1 text-center text-lg font-semibold text-gray-900 -ml-8">
-              Payment Methods
+              Wallet
             </Text>
           </View>
         </View>
@@ -143,7 +181,48 @@ export default function PaymentMethodsScreen() {
           </View>
         ) : (
           <ScrollView className="flex-1 p-4">
+            {/* SC Balance + Wallet Address */}
+            <View className="bg-white rounded-xl p-4">
+              <View className="flex-row items-center gap-3">
+                <View className="w-12 h-12 rounded-full bg-secondary items-center justify-center">
+                  <Coins size={22} color="#B45309" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-gray-500 text-xs uppercase font-semibold">SoulaaniCoin Balance</Text>
+                  <Text className="text-gray-900 text-2xl font-bold">
+                    {scBalance === null ? '—' : `${scBalance} SC`}
+                  </Text>
+                </View>
+              </View>
+
+              {user?.walletAddress ? (
+                <TouchableOpacity
+                  onPress={handleCopyAddress}
+                  className="mt-4 flex-row items-center justify-between rounded-lg bg-gray-50 p-3"
+                  activeOpacity={0.75}
+                >
+                  <View className="flex-1 min-w-0">
+                    <Text className="text-gray-500 text-xs uppercase font-semibold">Wallet Address</Text>
+                    <Text className="text-gray-800 text-sm mt-0.5" style={{ fontFamily: 'monospace' }}>
+                      {shortenAddress(user.walletAddress)}
+                    </Text>
+                  </View>
+                  {copiedAddress ? <Check size={18} color="#16A34A" /> : <Copy size={18} color="#6B7280" />}
+                </TouchableOpacity>
+              ) : null}
+
+              <TouchableOpacity
+                onPress={() => router.push('/export-wallet' as any)}
+                className="mt-3 flex-row items-center justify-center gap-2 rounded-lg border border-gray-200 py-3"
+                activeOpacity={0.75}
+              >
+                <KeyRound size={16} color="#374151" />
+                <Text className="text-gray-700 font-semibold text-sm">Export Wallet</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Card List */}
+            <Text className="text-gray-500 text-xs uppercase font-semibold mt-6 mb-2 px-1">Payment Methods</Text>
             {methods.length === 0 ? (
               <View className="bg-white rounded-xl p-8 items-center">
                 <CreditCard size={48} color="#9CA3AF" />
@@ -203,14 +282,14 @@ export default function PaymentMethodsScreen() {
             {/* Add Button */}
             <TouchableOpacity
               onPress={() => setShowAddModal(true)}
-              className="mt-4 bg-amber-600 rounded-xl py-4 flex-row items-center justify-center"
+              className="mt-4 bg-primary rounded-xl py-4 flex-row items-center justify-center"
             >
               <Plus size={20} color="white" />
               <Text className="text-white font-semibold ml-2">Add Card</Text>
             </TouchableOpacity>
 
             {/* Info */}
-            <View className="mt-4 bg-amber-50 rounded-xl p-4">
+            <View className="mt-4 bg-secondary rounded-xl p-4">
               <Text className="text-amber-800 text-sm">
                 Your default card will be charged automatically when your balance is insufficient
                 for a payment. Tap a card to set it as default.
@@ -245,7 +324,7 @@ export default function PaymentMethodsScreen() {
               </Text>
               <TouchableOpacity
                 onPress={() => setShowSuccessModal(false)}
-                className="bg-amber-600 rounded-xl py-3 px-8 w-full"
+                className="bg-primary rounded-xl py-3 px-8 w-full"
               >
                 <Text className="text-white font-semibold text-center">Done</Text>
               </TouchableOpacity>

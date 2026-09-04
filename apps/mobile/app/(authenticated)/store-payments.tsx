@@ -164,7 +164,7 @@ export default function StorePaymentsScreen() {
     <TouchableOpacity
       onPress={() => setFilter(status)}
       className={`px-4 py-2 rounded-full mr-2 ${
-        filter === status ? 'bg-amber-600' : 'bg-gray-100'
+        filter === status ? 'bg-primary' : 'bg-gray-100'
       }`}
     >
       <Text
@@ -210,7 +210,7 @@ export default function StorePaymentsScreen() {
 
         {loading ? (
           <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="large" color="#D97706" />
+            <ActivityIndicator size="large" color="#FF8A2A" />
           </View>
         ) : requests.length === 0 ? (
           <View className="flex-1 items-center justify-center p-8">
@@ -223,7 +223,7 @@ export default function StorePaymentsScreen() {
             </Text>
             <TouchableOpacity
               onPress={() => router.back()}
-              className="mt-6 bg-amber-600 px-6 py-3 rounded-xl"
+              className="mt-6 bg-primary px-6 py-3 rounded-xl"
             >
               <Text className="text-white font-semibold">Create Request</Text>
             </TouchableOpacity>
@@ -241,7 +241,7 @@ export default function StorePaymentsScreen() {
             ListFooterComponent={
               loadingMore ? (
                 <View className="py-4">
-                  <ActivityIndicator size="small" color="#D97706" />
+                  <ActivityIndicator size="small" color="#FF8A2A" />
                 </View>
               ) : null
             }

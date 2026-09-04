@@ -185,36 +185,36 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
   // Generic platform introduction screens
   const splashScreens = [
     {
-      title: 'Welcome to Cahootz Commons',
-      subtitle: 'Where Communities Build Together',
+      title: 'Build more together.',
+      subtitle: 'Cooperative finance',
       description:
-        'Join commons communities that invest together, support local businesses, and build shared wealth through collective economic power.',
+        'A shared home for your cooperative community, money, and decisions.',
       icon: Heart,
-      bgColor: 'bg-gold-600',
+      bgColor: 'bg-primary',
     },
     {
-      title: 'What is a Commons?',
-      subtitle: 'Democracy Meets Economics',
+      title: 'Your community, connected',
+      subtitle: 'People, resources, and shared purpose',
       description:
         'A commons is owned and governed by its members. Your voice matters, your spending builds community wealth, and everyone shares in the success.',
       icon: Users,
-      bgColor: 'bg-red-700',
+      bgColor: 'bg-primary',
     },
     {
-      title: 'Pool Your Power',
-      subtitle: 'Collective Buying Strength',
+      title: 'Money with meaning',
+      subtitle: 'Secure tools for collective prosperity',
       description:
         'By combining resources with others in your commons, you unlock better prices, support local businesses, and create jobs in your community.',
       icon: TrendingUp,
-      bgColor: 'bg-gold-600',
+      bgColor: 'bg-primary',
     },
     {
-      title: 'AI-Powered Governance',
-      subtitle: 'Smart Proposals, Better Decisions',
+      title: 'The Social Commons Network',
+      subtitle: 'Connect. Share vibes. Co-own everything.',
       description:
         'Every commons has an AI proposal engine that helps members create, evaluate, and vote on projects. Make informed decisions backed by data and community wisdom.',
       icon: Vote,
-      bgColor: 'bg-red-700',
+      bgColor: 'bg-primary',
     },
   ];
 
@@ -293,11 +293,11 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
       case 'radio':
         return (
           <View key={question.id}>
-            <Label className="text-charcoal-700 font-medium mb-3">
+            <Label className="text-foreground font-medium mb-3">
               {question.label} {question.required && '*'}
             </Label>
             {question.description && (
-              <Text className="text-sm text-charcoal-600 mb-2">{question.description}</Text>
+              <Text className="text-sm text-muted-foreground mb-2">{question.description}</Text>
             )}
             <View className={question.options && question.options.length > 2 ? "gap-2" : "flex flex-row gap-4"}>
               {question.options?.map((option) => (
@@ -307,7 +307,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                   onPress={() => handleDynamicAnswerChange(question.id, option.value)}
                   className={question.options && question.options.length > 2 ? "justify-start" : "flex-1"}
                 >
-                  <Text className={answer === option.value ? 'text-white' : 'text-charcoal-700'}>
+                  <Text className={answer === option.value ? 'text-white' : 'text-foreground'}>
                     {option.label}
                   </Text>
                 </Button>
@@ -319,11 +319,11 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
       case 'select':
         return (
           <View key={question.id}>
-            <Label className="text-charcoal-700 font-medium mb-3">
+            <Label className="text-foreground font-medium mb-3">
               {question.label} {question.required && '*'}
             </Label>
             {question.description && (
-              <Text className="text-sm text-charcoal-600 mb-2">{question.description}</Text>
+              <Text className="text-sm text-muted-foreground mb-2">{question.description}</Text>
             )}
             <View className="gap-2">
               {question.options?.map((option) => (
@@ -333,7 +333,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                   onPress={() => handleDynamicAnswerChange(question.id, option.value)}
                   className="justify-start"
                 >
-                  <Text className={answer === option.value ? 'text-white' : 'text-charcoal-700'}>
+                  <Text className={answer === option.value ? 'text-white' : 'text-foreground'}>
                     {option.label}
                   </Text>
                 </Button>
@@ -346,11 +346,11 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
         const selectedValues = (answer as string[]) || [];
         return (
           <View key={question.id}>
-            <Label className="text-charcoal-700 font-medium mb-3">
+            <Label className="text-foreground font-medium mb-3">
               {question.label} {question.required && '*'}
             </Label>
             {question.description && (
-              <Text className="text-sm text-charcoal-600 mb-2">{question.description}</Text>
+              <Text className="text-sm text-muted-foreground mb-2">{question.description}</Text>
             )}
             <View className="gap-2">
               {question.options?.map((option) => (
@@ -368,7 +368,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                       }
                     }}
                   />
-                  <Text className="text-sm text-charcoal-700 flex-1">{option.label}</Text>
+                  <Text className="text-sm text-foreground flex-1">{option.label}</Text>
                 </View>
               ))}
             </View>
@@ -378,11 +378,11 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
       case 'textarea':
         return (
           <View key={question.id}>
-            <Label className="text-charcoal-700 font-medium">
+            <Label className="text-foreground font-medium">
               {question.label} {question.required && '*'}
             </Label>
             {question.description && (
-              <Text className="text-sm text-charcoal-600 mt-1">{question.description}</Text>
+              <Text className="text-sm text-muted-foreground mt-1">{question.description}</Text>
             )}
             <TextInput
               value={answer || ''}
@@ -390,7 +390,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
               placeholder={question.placeholder || ''}
               multiline
               numberOfLines={3}
-              className="mt-2 w-full px-3 py-2 border border-cream-300 rounded-md text-base text-foreground"
+              className="mt-2 w-full px-3 py-2 border border-input rounded-md text-base text-foreground"
               style={{ textAlignVertical: 'top' }}
             />
           </View>
@@ -402,18 +402,18 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
       default:
         return (
           <View key={question.id}>
-            <Label className="text-charcoal-700 font-medium">
+            <Label className="text-foreground font-medium">
               {question.label} {question.required && '*'}
             </Label>
             {question.description && (
-              <Text className="text-sm text-charcoal-600 mt-1">{question.description}</Text>
+              <Text className="text-sm text-muted-foreground mt-1">{question.description}</Text>
             )}
             <TextInput
               value={answer || ''}
               onChangeText={(text) => handleDynamicAnswerChange(question.id, text)}
               placeholder={question.placeholder || ''}
               keyboardType={question.type === 'email' ? 'email-address' : question.type === 'phone' ? 'phone-pad' : 'default'}
-              className="mt-2 w-full px-3 py-2 border border-cream-300 rounded-md text-base text-foreground"
+              className="mt-2 w-full px-3 py-2 border border-input rounded-md text-base text-foreground"
             />
           </View>
         );
@@ -661,7 +661,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
         console.log('👤 User data:', user);
         await login(user);
         console.log('🎉 Login complete!');
-        router.replace(user.profileOnboardingCompletedAt ? '/(tabs)' as any : '/profile-onboarding' as any);
+        router.replace('/(tabs)' as any);
       } else {
         const errorMsg = 'Invalid code';
         console.error('❌ Verification failed:', errorMsg);
@@ -698,7 +698,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
               <View
                 key={i}
                 className={`h-2 rounded-full transition-all ${
-                  i === index ? 'bg-gold-600 w-6' : 'bg-gray-300 w-2'
+                  i === index ? 'bg-primary w-6' : 'bg-gray-300 w-2'
                 }`}
               />
             ))}
@@ -712,13 +712,13 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
               className={`${index === 0 ? 'opacity-0' : 'opacity-100'}`}
               disabled={index === 0}
             >
-              <Icon as={ChevronLeft} size={16} className="text-charcoal-600" />
-              <Text className="text-charcoal-600 ml-1">Back</Text>
+              <Icon as={ChevronLeft} size={16} className="text-muted-foreground" />
+              <Text className="text-muted-foreground ml-1">Back</Text>
             </Button>
 
             <Button
               onPress={index === splashScreens.length - 1 ? goToBrowseCoops : nextStep}
-              className="bg-gold-600"
+              className="bg-primary"
             >
               <Text className="text-white font-semibold">
                 {index === splashScreens.length - 1 ? 'Browse Commons' : 'Next'}
@@ -730,8 +730,8 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
           {/* Skip to Login */}
           {index < splashScreens.length - 1 && (
             <Button variant="ghost" onPress={goToLogin} className="mt-4">
-              <Text className="text-charcoal-500">Already a member? </Text>
-              <Text className="text-gold-600 font-semibold">Sign In</Text>
+              <Text className="text-muted-foreground">Already a member? </Text>
+              <Text className="text-primary font-semibold">Sign In</Text>
             </Button>
           )}
         </View>
@@ -740,15 +740,15 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
   };
 
   const renderWaitlistCard = () => (
-    <Card className="bg-charcoal-800 border-gold-600/30 shadow-lg overflow-hidden">
+    <Card className="bg-card border-border overflow-hidden">
       <CardContent className="p-5">
         <View className="flex-row items-start gap-3 mb-4">
-          <View className="h-11 w-11 rounded-2xl bg-gold-600/20 items-center justify-center">
-            <Icon as={Mail} size={20} className="text-gold-400" />
+          <View className="h-11 w-11 rounded-2xl bg-primary/20 items-center justify-center">
+            <Icon as={Mail} size={20} className="text-primary" />
           </View>
           <View className="flex-1">
-            <Text className="text-white text-xl font-black">Join the waitlist</Text>
-            <Text className="text-charcoal-100 text-sm leading-5 mt-1">
+            <Text className="text-foreground text-xl font-black">Join the waitlist</Text>
+            <Text className="text-muted-foreground text-sm leading-5 mt-1">
               Not sure which commons fits yet? Get early access and updates first.
             </Text>
           </View>
@@ -762,7 +762,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
               setWaitlistStatus('idle');
               setWaitlistMessage('');
             }}
-            className="flex-1 h-12 rounded-xl border-white/10 bg-white text-charcoal-900"
+            className="flex-1 h-12 rounded-xl border-input bg-muted text-foreground"
             placeholder="Email address"
             keyboardType="email-address"
             autoCapitalize="none"
@@ -770,9 +770,9 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
           <Button
             onPress={handleWaitlistSignup}
             disabled={waitlistStatus === 'submitting' || !waitlistData.email.trim()}
-            className="h-12 rounded-xl bg-gold-600 px-4"
+            className="h-12 rounded-xl bg-primary px-4"
           >
-            <Text className="text-charcoal-900 font-black">
+            <Text className="text-primary-foreground font-black">
               {waitlistStatus === 'submitting' ? 'Joining...' : 'Join'}
             </Text>
           </Button>
@@ -792,7 +792,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                 size={16}
                 className={waitlistStatus === 'success' ? 'text-green-400' : 'text-red-300'}
               />
-              <Text className={`flex-1 text-sm ${waitlistStatus === 'success' ? 'text-green-100' : 'text-red-100'}`}>
+              <Text className={`flex-1 text-sm ${waitlistStatus === 'success' ? 'text-green-700' : 'text-red-700'}`}>
                 {waitlistMessage}
               </Text>
             </View>
@@ -803,16 +803,16 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
   );
 
   const renderBrowseCoops = () => (
-    <View className="flex-1 bg-charcoal-900">
+    <View className="flex-1 bg-background">
       {/* Sticky Header */}
-      <View className="bg-charcoal-900 border-b border-white/10 p-6 pb-4">
+      <View className="bg-background border-b border-border p-6 pb-4">
         <View className="w-full max-w-md mx-auto">
           <View>
-            <View className="bg-gold-600/15 p-3 rounded-2xl mb-4 self-start">
-              <Icon as={Store} size={28} className="text-gold-400" />
+            <View className="bg-primary/15 p-3 rounded-2xl mb-4 self-start">
+              <Icon as={Store} size={28} className="text-primary" />
             </View>
-            <Text className="text-3xl font-black text-white mb-2">Choose Your Commons</Text>
-            <Text className="text-charcoal-100 leading-6">
+            <Text className="text-3xl font-black text-foreground mb-2">Choose Your Commons</Text>
+            <Text className="text-muted-foreground leading-6">
               Explore live communities, then apply when one feels aligned with your goals.
             </Text>
           </View>
@@ -829,8 +829,8 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
           {/* Loading State */}
           {isLoadingCoops && (
             <View className="items-center py-8">
-              <ActivityIndicator size="large" color="#D4AF37" />
-              <Text className="text-charcoal-100 mt-4">Loading available commons...</Text>
+              <ActivityIndicator size="large" color="#FF6B00" />
+              <Text className="text-muted-foreground mt-4">Loading available commons...</Text>
             </View>
           )}
 
@@ -863,17 +863,17 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                 // Parse color - could be hex (#2563eb) or Tailwind class (bg-blue-700)
                 const isHexColor = coop.bgColor?.startsWith('#');
                 const bgColorStyle = isHexColor ? coop.bgColor : undefined;
-                const bgColorClass = !isHexColor && coop.bgColor ? coop.bgColor : 'bg-charcoal-800';
+                const bgColorClass = !isHexColor && coop.bgColor ? coop.bgColor : 'bg-card';
                 
                 // Determine text color based on background luminance
-                const useWhiteText = coop.bgColor ? isColorDark(coop.bgColor || '') : true;
-                const textColorClass = useWhiteText ? 'text-white' : 'text-charcoal-800';
-                const subtextColorClass = useWhiteText ? 'text-white' : 'text-charcoal-700';
+                const useWhiteText = coop.bgColor ? isColorDark(coop.bgColor || '') : false;
+                const textColorClass = useWhiteText ? 'text-white' : 'text-foreground';
+                const subtextColorClass = useWhiteText ? 'text-white' : 'text-foreground';
                 
                 return (
                   <Pressable key={coop.id} onPress={() => selectCoop(coop.id)}>
                     <Card 
-                      className={`${bgColorClass} border-white/10 shadow-lg overflow-hidden`}
+                      className={`${bgColorClass} border-border overflow-hidden`}
                       style={bgColorStyle ? { backgroundColor: bgColorStyle } : undefined}
                     >
                       <CardContent className="p-6">
@@ -882,14 +882,14 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                             <Text className={`text-2xl font-black ${textColorClass} mb-1`}>{coop.name}</Text>
                             <Text className={`${subtextColorClass} font-semibold`}>{coop.tagline}</Text>
                           </View>
-                          <View className="h-10 w-10 rounded-xl bg-black/20 items-center justify-center">
+                          <View className="h-10 w-10 rounded-xl bg-primary/10 items-center justify-center">
                             <Icon as={ChevronRight} size={20} className={textColorClass} />
                           </View>
                         </View>
                         <Text className={`${subtextColorClass} text-sm leading-6 mb-4`}>{coop.description}</Text>
                         <View className="flex flex-row items-center justify-between">
-                          <Badge className={useWhiteText ? "bg-white/20" : "bg-gold-600/15"}>
-                            <Text className={`text-sm font-semibold ${useWhiteText ? 'text-white' : 'text-charcoal-700'}`}>Learn More</Text>
+                          <Badge className={useWhiteText ? "bg-white/20" : "bg-primary/15"}>
+                            <Text className={`text-sm font-semibold ${useWhiteText ? 'text-white' : 'text-foreground'}`}>Learn More</Text>
                           </Badge>
                         </View>
                       </CardContent>
@@ -903,23 +903,23 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
           {/* No Commons Available */}
           {!isLoadingCoops && coopsWithIcons.length === 0 && (
             <View className="items-center py-8">
-              <Text className="text-charcoal-100 text-center">No commons available at this time.</Text>
+              <Text className="text-muted-foreground text-center">No commons available at this time.</Text>
             </View>
           )}
         </View>
       </ScrollView>
 
       {/* Sticky Footer */}
-      <View className="bg-charcoal-900 border-t border-white/10 p-6 pt-4">
+      <View className="bg-background border-t border-border p-6 pt-4">
         <View className="w-full max-w-md mx-auto">
           <View className="flex flex-row justify-between items-center">
             <Button variant="ghost" onPress={prevStep}>
-              <Icon as={ChevronLeft} size={16} className="text-charcoal-100" />
-              <Text className="text-charcoal-100 ml-1">Back</Text>
+              <Icon as={ChevronLeft} size={16} className="text-muted-foreground" />
+              <Text className="text-muted-foreground ml-1">Back</Text>
             </Button>
             <Button variant="ghost" onPress={goToLogin}>
-              <Text className="text-charcoal-100">Already a member? </Text>
-              <Text className="text-gold-400 font-semibold">Sign In</Text>
+              <Text className="text-muted-foreground">Already a member? </Text>
+              <Text className="text-primary font-semibold">Sign In</Text>
             </Button>
           </View>
         </View>
@@ -932,48 +932,48 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
     if (!selectedCoop) return null;
 
     return (
-      <ScrollView className="flex-1 bg-charcoal-900">
+      <ScrollView className="flex-1 bg-background">
         <View className="min-h-screen flex-1 p-6">
           <View className="w-full max-w-md mx-auto">
             {/* Header */}
             <View className="mb-6">
               <View className="flex-row items-center justify-between mb-5">
                 <Button variant="ghost" onPress={prevStep} className="px-0">
-                  <Icon as={ChevronLeft} size={16} className="text-charcoal-100" />
-                  <Text className="text-charcoal-100 ml-1">Commons</Text>
+                  <Icon as={ChevronLeft} size={16} className="text-muted-foreground" />
+                  <Text className="text-muted-foreground ml-1">Commons</Text>
                 </Button>
                 <Button variant="ghost" onPress={goToLogin} className="px-0">
-                  <Text className="text-gold-400 font-semibold">Sign in</Text>
+                  <Text className="text-primary font-semibold">Sign in</Text>
                 </Button>
               </View>
-              <View className="bg-gold-600/15 p-3 rounded-2xl mb-4 self-start">
-                <Icon as={Heart} size={28} className="text-gold-400" />
+              <View className="bg-primary/15 p-3 rounded-2xl mb-4 self-start">
+                <Icon as={Heart} size={28} className="text-primary" />
               </View>
-              <Text className="text-4xl font-black text-white mb-2">{selectedCoop.name}</Text>
-              <Text className="text-lg text-gold-300 font-semibold">{selectedCoop.tagline}</Text>
+              <Text className="text-4xl font-black text-foreground mb-2">{selectedCoop.name}</Text>
+              <Text className="text-lg text-primary font-semibold">{selectedCoop.tagline}</Text>
             </View>
 
             {/* Mission */}
-            <Card className="bg-charcoal-800 border-white/10 mb-4">
+            <Card className="bg-card border-border mb-4">
               <CardContent className="p-5">
-                <Text className="font-semibold text-white mb-2">Mission</Text>
-                <Text className="text-charcoal-100 text-sm leading-relaxed">{selectedCoop.mission}</Text>
+                <Text className="font-semibold text-foreground mb-2">Mission</Text>
+                <Text className="text-muted-foreground text-sm leading-relaxed">{selectedCoop.mission}</Text>
               </CardContent>
             </Card>
 
             {/* Features */}
-            <Card className="bg-charcoal-800 border-white/10 mb-4">
+            <Card className="bg-card border-border mb-4">
               <CardContent className="p-5">
-                <Text className="font-semibold text-white mb-4">What You Get</Text>
+                <Text className="font-semibold text-foreground mb-4">What You Get</Text>
                 <View className="gap-4">
                   {selectedCoop.features.map((feature, index) => (
                     <View key={index} className="flex flex-row gap-3">
-                      <View className="bg-gold-600/15 p-2 rounded-lg h-10 w-10 items-center justify-center">
-                        <Icon as={feature.icon} size={20} className="text-gold-400" />
+                      <View className="bg-primary/15 p-2 rounded-lg h-10 w-10 items-center justify-center">
+                        <Icon as={feature.icon} size={20} className="text-primary" />
                       </View>
                       <View className="flex-1">
-                        <Text className="font-medium text-white">{feature.title}</Text>
-                        <Text className="text-sm text-charcoal-100">{feature.description}</Text>
+                        <Text className="font-medium text-foreground">{feature.title}</Text>
+                        <Text className="text-sm text-muted-foreground">{feature.description}</Text>
                       </View>
                     </View>
                   ))}
@@ -982,13 +982,13 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
             </Card>
 
             {/* Eligibility */}
-            <Card className="bg-gold-600/10 border-gold-600/25 mb-6">
+            <Card className="bg-primary/10 border-primary/25 mb-6">
               <CardContent className="p-4">
                 <View className="flex flex-row items-start gap-2">
-                  <Icon as={Shield} size={20} className="text-gold-400 mt-0.5" />
+                  <Icon as={Shield} size={20} className="text-primary mt-0.5" />
                   <View className="flex-1">
-                    <Text className="font-medium text-gold-300 mb-1">Eligibility</Text>
-                    <Text className="text-sm text-gold-100">{selectedCoop.eligibility}</Text>
+                    <Text className="font-medium text-primary mb-1">Eligibility</Text>
+                    <Text className="text-sm text-muted-foreground">{selectedCoop.eligibility}</Text>
                   </View>
                 </View>
               </CardContent>
@@ -996,21 +996,21 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
 
             {/* Action Buttons */}
             <View className="gap-3 mb-6">
-              <Button className="bg-gold-600 h-12 rounded-xl" onPress={startApplication}>
-                <Text className="text-charcoal-900 font-black">Apply to Join {selectedCoop.name}</Text>
-                <Icon as={ChevronRight} size={16} className="text-charcoal-900 ml-2" />
+              <Button className="bg-primary h-12 rounded-xl" onPress={startApplication}>
+                <Text className="text-primary-foreground font-black">Apply to Join {selectedCoop.name}</Text>
+                <Icon as={ChevronRight} size={16} className="text-primary-foreground ml-2" />
               </Button>
-              <Button variant="outline" onPress={prevStep} className="border-white/15 bg-white/5 h-12 rounded-xl">
-                <Icon as={ChevronLeft} size={16} className="text-white" />
-                <Text className="text-white ml-1">Back to Commons</Text>
+              <Button variant="outline" onPress={prevStep} className="border-border bg-card h-12 rounded-xl">
+                <Icon as={ChevronLeft} size={16} className="text-foreground" />
+                <Text className="text-foreground ml-1">Back to Commons</Text>
               </Button>
             </View>
 
             {/* Login Link */}
             <View className="items-center">
               <Button variant="ghost" onPress={goToLogin}>
-                <Text className="text-charcoal-100">Already a member? </Text>
-                <Text className="text-gold-400 font-semibold">Sign In</Text>
+                <Text className="text-muted-foreground">Already a member? </Text>
+                <Text className="text-primary font-semibold">Sign In</Text>
               </Button>
             </View>
           </View>
@@ -1028,35 +1028,35 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
         <View className="w-full max-w-md mx-auto">
           {/* Header */}
           <View className="items-center mb-8">
-            <View className="bg-gold-600 p-3 rounded-full mb-4">
+            <View className="bg-primary p-3 rounded-full mb-4">
               <Icon as={Building} size={32} className="text-white" />
             </View>
-            <Text className="text-2xl font-bold text-charcoal-800 mb-2 text-center">
+            <Text className="text-2xl font-bold text-foreground mb-2 text-center">
               Join {selectedCoop?.name || 'Commons'}
             </Text>
-            <Text className="text-charcoal-600 text-center">Step 1 of 4: Personal Information</Text>
+            <Text className="text-muted-foreground text-center">Step 1 of 4: Personal Information</Text>
           </View>
 
-          <Card className="bg-white border-cream-200">
+          <Card className="bg-white border-border">
             <CardContent className="p-6">
               <View className="gap-4">
                 {/* Name Fields */}
                 <View className="flex flex-row gap-3">
                   <View className="flex-1">
-                    <Label className="text-charcoal-700">First Name</Label>
+                    <Label className="text-foreground">First Name</Label>
                     <Input
                       value={formData.firstName}
                       onChangeText={(text) => handleInputChange('firstName', text)}
-                      className="mt-1 border-cream-300"
+                      className="mt-1 border-input"
                       placeholder="Marcus"
                     />
                   </View>
                   <View className="flex-1">
-                    <Label className="text-charcoal-700">Last Name</Label>
+                    <Label className="text-foreground">Last Name</Label>
                     <Input
                       value={formData.lastName}
                       onChangeText={(text) => handleInputChange('lastName', text)}
-                      className="mt-1 border-cream-300"
+                      className="mt-1 border-input"
                       placeholder="Johnson"
                     />
                   </View>
@@ -1064,11 +1064,11 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
 
                 {/* Email */}
                 <View>
-                  <Label className="text-charcoal-700">Email</Label>
+                  <Label className="text-foreground">Email</Label>
                   <Input
                     value={formData.email}
                     onChangeText={(text) => handleInputChange('email', text)}
-                    className="mt-1 border-cream-300"
+                    className="mt-1 border-input"
                     placeholder="marcus@example.com"
                     keyboardType="email-address"
                     autoCapitalize="none"
@@ -1077,11 +1077,11 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
 
                 {/* Phone */}
                 <View>
-                  <Label className="text-charcoal-700">Phone Number</Label>
+                  <Label className="text-foreground">Phone Number</Label>
                   <Input
                     value={formData.phone}
                     onChangeText={(text) => handleInputChange('phone', text)}
-                    className="mt-1 border-cream-300"
+                    className="mt-1 border-input"
                     placeholder="(555) 123-4567"
                     keyboardType="phone-pad"
                   />
@@ -1089,12 +1089,12 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
 
                 {/* Password */}
                 <View>
-                  <Label className="text-charcoal-700">Password</Label>
+                  <Label className="text-foreground">Password</Label>
                   <View className="relative mt-1">
                     <Input
                       value={formData.password}
                       onChangeText={(text) => handleInputChange('password', text)}
-                      className="border-cream-300 pr-12"
+                      className="border-input pr-12"
                       placeholder="Create a strong password"
                       secureTextEntry={!showPassword}
                     />
@@ -1105,7 +1105,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                       <Icon
                         as={showPassword ? EyeOff : Eye}
                         size={16}
-                        className="text-charcoal-500"
+                        className="text-muted-foreground"
                       />
                     </Pressable>
                   </View>
@@ -1113,12 +1113,12 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
 
                 {/* Confirm Password */}
                 <View>
-                  <Label className="text-charcoal-700">Confirm Password</Label>
+                  <Label className="text-foreground">Confirm Password</Label>
                   <View className="relative mt-1">
                     <Input
                       value={formData.confirmPassword}
                       onChangeText={(text) => handleInputChange('confirmPassword', text)}
-                      className="border-cream-300 pr-12"
+                      className="border-input pr-12"
                       placeholder="Confirm your password"
                       secureTextEntry={!showConfirmPassword}
                     />
@@ -1129,7 +1129,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                       <Icon
                         as={showConfirmPassword ? EyeOff : Eye}
                         size={16}
-                        className="text-charcoal-500"
+                        className="text-muted-foreground"
                       />
                     </Pressable>
                   </View>
@@ -1141,8 +1141,8 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
           {/* Navigation */}
           <View className="flex flex-row justify-between items-center mt-6">
             <Button variant="ghost" onPress={prevStep}>
-              <Icon as={ChevronLeft} size={16} className="text-charcoal-600" />
-              <Text className="text-charcoal-600 ml-1">Back</Text>
+              <Icon as={ChevronLeft} size={16} className="text-muted-foreground" />
+              <Text className="text-muted-foreground ml-1">Back</Text>
             </Button>
             <Button
               onPress={nextStep}
@@ -1153,7 +1153,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                 !formData.password ||
                 !formData.confirmPassword
               }
-              className="bg-red-700"
+              className="bg-primary"
             >
               <Text className="text-white font-semibold">Continue</Text>
               <Icon as={ChevronRight} size={16} className="text-white ml-1" />
@@ -1163,8 +1163,8 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
           {/* Login Link */}
           <View className="items-center mt-6">
             <Button variant="ghost" onPress={goToLogin}>
-              <Text className="text-charcoal-600">Have an account? </Text>
-              <Text className="font-semibold text-gold-700">Sign In</Text>
+              <Text className="text-muted-foreground">Have an account? </Text>
+              <Text className="font-semibold text-primary">Sign In</Text>
             </Button>
           </View>
         </View>
@@ -1182,33 +1182,33 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
         <View className="w-full max-w-md mx-auto">
           {/* Header */}
           <View className="items-center mb-8">
-            <View className="bg-red-700 p-3 rounded-full mb-4">
+            <View className="bg-primary p-3 rounded-full mb-4">
               <Icon as={Heart} size={32} className="text-white" />
             </View>
-            <Text className="text-2xl font-bold text-charcoal-800 mb-2 text-center">
+            <Text className="text-2xl font-bold text-foreground mb-2 text-center">
               {selectedCoop?.name} Application
             </Text>
-            <Text className="text-charcoal-600 text-center">Step 2 of 4: Tell us about yourself</Text>
+            <Text className="text-muted-foreground text-center">Step 2 of 4: Tell us about yourself</Text>
           </View>
 
           {isLoadingQuestions ? (
-            <Card className="bg-white border-cream-200">
+            <Card className="bg-white border-border">
               <CardContent className="p-6">
                 <View className="items-center justify-center py-8">
-                  <ActivityIndicator size="large" color="#991b1b" />
-                  <Text className="text-charcoal-600 mt-4">Loading questions...</Text>
+                  <ActivityIndicator size="large" color="#FF6B00" />
+                  <Text className="text-muted-foreground mt-4">Loading questions...</Text>
                 </View>
               </CardContent>
             </Card>
           ) : (
-            <Card className="bg-white border-cream-200">
+            <Card className="bg-white border-border">
               <CardContent className="p-6">
                 <View className="gap-6">
                   {applicationQuestions.map((question) => renderDynamicQuestion(question))}
                   
                   {applicationQuestions.length === 0 && (
                     <View className="items-center py-8">
-                      <Text className="text-charcoal-600">No questions available for this commons.</Text>
+                      <Text className="text-muted-foreground">No questions available for this commons.</Text>
                     </View>
                   )}
                 </View>
@@ -1219,8 +1219,8 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
           {/* Navigation */}
           <View className="flex flex-row justify-between items-center mt-6">
             <Button variant="ghost" onPress={prevStep}>
-              <Icon as={ChevronLeft} size={16} className="text-charcoal-600" />
-              <Text className="text-charcoal-600 ml-1">Back</Text>
+              <Icon as={ChevronLeft} size={16} className="text-muted-foreground" />
+              <Text className="text-muted-foreground ml-1">Back</Text>
             </Button>
             <Button
               onPress={nextStep}
@@ -1235,7 +1235,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                   return !answer || answer === '';
                 })
               }
-              className="bg-red-700"
+              className="bg-primary"
             >
               <Text className="text-white font-semibold">Continue</Text>
               <Icon as={ChevronRight} size={16} className="text-white ml-1" />
@@ -1256,18 +1256,18 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
           <View className="w-full max-w-md mx-auto">
             {/* Header */}
             <View className="items-center mb-8">
-              <View className="bg-amber-500 p-3 rounded-full mb-4">
+            <View className="bg-primary p-3 rounded-full mb-4">
                 <Icon as={Camera} size={32} className="text-white" />
               </View>
-              <Text className="text-2xl font-bold text-charcoal-800 mb-2 text-center">
+              <Text className="text-2xl font-bold text-foreground mb-2 text-center">
                 Introduce Yourself
               </Text>
-              <Text className="text-charcoal-600 text-center">
+              <Text className="text-muted-foreground text-center">
                 Step 3 of 4: Share a video and photo (optional but recommended)
               </Text>
             </View>
 
-            <Card className="bg-white border-cream-200">
+            <Card className="bg-white border-border">
               <CardContent className="p-6">
                 {/* Video Upload */}
                 <View className="mb-6">
@@ -1280,7 +1280,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                 </View>
 
                 {/* Photo Upload */}
-                <View className="border-t border-cream-200 pt-6">
+                <View className="border-t border-border pt-6">
                   <PhotoUpload
                     onUploadComplete={(cid, url) => {
                       handleInputChange('photoCID', cid);
@@ -1292,9 +1292,9 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                 </View>
 
                 {/* Info */}
-                <View className="bg-cream-100 border border-cream-300 rounded-lg p-4 mt-6">
-                  <Text className="text-sm text-charcoal-800 font-semibold mb-2">Why upload media?</Text>
-                  <Text className="text-sm text-charcoal-600">
+                <View className="bg-secondary border border-border rounded-2xl p-4 mt-6">
+                  <Text className="text-sm text-foreground font-semibold mb-2">Why upload media?</Text>
+                  <Text className="text-sm text-muted-foreground">
                     • Helps community members get to know you{'\n'}
                     • Increases your application approval chances{'\n'}
                     • Builds trust in the commons{'\n'}
@@ -1307,12 +1307,12 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
             {/* Navigation */}
             <View className="flex flex-row justify-between items-center mt-6">
               <Button variant="ghost" onPress={prevStep}>
-                <Icon as={ChevronLeft} size={16} className="text-charcoal-600" />
-                <Text className="text-charcoal-600 ml-1">Back</Text>
+                <Icon as={ChevronLeft} size={16} className="text-muted-foreground" />
+                <Text className="text-muted-foreground ml-1">Back</Text>
               </Button>
               <Button
                 onPress={nextStep}
-                className="bg-amber-500"
+                className="bg-primary"
               >
                 <Text className="text-white font-semibold">
                   {formData.videoCID && formData.photoCID ? 'Continue' : 'Skip for Now'}
@@ -1335,26 +1335,26 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
         <View className="w-full max-w-md mx-auto">
           {/* Header */}
           <View className="items-center mb-8">
-            <View className="bg-gold-600 p-3 rounded-full mb-4">
+            <View className="bg-primary p-3 rounded-full mb-4">
               <Icon as={Shield} size={32} className="text-white" />
             </View>
-            <Text className="text-2xl font-bold text-charcoal-800 mb-2 text-center">
+            <Text className="text-2xl font-bold text-foreground mb-2 text-center">
               {selectedCoop?.name} Application
             </Text>
-            <Text className="text-charcoal-600 text-center">Step 4 of 4: Review & Submit</Text>
+            <Text className="text-muted-foreground text-center">Step 4 of 4: Review & Submit</Text>
           </View>
 
-          <Card className="bg-white border-cream-200">
+          <Card className="bg-white border-border">
             <CardContent className="p-6">
               <View className="gap-6">
                 {/* Terms Agreement */}
-                <View className="gap-3 pt-4 border-t border-cream-200">
+                <View className="gap-3 pt-4 border-t border-border">
                   <View className="flex flex-row items-start gap-3">
                     <Checkbox
                       checked={formData.agreeToCoopValues}
                       onCheckedChange={(checked) => handleInputChange('agreeToCoopValues', !!checked)}
                     />
-                    <Text className="text-charcoal-800 font-medium flex-1">
+                    <Text className="text-foreground font-medium flex-1">
                       I align with this commons&apos; values and mission
                     </Text>
                   </View>
@@ -1364,7 +1364,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                       checked={formData.agreeToTerms}
                       onCheckedChange={(checked) => handleInputChange('agreeToTerms', !!checked)}
                     />
-                    <Text className="text-charcoal-800 font-medium flex-1">
+                    <Text className="text-foreground font-medium flex-1">
                       I agree to the Terms of Service and Community Charter
                     </Text>
                   </View>
@@ -1374,7 +1374,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                       checked={formData.agreeToPrivacy}
                       onCheckedChange={(checked) => handleInputChange('agreeToPrivacy', !!checked)}
                     />
-                    <Text className="text-charcoal-800 font-medium flex-1">
+                    <Text className="text-foreground font-medium flex-1">
                       I agree to the Privacy Policy
                     </Text>
                   </View>
@@ -1401,8 +1401,8 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
           {/* Navigation */}
           <View className="flex flex-row justify-between items-center mt-6">
             <Button variant="ghost" onPress={prevStep}>
-              <Icon as={ChevronLeft} size={16} className="text-charcoal-600" />
-              <Text className="text-charcoal-600 ml-1">Back</Text>
+              <Icon as={ChevronLeft} size={16} className="text-muted-foreground" />
+              <Text className="text-muted-foreground ml-1">Back</Text>
             </Button>
             <Button
               onPress={handleSubmitApplication}
@@ -1418,7 +1418,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                   ? 'bg-green-600' 
                   : submissionStatus === 'error'
                   ? 'bg-red-800'
-                  : 'bg-red-700'
+                  : 'bg-primary'
               }
             >
               <Text className="text-white font-semibold">
@@ -1448,8 +1448,8 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
             <View className="bg-green-600 p-4 rounded-full mb-4">
               <Icon as={Award} size={40} className="text-white" />
             </View>
-            <Text className="text-2xl font-bold text-charcoal-800 mb-2 text-center">Application Submitted!</Text>
-            <Text className="text-charcoal-600 text-center">
+            <Text className="text-2xl font-bold text-foreground mb-2 text-center">Application Submitted!</Text>
+            <Text className="text-muted-foreground text-center">
               Welcome to the {selectedCoop?.name} community review process
             </Text>
           </View>
@@ -1463,8 +1463,8 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                     <Text className="text-sm font-bold text-white">1</Text>
                   </View>
                   <View className="flex-1">
-                    <Text className="font-medium text-charcoal-800">Community Review</Text>
-                    <Text className="text-sm text-charcoal-600">
+                    <Text className="font-medium text-foreground">Community Review</Text>
+                    <Text className="text-sm text-muted-foreground">
                       Current {selectedCoop?.name} members will review your application (1-2 weeks)
                     </Text>
                   </View>
@@ -1474,8 +1474,8 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                     <Text className="text-sm font-bold text-white">2</Text>
                   </View>
                   <View className="flex-1">
-                    <Text className="font-medium text-charcoal-800">Community Interview</Text>
-                    <Text className="text-sm text-charcoal-600">You may be invited to meet with community members</Text>
+                    <Text className="font-medium text-foreground">Community Interview</Text>
+                    <Text className="text-sm text-muted-foreground">You may be invited to meet with community members</Text>
                   </View>
                 </View>
                 <View className="flex flex-row items-start gap-3">
@@ -1483,8 +1483,8 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                     <Text className="text-sm font-bold text-white">3</Text>
                   </View>
                   <View className="flex-1">
-                    <Text className="font-medium text-charcoal-800">Welcome to {selectedCoop?.name}</Text>
-                    <Text className="text-sm text-charcoal-600">
+                    <Text className="font-medium text-foreground">Welcome to {selectedCoop?.name}</Text>
+                    <Text className="text-sm text-muted-foreground">
                       If approved, you&apos;ll receive onboarding materials and access
                     </Text>
                   </View>
@@ -1496,12 +1496,12 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
           <Card className="bg-gold-50 border-gold-200 mt-6">
             <CardContent className="p-4">
               <View className="flex flex-row items-center gap-2">
-                <Icon as={Building} size={20} className="text-gold-600" />
+                <Icon as={Building} size={20} className="text-primary" />
                 <View className="flex-1">
                   <Text className="font-medium text-gold-800">
                     Application Reference: #{Math.random().toString(36).substr(2, 9).toUpperCase()}
                   </Text>
-                  <Text className="text-sm text-gold-700">Save this reference number for your records</Text>
+                  <Text className="text-sm text-primary">Save this reference number for your records</Text>
                 </View>
               </View>
             </CardContent>
@@ -1509,14 +1509,14 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
 
           {/* Action Button */}
           <View className="mt-8">
-            <Button className="w-full bg-gold-600" onPress={goToLogin}>
+            <Button className="w-full bg-primary" onPress={goToLogin}>
               <Text className="text-white font-semibold">Continue to Sign In</Text>
             </Button>
           </View>
 
           {/* Community Message */}
           <View className="items-center mt-6">
-            <Badge className={selectedCoop?.bgColor || 'bg-gold-600'}>
+            <Badge className={selectedCoop?.bgColor || 'bg-primary'}>
               <Text className="text-white font-medium">{selectedCoop?.tagline || 'Building Community Wealth Together'}</Text>
             </Badge>
           </View>
@@ -1532,26 +1532,27 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
         <View className="w-full max-w-md mx-auto">
           {/* Header */}
           <View className="items-center mb-8">
-            <View className="bg-red-700 p-3 rounded-full mb-4">
+            <View className="bg-primary p-3 rounded-full mb-4">
               <Icon as={Building} size={32} className="text-white" />
             </View>
-            <Text className="text-3xl font-bold text-charcoal-900 mb-2 text-center">Welcome Back</Text>
-            <Text className="text-charcoal-700 text-center leading-6">
-              {codeSent ? 'Enter the code sent to your email' : 'Sign in to access your commons membership'}
+              <Text className="text-xs font-black uppercase text-gray-500">Personal Details</Text>
+              <Text className="text-3xl font-black text-foreground mb-2 text-center">Join a Co-op or Log In</Text>
+            <Text className="text-muted-foreground text-center leading-6">
+              {codeSent ? 'Enter the code sent to your email' : 'Start your application to join a cooperative or sign in with passwordless email verification.'}
             </Text>
           </View>
 
-          <Card className="bg-white border-cream-200">
+          <Card className="bg-white border-border">
             <CardContent className="p-6">
               <View className="gap-5">
                 {/* Email */}
                 <View>
-                  <Label className="text-charcoal-700">Email</Label>
+                  <Label className="text-foreground">Email address</Label>
                   <Input
                     value={loginData.email}
                     onChangeText={(text) => setLoginData(prev => ({ ...prev, email: text }))}
-                    className="mt-1 border-cream-300"
-                    placeholder="marcus@example.com"
+                    className="mt-1 border-input"
+                    placeholder="name@email.com"
                     keyboardType="email-address"
                     autoCapitalize="none"
                     editable={!codeSent}
@@ -1561,11 +1562,11 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                 {/* Code Input - shown after code is sent */}
                 {codeSent && (
                   <View>
-                    <Label className="text-charcoal-700">Verification Code</Label>
+                    <Label className="text-foreground">Verification Code</Label>
                     <Input
                       value={loginData.code}
                       onChangeText={(text) => setLoginData(prev => ({ ...prev, code: text }))}
-                      className="mt-1 border-cream-300"
+                      className="mt-1 border-input"
                       placeholder="Enter 6-digit code"
                       keyboardType="number-pad"
                       maxLength={6}
@@ -1584,18 +1585,18 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                 {/* Submit Button */}
                 {!codeSent ? (
                   <Button
-                    className="h-auto min-h-16 w-full bg-red-700 px-4 py-4"
+                    className="h-auto min-h-16 w-full bg-primary px-4 py-4"
                     onPress={handleRequestCode}
                     disabled={isRequestingCode || !loginData.email}
                   >
                     <Text className="text-center text-white font-semibold">
-                      {isRequestingCode ? 'Sending Code...' : 'Send Login Code'}
+                      {isRequestingCode ? 'Sending Code...' : 'Log in with code'}
                     </Text>
                   </Button>
                 ) : (
                   <View className="gap-3">
                     <Button
-                      className="h-auto min-h-16 w-full bg-red-700 px-4 py-4"
+                      className="h-auto min-h-16 w-full bg-primary px-4 py-4"
                       onPress={handleVerifyCode}
                       disabled={isVerifyingCode || !loginData.code || loginData.code.length !== 6}
                     >
@@ -1607,11 +1608,11 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                     {/* Resend Code Button */}
                     <Button
                       variant="outline"
-                      className="h-auto min-h-14 w-full border-cream-300 px-4 py-3"
+                      className="h-auto min-h-14 w-full border-input px-4 py-3"
                       onPress={handleRequestCode}
                       disabled={!canResend || isRequestingCode}
                     >
-                      <Text className="text-center text-charcoal-700">
+                      <Text className="text-center text-foreground">
                         {canResend ? 'Resend Code' : `Resend in ${resendTimer}s`}
                       </Text>
                     </Button>
@@ -1626,7 +1627,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
                         setLoginError('');
                       }}
                     >
-                      <Text className="text-gold-700">Change Email</Text>
+                      <Text className="text-primary">Change Email</Text>
                     </Button>
                   </View>
                 )}
@@ -1637,14 +1638,14 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
           {/* Signup Link */}
           <View className="items-center mt-6">
             <Button variant="ghost" onPress={goToBrowseCoops}>
-              <Text className="text-charcoal-700">Don&apos;t have an account? </Text>
-              <Text className="font-semibold text-gold-700">Join a Commons</Text>
+              <Text className="text-foreground">Don&apos;t have an account? </Text>
+              <Text className="font-semibold text-primary">Join a Commons</Text>
             </Button>
           </View>
 
           {/* Community Notice */}
           <View className="items-center mt-8">
-            <Badge className="bg-gold-600">
+            <Badge className="bg-primary">
               <Text className="text-white font-medium">Building Community Wealth Together</Text>
             </Badge>
           </View>

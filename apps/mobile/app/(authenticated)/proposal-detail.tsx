@@ -32,7 +32,7 @@ import {
   RotateCcw,
   History,
 } from 'lucide-react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
@@ -55,7 +55,7 @@ function statusLabel(status: string) {
 function decisionColor(d?: string) {
   if (d === 'advance') return { bg: '#F0FDF4', border: '#86EFAC', text: '#15803D', label: 'Advance' };
   if (d === 'block')   return { bg: '#FEF2F2', border: '#FCA5A5', text: '#DC2626', label: 'Block' };
-  return { bg: '#FFFBEB', border: '#FCD34D', text: '#B45309', label: 'Revise' };
+  return { bg: '#FFFBEB', border: '#FCD34D', text: '#FF6B00', label: 'Revise' };
 }
 
 function walletShort(w?: string) {
@@ -71,7 +71,7 @@ function formatDate(iso: string) {
 
 function ScoreBar({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
   const pct = Math.round(value * 100);
-  const color = pct >= 70 ? '#16A34A' : pct >= 40 ? '#B45309' : '#DC2626';
+  const color = pct >= 70 ? '#16A34A' : pct >= 40 ? '#FF6B00' : '#DC2626';
   return (
     <View className="mb-3">
       <View className="flex-row items-center justify-between mb-1">
@@ -95,14 +95,14 @@ function CommentItem({ comment }: { comment: any }) {
   const initials = name.slice(0, 2).toUpperCase();
 
   const alignmentColor: Record<string, string> = {
-    ALIGNED: '#16A34A', NEUTRAL: '#B45309', MISALIGNED: '#DC2626',
+    ALIGNED: '#16A34A', NEUTRAL: '#FF6B00', MISALIGNED: '#DC2626',
   };
   const aiColor = comment.aiEvaluation ? alignmentColor[comment.aiEvaluation.alignment] : undefined;
 
   return (
     <View className="pb-4 mb-4 border-b border-cream-200 last:border-0">
       <View className="flex-row gap-3">
-        <View className="w-9 h-9 rounded-full bg-gold-600 items-center justify-center flex-shrink-0">
+        <View className="w-9 h-9 rounded-full bg-primary items-center justify-center flex-shrink-0">
           <Text className="text-white text-xs font-bold">{initials}</Text>
         </View>
         <View className="flex-1">
@@ -139,7 +139,20 @@ function CommentItem({ comment }: { comment: any }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function ProposalDetailScreen() {
+export default function ProposalDetailRedirect() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+
+  return (
+    <Redirect
+      href={{
+        pathname: '/(tabs)/proposal-detail',
+        params: id ? { id } : {},
+      } as any}
+    />
+  );
+}
+
+export function ProposalDetailContent() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
 
@@ -292,7 +305,7 @@ export default function ProposalDetailScreen() {
   if (loading) {
     return (
       <SafeAreaView className="flex-1 bg-cream-100 items-center justify-center">
-        <ActivityIndicator size="large" color="#B45309" />
+        <ActivityIndicator size="large" color="#FF6B00" />
       </SafeAreaView>
     );
   }
@@ -301,8 +314,8 @@ export default function ProposalDetailScreen() {
     return (
       <SafeAreaView className="flex-1 bg-cream-100 items-center justify-center p-8">
         <Text className="text-charcoal-500 text-center">Proposal not found.</Text>
-        <TouchableOpacity onPress={() => router.back()} className="mt-4">
-          <Text className="text-gold-700 font-semibold">Go back</Text>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)/proposals' as any)} className="mt-4">
+          <Text className="text-primary font-semibold">Go back</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -357,7 +370,7 @@ export default function ProposalDetailScreen() {
     if (isSubmitted) {
       // Engine returned "revise" — needs more information before it can advance
       steps.push({
-        icon: <Clock size={18} color="#B45309" />,
+        icon: <Clock size={18} color="#FF6B00" />,
         bg: '#FEF3C7',
         label: 'AI Scoring',
         detail: 'Checking alignment with commons goals & charter',
@@ -464,13 +477,17 @@ export default function ProposalDetailScreen() {
   return (
     <SafeAreaView className="flex-1 bg-cream-100">
       {/* Sticky header */}
-      <View className="bg-red-800 px-4 py-3 flex-row items-center gap-3">
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-          <ArrowLeft size={22} color="#fff" />
+      <View className="bg-white px-3 pt-7 pb-2 border-b border-gray-200 flex-row items-center gap-3">
+        <TouchableOpacity
+          onPress={() => router.replace('/(tabs)/proposals' as any)}
+          className="h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
+          accessibilityLabel="Back to proposals"
+        >
+          <ArrowLeft size={22} color="#1F2937" />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-white font-bold text-base" numberOfLines={1}>Proposal Details</Text>
-          <Text className="text-red-200 text-xs">{statusLabel(proposal.status)}</Text>
+          <Text className="text-gray-950 font-black text-xl" numberOfLines={1}>Proposal Details</Text>
+          <Text className="text-slate-600 text-sm font-semibold">{statusLabel(proposal.status)}</Text>
         </View>
       </View>
 
@@ -478,7 +495,7 @@ export default function ProposalDetailScreen() {
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 12 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#B45309" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#FF6B00" />}
           keyboardShouldPersistTaps="handled"
         >
           {/* ── Proposal header ── */}
@@ -486,7 +503,7 @@ export default function ProposalDetailScreen() {
             {/* Badges row */}
             <View className="flex-row flex-wrap gap-2 mb-3">
               <View className="bg-gold-100 rounded-full px-3 py-1">
-                <Text className="text-gold-700 text-xs font-semibold">{categoryLabels[proposal.category] ?? prettifyKey(proposal.category)}</Text>
+                <Text className="text-primary text-xs font-semibold">{categoryLabels[proposal.category] ?? prettifyKey(proposal.category)}</Text>
               </View>
               <View className="rounded-full px-3 py-1" style={{ backgroundColor: dc.bg, borderColor: dc.border, borderWidth: 1 }}>
                 <Text style={{ color: dc.text, fontSize: 12, fontWeight: '600' }}>
@@ -503,7 +520,7 @@ export default function ProposalDetailScreen() {
 
             {/* Proposer info */}
             <View className="bg-cream-50 rounded-xl p-3 flex-row items-center gap-3">
-              <View className="w-10 h-10 rounded-full bg-gold-600 items-center justify-center">
+              <View className="w-10 h-10 rounded-full bg-primary items-center justify-center">
                 <Text className="text-white font-bold text-sm">
                   {(proposal.proposer?.displayName ?? proposal.proposer?.wallet ?? '??').slice(0, 2).toUpperCase()}
                 </Text>
@@ -547,16 +564,16 @@ export default function ProposalDetailScreen() {
                   setShowEditPanel(v => !v);
                 }}
               >
-                <View className="w-9 h-9 rounded-full bg-amber-100 items-center justify-center">
-                  <Pencil size={16} color="#B45309" />
+                <View className="w-9 h-9 rounded-full bg-secondary items-center justify-center">
+                  <Pencil size={16} color="#FF6B00" />
                 </View>
                 <View className="flex-1">
                   <Text className="text-amber-800 font-semibold text-sm">Edit & Resubmit</Text>
-                  <Text className="text-amber-600 text-xs">Update your proposal text and let the AI re-evaluate</Text>
+                  <Text className="text-primary text-xs">Update your proposal text and let the AI re-evaluate</Text>
                 </View>
                 {showEditPanel
-                  ? <ChevronUp size={16} color="#B45309" />
-                  : <ChevronDown size={16} color="#B45309" />
+                  ? <ChevronUp size={16} color="#FF6B00" />
+                  : <ChevronDown size={16} color="#FF6B00" />
                 }
               </TouchableOpacity>
 
@@ -580,7 +597,7 @@ export default function ProposalDetailScreen() {
                     onPress={handleResubmit}
                     disabled={resubmitting || editText.trim().length < 10}
                     className="rounded-xl py-3 flex-row items-center justify-center gap-2"
-                    style={{ backgroundColor: resubmitting || editText.trim().length < 10 ? '#D1D5DB' : '#B45309' }}
+                    style={{ backgroundColor: resubmitting || editText.trim().length < 10 ? '#D1D5DB' : '#FF6B00' }}
                   >
                     {resubmitting
                       ? <ActivityIndicator size="small" color="#fff" />
@@ -678,16 +695,16 @@ export default function ProposalDetailScreen() {
                       Goal mapping {proposal.evaluation.structural_scores.goal_mapping_valid ? 'valid' : 'invalid'}
                     </Text>
                   </View>
-                  <ScoreBar label="Feasibility" value={proposal.evaluation.structural_scores.feasibility_score} icon={<CheckCircle size={13} color="#B45309" />} />
+                  <ScoreBar label="Feasibility" value={proposal.evaluation.structural_scores.feasibility_score} icon={<CheckCircle size={13} color="#FF6B00" />} />
                   {structuralBreakdown.find(b => b.factor === 'feasibility')?.rationale ? (
                     <Text className="text-charcoal-400 text-xs ml-5 -mt-1 mb-1 italic">{structuralBreakdown.find(b => b.factor === 'feasibility')!.rationale}</Text>
                   ) : null}
-                  <ScoreBar label="Risk" value={proposal.evaluation.structural_scores.risk_score} icon={<Shield size={13} color="#B45309" />} />
+                  <ScoreBar label="Risk" value={proposal.evaluation.structural_scores.risk_score} icon={<Shield size={13} color="#FF6B00" />} />
                   <Text className="text-charcoal-400 text-xs ml-5 -mt-1 mb-0.5">Lower risk is better</Text>
                   {structuralBreakdown.find(b => b.factor === 'risk')?.rationale ? (
                     <Text className="text-charcoal-400 text-xs ml-5 mb-1 italic">{structuralBreakdown.find(b => b.factor === 'risk')!.rationale}</Text>
                   ) : null}
-                  <ScoreBar label="Accountability" value={proposal.evaluation.structural_scores.accountability_score} icon={<Users size={13} color="#B45309" />} />
+                  <ScoreBar label="Accountability" value={proposal.evaluation.structural_scores.accountability_score} icon={<Users size={13} color="#FF6B00" />} />
                   {structuralBreakdown.find(b => b.factor === 'accountability')?.rationale ? (
                     <Text className="text-charcoal-400 text-xs ml-5 -mt-1 mb-1 italic">{structuralBreakdown.find(b => b.factor === 'accountability')!.rationale}</Text>
                   ) : null}
@@ -708,7 +725,7 @@ export default function ProposalDetailScreen() {
                       <ScoreBar
                         label={s.goal_id.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
                         value={s.impact_score}
-                        icon={<TrendingUp size={11} color="#B45309" />}
+                        icon={<TrendingUp size={11} color="#FF6B00" />}
                       />
                       <Text className="text-charcoal-400 text-xs ml-5 -mt-1 mb-0.5">
                         {Math.round(s.goal_priority_weight * 100)}% priority weight
@@ -724,10 +741,10 @@ export default function ProposalDetailScreen() {
               {/* Risk Flags */}
               {proposal.evaluation?.risk_flags && proposal.evaluation.risk_flags.length > 0 && (
                 <View className="mt-3 pt-3 border-t border-cream-200">
-                  <Text className="text-amber-700 font-semibold text-sm mb-2">Risk Flags</Text>
+                  <Text className="text-primary font-semibold text-sm mb-2">Risk Flags</Text>
                   {proposal.evaluation.risk_flags.map((flag: string, i: number) => (
                     <View key={i} className="flex-row gap-2 mb-1">
-                      <AlertCircle size={13} color="#B45309" style={{ marginTop: 1 }} />
+                      <AlertCircle size={13} color="#FF6B00" style={{ marginTop: 1 }} />
                       <Text className="text-charcoal-600 text-xs flex-1">{flag}</Text>
                     </View>
                   ))}
@@ -771,8 +788,8 @@ export default function ProposalDetailScreen() {
             <View className="bg-white rounded-2xl p-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
               <Text className="text-charcoal-800 font-semibold text-base mb-3">AI Alternatives</Text>
               {proposal.bestAlternative && (
-                <View className="p-3 rounded-xl border border-amber-300 bg-amber-50 mb-3">
-                  <Text className="text-amber-600 font-semibold text-xs mb-1">⭐ Recommended Alternative</Text>
+                <View className="p-3 rounded-xl border border-border bg-secondary mb-3">
+                  <Text className="text-primary font-semibold text-xs mb-1">⭐ Recommended Alternative</Text>
                   <Text className="text-charcoal-800 font-medium text-sm">{proposal.bestAlternative.label}</Text>
                   <Text className="text-charcoal-500 text-xs mt-1 leading-relaxed">{proposal.bestAlternative.rationale}</Text>
                 </View>
@@ -782,7 +799,7 @@ export default function ProposalDetailScreen() {
                   <Text className="text-charcoal-800 font-medium text-sm">{alt.label}</Text>
                   <Text className="text-charcoal-500 text-xs mt-1 leading-relaxed">{alt.rationale}</Text>
                   {alt.overallScore != null && (
-                    <Text className="text-amber-600 text-xs mt-1 font-semibold">
+                    <Text className="text-primary text-xs mt-1 font-semibold">
                       Overall Score: {Math.round((alt.overallScore ?? 0) * 100)}%
                     </Text>
                   )}
@@ -799,9 +816,9 @@ export default function ProposalDetailScreen() {
                 const sev: string = item.severity ?? (item.blocking ? 'BLOCKER' : 'SOFT');
                 const isBlocker = sev === 'BLOCKER';
                 const isInfo = sev === 'INFO';
-                const iconColor = isBlocker ? '#DC2626' : isInfo ? '#2563EB' : '#B45309';
+                const iconColor = isBlocker ? '#DC2626' : isInfo ? '#2563EB' : '#FF6B00';
                 const bgColor = isBlocker ? '#FEF2F2' : isInfo ? '#EFF6FF' : '#FFFBEB';
-                const textColor = isBlocker ? '#DC2626' : isInfo ? '#2563EB' : '#B45309';
+                const textColor = isBlocker ? '#DC2626' : isInfo ? '#2563EB' : '#FF6B00';
                 return (
                   <View key={i} className="flex-row gap-2 mb-3">
                     <AlertCircle size={16} color={iconColor} style={{ marginTop: 1 }} />
@@ -929,12 +946,12 @@ export default function ProposalDetailScreen() {
                 disabled={!user?.walletAddress || reactingTo !== null}
                 className="flex-1 rounded-xl border-2 p-4 items-center"
                 style={{
-                  borderColor: reactionCounts.myReaction === 'CONCERN' ? '#B45309' : '#E9E0D0',
+                  borderColor: reactionCounts.myReaction === 'CONCERN' ? '#FF6B00' : '#E9E0D0',
                   backgroundColor: reactionCounts.myReaction === 'CONCERN' ? '#FFFBEB' : '#fff',
                   opacity: (!user?.walletAddress || reactingTo !== null) ? 0.5 : 1,
                 }}
               >
-                {reactingTo === 'CONCERN' ? <ActivityIndicator size="small" color="#B45309" /> : <AlertCircle size={22} color={reactionCounts.myReaction === 'CONCERN' ? '#B45309' : '#9CA3AF'} />}
+                {reactingTo === 'CONCERN' ? <ActivityIndicator size="small" color="#FF6B00" /> : <AlertCircle size={22} color={reactionCounts.myReaction === 'CONCERN' ? '#FF6B00' : '#9CA3AF'} />}
                 <Text className="text-charcoal-800 font-bold text-base mt-1">Concern</Text>
                 <Text className="text-charcoal-500 text-sm font-semibold">{reactionCounts.concern}</Text>
               </TouchableOpacity>
@@ -958,7 +975,7 @@ export default function ProposalDetailScreen() {
               className="p-4 flex-row items-center justify-between"
             >
               <View className="flex-row items-center gap-2">
-                <FileText size={16} color="#B45309" />
+                <FileText size={16} color="#FF6B00" />
                 <Text className="text-charcoal-800 font-semibold text-base">Full Proposal Details</Text>
               </View>
               {showFull ? <ChevronUp size={18} color="#6B7280" /> : <ChevronDown size={18} color="#6B7280" />}
@@ -983,7 +1000,7 @@ export default function ProposalDetailScreen() {
           <View className="bg-white rounded-2xl p-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
             <View className="flex-row items-center justify-between mb-4">
               <View className="flex-row items-center gap-2">
-                <MessageCircle size={16} color="#B45309" />
+                <MessageCircle size={16} color="#FF6B00" />
                 <Text className="text-charcoal-800 font-semibold text-base">Community Discussion</Text>
               </View>
               <View className="bg-cream-100 rounded-full px-2 py-0.5">
@@ -1013,7 +1030,7 @@ export default function ProposalDetailScreen() {
                   <TouchableOpacity
                     onPress={postComment}
                     disabled={!comment.trim() || posting}
-                    className="bg-red-700 rounded-xl px-4 py-2 flex-row items-center gap-1.5"
+                    className="bg-primary rounded-xl px-4 py-2 flex-row items-center gap-1.5"
                     style={{ opacity: comment.trim() && !posting ? 1 : 0.4 }}
                   >
                     {posting
@@ -1044,8 +1061,8 @@ export default function ProposalDetailScreen() {
                     onPress={() => setShowAll(v => !v)}
                     className="flex-row items-center justify-center gap-1 py-2"
                   >
-                    {showAll ? <ChevronUp size={16} color="#B45309" /> : <ChevronDown size={16} color="#B45309" />}
-                    <Text className="text-gold-700 text-sm font-semibold">
+                    {showAll ? <ChevronUp size={16} color="#FF6B00" /> : <ChevronDown size={16} color="#FF6B00" />}
+                    <Text className="text-primary text-sm font-semibold">
                       {showAll ? 'Show less' : `View all ${comments.length} comments`}
                     </Text>
                   </TouchableOpacity>
@@ -1058,14 +1075,14 @@ export default function ProposalDetailScreen() {
           {revisions.length > 0 && (
             <View className="bg-white rounded-2xl overflow-hidden" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
               <View className="p-4 flex-row items-center gap-2 border-b border-cream-200">
-                <History size={16} color="#B45309" />
+                <History size={16} color="#FF6B00" />
                 <Text className="text-charcoal-800 font-semibold text-base flex-1">Submission History</Text>
                 <Text className="text-charcoal-400 text-xs">{revisions.length} revision{revisions.length !== 1 ? 's' : ''}</Text>
               </View>
               {[...revisions].reverse().map((rev: any) => {
                 const isExpanded = expandedRevision === rev.revisionNumber;
                 const decBg = rev.decision === 'advance' ? '#F0FDF4' : rev.decision === 'block' ? '#FEF2F2' : '#FFFBEB';
-                const decColor = rev.decision === 'advance' ? '#15803D' : rev.decision === 'block' ? '#DC2626' : '#B45309';
+                const decColor = rev.decision === 'advance' ? '#15803D' : rev.decision === 'block' ? '#DC2626' : '#FF6B00';
                 const overallPct = rev.evaluation?.computed_scores?.overall_score != null
                   ? Math.round(rev.evaluation.computed_scores.overall_score * 100)
                   : null;
@@ -1083,7 +1100,7 @@ export default function ProposalDetailScreen() {
                         {new Date(rev.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </Text>
                       {overallPct != null && (
-                        <Text style={{ color: overallPct >= 70 ? '#16A34A' : overallPct >= 40 ? '#B45309' : '#DC2626', fontSize: 12, fontWeight: '700' }}>
+                        <Text style={{ color: overallPct >= 70 ? '#16A34A' : overallPct >= 40 ? '#FF6B00' : '#DC2626', fontSize: 12, fontWeight: '700' }}>
                           {overallPct}%
                         </Text>
                       )}
@@ -1097,7 +1114,7 @@ export default function ProposalDetailScreen() {
                             <Text className="text-charcoal-500 text-xs font-semibold uppercase tracking-wide mb-1">Decision Reasons</Text>
                             {rev.decisionReasons.map((r: string, i: number) => (
                               <View key={i} className="flex-row items-start gap-1.5 mb-1">
-                                <Text className="text-amber-600 mt-0.5">•</Text>
+                                <Text className="text-primary mt-0.5">•</Text>
                                 <Text className="text-charcoal-600 text-xs flex-1">{r}</Text>
                               </View>
                             ))}

@@ -27,7 +27,7 @@ import { useCoin } from '@/contexts/platform-config-context';
 import { api } from '@/lib/api';
 
 const STATUS_CONFIG: Record<string, { color: string; bgColor: string; icon: any; label: string }> = {
-  PENDING: { color: '#D97706', bgColor: 'bg-amber-100 dark:bg-amber-900/30', icon: Clock, label: 'Pending' },
+  PENDING: { color: '#FF8A2A', bgColor: 'bg-secondary dark:bg-amber-900/30', icon: Clock, label: 'Pending' },
   PROCESSING: { color: '#2563EB', bgColor: 'bg-blue-100 dark:bg-blue-900/30', icon: CreditCard, label: 'Paid' },
   COMPLETED: { color: '#16A34A', bgColor: 'bg-green-100 dark:bg-green-900/30', icon: CheckCircle, label: 'Completed' },
   FAILED: { color: '#DC2626', bgColor: 'bg-red-100 dark:bg-red-900/30', icon: XCircle, label: 'Failed' },
@@ -99,7 +99,7 @@ function OrderCard({ transaction, onPress }: OrderCardProps) {
               )}
               {scReward.status === 'PENDING' && (
                 <>
-                  <Clock size={14} color="#D97706" />
+                  <Clock size={14} color="#FF8A2A" />
                   <Text className="text-amber-400 text-sm ml-1 font-semibold">SC Pending</Text>
                 </>
               )}
@@ -120,7 +120,7 @@ function OrderCard({ transaction, onPress }: OrderCardProps) {
       {/* Mismatch Alert */}
       {hasScMismatch && (
         <View className="mt-3 p-2 bg-amber-900/20 rounded-lg flex-row items-center">
-          <AlertCircle size={14} color="#D97706" />
+          <AlertCircle size={14} color="#FF8A2A" />
           <Text className="text-amber-400 text-xs ml-2">
             {scReward.status === 'PENDING' 
               ? 'SC reward processing...' 

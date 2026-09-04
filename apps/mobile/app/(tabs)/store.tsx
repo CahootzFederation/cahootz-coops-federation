@@ -111,30 +111,30 @@ export default function StoreScreen() {
       className="flex-1"
       style={{ backgroundColor: '#FFFBEB' }}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#B45309" />
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF6B00" />
       }
     >
       {/* Header */}
       <View className="px-4 pt-14 pb-4">
-        <Text className="text-xl font-bold text-gray-800">Community Store</Text>
-        <Text className="text-gray-500 text-sm">Support local businesses, earn {coopCoin.symbol} rewards</Text>
+        <Text className="text-xl font-bold text-gray-800">Commons Shops</Text>
+        <Text className="text-gray-500 text-sm">Support commons businesses, earn {coopCoin.symbol} rewards</Text>
       </View>
 
       {/* Search Bar */}
       <View className="px-4 mb-4">
-        <View className="flex-row items-center bg-white rounded-xl px-4 py-2 border border-amber-200">
+        <View className="flex-row items-center bg-white rounded-xl px-4 py-2 border border-border">
           <Search size={20} color="#9CA3AF" />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search stores..."
+            placeholder="Search commons stores..."
             placeholderTextColor="#9CA3AF"
             autoCapitalize="none"
             className="ml-3 h-10 flex-1 text-base text-gray-800"
           />
           {searchQuery ? (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Text className="text-sm font-semibold text-amber-700">Clear</Text>
+              <Text className="text-sm font-semibold text-primary">Clear</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -151,8 +151,8 @@ export default function StoreScreen() {
           onPress={() => setSelectedCategory(null)}
           className={`mr-3 px-4 py-2 rounded-full flex-row items-center ${
             selectedCategory === null
-              ? 'bg-amber-600'
-              : 'bg-white border border-amber-200'
+              ? 'bg-primary'
+              : 'bg-white border border-border'
           }`}
         >
           <Text className="mr-1">🏪</Text>
@@ -172,8 +172,8 @@ export default function StoreScreen() {
             onPress={() => setSelectedCategory(category.key)}
             className={`mr-3 px-4 py-2 rounded-full flex-row items-center ${
               selectedCategory === category.key
-                ? 'bg-amber-600'
-                : 'bg-white border border-amber-200'
+                ? 'bg-primary'
+                : 'bg-white border border-border'
             }`}
           >
             <Text className="mr-1">{CATEGORY_ICONS[category.key] || '📦'}</Text>
@@ -188,14 +188,14 @@ export default function StoreScreen() {
         ))}
       </ScrollView>
 
-      {/* Featured Stores */}
+      {/* Featured Commons Stores */}
       <View className="px-4">
-        <Text className="text-lg font-semibold text-gray-800 mb-3">Featured Stores</Text>
+        <Text className="text-lg font-semibold text-gray-800 mb-3">Featured Commons Stores</Text>
 
         {visibleStores.length === 0 ? (
-          <View className="bg-white rounded-2xl p-4 mb-3 border border-dashed border-amber-200">
-            <Text className="text-base font-semibold text-gray-800">No stores found</Text>
-            <Text className="mt-1 text-sm text-gray-500">Clear search or try another store name.</Text>
+          <View className="bg-white rounded-2xl p-4 mb-3 border border-dashed border-border">
+            <Text className="text-base font-semibold text-gray-800">No commons stores found</Text>
+            <Text className="mt-1 text-sm text-gray-500">Clear search or try another commons store name.</Text>
           </View>
         ) : null}
 
@@ -214,8 +214,8 @@ export default function StoreScreen() {
                   className="w-16 h-16 rounded-xl mr-3"
                 />
               ) : (
-                <View className="w-16 h-16 rounded-xl bg-amber-100 items-center justify-center mr-3">
-                  <ShoppingBag size={24} color="#B45309" />
+                <View className="w-16 h-16 rounded-xl bg-secondary items-center justify-center mr-3">
+                  <ShoppingBag size={24} color="#FF6B00" />
                 </View>
               )}
 
@@ -255,7 +255,7 @@ export default function StoreScreen() {
       <View className="mx-4 mt-4 mb-8 bg-green-50 rounded-2xl p-4 border border-green-200">
         <Text className="text-green-800 font-semibold mb-2">Earn {coopCoin.symbol} Rewards</Text>
         <Text className="text-green-700 text-sm">
-          Shop at {coopCoin.symbol}-verified stores and earn 1% back in {coopCoin.name} on every purchase!
+          Shop with {coopCoin.symbol}-verified commons stores and earn 1% back in {coopCoin.name} on every purchase!
         </Text>
       </View>
     </ScrollView>

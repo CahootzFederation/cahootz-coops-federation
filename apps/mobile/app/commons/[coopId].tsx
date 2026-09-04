@@ -26,7 +26,7 @@ const THEME = {
   paper: '#F6F7F8',
   ink: '#111827',
   muted: '#6B7280',
-  primary: '#F97316',
+  primary: '#FF6B00',
   primarySoft: '#FFF7ED',
   primaryBorder: '#FED7AA',
   greenSoft: '#ECFDF5',
@@ -583,7 +583,7 @@ export default function CommonsDetailScreen() {
                 {proposals.map((proposal) => (
                   <TouchableOpacity
                     key={proposal.id}
-                    onPress={() => router.push(`/(authenticated)/proposal-detail?id=${proposal.id}` as any)}
+                    onPress={() => router.push(`/(tabs)/proposal-detail?id=${proposal.id}` as any)}
                     className="rounded-xl border border-gray-100 bg-gray-50 p-3"
                     activeOpacity={0.75}
                   >

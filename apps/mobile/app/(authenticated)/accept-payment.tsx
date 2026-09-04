@@ -159,7 +159,7 @@ export default function AcceptPaymentScreen() {
   if (loading) {
     return (
       <View className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator size="large" color="#D97706" />
+        <ActivityIndicator size="large" color="#FF8A2A" />
       </View>
     );
   }
@@ -188,7 +188,7 @@ export default function AcceptPaymentScreen() {
             </Text>
             <TouchableOpacity
               onPress={() => router.push('/(authenticated)/apply-store' as any)}
-              className="mt-6 bg-amber-600 px-6 py-3 rounded-xl"
+              className="mt-6 bg-primary px-6 py-3 rounded-xl"
             >
               <Text className="text-white font-semibold">Apply for a Store</Text>
             </TouchableOpacity>
@@ -256,7 +256,7 @@ export default function AcceptPaymentScreen() {
               <TouchableOpacity
                 onPress={handleGenerateCode}
                 disabled={generating}
-                className="bg-amber-600 px-6 py-3 rounded-xl flex-row items-center"
+                className="bg-primary px-6 py-3 rounded-xl flex-row items-center"
               >
                 {generating ? (
                   <ActivityIndicator size="small" color="white" />
@@ -312,7 +312,7 @@ export default function AcceptPaymentScreen() {
               onPress={handleCreatePaymentRequest}
               disabled={generating}
               className={`py-4 rounded-xl items-center flex-row justify-center ${
-                generating ? 'bg-amber-400' : 'bg-amber-600'
+                generating ? 'bg-amber-400' : 'bg-primary'
               }`}
             >
               {generating ? (
@@ -329,9 +329,9 @@ export default function AcceptPaymentScreen() {
           </View>
 
           {/* Tips */}
-          <View className="mx-4 mt-4 mb-8 p-4 bg-amber-50 rounded-xl">
+          <View className="mx-4 mt-4 mb-8 p-4 bg-secondary rounded-xl">
             <Text className="text-amber-800 text-sm font-medium mb-2">Tips</Text>
-            <Text className="text-amber-700 text-sm">
+            <Text className="text-primary text-sm">
               {'\u2022'} Print your store QR code for quick payments{'\n'}
               {'\u2022'} Create payment requests with specific amounts{'\n'}
               {'\u2022'} Share payment links via SMS or messaging apps
@@ -380,7 +380,7 @@ export default function AcceptPaymentScreen() {
 
                 <TouchableOpacity
                   onPress={sharePaymentLink}
-                  className="bg-amber-600 py-3 rounded-xl items-center flex-row justify-center mb-3"
+                  className="bg-primary py-3 rounded-xl items-center flex-row justify-center mb-3"
                 >
                   <Share2 size={20} color="white" />
                   <Text className="text-white font-semibold ml-2">Share Link</Text>

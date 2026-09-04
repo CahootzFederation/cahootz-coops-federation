@@ -24,7 +24,7 @@ type SubmissionType = 'article' | 'event';
 export default function SubmitNewsletterScreen() {
   const { user, sessionToken } = useAuth();
   const config = coopConfig();
-  const primaryColor = resolveBrandColor(user?.coop?.primaryColor || config.primaryColor, '#B45309');
+  const primaryColor = resolveBrandColor(user?.coop?.primaryColor || config.primaryColor, '#FF6B00');
   const accentColor = resolveBrandColor(user?.coop?.accentColor || config.accentColor, '#16A34A');
   const [type, setType] = useState<SubmissionType>('article');
   const [title, setTitle] = useState('');

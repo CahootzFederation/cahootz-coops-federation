@@ -179,8 +179,8 @@ export default function BankAccountsScreen() {
                       index < accounts.length - 1 ? 'border-b border-gray-100' : ''
                     }`}
                   >
-                    <View className="w-12 h-12 rounded-full bg-amber-100 items-center justify-center mr-3">
-                      <Landmark size={24} color="#B45309" />
+                    <View className="w-12 h-12 rounded-full bg-secondary items-center justify-center mr-3">
+                      <Landmark size={24} color="#FF6B00" />
                     </View>
                     <View className="flex-1">
                       <Text className="text-gray-900 font-medium">{account.bankName}</Text>
@@ -209,14 +209,14 @@ export default function BankAccountsScreen() {
             {/* Add Button */}
             <TouchableOpacity
               onPress={() => setShowAddModal(true)}
-              className="mt-4 bg-amber-600 rounded-xl py-4 flex-row items-center justify-center"
+              className="mt-4 bg-primary rounded-xl py-4 flex-row items-center justify-center"
             >
               <Plus size={20} color="white" />
               <Text className="text-white font-semibold ml-2">Add Bank Account</Text>
             </TouchableOpacity>
 
             {/* Info */}
-            <View className="mt-4 bg-amber-50 rounded-xl p-4">
+            <View className="mt-4 bg-secondary rounded-xl p-4">
               <Text className="text-amber-800 text-sm">
                 Bank accounts are used for withdrawing funds. Tap an account to set it as your
                 default for withdrawals.
@@ -315,7 +315,7 @@ export default function BankAccountsScreen() {
               <TouchableOpacity
                 onPress={handleAdd}
                 disabled={adding}
-                className={`py-4 rounded-xl items-center ${adding ? 'bg-gray-300' : 'bg-amber-600'}`}
+                className={`py-4 rounded-xl items-center ${adding ? 'bg-gray-300' : 'bg-primary'}`}
               >
                 {adding ? (
                   <ActivityIndicator size="small" color="white" />

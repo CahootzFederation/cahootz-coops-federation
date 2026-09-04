@@ -227,7 +227,7 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#B45309" />
+          <ActivityIndicator size="large" color="#FF6B00" />
           <Text className="text-gray-500 mt-4">Loading order...</Text>
         </View>
       </SafeAreaView>
@@ -281,7 +281,7 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
             {order.isStoreOwner && order.fulfillmentStatus !== 'DELIVERED' && order.fulfillmentStatus !== 'CANCELLED' && (
               <TouchableOpacity
                 onPress={openStatusModal}
-                className="bg-amber-600 py-3 rounded-xl flex-row items-center justify-center"
+                className="bg-primary py-3 rounded-xl flex-row items-center justify-center"
               >
                 <Edit3 size={16} color="white" />
                 <Text className="text-white font-semibold ml-2">Update Order Status</Text>
@@ -304,7 +304,7 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
           {order.shippingAddress && (
             <View className="bg-white rounded-2xl p-4 mb-4 shadow-sm">
               <View className="flex-row items-center mb-3">
-                <MapPin size={20} color="#B45309" />
+                <MapPin size={20} color="#FF6B00" />
                 <Text className="font-semibold text-gray-900 ml-2">Shipping Address</Text>
               </View>
               <Text className="text-gray-700 leading-6">{order.shippingAddress}</Text>
@@ -339,7 +339,7 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
 
           {/* Order Note */}
           {order.note && (
-            <View className="bg-amber-50 rounded-2xl p-4 mb-4 border border-amber-200">
+            <View className="bg-secondary rounded-2xl p-4 mb-4 border border-border">
               <Text className="font-semibold text-amber-900 mb-2">Customer Note</Text>
               <Text className="text-amber-800 text-sm">{order.note}</Text>
             </View>
@@ -361,7 +361,7 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
               )}
               <View className="flex-row justify-between py-3 border-t border-gray-200">
                 <Text className="font-bold text-gray-900 text-lg">Total</Text>
-                <Text className="font-bold text-amber-700 text-lg">${formatPrice(order.totalUSD)}</Text>
+                <Text className="font-bold text-primary text-lg">${formatPrice(order.totalUSD)}</Text>
               </View>
               <View className="flex-row justify-between py-2 border-t border-gray-100">
                 <Text className="text-sm text-gray-500">Payment Method</Text>
@@ -403,7 +403,7 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
                     onPress={() => setSelectedStatus(option.value)}
                     className={`p-4 rounded-xl mb-2 border-2 ${
                       selectedStatus === option.value
-                        ? 'border-amber-600 bg-amber-50'
+                        ? 'border-amber-600 bg-secondary'
                         : 'border-gray-200 bg-white'
                     }`}
                   >
@@ -417,7 +417,7 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
                         <Text className="text-sm text-gray-500 mt-1">{option.description}</Text>
                       </View>
                       {selectedStatus === option.value && (
-                        <CheckCircle size={24} color="#D97706" />
+                        <CheckCircle size={24} color="#FF8A2A" />
                       )}
                     </View>
                   </TouchableOpacity>
@@ -454,7 +454,7 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={handleUpdateStatus}
-                  className="flex-1 bg-amber-600 py-4 rounded-xl"
+                  className="flex-1 bg-primary py-4 rounded-xl"
                   disabled={updating}
                 >
                   {updating ? (

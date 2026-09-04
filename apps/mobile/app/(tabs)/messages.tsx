@@ -342,7 +342,7 @@ export default function MessagesScreen() {
 
           <View className="mt-4 rounded-xl border border-emerald-900/10 bg-emerald-950 p-4">
             <View className="flex-row items-start gap-3">
-              <ShieldCheck size={21} color="#FBBF24" />
+              <ShieldCheck size={21} color="#FFB370" />
               <View className="flex-1">
                 <Text className="font-bold text-white">DMs should stay secondary</Text>
                 <Text className="mt-1 text-sm leading-5 text-white/75">

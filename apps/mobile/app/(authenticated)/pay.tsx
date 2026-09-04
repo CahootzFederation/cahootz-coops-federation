@@ -400,7 +400,7 @@ export default function PayScreen() {
                   )}
                 </View>
                 <TouchableOpacity onPress={() => setStep('recipient')}>
-                  <Text className="text-amber-700">Change</Text>
+                  <Text className="text-primary">Change</Text>
                 </TouchableOpacity>
               </View>
 
@@ -439,7 +439,7 @@ export default function PayScreen() {
                 onPress={() => setStep('type')}
                 disabled={!canProceedToConfirm()}
                 className={`py-4 rounded-xl items-center ${
-                  canProceedToConfirm() ? 'bg-amber-600' : 'bg-gray-300'
+                  canProceedToConfirm() ? 'bg-primary' : 'bg-gray-300'
                 }`}
               >
                 <Text className="text-white font-bold text-lg">Continue</Text>
@@ -468,7 +468,7 @@ export default function PayScreen() {
                       }}
                       className={`flex-row items-center p-4 rounded-xl border-2 ${
                         isSelected
-                          ? 'border-amber-500 bg-amber-50'
+                          ? 'border-amber-500 bg-secondary'
                           : 'border-gray-200 bg-white'
                       }`}
                     >
@@ -482,7 +482,7 @@ export default function PayScreen() {
                         {item.label}
                       </Text>
                       {isSelected && (
-                        <Check size={24} color="#D97706" />
+                        <Check size={24} color="#FF8A2A" />
                       )}
                     </TouchableOpacity>
                   );
@@ -594,7 +594,7 @@ export default function PayScreen() {
 
               {/* Non-user notice */}
               {!recipient.isSoulaanUser && (
-                <View className="bg-amber-50 rounded-xl p-4 mb-4">
+                <View className="bg-secondary rounded-xl p-4 mb-4">
                   <Text className="text-amber-800 text-sm">
                     {recipient.phone} isn&apos;t on {config.shortName} yet. They&apos;ll receive a text message
                     with a link to claim this payment.
@@ -676,7 +676,7 @@ export default function PayScreen() {
               <TouchableOpacity
                 onPress={handleConfirm}
                 disabled={loading}
-                className={`py-4 rounded-xl items-center ${loading ? 'bg-amber-400' : 'bg-amber-600'}`}
+                className={`py-4 rounded-xl items-center ${loading ? 'bg-amber-400' : 'bg-primary'}`}
               >
                 {loading ? (
                   <View className="flex-row items-center">

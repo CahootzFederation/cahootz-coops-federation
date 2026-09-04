@@ -86,6 +86,14 @@
         {
           "faceIDPermission": "Allow Cahootz Commons to use Face ID for authentication."
         }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "cahootz-mobile",
+          "organization": "cahootz-coop"
+        }
       ]
     ],
     "owner": "cahootz-coop",

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, RefreshControl, ScrollView, TouchableOpacity, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Bell,
   CheckCircle2,
@@ -78,6 +79,7 @@ function timeAgo(dateString: string) {
 
 export default function ProposalsScreen() {
   const params = useLocalSearchParams<{ coopId?: string; submit?: string }>();
+  const insets = useSafeAreaInsets();
   const { sessionToken, user } = useAuth();
   const [commons, setCommons] = useState<CommonsDirectoryItem[]>([DEFAULT_COMMONS]);
   const [selectedCommonsId, setSelectedCommonsId] = useState(params.coopId || DEFAULT_COMMONS.id);
@@ -182,7 +184,7 @@ export default function ProposalsScreen() {
         contentContainerStyle={{ paddingBottom: 32 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadProposals(true)} tintColor={PRIMARY} />}
       >
-        <View className="border-b border-gray-200 bg-white px-3 pt-7 pb-2">
+        <View className="border-b border-gray-200 bg-white px-3 pb-2" style={{ paddingTop: insets.top + 12 }}>
           <View className="flex-row items-center gap-2">
             <TouchableOpacity
               onPress={() => router.push('/(tabs)' as any)}

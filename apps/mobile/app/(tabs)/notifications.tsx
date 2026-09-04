@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { Bell, CheckCircle2, HandCoins, Menu, MessageCircle, PackageSearch, Scale, UserCircle, Wallet } from 'lucide-react-native';
 import { ScrollView, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
@@ -49,12 +50,13 @@ const alerts = [
 ];
 
 export default function NotificationsScreen() {
+  const insets = useSafeAreaInsets();
   const { isAuthenticated, user } = useAuth();
   const accountName = user?.name?.trim() || user?.email?.split('@')[0] || 'member';
 
   return (
     <ScrollView className="flex-1" style={{ backgroundColor: SOCIAL_THEME.paper }} contentContainerStyle={{ paddingBottom: 28 }}>
-      <View className="border-b border-gray-200 bg-white px-3 pt-7 pb-2">
+      <View className="border-b border-gray-200 bg-white px-3 pb-2" style={{ paddingTop: insets.top + 12 }}>
         <View className="flex-row items-center gap-2">
           <TouchableOpacity
             onPress={() => router.push('/(tabs)' as any)}

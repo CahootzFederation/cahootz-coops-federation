@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Bell,
   Bookmark,
@@ -116,6 +117,7 @@ function mimeFromFileName(fileName: string | null | undefined, mediaType: 'image
 }
 
 export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, onSignInPress, topBanner }: CommonsAiEntryProps) {
+  const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const pendingActionRef = useRef<PendingAction | null>(null);
   const { isAuthenticated, login, logout, sessionToken, user } = useAuth();
@@ -764,7 +766,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
         contentContainerStyle={{ paddingBottom: scopedFeedLocked ? 28 : 148 }}
         keyboardShouldPersistTaps="handled"
       >
-        <View className="border-b border-gray-200 bg-white px-3 pt-7 pb-2">
+        <View className="border-b border-gray-200 bg-white px-3 pb-2" style={{ paddingTop: insets.top + 12 }}>
           <View className="flex-row items-center gap-2">
             <TouchableOpacity
               onPress={() => setDrawerOpen(true)}

@@ -174,7 +174,7 @@ export default function AccountProfileScreen() {
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: PROFILE_THEME.paper }}>
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
-        <View className="border-b bg-white px-3 pt-7 pb-2" style={{ borderColor: PROFILE_THEME.border }}>
+        <View className="border-b bg-white px-3 pt-3 pb-2" style={{ borderColor: PROFILE_THEME.border }}>
           <View className="flex-row items-center gap-2">
             <TouchableOpacity
               onPress={handleBack}

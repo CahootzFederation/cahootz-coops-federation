@@ -20,6 +20,8 @@ platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
 
 prepare_react_native_project!
 
+use_modular_headers!
+
 target 'CahootzCoop' do
   use_expo_modules!
 

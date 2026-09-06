@@ -153,6 +153,7 @@ export interface NewsletterSubmissionData {
 
 export interface CommonsComment {
   id: string;
+  authorId?: string;
   author: string;
   body: string;
   media?: CommonsPostMedia[];
@@ -190,11 +191,29 @@ export interface CommonsPost {
   comments: CommonsComment[];
 }
 
+export interface SearchPerson {
+  id: string;
+  name: string;
+  handle: string;
+}
+
 export interface PersonalPageProfile {
   id: string;
   name: string;
   handle: string;
   bio?: string | null;
+  createdAt: string;
+  followerCount: number;
+  followingCount: number;
+  isOwnPage: boolean;
+  viewerIsFollowing: boolean;
+}
+
+export interface PersonalPageComment {
+  id: string;
+  authorId?: string;
+  author: string;
+  body: string;
   createdAt: string;
 }
 
@@ -210,6 +229,7 @@ export interface PersonalPageFeedPost {
   replies: number;
   support: number;
   media: CommonsPostMedia[];
+  comments: PersonalPageComment[];
 }
 
 export interface CommonsProfile {
@@ -417,14 +437,32 @@ export const api = {
     return result.result?.data;
   },
 
-  async listCommonsFeed(coopId = 'cahootz', sessionToken?: string | null) {
-    const input = encodeURIComponent(JSON.stringify({ coopId, limit: 30 }));
+  async listCommonsFeed(coopId = 'cahootz', sessionToken?: string | null, cursor?: string | null) {
+    const input = encodeURIComponent(JSON.stringify({ coopId, limit: 30, ...(cursor ? { cursor } : {}) }));
     const response = await fetch(`${API_BASE_URL}/trpc/commons.listFeed?input=${input}`, {
       method: 'GET',
       headers: createApiHeaders(null, sessionToken),
     });
 
-    return readTrpcResult<{ coop: CommonsProfile; posts: CommonsPost[] }>(response, 'Failed to load Commons feed');
+    return readTrpcResult<{ coop: CommonsProfile; posts: CommonsPost[]; nextCursor: string | null }>(
+      response,
+      'Failed to load Commons feed'
+    );
+  },
+
+  async searchCommons(
+    data: { coopId?: string; query: string; limit?: number },
+    sessionToken?: string | null
+  ) {
+    const input = encodeURIComponent(
+      JSON.stringify({ coopId: data.coopId || 'cahootz', query: data.query, limit: data.limit ?? 10 })
+    );
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.search?input=${input}`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<{ people: SearchPerson[]; posts: CommonsPost[] }>(response, 'Search failed');
   },
 
   async getCommonsPost(data: { coopId?: string; postId: string }, sessionToken?: string | null) {
@@ -437,14 +475,14 @@ export const api = {
     return readTrpcResult<{ coop: CommonsProfile; post: CommonsPost }>(response, 'Failed to load post');
   },
 
-  async getPersonalPage(handle: string, sessionToken?: string | null) {
-    const input = encodeURIComponent(JSON.stringify({ handle, limit: 30 }));
+  async getPersonalPage(handle: string, sessionToken?: string | null, cursor?: string | null) {
+    const input = encodeURIComponent(JSON.stringify({ handle, limit: 30, ...(cursor ? { cursor } : {}) }));
     const response = await fetch(`${API_BASE_URL}/trpc/commons.getPersonalPage?input=${input}`, {
       method: 'GET',
       headers: createApiHeaders(null, sessionToken),
     });
 
-    return readTrpcResult<{ profile: PersonalPageProfile; posts: PersonalPageFeedPost[] }>(
+    return readTrpcResult<{ profile: PersonalPageProfile; posts: PersonalPageFeedPost[]; nextCursor: string | null }>(
       response,
       'Failed to load personal page'
     );
@@ -572,6 +610,109 @@ export const api = {
     });
 
     return readTrpcResult<{ success: boolean }>(response, 'Failed to delete post');
+  },
+
+  async createPersonalPageComment(
+    data: { postId: string; content: string },
+    sessionToken?: string | null
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.createPersonalPagePostComment`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{ comment: PersonalPageComment }>(response, 'Failed to add comment');
+  },
+
+  async editPersonalPageComment(
+    data: { commentId: string; content: string },
+    sessionToken?: string | null
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.editPersonalPagePostComment`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{ comment: PersonalPageComment }>(response, 'Failed to edit comment');
+  },
+
+  async deletePersonalPageComment(commentId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.deletePersonalPagePostComment`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ commentId }),
+    });
+
+    return readTrpcResult<{ success: boolean }>(response, 'Failed to delete comment');
+  },
+
+  async togglePersonalPageSupport(postId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.togglePersonalPagePostSupport`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ postId }),
+    });
+
+    return readTrpcResult<{ supported: boolean }>(response, 'Failed to update like');
+  },
+
+  async editComment(
+    data: { commentId: string; content: string },
+    sessionToken?: string | null
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.editComment`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{ comment: CommonsComment }>(response, 'Failed to edit comment');
+  },
+
+  async deleteComment(commentId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.deleteComment`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ commentId }),
+    });
+
+    return readTrpcResult<{ success: boolean }>(response, 'Failed to delete comment');
+  },
+
+  async toggleFollowUser(userId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.toggleFollowUser`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ userId }),
+    });
+
+    return readTrpcResult<{ following: boolean }>(response, 'Failed to update follow');
+  },
+
+  async listFollowing(sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.listFollowing`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<{ members: { id: string; name: string; handle: string }[] }>(
+      response,
+      'Failed to load following'
+    );
+  },
+
+  async listFollowers(sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.listFollowers`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<{ members: { id: string; name: string; handle: string }[] }>(
+      response,
+      'Failed to load followers'
+    );
   },
 
   async uploadCommonsPostMedia(data: {

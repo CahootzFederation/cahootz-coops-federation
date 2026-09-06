@@ -16,6 +16,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   ImagePlus,
+  Pencil,
   Send,
   Share2,
   Trash2,
@@ -61,6 +62,9 @@ export default function CommonsPostDetailScreen() {
   const [isCommenting, setIsCommenting] = useState(false);
   const [viewerMedia, setViewerMedia] = useState<CommonsMediaPreview | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [busyCommentId, setBusyCommentId] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -165,6 +169,68 @@ export default function CommonsPostDetailScreen() {
     } finally {
       setIsCommenting(false);
     }
+  };
+
+  const startEditComment = (commentId: string, body: string) => {
+    setEditingCommentId(commentId);
+    setEditDraft(body);
+  };
+
+  const submitEditComment = async () => {
+    const content = editDraft.trim();
+    if (!content || !editingCommentId || !sessionToken) return;
+
+    setBusyCommentId(editingCommentId);
+    try {
+      const result = await api.editComment({ commentId: editingCommentId, content }, sessionToken);
+      setPost((current) =>
+        current
+          ? {
+              ...current,
+              comments: current.comments.map((comment) =>
+                comment.id === editingCommentId ? result.comment : comment
+              ),
+            }
+          : current
+      );
+      setEditingCommentId(null);
+      setEditDraft('');
+    } catch (caughtError) {
+      Alert.alert('Could not edit comment', caughtError instanceof Error ? caughtError.message : 'Please try again.');
+    } finally {
+      setBusyCommentId(null);
+    }
+  };
+
+  const deleteComment = (commentId: string) => {
+    if (!sessionToken) return;
+
+    Alert.alert('Delete comment?', 'This can\'t be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setBusyCommentId(commentId);
+          try {
+            await api.deleteComment(commentId, sessionToken);
+            setPost((current) =>
+              current
+                ? {
+                    ...current,
+                    replies: Math.max(0, current.replies - 1),
+                    comments: current.comments.filter((comment) => comment.id !== commentId),
+                  }
+                : current
+            );
+          } catch (caughtError) {
+            Alert.alert('Could not delete comment', caughtError instanceof Error ? caughtError.message : 'Please try again.');
+          } finally {
+            setBusyCommentId(null);
+          }
+        },
+      },
+    ]);
   };
 
   const pickCommentMedia = async () => {
@@ -384,8 +450,49 @@ export default function CommonsPostDetailScreen() {
                 ) : null}
                 {post.comments.map((comment) => (
                   <View key={comment.id || `${comment.author}-${comment.body}`} className="rounded-xl bg-stone-50 p-3">
-                    <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
-                    {comment.body ? <Text className="mt-1 text-sm leading-5 text-stone-700">{comment.body}</Text> : null}
+                    <View className="flex-row items-start justify-between gap-2">
+                      <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
+                      {comment.authorId && comment.authorId === user?.id ? (
+                        <View className="flex-row items-center gap-3">
+                          <TouchableOpacity
+                            onPress={() => startEditComment(comment.id, comment.body)}
+                            accessibilityLabel="Edit comment"
+                          >
+                            <Pencil size={13} color={THEME.muted} />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => deleteComment(comment.id)} accessibilityLabel="Delete comment">
+                            {busyCommentId === comment.id ? (
+                              <ActivityIndicator size="small" color="#DC2626" />
+                            ) : (
+                              <Trash2 size={13} color="#DC2626" />
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                    </View>
+                    {editingCommentId === comment.id ? (
+                      <View className="mt-1 flex-row items-center gap-2">
+                        <TextInput
+                          value={editDraft}
+                          onChangeText={setEditDraft}
+                          className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-sm text-gray-900"
+                          multiline
+                        />
+                        <TouchableOpacity
+                          onPress={submitEditComment}
+                          disabled={busyCommentId === comment.id}
+                          accessibilityLabel="Save comment edit"
+                        >
+                          {busyCommentId === comment.id ? (
+                            <ActivityIndicator size="small" color={THEME.primary} />
+                          ) : (
+                            <Send size={16} color={THEME.primary} />
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    ) : comment.body ? (
+                      <Text className="mt-1 text-sm leading-5 text-stone-700">{comment.body}</Text>
+                    ) : null}
                     {comment.media?.length ? (
                       <View className="mt-2 flex-row flex-wrap gap-2">
                         {comment.media.map((media) => (

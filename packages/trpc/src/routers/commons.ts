@@ -527,6 +527,70 @@ export const commonsRouter = router({
       };
     }),
 
+  search: publicProcedure
+    .input(
+      z.object({
+        coopId: z.string().min(1).default(COMMONS_COOP_ID),
+        query: z.string().trim().min(1).max(80),
+        limit: z.number().min(1).max(30).default(10),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const context = ctx as Context;
+      const coop = await loadCoopSummary(ctx.db, input.coopId);
+      const accountUser = await resolveOptionalAccountUser(context);
+      const canReadPosts =
+        input.coopId === COMMONS_COOP_ID ||
+        (!!accountUser && (await hasActiveCommonsMembership(context.db, accountUser.id, input.coopId)));
+
+      const [people, posts] = await Promise.all([
+        context.db.user.findMany({
+          where: {
+            deletedAt: null,
+            OR: [
+              { name: { contains: input.query, mode: "insensitive" } },
+              { handle: { contains: input.query, mode: "insensitive" } },
+            ],
+          },
+          orderBy: { createdAt: "desc" },
+          take: input.limit,
+          select: { id: true, name: true, email: true, handle: true },
+        }),
+        canReadPosts
+          ? context.db.commonsPost.findMany({
+              where: {
+                coopId: input.coopId,
+                OR: [
+                  { title: { contains: input.query, mode: "insensitive" } },
+                  { content: { contains: input.query, mode: "insensitive" } },
+                ],
+              },
+              orderBy: { createdAt: "desc" },
+              take: input.limit,
+              include: {
+                author: { select: { name: true, email: true, handle: true } },
+                comments: {
+                  orderBy: { createdAt: "asc" },
+                  take: 2,
+                  include: { author: { select: { name: true, email: true, handle: true } } },
+                },
+                media: { orderBy: { order: "asc" } },
+                _count: { select: { comments: true, supports: true } },
+              },
+            })
+          : [],
+      ]);
+
+      return {
+        people: people.map((user: any) => ({
+          id: user.id,
+          name: displayName(user),
+          handle: personHandle(user),
+        })),
+        posts: posts.map((post: any) => mapPostWithGroup(post, coop.name)),
+      };
+    }),
+
   listDirectory: publicProcedure
     .query(async ({ ctx }) => {
       const context = ctx as Context;

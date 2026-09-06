@@ -30,6 +30,7 @@ import {
   MessageCircle,
   Repeat2,
   Scale,
+  Search,
   Send,
   Sparkles,
   Store,
@@ -43,7 +44,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { PostTypeSelector } from '@/components/post-type-selector';
-import { api, type CommonsDirectoryItem, type CommonsPost, type CommonsPostMedia, type CommonsProfile } from '@/lib/api';
+import {
+  api,
+  type CommonsDirectoryItem,
+  type CommonsPost,
+  type CommonsPostMedia,
+  type CommonsProfile,
+  type SearchPerson,
+} from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import {
   COMPOSER_MEDIA_TILE_SIZE,
@@ -51,7 +59,6 @@ import {
   CommonsMediaTile,
 } from '@/components/commons-media-viewer';
 import { DEFAULT_POST_TYPE, postTypeLabel, postTypePlaceholder, shouldShowPostType, type SelectedPostType } from '@/lib/post-types';
-import { listFollowTargets, toggleFollowTarget, type FollowTarget } from '@/lib/personal-social-store';
 import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
 
 type PendingAction = (sessionToken: string) => Promise<void>;
@@ -130,6 +137,8 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
   const { isAuthenticated, login, logout, sessionToken, user } = useAuth();
   const [draft, setDraft] = useState('');
   const [feedPosts, setFeedPosts] = useState<CommonsPost[]>([]);
+  const [nextFeedCursor, setNextFeedCursor] = useState<string | null>(null);
+  const [isLoadingMoreFeed, setIsLoadingMoreFeed] = useState(false);
   const [commonsProfile, setCommonsProfile] = useState<CommonsProfile>(DEFAULT_COMMONS_PROFILE);
   const [memberCommons, setMemberCommons] = useState<CommonsDirectoryItem[]>([]);
   const [directoryLoaded, setDirectoryLoaded] = useState(false);
@@ -141,7 +150,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const [selectedMediaItems, setSelectedMediaItems] = useState<ComposerMedia[]>([]);
   const [selectedPostType, setSelectedPostType] = useState<SelectedPostType>(DEFAULT_POST_TYPE);
-  const [followTargets, setFollowTargets] = useState<FollowTarget[]>([]);
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [composerNotice, setComposerNotice] = useState<ComposerNotice>(null);
   const [accountPromptOpen, setAccountPromptOpen] = useState(false);
@@ -156,6 +165,12 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
   const [suggestedCommonsEmail, setSuggestedCommonsEmail] = useState('');
   const [suggestionStatus, setSuggestionStatus] = useState<SuggestionStatus>('idle');
   const [suggestionMessage, setSuggestionMessage] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchPeople, setSearchPeople] = useState<SearchPerson[]>([]);
+  const [searchPosts, setSearchPosts] = useState<CommonsPost[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
   const hasAccountSession = isAuthenticated && !!sessionToken;
   const accountName = user?.name?.trim() || user?.email?.split('@')[0] || 'member';
   const accountHandle = user?.handle || (user?.email?.split('@')[0] || accountName).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -232,18 +247,20 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
   );
 
   useEffect(() => {
-    if (!hasAccountSession || !user?.email) {
-      setFollowTargets([]);
+    if (!hasAccountSession || !sessionToken) {
+      setFollowingIds(new Set());
       return;
     }
 
-    listFollowTargets(user.email)
-      .then(setFollowTargets)
-      .catch((error) => console.warn('Could not load follow targets:', error));
-  }, [hasAccountSession, user?.email]);
+    api
+      .listFollowing(sessionToken)
+      .then((result) => setFollowingIds(new Set(result.members.map((member) => member.id))))
+      .catch((error) => console.warn('Could not load following list:', error));
+  }, [hasAccountSession, sessionToken]);
 
   useEffect(() => {
     let mounted = true;
+    setNextFeedCursor(null);
 
     api
       .listCommonsFeed(feedCoopId, sessionToken)
@@ -251,6 +268,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
         if (!mounted) return;
         setCommonsProfile(result.coop || DEFAULT_COMMONS_PROFILE);
         setFeedPosts(result.posts);
+        setNextFeedCursor(result.nextCursor);
         setFeedError('');
       })
       .catch((error) => {
@@ -262,6 +280,75 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
       mounted = false;
     };
   }, [feedCoopId, sessionToken]);
+
+  const loadMoreFeedPosts = async () => {
+    if (!nextFeedCursor || isLoadingMoreFeed) return;
+
+    setIsLoadingMoreFeed(true);
+    try {
+      const result = await api.listCommonsFeed(feedCoopId, sessionToken, nextFeedCursor);
+      setFeedPosts((current) => [...current, ...result.posts]);
+      setNextFeedCursor(result.nextCursor);
+    } catch (error) {
+      console.error('Failed to load more Commons posts:', error);
+    } finally {
+      setIsLoadingMoreFeed(false);
+    }
+  };
+
+  const handleFeedScroll = (event: { nativeEvent: { contentOffset: { y: number }; layoutMeasurement: { height: number }; contentSize: { height: number } } }) => {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const isNearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 400;
+    if (isNearBottom) void loadMoreFeedPosts();
+  };
+
+  const searchCoopId = isScopedFeed ? feedCoopId : DEFAULT_COMMONS_PROFILE.id;
+
+  useEffect(() => {
+    if (!searchOpen) return;
+
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      setSearchPeople([]);
+      setSearchPosts([]);
+      setSearchError('');
+      setIsSearching(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsSearching(true);
+    const timeout = setTimeout(() => {
+      api
+        .searchCommons({ coopId: searchCoopId, query: trimmed }, sessionToken)
+        .then((result) => {
+          if (cancelled) return;
+          setSearchPeople(result.people);
+          setSearchPosts(result.posts);
+          setSearchError('');
+        })
+        .catch((error) => {
+          console.error('Search failed:', error);
+          if (!cancelled) setSearchError('Could not search right now.');
+        })
+        .finally(() => {
+          if (!cancelled) setIsSearching(false);
+        });
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [searchOpen, searchQuery, searchCoopId, sessionToken]);
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSearchPeople([]);
+    setSearchPosts([]);
+    setSearchError('');
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -714,14 +801,21 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
     return { bg: '#E0F2FE', fg: '#075985' };
   };
 
-  const isFollowing = (targetId: string, type: FollowTarget['type']) =>
-    followTargets.some((target) => target.id === targetId && target.type === type);
-
-  const toggleFollow = (target: Omit<FollowTarget, 'createdAt'>) => {
-    void requireAccount(async () => {
-      if (!user?.email) return;
-      const next = await toggleFollowTarget(user.email, target, personHandleFromName(accountName));
-      setFollowTargets(next);
+  const toggleFollow = (authorId: string) => {
+    void requireAccount(async (token) => {
+      if (authorId === user?.id) return;
+      try {
+        const result = await api.toggleFollowUser(authorId, token);
+        setFollowingIds((current) => {
+          const next = new Set(current);
+          if (result.following) next.add(authorId);
+          else next.delete(authorId);
+          return next;
+        });
+      } catch (error) {
+        console.error('Failed to update follow:', error);
+        setAuthError(error instanceof Error ? error.message : 'Could not update follow.');
+      }
     });
   };
 
@@ -929,6 +1023,13 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
             </TouchableOpacity>
           </View>
           <TouchableOpacity
+            onPress={() => setSearchOpen(true)}
+            className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
+            accessibilityLabel="Search people and posts"
+          >
+            <Search size={16} color="#334155" />
+          </TouchableOpacity>
+          <TouchableOpacity
             onPress={openMessages}
             className="relative h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
             accessibilityLabel="Open direct messages"
@@ -952,6 +1053,8 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
         className="flex-1"
         contentContainerStyle={{ paddingBottom: scopedFeedLocked ? 28 : 148 }}
         keyboardShouldPersistTaps="handled"
+        onScroll={handleFeedScroll}
+        scrollEventThrottle={200}
       >
         <View className="px-4 py-3">
           {finishProfileBanner}
@@ -990,7 +1093,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
               const colors = tagColor(post.tag);
               const authorFollowId = post.authorHandle || personHandleFromName(post.author);
               const authorHandle = personDisplayHandle(authorFollowId);
-              const followsAuthor = isFollowing(authorFollowId, 'person');
+              const followsAuthor = !!post.authorId && followingIds.has(post.authorId);
               const firstComment = post.comments[0];
               return (
                 <TouchableOpacity
@@ -1062,7 +1165,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
                         <TouchableOpacity
                           onPress={(event) => {
                             event.stopPropagation();
-                            toggleFollow({ id: authorFollowId, type: 'person', label: post.author });
+                            if (post.authorId) toggleFollow(post.authorId);
                           }}
                           className="rounded-full border px-3 py-1.5"
                           style={{
@@ -1141,6 +1244,11 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
                 </TouchableOpacity>
               );
             })}
+            {isLoadingMoreFeed ? (
+              <View className="items-center py-4">
+                <ActivityIndicator size="small" color={SOCIAL_THEME.primary} />
+              </View>
+            ) : null}
           </View>
         </View>
       </ScrollView>
@@ -1498,6 +1606,104 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={searchOpen} animationType="slide" onRequestClose={closeSearch}>
+        <View className="flex-1" style={{ backgroundColor: SOCIAL_THEME.paper, paddingTop: insets.top }}>
+          <View className="flex-row items-center gap-2 border-b border-gray-200 bg-white px-4 pb-3 pt-3">
+            <View
+              className="min-w-0 flex-1 flex-row items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-4 py-2.5"
+            >
+              <Search size={16} color={SOCIAL_THEME.muted} />
+              <TextInput
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder={`Search people and posts in ${isScopedFeed ? commonsProfile.name : 'Cahootz Commons'}`}
+                placeholderTextColor={SOCIAL_THEME.muted}
+                autoFocus
+                className="min-w-0 flex-1 text-sm text-gray-900"
+              />
+              {isSearching ? <ActivityIndicator size="small" color={SOCIAL_THEME.primary} /> : null}
+            </View>
+            <TouchableOpacity
+              onPress={closeSearch}
+              className="h-10 w-10 items-center justify-center rounded-full bg-gray-100"
+              accessibilityLabel="Close search"
+            >
+              <X size={18} color={SOCIAL_THEME.ink} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+            {searchError ? (
+              <Text className="mb-3 text-sm font-semibold text-red-600">{searchError}</Text>
+            ) : null}
+
+            {!searchQuery.trim() ? (
+              <Text className="text-sm text-gray-500">Start typing to find people or posts.</Text>
+            ) : null}
+
+            {searchQuery.trim() && !isSearching && searchPeople.length === 0 && searchPosts.length === 0 && !searchError ? (
+              <Text className="text-sm text-gray-500">No matches for &ldquo;{searchQuery.trim()}&rdquo;.</Text>
+            ) : null}
+
+            {searchPeople.length > 0 ? (
+              <View className="mb-5">
+                <Text className="mb-2 text-xs font-black uppercase text-gray-500">People</Text>
+                <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                  {searchPeople.map((person, index) => (
+                    <TouchableOpacity
+                      key={person.id}
+                      onPress={() => {
+                        closeSearch();
+                        openPersonPage(person.name, person.handle);
+                      }}
+                      className={`flex-row items-center gap-3 px-4 py-3 ${
+                        index < searchPeople.length - 1 ? 'border-b border-gray-100' : ''
+                      }`}
+                      activeOpacity={0.75}
+                    >
+                      <View className="h-9 w-9 items-center justify-center rounded-full bg-slate-200">
+                        <Text className="text-sm font-black text-slate-600">{personInitials(person.name)}</Text>
+                      </View>
+                      <View className="min-w-0 flex-1">
+                        <Text className="text-sm font-black text-gray-950" numberOfLines={1}>{person.name}</Text>
+                        <Text className="text-xs font-semibold text-gray-500">{personDisplayHandle(person.handle)}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {searchPosts.length > 0 ? (
+              <View>
+                <Text className="mb-2 text-xs font-black uppercase text-gray-500">Posts</Text>
+                <View className="gap-2">
+                  {searchPosts.map((post) => (
+                    <TouchableOpacity
+                      key={post.id}
+                      onPress={() => {
+                        closeSearch();
+                        openPostDetail(post);
+                      }}
+                      className="rounded-2xl border border-gray-200 bg-white p-4"
+                      activeOpacity={0.75}
+                    >
+                      <Text className="text-xs font-semibold text-gray-500">{post.author} · {post.time}</Text>
+                      {post.title && post.title !== post.body ? (
+                        <Text className="mt-1 text-sm font-black text-gray-950" numberOfLines={1}>{post.title}</Text>
+                      ) : null}
+                      {post.body ? (
+                        <Text className="mt-1 text-sm leading-5 text-gray-700" numberOfLines={2}>{post.body}</Text>
+                      ) : null}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </ScrollView>
+        </View>
       </Modal>
 
       <Modal visible={accountPromptOpen} transparent animationType="slide" onRequestClose={() => setAccountPromptOpen(false)}>

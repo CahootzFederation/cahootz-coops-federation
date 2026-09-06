@@ -3,24 +3,20 @@ import * as ImagePicker from 'expo-image-picker';
 import { ActivityIndicator, Alert, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ArrowLeft, Image as ImageIcon, MessageCircle, Send, Trash2, UserCircle } from 'lucide-react-native';
+import { ArrowLeft, Image as ImageIcon, Send, Trash2, UserCircle } from 'lucide-react-native';
 
 import {
   COMPOSER_MEDIA_TILE_SIZE,
   CommonsMediaTile,
   CommonsMediaViewer,
-  FEED_MEDIA_TILE_SIZE,
   type CommonsMediaPreview,
 } from '@/components/commons-media-viewer';
+import { PersonalPagePostCard } from '@/components/personal-page-post-card';
 import { PostTypeSelector } from '@/components/post-type-selector';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
-import { api, type PersonalPageFeedPost } from '@/lib/api';
-import { DEFAULT_POST_TYPE, postTypeLabel, postTypePlaceholder, shouldShowPostType, type SelectedPostType } from '@/lib/post-types';
-import {
-  listFollowTargets,
-  type FollowTarget,
-} from '@/lib/personal-social-store';
+import { api, type PersonalPageFeedPost, type PersonalPageProfile } from '@/lib/api';
+import { DEFAULT_POST_TYPE, postTypePlaceholder, type SelectedPostType } from '@/lib/post-types';
 import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
 
 const PAGE_THEME = {
@@ -41,13 +37,16 @@ export default function PersonalPageScreen() {
   const displayName = user?.name?.trim() || user?.email?.split('@')[0] || 'Member';
   const publicHandle = user?.handle || personHandleFromName(displayName);
   const [posts, setPosts] = React.useState<PersonalPageFeedPost[]>([]);
-  const [follows, setFollows] = React.useState<FollowTarget[]>([]);
+  const [profile, setProfile] = React.useState<PersonalPageProfile | null>(null);
+  const [following, setFollowing] = React.useState<{ id: string; name: string; handle: string }[]>([]);
   const [draft, setDraft] = React.useState('');
   const [selectedType, setSelectedType] = React.useState<SelectedPostType>(DEFAULT_POST_TYPE);
   const [selectedMedia, setSelectedMedia] = React.useState<CommonsMediaPreview[]>([]);
   const [viewerMedia, setViewerMedia] = React.useState<CommonsMediaPreview | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
   const [deletingPostId, setDeletingPostId] = React.useState<string | null>(null);
+  const [nextPostsCursor, setNextPostsCursor] = React.useState<string | null>(null);
+  const [isLoadingMorePosts, setIsLoadingMorePosts] = React.useState(false);
 
   React.useEffect(() => {
     if (isLoading || (isAuthenticated && sessionToken)) return;
@@ -58,13 +57,37 @@ export default function PersonalPageScreen() {
   React.useEffect(() => {
     if (!user?.email || !sessionToken) return;
 
-    Promise.all([api.getPersonalPage(publicHandle, sessionToken), listFollowTargets(user.email)])
-      .then(([page, storedFollows]) => {
+    Promise.all([api.getPersonalPage(publicHandle, sessionToken), api.listFollowing(sessionToken)])
+      .then(([page, followingResult]) => {
         setPosts(page.posts);
-        setFollows(storedFollows);
+        setProfile(page.profile);
+        setNextPostsCursor(page.nextCursor);
+        setFollowing(followingResult.members);
       })
       .catch((error) => console.warn('Could not load personal page data:', error));
   }, [publicHandle, sessionToken, user?.email]);
+
+  const loadMorePosts = async () => {
+    if (!nextPostsCursor || isLoadingMorePosts || !sessionToken) return;
+
+    setIsLoadingMorePosts(true);
+    try {
+      const page = await api.getPersonalPage(publicHandle, sessionToken, nextPostsCursor);
+      setPosts((current) => [...current, ...page.posts]);
+      setNextPostsCursor(page.nextCursor);
+    } catch (error) {
+      console.error('Failed to load more page posts:', error);
+    } finally {
+      setIsLoadingMorePosts(false);
+    }
+  };
+
+  const handleScroll = (event: { nativeEvent: { contentOffset: { y: number }; layoutMeasurement: { height: number }; contentSize: { height: number } } }) => {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    if (contentOffset.y + layoutMeasurement.height >= contentSize.height - 400) {
+      void loadMorePosts();
+    }
+  };
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -213,7 +236,13 @@ export default function PersonalPageScreen() {
         </View>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 32 }}
+        keyboardShouldPersistTaps="handled"
+        onScroll={handleScroll}
+        scrollEventThrottle={200}
+      >
         <View className="px-4 py-3">
           <View className="rounded-[28px] border bg-white p-4" style={{ borderColor: PAGE_THEME.border }}>
             <View className="flex-row items-center gap-3">
@@ -228,6 +257,16 @@ export default function PersonalPageScreen() {
                 <Text className="text-xs font-black text-gray-700">{posts.length} posts</Text>
               </View>
             </View>
+            {profile ? (
+              <View className="mt-3 flex-row gap-4">
+                <Text className="text-xs font-bold text-gray-600">
+                  <Text className="font-black text-gray-950">{profile.followerCount}</Text> followers
+                </Text>
+                <Text className="text-xs font-bold text-gray-600">
+                  <Text className="font-black text-gray-950">{profile.followingCount}</Text> following
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <View className="mt-3 rounded-[28px] border bg-white p-4" style={{ borderColor: PAGE_THEME.border }}>
@@ -315,79 +354,54 @@ export default function PersonalPageScreen() {
             ) : null}
 
             {posts.map((post) => (
-              <View key={post.id} className="overflow-hidden rounded-[28px] border bg-white" style={{ borderColor: PAGE_THEME.border }}>
-                <View className="p-4">
-                  <View className="flex-row items-start gap-2.5">
-                    <View className="h-11 w-11 items-center justify-center rounded-full bg-slate-200">
-                      <Text className="text-base font-black text-slate-600">{personInitials(displayName)}</Text>
+              <PersonalPagePostCard
+                key={post.id}
+                post={post}
+                sessionToken={sessionToken}
+                currentUserId={user?.id}
+                onChange={(updated) =>
+                  setPosts((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+                }
+                onDeletePost={() => deletePost(post.id)}
+                isDeletingPost={deletingPostId === post.id}
+                onMediaPress={setViewerMedia}
+                header={
+                  <View className="mb-3 flex-row items-center gap-2.5">
+                    <View className="h-9 w-9 items-center justify-center rounded-full bg-slate-200">
+                      <Text className="text-sm font-black text-slate-600">{personInitials(displayName)}</Text>
                     </View>
                     <View className="min-w-0 flex-1">
-                      <View className="flex-row flex-wrap items-center gap-1.5">
-                        <Text className="text-sm font-black text-gray-950">{displayName}</Text>
-                        <Text className="text-xs font-semibold text-slate-500">{personDisplayHandle(publicHandle)}</Text>
-                        <Text className="text-xs font-semibold text-slate-400">·</Text>
-                  <Text className="text-xs font-semibold text-slate-500">{post.time || formatDate(post.createdAt)}</Text>
-                      </View>
-                      {shouldShowPostType(post.tag) ? (
-                        <View className="mt-1.5 self-start rounded-md px-2 py-0.5" style={{ backgroundColor: PAGE_THEME.primarySoft }}>
-                          <Text className="text-[10px] font-black" style={{ color: PAGE_THEME.primary }}>
-                            {postTypeLabel(post.tag)}
-                          </Text>
-                        </View>
-                      ) : null}
+                      <Text className="text-sm font-black text-gray-950">{displayName}</Text>
+                      <Text className="text-xs font-semibold text-slate-500">
+                        {personDisplayHandle(publicHandle)} · {post.time || formatDate(post.createdAt)}
+                      </Text>
                     </View>
-                    <TouchableOpacity
-                      onPress={() => deletePost(post.id)}
-                      disabled={deletingPostId === post.id}
-                      className="h-8 w-8 items-center justify-center rounded-full"
-                      accessibilityLabel="Delete post"
-                    >
-                      {deletingPostId === post.id ? (
-                        <ActivityIndicator size="small" color="#DC2626" />
-                      ) : (
-                        <Trash2 size={16} color="#DC2626" />
-                      )}
-                    </TouchableOpacity>
                   </View>
-                  {post.body ? <Text className="mt-3 text-sm leading-5 text-gray-800">{post.body}</Text> : null}
-                </View>
-
-                {post.media?.length ? (
-                  <View className="border-y border-gray-100 bg-gray-50">
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      <View className="flex-row gap-2 p-2">
-                        {post.media.map((media, index) => (
-                          <TouchableOpacity
-                            key={`${media.url}-${index}`}
-                            onPress={() => setViewerMedia(media)}
-                            className="overflow-hidden rounded-2xl bg-gray-200"
-                            activeOpacity={0.85}
-                          >
-                            <CommonsMediaTile media={media} size={post.media.length === 1 ? 286 : FEED_MEDIA_TILE_SIZE} />
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </ScrollView>
-                  </View>
-                ) : null}
-
-                <View className="flex-row border-t border-gray-100 px-4 py-3">
-                  <View className="flex-1 flex-row items-center justify-center gap-2">
-                    <MessageCircle size={15} color={PAGE_THEME.muted} />
-                    <Text className="text-xs font-black text-gray-600">0</Text>
-                  </View>
-                </View>
-              </View>
+                }
+              />
             ))}
+            {isLoadingMorePosts ? (
+              <View className="items-center py-4">
+                <ActivityIndicator size="small" color={PAGE_THEME.primary} />
+              </View>
+            ) : null}
           </View>
 
-          {follows.length > 0 ? (
+          {following.length > 0 ? (
             <View className="mt-4 rounded-2xl border bg-white p-4" style={{ borderColor: PAGE_THEME.border }}>
               <Text className="text-sm font-black text-gray-950">Following</Text>
-              {follows.slice(0, 8).map((follow) => (
-                <Text key={`${follow.type}-${follow.id}`} className="py-1 text-sm font-semibold text-gray-700">
-                  {follow.label} · {follow.type}
-                </Text>
+              {following.slice(0, 8).map((member) => (
+                <TouchableOpacity
+                  key={member.id}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/people/[handle]',
+                      params: { handle: member.handle, name: member.name },
+                    } as any)
+                  }
+                >
+                  <Text className="py-1 text-sm font-semibold text-gray-700">{member.name}</Text>
+                </TouchableOpacity>
               ))}
             </View>
           ) : null}

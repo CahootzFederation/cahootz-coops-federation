@@ -191,6 +191,12 @@ export interface CommonsPost {
   comments: CommonsComment[];
 }
 
+export interface SearchPerson {
+  id: string;
+  name: string;
+  handle: string;
+}
+
 export interface PersonalPageProfile {
   id: string;
   name: string;
@@ -442,6 +448,21 @@ export const api = {
       response,
       'Failed to load Commons feed'
     );
+  },
+
+  async searchCommons(
+    data: { coopId?: string; query: string; limit?: number },
+    sessionToken?: string | null
+  ) {
+    const input = encodeURIComponent(
+      JSON.stringify({ coopId: data.coopId || 'cahootz', query: data.query, limit: data.limit ?? 10 })
+    );
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.search?input=${input}`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<{ people: SearchPerson[]; posts: CommonsPost[] }>(response, 'Search failed');
   },
 
   async getCommonsPost(data: { coopId?: string; postId: string }, sessionToken?: string | null) {

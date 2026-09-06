@@ -96,9 +96,12 @@ jobs:
             --message "$message"
             --environment "$UPDATE_CHANNEL"
             --platform "$UPDATE_PLATFORM"
-            --rollout-percentage "$ROLLOUT_PERCENTAGE"
             --non-interactive
           )
+
+          if [ "$ROLLOUT_PERCENTAGE" != "100" ]; then
+            args+=(--rollout-percentage "$ROLLOUT_PERCENTAGE")
+          fi
 
           if [ "$CLEAR_CACHE" = "true" ]; then
             args+=(--clear-cache)

@@ -3,6 +3,7 @@ import { usePathname, useRouter, useSegments } from 'expo-router';
 import { secureStorage } from '@/lib/secure-storage';
 import { setActiveCoopConfig, resetCoopConfig, type CoopConfig } from '@/lib/coop-config';
 import { registerForNativePushNotifications } from '@/lib/push-notifications';
+import { canAccessUpdateChannelDebug, clearUpdateChannelOverrideQuietly } from '@/lib/update-channel-debug';
 
 interface User {
   id: string;
@@ -69,6 +70,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.warn('Native push registration skipped:', error);
     });
   }, [sessionToken, user?.profileOnboardingCompletedAt, user?.coop?.id]);
+
+  useEffect(() => {
+    if (isLoading || canAccessUpdateChannelDebug(user?.email)) return;
+
+    void clearUpdateChannelOverrideQuietly();
+  }, [isLoading, user?.email]);
 
   // Handle navigation based on auth state
   useEffect(() => {

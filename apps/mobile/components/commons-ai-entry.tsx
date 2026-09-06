@@ -634,6 +634,23 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
     router.push('/(tabs)/messages' as any);
   };
 
+  const openSignIn = () => {
+    setDrawerOpen(false);
+    setAccountPromptOpen(false);
+    if (onSignInPress) {
+      onSignInPress();
+      return;
+    }
+
+    router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
+  };
+
+  const handleDrawerSignOut = async () => {
+    setDrawerOpen(false);
+    await logout();
+    router.replace('/' as any);
+  };
+
   const finishProfileBanner = topBanner ?? (
     hasAccountSession && !user?.profileOnboardingCompletedAt ? (
       <TouchableOpacity
@@ -1031,7 +1048,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
                     if (hasAccountSession) {
                       router.push('/(tabs)/wallet' as any);
                     } else {
-                      onSignInPress?.();
+                      openSignIn();
                     }
                   }}
                   className="min-w-0 flex-1 flex-row items-center gap-2.5"
@@ -1141,7 +1158,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
 
               {hasAccountSession ? (
                 <TouchableOpacity
-                  onPress={() => void logout()}
+                  onPress={() => void handleDrawerSignOut()}
                   className="flex-row items-center justify-center gap-2 rounded-2xl bg-stone-100 py-3"
                   activeOpacity={0.8}
                 >
@@ -1150,7 +1167,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  onPress={onSignInPress}
+                  onPress={openSignIn}
                   className="flex-row items-center justify-center gap-2 rounded-2xl py-3"
                   style={{ backgroundColor: SOCIAL_THEME.primary }}
                   activeOpacity={0.85}

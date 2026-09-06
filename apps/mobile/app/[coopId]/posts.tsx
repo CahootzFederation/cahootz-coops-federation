@@ -10,7 +10,7 @@ export default function CommonsPostsScreen() {
     <CommonsAiEntry
       feedCoopId={coopId}
       onMessagesPress={() => router.push('/(tabs)/messages' as any)}
-      onSignInPress={() => router.push({ pathname: '/', params: { entry: 'sign-in' } } as any)}
+      onSignInPress={() => router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any)}
     />
   );
 }

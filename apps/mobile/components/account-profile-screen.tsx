@@ -17,6 +17,7 @@ import {
   Store,
   Trash2,
   UserCircle,
+  Users,
   Vote,
   Wallet,
 } from 'lucide-react-native';
@@ -123,6 +124,18 @@ export default function AccountProfileScreen() {
   };
 
   const navItems: NavItem[] = [
+    {
+      label: 'Personal Page',
+      description: 'Posts, drafts, offers, projects, and saved thoughts',
+      icon: UserCircle,
+      href: '/(authenticated)/personal-page',
+    },
+    {
+      label: 'Private Spaces',
+      description: 'Small invite-only groups before they become commons',
+      icon: Users,
+      href: '/(authenticated)/spaces',
+    },
     {
       label: 'Wallet',
       description: 'SC balance, wallet address, cards, and funding',

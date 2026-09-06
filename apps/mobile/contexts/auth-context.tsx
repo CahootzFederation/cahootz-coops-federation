@@ -8,6 +8,7 @@ import { canAccessUpdateChannelDebug, clearUpdateChannelOverrideQuietly } from '
 interface User {
   id: string;
   email: string;
+  handle: string;
   name: string | null;
   roles: string[];
   status: string;

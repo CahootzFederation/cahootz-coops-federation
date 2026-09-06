@@ -13,6 +13,7 @@ datasource db {
 model User {
   id                  String     @id @default(cuid())
   email               String     @unique
+  handle              String?    @unique
   name                String?
   roles               String[]   @default(["member"]) // member, business, admin, governor
   status              UserStatus @default(PENDING)
@@ -63,13 +64,32 @@ model User {
   scMintEvents         SCMintEvent[]
   scBurnEvents         SCBurnEvent[]
   commonsPosts         CommonsPost[]
+  personalPagePosts    PersonalPagePost[]
   commonsComments      CommonsComment[]
   commonsPostSupports  CommonsPostSupport[]
   commonsSuggestions   CommonsSuggestion[]
   sentDirectMessages   DirectMessage[]       @relation("DirectMessageSender")
   receivedDirectMessages DirectMessage[]     @relation("DirectMessageReceiver")
+  following              Follow[]                    @relation("Follower")
+  followers              Follow[]                    @relation("Following")
+  personalPagePostComments PersonalPagePostComment[]
+  personalPagePostSupports PersonalPagePostSupport[]
 
   @@index([deletedAt])
+  @@schema("public")
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+  @@index([followerId, createdAt])
+  @@index([followingId, createdAt])
   @@schema("public")
 }
 
@@ -716,6 +736,55 @@ model CommonsPost {
   @@index([coopId, createdAt])
   @@index([coopId, classification, createdAt])
   @@index([authorId, createdAt])
+  @@schema("public")
+}
+
+model PersonalPagePost {
+  id       String @id @default(cuid())
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  content String  @db.Text
+  tag     String?
+  media   Json    @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  comments PersonalPagePostComment[]
+  supports PersonalPagePostSupport[]
+
+  @@index([authorId, createdAt])
+  @@schema("public")
+}
+
+model PersonalPagePostComment {
+  id       String           @id @default(cuid())
+  postId   String
+  post     PersonalPagePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId String
+  author   User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content  String           @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId, createdAt])
+  @@index([authorId, createdAt])
+  @@schema("public")
+}
+
+model PersonalPagePostSupport {
+  id        String           @id @default(cuid())
+  postId    String
+  post      PersonalPagePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId, createdAt])
   @@schema("public")
 }
 

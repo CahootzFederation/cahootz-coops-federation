@@ -2,6 +2,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -27,7 +28,6 @@ import {
   LogOut,
   Menu,
   MessageCircle,
-  MoreHorizontal,
   Repeat2,
   Scale,
   Send,
@@ -42,6 +42,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
+import { PostTypeSelector } from '@/components/post-type-selector';
 import { api, type CommonsDirectoryItem, type CommonsPost, type CommonsPostMedia, type CommonsProfile } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import {
@@ -49,6 +50,9 @@ import {
   FEED_MEDIA_TILE_SIZE,
   CommonsMediaTile,
 } from '@/components/commons-media-viewer';
+import { DEFAULT_POST_TYPE, postTypeLabel, postTypePlaceholder, shouldShowPostType, type SelectedPostType } from '@/lib/post-types';
+import { listFollowTargets, toggleFollowTarget, type FollowTarget } from '@/lib/personal-social-store';
+import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
 
 type PendingAction = (sessionToken: string) => Promise<void>;
 type ComposerNotice = { type: 'success' | 'error' | 'info'; body: string } | null;
@@ -80,6 +84,7 @@ const DEFAULT_COMMONS_PROFILE: CommonsProfile = {
 };
 
 const MAX_MEDIA_ATTACHMENTS = 4;
+const PERSONAL_PAGE_DESTINATION_ID = '__personal_page__';
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
 const ALLOWED_POST_MEDIA_MIMES = new Set([
@@ -99,6 +104,8 @@ const COMMONS_RULES = [
 ] as const;
 
 const DRAWER_SECTIONS = [
+  { label: 'Personal Page', icon: UserCircle, action: '/(authenticated)/personal-page' },
+  { label: 'Private Spaces', icon: Users, action: '/(authenticated)/spaces' },
   { label: 'Wallet', icon: Wallet, action: '/(tabs)/wallet' },
   { label: 'Commons Stores & Shops', icon: Store, action: '/(tabs)/store' },
   { label: 'Proposals & Governance', icon: Scale, action: '/(tabs)/proposals' },
@@ -133,6 +140,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
   const [isPosting, setIsPosting] = useState(false);
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
   const [selectedMediaItems, setSelectedMediaItems] = useState<ComposerMedia[]>([]);
+  const [selectedPostType, setSelectedPostType] = useState<SelectedPostType>(DEFAULT_POST_TYPE);
+  const [followTargets, setFollowTargets] = useState<FollowTarget[]>([]);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [composerNotice, setComposerNotice] = useState<ComposerNotice>(null);
   const [accountPromptOpen, setAccountPromptOpen] = useState(false);
   const [accountEmail, setAccountEmail] = useState('');
@@ -148,11 +158,23 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
   const [suggestionMessage, setSuggestionMessage] = useState('');
   const hasAccountSession = isAuthenticated && !!sessionToken;
   const accountName = user?.name?.trim() || user?.email?.split('@')[0] || 'member';
-  const accountHandle = (user?.email?.split('@')[0] || accountName).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const accountHandle = user?.handle || (user?.email?.split('@')[0] || accountName).toLowerCase().replace(/[^a-z0-9]/g, '');
   const isScopedFeed = feedCoopId !== 'all';
   const headerCommonsName = isScopedFeed ? commonsProfile.name : 'Commons';
   const postableCommons = useMemo(() => {
     const byId = new Map<string, CommonsDirectoryItem>();
+    if (hasAccountSession) {
+      byId.set(PERSONAL_PAGE_DESTINATION_ID, {
+        id: PERSONAL_PAGE_DESTINATION_ID,
+        name: 'My Personal Page',
+        shortName: 'Page',
+        description: 'Post directly to your public personal page.',
+        accessStatus: 'ACTIVE' as const,
+        isMember: true,
+        isLocked: false,
+        canApply: false,
+      });
+    }
     const fallback = {
       ...DEFAULT_COMMONS_PROFILE,
       accessStatus: 'ACTIVE' as const,
@@ -164,7 +186,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
     byId.set(fallback.id, fallback);
     memberCommons.forEach((commons) => byId.set(commons.id, commons));
     return Array.from(byId.values());
-  }, [memberCommons]);
+  }, [hasAccountSession, memberCommons]);
   const selectedComposerCommons = postableCommons.find((commons) => commons.id === selectedComposerCoopId) || postableCommons[0];
   const scopedFeedLocked =
     isScopedFeed &&
@@ -183,16 +205,42 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
             canApply: false,
           }];
 
-      return activeCommonsForDrawer.map((commons) => ({
+      const commonsItems = activeCommonsForDrawer.map((commons) => ({
         id: commons.id,
         label: commons.name,
         description: commons.description,
         icon: commons.name.slice(0, 1).toUpperCase(),
         accessStatus: commons.accessStatus,
+        action: `/${commons.id}/posts`,
       }));
+
+      return hasAccountSession
+        ? [
+            {
+              id: PERSONAL_PAGE_DESTINATION_ID,
+              label: 'My Personal Page',
+              description: 'Your public page feed',
+              icon: accountName.slice(0, 1).toUpperCase(),
+              accessStatus: 'ACTIVE' as const,
+              action: '/(authenticated)/personal-page',
+            },
+            ...commonsItems,
+          ]
+        : commonsItems;
     },
-    [memberCommons]
+    [accountName, hasAccountSession, memberCommons]
   );
+
+  useEffect(() => {
+    if (!hasAccountSession || !user?.email) {
+      setFollowTargets([]);
+      return;
+    }
+
+    listFollowTargets(user.email)
+      .then(setFollowTargets)
+      .catch((error) => console.warn('Could not load follow targets:', error));
+  }, [hasAccountSession, user?.email]);
 
   useEffect(() => {
     let mounted = true;
@@ -283,11 +331,11 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
     }
 
     if (!hasAccountSession) {
-      setComposerNotice({ type: 'info', body: `Sign in once to publish posts in ${selectedComposerCommons?.name || 'a commons'}.` });
+      setComposerNotice({ type: 'info', body: `Sign in once to publish posts in ${selectedComposerCommons?.name || 'a commons or page'}.` });
     }
 
     if (!selectedComposerCommons) {
-      setComposerNotice({ type: 'error', body: 'Choose a commons first.' });
+      setComposerNotice({ type: 'error', body: 'Choose where to post first.' });
       return;
     }
 
@@ -295,6 +343,8 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
       setIsPosting(true);
       setComposerNotice(null);
       try {
+        const isPersonalPageDestination = selectedComposerCommons.id === PERSONAL_PAGE_DESTINATION_ID;
+        const uploadResourceId = isPersonalPageDestination ? 'personal-page' : selectedComposerCommons.id;
         const uploadedMedia = selectedMediaItems.length
           ? await (async () => {
               setIsUploadingMedia(true);
@@ -302,7 +352,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
               return Promise.all(
                 selectedMediaItems.map((media) =>
                   api.uploadCommonsPostMedia({
-                    coopId: selectedComposerCommons.id,
+                    coopId: uploadResourceId,
                     uri: media.uri,
                     fileName: media.fileName,
                     mimeType: media.mimeType,
@@ -316,9 +366,24 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
               );
             })()
           : [];
+
+        if (isPersonalPageDestination) {
+          await api.createPersonalPagePost({
+            content: trimmed,
+            tag: selectedPostType,
+            media: uploadedMedia,
+          }, token);
+          setDraft('');
+          setSelectedPostType(DEFAULT_POST_TYPE);
+          clearSelectedMedia();
+          setComposerNotice({ type: 'success', body: 'Posted to your Personal Page.' });
+          return;
+        }
+
         const result = await api.createCommonsPost({
           content: trimmed,
           coopId: selectedComposerCommons.id,
+          tag: selectedPostType,
           media: uploadedMedia,
         }, token);
         const belongsInCurrentFeed = feedCoopId === 'all' || result.post.coopId === feedCoopId;
@@ -326,6 +391,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
           setFeedPosts((current) => [result.post, ...current]);
         }
         setDraft('');
+        setSelectedPostType(DEFAULT_POST_TYPE);
         clearSelectedMedia();
         setComposerNotice({
           type: 'success',
@@ -531,12 +597,45 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
     });
   };
 
+  const deletePost = (post: CommonsPost) => {
+    if (deletingPostId || !sessionToken) return;
+
+    Alert.alert('Delete post?', 'This can\'t be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setDeletingPostId(post.id);
+          try {
+            await api.deleteCommonsPost(post.id, sessionToken);
+            setFeedPosts((current) => current.filter((item) => item.id !== post.id));
+          } catch (error) {
+            Alert.alert('Could not delete post', error instanceof Error ? error.message : 'Please try again.');
+          } finally {
+            setDeletingPostId(null);
+          }
+        },
+      },
+    ]);
+  };
+
   const openPostDetail = (post: CommonsPost) => {
     router.push({
       pathname: '/[coopId]/posts/[postId]',
       params: {
         coopId: post.coopId || feedCoopId || 'cahootz',
         postId: post.id,
+      },
+    } as any);
+  };
+
+  const openPersonPage = (author: string, handle?: string) => {
+    router.push({
+      pathname: '/people/[handle]',
+      params: {
+        handle: handle || personHandleFromName(author),
+        name: author,
       },
     } as any);
   };
@@ -605,14 +704,25 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
   };
 
   const tagColor = (tag: CommonsPost['tag']) => {
-    if (tag === 'Social') return { bg: '#F3F4F6', fg: '#374151' };
+    if (tag === 'Social' || tag === 'Thought') return { bg: '#F3F4F6', fg: '#374151' };
     if (tag === 'Meme') return { bg: SOCIAL_THEME.primarySoft, fg: '#C2410C' };
-    if (tag === 'Win') return { bg: '#D1FAE5', fg: '#047857' };
-    if (tag === 'Opportunity') return { bg: '#E0E7FF', fg: '#3730A3' };
-    if (tag === 'Need') return { bg: '#DCFCE7', fg: '#166534' };
-    if (tag === 'Vote') return { bg: SOCIAL_THEME.primarySoft, fg: '#C2410C' };
-    if (tag === 'Resource') return { bg: '#FEE2E2', fg: '#B91C1C' };
+    if (tag === 'Win' || tag === 'Update') return { bg: '#D1FAE5', fg: '#047857' };
+    if (tag === 'Opportunity' || tag === 'Offer' || tag === 'Product') return { bg: '#E0E7FF', fg: '#3730A3' };
+    if (tag === 'Need' || tag === 'Ask') return { bg: '#DCFCE7', fg: '#166534' };
+    if (tag === 'Vote' || tag === 'Proposal' || tag === 'Decision') return { bg: SOCIAL_THEME.primarySoft, fg: '#C2410C' };
+    if (tag === 'Resource' || tag === 'Receipt' || tag === 'Project') return { bg: '#FEE2E2', fg: '#B91C1C' };
     return { bg: '#E0F2FE', fg: '#075985' };
+  };
+
+  const isFollowing = (targetId: string, type: FollowTarget['type']) =>
+    followTargets.some((target) => target.id === targetId && target.type === type);
+
+  const toggleFollow = (target: Omit<FollowTarget, 'createdAt'>) => {
+    void requireAccount(async () => {
+      if (!user?.email) return;
+      const next = await toggleFollowTarget(user.email, target, personHandleFromName(accountName));
+      setFollowTargets(next);
+    });
   };
 
   const goToDrawerItem = (href: string | null) => {
@@ -719,17 +829,27 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
           </Text>
         ) : null}
 
-        <View className="flex-row items-center gap-2">
+        <View className="mb-2 flex-row items-center justify-between">
           <TouchableOpacity
             onPress={() => setComposerPickerOpen(true)}
-            className="h-10 w-10 items-center justify-center rounded-full bg-slate-400"
+            className="min-w-0 flex-1 flex-row items-center gap-2"
             activeOpacity={0.8}
             accessibilityLabel={`Posting to ${selectedComposerCommons?.shortName || selectedComposerCommons?.name || 'Commons'}. Tap to switch.`}
           >
-            <Text className="text-base font-black text-white">
-              {accountName.slice(0, 1).toUpperCase()}
+            <View className="h-8 w-8 items-center justify-center rounded-full bg-slate-400">
+              <Text className="text-sm font-black text-white">
+                {accountName.slice(0, 1).toUpperCase()}
+              </Text>
+            </View>
+            <Text className="min-w-0 text-xs font-black text-slate-600" numberOfLines={1}>
+              {selectedComposerCommons?.name || 'Choose where to post'}
             </Text>
+            <ChevronDown size={13} color="#64748B" />
           </TouchableOpacity>
+          <PostTypeSelector value={selectedPostType} onChange={setSelectedPostType} />
+        </View>
+
+        <View className="flex-row items-center gap-2">
           <View className="min-w-0 flex-1 flex-row items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5">
             <TextInput
               value={draft}
@@ -737,7 +857,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
                 setDraft(text);
                 if (composerNotice) setComposerNotice(null);
               }}
-              placeholder="Share what's happening..."
+              placeholder={postTypePlaceholder(selectedPostType)}
               placeholderTextColor={SOCIAL_THEME.muted}
               multiline
               className="max-h-20 min-h-8 flex-1 text-left text-sm text-gray-900"
@@ -777,62 +897,62 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
       style={{ backgroundColor: SOCIAL_THEME.paper }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <View className="border-b border-gray-200 bg-white px-3 pb-2" style={{ paddingTop: insets.top + 12 }}>
+        <View className="flex-row items-center gap-2">
+          <TouchableOpacity
+            onPress={() => setDrawerOpen(true)}
+            className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
+            accessibilityLabel="Open menu"
+          >
+            <Menu size={18} color="#1F2937" strokeWidth={2.6} />
+          </TouchableOpacity>
+          <View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: SOCIAL_THEME.primary }}>
+            <LayoutGrid size={17} color="#FFFFFF" strokeWidth={2.6} />
+          </View>
+          <View className="min-w-0 flex-1">
+            <View className="flex-row items-center gap-1.5">
+              <Text className="min-w-0 text-base font-black text-gray-950" numberOfLines={1}>
+                {headerCommonsName}
+              </Text>
+              <View className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5">
+                <Text className="text-[10px] font-black text-emerald-600">Member</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => setDrawerOpen(true)}
+              className="mt-0.5 flex-row items-center"
+              activeOpacity={0.75}
+              accessibilityLabel="Switch commons"
+            >
+              <Text className="text-xs font-semibold text-slate-600">Switch commons</Text>
+              <ChevronDown size={13} color="#475569" />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            onPress={openMessages}
+            className="relative h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
+            accessibilityLabel="Open direct messages"
+          >
+            <MessageCircle size={16} color="#334155" />
+            <View className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white" style={{ backgroundColor: SOCIAL_THEME.primary }} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/(tabs)/notifications' as any)}
+            className="relative h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
+            accessibilityLabel="Open alerts"
+          >
+            <Bell size={16} color="#334155" />
+            <View className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white" style={{ backgroundColor: SOCIAL_THEME.primary }} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <ScrollView
         ref={scrollRef}
         className="flex-1"
         contentContainerStyle={{ paddingBottom: scopedFeedLocked ? 28 : 148 }}
         keyboardShouldPersistTaps="handled"
       >
-        <View className="border-b border-gray-200 bg-white px-3 pb-2" style={{ paddingTop: insets.top + 12 }}>
-          <View className="flex-row items-center gap-2">
-            <TouchableOpacity
-              onPress={() => setDrawerOpen(true)}
-              className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
-              accessibilityLabel="Open menu"
-            >
-              <Menu size={18} color="#1F2937" strokeWidth={2.6} />
-            </TouchableOpacity>
-            <View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: SOCIAL_THEME.primary }}>
-              <LayoutGrid size={17} color="#FFFFFF" strokeWidth={2.6} />
-            </View>
-            <View className="min-w-0 flex-1">
-              <View className="flex-row items-center gap-1.5">
-                <Text className="min-w-0 text-base font-black text-gray-950" numberOfLines={1}>
-                  {headerCommonsName}
-                </Text>
-                <View className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5">
-                  <Text className="text-[10px] font-black text-emerald-600">Member</Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                onPress={() => setDrawerOpen(true)}
-                className="mt-0.5 flex-row items-center"
-                activeOpacity={0.75}
-                accessibilityLabel="Switch commons"
-              >
-                <Text className="text-xs font-semibold text-slate-600">Switch commons</Text>
-                <ChevronDown size={13} color="#475569" />
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              onPress={openMessages}
-              className="relative h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
-              accessibilityLabel="Open direct messages"
-            >
-              <MessageCircle size={16} color="#334155" />
-              <View className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white" style={{ backgroundColor: SOCIAL_THEME.primary }} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => router.push('/(tabs)/notifications' as any)}
-              className="relative h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
-              accessibilityLabel="Open alerts"
-            >
-              <Bell size={16} color="#334155" />
-              <View className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white" style={{ backgroundColor: SOCIAL_THEME.primary }} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
         <View className="px-4 py-3">
           {finishProfileBanner}
 
@@ -868,7 +988,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
 
             {visiblePosts.map((post) => {
               const colors = tagColor(post.tag);
-              const authorHandle = `@${post.author.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'member'}`;
+              const authorFollowId = post.authorHandle || personHandleFromName(post.author);
+              const authorHandle = personDisplayHandle(authorFollowId);
+              const followsAuthor = isFollowing(authorFollowId, 'person');
               const firstComment = post.comments[0];
               return (
                 <TouchableOpacity
@@ -880,25 +1002,80 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
                 >
                   <View className="p-4">
                     <View className="flex-row items-start gap-2.5">
-                      <View className="h-11 w-11 items-center justify-center rounded-full bg-slate-200">
-                        <Text className="text-base font-black text-slate-600">
-                          {post.author.slice(0, 1).toUpperCase()}
-                        </Text>
-                      </View>
+                      <TouchableOpacity
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          openPersonPage(post.author, post.authorHandle);
+                        }}
+                        className="h-11 w-11 items-center justify-center rounded-full bg-slate-200"
+                        activeOpacity={0.75}
+                        accessibilityLabel={`Open ${post.author}'s personal page`}
+                      >
+                        <Text className="text-base font-black text-slate-600">{personInitials(post.author)}</Text>
+                      </TouchableOpacity>
                       <View className="min-w-0 flex-1">
-                        <View className="flex-row flex-wrap items-center gap-1.5">
-                          <Text className="text-sm font-black text-gray-950">{post.author}</Text>
-                          <Text className="text-xs font-semibold text-slate-500">{authorHandle}</Text>
-                          <Text className="text-xs font-semibold text-slate-400">·</Text>
-                          <Text className="text-xs font-semibold text-slate-500">{post.time}</Text>
-                        </View>
-                        <View className="mt-1.5 self-start rounded-md px-2 py-0.5" style={{ backgroundColor: colors.bg }}>
-                          <Text className="text-[10px] font-black" style={{ color: colors.fg }}>
-                            {post.group || post.tag}
+                        <TouchableOpacity
+                          onPress={(event) => {
+                            event.stopPropagation();
+                            openPersonPage(post.author, post.authorHandle);
+                          }}
+                          activeOpacity={0.75}
+                          accessibilityLabel={`Open ${post.author}'s personal page`}
+                        >
+                          <View className="flex-row flex-wrap items-center gap-1.5">
+                            <Text className="text-sm font-black text-gray-950">{post.author}</Text>
+                            <Text className="text-xs font-semibold text-slate-500">{authorHandle}</Text>
+                            <Text className="text-xs font-semibold text-slate-400">·</Text>
+                            <Text className="text-xs font-semibold text-slate-500">{post.time}</Text>
+                          </View>
+                        </TouchableOpacity>
+                        <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5">
+                          {shouldShowPostType(post.tag) ? (
+                            <View className="self-start rounded-md px-2 py-0.5" style={{ backgroundColor: colors.bg }}>
+                              <Text className="text-[10px] font-black" style={{ color: colors.fg }}>
+                                {postTypeLabel(post.tag)}
+                              </Text>
+                            </View>
+                          ) : null}
+                          <Text className="text-[11px] font-semibold text-slate-400" numberOfLines={1}>
+                            {post.group}
                           </Text>
                         </View>
                       </View>
-                      <MoreHorizontal size={18} color="#475569" />
+                      {post.authorId && post.authorId === user?.id ? (
+                        <TouchableOpacity
+                          onPress={(event) => {
+                            event.stopPropagation();
+                            deletePost(post);
+                          }}
+                          disabled={deletingPostId === post.id}
+                          className="h-8 w-8 items-center justify-center rounded-full"
+                          accessibilityLabel="Delete post"
+                        >
+                          {deletingPostId === post.id ? (
+                            <ActivityIndicator size="small" color="#DC2626" />
+                          ) : (
+                            <Trash2 size={16} color="#DC2626" />
+                          )}
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          onPress={(event) => {
+                            event.stopPropagation();
+                            toggleFollow({ id: authorFollowId, type: 'person', label: post.author });
+                          }}
+                          className="rounded-full border px-3 py-1.5"
+                          style={{
+                            borderColor: followsAuthor ? SOCIAL_THEME.primary : SOCIAL_THEME.border,
+                            backgroundColor: followsAuthor ? SOCIAL_THEME.primarySoft : '#FFFFFF',
+                          }}
+                          activeOpacity={0.75}
+                        >
+                          <Text className="text-[10px] font-black" style={{ color: followsAuthor ? SOCIAL_THEME.primary : '#475569' }}>
+                            {followsAuthor ? 'Following' : 'Follow'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
 
                     {post.title && post.title !== post.body ? (
@@ -980,9 +1157,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
           <View className="max-h-[70%] rounded-t-2xl bg-white">
             <View className="border-b border-gray-200 px-5 pb-4 pt-5">
               <View className="flex-row items-center justify-between gap-3">
-                <View className="min-w-0 flex-1">
-                  <Text className="text-xs font-black uppercase text-gray-500">Post destination</Text>
-                  <Text className="text-2xl font-black text-gray-950">Choose a commons</Text>
+              <View className="min-w-0 flex-1">
+                <Text className="text-xs font-black uppercase text-gray-500">Post destination</Text>
+                  <Text className="text-2xl font-black text-gray-950">Choose where to post</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setComposerPickerOpen(false)}
@@ -1089,7 +1266,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
                   return (
                     <TouchableOpacity
                       key={item.id}
-                      onPress={() => goToDrawerItem(`/${item.id}/posts`)}
+                      onPress={() => goToDrawerItem(item.action)}
                       className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
                       style={isActive ? { backgroundColor: SOCIAL_THEME.primarySoft } : undefined}
                       activeOpacity={0.75}

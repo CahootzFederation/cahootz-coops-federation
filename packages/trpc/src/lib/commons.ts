@@ -60,6 +60,47 @@ export async function getCoopSessionData(
   };
 }
 
+function slugifyHandle(base: string) {
+  return base.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 30) || "member";
+}
+
+type HandleDb = Pick<Context["db"], "user">;
+
+/**
+ * Returns the user's stable, unique handle, generating and persisting one
+ * on first use. Handles used to be computed on the fly from display name,
+ * which collided across users and changed whenever they renamed themselves.
+ */
+export async function ensureUserHandle(
+  db: HandleDb,
+  user: { id: string; handle?: string | null; name: string | null; email: string },
+) {
+  if (user.handle) return user.handle;
+
+  const base = slugifyHandle(user.name || user.email.split("@")[0] || "member");
+  let candidate = base;
+  let suffix = 0;
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const existing = await db.user.findUnique({ where: { handle: candidate }, select: { id: true } });
+    if (!existing || existing.id === user.id) break;
+    suffix += 1;
+    candidate = `${base}${suffix}`;
+  }
+
+  try {
+    await db.user.update({ where: { id: user.id }, data: { handle: candidate } });
+  } catch (error) {
+    // Unique constraint race: another request claimed `candidate` between the check and this write.
+    const refreshed = await db.user.findUnique({ where: { id: user.id }, select: { handle: true } });
+    if (refreshed?.handle) return refreshed.handle;
+    throw error;
+  }
+
+  return candidate;
+}
+
 export async function createAccountSession(
   db: Context["db"],
   ctx: Context,

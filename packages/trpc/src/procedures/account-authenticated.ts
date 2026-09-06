@@ -33,6 +33,7 @@ const requireAccountSession = t.middleware(async ({ ctx, next }) => {
     select: {
       id: true,
       email: true,
+      handle: true,
       name: true,
       phone: true,
       roles: true,

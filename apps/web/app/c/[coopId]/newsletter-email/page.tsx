@@ -405,7 +405,7 @@ export default async function NewsletterEmailPreviewPage({ params }: PageProps) 
               </div>
             ) : (
               <p style={{ margin: 0, color: "#4b5563", fontSize: 14, lineHeight: "22px" }}>
-                Classifieds from the co-op marketplace will appear here.
+                Classifieds from the Commons Marketplace will appear here.
               </p>
             )}
           </div>

@@ -10,6 +10,7 @@ import {
   COMMONS_COOP_ID,
   createAccountSession,
   ensureCommonsMembership,
+  ensureUserHandle,
   getCoopSessionData,
 } from "../lib/commons.js";
 
@@ -48,6 +49,7 @@ export const authRouter = router({
       user: z.object({
         id: z.string(),
         email: z.string(),
+        handle: z.string(),
         name: z.string().nullable(),
         roles: z.array(z.string()),
         status: z.string(),
@@ -144,6 +146,7 @@ export const authRouter = router({
             : user;
 
         await ensureCommonsMembership(context.db, activeUser.id);
+        const handle = await ensureUserHandle(context.db, activeUser);
         const sessionToken = await createAccountSession(
           context.db,
           context,
@@ -158,6 +161,7 @@ export const authRouter = router({
           user: {
             id: activeUser.id,
             email: activeUser.email,
+            handle,
             name: activeUser.name,
             roles: activeUser.roles,
             status: activeUser.status,
@@ -444,6 +448,7 @@ export const authRouter = router({
       user: z.object({
         id: z.string(),
         email: z.string(),
+        handle: z.string(),
         name: z.string().nullable(),
         roles: z.array(z.string()),
         status: z.string(),
@@ -591,6 +596,7 @@ export const authRouter = router({
           user.memberships[0]?.coopId ||
           (isDemoCode ? DEMO_COOP_ID : COMMONS_COOP_ID);
         const coopData = await getCoopSessionData(context.db, activeCoopId);
+        const handle = await ensureUserHandle(context.db, user);
         const sessionToken = await createAccountSession(
           context.db,
           context,
@@ -603,6 +609,7 @@ export const authRouter = router({
           user: {
             id: user.id,
             email: user.email,
+            handle,
             name: user.name,
             roles: user.roles,
             status: user.status,

@@ -6,7 +6,7 @@ export default function CommonsScreen() {
   return (
     <CommonsAiEntry
       onMessagesPress={() => router.push('/(tabs)/messages')}
-      onSignInPress={() => router.push({ pathname: '/', params: { entry: 'sign-in' } })}
+      onSignInPress={() => router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any)}
     />
   );
 }

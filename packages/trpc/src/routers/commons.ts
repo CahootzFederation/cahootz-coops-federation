@@ -8,7 +8,7 @@ import {
   accountAuthenticatedProcedure,
   publicProcedure,
 } from "../procedures/index.js";
-import { COMMONS_COOP_ID, ensureCommonsMembership } from "../lib/commons.js";
+import { COMMONS_COOP_ID, ensureCommonsMembership, ensureUserHandle } from "../lib/commons.js";
 import { toE164 } from "../lib/phone.js";
 import {
   sendApplicationSubmittedNotification,
@@ -18,6 +18,16 @@ import { createNotificationAndPush } from "../services/push-notification-service
 import { router } from "../trpc.js";
 
 const postTagSchema = z.enum([
+  "Thought",
+  "Ask",
+  "Offer",
+  "Event",
+  "Project",
+  "Proposal",
+  "Product",
+  "Update",
+  "Decision",
+  "Receipt",
   "Social",
   "Meme",
   "Win",
@@ -77,18 +87,24 @@ function nameParts(name: string | null | undefined) {
   };
 }
 
-async function loadFeedPosts(db: any, coopId: string | string[], limit: number) {
+async function loadFeedPosts(
+  db: any,
+  coopId: string | string[],
+  limit: number,
+  cursor?: string,
+) {
   const coopIds = Array.isArray(coopId) ? coopId : [coopId];
-  return db.commonsPost.findMany({
+  const posts = await db.commonsPost.findMany({
     where: coopIds.length === 1 ? { coopId: coopIds[0] } : { coopId: { in: coopIds } },
     orderBy: { createdAt: "desc" },
-    take: limit,
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     include: {
-      author: { select: { name: true, email: true } },
+      author: { select: { name: true, email: true, handle: true } },
       comments: {
         orderBy: { createdAt: "asc" },
         take: 2,
-        include: { author: { select: { name: true, email: true } } },
+        include: { author: { select: { name: true, email: true, handle: true } } },
       },
       media: {
         orderBy: { order: "asc" },
@@ -96,10 +112,59 @@ async function loadFeedPosts(db: any, coopId: string | string[], limit: number) 
       _count: { select: { comments: true, supports: true } },
     },
   });
+
+  const hasMore = posts.length > limit;
+  const page = hasMore ? posts.slice(0, limit) : posts;
+  return { page, nextCursor: hasMore ? page[page.length - 1].id : null };
 }
 
 function displayName(user: { name: string | null; email: string }) {
   return user.name || user.email.split("@")[0] || "Commons member";
+}
+
+function personHandle(user: { handle?: string | null; name: string | null; email: string }) {
+  if (user.handle) return user.handle;
+  // Fallback for authors who somehow don't have a persisted handle yet (should be rare —
+  // ensureUserHandle assigns one at login and at post creation).
+  return displayName(user).toLowerCase().replace(/[^a-z0-9]+/g, "") || "member";
+}
+
+function mapPersonalPagePost(record: any) {
+  return {
+    id: record.id,
+    authorId: record.authorId,
+    author: displayName(record.author),
+    handle: personHandle(record.author),
+    body: record.content,
+    tag: record.tag || null,
+    time: relativeTime(record.createdAt),
+    createdAt: record.createdAt.toISOString(),
+    replies: record._count?.comments ?? record.comments?.length ?? 0,
+    support: record._count?.supports ?? 0,
+    media: Array.isArray(record.media) ? record.media : [],
+    comments:
+      record.comments?.map((comment: any) => ({
+        id: comment.id,
+        authorId: comment.authorId,
+        author: displayName(comment.author),
+        body: comment.content,
+        createdAt: comment.createdAt.toISOString(),
+      })) ?? [],
+  };
+}
+
+async function findUserByPersonalHandle(db: any, handle: string) {
+  return db.user.findFirst({
+    where: { handle, deletedAt: null },
+    select: {
+      id: true,
+      email: true,
+      handle: true,
+      name: true,
+      selfDescription: true,
+      createdAt: true,
+    },
+  });
 }
 
 function relativeTime(date: Date) {
@@ -132,16 +197,22 @@ function classifyPost(input: {
     return found;
   };
 
-  if (input.tag === "Vote" || match("proposal", ["proposal", "vote", "decide", "approve", "policy"])) {
+  if (input.tag === "Proposal" || input.tag === "Vote" || match("proposal", ["proposal", "vote", "decide", "approve", "policy"])) {
     classification = "proposal_seed";
-  } else if (match("event", ["event", "meetup", "meeting", "pull up", "rsvp", "tomorrow", "tonight"])) {
+  } else if (input.tag === "Event" || match("event", ["event", "meetup", "meeting", "pull up", "rsvp", "tomorrow", "tonight"])) {
     classification = "event";
-  } else if (input.tag === "Need" || match("need", ["need", "looking for", "help with", "does anyone have", "who can"])) {
+  } else if (input.tag === "Ask" || input.tag === "Need" || match("need", ["need", "looking for", "help with", "does anyone have", "who can"])) {
     classification = "need";
-  } else if (input.tag === "Resource" || match("resource", ["resource", "template", "guide", "link", "toolkit"])) {
+  } else if (input.tag === "Resource" || input.tag === "Receipt" || match("resource", ["resource", "template", "guide", "link", "toolkit", "receipt"])) {
     classification = "resource";
-  } else if (input.tag === "Opportunity" || match("market", ["job", "gig", "hiring", "selling", "available", "vendor", "client"])) {
+  } else if (input.tag === "Offer" || input.tag === "Product" || input.tag === "Opportunity" || match("market", ["job", "gig", "hiring", "selling", "available", "vendor", "client"])) {
     classification = "market";
+  } else if (input.tag === "Project") {
+    classification = "project";
+  } else if (input.tag === "Decision") {
+    classification = "decision";
+  } else if (input.tag === "Update") {
+    classification = "update";
   } else if (match("support", ["support", "congratulations", "proud", "show love", "celebrate"])) {
     classification = "support";
   } else if (input.tag === "Win") {
@@ -168,7 +239,9 @@ function mapPostWithGroup(record: any, groupName: string) {
   return {
     id: record.id,
     coopId: record.coopId,
+    authorId: record.authorId,
     author: displayName(record.author),
+    authorHandle: personHandle(record.author),
     group: groupName,
     time: relativeTime(record.createdAt),
     title: record.title,
@@ -194,6 +267,7 @@ function mapPostWithGroup(record: any, groupName: string) {
     comments:
       record.comments?.map((comment: any) => ({
         id: comment.id,
+        authorId: comment.authorId,
         author: displayName(comment.author),
         body: comment.content,
         media:
@@ -375,6 +449,7 @@ export const commonsRouter = router({
         .object({
           coopId: z.string().min(1).default(COMMONS_COOP_ID),
           limit: z.number().min(1).max(50).default(20),
+          cursor: z.string().optional(),
         })
         .default({ coopId: COMMONS_COOP_ID, limit: 20 }),
     )
@@ -396,7 +471,7 @@ export const commonsRouter = router({
         }
 
         const activeCoopIds = [...coopIds];
-        const posts = await loadFeedPosts(ctx.db, activeCoopIds, input.limit);
+        const { page, nextCursor } = await loadFeedPosts(ctx.db, activeCoopIds, input.limit, input.cursor);
 
         const coopConfigs = await context.db.coopConfig.findMany({
           where: {
@@ -426,9 +501,10 @@ export const commonsRouter = router({
             shortName: "Home",
             description: "Posts from every commons you are approved to access.",
           },
-          posts: posts.map((post: any) =>
+          posts: page.map((post: any) =>
             mapPostWithGroup(post, coopNameById.get(post.coopId) || post.coopId),
           ),
+          nextCursor,
         };
       }
 
@@ -439,14 +515,15 @@ export const commonsRouter = router({
         (!!accountUser && (await hasActiveCommonsMembership(context.db, accountUser.id, input.coopId)));
 
       if (!canRead) {
-        return { coop, posts: [] };
+        return { coop, posts: [], nextCursor: null };
       }
 
-      const posts = await loadFeedPosts(ctx.db, input.coopId, input.limit);
+      const { page, nextCursor } = await loadFeedPosts(ctx.db, input.coopId, input.limit, input.cursor);
 
       return {
         coop,
-        posts: posts.map((post: any) => mapPostWithGroup(post, coop.name)),
+        posts: page.map((post: any) => mapPostWithGroup(post, coop.name)),
+        nextCursor,
       };
     }),
 
@@ -741,12 +818,13 @@ export const commonsRouter = router({
       const comments = await ctx.db.commonsComment.findMany({
         where: { postId: input.postId },
         orderBy: { createdAt: "asc" },
-        include: { author: { select: { name: true, email: true } } },
+        include: { author: { select: { name: true, email: true, handle: true } } },
       });
 
       return {
         comments: comments.map((comment) => ({
           id: comment.id,
+          authorId: comment.authorId,
           author: displayName(comment.author),
           body: comment.content,
         })),
@@ -765,7 +843,7 @@ export const commonsRouter = router({
       const post = await context.db.commonsPost.findUnique({
         where: { id: input.postId },
         include: {
-          author: { select: { name: true, email: true } },
+          author: { select: { name: true, email: true, handle: true } },
           media: {
             orderBy: { order: "asc" },
           },
@@ -773,7 +851,7 @@ export const commonsRouter = router({
             orderBy: { createdAt: "asc" },
             take: 100,
             include: {
-              author: { select: { name: true, email: true } },
+              author: { select: { name: true, email: true, handle: true } },
               media: { orderBy: { order: "asc" } },
             },
           },
@@ -825,7 +903,7 @@ export const commonsRouter = router({
             comments: {
               orderBy: { createdAt: "asc" },
               take: 10,
-              include: { author: { select: { name: true, email: true } } },
+              include: { author: { select: { name: true, email: true, handle: true } } },
             },
           },
         });
@@ -850,6 +928,309 @@ export const commonsRouter = router({
       return { answer };
     }),
 
+  getPersonalPage: publicProcedure
+    .input(
+      z.object({
+        handle: z.string().trim().min(1).max(80),
+        limit: z.number().min(1).max(50).default(30),
+        cursor: z.string().optional(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const context = ctx as Context;
+      const handle = input.handle.toLowerCase().replace(/[^a-z0-9]+/g, "");
+      const user = await findUserByPersonalHandle(ctx.db, handle);
+
+      if (!user) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Personal page not found.",
+        });
+      }
+
+      const [rawPosts, followerCount, followingCount, viewerUser] = await Promise.all([
+        context.db.personalPagePost.findMany({
+          where: { authorId: user.id },
+          orderBy: { createdAt: "desc" },
+          take: input.limit + 1,
+          ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+          include: {
+            author: { select: { name: true, email: true, handle: true } },
+            comments: {
+              orderBy: { createdAt: "asc" },
+              take: 50,
+              include: { author: { select: { name: true, email: true, handle: true } } },
+            },
+            _count: { select: { comments: true, supports: true } },
+          },
+        }),
+        context.db.follow.count({ where: { followingId: user.id } }),
+        context.db.follow.count({ where: { followerId: user.id } }),
+        resolveOptionalAccountUser(context),
+      ]);
+
+      const hasMore = rawPosts.length > input.limit;
+      const posts = hasMore ? rawPosts.slice(0, input.limit) : rawPosts;
+      const nextCursor = hasMore ? posts[posts.length - 1].id : null;
+
+      const viewerIsFollowing =
+        viewerUser && viewerUser.id !== user.id
+          ? (await context.db.follow.findUnique({
+              where: { followerId_followingId: { followerId: viewerUser.id, followingId: user.id } },
+              select: { id: true },
+            })) !== null
+          : false;
+
+      return {
+        profile: {
+          id: user.id,
+          name: displayName(user),
+          handle: personHandle(user),
+          bio: user.selfDescription,
+          createdAt: user.createdAt.toISOString(),
+          followerCount,
+          followingCount,
+          isOwnPage: viewerUser?.id === user.id,
+          viewerIsFollowing,
+        },
+        posts: posts.map(mapPersonalPagePost),
+        nextCursor,
+      };
+    }),
+
+  createPersonalPagePost: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        content: z.string().trim().max(5000).default(""),
+        tag: postTagSchema.nullable().optional(),
+        media: z.array(uploadedPostMediaSchema).max(4).default([]),
+      }).refine((input) => input.content.length > 0 || input.media.length > 0, {
+        message: "Write something or attach media before posting.",
+        path: ["content"],
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      await ensureUserHandle(ctx.db, accountUser);
+      const post = await ctx.db.personalPagePost.create({
+        data: {
+          authorId: accountUser.id,
+          content: input.content,
+          tag: input.tag || null,
+          media: toJsonValue(input.media),
+        },
+        include: {
+          author: { select: { name: true, email: true, handle: true } },
+          comments: {
+            orderBy: { createdAt: "asc" },
+            include: { author: { select: { name: true, email: true, handle: true } } },
+          },
+          _count: { select: { comments: true, supports: true } },
+        },
+      });
+
+      return { post: mapPersonalPagePost(post) };
+    }),
+
+  deletePersonalPagePost: accountAuthenticatedProcedure
+    .input(z.object({ postId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const post = await ctx.db.personalPagePost.findUnique({
+        where: { id: input.postId },
+        select: { authorId: true },
+      });
+
+      if (!post) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Post not found.",
+        });
+      }
+      if (post.authorId !== accountUser.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You can only delete your own posts.",
+        });
+      }
+
+      await ctx.db.personalPagePost.delete({ where: { id: input.postId } });
+
+      return { success: true };
+    }),
+
+  createPersonalPagePostComment: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        postId: z.string().min(1),
+        content: z.string().trim().min(1).max(2000),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      await ensureUserHandle(ctx.db, accountUser);
+
+      const post = await ctx.db.personalPagePost.findUnique({
+        where: { id: input.postId },
+        select: { authorId: true },
+      });
+      if (!post) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Post not found.",
+        });
+      }
+
+      const comment = await ctx.db.personalPagePostComment.create({
+        data: {
+          postId: input.postId,
+          authorId: accountUser.id,
+          content: input.content,
+        },
+        include: { author: { select: { name: true, email: true, handle: true } } },
+      });
+
+      if (post.authorId !== accountUser.id) {
+        void createNotificationAndPush(ctx.db, {
+          userId: post.authorId,
+          coopId: COMMONS_COOP_ID,
+          type: "PERSONAL_PAGE_COMMENT",
+          title: "New comment",
+          body: `${displayName(comment.author)} commented on your page.`,
+          data: { postId: input.postId },
+        });
+      }
+
+      return {
+        comment: {
+          id: comment.id,
+          authorId: comment.authorId,
+          author: displayName(comment.author),
+          body: comment.content,
+          createdAt: comment.createdAt.toISOString(),
+        },
+      };
+    }),
+
+  editPersonalPagePostComment: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        commentId: z.string().min(1),
+        content: z.string().trim().min(1).max(2000),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const comment = await ctx.db.personalPagePostComment.findUnique({
+        where: { id: input.commentId },
+        select: { authorId: true },
+      });
+
+      if (!comment) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Comment not found.",
+        });
+      }
+      if (comment.authorId !== accountUser.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You can only edit your own comments.",
+        });
+      }
+
+      const updated = await ctx.db.personalPagePostComment.update({
+        where: { id: input.commentId },
+        data: { content: input.content },
+        include: { author: { select: { name: true, email: true, handle: true } } },
+      });
+
+      return {
+        comment: {
+          id: updated.id,
+          authorId: updated.authorId,
+          author: displayName(updated.author),
+          body: updated.content,
+          createdAt: updated.createdAt.toISOString(),
+        },
+      };
+    }),
+
+  deletePersonalPagePostComment: accountAuthenticatedProcedure
+    .input(z.object({ commentId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const comment = await ctx.db.personalPagePostComment.findUnique({
+        where: { id: input.commentId },
+        select: { authorId: true },
+      });
+
+      if (!comment) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Comment not found.",
+        });
+      }
+      if (comment.authorId !== accountUser.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You can only delete your own comments.",
+        });
+      }
+
+      await ctx.db.personalPagePostComment.delete({ where: { id: input.commentId } });
+
+      return { success: true };
+    }),
+
+  togglePersonalPagePostSupport: accountAuthenticatedProcedure
+    .input(z.object({ postId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const post = await ctx.db.personalPagePost.findUnique({
+        where: { id: input.postId },
+        select: { authorId: true },
+      });
+
+      if (!post) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Post not found.",
+        });
+      }
+
+      const existing = await ctx.db.personalPagePostSupport.findUnique({
+        where: {
+          postId_userId: {
+            postId: input.postId,
+            userId: accountUser.id,
+          },
+        },
+      });
+
+      if (existing) {
+        await ctx.db.personalPagePostSupport.delete({ where: { id: existing.id } });
+        return { supported: false };
+      }
+
+      await ctx.db.personalPagePostSupport.create({
+        data: { postId: input.postId, userId: accountUser.id },
+      });
+
+      if (post.authorId !== accountUser.id) {
+        void createNotificationAndPush(ctx.db, {
+          userId: post.authorId,
+          coopId: COMMONS_COOP_ID,
+          type: "PERSONAL_PAGE_SUPPORT",
+          title: "Someone liked your post",
+          body: "A member liked what you shared on your page.",
+          data: { postId: input.postId },
+        });
+      }
+
+      return { supported: true };
+    }),
+
   createPost: accountAuthenticatedProcedure
     .input(
       z.object({
@@ -866,6 +1247,7 @@ export const commonsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const { accountUser } = ctx as AccountAuthenticatedContext;
       await requireActiveCommonsMembership(ctx.db, accountUser.id, input.coopId);
+      await ensureUserHandle(ctx.db, accountUser);
       const classification = classifyPost({
         title: input.title,
         content: input.content,
@@ -902,14 +1284,14 @@ export const commonsRouter = router({
             : undefined,
         },
         include: {
-          author: { select: { name: true, email: true } },
+          author: { select: { name: true, email: true, handle: true } },
           media: {
             orderBy: { order: "asc" },
           },
           comments: {
             orderBy: { createdAt: "asc" },
             take: 2,
-            include: { author: { select: { name: true, email: true } } },
+            include: { author: { select: { name: true, email: true, handle: true } } },
           },
           _count: { select: { comments: true, supports: true } },
         },
@@ -917,6 +1299,33 @@ export const commonsRouter = router({
       const coop = await loadCoopSummary(ctx.db, input.coopId);
 
       return { post: mapPostWithGroup(post, coop.name) };
+    }),
+
+  deletePost: accountAuthenticatedProcedure
+    .input(z.object({ postId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const post = await ctx.db.commonsPost.findUnique({
+        where: { id: input.postId },
+        select: { authorId: true },
+      });
+
+      if (!post) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Post not found.",
+        });
+      }
+      if (post.authorId !== accountUser.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You can only delete your own posts.",
+        });
+      }
+
+      await ctx.db.commonsPost.delete({ where: { id: input.postId } });
+
+      return { success: true };
     }),
 
   createComment: accountAuthenticatedProcedure
@@ -969,7 +1378,7 @@ export const commonsRouter = router({
             : undefined,
         },
         include: {
-          author: { select: { name: true, email: true } },
+          author: { select: { name: true, email: true, handle: true } },
           media: { orderBy: { order: "asc" } },
         },
       });
@@ -991,6 +1400,7 @@ export const commonsRouter = router({
       return {
         comment: {
           id: comment.id,
+          authorId: comment.authorId,
           author: displayName(comment.author),
           body: comment.content,
           media:
@@ -1008,6 +1418,92 @@ export const commonsRouter = router({
             })) ?? [],
         },
       };
+    }),
+
+  editComment: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        commentId: z.string().min(1),
+        content: z.string().trim().min(1).max(2000),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const comment = await ctx.db.commonsComment.findUnique({
+        where: { id: input.commentId },
+        select: { authorId: true },
+      });
+
+      if (!comment) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Comment not found.",
+        });
+      }
+      if (comment.authorId !== accountUser.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You can only edit your own comments.",
+        });
+      }
+
+      const updated = await ctx.db.commonsComment.update({
+        where: { id: input.commentId },
+        data: { content: input.content },
+        include: {
+          author: { select: { name: true, email: true, handle: true } },
+          media: { orderBy: { order: "asc" } },
+        },
+      });
+
+      return {
+        comment: {
+          id: updated.id,
+          authorId: updated.authorId,
+          author: displayName(updated.author),
+          body: updated.content,
+          media:
+            updated.media?.map((item: any) => ({
+              id: item.id,
+              pathname: item.pathname,
+              url: item.url,
+              mediaType: item.mediaType,
+              mimeType: item.mimeType,
+              fileName: item.fileName,
+              width: item.width,
+              height: item.height,
+              durationMs: item.durationMs,
+              sizeBytes: item.sizeBytes,
+            })) ?? [],
+        },
+      };
+    }),
+
+  deleteComment: accountAuthenticatedProcedure
+    .input(z.object({ commentId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const comment = await ctx.db.commonsComment.findUnique({
+        where: { id: input.commentId },
+        select: { authorId: true },
+      });
+
+      if (!comment) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Comment not found.",
+        });
+      }
+      if (comment.authorId !== accountUser.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You can only delete your own comments.",
+        });
+      }
+
+      await ctx.db.commonsComment.delete({ where: { id: input.commentId } });
+
+      return { success: true };
     }),
 
   toggleSupport: accountAuthenticatedProcedure
@@ -1177,4 +1673,97 @@ export const commonsRouter = router({
 
     return { threads: Array.from(threads.values()) };
   }),
+
+  toggleFollowUser: accountAuthenticatedProcedure
+    .input(z.object({ userId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+
+      if (input.userId === accountUser.id) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "You can't follow yourself.",
+        });
+      }
+
+      const target = await ctx.db.user.findUnique({
+        where: { id: input.userId },
+        select: { id: true, deletedAt: true },
+      });
+      if (!target || target.deletedAt) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Member not found.",
+        });
+      }
+
+      const existing = await ctx.db.follow.findUnique({
+        where: {
+          followerId_followingId: {
+            followerId: accountUser.id,
+            followingId: input.userId,
+          },
+        },
+      });
+
+      if (existing) {
+        await ctx.db.follow.delete({ where: { id: existing.id } });
+        return { following: false };
+      }
+
+      await ctx.db.follow.create({
+        data: { followerId: accountUser.id, followingId: input.userId },
+      });
+
+      void createNotificationAndPush(ctx.db, {
+        userId: input.userId,
+        coopId: COMMONS_COOP_ID,
+        type: "NEW_FOLLOWER",
+        title: "New follower",
+        body: `${displayName(accountUser)} started following you.`,
+        data: { followerId: accountUser.id },
+      });
+
+      return { following: true };
+    }),
+
+  listFollowing: accountAuthenticatedProcedure
+    .input(z.object({ limit: z.number().min(1).max(100).default(50) }).default({ limit: 50 }))
+    .query(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const follows = await ctx.db.follow.findMany({
+        where: { followerId: accountUser.id },
+        orderBy: { createdAt: "desc" },
+        take: input.limit,
+        include: { following: { select: { id: true, name: true, email: true, handle: true } } },
+      });
+
+      return {
+        members: follows.map((follow) => ({
+          id: follow.following.id,
+          name: displayName(follow.following),
+          handle: personHandle(follow.following),
+        })),
+      };
+    }),
+
+  listFollowers: accountAuthenticatedProcedure
+    .input(z.object({ limit: z.number().min(1).max(100).default(50) }).default({ limit: 50 }))
+    .query(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const follows = await ctx.db.follow.findMany({
+        where: { followingId: accountUser.id },
+        orderBy: { createdAt: "desc" },
+        take: input.limit,
+        include: { follower: { select: { id: true, name: true, email: true, handle: true } } },
+      });
+
+      return {
+        members: follows.map((follow) => ({
+          id: follow.follower.id,
+          name: displayName(follow.follower),
+          handle: personHandle(follow.follower),
+        })),
+      };
+    }),
 });

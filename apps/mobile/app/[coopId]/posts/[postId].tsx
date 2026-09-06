@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -17,6 +18,8 @@ import {
   ImagePlus,
   Send,
   Share2,
+  Trash2,
+  UserCircle,
   X,
 } from 'lucide-react-native';
 
@@ -30,6 +33,7 @@ import {
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsPost, type CommonsProfile } from '@/lib/api';
+import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -56,6 +60,7 @@ export default function CommonsPostDetailScreen() {
   const [commentMedia, setCommentMedia] = useState<CommonsMediaPreview[]>([]);
   const [isCommenting, setIsCommenting] = useState(false);
   const [viewerMedia, setViewerMedia] = useState<CommonsMediaPreview | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -216,6 +221,38 @@ export default function CommonsPostDetailScreen() {
     }
   };
 
+  const deletePost = () => {
+    if (!post || isDeleting || !sessionToken) return;
+
+    Alert.alert('Delete post?', 'This can\'t be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setIsDeleting(true);
+          try {
+            await api.deleteCommonsPost(post.id, sessionToken);
+            router.back();
+          } catch (caughtError) {
+            setIsDeleting(false);
+            Alert.alert('Could not delete post', caughtError instanceof Error ? caughtError.message : 'Please try again.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const openPersonPage = (author: string, handle?: string) => {
+    router.push({
+      pathname: '/people/[handle]',
+      params: {
+        handle: handle || personHandleFromName(author),
+        name: author,
+      },
+    } as any);
+  };
+
   return (
     <KeyboardAvoidingView
       className="flex-1"
@@ -242,6 +279,16 @@ export default function CommonsPostDetailScreen() {
           >
             <Share2 size={20} color={THEME.ink} />
           </TouchableOpacity>
+          {post && user?.id && post.authorId === user.id ? (
+            <TouchableOpacity
+              onPress={deletePost}
+              disabled={isDeleting}
+              className="h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white"
+              accessibilityLabel="Delete post"
+            >
+              {isDeleting ? <ActivityIndicator size="small" color="#DC2626" /> : <Trash2 size={20} color="#DC2626" />}
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 
@@ -262,9 +309,28 @@ export default function CommonsPostDetailScreen() {
 
         {post ? (
           <View className="rounded-xl border border-gray-200 bg-white p-4">
-            <Text className="text-xs font-semibold text-stone-500">
-              {post.group} · {post.author} · {post.time}
-            </Text>
+            <View className="flex-row items-center gap-3">
+              <TouchableOpacity
+                onPress={() => openPersonPage(post.author, post.authorHandle)}
+                className="h-11 w-11 items-center justify-center rounded-full bg-slate-200"
+                activeOpacity={0.75}
+                accessibilityLabel={`Open ${post.author}'s personal page`}
+              >
+                <Text className="text-base font-black text-slate-600">{personInitials(post.author)}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => openPersonPage(post.author, post.authorHandle)}
+                className="min-w-0 flex-1"
+                activeOpacity={0.75}
+                accessibilityLabel={`Open ${post.author}'s personal page`}
+              >
+                <Text className="text-sm font-black text-gray-950" numberOfLines={1}>{post.author}</Text>
+                <Text className="text-xs font-semibold text-stone-500" numberOfLines={1}>
+                  {personDisplayHandle(post.author)} · {post.group} · {post.time}
+                </Text>
+              </TouchableOpacity>
+              <UserCircle size={20} color={THEME.primary} />
+            </View>
             <Text className="mt-3 text-2xl font-black leading-8 text-gray-950">{post.title}</Text>
             {post.body ? <Text className="mt-3 text-base leading-6 text-gray-700">{post.body}</Text> : null}
 

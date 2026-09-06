@@ -3,6 +3,7 @@
 
 import { getApiUrl, getWebUrl, networkConfig } from './config';
 import { coopConfig } from './coop-config';
+import type { CommonsPostTag } from './post-types';
 
 /**
  * Resolve the coopId to use for public marketplace queries.
@@ -82,6 +83,7 @@ export interface EmailCodeAuthResult {
   user?: {
     id: string;
     email: string;
+    handle: string;
     name: string | null;
     roles: string[];
     status: string;
@@ -172,18 +174,42 @@ export interface CommonsPostMedia {
 export interface CommonsPost {
   id: string;
   coopId?: string;
+  authorId?: string;
   author: string;
+  authorHandle?: string;
   group: string;
   time: string;
   title: string;
   body: string;
-  tag: 'Social' | 'Meme' | 'Win' | 'Need' | 'Idea' | 'Vote' | 'Resource' | 'Opportunity';
+  tag: CommonsPostTag;
   classification?: string;
   replies: number;
   support: number;
   pledges?: string;
   media: CommonsPostMedia[];
   comments: CommonsComment[];
+}
+
+export interface PersonalPageProfile {
+  id: string;
+  name: string;
+  handle: string;
+  bio?: string | null;
+  createdAt: string;
+}
+
+export interface PersonalPageFeedPost {
+  id: string;
+  authorId?: string;
+  author: string;
+  handle: string;
+  body: string;
+  tag: CommonsPostTag | null;
+  time: string;
+  createdAt: string;
+  replies: number;
+  support: number;
+  media: CommonsPostMedia[];
 }
 
 export interface CommonsProfile {
@@ -411,6 +437,19 @@ export const api = {
     return readTrpcResult<{ coop: CommonsProfile; post: CommonsPost }>(response, 'Failed to load post');
   },
 
+  async getPersonalPage(handle: string, sessionToken?: string | null) {
+    const input = encodeURIComponent(JSON.stringify({ handle, limit: 30 }));
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.getPersonalPage?input=${input}`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<{ profile: PersonalPageProfile; posts: PersonalPageFeedPost[] }>(
+      response,
+      'Failed to load personal page'
+    );
+  },
+
   async listCommonsDirectory(sessionToken?: string | null) {
     const response = await fetch(`${API_BASE_URL}/trpc/commons.listDirectory`, {
       method: 'GET',
@@ -473,7 +512,7 @@ export const api = {
     data: {
       content: string;
       title?: string;
-      tag?: CommonsPost['tag'];
+      tag?: CommonsPost['tag'] | null;
       coopId?: string;
       media?: CommonsPostMedia[];
     },
@@ -486,12 +525,53 @@ export const api = {
         coopId: data.coopId || 'cahootz',
         title: data.title,
         content: data.content,
-        tag: data.tag || 'Social',
+        ...(data.tag ? { tag: data.tag } : {}),
         media: data.media || [],
       }),
     });
 
     return readTrpcResult<{ post: CommonsPost }>(response, 'Create an account to post');
+  },
+
+  async createPersonalPagePost(
+    data: {
+      content: string;
+      tag?: CommonsPost['tag'] | null;
+      media?: CommonsPostMedia[];
+    },
+    sessionToken?: string | null
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.createPersonalPagePost`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({
+        content: data.content,
+        ...(data.tag ? { tag: data.tag } : {}),
+        media: data.media || [],
+      }),
+    });
+
+    return readTrpcResult<{ post: PersonalPageFeedPost }>(response, 'Create an account to post');
+  },
+
+  async deleteCommonsPost(postId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.deletePost`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ postId }),
+    });
+
+    return readTrpcResult<{ success: boolean }>(response, 'Failed to delete post');
+  },
+
+  async deletePersonalPagePost(postId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.deletePersonalPagePost`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ postId }),
+    });
+
+    return readTrpcResult<{ success: boolean }>(response, 'Failed to delete post');
   },
 
   async uploadCommonsPostMedia(data: {

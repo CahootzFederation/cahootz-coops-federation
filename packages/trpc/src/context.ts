@@ -49,6 +49,7 @@ export type AccountAuthenticatedContext = Context & {
   accountUser: {
     id: string;
     email: string;
+    handle: string | null;
     name: string | null;
     phone: string | null;
     roles: string[];

@@ -1536,7 +1536,7 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
               <Icon as={Building} size={32} className="text-white" />
             </View>
               <Text className="text-xs font-black uppercase text-gray-500">Personal Details</Text>
-              <Text className="text-3xl font-black text-foreground mb-2 text-center">Join a Co-op or Log In</Text>
+              <Text className="text-3xl font-black text-foreground mb-2 text-center">Common</Text>
             <Text className="text-muted-foreground text-center leading-6">
               {codeSent ? 'Enter the code sent to your email' : 'Start your application to join a cooperative or sign in with passwordless email verification.'}
             </Text>

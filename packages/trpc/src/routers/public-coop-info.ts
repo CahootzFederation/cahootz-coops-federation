@@ -2834,7 +2834,7 @@ export const publicCoopInfoRouter = router({
         patch = {
           tagline: "Help grow the businesses your co-op believes in",
           heroTitle: `Build with ${coopName}`,
-          heroSubtitle: `${coopName} is recruiting members who want to buy from, promote, fund, and grow a stronger co-op marketplace.`,
+          heroSubtitle: `${coopName} is recruiting members who want to buy from, promote, fund, and grow a stronger Commons Marketplace.`,
           aboutTitle: "Turn Support into Ownership",
           aboutBody: `Apply to ${coopName} if you want your support for local businesses to become part of a bigger ownership strategy. Members help bring customers, proposals, rewards, and governance into one co-op economy.`,
           missionBody: [
@@ -2844,7 +2844,7 @@ export const publicCoopInfoRouter = router({
           ].join("\n"),
           eligibilityTitle: "Who Should Apply",
           eligibilityBody:
-            "Apply if you are ready to support member businesses, invite serious builders, and help the co-op marketplace grow.",
+            "Apply if you are ready to support member businesses, invite serious builders, and help the Commons Marketplace grow.",
           faqs: [],
           primaryCtaLabel: "Apply to Join",
           primaryCtaUrl: `/${input.coopId}/application`,

@@ -12,10 +12,12 @@ import {
   Copy,
   HelpCircle,
   LogOut,
+  Settings,
   Shield,
   Store,
   Trash2,
   UserCircle,
+  Users,
   Vote,
   Wallet,
 } from 'lucide-react-native';
@@ -23,6 +25,7 @@ import {
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { canAccessUpdateChannelDebug } from '@/lib/update-channel-debug';
 
 const PROFILE_THEME = {
   paper: '#F8FAFC',
@@ -52,6 +55,7 @@ export default function AccountProfileScreen() {
   const commonsName = user?.coop?.name || 'Oakland Commons';
   const roleLabel = user?.roles?.join(', ') || 'Member';
   const statusLabel = user?.status?.toLowerCase() || 'active';
+  const canUseUpdateDebug = canAccessUpdateChannelDebug(user?.email);
 
   const handleCopyAddress = async () => {
     if (!user?.walletAddress) return;
@@ -121,6 +125,18 @@ export default function AccountProfileScreen() {
 
   const navItems: NavItem[] = [
     {
+      label: 'Personal Page',
+      description: 'Posts, drafts, offers, projects, and saved thoughts',
+      icon: UserCircle,
+      href: '/(authenticated)/personal-page',
+    },
+    {
+      label: 'Private Spaces',
+      description: 'Small invite-only groups before they become commons',
+      icon: Users,
+      href: '/(authenticated)/spaces',
+    },
+    {
       label: 'Wallet',
       description: 'SC balance, wallet address, cards, and funding',
       icon: Wallet,
@@ -150,6 +166,16 @@ export default function AccountProfileScreen() {
       icon: Shield,
       href: '/export-wallet',
     },
+    ...(canUseUpdateDebug
+      ? [
+          {
+            label: 'Update Channels',
+            description: 'Switch EAS update channels for testing',
+            icon: Settings,
+            href: '/(authenticated)/debug-updates',
+          },
+        ]
+      : []),
     {
       label: 'Help & Support',
       description: 'Get help with your Cahootz account',

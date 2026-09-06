@@ -1,0 +1,107 @@
+name: Mobile EAS Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: EAS Update channel to publish to
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
+      platform:
+        description: Platform to update
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - ios
+          - android
+      message:
+        description: Update message shown in EAS
+        required: false
+        default: ""
+        type: string
+      rollout_percentage:
+        description: Percentage rollout, 100 for everyone
+        required: true
+        default: "100"
+        type: choice
+        options:
+          - "10"
+          - "25"
+          - "50"
+          - "100"
+      clear_cache:
+        description: Clear Expo bundler cache before publishing
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.channel }}-${{ inputs.platform }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Publish ${{ inputs.channel }} OTA update
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate production branch
+        if: ${{ inputs.channel == 'production' && github.ref_name != 'main' }}
+        shell: bash
+        run: |
+          echo "::error::Production EAS updates must be published from main."
+          exit 1
+
+      - name: Setup repo
+        uses: ./tooling/github/setup
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v9
+        with:
+          eas-version: latest
+          packager: pnpm
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Publish EAS update
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL || secrets.EXPO_PUBLIC_API_BASE_URL }}
+          EXPO_PUBLIC_WEB_URL: ${{ vars.EXPO_PUBLIC_WEB_URL || secrets.EXPO_PUBLIC_WEB_URL }}
+          UPDATE_CHANNEL: ${{ inputs.channel }}
+          UPDATE_PLATFORM: ${{ inputs.platform }}
+          UPDATE_MESSAGE: ${{ inputs.message }}
+          ROLLOUT_PERCENTAGE: ${{ inputs.rollout_percentage }}
+          CLEAR_CACHE: ${{ inputs.clear_cache }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          message="${UPDATE_MESSAGE}"
+          if [ -z "$message" ]; then
+            message="${GITHUB_REF_NAME}@${GITHUB_SHA::7}"
+          fi
+
+          args=(
+            --channel "$UPDATE_CHANNEL"
+            --message "$message"
+            --environment "$UPDATE_CHANNEL"
+            --platform "$UPDATE_PLATFORM"
+            --rollout-percentage "$ROLLOUT_PERCENTAGE"
+            --non-interactive
+          )
+
+          if [ "$CLEAR_CACHE" = "true" ]; then
+            args+=(--clear-cache)
+          fi
+
+          eas update "${args[@]}"

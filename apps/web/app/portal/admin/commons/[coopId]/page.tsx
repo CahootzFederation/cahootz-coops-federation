@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Loader2, AlertCircle, ArrowLeft, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface MissionGoal {
   key?: string;
@@ -41,6 +42,260 @@ interface CommonsDetail {
   storePaymentRouterAddress: string | null;
   rewardEngineAddress: string | null;
   rpcUrl: string | null;
+}
+
+interface CommonsMemberRow {
+  id: string;
+  userId: string;
+  username: string | null;
+  status: string;
+  roles: string[];
+  lastLogin: string | null;
+  createdAt: string;
+  email: string;
+  name: string | null;
+  walletAddress: string | null;
+}
+
+interface CommonsApplicationRow {
+  id: string;
+  userId: string;
+  status: string;
+  createdAt: string;
+  reviewedAt: string | null;
+  email: string;
+  name: string | null;
+}
+
+const APPLICATION_STATUSES = ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED'] as const;
+
+function usePaginatedSearch<T>(
+  endpoint: string,
+  extraQuery: Record<string, string> = {},
+  pageSize = 10
+) {
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [items, setItems] = useState<T[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const extraQueryKey = JSON.stringify(extraQuery);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, extraQueryKey]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setLoading(true);
+      setError(null);
+      const qs = new URLSearchParams({
+        search,
+        page: String(page),
+        pageSize: String(pageSize),
+        ...JSON.parse(extraQueryKey),
+      });
+      fetch(`${endpoint}?${qs.toString()}`, { signal: controller.signal })
+        .then(async (res) => {
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Failed to load.');
+          setItems(data.items);
+          setTotal(data.total);
+        })
+        .catch((err) => {
+          if (err instanceof Error && err.name !== 'AbortError') setError(err.message);
+        })
+        .finally(() => setLoading(false));
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [endpoint, search, page, pageSize, extraQueryKey]);
+
+  return { search, setSearch, page, setPage, items, total, loading, error, pageSize };
+}
+
+function PaginationBar({
+  page,
+  total,
+  pageSize,
+  onPageChange,
+}: {
+  page: number;
+  total: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (total === 0) return null;
+
+  return (
+    <div className="flex items-center justify-between text-sm text-slate-400">
+      <span>
+        {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
+      </span>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
+          Prev
+        </Button>
+        <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
+          Next
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function MembersSection({ coopId }: { coopId: string }) {
+  const { search, setSearch, page, setPage, items, total, loading, error, pageSize } =
+    usePaginatedSearch<CommonsMemberRow>(`/api/admin/commons/${coopId}/members`);
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-lg font-semibold text-white">Members</h2>
+        <div className="relative w-64">
+          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name, email, username..."
+            className="bg-white pl-8 text-slate-900 placeholder:text-slate-400"
+          />
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-red-300">{error}</p>}
+
+      <div className="overflow-hidden rounded-[8px] border border-white/10">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-white/5 text-slate-400">
+            <tr>
+              <th className="px-4 py-2 font-medium">Name</th>
+              <th className="px-4 py-2 font-medium">Email</th>
+              <th className="px-4 py-2 font-medium">Username</th>
+              <th className="px-4 py-2 font-medium">Status</th>
+              <th className="px-4 py-2 font-medium">Roles</th>
+              <th className="px-4 py-2 font-medium">Last Login</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/10">
+            {items.map((m) => (
+              <tr key={m.id}>
+                <td className="px-4 py-2 text-white">{m.name || '—'}</td>
+                <td className="px-4 py-2 text-slate-300">{m.email}</td>
+                <td className="px-4 py-2 text-slate-400">{m.username || '—'}</td>
+                <td className="px-4 py-2 text-slate-300">{m.status}</td>
+                <td className="px-4 py-2 text-slate-400">{m.roles.join(', ')}</td>
+                <td className="px-4 py-2 text-slate-400">
+                  {m.lastLogin ? new Date(m.lastLogin).toLocaleDateString() : '—'}
+                </td>
+              </tr>
+            ))}
+            {!loading && items.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
+                  No members found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        {loading && (
+          <div className="flex justify-center border-t border-white/10 py-3">
+            <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+          </div>
+        )}
+      </div>
+
+      <PaginationBar page={page} total={total} pageSize={pageSize} onPageChange={setPage} />
+    </section>
+  );
+}
+
+function ApplicationsSection({ coopId }: { coopId: string }) {
+  const [status, setStatus] = useState('');
+  const { search, setSearch, page, setPage, items, total, loading, error, pageSize } =
+    usePaginatedSearch<CommonsApplicationRow>(
+      `/api/admin/commons/${coopId}/applications`,
+      status ? { status } : {}
+    );
+
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h2 className="text-lg font-semibold text-white">Applications</h2>
+        <div className="flex gap-2">
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="rounded-md border border-input bg-white px-3 py-2 text-sm text-slate-900"
+          >
+            <option value="">All statuses</option>
+            {APPLICATION_STATUSES.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <div className="relative w-64">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name or email..."
+              className="bg-white pl-8 text-slate-900 placeholder:text-slate-400"
+            />
+          </div>
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-red-300">{error}</p>}
+
+      <div className="overflow-hidden rounded-[8px] border border-white/10">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-white/5 text-slate-400">
+            <tr>
+              <th className="px-4 py-2 font-medium">Name</th>
+              <th className="px-4 py-2 font-medium">Email</th>
+              <th className="px-4 py-2 font-medium">Status</th>
+              <th className="px-4 py-2 font-medium">Submitted</th>
+              <th className="px-4 py-2 font-medium">Reviewed</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/10">
+            {items.map((a) => (
+              <tr key={a.id}>
+                <td className="px-4 py-2 text-white">{a.name || '—'}</td>
+                <td className="px-4 py-2 text-slate-300">{a.email}</td>
+                <td className="px-4 py-2 text-slate-300">{a.status}</td>
+                <td className="px-4 py-2 text-slate-400">{new Date(a.createdAt).toLocaleDateString()}</td>
+                <td className="px-4 py-2 text-slate-400">
+                  {a.reviewedAt ? new Date(a.reviewedAt).toLocaleDateString() : '—'}
+                </td>
+              </tr>
+            ))}
+            {!loading && items.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                  No applications found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        {loading && (
+          <div className="flex justify-center border-t border-white/10 py-3">
+            <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+          </div>
+        )}
+      </div>
+
+      <PaginationBar page={page} total={total} pageSize={pageSize} onPageChange={setPage} />
+    </section>
+  );
 }
 
 function StatCard({ label, value }: { label: string; value: number | string }) {
@@ -157,6 +412,10 @@ export default function AdminCommonsDetailPage() {
             <StatCard label="Applications" value={commons.applicationCount} />
             <StatCard label="Posts" value={commons.postCount} />
           </div>
+
+          <MembersSection coopId={commons.coopId} />
+
+          <ApplicationsSection coopId={commons.coopId} />
 
           <section className="space-y-3">
             <h2 className="text-lg font-semibold text-white">Goals</h2>

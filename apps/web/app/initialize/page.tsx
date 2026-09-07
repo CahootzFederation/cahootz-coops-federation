@@ -18,7 +18,6 @@ import { CheckCircle2, AlertCircle, Info, Loader2 } from "lucide-react";
 import { DeploymentStep, ContractCard } from "@/components/deployment-status";
 import { CoopConfigPreview } from "@/components/config-preview";
 import { Checkbox } from "@/components/ui/checkbox";
-import { api } from "@/lib/trpc/client";
 import { env } from "~/env";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -50,9 +49,6 @@ function InitializePageContent() {
   const publicClient = usePublicClient();
   const { open } = useWeb3Modal();
   const { switchChain } = useSwitchChain();
-
-  // tRPC mutation for saving co-op config (includes chain config)
-  const createCoopConfig = api.coopConfig.create.useMutation();
 
   // API connection check
   const [apiConnected, setApiConnected] = useState<boolean | null>(null);
@@ -880,7 +876,10 @@ function InitializePageContent() {
         const bgColor = coopConfig.primaryColor || "#2563eb";
         const accentColor = coopConfig.accentColor || "#16a34a";
 
-        await createCoopConfig.mutateAsync({
+        const createConfigResponse = await fetch('/api/admin/commons/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
           coopId,
           walletAddress: address,
           reason: "Initial deployment via web UI",
@@ -956,9 +955,16 @@ function InitializePageContent() {
           scTokenSymbol: coopConfig.scTokenSymbol.trim(),
           scTokenName: coopConfig.scTokenName.trim(),
           isPrivate: coopConfig.isPrivate,
+          }),
         });
+
+        if (!createConfigResponse.ok) {
+          const errorBody = await createConfigResponse.json().catch(() => ({}));
+          throw new Error(errorBody.error || `Failed to save co-op configuration (HTTP ${createConfigResponse.status})`);
+        }
+
         console.log("✅ Co-op configuration (including chain config) saved to database");
-        
+
         updateStepStatus("save-db", "completed");
       } catch (dbError: any) {
         console.error("Failed to save to database:", dbError);

@@ -108,6 +108,11 @@
       "import": "./dist/services/platform-admin.js",
       "require": "./dist/services/platform-admin.js"
     },
+    "./routers/coop-config": {
+      "types": "./dist/routers/coop-config.d.ts",
+      "import": "./dist/routers/coop-config.js",
+      "require": "./dist/routers/coop-config.js"
+    },
     "./lib/admin-config": {
       "types": "./dist/lib/admin-config.d.ts",
       "import": "./dist/lib/admin-config.js",

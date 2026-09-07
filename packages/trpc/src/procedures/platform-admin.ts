@@ -8,6 +8,12 @@ import { isPlatformAdminWallet } from "../lib/admin-config.js";
  * hardcoded PLATFORM_ADMIN_WALLETS allowlist. Unlike privateProcedure,
  * this is not scoped to any single coop's blockchain role - it gates
  * cross-commons operations (e.g. deploying/registering a new commons).
+ *
+ * This still exists for direct browser-to-apps/api calls. The primary
+ * admin-portal path for creating a commons goes through
+ * apps/web/app/api/admin/commons/create/route.ts instead, which is gated
+ * by the same iron-session check as the rest of /portal/admin and writes
+ * to the database directly - no wallet allowlist required there.
  */
 const isPlatformAdmin = t.middleware(async ({ ctx, next }) => {
   const context = ctx as Context;

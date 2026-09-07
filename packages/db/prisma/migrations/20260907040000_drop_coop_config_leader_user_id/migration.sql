@@ -1,8 +1,8 @@
 -- DropForeignKey
-ALTER TABLE "CoopConfig" DROP CONSTRAINT "CoopConfig_leaderUserId_fkey";
+ALTER TABLE "CoopConfig" DROP CONSTRAINT IF EXISTS "CoopConfig_leaderUserId_fkey";
 
 -- DropIndex
-DROP INDEX "CoopConfig_leaderUserId_idx";
+DROP INDEX IF EXISTS "CoopConfig_leaderUserId_idx";
 
 -- AlterTable
-ALTER TABLE "CoopConfig" DROP COLUMN "leaderUserId";
+ALTER TABLE "CoopConfig" DROP COLUMN IF EXISTS "leaderUserId";

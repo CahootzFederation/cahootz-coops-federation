@@ -1,12 +1,12 @@
 import React from 'react';
-import { ActivityIndicator, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ArrowLeft, Lock, Plus, Users } from 'lucide-react-native';
+import { ArrowLeft, KeyRound, Lock, Plus, Users } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
-import { addPersonalSpace, listPersonalSpaces, type PersonalSpace } from '@/lib/personal-social-store';
+import { api, type PrivateGroupSummary } from '@/lib/api';
 
 const SPACES_THEME = {
   paper: '#F8FAFC',
@@ -22,10 +22,13 @@ function formatDate(value: string) {
 
 export default function SpacesScreen() {
   const { user, isLoading, isAuthenticated, sessionToken } = useAuth();
-  const [spaces, setSpaces] = React.useState<PersonalSpace[]>([]);
+  const [groups, setGroups] = React.useState<PrivateGroupSummary[]>([]);
+  const [isLoadingGroups, setIsLoadingGroups] = React.useState(true);
   const [name, setName] = React.useState('');
   const [purpose, setPurpose] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
+  const [joinCode, setJoinCode] = React.useState('');
+  const [isJoining, setIsJoining] = React.useState(false);
 
   React.useEffect(() => {
     if (isLoading || (isAuthenticated && sessionToken)) return;
@@ -33,13 +36,20 @@ export default function SpacesScreen() {
     router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
   }, [isAuthenticated, isLoading, sessionToken]);
 
-  React.useEffect(() => {
-    if (!user?.email) return;
+  const loadGroups = React.useCallback(() => {
+    if (!sessionToken) return;
 
-    listPersonalSpaces(user.email)
-      .then(setSpaces)
-      .catch((error) => console.warn('Could not load spaces:', error));
-  }, [user?.email]);
+    setIsLoadingGroups(true);
+    api
+      .listMyGroups(sessionToken)
+      .then(({ groups: next }) => setGroups(next))
+      .catch((error) => console.warn('Could not load groups:', error))
+      .finally(() => setIsLoadingGroups(false));
+  }, [sessionToken]);
+
+  React.useEffect(() => {
+    loadGroups();
+  }, [loadGroups]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -52,16 +62,38 @@ export default function SpacesScreen() {
 
   const createSpace = async () => {
     const trimmedName = name.trim();
-    if (!trimmedName || isSaving) return;
+    if (!trimmedName || isSaving || !sessionToken) return;
 
     setIsSaving(true);
     try {
-      const next = await addPersonalSpace(user?.email, trimmedName, purpose.trim());
-      setSpaces(next);
+      await api.createGroup(
+        { name: trimmedName, purpose: purpose.trim() || undefined, privacy: 'invite-only' },
+        sessionToken
+      );
       setName('');
       setPurpose('');
+      loadGroups();
+    } catch (error) {
+      Alert.alert('Could not create space', error instanceof Error ? error.message : 'Try again.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const joinSpace = async () => {
+    const trimmedCode = joinCode.trim();
+    if (!trimmedCode || isJoining || !sessionToken) return;
+
+    setIsJoining(true);
+    try {
+      const { groupId } = await api.joinGroupByCode(trimmedCode, sessionToken);
+      setJoinCode('');
+      loadGroups();
+      router.push({ pathname: '/(authenticated)/group/[groupId]', params: { groupId } } as any);
+    } catch (error) {
+      Alert.alert('Could not join space', error instanceof Error ? error.message : 'Check the code and try again.');
+    } finally {
+      setIsJoining(false);
     }
   };
 
@@ -136,8 +168,43 @@ export default function SpacesScreen() {
             </TouchableOpacity>
           </View>
 
+          <View className="mt-4 rounded-2xl border bg-white p-4" style={{ borderColor: SPACES_THEME.border }}>
+            <Text className="text-xs font-black uppercase text-gray-500">Have an invite code?</Text>
+            <View className="mt-2 flex-row items-center gap-2">
+              <TextInput
+                value={joinCode}
+                onChangeText={(text) => setJoinCode(text.toUpperCase())}
+                placeholder="Enter code"
+                autoCapitalize="characters"
+                placeholderTextColor={SPACES_THEME.muted}
+                className="flex-1 rounded-2xl border bg-gray-50 px-3 py-3 text-sm text-gray-900"
+                style={{ borderColor: SPACES_THEME.border }}
+              />
+              <TouchableOpacity
+                onPress={() => void joinSpace()}
+                disabled={isJoining || !joinCode.trim()}
+                className="flex-row items-center justify-center gap-2 rounded-2xl px-4 py-3"
+                style={{ backgroundColor: SPACES_THEME.primarySoft, opacity: isJoining || !joinCode.trim() ? 0.6 : 1 }}
+                activeOpacity={0.82}
+              >
+                {isJoining ? (
+                  <ActivityIndicator size="small" color={SPACES_THEME.primary} />
+                ) : (
+                  <KeyRound size={16} color={SPACES_THEME.primary} />
+                )}
+                <Text className="text-sm font-black" style={{ color: SPACES_THEME.primary }}>
+                  Join
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           <View className="mt-4 gap-3">
-            {spaces.length === 0 ? (
+            {isLoadingGroups ? (
+              <View className="items-center py-6">
+                <ActivityIndicator size="small" color={SPACES_THEME.primary} />
+              </View>
+            ) : groups.length === 0 ? (
               <View className="rounded-2xl border border-dashed border-gray-300 bg-white p-5">
                 <Text className="text-base font-black text-gray-950">No spaces yet</Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">
@@ -146,8 +213,16 @@ export default function SpacesScreen() {
               </View>
             ) : null}
 
-            {spaces.map((space) => (
-              <View key={space.id} className="rounded-2xl border bg-white p-4" style={{ borderColor: SPACES_THEME.border }}>
+            {groups.map((group) => (
+              <TouchableOpacity
+                key={group.id}
+                onPress={() =>
+                  router.push({ pathname: '/(authenticated)/group/[groupId]', params: { groupId: group.id } } as any)
+                }
+                activeOpacity={0.8}
+                className="rounded-2xl border bg-white p-4"
+                style={{ borderColor: SPACES_THEME.border }}
+              >
                 <View className="flex-row items-start gap-3">
                   <View className="h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: SPACES_THEME.primarySoft }}>
                     <Lock size={18} color={SPACES_THEME.primary} />
@@ -155,19 +230,29 @@ export default function SpacesScreen() {
                   <View className="min-w-0 flex-1">
                     <View className="flex-row items-center justify-between gap-3">
                       <Text className="text-base font-black text-gray-950" numberOfLines={1}>
-                        {space.name}
+                        {group.name}
                       </Text>
-                      <Text className="text-xs font-semibold text-gray-400">{formatDate(space.createdAt)}</Text>
+                      <Text className="text-xs font-semibold text-gray-400">{formatDate(group.createdAt)}</Text>
                     </View>
                     <Text className="mt-1 text-sm leading-5 text-gray-600">
-                      {space.purpose || 'Invite-only coordination space'}
+                      {group.purpose || 'Invite-only coordination space'}
                     </Text>
-                    <Text className="mt-2 text-xs font-black uppercase text-gray-400">
-                      {space.privacy.replace('-', ' ')}
-                    </Text>
+                    <View className="mt-2 flex-row items-center gap-2">
+                      <Text className="text-xs font-black uppercase text-gray-400">
+                        {group.privacy.replace('-', ' ')}
+                      </Text>
+                      <Text className="text-xs font-black uppercase text-gray-300">
+                        · {group.memberCount} {group.memberCount === 1 ? 'member' : 'members'}
+                      </Text>
+                      {group.isLeader && (
+                        <Text className="text-xs font-black uppercase" style={{ color: SPACES_THEME.primary }}>
+                          · leader
+                        </Text>
+                      )}
+                    </View>
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         </View>

@@ -74,6 +74,9 @@ model User {
   followers              Follow[]                    @relation("Following")
   personalPagePostComments PersonalPagePostComment[]
   personalPagePostSupports PersonalPagePostSupport[]
+  groupsLed              Group[]                     @relation("GroupLeader")
+  groupMemberships       GroupMember[]
+  groupComments          GroupComment[]
 
   @@index([deletedAt])
   @@schema("public")
@@ -881,6 +884,55 @@ model CommonsSuggestion {
   @@index([coopId, createdAt])
   @@index([suggestedByEmail, createdAt])
   @@index([status, createdAt])
+  @@schema("public")
+}
+
+// ── Private Groups ("Spaces") ───────────────────────────
+model Group {
+  id         String   @id @default(cuid())
+  coopId     String   @default("cahootz")
+  name       String
+  purpose    String?  @db.Text
+  privacy    String   @default("invite-only") // "private" | "invite-only"
+  inviteCode String   @unique
+  leaderId   String
+  leader     User     @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  members  GroupMember[]
+  comments GroupComment[]
+
+  @@index([coopId, createdAt])
+  @@index([leaderId])
+  @@schema("public")
+}
+
+model GroupMember {
+  id       String   @id @default(cuid())
+  groupId  String
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt DateTime @default(now())
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@schema("public")
+}
+
+model GroupComment {
+  id        String   @id @default(cuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([groupId, createdAt])
+  @@index([authorId, createdAt])
   @@schema("public")
 }
 

@@ -54,7 +54,7 @@ function AdminGate({ children }: { children: React.ReactNode }) {
         <p className="max-w-md text-slate-400">
           {email || address} is signed in but is not on the platform admin allowlist.
         </p>
-        <Button variant="outline" onClick={() => logout()}>
+        <Button variant="outline" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => logout()}>
           Log Out
         </Button>
       </div>

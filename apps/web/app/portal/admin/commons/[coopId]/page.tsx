@@ -139,10 +139,10 @@ function PaginationBar({
         {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
       </span>
       <div className="flex gap-2">
-        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
+        <Button variant="outline" size="sm" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
           Prev
         </Button>
-        <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
+        <Button variant="outline" size="sm" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
           Next
         </Button>
       </div>
@@ -394,7 +394,7 @@ export default function AdminCommonsDetailPage() {
               {commons.tagline && <p className="mt-1 text-slate-400">{commons.tagline}</p>}
               <p className="mt-1 font-mono text-xs text-slate-500">{commons.coopId}</p>
             </div>
-            <Button variant="outline" size="sm" onClick={togglePrivacy} disabled={isTogglingPrivacy}>
+            <Button variant="outline" size="sm" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={togglePrivacy} disabled={isTogglingPrivacy}>
               {isTogglingPrivacy ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : commons.isPrivate ? (

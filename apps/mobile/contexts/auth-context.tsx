@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { Alert } from 'react-native';
 import { usePathname, useRouter, useSegments } from 'expo-router';
 import { secureStorage } from '@/lib/secure-storage';
 import { setActiveCoopConfig, resetCoopConfig, type CoopConfig } from '@/lib/coop-config';
+import { onSessionExpired } from '@/lib/api';
 import { registerForNativePushNotifications } from '@/lib/push-notifications';
 import { canAccessUpdateChannelDebug, clearUpdateChannelOverrideQuietly } from '@/lib/update-channel-debug';
 
@@ -193,6 +195,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Failed to logout');
     }
   };
+
+  const userRef = useRef(user);
+  userRef.current = user;
+
+  // Any API call that comes back 401 means the backend no longer honors this
+  // session (expired or revoked) - force the app back to a logged-out state
+  // instead of leaving stale authenticated screens up.
+  useEffect(() => {
+    return onSessionExpired(() => {
+      if (!userRef.current) return; // already logged out
+
+      logout()
+        .then(() => {
+          Alert.alert('Session expired', 'Please sign in again to continue.');
+        })
+        .catch((error) => console.error('Error handling session expiry:', error));
+    });
+  }, []);
 
   return (
     <AuthContext.Provider

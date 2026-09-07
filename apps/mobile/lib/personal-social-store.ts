@@ -1,13 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type PersonalSpace = {
-  id: string;
-  name: string;
-  purpose: string;
-  privacy: 'private' | 'invite-only';
-  createdAt: string;
-};
-
 export type FollowTarget = {
   id: string;
   label: string;
@@ -37,29 +29,6 @@ async function readList<T>(key: string): Promise<T[]> {
 
 async function writeList<T>(key: string, value: T[]) {
   await AsyncStorage.setItem(key, JSON.stringify(value));
-}
-
-function createId(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-export async function listPersonalSpaces(email?: string | null) {
-  return readList<PersonalSpace>(storageKey(email, 'spaces'));
-}
-
-export async function addPersonalSpace(email: string | null | undefined, name: string, purpose: string) {
-  const key = storageKey(email, 'spaces');
-  const current = await readList<PersonalSpace>(key);
-  const space: PersonalSpace = {
-    id: createId('space'),
-    name,
-    purpose,
-    privacy: 'invite-only',
-    createdAt: new Date().toISOString(),
-  };
-  const next = [space, ...current];
-  await writeList(key, next);
-  return next;
 }
 
 export async function listFollowTargets(email?: string | null) {

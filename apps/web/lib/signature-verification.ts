@@ -8,6 +8,7 @@ import { config, getServerConfig } from './config';
 import { env } from '~/env';
 // Import admin verification from API server (server-side only, secure)
 import { checkPortalAccess } from '@repo/trpc/services/admin-verification';
+import { isPlatformAdminWallet, isPlatformAdminEmail } from '@repo/trpc/lib/admin-config';
 
 // Initialize Prisma client directly since @repo/db exports aren't working in Next.js
 const globalForPrisma = globalThis as unknown as {
@@ -34,6 +35,9 @@ export interface AuthSession {
   activeCoopId?: string;
   isAdmin?: boolean;
   adminRole?: string;
+  // Platform admin: cross-commons access via PLATFORM_ADMIN_WALLETS / PLATFORM_ADMIN_EMAILS,
+  // distinct from isAdmin/adminRole which are scoped to a single coop's blockchain role.
+  isPlatformAdmin?: boolean;
   nonce?: string;
   expiresAt?: Date;
   save: () => Promise<void>;
@@ -359,6 +363,7 @@ export async function createSession(address: string, coopId?: string): Promise<A
   session.activeCoopId = coopId;
   session.isAdmin = isAdmin;
   session.adminRole = adminRole;
+  session.isPlatformAdmin = isPlatformAdminWallet(address) || isPlatformAdminEmail(user?.email);
 
   // Update last login time if profile exists
   if (hasProfile && coopId && user) {
@@ -457,6 +462,7 @@ export async function createUserSession(userId: string, coopId: string): Promise
   session.activeCoopId = coopId;
   session.isAdmin = isAdmin;
   session.adminRole = adminRole;
+  session.isPlatformAdmin = isPlatformAdminWallet(walletAddress) || isPlatformAdminEmail(user.email);
 
   await db.userCoopMembership.update({
     where: {
@@ -474,6 +480,51 @@ export async function createUserSession(userId: string, coopId: string): Promise
   await session.save();
 
   console.log(`✅ Email session created for ${user.email} (${walletAddress}), isAdmin: ${isAdmin}, role: ${adminRole || 'N/A'}`);
+
+  return session;
+}
+
+/**
+ * Create a session for a platform admin logging in via the admin-only email
+ * code flow. Unlike createUserSession(), this does NOT require an active
+ * membership in any particular coop - platform admin access is granted
+ * purely via PLATFORM_ADMIN_EMAILS and is not coop-scoped.
+ */
+export async function createPlatformAdminSession(params: {
+  userId: string;
+  email: string;
+}): Promise<AuthSession> {
+  if (!isPlatformAdminEmail(params.email)) {
+    throw new Error('Not a platform admin');
+  }
+
+  const cookieStore = await cookies();
+  const session = await getIronSession<AuthSession>(cookieStore, getSessionOptions());
+
+  const user = await db.user.findUnique({
+    where: { id: params.userId },
+    include: { wallets: { where: { isPrimary: true }, take: 1 } },
+  });
+
+  if (!user || user.deletedAt) {
+    throw new Error('Account not available');
+  }
+
+  session.address = user.walletAddress || user.wallets[0]?.address || '';
+  session.userId = user.id;
+  session.email = user.email ?? params.email;
+  session.name = user.name ?? undefined;
+  session.loginMethod = 'email';
+  session.isLoggedIn = true;
+  session.hasProfile = true;
+  session.activeCoopId = undefined;
+  session.isAdmin = false;
+  session.adminRole = undefined;
+  session.isPlatformAdmin = true;
+
+  await session.save();
+
+  console.log(`✅ Platform admin session created for ${session.email}`);
 
   return session;
 }

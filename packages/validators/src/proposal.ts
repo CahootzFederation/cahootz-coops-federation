@@ -331,6 +331,7 @@ export const CoopConfigInputZ = z.object({
   backendWalletAddress: z.string().optional(),
   scTokenSymbol: z.string().optional(),
   scTokenName: z.string().optional(),
+  isPrivate: z.boolean().optional().default(false),
 });
 
 export const CoopConfigOutputZ = z.object({
@@ -385,6 +386,7 @@ export const CoopConfigOutputZ = z.object({
   backendWalletAddress: z.string().optional(),
   scTokenSymbol: z.string().optional(),
   scTokenName: z.string().optional(),
+  isPrivate: z.boolean().optional(),
 });
 
 // ── Comment Schemas ──────────────────────────────────────────────────────

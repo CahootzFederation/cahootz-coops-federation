@@ -6,14 +6,14 @@ import Link from 'next/link';
 import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-type MissionGoal = {
+interface MissionGoal {
   key?: string;
   label: string;
   priorityWeight?: number;
   description?: string;
-};
+}
 
-type CommonsDetail = {
+interface CommonsDetail {
   coopId: string;
   name: string | null;
   slug: string | null;
@@ -41,7 +41,7 @@ type CommonsDetail = {
   storePaymentRouterAddress: string | null;
   rewardEngineAddress: string | null;
   rpcUrl: string | null;
-};
+}
 
 function StatCard({ label, value }: { label: string; value: number | string }) {
   return (

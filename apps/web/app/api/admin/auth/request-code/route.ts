@@ -2,13 +2,14 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { isPlatformAdminEmail } from '@repo/trpc/lib/admin-config';
+import { env } from '~/env';
 
 const requestCodeSchema = z.object({
   email: z.string().email(),
 });
 
 function getApiTrpcUrl() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/trpc';
+  const apiUrl = env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/trpc';
   return apiUrl.endsWith('/trpc') ? apiUrl : `${apiUrl.replace(/\/$/, '')}/trpc`;
 }
 

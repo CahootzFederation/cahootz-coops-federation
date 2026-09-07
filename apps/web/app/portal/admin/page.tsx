@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Loader2, Plus, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-type CommonsSummary = {
+interface CommonsSummary {
   coopId: string;
   name: string | null;
   slug: string | null;
@@ -18,7 +18,7 @@ type CommonsSummary = {
   memberCount: number;
   applicationCount: number;
   postCount: number;
-};
+}
 
 export default function AdminCommonsListPage() {
   const [commons, setCommons] = useState<CommonsSummary[] | null>(null);
@@ -62,7 +62,7 @@ export default function AdminCommonsListPage() {
         </div>
       )}
 
-      {commons && commons.length === 0 && (
+      {commons?.length === 0 && (
         <p className="text-slate-400">No commons yet. Create the first one.</p>
       )}
 

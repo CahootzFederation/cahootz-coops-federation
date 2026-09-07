@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router } from "../trpc.js";
-import { publicProcedure, privateProcedure } from "../procedures/index.js";
+import { publicProcedure, privateProcedure, platformAdminProcedure } from "../procedures/index.js";
 import { CoopConfigInputZ, CoopConfigOutputZ, type CoopConfigOutput } from "@repo/validators";
 import type { CoopConfig, Prisma } from "@repo/db";
 import type { AuthenticatedContext } from "../context.js";
@@ -107,6 +107,7 @@ function mapDbToConfigOutput(record: CoopConfig): CoopConfigOutput {
     backendWalletAddress: record.backendWalletAddress ?? undefined,
     scTokenSymbol: record.scTokenSymbol ?? undefined,
     scTokenName: record.scTokenName ?? undefined,
+    isPrivate: record.isPrivate,
   };
 }
 
@@ -149,7 +150,7 @@ export const coopConfigRouter = router({
     })))
     .query(async ({ ctx }) => {
       const coops = await ctx.db.coopConfig.findMany({
-        where: { isActive: true, isDemo: false },
+        where: { isActive: true, isDemo: false, isPrivate: false },
         orderBy: { displayOrder: 'asc' },
         select: {
           coopId: true,
@@ -222,9 +223,10 @@ export const coopConfigRouter = router({
     })))
     .query(async ({ ctx }) => {
       const coops = await ctx.db.coopConfig.findMany({
-        where: { 
+        where: {
           isActive: true,
           isDemo: false,
+          isPrivate: false,
           name: { not: null },
         },
         orderBy: { displayOrder: 'asc' },
@@ -422,10 +424,12 @@ export const coopConfigRouter = router({
     }),
 
   /**
-   * Create initial config for a coopId (only when none exists)
-   * Uses publicProcedure since this is the initial deployment before contracts exist
+   * Create initial config for a coopId (only when none exists).
+   * Gated to platform admins (PLATFORM_ADMIN_WALLETS) — this writes a new
+   * commons into the platform and is called after contracts are deployed
+   * from /initialize, so publicProcedure would let anyone register a coop.
    */
-  create: publicProcedure
+  create: platformAdminProcedure
     .input(CoopConfigInputZ.extend({
       walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
     }))
@@ -519,6 +523,7 @@ export const coopConfigRouter = router({
             backendWalletAddress: fields.backendWalletAddress,
             scTokenSymbol: fields.scTokenSymbol ?? 'FAK',
             scTokenName: fields.scTokenName ?? 'FakeCoin',
+            isPrivate: fields.isPrivate ?? false,
             createdBy: walletAddress,
           },
         });

@@ -102,6 +102,16 @@
       "types": "./dist/services/email-service.d.ts",
       "import": "./dist/services/email-service.js",
       "require": "./dist/services/email-service.js"
+    },
+    "./services/platform-admin": {
+      "types": "./dist/services/platform-admin.d.ts",
+      "import": "./dist/services/platform-admin.js",
+      "require": "./dist/services/platform-admin.js"
+    },
+    "./lib/admin-config": {
+      "types": "./dist/lib/admin-config.d.ts",
+      "import": "./dist/lib/admin-config.js",
+      "require": "./dist/lib/admin-config.js"
     }
   },
   "keywords": [],

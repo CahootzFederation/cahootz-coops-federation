@@ -107,6 +107,7 @@ export async function POST(request: NextRequest) {
       activeCoopId: session.activeCoopId,
       isAdmin: session.isAdmin || false,
       adminRole: session.adminRole || null,
+      isPlatformAdmin: session.isPlatformAdmin || false,
       address: session.address,
       loginMethod: session.loginMethod,
     });

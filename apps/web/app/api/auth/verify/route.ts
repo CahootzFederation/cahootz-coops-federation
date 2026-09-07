@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
       activeCoopId: session.activeCoopId || null,
       isAdmin: session.isAdmin || false,
       adminRole: session.adminRole || null,
+      isPlatformAdmin: session.isPlatformAdmin || false,
     });
   } catch (error) {
     console.error('Error verifying signature:', error);

@@ -14,12 +14,15 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle2, AlertCircle, Info } from "lucide-react";
+import { CheckCircle2, AlertCircle, Info, Loader2 } from "lucide-react";
 import { DeploymentStep, ContractCard } from "@/components/deployment-status";
 import { CoopConfigPreview } from "@/components/config-preview";
 import { Checkbox } from "@/components/ui/checkbox";
 import { api } from "@/lib/trpc/client";
 import { env } from "~/env";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useWeb3Auth } from "@/hooks/use-web3-auth";
 
 interface DeploymentStepType {
   id: string;
@@ -41,7 +44,7 @@ interface DeployedContracts {
   storePaymentRouter?: string;
 };
 
-export default function InitializePage() {
+function InitializePageContent() {
   const { address, isConnected, chain: connectedChain } = useAccount();
   const { data: walletClient } = useWalletClient();
   const publicClient = usePublicClient();
@@ -158,6 +161,9 @@ export default function InitializePage() {
     p2pFeePercent: 0,
     withdrawalFeePercent: 0,
     withdrawalFeeFlat: 0,
+
+    // Visibility
+    isPrivate: false,
   });
 
   const getDeploymentSteps = (): DeploymentStepType[] => {
@@ -949,6 +955,7 @@ export default function InitializePage() {
           backendWalletAddress: address,
           scTokenSymbol: coopConfig.scTokenSymbol.trim(),
           scTokenName: coopConfig.scTokenName.trim(),
+          isPrivate: coopConfig.isPrivate,
         });
         console.log("✅ Co-op configuration (including chain config) saved to database");
         
@@ -1246,6 +1253,24 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
                         value={coopConfig.description}
                         onChange={(e) => setCoopConfig({ ...coopConfig, description: e.target.value })}
                       />
+                    </div>
+
+                    <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
+                      <Checkbox
+                        id="isPrivate"
+                        checked={coopConfig.isPrivate}
+                        onCheckedChange={(checked) =>
+                          setCoopConfig({ ...coopConfig, isPrivate: checked as boolean })
+                        }
+                      />
+                      <div className="flex-1">
+                        <Label htmlFor="isPrivate" className="font-medium cursor-pointer">
+                          Private commons
+                        </Label>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Hidden from public discovery and onboarding lists. Still reachable directly by coop ID. Can be changed later from the admin dashboard.
+                        </p>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -1918,5 +1943,53 @@ SCREENING_PASS_THRESHOLD="${coopConfig.screeningPassThreshold}"
         )}
       </div>
     </div>
+  );
+}
+
+export default function InitializePage() {
+  const router = useRouter();
+  const { isAuthenticated, isPlatformAdmin, isLoading } = useWeb3Auth();
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push('/portal/admin/login');
+    }
+  }, [isLoading, isAuthenticated, router]);
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  if (!isPlatformAdmin) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center space-y-4 text-center">
+        <h2 className="text-xl font-bold">Access Denied</h2>
+        <p className="max-w-md text-muted-foreground">
+          Deploying a new commons requires platform admin access.
+        </p>
+        <Link href="/portal/admin" className="text-sm font-medium text-blue-600 underline">
+          ← Back to Commons Admin
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="mx-auto w-full max-w-5xl px-4 pt-4">
+        <Link href="/portal/admin" className="text-sm text-muted-foreground underline">
+          ← Back to Commons Admin
+        </Link>
+      </div>
+      <InitializePageContent />
+    </>
   );
 }

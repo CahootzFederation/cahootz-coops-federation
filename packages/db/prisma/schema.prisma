@@ -282,6 +282,7 @@ model CoopConfig {
   accentColor     String  @default("bg-gold-600")
   displayOrder    Int     @default(0)
   isDemo          Boolean @default(false)
+  isPrivate       Boolean @default(false) // Hidden from public listing/onboarding, still reachable by direct coopId
 
   // Application form configuration
   applicationQuestions Json? // [{ id, type, label, description?, placeholder?, required, options?, validation? }]

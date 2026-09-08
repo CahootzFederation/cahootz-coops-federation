@@ -41,12 +41,19 @@ export default function AdminCommonsListPage() {
           <h1 className="text-2xl font-bold text-white">All Commons</h1>
           <p className="text-sm text-slate-400">Every cooperative running on this platform.</p>
         </div>
-        <Link href="/initialize">
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            Create New Commons
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/portal/admin/agents">
+            <Button variant="outline" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white">
+              Agent Playground
+            </Button>
+          </Link>
+          <Link href="/initialize">
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              Create New Commons
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {error && (

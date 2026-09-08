@@ -9,9 +9,19 @@ import { Button } from '@/components/ui/button';
 function AdminGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, isPlatformAdmin, isLoading, email, address, logout } = useWeb3Auth();
+  const { isAuthenticated, isPlatformAdmin, isLoading, email, address, logout, checkAuth } = useWeb3Auth();
 
   const isLoginPage = pathname === '/portal/admin/login';
+
+  // This layout persists across navigations within /portal/admin/* (Next.js
+  // doesn't remount a shared layout between sibling routes), but useWeb3Auth
+  // only fetches the session once on mount. Without this, logging in on
+  // /portal/admin/login and getting redirected to /portal/admin would still
+  // see this gate's stale pre-login "not authenticated" state and bounce
+  // straight back to the login page.
+  useEffect(() => {
+    checkAuth();
+  }, [pathname, checkAuth]);
 
   useEffect(() => {
     if (isLoading || isLoginPage) return;
@@ -44,7 +54,7 @@ function AdminGate({ children }: { children: React.ReactNode }) {
         <p className="max-w-md text-slate-400">
           {email || address} is signed in but is not on the platform admin allowlist.
         </p>
-        <Button variant="outline" onClick={() => logout()}>
+        <Button variant="outline" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => logout()}>
           Log Out
         </Button>
       </div>

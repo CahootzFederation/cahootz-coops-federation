@@ -1,3 +1,5 @@
+import type { ApplicationStatus } from "@repo/db";
+
 export type CommonsSummary = {
   coopId: string;
   name: string | null;
@@ -132,4 +134,143 @@ export async function setCommonsPrivate(coopId: string, isPrivate: boolean): Pro
   });
 
   return result.count > 0;
+}
+
+export type CommonsMemberRow = {
+  id: string;
+  userId: string;
+  username: string | null;
+  status: string;
+  roles: string[];
+  lastLogin: string | null;
+  createdAt: string;
+  email: string;
+  name: string | null;
+  walletAddress: string | null;
+};
+
+export type CommonsApplicationRow = {
+  id: string;
+  userId: string;
+  status: string;
+  createdAt: string;
+  reviewedAt: string | null;
+  email: string;
+  name: string | null;
+  data: unknown;
+};
+
+export type PaginatedResult<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+const DEFAULT_PAGE_SIZE = 20;
+
+export async function listCommonsMembers(
+  coopId: string,
+  opts: { search?: string; page?: number; pageSize?: number } = {}
+): Promise<PaginatedResult<CommonsMemberRow>> {
+  const { db } = await import("@repo/db");
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? DEFAULT_PAGE_SIZE));
+  const search = opts.search?.trim();
+
+  const where = {
+    coopId,
+    ...(search
+      ? {
+          OR: [
+            { username: { contains: search, mode: "insensitive" as const } },
+            { user: { email: { contains: search, mode: "insensitive" as const } } },
+            { user: { name: { contains: search, mode: "insensitive" as const } } },
+          ],
+        }
+      : {}),
+  };
+
+  const [rows, total] = await Promise.all([
+    db.userCoopMembership.findMany({
+      where,
+      include: { user: { select: { email: true, name: true, walletAddress: true } } },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    db.userCoopMembership.count({ where }),
+  ]);
+
+  return {
+    items: rows.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      username: r.username,
+      status: r.status,
+      roles: r.roles,
+      lastLogin: r.lastLogin ? r.lastLogin.toISOString() : null,
+      createdAt: r.createdAt.toISOString(),
+      email: r.user.email,
+      name: r.user.name,
+      walletAddress: r.user.walletAddress,
+    })),
+    total,
+    page,
+    pageSize,
+  };
+}
+
+export async function listCommonsApplications(
+  coopId: string,
+  opts: { search?: string; status?: ApplicationStatus; page?: number; pageSize?: number } = {}
+): Promise<PaginatedResult<CommonsApplicationRow>> {
+  const { db } = await import("@repo/db");
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? DEFAULT_PAGE_SIZE));
+  const search = opts.search?.trim();
+
+  const where = {
+    coopId,
+    ...(opts.status ? { status: opts.status } : {}),
+    ...(search
+      ? {
+          user: {
+            OR: [
+              { email: { contains: search, mode: "insensitive" as const } },
+              { name: { contains: search, mode: "insensitive" as const } },
+            ],
+          },
+        }
+      : {}),
+  };
+
+  const [rows, total] = await Promise.all([
+    db.application.findMany({
+      where,
+      include: { user: { select: { email: true, name: true } } },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    db.application.count({ where }),
+  ]);
+
+  return {
+    items: rows.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      status: r.status,
+      createdAt: r.createdAt.toISOString(),
+      reviewedAt: r.reviewedAt ? r.reviewedAt.toISOString() : null,
+      email: r.user.email,
+      name: r.user.name,
+      data: r.data,
+    })),
+    total,
+    page,
+    pageSize,
+  };
 }

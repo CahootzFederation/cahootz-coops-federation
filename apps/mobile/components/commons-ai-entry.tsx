@@ -111,9 +111,9 @@ const COMMONS_RULES = [
 ] as const;
 
 const DRAWER_SECTIONS = [
-  { label: 'Personal Page', icon: UserCircle, action: '/(authenticated)/personal-page' },
-  { label: 'Private Spaces', icon: Users, action: '/(authenticated)/spaces' },
-  { label: 'Wallet', icon: Wallet, action: '/(tabs)/wallet' },
+  { label: 'Personal Page', icon: UserCircle, action: '/(authenticated)/personal-page', requiresAuth: true },
+  { label: 'Private Spaces', icon: Users, action: '/(authenticated)/spaces', requiresAuth: true },
+  { label: 'Wallet', icon: Wallet, action: '/(tabs)/wallet', requiresAuth: true },
   { label: 'Commons Stores & Shops', icon: Store, action: '/(tabs)/store' },
   { label: 'Proposals & Governance', icon: Scale, action: '/(tabs)/proposals' },
   { label: 'Messages & Direct Chat', icon: MessageCircle, action: '/(tabs)/messages' },
@@ -244,6 +244,11 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
         : commonsItems;
     },
     [accountName, hasAccountSession, memberCommons]
+  );
+
+  const visibleDrawerSections = useMemo(
+    () => DRAWER_SECTIONS.filter((item) => !item.requiresAuth || hasAccountSession),
+    [hasAccountSession]
   );
 
   useEffect(() => {
@@ -1420,14 +1425,14 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
 
               <Text className="mb-2 text-[11px] font-black uppercase tracking-wide text-stone-400">Sections</Text>
               <View className="mb-5 overflow-hidden rounded-2xl border border-stone-200 bg-white">
-                {DRAWER_SECTIONS.map((item, index) => {
+                {visibleDrawerSections.map((item, index) => {
                   const Icon = item.icon;
                   return (
                     <TouchableOpacity
                       key={item.label}
                       onPress={() => goToDrawerItem(item.action)}
                       className={`flex-row items-center gap-2.5 px-3 py-3 ${
-                        index < DRAWER_SECTIONS.length - 1 ? 'border-b border-stone-100' : ''
+                        index < visibleDrawerSections.length - 1 ? 'border-b border-stone-100' : ''
                       }`}
                       activeOpacity={0.75}
                     >
@@ -1463,7 +1468,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
               )}
 
               <Text className="mt-4 text-center text-[11px] font-semibold text-stone-300">
-                Cahootz v1.1 · Powered by Expo 54
+                Cahootz v1.1
               </Text>
             </ScrollView>
           </View>

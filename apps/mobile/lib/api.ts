@@ -20,6 +20,72 @@ export function resolveCoopId(): string {
 export const API_BASE_URL = getApiUrl();
 
 /**
+ * Session expiry detection.
+ *
+ * Individual API calls don't go through a shared response-reading helper (each
+ * endpoint parses its own response), so we can't centralize this at that layer.
+ * Instead we patch `fetch` once and watch for 401s from our own backend - that
+ * catches every endpoint, present and future, without touching call sites.
+ *
+ * Not every 401 means the account session expired - `x-wallet-address`-gated
+ * endpoints (privateProcedure/authenticatedProcedure) also throw 401 for
+ * unrelated reasons (no wallet address on this call, invalid signature, wrong
+ * password, expired login code). Only `accountAuthenticatedProcedure` uses the
+ * literal message below when the session token itself is invalid/expired, so
+ * we match on that instead of the status code alone.
+ */
+const SESSION_EXPIRED_MESSAGE = /session expired/i;
+
+type SessionExpiredListener = () => void;
+const sessionExpiredListeners = new Set<SessionExpiredListener>();
+
+export function onSessionExpired(listener: SessionExpiredListener) {
+  sessionExpiredListeners.add(listener);
+  return () => {
+    sessionExpiredListeners.delete(listener);
+  };
+}
+
+function notifySessionExpired() {
+  sessionExpiredListeners.forEach((listener) => listener());
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __soulaanOriginalFetch: typeof fetch | undefined;
+}
+
+async function checkForSessionExpiry(response: Response) {
+  try {
+    const body = await response.clone().json();
+    const message: unknown = body?.error?.message;
+    if (typeof message === 'string' && SESSION_EXPIRED_MESSAGE.test(message)) {
+      notifySessionExpired();
+    }
+  } catch {
+    // Non-JSON 401 body - not one of our tRPC error responses, ignore.
+  }
+}
+
+function installSessionExpiryInterceptor() {
+  const baseFetch = globalThis.__soulaanOriginalFetch ?? globalThis.fetch;
+  globalThis.__soulaanOriginalFetch = baseFetch;
+
+  globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+    const response = await baseFetch(...args);
+
+    const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
+    if (response.status === 401 && url.startsWith(API_BASE_URL)) {
+      void checkForSessionExpiry(response);
+    }
+
+    return response;
+  }) as typeof fetch;
+}
+
+installSessionExpiryInterceptor();
+
+/**
  * Helper to create headers with optional wallet address
  * Used for authenticated requests that require wallet verification
  */
@@ -195,6 +261,41 @@ export interface SearchPerson {
   id: string;
   name: string;
   handle: string;
+}
+
+export interface PrivateGroupSummary {
+  id: string;
+  name: string;
+  purpose: string | null;
+  privacy: 'private' | 'invite-only';
+  memberCount: number;
+  isLeader: boolean;
+  createdAt: string;
+}
+
+export interface PrivateGroupMember {
+  userId: string;
+  name: string;
+  isLeader: boolean;
+  joinedAt: string;
+}
+
+export interface PrivateGroupDetail {
+  id: string;
+  name: string;
+  purpose: string | null;
+  privacy: 'private' | 'invite-only';
+  inviteCode: string | null;
+  isLeader: boolean;
+  createdAt: string;
+}
+
+export interface PrivateGroupComment {
+  id: string;
+  authorId: string;
+  author: string;
+  content: string;
+  createdAt: string;
 }
 
 export interface PersonalPageProfile {
@@ -880,6 +981,111 @@ export const api = {
     });
 
     return readTrpcResult<{ supported: boolean }>(response, 'Create an account to support posts');
+  },
+
+  async listMyGroups(sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.listMine`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<{ groups: PrivateGroupSummary[] }>(response, 'Failed to load groups');
+  },
+
+  async createGroup(
+    data: { name: string; purpose?: string; privacy: 'private' | 'invite-only'; coopId?: string },
+    sessionToken?: string | null
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.create`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{ group: PrivateGroupSummary & { inviteCode: string } }>(
+      response,
+      'Failed to create group'
+    );
+  },
+
+  async getGroupDetail(groupId: string, sessionToken?: string | null) {
+    const input = encodeURIComponent(JSON.stringify({ groupId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.getDetail?input=${input}`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<{ group: PrivateGroupDetail; members: PrivateGroupMember[] }>(
+      response,
+      'Failed to load group'
+    );
+  },
+
+  async joinGroupByCode(inviteCode: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.joinByCode`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ inviteCode }),
+    });
+
+    return readTrpcResult<{ groupId: string; name: string }>(response, 'Invalid invite code');
+  },
+
+  async regenerateGroupInviteCode(groupId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.regenerateInviteCode`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ groupId }),
+    });
+
+    return readTrpcResult<{ inviteCode: string }>(response, 'Failed to regenerate invite code');
+  },
+
+  async transferGroupLeadership(
+    groupId: string,
+    newLeaderUserId: string,
+    sessionToken?: string | null
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.transferLeadership`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ groupId, newLeaderUserId }),
+    });
+
+    return readTrpcResult<{ success: boolean }>(response, 'Failed to transfer leadership');
+  },
+
+  async leaveGroup(groupId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.leave`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ groupId }),
+    });
+
+    return readTrpcResult<{ success: boolean; groupDeleted: boolean }>(response, 'Failed to leave group');
+  },
+
+  async listGroupComments(groupId: string, sessionToken?: string | null, cursor?: string | null) {
+    const input = encodeURIComponent(JSON.stringify({ groupId, ...(cursor ? { cursor } : {}) }));
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.listComments?input=${input}`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<{ comments: PrivateGroupComment[]; nextCursor: string | null }>(
+      response,
+      'Failed to load comments'
+    );
+  },
+
+  async addGroupComment(groupId: string, content: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.addComment`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ groupId, content }),
+    });
+
+    return readTrpcResult<{ comment: PrivateGroupComment }>(response, 'Failed to add comment');
   },
 
   async listDirectThreads(sessionToken?: string | null) {

@@ -108,10 +108,20 @@
       "import": "./dist/services/platform-admin.js",
       "require": "./dist/services/platform-admin.js"
     },
+    "./routers/coop-config": {
+      "types": "./dist/routers/coop-config.d.ts",
+      "import": "./dist/routers/coop-config.js",
+      "require": "./dist/routers/coop-config.js"
+    },
     "./lib/admin-config": {
       "types": "./dist/lib/admin-config.d.ts",
       "import": "./dist/lib/admin-config.js",
       "require": "./dist/lib/admin-config.js"
+    },
+    "./agents/registry": {
+      "types": "./dist/agents/registry.d.ts",
+      "import": "./dist/agents/registry.js",
+      "require": "./dist/agents/registry.js"
     }
   },
   "keywords": [],
@@ -137,6 +147,7 @@
     "superjson": "^2.2.2",
     "twilio": "^5.11.2",
     "viem": "catalog:",
+    "zod-to-json-schema": "^3.25.2",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -6,6 +6,7 @@ import { ProposalInputZ, ProposalOutputZ, proposalEngine, type ProposalOutput } 
 import type { CoopConfigData } from "@repo/validators";
 import { ProposalCategory, ProposalStatus, ProposerRole, Currency, VoteType } from "@repo/db";
 import type { AuthenticatedContext } from "../context.js";
+import { recordAIEvaluation } from "../services/ai-evaluation-log.js";
 
 const COMMONS_COOP_ID = "cahootz";
 
@@ -125,11 +126,30 @@ export const proposalRouter = router({
       // Process proposal through AI engine — save raw proposal first if engine fails
       let processedProposal: Awaited<ReturnType<typeof proposalEngine.processProposal>> | null = null;
       let aiError: unknown = null;
+      const engineStart = Date.now();
       try {
         processedProposal = await proposalEngine.processProposal(input, configData);
+        await recordAIEvaluation({
+          agentKey: "proposal-engine",
+          agentName: "Proposal Engine",
+          entityType: "Proposal",
+          entityId: processedProposal.id,
+          input: { rawText: input.text },
+          output: processedProposal,
+          durationMs: Date.now() - engineStart,
+        }).catch((logErr) => console.error("Failed to log AIEvaluation for proposal-engine:", logErr));
       } catch (err) {
         aiError = err;
         console.error(`⚠️ [proposal.create] AI engine failed — saving raw proposal for async review:`, err);
+        await recordAIEvaluation({
+          agentKey: "proposal-engine",
+          agentName: "Proposal Engine",
+          entityType: "Proposal",
+          input: { rawText: input.text },
+          status: "ERROR",
+          error: err instanceof Error ? err.message : String(err),
+          durationMs: Date.now() - engineStart,
+        }).catch((logErr) => console.error("Failed to log AIEvaluation error for proposal-engine:", logErr));
       }
 
       if (aiError || !processedProposal) {

@@ -73,6 +73,7 @@ function mapDbToConfigOutput(record: CoopConfig): CoopConfigOutput {
       .map(e => typeof e === "string" ? { value: e } : e),
     scorerAgents: ((record as any).scorerAgents as Array<{ agentKey: string; label: string; enabled: boolean; promptTemplate?: string; model?: string }> | undefined) ?? [],
     minScBalanceToSubmit: record.minScBalanceToSubmit,
+    minScBalanceToCreateGroup: record.minScBalanceToCreateGroup,
     aiAutoApproveThresholdUSD: record.aiAutoApproveThresholdUSD ?? 500,
     councilVoteThresholdUSD: record.councilVoteThresholdUSD ?? 5000,
     strongGoalThreshold: record.strongGoalThreshold,
@@ -213,6 +214,7 @@ export async function createCommonsConfig(
           { agentKey: "general",   label: "General (Fallback)",       enabled: true },
         ],
         minScBalanceToSubmit: fields.minScBalanceToSubmit ?? 0,
+        minScBalanceToCreateGroup: fields.minScBalanceToCreateGroup ?? 0,
         aiAutoApproveThresholdUSD: fields.aiAutoApproveThresholdUSD ?? 500,
         councilVoteThresholdUSD: fields.councilVoteThresholdUSD ?? 5000,
         strongGoalThreshold: fields.strongGoalThreshold ?? 0.70,
@@ -590,6 +592,7 @@ export const coopConfigRouter = router({
       if (updates.sectorExclusions !== undefined) newFields.sectorExclusions = updates.sectorExclusions;
       if (updates.scorerAgents !== undefined) newFields.scorerAgents = updates.scorerAgents;
       if (updates.minScBalanceToSubmit !== undefined) newFields.minScBalanceToSubmit = updates.minScBalanceToSubmit;
+      if (updates.minScBalanceToCreateGroup !== undefined) newFields.minScBalanceToCreateGroup = updates.minScBalanceToCreateGroup;
       if (updates.aiAutoApproveThresholdUSD !== undefined) newFields.aiAutoApproveThresholdUSD = updates.aiAutoApproveThresholdUSD;
       if (updates.councilVoteThresholdUSD !== undefined) newFields.councilVoteThresholdUSD = updates.councilVoteThresholdUSD;
       if (updates.strongGoalThreshold !== undefined) newFields.strongGoalThreshold = updates.strongGoalThreshold;

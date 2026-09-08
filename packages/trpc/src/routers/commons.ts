@@ -15,6 +15,8 @@ import {
   sendCommonsSuggestionNotification,
 } from "../services/slack-notification-service.js";
 import { createNotificationAndPush } from "../services/push-notification-service.js";
+import { getAgent, COMMUNITY_OBSERVER_POST_TYPES } from "../agents/registry.js";
+import { recordObservation } from "../services/ai-memory.js";
 import { router } from "../trpc.js";
 
 const postTagSchema = z.enum([
@@ -235,6 +237,55 @@ function classifyPost(input: {
   };
 }
 
+// Runs the same shared Community Observer agent used by the circle digest
+// (groups.ts getAiDigest) against this post, and writes the result to AI
+// Working Memory (Layer 4) alongside the keyword classifier's real-time
+// classifyPost() result above. This is a deliberate dual-write, not a
+// cutover: classifyPost() stays the source of truth for CommonsPost.classification
+// (fast, synchronous, no external dependency), while this LLM pass populates
+// AIObservation for comparison/consumption by other agents. Mirrors the
+// existing "AI failure never blocks the write" convention used for proposal
+// comment evaluation (routers/proposal-comment.ts) - a failure here is
+// logged and swallowed, never thrown.
+async function recordPostClassificationObservation(params: {
+  coopId: string;
+  postId: string;
+  title?: string;
+  content: string;
+  tag: string;
+}) {
+  if (!process.env.OPENAI_API_KEY) return;
+
+  try {
+    const agent = getAgent("community-observer");
+    if (!agent) return;
+
+    const output = await agent.run({
+      task: "Classify this single community post into exactly one of the allowed types.",
+      content: [
+        params.title ? `Title: ${params.title}` : "",
+        `Content: ${params.content}`,
+        `User-selected tag: ${params.tag}`,
+      ].filter(Boolean).join("\n"),
+      allowedTypes: [...COMMUNITY_OBSERVER_POST_TYPES],
+    });
+
+    await recordObservation({
+      type: "post_classification",
+      scopeType: "commons",
+      scopeId: params.coopId,
+      confidence: output.confidence,
+      summary: output.summary,
+      details: { classification: output.type, ...output.details },
+      sources: [{ type: "commons_post", id: params.postId }],
+      visibility: "COMMONS_MEMBERS",
+      generatedByAgentKey: "community-observer",
+    });
+  } catch (err) {
+    console.error("Failed to record post_classification AIObservation:", err);
+  }
+}
+
 function mapPostWithGroup(record: any, groupName: string) {
   return {
     id: record.id,
@@ -360,7 +411,7 @@ async function hasActiveCommonsMembership(db: any, userId: string, coopId: strin
   return membership?.status === "ACTIVE";
 }
 
-async function requireActiveCommonsMembership(db: any, userId: string, coopId: string) {
+export async function requireActiveCommonsMembership(db: any, userId: string, coopId: string) {
   if (coopId === COMMONS_COOP_ID) {
     await ensureCommonsMembership(db, userId);
     return;
@@ -613,7 +664,7 @@ export const commonsRouter = router({
         },
       });
       const coopIds = coops.map((coop: any) => coop.coopId);
-      const [memberships, applications] = accountUser
+      const [memberships, applications, circleMemberships] = accountUser
         ? await Promise.all([
             context.db.userCoopMembership.findMany({
               where: {
@@ -639,11 +690,25 @@ export const commonsRouter = router({
                 reviewedAt: true,
               },
             }),
+            // Just "circles I'm in" per commons, not a total across every
+            // member - circles are private/invite-only, so a raw total would
+            // surface the existence of spaces this user isn't part of.
+            context.db.groupMember.findMany({
+              where: {
+                userId: accountUser.id,
+                group: { coopId: { in: coopIds } },
+              },
+              select: { group: { select: { coopId: true } } },
+            }),
           ])
-        : [[], []];
+        : [[], [], []];
 
       const membershipByCoop = new Map(memberships.map((membership: any) => [membership.coopId, membership]));
       const applicationByCoop = new Map(applications.map((application: any) => [application.coopId, application]));
+      const circleCountByCoop = new Map<string, number>();
+      for (const { group } of circleMemberships as { group: { coopId: string } }[]) {
+        circleCountByCoop.set(group.coopId, (circleCountByCoop.get(group.coopId) || 0) + 1);
+      }
 
       return {
         coops: coops.map((coop: any) => {
@@ -677,6 +742,7 @@ export const commonsRouter = router({
             canApply: accessStatus === "LOCKED",
             applicationId: application?.id || null,
             applicationStatus: applicationStatus || null,
+            circleCount: circleCountByCoop.get(coop.coopId) || 0,
           };
         }),
       };
@@ -1361,6 +1427,14 @@ export const commonsRouter = router({
         },
       });
       const coop = await loadCoopSummary(ctx.db, input.coopId);
+
+      await recordPostClassificationObservation({
+        coopId: input.coopId,
+        postId: post.id,
+        title: input.title,
+        content: input.content,
+        tag: input.tag,
+      });
 
       return { post: mapPostWithGroup(post, coop.name) };
     }),

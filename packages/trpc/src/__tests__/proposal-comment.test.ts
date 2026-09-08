@@ -36,8 +36,9 @@ describe('proposal-comment router (unit)', () => {
       create: vi.fn(),
       count: vi.fn(),
     };
-    mockDb.commentAIEvaluation = {
+    mockDb.aIEvaluation = {
       create: vi.fn(),
+      findMany: vi.fn(),
     };
     mockDb.coopConfig = {
       findFirst: vi.fn(),
@@ -64,18 +65,22 @@ describe('proposal-comment router (unit)', () => {
 
       const evaluation = {
         id: 'eval_1',
-        commentId: 'comment_1',
-        alignment: 'ALIGNED',
-        score: 0.85,
-        analysis: 'Supports charter goals',
-        goalsImpacted: ['LeakageReduction'],
+        agentKey: 'comment-evaluation',
+        entityType: 'ProposalComment',
+        entityId: 'comment_1',
+        output: {
+          alignment: 'ALIGNED',
+          score: 0.85,
+          analysis: 'Supports charter goals',
+          goalsImpacted: ['LeakageReduction'],
+        },
         createdAt: new Date(),
       };
 
       mockDb.proposal.findUnique.mockResolvedValue(proposal);
       mockDb.proposalComment.create.mockResolvedValue(comment);
       mockDb.coopConfig.findFirst.mockResolvedValue(null);
-      mockDb.commentAIEvaluation.create.mockResolvedValue(evaluation);
+      mockDb.aIEvaluation.create.mockResolvedValue(evaluation);
 
       // Simulate the create flow
       const foundProposal = await mockDb.proposal.findUnique({ where: { id: 'prop_123' } });
@@ -101,7 +106,7 @@ describe('proposal-comment router (unit)', () => {
   });
 
   describe('listByProposal', () => {
-    it('returns comments with evaluations ordered by createdAt', async () => {
+    it('returns comments with evaluations looked up from AIEvaluation', async () => {
       const comments = [
         {
           id: 'comment_1',
@@ -109,12 +114,6 @@ describe('proposal-comment router (unit)', () => {
           authorWallet: '0xabc',
           content: 'First comment',
           createdAt: new Date('2026-01-01'),
-          aiEvaluation: {
-            alignment: 'ALIGNED',
-            score: 0.8,
-            analysis: 'Supportive',
-            goalsImpacted: ['LeakageReduction'],
-          },
         },
         {
           id: 'comment_2',
@@ -122,22 +121,35 @@ describe('proposal-comment router (unit)', () => {
           authorWallet: '0xdef',
           content: 'Second comment',
           createdAt: new Date('2026-01-02'),
-          aiEvaluation: null,
+        },
+      ];
+
+      const evaluations = [
+        {
+          id: 'eval_1',
+          agentKey: 'comment-evaluation',
+          entityType: 'ProposalComment',
+          entityId: 'comment_1',
+          output: { alignment: 'ALIGNED', score: 0.8, analysis: 'Supportive', goalsImpacted: ['LeakageReduction'] },
+          createdAt: new Date('2026-01-01'),
         },
       ];
 
       mockDb.proposalComment.findMany.mockResolvedValue(comments);
       mockDb.proposalComment.count.mockResolvedValue(2);
+      mockDb.aIEvaluation.findMany.mockResolvedValue(evaluations);
 
       const result = await mockDb.proposalComment.findMany({
         where: { proposalId: 'prop_123' },
-        include: { aiEvaluation: true },
         orderBy: { createdAt: 'asc' },
+      });
+      const foundEvaluations = await mockDb.aIEvaluation.findMany({
+        where: { entityType: 'ProposalComment', entityId: { in: result.map((c: any) => c.id) } },
       });
 
       expect(result).toHaveLength(2);
-      expect(result[0].aiEvaluation).not.toBeNull();
-      expect(result[1].aiEvaluation).toBeNull();
+      expect(foundEvaluations).toHaveLength(1);
+      expect(foundEvaluations[0].entityId).toBe('comment_1');
     });
 
     it('returns empty array for proposal with no comments', async () => {

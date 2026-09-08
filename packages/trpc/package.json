@@ -141,6 +141,7 @@
     "bcryptjs": "^3.0.2",
     "iron-session": "catalog:",
     "next-auth": "^4.24.13",
+    "openai": "^6.10.0",
     "react": "catalog:react19",
     "resend": "^6.12.3",
     "stripe": "^20.1.2",

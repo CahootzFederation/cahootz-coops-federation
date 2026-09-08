@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
@@ -7,7 +8,8 @@ datasource db {
   url               = env("DATABASE_URL")
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 
-  schemas = ["auth", "public"]
+  schemas    = ["auth", "public"]
+  extensions = [vector]
 }
 
 model User {
@@ -77,6 +79,8 @@ model User {
   groupsLed              Group[]                     @relation("GroupLeader")
   groupMemberships       GroupMember[]
   groupComments          GroupComment[]
+  uploadedKnowledgeDocuments KnowledgeDocument[]
+  verifiedAIObservations AIObservation[]              @relation("AIObservationVerifier")
 
   @@index([deletedAt])
   @@schema("public")
@@ -305,6 +309,7 @@ model CoopConfig {
   sectorExclusions          Json // [{ value, description? }]
   scorerAgents              Json   @default("[]") // [{ agentKey, label, enabled, promptTemplate?, model? }]
   minScBalanceToSubmit      Float  @default(0)
+  minScBalanceToCreateGroup Float  @default(0)
   aiAutoApproveThresholdUSD Float  @default(500)
   councilVoteThresholdUSD   Float  @default(5000)
   strongGoalThreshold       Float  @default(0.70)
@@ -486,6 +491,68 @@ model CoopResearchCache {
   @@unique([coopId, cacheKey])
   @@index([coopId])
   @@index([expiresAt])
+  @@schema("public")
+}
+
+// ── Knowledge Base (LLM memory layer 3: documents, indexed for semantic search) ────────────────────────────
+enum KnowledgeDocumentType {
+  MEETING_NOTES
+  CHARTER
+  BYLAWS
+  FAQ
+  PROJECT_PLAN
+  RESEARCH
+  VENDOR_LIST
+  GRANT_NOTES
+  MEMBER_GUIDE
+  DECISION_SUMMARY
+  OTHER
+
+  @@schema("public")
+}
+
+enum KnowledgeVisibility {
+  PRIVATE // author/uploader only
+  CIRCLE // members of scopeId (a Group) only
+  COMMONS // all members of scopeId (a coopId)
+  PUBLIC // unauthenticated readers too
+
+  @@schema("public")
+}
+
+model KnowledgeDocument {
+  id           String                @id @default(cuid())
+  coopId       String                @default("cahootz")
+  scopeType    String // "commons" | "circle"
+  scopeId      String // coopId or Group.id depending on scopeType
+  type         KnowledgeDocumentType
+  visibility   KnowledgeVisibility   @default(COMMONS)
+  title        String
+  sourceUrl    String?
+  uploadedById String
+  uploadedBy   User                  @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+  content      String                @db.Text // canonical text (markdown), chunked at ingest time
+  metadata     Json                  @default("{}")
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  chunks KnowledgeChunk[]
+
+  @@index([coopId, scopeType, scopeId])
+  @@index([coopId, type])
+  @@schema("public")
+}
+
+model KnowledgeChunk {
+  id         String            @id @default(cuid())
+  documentId String
+  document   KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunkIndex Int
+  content    String            @db.Text
+  embedding  Unsupported("vector(1536)")?
+  createdAt  DateTime          @default(now())
+
+  @@unique([documentId, chunkIndex])
   @@schema("public")
 }
 
@@ -683,9 +750,6 @@ model ProposalComment {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  // Relations
-  aiEvaluation CommentAIEvaluation?
-
   @@index([proposalId, createdAt])
   @@schema("public")
 }
@@ -703,16 +767,90 @@ model ProposalReaction {
   @@schema("public")
 }
 
-model CommentAIEvaluation {
-  id            String           @id @default(cuid())
-  commentId     String           @unique
-  comment       ProposalComment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  alignment     CommentAlignment
-  score         Float // 0-1
-  analysis      String           @db.Text
-  goalsImpacted String[]
-  createdAt     DateTime         @default(now())
+enum AIEvaluationStatus {
+  SUCCESS
+  ERROR
 
+  @@schema("public")
+}
+
+model AIEvaluation {
+  id         String             @id @default(cuid())
+  createdAt  DateTime           @default(now())
+  agentKey   String
+  agentName  String
+  model      String?
+  entityType String?
+  entityId   String?
+  input      Json?
+  output     Json?
+  status     AIEvaluationStatus @default(SUCCESS)
+  error      String?            @db.Text
+  durationMs Int?
+
+  @@index([entityType, entityId])
+  @@index([agentKey, createdAt])
+  @@schema("public")
+}
+
+// ── AI Working Memory (LLM memory layer 4: generated observations, treated as
+// suggestions/interpretations, not truth — distinct from AIEvaluation above,
+// which is a write-only debug trace of raw agent input/output). ────────────
+enum AIObservationVisibility {
+  PRIVATE_TO_AUTHOR_SCOPE // only the specific user/admin whose scope this is (rare)
+  CIRCLE // members of scopeId when scopeType = "circle"
+  COMMONS_ADMINS // admins of scopeId when scopeType = "commons"
+  COMMONS_MEMBERS // all members of scopeId when scopeType = "commons"
+  PUBLIC
+
+  @@schema("public")
+}
+
+enum AIObservationStatus {
+  ACTIVE
+  SUPERSEDED
+  DISMISSED
+  EXPIRED
+
+  @@schema("public")
+}
+
+model AIObservation {
+  id                  String                  @id @default(cuid())
+  type                String // "pattern_detected" | "risk_flag" | "recommendation" | "post_classification" | "circle_digest_summary" | ...
+  scopeType           String // "commons" | "circle" | "member" | "proposal"
+  scopeId             String
+  confidence          Float
+  summary             String                  @db.Text
+  details             Json?
+  sources             AIObservationSource[]
+  visibility          AIObservationVisibility @default(COMMONS_ADMINS)
+  status              AIObservationStatus     @default(ACTIVE)
+  expiresAt           DateTime?
+  reviewAt            DateTime?
+  verifiedById        String?
+  verifiedBy          User?                   @relation("AIObservationVerifier", fields: [verifiedById], references: [id])
+  verifiedAt          DateTime?
+  generatedByAgentKey String? // matches AgentDefinition.key in agents/registry.ts
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@index([scopeType, scopeId, status])
+  @@index([status, expiresAt])
+  @@index([generatedByAgentKey, createdAt])
+  @@schema("public")
+}
+
+model AIObservationSource {
+  id            String        @id @default(cuid())
+  observationId String
+  observation   AIObservation @relation(fields: [observationId], references: [id], onDelete: Cascade)
+  sourceType    String // "commons_post" | "group_comment" | "knowledge_document" | "proposal" | "audit_log" | ...
+  sourceId      String
+  createdAt     DateTime      @default(now())
+
+  @@index([observationId])
+  @@index([sourceType, sourceId])
   @@schema("public")
 }
 
@@ -889,22 +1027,24 @@ model CommonsSuggestion {
 
 // ── Private Groups ("Spaces") ───────────────────────────
 model Group {
-  id         String   @id @default(cuid())
-  coopId     String   @default("cahootz")
-  name       String
-  purpose    String?  @db.Text
-  privacy    String   @default("invite-only") // "private" | "invite-only"
-  inviteCode String   @unique
-  leaderId   String
-  leader     User     @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id             String   @id @default(cuid())
+  coopId         String   @default("cahootz")
+  name           String
+  purpose        String?  @db.Text
+  privacy        String   @default("invite-only") // "private" | "invite-only"
+  inviteCode     String   @unique
+  leaderId       String
+  leader         User     @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  lastActivityAt DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   members  GroupMember[]
   comments GroupComment[]
 
   @@index([coopId, createdAt])
   @@index([leaderId])
+  @@index([coopId, lastActivityAt])
   @@schema("public")
 }
 
@@ -1146,14 +1286,6 @@ enum VoteType {
   FOR
   AGAINST
   ABSTAIN
-
-  @@schema("public")
-}
-
-enum CommentAlignment {
-  ALIGNED
-  NEUTRAL
-  MISALIGNED
 
   @@schema("public")
 }

@@ -1182,13 +1182,18 @@ async function seedGovernance(users: Map<string, any>) {
       },
     });
 
-    await prisma.commentAIEvaluation.create({
+    await prisma.aIEvaluation.create({
       data: {
-        commentId: comment.id,
-        alignment: "ALIGNED",
-        score: 0.86,
-        analysis: "The comment is constructive and mission-aligned.",
-        goalsImpacted: ["governance", "member_onboarding"],
+        agentKey: "comment-evaluation",
+        agentName: "Comment Evaluation Agent",
+        entityType: "ProposalComment",
+        entityId: comment.id,
+        output: {
+          alignment: "ALIGNED",
+          score: 0.86,
+          analysis: "The comment is constructive and mission-aligned.",
+          goalsImpacted: ["governance", "member_onboarding"],
+        },
       },
     });
 

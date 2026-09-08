@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { db } from "@repo/db";
 
 import { commonsRouter } from "../routers/commons.js";
 import {
@@ -6,10 +7,33 @@ import {
   sendCommonsSuggestionNotification,
 } from "../services/slack-notification-service.js";
 
+const mockDb = db as any;
+
 vi.mock("../services/slack-notification-service.js", () => ({
   sendApplicationSubmittedNotification: vi.fn().mockResolvedValue(undefined),
   sendCommonsSuggestionNotification: vi.fn().mockResolvedValue(undefined),
 }));
+
+// Real class for Agent (per project convention — a generic vi.fn() mock
+// breaks `new Agent(...)`), real-enough `run()` for the shared Community
+// Observer agent used by commons.ts's post-classification dual-write.
+vi.mock("@openai/agents", () => {
+  class MockAgent {
+    constructor(_opts: any) {}
+  }
+  return {
+    Agent: MockAgent,
+    run: vi.fn().mockResolvedValue({
+      finalOutput: {
+        type: "need",
+        confidence: 0.9,
+        summary: "Someone is asking for help with weekend food support.",
+        details: {},
+      },
+    }),
+    webSearchTool: vi.fn().mockReturnValue({}),
+  };
+});
 
 const ACTIVE_USER = {
   id: "user_1",
@@ -83,6 +107,10 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
       findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn(),
       ...overrides.directMessage,
+    },
+    groupMember: {
+      findMany: vi.fn().mockResolvedValue([]),
+      ...overrides.groupMember,
     },
     session: {
       findUnique: vi.fn().mockResolvedValue({
@@ -276,6 +304,50 @@ describe("commonsRouter", () => {
     ]);
   });
 
+  it("counts only the caller's own circles per commons, not every circle that exists", async () => {
+    const db = makeDb({
+      coopConfig: {
+        findMany: vi.fn().mockResolvedValue([
+          { coopId: "cahootz", name: "Cahootz Commons", slug: "Cahootz" },
+          { coopId: "artists", name: "Artists Commons", slug: "Artists" },
+        ]),
+      },
+      userCoopMembership: {
+        findMany: vi.fn().mockResolvedValue([
+          { coopId: "cahootz", status: "ACTIVE", roles: ["member"] },
+        ]),
+      },
+      groupMember: {
+        findMany: vi.fn().mockResolvedValue([
+          { group: { coopId: "cahootz" } },
+          { group: { coopId: "cahootz" } },
+        ]),
+      },
+    });
+
+    const result = await callerFor(db, { "x-session-token": "token_1" }).listDirectory();
+
+    expect(result.coops).toEqual([
+      expect.objectContaining({ id: "cahootz", circleCount: 2 }),
+      expect.objectContaining({ id: "artists", circleCount: 0 }),
+    ]);
+  });
+
+  it("skips the circle-membership query entirely for anonymous visitors", async () => {
+    const db = makeDb({
+      coopConfig: {
+        findMany: vi.fn().mockResolvedValue([
+          { coopId: "cahootz", name: "Cahootz Commons", slug: "Cahootz" },
+        ]),
+      },
+    });
+
+    const result = await callerFor(db, {}).listDirectory();
+
+    expect(result.coops).toEqual([expect.objectContaining({ id: "cahootz", circleCount: 0 })]);
+    expect(db.groupMember.findMany).not.toHaveBeenCalled();
+  });
+
   it("lets logged-in users apply to locked commons with coop-config questions", async () => {
     const db = makeDb({
       coopConfig: {
@@ -406,6 +478,84 @@ describe("commonsRouter", () => {
         }),
       }),
     );
+  });
+
+  it("dual-writes an AIObservation via the shared Community Observer agent when OPENAI_API_KEY is set", async () => {
+    const originalKey = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "test-key";
+    mockDb.aIObservation = { create: vi.fn().mockResolvedValue({}) };
+
+    try {
+      const db = makeDb({
+        commonsPost: {
+          create: vi.fn().mockResolvedValue({
+            id: "post_1",
+            coopId: "cahootz",
+            author: { name: "Alice", email: "alice@example.com" },
+            createdAt: new Date(),
+            title: "Food support",
+            content: "We should coordinate weekend food support.",
+            tag: "Need",
+            comments: [],
+            _count: { comments: 0, supports: 0 },
+          }),
+        },
+      });
+
+      await callerFor(db, { "x-session-token": "token_1" }).createPost({
+        title: "Food support",
+        content: "We should coordinate weekend food support.",
+        tag: "Need",
+      });
+
+      expect(mockDb.aIObservation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: "post_classification",
+            scopeType: "commons",
+            scopeId: "cahootz",
+            visibility: "COMMONS_MEMBERS",
+            generatedByAgentKey: "community-observer",
+          }),
+        }),
+      );
+    } finally {
+      process.env.OPENAI_API_KEY = originalKey;
+    }
+  });
+
+  it("skips the AIObservation dual-write when OPENAI_API_KEY is unset", async () => {
+    const originalKey = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    mockDb.aIObservation = { create: vi.fn().mockResolvedValue({}) };
+
+    try {
+      const db = makeDb({
+        commonsPost: {
+          create: vi.fn().mockResolvedValue({
+            id: "post_1",
+            coopId: "cahootz",
+            author: { name: "Alice", email: "alice@example.com" },
+            createdAt: new Date(),
+            title: "Food support",
+            content: "We should coordinate weekend food support.",
+            tag: "Need",
+            comments: [],
+            _count: { comments: 0, supports: 0 },
+          }),
+        },
+      });
+
+      await callerFor(db, { "x-session-token": "token_1" }).createPost({
+        title: "Food support",
+        content: "We should coordinate weekend food support.",
+        tag: "Need",
+      });
+
+      expect(mockDb.aIObservation.create).not.toHaveBeenCalled();
+    } finally {
+      process.env.OPENAI_API_KEY = originalKey;
+    }
   });
 
   it("lets members comment on real posts", async () => {

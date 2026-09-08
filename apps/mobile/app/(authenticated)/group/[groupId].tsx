@@ -191,9 +191,14 @@ export default function GroupDetailScreen() {
               <ArrowLeft size={18} color="#1F2937" strokeWidth={2.6} />
             </TouchableOpacity>
             <View className="min-w-0 flex-1">
-              <Text className="text-[10px] font-black uppercase text-gray-500">
-                {group.privacy.replace('-', ' ')}
-              </Text>
+              <TouchableOpacity
+                onPress={() => router.push(`/commons/${group.coopId}` as any)}
+                activeOpacity={0.7}
+              >
+                <Text className="text-[10px] font-black uppercase" style={{ color: THEME.primary }} numberOfLines={1}>
+                  {group.coopName} · {group.privacy.replace('-', ' ')}
+                </Text>
+              </TouchableOpacity>
               <Text className="text-base font-black text-gray-950" numberOfLines={1}>
                 {group.name}
               </Text>

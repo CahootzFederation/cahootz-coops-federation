@@ -293,6 +293,7 @@ export const CoopConfigInputZ = z.object({
   proposalCategories: z.array(ProposalCategoryConfigZ).optional(),
   sectorExclusions: z.array(SectorExclusionZ).optional(),
   minScBalanceToSubmit: z.number().min(0).optional(),
+  minScBalanceToCreateGroup: z.number().min(0).optional(),
   aiAutoApproveThresholdUSD: z.number().min(0).optional(),
   councilVoteThresholdUSD: z.number().min(0).optional(),
   /** Configurable domain scorer-agent registry; admins manage without code changes */
@@ -351,6 +352,7 @@ export const CoopConfigOutputZ = z.object({
   proposalCategories: z.array(ProposalCategoryConfigZ),
   sectorExclusions: z.array(SectorExclusionZ),
   minScBalanceToSubmit: z.number(),
+  minScBalanceToCreateGroup: z.number(),
   aiAutoApproveThresholdUSD: z.number(),
   councilVoteThresholdUSD: z.number(),
   scorerAgents: z.array(ScorerAgentZ).default([]),

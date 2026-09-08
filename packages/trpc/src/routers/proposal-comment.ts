@@ -2,17 +2,27 @@ import { z } from "zod";
 import { router } from "../trpc.js";
 import { authenticatedProcedure, publicProcedure } from "../procedures/index.js";
 import { CommentInputZ, CommentOutputZ, proposalEngine } from "@repo/validators";
-import type { CommentAlignment } from "@repo/db";
 import type { AuthenticatedContext } from "../context.js";
+import { withAIEvaluationLogging } from "../services/ai-evaluation-log.js";
 
-function mapCommentToOutput(record: any): {
+type CommentAIEvaluationOutput = {
+  alignment: "ALIGNED" | "NEUTRAL" | "MISALIGNED";
+  score: number;
+  analysis: string;
+  goalsImpacted: string[];
+};
+
+function mapCommentToOutput(
+  record: any,
+  aiEvaluation?: CommentAIEvaluationOutput | null,
+): {
   id: string;
   proposalId: string;
   authorWallet: string;
   authorName?: string | null;
   content: string;
   createdAt: string;
-  aiEvaluation?: { alignment: "ALIGNED" | "NEUTRAL" | "MISALIGNED"; score: number; analysis: string; goalsImpacted: string[] } | null;
+  aiEvaluation?: CommentAIEvaluationOutput | null;
 } {
   return {
     id: record.id,
@@ -21,14 +31,7 @@ function mapCommentToOutput(record: any): {
     authorName: record.authorName,
     content: record.content,
     createdAt: record.createdAt instanceof Date ? record.createdAt.toISOString() : record.createdAt,
-    aiEvaluation: record.aiEvaluation
-      ? {
-          alignment: record.aiEvaluation.alignment as "ALIGNED" | "NEUTRAL" | "MISALIGNED",
-          score: record.aiEvaluation.score as number,
-          analysis: record.aiEvaluation.analysis as string,
-          goalsImpacted: record.aiEvaluation.goalsImpacted as string[],
-        }
-      : null,
+    aiEvaluation: aiEvaluation ?? null,
   };
 }
 
@@ -60,7 +63,7 @@ export const proposalCommentRouter = router({
       });
 
       // Run AI evaluation
-      let aiEvaluation = null;
+      let aiEvaluation: CommentAIEvaluationOutput | null = null;
       try {
         // Fetch coop config if available
         const coopConfig = proposal.coopId
@@ -85,32 +88,31 @@ export const proposalCommentRouter = router({
             }
           : undefined;
 
-        const evalResult = await proposalEngine.evaluateComment(
-          input.content,
+        aiEvaluation = await withAIEvaluationLogging(
           {
-            title: proposal.title,
-            summary: proposal.summary,
-            category: proposal.category.toLowerCase(),
+            agentKey: "comment-evaluation",
+            agentName: "Comment Evaluation Agent",
+            entityType: "ProposalComment",
+            entityId: comment.id,
+            input: { commentText: input.content, proposalId: input.proposalId },
           },
-          configData,
+          () =>
+            proposalEngine.evaluateComment(
+              input.content,
+              {
+                title: proposal.title,
+                summary: proposal.summary,
+                category: proposal.category.toLowerCase(),
+              },
+              configData,
+            ),
         );
-
-        // Persist AI evaluation
-        aiEvaluation = await ctx.db.commentAIEvaluation.create({
-          data: {
-            commentId: comment.id,
-            alignment: evalResult.alignment as CommentAlignment,
-            score: evalResult.score,
-            analysis: evalResult.analysis,
-            goalsImpacted: evalResult.goalsImpacted,
-          },
-        });
       } catch (err) {
         // AI evaluation failure should not block comment creation
         console.error("AI comment evaluation failed:", err);
       }
 
-      return mapCommentToOutput({ ...comment, aiEvaluation });
+      return mapCommentToOutput(comment, aiEvaluation);
     }),
 
   /**
@@ -130,7 +132,6 @@ export const proposalCommentRouter = router({
       const [comments, total] = await Promise.all([
         ctx.db.proposalComment.findMany({
           where: { proposalId: input.proposalId },
-          include: { aiEvaluation: true },
           orderBy: { createdAt: "asc" },
           skip: input.offset,
           take: input.limit,
@@ -140,8 +141,33 @@ export const proposalCommentRouter = router({
         }),
       ]);
 
+      const evaluations = comments.length
+        ? await ctx.db.aIEvaluation.findMany({
+            where: {
+              entityType: "ProposalComment",
+              entityId: { in: comments.map((c) => c.id) },
+            },
+            orderBy: { createdAt: "desc" },
+          })
+        : [];
+
+      const evaluationByCommentId = new Map<string, CommentAIEvaluationOutput>();
+      for (const evaluation of evaluations) {
+        if (!evaluation.entityId || evaluationByCommentId.has(evaluation.entityId)) continue;
+        const output = evaluation.output as Partial<CommentAIEvaluationOutput> | null;
+        if (!output) continue;
+        evaluationByCommentId.set(evaluation.entityId, {
+          alignment: output.alignment as CommentAIEvaluationOutput["alignment"],
+          score: output.score as number,
+          analysis: output.analysis as string,
+          goalsImpacted: output.goalsImpacted as string[],
+        });
+      }
+
       return {
-        comments: comments.map(mapCommentToOutput),
+        comments: comments.map((comment) =>
+          mapCommentToOutput(comment, evaluationByCommentId.get(comment.id) ?? null),
+        ),
         total,
       };
     }),

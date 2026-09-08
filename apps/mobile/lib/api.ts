@@ -288,6 +288,8 @@ export interface PrivateGroupDetail {
   inviteCode: string | null;
   isLeader: boolean;
   createdAt: string;
+  coopId: string;
+  coopName: string;
 }
 
 export interface PrivateGroupComment {
@@ -296,6 +298,12 @@ export interface PrivateGroupComment {
   author: string;
   content: string;
   createdAt: string;
+}
+
+export interface GroupCreateRequirements {
+  minScBalance: number;
+  currentScBalance: number;
+  canCreate: boolean;
 }
 
 export interface PersonalPageProfile {
@@ -352,6 +360,7 @@ export interface CommonsDirectoryItem extends CommonsProfile {
   canApply: boolean;
   applicationId?: string | null;
   applicationStatus?: string | null;
+  circleCount?: number;
 }
 
 export interface CommonsMissionGoal {
@@ -983,8 +992,9 @@ export const api = {
     return readTrpcResult<{ supported: boolean }>(response, 'Create an account to support posts');
   },
 
-  async listMyGroups(sessionToken?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/groups.listMine`, {
+  async listMyGroups(sessionToken?: string | null, coopId?: string) {
+    const input = encodeURIComponent(JSON.stringify(coopId ? { coopId } : {}));
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.listMine?input=${input}`, {
       method: 'GET',
       headers: createApiHeaders(null, sessionToken),
     });
@@ -1008,6 +1018,16 @@ export const api = {
     );
   },
 
+  async getGroupCreateRequirements(sessionToken?: string | null, coopId?: string) {
+    const input = encodeURIComponent(JSON.stringify(coopId ? { coopId } : {}));
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.getCreateRequirements?input=${input}`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<GroupCreateRequirements>(response, 'Failed to check space creation requirements');
+  },
+
   async getGroupDetail(groupId: string, sessionToken?: string | null) {
     const input = encodeURIComponent(JSON.stringify({ groupId }));
     const response = await fetch(`${API_BASE_URL}/trpc/groups.getDetail?input=${input}`, {
@@ -1021,11 +1041,11 @@ export const api = {
     );
   },
 
-  async joinGroupByCode(inviteCode: string, sessionToken?: string | null) {
+  async joinGroupByCode(inviteCode: string, sessionToken?: string | null, coopId?: string) {
     const response = await fetch(`${API_BASE_URL}/trpc/groups.joinByCode`, {
       method: 'POST',
       headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({ inviteCode }),
+      body: JSON.stringify({ inviteCode, coopId }),
     });
 
     return readTrpcResult<{ groupId: string; name: string }>(response, 'Invalid invite code');

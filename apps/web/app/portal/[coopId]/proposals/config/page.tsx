@@ -119,6 +119,7 @@ export default function CoopConfigPage() {
   const [editApproval, setEditApproval] = useState("");
   const [editWindow, setEditWindow] = useState("");
   const [editMinSc, setEditMinSc] = useState("");
+  const [editMinScToCreateGroup, setEditMinScToCreateGroup] = useState("");
   const [editAutoApproveThreshold, setEditAutoApproveThreshold] = useState("");
   const [editCouncilThreshold, setEditCouncilThreshold] = useState("");
   const [editPassThreshold, setEditPassThreshold] = useState("");
@@ -658,6 +659,30 @@ export default function CoopConfigPage() {
             type="number"
             defaultValue={config.minScBalanceToSubmit}
             onChange={(e) => setEditMinSc(e.target.value)}
+            className="bg-slate-900 border-slate-600 text-white mt-1 max-w-xs"
+          />
+        </div>
+      </ConfigSectionEditor>
+
+      {/* Group Creation Requirements */}
+      <ConfigSectionEditor
+        title="Group Creation Requirements"
+        description={`Minimum ${coin.symbol} token balance a member must hold to create a Group ("Space"). Set to 0 to let anyone create one.`}
+        isDirty={editMinScToCreateGroup !== ""}
+        onSave={async (reason) => {
+          const minScBalanceToCreateGroup = editMinScToCreateGroup ? parseFloat(editMinScToCreateGroup) : config.minScBalanceToCreateGroup;
+          await propose("groupCreationRequirements", { minScBalanceToCreateGroup }, { minScBalanceToCreateGroup: config.minScBalanceToCreateGroup })(reason);
+        }}
+        isSaving={proposeChange.isPending}
+        {...sectionReview("groupCreationRequirements")}
+        coopId={coopId}
+      >
+        <div className="text-sm">
+          <span className="text-gray-500">Min SC Balance to Create a Group</span>
+          <Input
+            type="number"
+            defaultValue={config.minScBalanceToCreateGroup}
+            onChange={(e) => setEditMinScToCreateGroup(e.target.value)}
             className="bg-slate-900 border-slate-600 text-white mt-1 max-w-xs"
           />
         </div>

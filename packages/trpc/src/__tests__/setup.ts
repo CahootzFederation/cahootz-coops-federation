@@ -5,8 +5,15 @@ process.env.STRIPE_SECRET_KEY = 'sk_test_mock_key_for_testing';
 process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_mock_webhook_secret';
 process.env.WALLET_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'; // 64 hex chars = 32 bytes
 
-// Mock @repo/db
-vi.mock('@repo/db', () => ({
+// Mock @repo/db. `Prisma` is pulled straight from @prisma/client (not through
+// packages/db/index.ts, which eagerly constructs a real PrismaClient with
+// process-exit handlers as a side effect) — Prisma.sql/join/empty are pure
+// tag-template helpers with no DB connection, safe to use for real in tests
+// that build raw queries (e.g. services/knowledge-base.ts).
+vi.mock('@repo/db', async () => {
+  const { Prisma } = await import('@prisma/client');
+  return {
+  Prisma,
   db: {
     user: {
       findUnique: vi.fn(),
@@ -95,7 +102,8 @@ vi.mock('@repo/db', () => ({
       return callback(mockTx);
     }),
   },
-}));
+  };
+});
 
 // Mock Stripe SDK
 vi.mock('stripe', () => {

@@ -1,12 +1,12 @@
 import React from 'react';
 import { ActivityIndicator, Alert, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, KeyRound, Lock, Plus, Users } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
-import { api, type PrivateGroupSummary } from '@/lib/api';
+import { api, type GroupCreateRequirements, type PrivateGroupSummary } from '@/lib/api';
 
 const SPACES_THEME = {
   paper: '#F8FAFC',
@@ -21,6 +21,7 @@ function formatDate(value: string) {
 }
 
 export default function SpacesScreen() {
+  const { coopId, coopName } = useLocalSearchParams<{ coopId?: string; coopName?: string }>();
   const { user, isLoading, isAuthenticated, sessionToken } = useAuth();
   const [groups, setGroups] = React.useState<PrivateGroupSummary[]>([]);
   const [isLoadingGroups, setIsLoadingGroups] = React.useState(true);
@@ -29,6 +30,7 @@ export default function SpacesScreen() {
   const [isSaving, setIsSaving] = React.useState(false);
   const [joinCode, setJoinCode] = React.useState('');
   const [isJoining, setIsJoining] = React.useState(false);
+  const [requirements, setRequirements] = React.useState<GroupCreateRequirements | null>(null);
 
   React.useEffect(() => {
     if (isLoading || (isAuthenticated && sessionToken)) return;
@@ -41,15 +43,23 @@ export default function SpacesScreen() {
 
     setIsLoadingGroups(true);
     api
-      .listMyGroups(sessionToken)
+      .listMyGroups(sessionToken, coopId)
       .then(({ groups: next }) => setGroups(next))
       .catch((error) => console.warn('Could not load groups:', error))
       .finally(() => setIsLoadingGroups(false));
-  }, [sessionToken]);
+  }, [sessionToken, coopId]);
 
   React.useEffect(() => {
     loadGroups();
   }, [loadGroups]);
+
+  React.useEffect(() => {
+    if (!sessionToken) return;
+    api
+      .getGroupCreateRequirements(sessionToken, coopId)
+      .then(setRequirements)
+      .catch((error) => console.warn('Could not load create requirements:', error));
+  }, [sessionToken, coopId]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -64,10 +74,18 @@ export default function SpacesScreen() {
     const trimmedName = name.trim();
     if (!trimmedName || isSaving || !sessionToken) return;
 
+    if (requirements && !requirements.canCreate) {
+      Alert.alert(
+        'Not enough SC',
+        `You need at least ${requirements.minScBalance} SC to create a space (you have ${requirements.currentScBalance.toFixed(2)} SC).`
+      );
+      return;
+    }
+
     setIsSaving(true);
     try {
       await api.createGroup(
-        { name: trimmedName, purpose: purpose.trim() || undefined, privacy: 'invite-only' },
+        { name: trimmedName, purpose: purpose.trim() || undefined, privacy: 'invite-only', coopId },
         sessionToken
       );
       setName('');
@@ -86,7 +104,7 @@ export default function SpacesScreen() {
 
     setIsJoining(true);
     try {
-      const { groupId } = await api.joinGroupByCode(trimmedCode, sessionToken);
+      const { groupId } = await api.joinGroupByCode(trimmedCode, sessionToken, coopId);
       setJoinCode('');
       loadGroups();
       router.push({ pathname: '/(authenticated)/group/[groupId]', params: { groupId } } as any);
@@ -119,7 +137,9 @@ export default function SpacesScreen() {
               <ArrowLeft size={18} color="#1F2937" strokeWidth={2.6} />
             </TouchableOpacity>
             <View className="min-w-0 flex-1">
-              <Text className="text-[10px] font-black uppercase text-gray-500">Small Groups</Text>
+              <Text className="text-[10px] font-black uppercase text-gray-500">
+                {coopName ? `Circles in ${coopName}` : 'Small Groups'}
+              </Text>
               <Text className="text-base font-black text-gray-950" numberOfLines={1}>
                 Private Spaces
               </Text>
@@ -136,6 +156,21 @@ export default function SpacesScreen() {
             <Text className="mt-2 text-sm font-semibold leading-5 text-gray-500">
               Create a private or invite-only space before something needs to become a full commons.
             </Text>
+            {requirements && requirements.minScBalance > 0 ? (
+              <View
+                className="mt-3 rounded-xl px-3 py-2"
+                style={{ backgroundColor: requirements.canCreate ? SPACES_THEME.primarySoft : '#FEF2F2' }}
+              >
+                <Text
+                  className="text-xs font-bold"
+                  style={{ color: requirements.canCreate ? SPACES_THEME.primary : '#DC2626' }}
+                >
+                  {requirements.canCreate
+                    ? `You have ${requirements.currentScBalance.toFixed(2)} SC — enough to create a space.`
+                    : `Requires ${requirements.minScBalance} SC to create a space. You have ${requirements.currentScBalance.toFixed(2)} SC.`}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <View className="mt-4 rounded-2xl border bg-white p-4" style={{ borderColor: SPACES_THEME.border }}>
@@ -158,9 +193,12 @@ export default function SpacesScreen() {
             />
             <TouchableOpacity
               onPress={() => void createSpace()}
-              disabled={isSaving || !name.trim()}
+              disabled={isSaving || !name.trim() || (requirements ? !requirements.canCreate : false)}
               className="mt-3 flex-row items-center justify-center gap-2 rounded-2xl py-3"
-              style={{ backgroundColor: SPACES_THEME.primary, opacity: isSaving || !name.trim() ? 0.6 : 1 }}
+              style={{
+                backgroundColor: SPACES_THEME.primary,
+                opacity: isSaving || !name.trim() || (requirements ? !requirements.canCreate : false) ? 0.6 : 1,
+              }}
               activeOpacity={0.82}
             >
               {isSaving ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Plus size={16} color="#FFFFFF" />}
@@ -206,7 +244,9 @@ export default function SpacesScreen() {
               </View>
             ) : groups.length === 0 ? (
               <View className="rounded-2xl border border-dashed border-gray-300 bg-white p-5">
-                <Text className="text-base font-black text-gray-950">No spaces yet</Text>
+                <Text className="text-base font-black text-gray-950">
+                  {coopName ? `No circles in ${coopName} yet` : 'No spaces yet'}
+                </Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">
                   A space can start as just you and a few people, then graduate when it has momentum.
                 </Text>

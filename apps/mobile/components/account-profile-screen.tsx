@@ -17,7 +17,6 @@ import {
   Store,
   Trash2,
   UserCircle,
-  Users,
   Vote,
   Wallet,
 } from 'lucide-react-native';
@@ -130,12 +129,9 @@ export default function AccountProfileScreen() {
       icon: UserCircle,
       href: '/(authenticated)/personal-page',
     },
-    {
-      label: 'Private Spaces',
-      description: 'Small invite-only groups before they become commons',
-      icon: Users,
-      href: '/(authenticated)/spaces',
-    },
+    // No global "Private Spaces" entry here on purpose — Circles live under
+    // a commons now (see the Circles section on /commons/[coopId]); a
+    // standalone profile-menu link made it look like they existed outside one.
     {
       label: 'Wallet',
       description: 'SC balance, wallet address, cards, and funding',

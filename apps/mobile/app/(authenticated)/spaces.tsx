@@ -1,7 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, Alert, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, KeyRound, Lock, Plus, Users } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
@@ -21,6 +21,7 @@ function formatDate(value: string) {
 }
 
 export default function SpacesScreen() {
+  const { coopId, coopName } = useLocalSearchParams<{ coopId?: string; coopName?: string }>();
   const { user, isLoading, isAuthenticated, sessionToken } = useAuth();
   const [groups, setGroups] = React.useState<PrivateGroupSummary[]>([]);
   const [isLoadingGroups, setIsLoadingGroups] = React.useState(true);
@@ -42,11 +43,11 @@ export default function SpacesScreen() {
 
     setIsLoadingGroups(true);
     api
-      .listMyGroups(sessionToken)
+      .listMyGroups(sessionToken, coopId)
       .then(({ groups: next }) => setGroups(next))
       .catch((error) => console.warn('Could not load groups:', error))
       .finally(() => setIsLoadingGroups(false));
-  }, [sessionToken]);
+  }, [sessionToken, coopId]);
 
   React.useEffect(() => {
     loadGroups();
@@ -55,10 +56,10 @@ export default function SpacesScreen() {
   React.useEffect(() => {
     if (!sessionToken) return;
     api
-      .getGroupCreateRequirements(sessionToken)
+      .getGroupCreateRequirements(sessionToken, coopId)
       .then(setRequirements)
       .catch((error) => console.warn('Could not load create requirements:', error));
-  }, [sessionToken]);
+  }, [sessionToken, coopId]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -84,7 +85,7 @@ export default function SpacesScreen() {
     setIsSaving(true);
     try {
       await api.createGroup(
-        { name: trimmedName, purpose: purpose.trim() || undefined, privacy: 'invite-only' },
+        { name: trimmedName, purpose: purpose.trim() || undefined, privacy: 'invite-only', coopId },
         sessionToken
       );
       setName('');
@@ -103,7 +104,7 @@ export default function SpacesScreen() {
 
     setIsJoining(true);
     try {
-      const { groupId } = await api.joinGroupByCode(trimmedCode, sessionToken);
+      const { groupId } = await api.joinGroupByCode(trimmedCode, sessionToken, coopId);
       setJoinCode('');
       loadGroups();
       router.push({ pathname: '/(authenticated)/group/[groupId]', params: { groupId } } as any);
@@ -136,7 +137,9 @@ export default function SpacesScreen() {
               <ArrowLeft size={18} color="#1F2937" strokeWidth={2.6} />
             </TouchableOpacity>
             <View className="min-w-0 flex-1">
-              <Text className="text-[10px] font-black uppercase text-gray-500">Small Groups</Text>
+              <Text className="text-[10px] font-black uppercase text-gray-500">
+                {coopName ? `Circles in ${coopName}` : 'Small Groups'}
+              </Text>
               <Text className="text-base font-black text-gray-950" numberOfLines={1}>
                 Private Spaces
               </Text>
@@ -241,7 +244,9 @@ export default function SpacesScreen() {
               </View>
             ) : groups.length === 0 ? (
               <View className="rounded-2xl border border-dashed border-gray-300 bg-white p-5">
-                <Text className="text-base font-black text-gray-950">No spaces yet</Text>
+                <Text className="text-base font-black text-gray-950">
+                  {coopName ? `No circles in ${coopName} yet` : 'No spaces yet'}
+                </Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">
                   A space can start as just you and a few people, then graduate when it has momentum.
                 </Text>

@@ -3,13 +3,17 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { Agent, run } from "@openai/agents";
 import { proposalEngine, ProposalInputZ, ProposalOutputZ } from "@repo/validators";
 
+import type { AgentToolContext } from "./tools/index.js";
+import { buildDbTools, buildQueryObservationsTool, buildSearchKnowledgeBaseTool } from "./tools/index.js";
+
 export interface AgentDefinition {
   key: string;
   name: string;
   description: string;
   inputSchema: z.ZodTypeAny;
   outputSchema: z.ZodTypeAny;
-  run: (input: any) => Promise<any>;
+  // toolCtx is additive/optional - the 5 tool-less agents below ignore it.
+  run: (input: any, toolCtx?: AgentToolContext) => Promise<any>;
 }
 
 export interface AgentMetadata {
@@ -269,16 +273,23 @@ async function runCommonsRecommender(
   return result.finalOutput ?? result.output ?? { recommendations: [] };
 }
 
-// ── 6. Post Classifier ─────────────────────────────────────────────────────
-// Classifies a CommonsPost into the same `classification` categories the
-// keyword-based classifyPost() in packages/trpc/src/routers/commons.ts
-// already assigns on post creation - but via an LLM instead of keyword
-// matching, so the two approaches can be compared side by side. Mirrors
-// that function's real input shape (title, content, tag); the tag enum is
-// duplicated here rather than imported since it's a private const in that
-// router file, not exported.
+// ── 6. Community Observer ──────────────────────────────────────────────────
+// A single, scope-agnostic agent used everywhere the platform wants an LLM
+// to look at some content-in-context and produce ONE structured observation
+// (type, confidence, summary, optional details) matching the AIObservation
+// shape (packages/db/prisma/schema.prisma) - rather than a bespoke agent per
+// feature. Two production call sites share this exact Agent instance/
+// instructions: commons post classification (routers/commons.ts createPost)
+// and the circle digest (routers/groups.ts getAiDigest) - each just passes a
+// different `task`/`content`/`allowedTypes`. This generalizes what used to be
+// a Post-Classifier-only agent (kept the same registry slot rather than
+// adding a second one, since it was never called from production code).
+//
+// When called with a toolCtx (run()'s optional second arg), the agent also
+// gets DB-query, knowledge-base search, and prior-observation-read tools so
+// it isn't limited to only what the caller pre-fetched into `content`.
 
-const POST_CLASSIFICATIONS = [
+export const COMMUNITY_OBSERVER_POST_TYPES = [
   "proposal_seed",
   "event",
   "need",
@@ -292,59 +303,56 @@ const POST_CLASSIFICATIONS = [
   "social",
 ] as const;
 
-const PostClassifierInputZ = z.object({
-  title: z.string().optional().describe("The post's title, if it has one"),
-  content: z.string().min(1).describe("The post's body text"),
-  tag: z.enum([
-    "Thought", "Ask", "Offer", "Event", "Project", "Proposal", "Product",
-    "Update", "Decision", "Receipt", "Social", "Meme", "Win", "Need",
-    "Idea", "Vote", "Resource", "Opportunity",
-  ]).optional().describe("The post's user-selected type, if any"),
+const CommunityObserverInputZ = z.object({
+  task: z.string().min(1).describe(
+    "What to look at and what kind of observation to produce, e.g. 'Classify this single community post' or 'Summarize recent circle activity since the last digest'"
+  ),
+  content: z.string().min(1).describe("The content/context to analyze"),
+  allowedTypes: z.array(z.string()).optional().describe(
+    "If set, constrain the observation's `type` field to one of these values"
+  ),
 });
 
-const PostClassifierOutputZ = z.object({
-  classification: z.enum(POST_CLASSIFICATIONS),
+const CommunityObserverOutputZ = z.object({
+  type: z.string().describe("A short machine-readable label for this observation, e.g. a category or 'circle_digest_summary'"),
   confidence: z.number().min(0).max(1),
-  reasoning: z.string(),
+  summary: z.string().describe("A plain-language summary of the observation"),
+  details: z.record(z.string(), z.unknown()).optional().describe("Optional structured extras beyond the summary"),
 });
 
-async function runPostClassifier(
-  input: z.infer<typeof PostClassifierInputZ>
-): Promise<z.infer<typeof PostClassifierOutputZ>> {
+async function runCommunityObserver(
+  input: z.infer<typeof CommunityObserverInputZ>,
+  toolCtx?: AgentToolContext,
+): Promise<z.infer<typeof CommunityObserverOutputZ>> {
   const agent = new Agent({
-    name: "Post Classifier",
+    name: "Community Observer",
     model: "gpt-5.2",
     instructions: [
-      "Classify a community post into exactly one of these categories:",
-      "- proposal_seed: proposes a decision, vote, or policy for the group to consider",
-      "- event: an event, meetup, or gathering with a time/place component",
-      "- need: the author is asking for help or looking for something",
-      "- resource: sharing a template, guide, link, toolkit, or receipt",
-      "- market: a job, gig, hiring, sale, or other economic opportunity",
-      "- project: an update on or call to collaborate on an ongoing project",
-      "- decision: announcing a decision that's been made",
-      "- update: a general status update",
-      "- support: celebrating, encouraging, or congratulating someone",
-      "- win: sharing a personal or community win",
-      "- social: general social chatter, memes, or anything that doesn't fit above (default)",
-      "",
-      "The post's user-selected tag (if given) is a strong signal but not decisive - classify based on the actual content.",
+      "You look at content from a cooperative/mutual-aid community platform and produce ONE structured observation: a short `type` label, a confidence (0-1), a plain-language summary, and optional structured details.",
+      "Treat your output as a suggestion for humans to review, not a final decision - don't overstate confidence.",
+      "If the task specifies allowed types, the `type` field MUST be one of those values.",
+      "If you have tools available, use them to look up additional context (user profiles, group history, past observations, knowledge base documents) rather than guessing - but don't fabricate specifics you can't verify.",
+      "If you use a knowledge base search result, cite the document title inline in your summary.",
     ].join("\n"),
-    outputType: PostClassifierOutputZ,
+    tools: toolCtx
+      ? [...buildDbTools(toolCtx), buildQueryObservationsTool(toolCtx), buildSearchKnowledgeBaseTool(toolCtx)]
+      : [],
+    ...(toolCtx ? { modelSettings: { toolChoice: "auto" as const } } : {}),
+    outputType: CommunityObserverOutputZ,
   });
 
   const prompt = [
-    input.title ? `Title: ${input.title}` : "",
-    `Content: ${input.content}`,
-    input.tag ? `User-selected tag: ${input.tag}` : "",
-  ].filter(Boolean).join("\n");
+    `Task: ${input.task}`,
+    input.allowedTypes?.length ? `Allowed types: ${input.allowedTypes.join(", ")}` : "",
+    `Content:\n${input.content}`,
+  ].filter(Boolean).join("\n\n");
 
   const result = await run(agent, prompt) as unknown as {
-    finalOutput?: z.infer<typeof PostClassifierOutputZ>;
-    output?: z.infer<typeof PostClassifierOutputZ>;
+    finalOutput?: z.infer<typeof CommunityObserverOutputZ>;
+    output?: z.infer<typeof CommunityObserverOutputZ>;
   };
 
-  return result.finalOutput ?? result.output ?? { classification: "social", confidence: 0, reasoning: "The agent returned no output." };
+  return result.finalOutput ?? result.output ?? { type: "unknown", confidence: 0, summary: "The agent returned no output." };
 }
 
 // ── Registry ────────────────────────────────────────────────────────────
@@ -394,12 +402,12 @@ export const agentRegistry: AgentDefinition[] = [
     run: runCommonsRecommender,
   },
   {
-    key: "post-classifier",
-    name: "Post Classifier",
-    description: "Classifies a community post into one of the same categories the rule-based classifier uses, for comparison.",
-    inputSchema: PostClassifierInputZ,
-    outputSchema: PostClassifierOutputZ,
-    run: runPostClassifier,
+    key: "community-observer",
+    name: "Community Observer",
+    description: "Looks at content-in-context (a post, a window of circle activity, etc.) and produces one structured observation - type, confidence, summary - used to populate AI Working Memory across the platform.",
+    inputSchema: CommunityObserverInputZ,
+    outputSchema: CommunityObserverOutputZ,
+    run: runCommunityObserver,
   },
 ];
 

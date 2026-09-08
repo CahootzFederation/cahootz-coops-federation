@@ -23,6 +23,7 @@ import {
   Compass,
   Heart,
   Image as ImageIcon,
+  Info,
   LayoutGrid,
   Lock,
   LogOut,
@@ -112,7 +113,9 @@ const COMMONS_RULES = [
 
 const DRAWER_SECTIONS = [
   { label: 'Personal Page', icon: UserCircle, action: '/(authenticated)/personal-page', requiresAuth: true },
-  { label: 'Private Spaces', icon: Users, action: '/(authenticated)/spaces', requiresAuth: true },
+  // No global "Private Spaces" entry here on purpose — Circles now live
+  // under a commons (see the Circles section on /commons/[coopId]), and a
+  // standalone drawer link made it look like they existed outside one.
   { label: 'Wallet', icon: Wallet, action: '/(tabs)/wallet', requiresAuth: true },
   { label: 'Commons Stores & Shops', icon: Store, action: '/(tabs)/store' },
   { label: 'Proposals & Governance', icon: Scale, action: '/(tabs)/proposals' },
@@ -1399,6 +1402,16 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
                           {item.accessStatus === 'ACTIVE' ? (isActive ? 'Active Member' : 'Member') : 'Pending'}
                         </Text>
                       </View>
+                      {item.id !== PERSONAL_PAGE_DESTINATION_ID ? (
+                        <TouchableOpacity
+                          onPress={() => goToDrawerItem(`/commons/${item.id}`)}
+                          className="h-8 w-8 items-center justify-center rounded-full bg-stone-100"
+                          accessibilityLabel={`Open ${item.label} page`}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Info size={15} color="#57534E" />
+                        </TouchableOpacity>
+                      ) : null}
                       {isActive ? (
                         <CheckCircle2 size={17} color={SOCIAL_THEME.primary} />
                       ) : (

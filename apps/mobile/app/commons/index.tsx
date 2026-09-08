@@ -67,9 +67,19 @@ function CommonsCard({ commons }: { commons: CommonsDirectoryItem }) {
       </View>
 
       <View className="mt-4 flex-row items-center justify-between border-t border-gray-100 pt-3">
-        <Text className="text-sm font-bold" style={{ color: commons.canApply ? THEME.primary : THEME.muted }}>
-          {commons.canApply ? 'View and apply' : commons.isMember ? 'Open commons' : 'View status'}
-        </Text>
+        <View className="flex-row items-center gap-2">
+          <Text className="text-sm font-bold" style={{ color: commons.canApply ? THEME.primary : THEME.muted }}>
+            {commons.canApply ? 'View and apply' : commons.isMember ? 'Open commons' : 'View status'}
+          </Text>
+          {commons.isMember && (commons.circleCount || 0) > 0 ? (
+            <View className="flex-row items-center gap-1 rounded-full px-2 py-0.5" style={{ backgroundColor: THEME.primarySoft }}>
+              <Users size={11} color={THEME.primary} />
+              <Text className="text-xs font-black" style={{ color: THEME.primary }}>
+                {commons.circleCount} {commons.circleCount === 1 ? 'circle' : 'circles'}
+              </Text>
+            </View>
+          ) : null}
+        </View>
         <ChevronRight size={18} color={commons.canApply || commons.isMember ? THEME.primary : THEME.muted} />
       </View>
     </TouchableOpacity>

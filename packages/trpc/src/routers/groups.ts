@@ -6,6 +6,10 @@ import type { AccountAuthenticatedContext } from "../context.js";
 import { accountAuthenticatedProcedure } from "../procedures/index.js";
 import { validateSCBalance } from "../services/sc-validation-service.js";
 import { router } from "../trpc.js";
+import { auditLogEntry } from "../lib/audit.js";
+import { getAgent } from "../agents/registry.js";
+import type { AgentToolContext } from "../agents/tools/index.js";
+import { queryObservations, recordObservation } from "../services/ai-memory.js";
 
 // Unambiguous alphabet (no 0/O/1/I) for invite codes people type in by hand.
 const INVITE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -23,7 +27,7 @@ function displayName(user: { name: string | null; email: string }) {
   return user.name || user.email.split("@")[0] || "Member";
 }
 
-async function requireMembership(
+export async function requireMembership(
   db: AccountAuthenticatedContext["db"],
   groupId: string,
   userId: string,
@@ -51,30 +55,37 @@ async function requireMembership(
 const privacySchema = z.enum(["private", "invite-only"]);
 
 export const groupsRouter = router({
-  listMine: accountAuthenticatedProcedure.query(async ({ ctx }) => {
-    const context = ctx as AccountAuthenticatedContext;
-    const userId = context.accountUser.id;
+  // coopId is optional so existing "all my spaces across every commons"
+  // callers (the standalone Spaces screen opened from the drawer) keep
+  // working unchanged; passing it scopes the list to one commons (e.g. the
+  // Circles section on a commons detail page).
+  listMine: accountAuthenticatedProcedure
+    .input(z.object({ coopId: z.string().min(1).optional() }).optional())
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+      const coopId = input?.coopId;
 
-    const memberships = await context.db.groupMember.findMany({
-      where: { userId },
-      include: {
-        group: { include: { _count: { select: { members: true } } } },
-      },
-      orderBy: { joinedAt: "desc" },
-    });
+      const memberships = await context.db.groupMember.findMany({
+        where: { userId, ...(coopId ? { group: { coopId } } : {}) },
+        include: {
+          group: { include: { _count: { select: { members: true } } } },
+        },
+        orderBy: { joinedAt: "desc" },
+      });
 
-    return {
-      groups: memberships.map(({ group }) => ({
-        id: group.id,
-        name: group.name,
-        purpose: group.purpose,
-        privacy: group.privacy,
-        memberCount: group._count.members,
-        isLeader: group.leaderId === userId,
-        createdAt: group.createdAt.toISOString(),
-      })),
-    };
-  }),
+      return {
+        groups: memberships.map(({ group }) => ({
+          id: group.id,
+          name: group.name,
+          purpose: group.purpose,
+          privacy: group.privacy,
+          memberCount: group._count.members,
+          isLeader: group.leaderId === userId,
+          createdAt: group.createdAt.toISOString(),
+        })),
+      };
+    }),
 
   create: accountAuthenticatedProcedure
     .input(
@@ -130,6 +141,16 @@ export const groupsRouter = router({
           data: { groupId: created.id, userId },
         });
 
+        await tx.auditLog.create({
+          data: auditLogEntry({
+            actorId: userId,
+            action: "GROUP_CREATED",
+            resource: "Group",
+            resourceId: created.id,
+            metadata: { name: created.name, privacy: created.privacy, coopId },
+          }),
+        });
+
         return created;
       });
 
@@ -179,11 +200,18 @@ export const groupsRouter = router({
       const group = await requireMembership(context.db, input.groupId, userId);
       const isLeader = group.leaderId === userId;
 
-      const members = await context.db.groupMember.findMany({
-        where: { groupId: group.id },
-        include: { user: { select: { name: true, email: true } } },
-        orderBy: { joinedAt: "asc" },
-      });
+      const [members, coopConfig] = await Promise.all([
+        context.db.groupMember.findMany({
+          where: { groupId: group.id },
+          include: { user: { select: { name: true, email: true } } },
+          orderBy: { joinedAt: "asc" },
+        }),
+        context.db.coopConfig.findFirst({
+          where: { coopId: group.coopId, isActive: true },
+          orderBy: { version: "desc" },
+          select: { name: true, slug: true },
+        }),
+      ]);
 
       return {
         group: {
@@ -194,6 +222,8 @@ export const groupsRouter = router({
           inviteCode: isLeader ? group.inviteCode : null,
           isLeader,
           createdAt: group.createdAt.toISOString(),
+          coopId: group.coopId,
+          coopName: coopConfig?.name || coopConfig?.slug || group.coopId,
         },
         members: members.map((member) => ({
           userId: member.userId,
@@ -205,7 +235,15 @@ export const groupsRouter = router({
     }),
 
   joinByCode: accountAuthenticatedProcedure
-    .input(z.object({ inviteCode: z.string().trim().min(1).max(32) }))
+    .input(
+      z.object({
+        inviteCode: z.string().trim().min(1).max(32),
+        // Optional — set when the caller is on a commons-scoped screen (e.g.
+        // "Circles in X"), so a code for a circle under a different commons
+        // is rejected instead of silently joining the wrong commons.
+        coopId: z.string().min(1).optional(),
+      }),
+    )
     .mutation(async ({ input, ctx }) => {
       const context = ctx as AccountAuthenticatedContext;
       const userId = context.accountUser.id;
@@ -218,11 +256,28 @@ export const groupsRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Invalid invite code." });
       }
 
-      await context.db.groupMember.upsert({
-        where: { groupId_userId: { groupId: group.id, userId } },
-        create: { groupId: group.id, userId },
-        update: {},
-      });
+      if (input.coopId && group.coopId !== input.coopId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This invite code belongs to a circle in a different commons.",
+        });
+      }
+
+      await context.db.$transaction([
+        context.db.groupMember.upsert({
+          where: { groupId_userId: { groupId: group.id, userId } },
+          create: { groupId: group.id, userId },
+          update: {},
+        }),
+        context.db.auditLog.create({
+          data: auditLogEntry({
+            actorId: userId,
+            action: "GROUP_JOINED",
+            resource: "GroupMember",
+            resourceId: group.id,
+          }),
+        }),
+      ]);
 
       return { groupId: group.id, name: group.name };
     }),
@@ -248,10 +303,20 @@ export const groupsRouter = router({
         inviteCode = generateInviteCode();
       }
 
-      const updated = await context.db.group.update({
-        where: { id: group.id },
-        data: { inviteCode },
-      });
+      const [updated] = await context.db.$transaction([
+        context.db.group.update({
+          where: { id: group.id },
+          data: { inviteCode },
+        }),
+        context.db.auditLog.create({
+          data: auditLogEntry({
+            actorId: userId,
+            action: "GROUP_INVITE_CODE_REGENERATED",
+            resource: "Group",
+            resourceId: group.id,
+          }),
+        }),
+      ]);
 
       return { inviteCode: updated.inviteCode };
     }),
@@ -286,10 +351,21 @@ export const groupsRouter = router({
         });
       }
 
-      await context.db.group.update({
-        where: { id: group.id },
-        data: { leaderId: input.newLeaderUserId },
-      });
+      await context.db.$transaction([
+        context.db.group.update({
+          where: { id: group.id },
+          data: { leaderId: input.newLeaderUserId },
+        }),
+        context.db.auditLog.create({
+          data: auditLogEntry({
+            actorId: userId,
+            action: "GROUP_LEADERSHIP_TRANSFERRED",
+            resource: "Group",
+            resourceId: group.id,
+            metadata: { previousLeaderId: userId, newLeaderId: input.newLeaderUserId },
+          }),
+        }),
+      ]);
 
       return { success: true };
     }),
@@ -312,13 +388,34 @@ export const groupsRouter = router({
           });
         }
 
-        await context.db.group.delete({ where: { id: group.id } });
+        await context.db.$transaction([
+          context.db.auditLog.create({
+            data: auditLogEntry({
+              actorId: userId,
+              action: "GROUP_DELETED",
+              resource: "Group",
+              resourceId: group.id,
+              metadata: { reason: "leader_left_as_sole_member" },
+            }),
+          }),
+          context.db.group.delete({ where: { id: group.id } }),
+        ]);
         return { success: true, groupDeleted: true };
       }
 
-      await context.db.groupMember.delete({
-        where: { groupId_userId: { groupId: group.id, userId } },
-      });
+      await context.db.$transaction([
+        context.db.groupMember.delete({
+          where: { groupId_userId: { groupId: group.id, userId } },
+        }),
+        context.db.auditLog.create({
+          data: auditLogEntry({
+            actorId: userId,
+            action: "GROUP_LEFT",
+            resource: "GroupMember",
+            resourceId: group.id,
+          }),
+        }),
+      ]);
 
       return { success: true, groupDeleted: false };
     }),
@@ -387,6 +484,16 @@ export const groupsRouter = router({
           data: { lastActivityAt: new Date() },
         });
 
+        await tx.auditLog.create({
+          data: auditLogEntry({
+            actorId: userId,
+            action: "GROUP_COMMENT_ADDED",
+            resource: "GroupComment",
+            resourceId: created.id,
+            metadata: { groupId: input.groupId },
+          }),
+        });
+
         return created;
       });
 
@@ -432,6 +539,104 @@ export const groupsRouter = router({
         memberCount,
         commentCountSince,
         since: since ? since.toISOString() : null,
+      };
+    }),
+
+  // AI-generated companion to getDigest above - touches all four memory
+  // layers: Group/GroupComment (Layer 1, already read elsewhere), AuditLog
+  // (Layer 2, populated by the mutations above), KnowledgeDocument search +
+  // the previous digest's AIObservation (Layers 3/4, via tools bound below),
+  // then writes a new AIObservation (Layer 4). Uses the exact same shared
+  // Community Observer agent as commons.ts's post classification - just a
+  // different `task`/`content`/`allowedTypes`.
+  getAiDigest: accountAuthenticatedProcedure
+    .input(z.object({ groupId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+
+      const group = await requireMembership(context.db, input.groupId, userId);
+
+      const agent = getAgent("community-observer");
+      if (!agent || !process.env.OPENAI_API_KEY) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "AI digest is not available right now.",
+        });
+      }
+
+      const priorObservations = await queryObservations({
+        scopeType: "circle",
+        scopeId: group.id,
+        requestingUserId: userId,
+        coopId: group.coopId,
+      });
+      const priorDigest = priorObservations.find((o) => o.type === "circle_digest_summary");
+
+      const [recentComments, recentEvents] = await Promise.all([
+        context.db.groupComment.findMany({
+          where: { groupId: group.id },
+          orderBy: { createdAt: "desc" },
+          take: 20,
+          include: { author: { select: { name: true, email: true } } },
+        }),
+        context.db.auditLog.findMany({
+          where: { resourceId: group.id },
+          orderBy: { occurredAt: "desc" },
+          take: 20,
+        }),
+      ]);
+
+      const content = [
+        `Circle: ${group.name}`,
+        priorDigest
+          ? `Previous digest (${priorDigest.createdAt}): ${priorDigest.summary}`
+          : "No previous digest exists for this circle yet.",
+        "Recent events (most recent first):",
+        recentEvents.map((e) => `- ${e.occurredAt.toISOString()}: ${e.action}`).join("\n") || "(none)",
+        "Recent comments (most recent first):",
+        recentComments.map((c) => `- ${displayName(c.author)}: ${c.content}`).join("\n") || "(none)",
+      ].join("\n\n");
+
+      const toolCtx: AgentToolContext = {
+        db: context.db,
+        requestingUserId: userId,
+        coopId: group.coopId,
+      };
+
+      const output = await agent.run(
+        {
+          task: priorDigest
+            ? "Summarize what's changed in this circle since the previous digest - reference it explicitly rather than restating everything."
+            : "Summarize recent activity in this circle for a first digest.",
+          content,
+          allowedTypes: ["circle_digest_summary"],
+        },
+        toolCtx,
+      );
+
+      const observation = await recordObservation({
+        type: "circle_digest_summary",
+        scopeType: "circle",
+        scopeId: group.id,
+        confidence: output.confidence,
+        summary: output.summary,
+        details: output.details,
+        sources: [
+          ...recentEvents.map((e) => ({ type: "audit_log", id: e.id })),
+          ...recentComments.map((c) => ({ type: "group_comment", id: c.id })),
+        ],
+        visibility: "CIRCLE",
+        generatedByAgentKey: "community-observer",
+      });
+
+      return {
+        digest: {
+          id: observation.id,
+          summary: observation.summary,
+          confidence: observation.confidence,
+          createdAt: observation.createdAt.toISOString(),
+        },
       };
     }),
 });

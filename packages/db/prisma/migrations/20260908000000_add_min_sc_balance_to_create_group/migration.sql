@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "CoopConfig" ADD COLUMN "minScBalanceToCreateGroup" DOUBLE PRECISION NOT NULL DEFAULT 0;

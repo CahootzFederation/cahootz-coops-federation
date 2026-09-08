@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 
 import type { AccountAuthenticatedContext } from "../context.js";
 import { accountAuthenticatedProcedure } from "../procedures/index.js";
+import { validateSCBalance } from "../services/sc-validation-service.js";
 import { router } from "../trpc.js";
 
 // Unambiguous alphabet (no 0/O/1/I) for invite codes people type in by hand.
@@ -87,6 +88,24 @@ export const groupsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const context = ctx as AccountAuthenticatedContext;
       const userId = context.accountUser.id;
+      const coopId = input.coopId || "cahootz";
+
+      const config = await context.db.coopConfig.findFirst({
+        where: { coopId, isActive: true },
+        orderBy: { version: "desc" },
+        select: { minScBalanceToCreateGroup: true },
+      });
+      const minScBalance = config?.minScBalanceToCreateGroup ?? 0;
+
+      if (minScBalance > 0) {
+        const currentBalance = await validateSCBalance(userId, coopId);
+        if (currentBalance < minScBalance) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: `You need at least ${minScBalance} SC to create a space (current balance: ${currentBalance.toFixed(2)} SC).`,
+          });
+        }
+      }
 
       let inviteCode = generateInviteCode();
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -98,7 +117,7 @@ export const groupsRouter = router({
       const group = await context.db.$transaction(async (tx) => {
         const created = await tx.group.create({
           data: {
-            coopId: input.coopId || "cahootz",
+            coopId,
             name: input.name,
             purpose: input.purpose || null,
             privacy: input.privacy,
@@ -125,6 +144,29 @@ export const groupsRouter = router({
           isLeader: true,
           createdAt: group.createdAt.toISOString(),
         },
+      };
+    }),
+
+  getCreateRequirements: accountAuthenticatedProcedure
+    .input(z.object({ coopId: z.string().min(1).optional() }))
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+      const coopId = input.coopId || "cahootz";
+
+      const config = await context.db.coopConfig.findFirst({
+        where: { coopId, isActive: true },
+        orderBy: { version: "desc" },
+        select: { minScBalanceToCreateGroup: true },
+      });
+      const minScBalance = config?.minScBalanceToCreateGroup ?? 0;
+
+      const currentScBalance = minScBalance > 0 ? await validateSCBalance(userId, coopId) : 0;
+
+      return {
+        minScBalance,
+        currentScBalance,
+        canCreate: minScBalance === 0 || currentScBalance >= minScBalance,
       };
     }),
 
@@ -330,13 +372,22 @@ export const groupsRouter = router({
 
       await requireMembership(context.db, input.groupId, userId);
 
-      const comment = await context.db.groupComment.create({
-        data: {
-          groupId: input.groupId,
-          authorId: userId,
-          content: input.content,
-        },
-        include: { author: { select: { name: true, email: true } } },
+      const comment = await context.db.$transaction(async (tx) => {
+        const created = await tx.groupComment.create({
+          data: {
+            groupId: input.groupId,
+            authorId: userId,
+            content: input.content,
+          },
+          include: { author: { select: { name: true, email: true } } },
+        });
+
+        await tx.group.update({
+          where: { id: input.groupId },
+          data: { lastActivityAt: new Date() },
+        });
+
+        return created;
       });
 
       return {
@@ -347,6 +398,40 @@ export const groupsRouter = router({
           content: comment.content,
           createdAt: comment.createdAt.toISOString(),
         },
+      };
+    }),
+
+  getDigest: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        groupId: z.string().min(1),
+        since: z.string().datetime().optional(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+
+      const group = await requireMembership(context.db, input.groupId, userId);
+      const since = input.since ? new Date(input.since) : undefined;
+
+      const [memberCount, commentCountSince] = await Promise.all([
+        context.db.groupMember.count({ where: { groupId: input.groupId } }),
+        context.db.groupComment.count({
+          where: {
+            groupId: input.groupId,
+            ...(since ? { createdAt: { gte: since } } : {}),
+          },
+        }),
+      ]);
+
+      return {
+        groupId: group.id,
+        groupName: group.name,
+        lastActivityAt: group.lastActivityAt.toISOString(),
+        memberCount,
+        commentCountSince,
+        since: since ? since.toISOString() : null,
       };
     }),
 });

@@ -305,6 +305,7 @@ model CoopConfig {
   sectorExclusions          Json // [{ value, description? }]
   scorerAgents              Json   @default("[]") // [{ agentKey, label, enabled, promptTemplate?, model? }]
   minScBalanceToSubmit      Float  @default(0)
+  minScBalanceToCreateGroup Float  @default(0)
   aiAutoApproveThresholdUSD Float  @default(500)
   councilVoteThresholdUSD   Float  @default(5000)
   strongGoalThreshold       Float  @default(0.70)
@@ -683,9 +684,6 @@ model ProposalComment {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  // Relations
-  aiEvaluation CommentAIEvaluation?
-
   @@index([proposalId, createdAt])
   @@schema("public")
 }
@@ -703,16 +701,29 @@ model ProposalReaction {
   @@schema("public")
 }
 
-model CommentAIEvaluation {
-  id            String           @id @default(cuid())
-  commentId     String           @unique
-  comment       ProposalComment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  alignment     CommentAlignment
-  score         Float // 0-1
-  analysis      String           @db.Text
-  goalsImpacted String[]
-  createdAt     DateTime         @default(now())
+enum AIEvaluationStatus {
+  SUCCESS
+  ERROR
 
+  @@schema("public")
+}
+
+model AIEvaluation {
+  id         String             @id @default(cuid())
+  createdAt  DateTime           @default(now())
+  agentKey   String
+  agentName  String
+  model      String?
+  entityType String?
+  entityId   String?
+  input      Json?
+  output     Json?
+  status     AIEvaluationStatus @default(SUCCESS)
+  error      String?            @db.Text
+  durationMs Int?
+
+  @@index([entityType, entityId])
+  @@index([agentKey, createdAt])
   @@schema("public")
 }
 
@@ -889,22 +900,24 @@ model CommonsSuggestion {
 
 // ── Private Groups ("Spaces") ───────────────────────────
 model Group {
-  id         String   @id @default(cuid())
-  coopId     String   @default("cahootz")
-  name       String
-  purpose    String?  @db.Text
-  privacy    String   @default("invite-only") // "private" | "invite-only"
-  inviteCode String   @unique
-  leaderId   String
-  leader     User     @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id             String   @id @default(cuid())
+  coopId         String   @default("cahootz")
+  name           String
+  purpose        String?  @db.Text
+  privacy        String   @default("invite-only") // "private" | "invite-only"
+  inviteCode     String   @unique
+  leaderId       String
+  leader         User     @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  lastActivityAt DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   members  GroupMember[]
   comments GroupComment[]
 
   @@index([coopId, createdAt])
   @@index([leaderId])
+  @@index([coopId, lastActivityAt])
   @@schema("public")
 }
 
@@ -1146,14 +1159,6 @@ enum VoteType {
   FOR
   AGAINST
   ABSTAIN
-
-  @@schema("public")
-}
-
-enum CommentAlignment {
-  ALIGNED
-  NEUTRAL
-  MISALIGNED
 
   @@schema("public")
 }

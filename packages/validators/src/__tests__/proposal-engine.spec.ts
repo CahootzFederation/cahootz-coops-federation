@@ -1,4 +1,48 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
+vi.mock("@openai/agents", () => {
+  class MockAgent {
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    constructor(_opts: any) {}
+  }
+
+  return {
+    Agent: MockAgent,
+    run: vi.fn().mockResolvedValue({
+      finalOutput: {
+        title: "Test Proposal",
+        summary: "A test proposal for a community project with local benefit",
+        proposer: { wallet: "WALLET_123", role: "member", displayName: "Alice" },
+        region: { code: "ATL", name: "Atlanta" },
+        category: "business_funding",
+        budget: { currency: "USD", amountRequested: 250000 },
+        treasuryPlan: { localPercent: 70, nationalPercent: 30, acceptUC: true },
+        structural_scores: {
+          goal_mapping_valid: true,
+          feasibility_score: 0.7,
+          risk_score: 0.3,
+          accountability_score: 0.6,
+        },
+        mission_impact_scores: [
+          { goal_id: "member_benefit", impact_score: 0.75 },
+          { goal_id: "operational_value", impact_score: 0.65 },
+          { goal_id: "financial_clarity", impact_score: 0.7 },
+          { goal_id: "accountability", impact_score: 0.65 },
+        ],
+        violations: [],
+        risk_flags: [],
+        llm_summary: "Solid proposal.",
+        quorumPercent: 20,
+        approvalThresholdPercent: 60,
+        votingWindowDays: 7,
+        alternatives: [],
+        missing_data: [],
+      },
+    }),
+    webSearchTool: vi.fn().mockReturnValue({}),
+  };
+});
+
 import { proposalEngine } from "../proposal-engine.js";
 import { ProposalInputZ } from "../proposal.js";
 import type { ProposalInput } from "../proposal.js";

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
   SafeAreaView,
@@ -9,6 +11,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -19,6 +22,7 @@ import { api } from '@/lib/api';
 
 const MIN_SELF_DESCRIPTION = 40;
 const MIN_SIGNAL_ITEMS = 1;
+const INTRO_CAROUSEL_INTERVAL_MS = 4500;
 
 type ListFieldName = 'interests' | 'resourcesOffered' | 'resourcesNeeded';
 type OptionalFieldName = 'goals' | 'businessSummary' | 'locationSummary';
@@ -78,21 +82,29 @@ const appIntroItems = [
   {
     title: 'Post on your community feeds',
     body: 'Introduce yourself, ask a question, share an idea, or tell people what you are working on.',
+    visual: '💬',
+    visualBg: '#EFF6FF',
     Icon: MessageCircle,
   },
   {
     title: 'Join commons',
     body: 'Commons are shared spaces where people with a real connection can post, ask for help, offer support, plan things, and build trust over time.',
+    visual: '🤝',
+    visualBg: '#F0FDF4',
     Icon: Users,
   },
   {
     title: 'Ask for help and offer help',
     body: 'People can share needs, skills, time, tools, advice, rides, space, or support.',
+    visual: '🛠️',
+    visualBg: '#FFF7ED',
     Icon: HandHeart,
   },
   {
     title: 'Turn good conversations into action',
     body: 'Start simple. A useful post can become a meetup, project, event, service, or local connection.',
+    visual: '💡',
+    visualBg: '#FEFCE8',
     Icon: Lightbulb,
   },
 ] as const;
@@ -111,8 +123,11 @@ function parseSignalList(value: string, maxItemLength = 120) {
 
 export default function ProfileOnboardingScreen() {
   const { user, sessionToken, isLoading, login, deferProfileOnboarding } = useAuth();
+  const { width } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
+  const introCarouselRef = useRef<ScrollView>(null);
   const [step, setStep] = useState<WizardStep>('intro');
+  const [introCarouselIndex, setIntroCarouselIndex] = useState(0);
   const [selfDescription, setSelfDescription] = useState(user?.selfDescription || '');
   const [signalValues, setSignalValues] = useState<Record<ListFieldName, string>>({
     interests: user?.interests?.join(', ') || '',
@@ -134,6 +149,21 @@ export default function ProfileOnboardingScreen() {
   }, [isLoading, user]);
 
   const introComplete = selfDescription.trim().length >= introField.minChars;
+  const introCardWidth = Math.max(width - 40, 280);
+
+  useEffect(() => {
+    if (step !== 'intro') return;
+
+    const interval = setInterval(() => {
+      setIntroCarouselIndex((currentIndex) => {
+        const nextIndex = (currentIndex + 1) % appIntroItems.length;
+        introCarouselRef.current?.scrollTo({ x: nextIndex * introCardWidth, animated: true });
+        return nextIndex;
+      });
+    }, INTRO_CAROUSEL_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [introCardWidth, step]);
 
   const signalProgress = useMemo(() => {
     return signalFields.reduce<Record<ListFieldName, { count: number; complete: boolean }>>((acc, field) => {
@@ -178,6 +208,16 @@ export default function ProfileOnboardingScreen() {
 
     setStep(nextStep);
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }));
+  };
+
+  const updateIntroCarouselIndex = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const nextIndex = Math.round(event.nativeEvent.contentOffset.x / introCardWidth);
+    setIntroCarouselIndex(Math.min(Math.max(nextIndex, 0), appIntroItems.length - 1));
+  };
+
+  const goToIntroSlide = (index: number) => {
+    introCarouselRef.current?.scrollTo({ x: index * introCardWidth, animated: true });
+    setIntroCarouselIndex(index);
   };
 
   const handleSkip = async () => {
@@ -279,17 +319,45 @@ export default function ProfileOnboardingScreen() {
           </View>
 
           <View style={styles.appIntro}>
-            {appIntroItems.map(({ title, body, Icon }) => (
-              <View key={title} style={styles.appIntroRow}>
-                <View style={styles.appIntroIcon}>
-                  <Icon color="#FF6B00" size={18} strokeWidth={2.5} />
+            <ScrollView
+              ref={introCarouselRef}
+              horizontal
+              pagingEnabled
+              snapToInterval={introCardWidth}
+              decelerationRate="fast"
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={updateIntroCarouselIndex}
+              style={styles.carousel}
+            >
+              {appIntroItems.map(({ title, body, visual, visualBg, Icon }) => (
+                <View key={title} style={[styles.carouselCard, { width: introCardWidth }]}>
+                  <View style={[styles.carouselVisual, { backgroundColor: visualBg }]}>
+                    <Text style={styles.carouselEmoji}>{visual}</Text>
+                    <View style={styles.carouselIcon}>
+                      <Icon color="#FF6B00" size={20} strokeWidth={2.5} />
+                    </View>
+                  </View>
+                  <Text style={styles.carouselTitle}>{title}</Text>
+                  <Text style={styles.carouselBody}>{body}</Text>
                 </View>
-                <View style={styles.appIntroText}>
-                  <Text style={styles.appIntroTitle}>{title}</Text>
-                  <Text style={styles.appIntroBody}>{body}</Text>
-                </View>
-              </View>
-            ))}
+              ))}
+            </ScrollView>
+
+            <View style={styles.carouselDots}>
+              {appIntroItems.map((item, index) => {
+                const active = introCarouselIndex === index;
+
+                return (
+                  <Pressable
+                    key={item.title}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Show ${item.title}`}
+                    onPress={() => goToIntroSlide(index)}
+                    style={[styles.carouselDot, active && styles.carouselDotActive]}
+                  />
+                );
+              })}
+            </View>
           </View>
 
           <Pressable
@@ -559,42 +627,73 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   appIntro: {
-    gap: 10,
     marginBottom: 20,
   },
-  appIntroRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    borderRadius: 16,
+  carousel: {
+    overflow: 'visible',
+  },
+  carouselCard: {
+    minHeight: 300,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: '#F0F2F5',
     backgroundColor: '#FFFFFF',
-    padding: 14,
+    padding: 18,
+    justifyContent: 'center',
   },
-  appIntroIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
+  carouselVisual: {
+    height: 132,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFF7ED',
+    marginBottom: 18,
+    position: 'relative',
   },
-  appIntroText: {
-    flex: 1,
-    minWidth: 0,
+  carouselEmoji: {
+    fontSize: 60,
+    lineHeight: 72,
   },
-  appIntroTitle: {
+  carouselIcon: {
+    position: 'absolute',
+    right: 14,
+    bottom: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  carouselTitle: {
     color: '#0F172A',
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 21,
+    lineHeight: 27,
     fontWeight: '900',
   },
-  appIntroBody: {
+  carouselBody: {
     color: '#64748B',
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 3,
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 8,
+  },
+  carouselDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 14,
+  },
+  carouselDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#CBD5E1',
+  },
+  carouselDotActive: {
+    width: 22,
+    backgroundColor: '#FF6B00',
   },
   profileIntro: {
     borderTopWidth: 1,

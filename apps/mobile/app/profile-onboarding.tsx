@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -12,21 +12,19 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowRight, Sparkles } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, HandHeart, Lightbulb, MessageCircle, UserCircle, Users } from 'lucide-react-native';
 
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 
-const MIN_SELF_DESCRIPTION = 120;
-const MIN_GOALS = 50;
+const MIN_SELF_DESCRIPTION = 40;
 const MIN_SIGNAL_ITEMS = 1;
 
-type FieldName = 'selfDescription' | 'shortTermGoals' | 'longTermGoals';
-type ListFieldName = 'skills' | 'interests' | 'resourcesOffered' | 'resourcesNeeded';
-type OptionalFieldName = 'businessSummary' | 'locationSummary';
+type ListFieldName = 'interests' | 'resourcesOffered' | 'resourcesNeeded';
+type OptionalFieldName = 'goals' | 'businessSummary' | 'locationSummary';
+type WizardStep = 'intro' | 'profile';
 
 type FieldConfig = {
-  name: FieldName;
   label: string;
   helper: string;
   placeholder: string;
@@ -34,32 +32,13 @@ type FieldConfig = {
   minHeight: number;
 };
 
-const fields: FieldConfig[] = [
-  {
-    name: 'selfDescription',
-    label: 'Self Description',
-    helper: 'Give a real paragraph or two: background, skills, interests, what you care about, what you can offer, and what you need.',
-    placeholder: 'I am a designer and neighborhood organizer in Oakland. I care about...',
-    minChars: MIN_SELF_DESCRIPTION,
-    minHeight: 180,
-  },
-  {
-    name: 'shortTermGoals',
-    label: 'Short-Term Goals',
-    helper: 'What are you trying to move forward over the next few months?',
-    placeholder: 'This season I want to...',
-    minChars: MIN_GOALS,
-    minHeight: 132,
-  },
-  {
-    name: 'longTermGoals',
-    label: 'Long-Term Goals',
-    helper: 'What kind of future are you building toward over the next few years?',
-    placeholder: 'Long term, I want to build...',
-    minChars: MIN_GOALS,
-    minHeight: 132,
-  },
-];
+const introField: FieldConfig = {
+  label: 'Short intro',
+  helper: 'A few sentences is enough. Share who you are and what you care about.',
+  placeholder: 'I live in East Oakland and care about food access, music, and helping neighbors connect.',
+  minChars: MIN_SELF_DESCRIPTION,
+  minHeight: 120,
+};
 
 const signalFields: {
   name: ListFieldName;
@@ -70,38 +49,53 @@ const signalFields: {
   maxItemLength: number;
 }[] = [
   {
-    name: 'skills',
-    label: 'Skills',
-    helper: 'Separate with commas or new lines.',
-    placeholder: 'design, childcare, grant writing, event planning',
-    minItems: MIN_SIGNAL_ITEMS,
-    maxItemLength: 80,
-  },
-  {
     name: 'interests',
     label: 'Interests',
-    helper: 'Topics, scenes, causes, or culture you care about.',
-    placeholder: 'music, housing, wellness, mutual aid, local business',
+    helper: 'What do you want to hear about or connect around?',
+    placeholder: 'music, housing, food, wellness, events',
     minItems: MIN_SIGNAL_ITEMS,
     maxItemLength: 80,
   },
   {
     name: 'resourcesOffered',
     label: 'What you can offer',
-    helper: 'People, space, tools, capital, experience, services.',
-    placeholder: 'studio space, bookkeeping help, vendor contacts',
+    helper: 'This can be skills, time, tools, space, rides, advice, or encouragement.',
+    placeholder: 'childcare, rides, cooking, design help',
     minItems: MIN_SIGNAL_ITEMS,
     maxItemLength: 120,
   },
   {
     name: 'resourcesNeeded',
-    label: 'What you need',
-    helper: 'Things that would help you or your work move faster.',
-    placeholder: 'venue access, marketing help, startup capital',
+    label: "What you're looking for",
+    helper: 'Share what would help you, your family, or something you are working on.',
+    placeholder: 'job leads, event space, repair help, collaborators',
     minItems: MIN_SIGNAL_ITEMS,
     maxItemLength: 120,
   },
 ];
+
+const appIntroItems = [
+  {
+    title: 'Post on your community feeds',
+    body: 'Introduce yourself, ask a question, share an idea, or tell people what you are working on.',
+    Icon: MessageCircle,
+  },
+  {
+    title: 'Join commons',
+    body: 'Commons are shared spaces where people with a real connection can post, ask for help, offer support, plan things, and build trust over time.',
+    Icon: Users,
+  },
+  {
+    title: 'Ask for help and offer help',
+    body: 'People can share needs, skills, time, tools, advice, rides, space, or support.',
+    Icon: HandHeart,
+  },
+  {
+    title: 'Turn good conversations into action',
+    body: 'Start simple. A useful post can become a meetup, project, event, service, or local connection.',
+    Icon: Lightbulb,
+  },
+] as const;
 
 function parseSignalList(value: string, maxItemLength = 120) {
   return Array.from(
@@ -116,19 +110,17 @@ function parseSignalList(value: string, maxItemLength = 120) {
 }
 
 export default function ProfileOnboardingScreen() {
-  const { user, sessionToken, isLoading, login } = useAuth();
-  const [values, setValues] = useState<Record<FieldName, string>>({
-    selfDescription: user?.selfDescription || '',
-    shortTermGoals: user?.shortTermGoals || '',
-    longTermGoals: user?.longTermGoals || '',
-  });
+  const { user, sessionToken, isLoading, login, deferProfileOnboarding } = useAuth();
+  const scrollRef = useRef<ScrollView>(null);
+  const [step, setStep] = useState<WizardStep>('intro');
+  const [selfDescription, setSelfDescription] = useState(user?.selfDescription || '');
   const [signalValues, setSignalValues] = useState<Record<ListFieldName, string>>({
-    skills: user?.skills?.join(', ') || '',
     interests: user?.interests?.join(', ') || '',
     resourcesOffered: user?.resourcesOffered?.join(', ') || '',
     resourcesNeeded: user?.resourcesNeeded?.join(', ') || '',
   });
   const [optionalValues, setOptionalValues] = useState<Record<OptionalFieldName, string>>({
+    goals: user?.shortTermGoals || user?.longTermGoals || '',
     businessSummary: user?.businessSummary || '',
     locationSummary: user?.locationSummary || '',
   });
@@ -141,12 +133,7 @@ export default function ProfileOnboardingScreen() {
     }
   }, [isLoading, user]);
 
-  const fieldProgress = useMemo(() => {
-    return fields.reduce<Record<FieldName, boolean>>((acc, field) => {
-      acc[field.name] = values[field.name].trim().length >= field.minChars;
-      return acc;
-    }, {} as Record<FieldName, boolean>);
-  }, [values]);
+  const introComplete = selfDescription.trim().length >= introField.minChars;
 
   const signalProgress = useMemo(() => {
     return signalFields.reduce<Record<ListFieldName, { count: number; complete: boolean }>>((acc, field) => {
@@ -160,13 +147,13 @@ export default function ProfileOnboardingScreen() {
   }, [signalValues]);
 
   const canSubmit =
-    fields.every((field) => fieldProgress[field.name]) &&
+    introComplete &&
     signalFields.every((field) => signalProgress[field.name].complete) &&
     !!sessionToken &&
     !!user;
 
-  const updateField = (name: FieldName, value: string) => {
-    setValues((current) => ({ ...current, [name]: value }));
+  const updateIntro = (value: string) => {
+    setSelfDescription(value);
     setError('');
   };
 
@@ -180,12 +167,36 @@ export default function ProfileOnboardingScreen() {
     setError('');
   };
 
+  const goToStep = async (nextStep: WizardStep) => {
+    if (nextStep === 'profile') {
+      try {
+        await deferProfileOnboarding();
+      } catch (err) {
+        console.error('Profile onboarding seen-state save failed:', err);
+      }
+    }
+
+    setStep(nextStep);
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }));
+  };
+
+  const handleSkip = async () => {
+    if (!user || isSaving) return;
+
+    try {
+      await deferProfileOnboarding();
+      router.replace({ pathname: '/(tabs)', params: { welcome: '1' } } as any);
+    } catch (err) {
+      console.error('Profile onboarding skip failed:', err);
+      setError('Could not skip right now. Try again.');
+    }
+  };
+
   const handleSubmit = async () => {
     if (!user || !sessionToken || isSaving) return;
 
-    const missingField = fields.find((field) => !fieldProgress[field.name]);
-    if (missingField) {
-      setError(`${missingField.label} needs a little more detail before you continue.`);
+    if (!introComplete) {
+      setError('Your short intro needs a little more detail before you continue.');
       return;
     }
 
@@ -201,10 +212,8 @@ export default function ProfileOnboardingScreen() {
     try {
       const result = await api.completeProfileOnboarding(
         {
-          selfDescription: values.selfDescription.trim(),
-          shortTermGoals: values.shortTermGoals.trim(),
-          longTermGoals: values.longTermGoals.trim(),
-          skills: parseSignalList(signalValues.skills, 80),
+          selfDescription: selfDescription.trim(),
+          goals: optionalValues.goals.trim(),
           interests: parseSignalList(signalValues.interests, 80),
           resourcesOffered: parseSignalList(signalValues.resourcesOffered, 120),
           resourcesNeeded: parseSignalList(signalValues.resourcesNeeded, 120),
@@ -225,7 +234,7 @@ export default function ProfileOnboardingScreen() {
         coop: user.coop,
       });
 
-      router.replace('/(tabs)' as any);
+      router.replace({ pathname: '/(tabs)', params: { welcome: '1' } } as any);
     } catch (err) {
       console.error('Profile onboarding save failed:', err);
       setError(err instanceof Error ? err.message : 'Could not save your profile. Try again.');
@@ -249,47 +258,98 @@ export default function ProfileOnboardingScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
+          ref={scrollRef}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.content}
         >
+          {step === 'intro' ? (
+            <>
           <View style={styles.header}>
-            <View style={styles.badge}>
-              <Sparkles color="#FF6B00" size={18} strokeWidth={2.4} />
-              <Text style={styles.badgeText}>AI Matching Signal Setup</Text>
+            <View style={styles.stepPill}>
+              <Text style={styles.stepPillText}>Step 1 of 2</Text>
             </View>
-            <Text style={styles.title}>Your Co-op Profile</Text>
+            <View style={styles.badge}>
+              <UserCircle color="#FF6B00" size={18} strokeWidth={2.4} />
+              <Text style={styles.badgeText}>Welcome to Cahootz</Text>
+            </View>
+            <Text style={styles.title}>A community app for everyday help and action</Text>
             <Text style={styles.subtitle}>
-              This one-time setup powers cooperative matching for local circles, resource sharing, and governance voting.
+              Cahootz is a place to meet people, share what you need, offer what you can, and start real conversations.
+            </Text>
+          </View>
+
+          <View style={styles.appIntro}>
+            {appIntroItems.map(({ title, body, Icon }) => (
+              <View key={title} style={styles.appIntroRow}>
+                <View style={styles.appIntroIcon}>
+                  <Icon color="#FF6B00" size={18} strokeWidth={2.5} />
+                </View>
+                <View style={styles.appIntroText}>
+                  <Text style={styles.appIntroTitle}>{title}</Text>
+                  <Text style={styles.appIntroBody}>{body}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => goToStep('profile')}
+            style={({ pressed }) => [
+              styles.submitButton,
+              pressed && styles.submitButtonPressed,
+            ]}
+          >
+            <Text style={styles.submitText}>Continue</Text>
+            <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.6} />
+          </Pressable>
+            </>
+          ) : (
+            <>
+          <View style={styles.wizardTop}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => goToStep('intro')}
+              style={({ pressed }) => [
+                styles.backButton,
+                pressed && styles.backButtonPressed,
+              ]}
+            >
+              <ArrowLeft color="#475569" size={18} strokeWidth={2.5} />
+              <Text style={styles.backButtonText}>Back</Text>
+            </Pressable>
+            <View style={[styles.stepPill, styles.stepPillFlush]}>
+              <Text style={styles.stepPillText}>Step 2 of 2</Text>
+            </View>
+          </View>
+
+          <View style={styles.profileIntro}>
+            <Text style={styles.sectionEyebrow}>Before your first post</Text>
+            <Text style={styles.sectionTitle}>Build your profile</Text>
+            <Text style={styles.sectionBody}>
+              These answers help people understand who you are and make your first post easier. You can change them later.
             </Text>
           </View>
 
           <View style={styles.form}>
-            {fields.map((field) => {
-              const count = values[field.name].trim().length;
-              const complete = fieldProgress[field.name];
-              const remaining = Math.max(field.minChars - count, 0);
-
-              return (
-                <View key={field.name} style={styles.fieldBlock}>
-                  <View style={styles.fieldHeader}>
-                    <Text style={styles.label}>{field.label}</Text>
-                    <Text style={[styles.counter, complete && styles.counterComplete]}>
-                      {complete ? 'Good detail' : `${remaining} more`}
-                    </Text>
-                  </View>
-                  <Text style={styles.helper}>{field.helper}</Text>
-                  <TextInput
-                    value={values[field.name]}
-                    onChangeText={(value) => updateField(field.name, value)}
-                    placeholder={field.placeholder}
-                    placeholderTextColor="#9CA3AF"
-                    multiline
-                    textAlignVertical="top"
-                    style={[styles.input, { minHeight: field.minHeight }]}
-                  />
-                </View>
-              );
-            })}
+            <View style={styles.fieldBlock}>
+              <View style={styles.fieldHeader}>
+                <Text style={styles.label}>{introField.label}</Text>
+                <Text style={[styles.counter, introComplete && styles.counterComplete]}>
+                  {introComplete ? 'Ready' : `${Math.max(introField.minChars - selfDescription.trim().length, 0)} more`}
+                </Text>
+              </View>
+              <Text style={styles.helper}>{introField.helper}</Text>
+              <TextInput
+                value={selfDescription}
+                onChangeText={updateIntro}
+                placeholder={introField.placeholder}
+                placeholderTextColor="#9CA3AF"
+                multiline
+                textAlignVertical="top"
+                style={[styles.input, { minHeight: introField.minHeight }]}
+              />
+            </View>
 
             <View style={styles.signalGrid}>
               {signalFields.map((field) => {
@@ -319,9 +379,25 @@ export default function ProfileOnboardingScreen() {
             </View>
 
             <View style={styles.fieldBlock}>
+              <Text style={styles.label}>Goals</Text>
+              <Text style={styles.helper}>
+                Optional. Share something you want to work on, learn, organize, or move forward.
+              </Text>
+              <TextInput
+                value={optionalValues.goals}
+                onChangeText={(value) => updateOptionalField('goals', value)}
+                placeholder="I want to meet collaborators, find steady work, and help plan more community events."
+                placeholderTextColor="#9CA3AF"
+                multiline
+                textAlignVertical="top"
+                style={[styles.input, styles.optionalInput]}
+              />
+            </View>
+
+            <View style={styles.fieldBlock}>
               <Text style={styles.label}>Business or work</Text>
               <Text style={styles.helper}>
-                Optional, but useful if you run something, sell something, or want the commons to understand your economic lane.
+                Optional. Add what you do, make, sell, study, or want people to know about your work.
               </Text>
               <TextInput
                 value={optionalValues.businessSummary}
@@ -370,6 +446,11 @@ export default function ProfileOnboardingScreen() {
               </>
             )}
           </Pressable>
+          <Pressable accessibilityRole="button" disabled={isSaving} onPress={handleSkip} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Do this later</Text>
+          </Pressable>
+            </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -398,7 +479,53 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: 8,
-    paddingBottom: 22,
+    paddingBottom: 18,
+  },
+  wizardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 18,
+  },
+  stepPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 14,
+  },
+  stepPillFlush: {
+    marginBottom: 0,
+  },
+  stepPillText: {
+    color: '#475569',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+  },
+  backButton: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    borderRadius: 999,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 12,
+  },
+  backButtonPressed: {
+    opacity: 0.72,
+  },
+  backButtonText: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '800',
   },
   badge: {
     alignSelf: 'flex-start',
@@ -420,8 +547,8 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#0F172A',
-    fontSize: 34,
-    lineHeight: 40,
+    fontSize: 30,
+    lineHeight: 36,
     fontWeight: '900',
     letterSpacing: 0,
   },
@@ -430,6 +557,70 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     marginTop: 12,
+  },
+  appIntro: {
+    gap: 10,
+    marginBottom: 20,
+  },
+  appIntroRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#F0F2F5',
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+  },
+  appIntroIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF7ED',
+  },
+  appIntroText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  appIntroTitle: {
+    color: '#0F172A',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  appIntroBody: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 3,
+  },
+  profileIntro: {
+    borderTopWidth: 1,
+    borderTopColor: '#F0F2F5',
+    paddingTop: 18,
+    marginBottom: 14,
+  },
+  sectionEyebrow: {
+    color: '#FF6B00',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  sectionTitle: {
+    color: '#0F172A',
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '900',
+    marginTop: 6,
+  },
+  sectionBody: {
+    color: '#64748B',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 6,
   },
   form: {
     gap: 18,
@@ -518,5 +709,17 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 22,
     fontWeight: '900',
+  },
+  secondaryButton: {
+    minHeight: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  secondaryButtonText: {
+    color: '#64748B',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
   },
 });

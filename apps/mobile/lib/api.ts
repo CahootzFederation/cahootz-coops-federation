@@ -1186,8 +1186,9 @@ export const api = {
   async completeProfileOnboarding(
     data: {
       selfDescription: string;
-      shortTermGoals: string;
-      longTermGoals: string;
+      goals?: string;
+      shortTermGoals?: string;
+      longTermGoals?: string;
       skills?: string[];
       interests?: string[];
       resourcesOffered?: string[];

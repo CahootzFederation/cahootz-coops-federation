@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
   USER: 'soulaan.user',
   LOGIN_TIME: 'soulaan.loginTime',
   SESSION_TOKEN: 'soulaan.sessionToken',
+  PROFILE_ONBOARDING_DEFERRED_USER: 'soulaan.profileOnboardingDeferredUser',
 } as const;
 
 const isWeb = Platform.OS === 'web';
@@ -90,6 +91,7 @@ export const secureStorage = {
           window.localStorage.removeItem(STORAGE_KEYS.USER);
           window.localStorage.removeItem(STORAGE_KEYS.LOGIN_TIME);
           window.localStorage.removeItem(STORAGE_KEYS.SESSION_TOKEN);
+          window.localStorage.removeItem(STORAGE_KEYS.PROFILE_ONBOARDING_DEFERRED_USER);
         }
       } else {
         // Clear on native
@@ -97,6 +99,7 @@ export const secureStorage = {
           SecureStore.deleteItemAsync(STORAGE_KEYS.USER),
           SecureStore.deleteItemAsync(STORAGE_KEYS.LOGIN_TIME),
           SecureStore.deleteItemAsync(STORAGE_KEYS.SESSION_TOKEN),
+          SecureStore.deleteItemAsync(STORAGE_KEYS.PROFILE_ONBOARDING_DEFERRED_USER),
         ]);
       }
     } catch (error) {

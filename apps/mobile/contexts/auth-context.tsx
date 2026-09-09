@@ -49,6 +49,7 @@ interface AuthContextType {
   sessionToken: string | null;
   login: (user: User) => Promise<void>;
   logout: () => Promise<void>;
+  deferProfileOnboarding: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -56,6 +57,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [profileOnboardingDeferredUserId, setProfileOnboardingDeferredUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const segments = useSegments();
@@ -87,9 +89,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const inAuthGroup = segments[0] === '(authenticated)';
     const inProfileOnboarding = segments[0] === 'profile-onboarding';
     const atRoot = pathname === '/';
+
     if (!user && inAuthGroup) {
       // User is not logged in but in authenticated routes, redirect to onboarding
       router.replace('/');
+      return;
+    }
+
+    const profileOnboardingDeferred = !!user && profileOnboardingDeferredUserId === user.id;
+
+    if (user && !user.profileOnboardingCompletedAt && !profileOnboardingDeferred && !inProfileOnboarding) {
+      router.replace('/profile-onboarding' as any);
       return;
     }
 
@@ -101,11 +111,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user?.profileOnboardingCompletedAt && inProfileOnboarding) {
       router.replace('/(tabs)' as any);
     }
-  }, [user, segments, isLoading, router, pathname]);
+  }, [user, segments, isLoading, router, pathname, profileOnboardingDeferredUserId]);
 
   const loadSession = async () => {
     try {
       const userData = await secureStorage.getItem(secureStorage.keys.USER);
+      const deferredUserId = await secureStorage.getItem(secureStorage.keys.PROFILE_ONBOARDING_DEFERRED_USER);
+      setProfileOnboardingDeferredUserId(deferredUserId);
       if (userData) {
         const parsedUser = JSON.parse(userData);
         // Convert createdAt string back to Date
@@ -157,6 +169,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           userData.sessionToken
         );
       }
+      if (userData.profileOnboardingCompletedAt) {
+        await secureStorage.removeItem(secureStorage.keys.PROFILE_ONBOARDING_DEFERRED_USER);
+        setProfileOnboardingDeferredUserId(null);
+      }
 
       // Set coop config if user has coop membership
       if (userData.coop) {
@@ -189,11 +205,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Coop config reset');
       setUser(null);
       setSessionToken(null);
+      setProfileOnboardingDeferredUserId(null);
       console.log('User state cleared, should redirect to /');
     } catch (error) {
       console.error('Error during logout:', error);
       throw new Error('Failed to logout');
     }
+  };
+
+  const deferProfileOnboarding = async () => {
+    if (!user) return;
+
+    await secureStorage.setItem(secureStorage.keys.PROFILE_ONBOARDING_DEFERRED_USER, user.id);
+    setProfileOnboardingDeferredUserId(user.id);
   };
 
   const userRef = useRef(user);
@@ -223,6 +247,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         sessionToken,
         login,
         logout,
+        deferProfileOnboarding,
       }}
     >
       {children}

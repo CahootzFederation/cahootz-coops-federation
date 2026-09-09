@@ -29,7 +29,6 @@ export async function ensureCommonsMembership(
     },
     update: {
       status: "ACTIVE",
-      joinedAt: now,
       lastActiveAt: now,
     },
   });

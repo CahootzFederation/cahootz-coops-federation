@@ -9,14 +9,16 @@ import { publicProcedure, authenticatedProcedure, accountAuthenticatedProcedure 
 import { router } from "../trpc.js";
 import { getUserWallet, createWalletForUser, getUserWalletInfo } from "../services/wallet-service.js";
 import type { AccountAuthenticatedContext, AuthenticatedContext } from "../context.js";
+import { ensureCommonsMembership } from "../lib/commons.js";
 
 const DEMO_LOGIN_EMAIL = "demo@cahootz.coop";
 const DEMO_COOP_ID = "demo";
 
 const mobileProfileOnboardingInput = z.object({
-  selfDescription: z.string().trim().min(120, "Write at least a strong paragraph about yourself.").max(5000),
-  shortTermGoals: z.string().trim().min(50, "Share a little more about what you are working toward soon.").max(3000),
-  longTermGoals: z.string().trim().min(50, "Share a little more about the future you are building toward.").max(3000),
+  selfDescription: z.string().trim().min(40, "Write a few sentences so people know who you are.").max(5000),
+  goals: z.string().trim().max(3000).optional(),
+  shortTermGoals: z.string().trim().max(3000).optional(),
+  longTermGoals: z.string().trim().max(3000).optional(),
   skills: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
   interests: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
   resourcesOffered: z.array(z.string().trim().min(1).max(120)).max(30).default([]),
@@ -350,13 +352,17 @@ export const userRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const context = ctx as AccountAuthenticatedContext;
+      const combinedGoals = input.goals ?? input.shortTermGoals ?? "";
+      const longTermGoals = input.goals !== undefined ? null : input.longTermGoals || null;
+
+      await ensureCommonsMembership(context.db, context.accountUser.id);
 
       const user = await context.db.user.update({
         where: { id: context.accountUser.id },
         data: {
           selfDescription: input.selfDescription,
-          shortTermGoals: input.shortTermGoals,
-          longTermGoals: input.longTermGoals,
+          shortTermGoals: combinedGoals || null,
+          longTermGoals,
           skills: input.skills,
           interests: input.interests,
           resourcesOffered: input.resourcesOffered,
@@ -364,7 +370,7 @@ export const userRouter = router({
           businessSummary: input.businessSummary || null,
           locationSummary: input.locationSummary || null,
           profileSignals: {
-            onboardingVersion: 2,
+            onboardingVersion: input.goals !== undefined ? 3 : 2,
             lastUpdatedFrom: "mobile_onboarding",
             completedAt: new Date().toISOString(),
             signalCounts: {

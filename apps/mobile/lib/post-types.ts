@@ -1,4 +1,5 @@
 export const INTENT_POST_TYPES = Object.freeze([
+  { value: 'Intro', label: 'intro' },
   { value: 'Thought', label: 'thought' },
   { value: 'Ask', label: 'ask' },
   { value: 'Offer', label: 'offer' },
@@ -40,6 +41,8 @@ export function shouldShowPostType(value: CommonsPostTag | null | undefined) {
 
 export function postTypePlaceholder(value: CommonsPostTag | null | undefined) {
   switch (value) {
+    case 'Intro':
+      return 'Introduce yourself...';
     case 'Ask':
       return 'What do you need help with?';
     case 'Offer':

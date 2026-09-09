@@ -11,11 +11,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Bell,
   Bookmark,
   CheckCircle2,
   ChevronDown,
@@ -30,7 +29,6 @@ import {
   Menu,
   MessageCircle,
   Repeat2,
-  Scale,
   Search,
   Send,
   Sparkles,
@@ -38,7 +36,6 @@ import {
   Trash2,
   UserCircle,
   Users,
-  Wallet,
   X,
 } from 'lucide-react-native';
 
@@ -66,6 +63,11 @@ type PendingAction = (sessionToken: string) => Promise<void>;
 type ComposerNotice = { type: 'success' | 'error' | 'info'; body: string } | null;
 type SuggestionStatus = 'idle' | 'submitting' | 'success' | 'error';
 type ComposerMedia = Omit<CommonsPostMedia, 'pathname' | 'url' | 'id'> & { uri: string };
+type FirstStepAction = {
+  label: string;
+  type: SelectedPostType;
+  buildDraft: () => string;
+};
 
 type CommonsAiEntryProps = {
   feedCoopId?: string;
@@ -106,7 +108,7 @@ const ALLOWED_POST_MEDIA_MIMES = new Set([
 ]);
 
 const COMMONS_RULES = [
-  'A commons is a social space for a real group, place, identity, craft, or shared economic interest.',
+  'A commons is a social space for a real group, place, identity, craft, or shared interest.',
   'Members can talk normally, share wins, post needs, support businesses, and turn useful threads into action.',
   'Every commons should create value for its members. No scams, harassment, hate, extraction, or charity-only spaces.',
 ] as const;
@@ -116,9 +118,7 @@ const DRAWER_SECTIONS = [
   // No global "Private Spaces" entry here on purpose — Circles now live
   // under a commons (see the Circles section on /commons/[coopId]), and a
   // standalone drawer link made it look like they existed outside one.
-  { label: 'Wallet', icon: Wallet, action: '/(tabs)/wallet', requiresAuth: true },
   { label: 'Commons Stores & Shops', icon: Store, action: '/(tabs)/store' },
-  { label: 'Proposals & Governance', icon: Scale, action: '/(tabs)/proposals' },
   { label: 'Messages & Direct Chat', icon: MessageCircle, action: '/(tabs)/messages' },
 ];
 
@@ -133,8 +133,9 @@ function mimeFromFileName(fileName: string | null | undefined, mediaType: 'image
   return mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
 }
 
-export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, onSignInPress, topBanner }: CommonsAiEntryProps) {
+export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topBanner }: CommonsAiEntryProps) {
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ welcome?: string }>();
   const scrollRef = useRef<ScrollView>(null);
   const pendingActionRef = useRef<PendingAction | null>(null);
   const { isAuthenticated, login, logout, sessionToken, user } = useAuth();
@@ -174,6 +175,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
   const [searchPosts, setSearchPosts] = useState<CommonsPost[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
+  const [nextStepHidden, setNextStepHidden] = useState(false);
   const hasAccountSession = isAuthenticated && !!sessionToken;
   const accountName = user?.name?.trim() || user?.email?.split('@')[0] || 'member';
   const accountHandle = user?.handle || (user?.email?.split('@')[0] || accountName).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -405,6 +407,13 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
   const visiblePosts = useMemo(() => {
     return [...feedPosts].sort((a, b) => b.support - a.support || b.replies - a.replies);
   }, [feedPosts]);
+  const hasCurrentUserPost = visiblePosts.some((post) => post.authorId === user?.id);
+  const isWelcomeHandoff = params.welcome === '1';
+  const shouldShowNextStep =
+    hasAccountSession &&
+    !scopedFeedLocked &&
+    !nextStepHidden &&
+    (isWelcomeHandoff || !hasCurrentUserPost);
 
   const requireAccount = async (action: PendingAction) => {
     if (hasAccountSession) {
@@ -468,6 +477,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
             tag: selectedPostType,
             media: uploadedMedia,
           }, token);
+          setNextStepHidden(true);
           setDraft('');
           setSelectedPostType(DEFAULT_POST_TYPE);
           clearSelectedMedia();
@@ -485,6 +495,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
         if (belongsInCurrentFeed) {
           setFeedPosts((current) => [result.post, ...current]);
         }
+        setNextStepHidden(true);
         setDraft('');
         setSelectedPostType(DEFAULT_POST_TYPE);
         clearSelectedMedia();
@@ -800,6 +811,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
 
   const tagColor = (tag: CommonsPost['tag']) => {
     if (tag === 'Social' || tag === 'Thought') return { bg: '#F3F4F6', fg: '#374151' };
+    if (tag === 'Intro') return { bg: SOCIAL_THEME.primarySoft, fg: '#C2410C' };
     if (tag === 'Meme') return { bg: SOCIAL_THEME.primarySoft, fg: '#C2410C' };
     if (tag === 'Win' || tag === 'Update') return { bg: '#D1FAE5', fg: '#047857' };
     if (tag === 'Opportunity' || tag === 'Offer' || tag === 'Product') return { bg: '#E0E7FF', fg: '#3730A3' };
@@ -837,15 +849,6 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
     router.push(href as any);
   };
 
-  const openMessages = () => {
-    if (onMessagesPress) {
-      onMessagesPress();
-      return;
-    }
-
-    router.push('/(tabs)/messages' as any);
-  };
-
   const openSignIn = () => {
     setDrawerOpen(false);
     setAccountPromptOpen(false);
@@ -879,7 +882,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
           <View className="min-w-0 flex-1">
             <Text className="text-sm font-black leading-5 text-white">Finish your profile setup</Text>
             <Text className="mt-0.5 text-xs leading-4 text-white">
-              Unlock AI matchmaking & commons voting power
+              Help people know who you are and what you care about
             </Text>
           </View>
           <View className="rounded-full bg-white px-3.5 py-2">
@@ -891,6 +894,97 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
       </TouchableOpacity>
     ) : null
   );
+
+  const listPreview = (items?: string[]) => {
+    const list = (items || []).map((item) => item.trim()).filter(Boolean).slice(0, 3);
+    return list.join(', ');
+  };
+
+  const firstStepActions: FirstStepAction[] = [
+    {
+      label: 'Introduce myself',
+      type: 'Intro',
+      buildDraft: () => {
+        const interests = listPreview(user?.interests);
+        const offers = listPreview(user?.resourcesOffered);
+        const needs = listPreview(user?.resourcesNeeded);
+        return [
+          `Hey everyone, I'm ${accountName}.`,
+          interests ? `I'm interested in ${interests}.` : "I'm excited to connect with people here.",
+          offers ? `I can help with ${offers}.` : null,
+          needs ? `I'm looking to connect around ${needs}.` : null,
+        ].filter(Boolean).join(' ');
+      },
+    },
+    {
+      label: 'Ask for help',
+      type: 'Ask',
+      buildDraft: () => {
+        const needs = listPreview(user?.resourcesNeeded);
+        return needs
+          ? `I'm looking for help with ${needs}. If you know someone or have ideas, I'd appreciate it.`
+          : "I'm looking for help with...";
+      },
+    },
+    {
+      label: 'Offer help',
+      type: 'Offer',
+      buildDraft: () => {
+        const offers = listPreview(user?.resourcesOffered);
+        return offers
+          ? `I can help with ${offers}. Reach out if this would be useful.`
+          : 'I can help with...';
+      },
+    },
+    {
+      label: 'Share an idea',
+      type: 'Project',
+      buildDraft: () => 'I have an idea for the community: ',
+    },
+  ];
+
+  const startFirstStep = (action: FirstStepAction) => {
+    setSelectedPostType(action.type);
+    setDraft(action.buildDraft());
+    setNextStepHidden(true);
+    setComposerNotice({ type: 'info', body: "Edit this however you want, then tap Post when you're ready." });
+    requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+  };
+
+  const renderNextStepPanel = () => {
+    if (!shouldShowNextStep) return null;
+
+    return (
+      <View className="mb-4 rounded-[24px] border bg-white p-4" style={{ borderColor: SOCIAL_THEME.border }}>
+        <View className="flex-row items-start gap-3">
+          <View className="h-10 w-10 items-center justify-center rounded-2xl" style={{ backgroundColor: SOCIAL_THEME.primarySoft }}>
+            <Sparkles size={18} color={SOCIAL_THEME.primary} strokeWidth={2.6} />
+          </View>
+          <View className="min-w-0 flex-1">
+            <Text className="text-base font-black text-gray-950">Your next step</Text>
+            <Text className="mt-1 text-sm leading-5 text-gray-600">
+              Start by sharing one thing with the community.
+            </Text>
+          </View>
+        </View>
+        <View className="mt-4 flex-row flex-wrap gap-2">
+          {firstStepActions.map((action) => (
+            <TouchableOpacity
+              key={action.label}
+              onPress={() => startFirstStep(action)}
+              className="rounded-full border px-3.5 py-2"
+              style={{ borderColor: SOCIAL_THEME.primaryBorder, backgroundColor: SOCIAL_THEME.primarySoft }}
+              activeOpacity={0.8}
+            >
+              <Text className="text-xs font-black" style={{ color: SOCIAL_THEME.primary }}>
+                {action.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    );
+  };
 
   const renderComposer = () => {
     if (scopedFeedLocked) return null;
@@ -1012,14 +1106,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
             <LayoutGrid size={17} color="#FFFFFF" strokeWidth={2.6} />
           </View>
           <View className="min-w-0 flex-1">
-            <View className="flex-row items-center gap-1.5">
-              <Text className="min-w-0 text-base font-black text-gray-950" numberOfLines={1}>
-                {headerCommonsName}
-              </Text>
-              <View className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5">
-                <Text className="text-[10px] font-black text-emerald-600">Member</Text>
-              </View>
-            </View>
+            <Text className="min-w-0 text-base font-black text-gray-950" numberOfLines={1}>
+              {headerCommonsName}
+            </Text>
             <TouchableOpacity
               onPress={() => setDrawerOpen(true)}
               className="mt-0.5 flex-row items-center"
@@ -1030,29 +1119,6 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
               <ChevronDown size={13} color="#475569" />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            onPress={() => setSearchOpen(true)}
-            className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
-            accessibilityLabel="Search people and posts"
-          >
-            <Search size={16} color="#334155" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={openMessages}
-            className="relative h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
-            accessibilityLabel="Open direct messages"
-          >
-            <MessageCircle size={16} color="#334155" />
-            <View className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white" style={{ backgroundColor: SOCIAL_THEME.primary }} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => router.push('/(tabs)/notifications' as any)}
-            className="relative h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
-            accessibilityLabel="Open alerts"
-          >
-            <Bell size={16} color="#334155" />
-            <View className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white" style={{ backgroundColor: SOCIAL_THEME.primary }} />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -1066,6 +1132,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
       >
         <View className="px-4 py-3">
           {finishProfileBanner}
+          {renderNextStepPanel()}
 
           {feedError ? (
             <View className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4">
@@ -1090,9 +1157,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
           <View className="gap-5">
             {visiblePosts.length === 0 ? (
               <View className="rounded-[28px] border border-dashed border-gray-300 bg-white p-5">
-                <Text className="text-base font-black text-gray-900">No posts yet</Text>
+                <Text className="text-base font-black text-gray-900">Start the conversation</Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">
-                  Start with a normal post, question, shoutout, event, request, or offer.
+                  Introduce yourself, ask for help, or offer help.
                 </Text>
               </View>
             ) : null}
@@ -1339,7 +1406,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
                   onPress={() => {
                     setDrawerOpen(false);
                     if (hasAccountSession) {
-                      router.push('/(tabs)/wallet' as any);
+                      router.push('/(authenticated)/personal-page' as any);
                     } else {
                       openSignIn();
                     }
@@ -1506,7 +1573,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
                   <Text className="text-xs font-black uppercase text-gray-500">Commons</Text>
                   <Text className="text-2xl font-black text-gray-950">Suggest a commons</Text>
                   <Text className="mt-1 text-sm leading-5 text-gray-600">
-                    Tell Cahootz what community, neighborhood, identity, craft, or market should have a space next.
+                    Tell Cahootz what community, neighborhood, identity, craft, or shared interest should have a space next.
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -1524,7 +1591,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onMessagesPress, on
                 <Text className="font-black text-gray-950">How commons work</Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">
                   Everyone starts in {commonsProfile.name}. Later, people can join more focused commons that match who they are, where
-                  they live, what they build, or what they want to organize economically.
+                  they live, what they build, or what they want to do together.
                 </Text>
               </View>
 

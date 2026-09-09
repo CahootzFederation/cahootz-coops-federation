@@ -20,6 +20,7 @@ import { recordObservation } from "../services/ai-memory.js";
 import { router } from "../trpc.js";
 
 const postTagSchema = z.enum([
+  "Intro",
   "Thought",
   "Ask",
   "Offer",
@@ -199,7 +200,9 @@ function classifyPost(input: {
     return found;
   };
 
-  if (input.tag === "Proposal" || input.tag === "Vote" || match("proposal", ["proposal", "vote", "decide", "approve", "policy"])) {
+  if (input.tag === "Intro") {
+    hits.push("intro");
+  } else if (input.tag === "Proposal" || input.tag === "Vote" || match("proposal", ["proposal", "vote", "decide", "approve", "policy"])) {
     classification = "proposal_seed";
   } else if (input.tag === "Event" || match("event", ["event", "meetup", "meeting", "pull up", "rsvp", "tomorrow", "tonight"])) {
     classification = "event";
@@ -710,8 +713,14 @@ export const commonsRouter = router({
         circleCountByCoop.set(group.coopId, (circleCountByCoop.get(group.coopId) || 0) + 1);
       }
 
+      const sortedCoops = [...coops].sort((a: any, b: any) => {
+        if (a.coopId === COMMONS_COOP_ID) return -1;
+        if (b.coopId === COMMONS_COOP_ID) return 1;
+        return 0;
+      });
+
       return {
-        coops: coops.map((coop: any) => {
+        coops: sortedCoops.map((coop: any) => {
           const membership = membershipByCoop.get(coop.coopId);
           const application = applicationByCoop.get(coop.coopId);
           const membershipStatus = membership?.status as string | undefined;
@@ -1220,7 +1229,7 @@ export const commonsRouter = router({
         include: { author: { select: { name: true, email: true, handle: true } } },
       });
 
-      if (post.authorId !== accountUser.id) {
+      if (post.authorId && post.authorId !== accountUser.id) {
         void createNotificationAndPush(ctx.db, {
           userId: post.authorId,
           coopId: COMMONS_COOP_ID,
@@ -1347,7 +1356,7 @@ export const commonsRouter = router({
         data: { postId: input.postId, userId: accountUser.id },
       });
 
-      if (post.authorId !== accountUser.id) {
+      if (post.authorId && post.authorId !== accountUser.id) {
         void createNotificationAndPush(ctx.db, {
           userId: post.authorId,
           coopId: COMMONS_COOP_ID,
@@ -1521,7 +1530,7 @@ export const commonsRouter = router({
         },
       });
 
-      if (post.authorId !== accountUser.id) {
+      if (post.authorId && post.authorId !== accountUser.id) {
         void createNotificationAndPush(ctx.db, {
           userId: post.authorId,
           coopId: post.coopId,
@@ -1678,7 +1687,7 @@ export const commonsRouter = router({
         data: { postId: input.postId, userId: accountUser.id },
       });
 
-      if (post.authorId !== accountUser.id) {
+      if (post.authorId && post.authorId !== accountUser.id) {
         void createNotificationAndPush(ctx.db, {
           userId: post.authorId,
           coopId: post.coopId,

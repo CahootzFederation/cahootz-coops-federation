@@ -34,8 +34,8 @@ describe("agent registry", () => {
     agentConstructorCalls.length = 0;
   });
 
-  it("keeps all 6 registry entries with unique keys", () => {
-    expect(agentRegistry).toHaveLength(6);
+  it("keeps all 7 registry entries with unique keys", () => {
+    expect(agentRegistry).toHaveLength(7);
     const keys = agentRegistry.map((a) => a.key);
     expect(new Set(keys).size).toBe(keys.length);
   });
@@ -45,9 +45,13 @@ describe("agent registry", () => {
     expect(getAgent("post-classifier")).toBeUndefined();
   });
 
+  it("registers Sage as the Commons @-mention/DM bot", () => {
+    expect(getAgent("sage-commons-reply")).toBeDefined();
+  });
+
   it("exposes valid JSON-schema-convertible metadata for every registered agent", () => {
     const metadata = listAgentMetadata();
-    expect(metadata).toHaveLength(6);
+    expect(metadata).toHaveLength(7);
     for (const m of metadata) {
       expect(m.inputSchema).toBeTruthy();
       expect(m.outputSchema).toBeTruthy();

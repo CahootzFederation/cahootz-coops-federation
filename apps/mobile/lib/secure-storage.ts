@@ -8,13 +8,74 @@ import { Platform } from 'react-native';
  */
 
 const STORAGE_KEYS = {
+  USER: 'cahootz.user',
+  LOGIN_TIME: 'cahootz.loginTime',
+  SESSION_TOKEN: 'cahootz.sessionToken',
+  PROFILE_ONBOARDING_DEFERRED_USER: 'cahootz.profileOnboardingDeferredUser',
+} as const;
+
+const LEGACY_STORAGE_KEYS = {
   USER: 'soulaan.user',
   LOGIN_TIME: 'soulaan.loginTime',
   SESSION_TOKEN: 'soulaan.sessionToken',
   PROFILE_ONBOARDING_DEFERRED_USER: 'soulaan.profileOnboardingDeferredUser',
 } as const;
 
+const WALLET_KEY_PREFIX = 'cahootz.wallet.privateKey';
+const LEGACY_WALLET_KEY_PREFIX = 'soulaan.wallet.privateKey';
+
 const isWeb = Platform.OS === 'web';
+
+function legacyKeyFor(key: string): string | null {
+  const keyEntry = Object.entries(STORAGE_KEYS).find(([, currentKey]) => currentKey === key);
+  if (keyEntry) {
+    const [name] = keyEntry as [keyof typeof STORAGE_KEYS, string];
+    return LEGACY_STORAGE_KEYS[name];
+  }
+
+  if (key.startsWith(`${WALLET_KEY_PREFIX}.`)) {
+    return key.replace(WALLET_KEY_PREFIX, LEGACY_WALLET_KEY_PREFIX);
+  }
+
+  return null;
+}
+
+async function setRawItem(key: string, value: string): Promise<void> {
+  if (isWeb) {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(key, value);
+      return;
+    }
+
+    throw new Error('localStorage not available');
+  }
+
+  await SecureStore.setItemAsync(key, value);
+}
+
+async function getRawItem(key: string): Promise<string | null> {
+  if (isWeb) {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage.getItem(key);
+    }
+
+    return null;
+  }
+
+  return SecureStore.getItemAsync(key);
+}
+
+async function removeRawItem(key: string): Promise<void> {
+  if (isWeb) {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(key);
+    }
+
+    return;
+  }
+
+  await SecureStore.deleteItemAsync(key);
+}
 
 export const secureStorage = {
   /**
@@ -22,17 +83,7 @@ export const secureStorage = {
    */
   async setItem(key: string, value: string): Promise<void> {
     try {
-      if (isWeb) {
-        // Use localStorage on web
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.setItem(key, value);
-        } else {
-          throw new Error('localStorage not available');
-        }
-      } else {
-        // Use SecureStore on native
-        await SecureStore.setItemAsync(key, value);
-      }
+      await setRawItem(key, value);
     } catch (error) {
       console.error('Error storing secure data:', error);
       throw new Error('Failed to store data securely');
@@ -44,16 +95,29 @@ export const secureStorage = {
    */
   async getItem(key: string): Promise<string | null> {
     try {
-      if (isWeb) {
-        // Use localStorage on web
-        if (typeof window !== 'undefined' && window.localStorage) {
-          return window.localStorage.getItem(key);
-        }
-        return null;
-      } else {
-        // Use SecureStore on native
-        return await SecureStore.getItemAsync(key);
+      const currentValue = await getRawItem(key);
+      if (currentValue) {
+        return currentValue;
       }
+
+      const legacyKey = legacyKeyFor(key);
+      if (!legacyKey) {
+        return null;
+      }
+
+      const legacyValue = await getRawItem(legacyKey);
+      if (!legacyValue) {
+        return null;
+      }
+
+      try {
+        await setRawItem(key, legacyValue);
+        await removeRawItem(legacyKey);
+      } catch (migrationError) {
+        console.warn('Secure storage key migration skipped:', migrationError);
+      }
+
+      return legacyValue;
     } catch (error) {
       console.error('Error retrieving secure data:', error);
       return null;
@@ -65,14 +129,11 @@ export const secureStorage = {
    */
   async removeItem(key: string): Promise<void> {
     try {
-      if (isWeb) {
-        // Use localStorage on web
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(key);
-        }
-      } else {
-        // Use SecureStore on native
-        await SecureStore.deleteItemAsync(key);
+      await removeRawItem(key);
+
+      const legacyKey = legacyKeyFor(key);
+      if (legacyKey) {
+        await removeRawItem(legacyKey);
       }
     } catch (error) {
       console.error('Error removing secure data:', error);
@@ -85,23 +146,10 @@ export const secureStorage = {
    */
   async clear(): Promise<void> {
     try {
-      if (isWeb) {
-        // Clear specific keys on web
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(STORAGE_KEYS.USER);
-          window.localStorage.removeItem(STORAGE_KEYS.LOGIN_TIME);
-          window.localStorage.removeItem(STORAGE_KEYS.SESSION_TOKEN);
-          window.localStorage.removeItem(STORAGE_KEYS.PROFILE_ONBOARDING_DEFERRED_USER);
-        }
-      } else {
-        // Clear on native
-        await Promise.all([
-          SecureStore.deleteItemAsync(STORAGE_KEYS.USER),
-          SecureStore.deleteItemAsync(STORAGE_KEYS.LOGIN_TIME),
-          SecureStore.deleteItemAsync(STORAGE_KEYS.SESSION_TOKEN),
-          SecureStore.deleteItemAsync(STORAGE_KEYS.PROFILE_ONBOARDING_DEFERRED_USER),
-        ]);
-      }
+      await Promise.all([
+        ...Object.values(STORAGE_KEYS).map((key) => removeRawItem(key)),
+        ...Object.values(LEGACY_STORAGE_KEYS).map((key) => removeRawItem(key)),
+      ]);
     } catch (error) {
       console.error('Error clearing secure storage:', error);
       throw new Error('Failed to clear storage');
@@ -112,4 +160,5 @@ export const secureStorage = {
    * Get storage keys
    */
   keys: STORAGE_KEYS,
+  legacyKeys: LEGACY_STORAGE_KEYS,
 };

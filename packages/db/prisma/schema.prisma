@@ -19,6 +19,7 @@ model User {
   name                String?
   roles               String[]   @default(["member"]) // member, business, admin, governor
   status              UserStatus @default(PENDING)
+  isBot               Boolean    @default(false) // true for platform bot accounts (e.g. Sage)
   password            String?
   phone               String?    @unique // E.164 format: +1XXXXXXXXXX
   walletAddress       String?    @unique // DEPRECATED: Use Wallet model instead

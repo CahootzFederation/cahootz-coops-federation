@@ -256,7 +256,6 @@
 			name = "Upload Debug Symbols to Sentry";
 			outputPaths = (
 			);
-			basedOnDependencyAnalysis = 0;
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "if [ -f \"$SRCROOT/.xcode.env\" ]; then\n  . \"$SRCROOT/.xcode.env\"\nfi\nif [ -f \"$SRCROOT/.xcode.env.local\" ]; then\n  . \"$SRCROOT/.xcode.env.local\"\nfi\nexport NODE_BINARY=${NODE_BINARY:-node}\n/bin/sh `\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('@sentry/react-native/package.json')) + '/scripts/sentry-xcode-debug-files.sh'\"`\n";

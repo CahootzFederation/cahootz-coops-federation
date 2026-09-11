@@ -446,6 +446,7 @@ export interface DirectThread {
 export interface DirectMember {
   id: string;
   name: string;
+  handle: string;
   role: string;
 }
 

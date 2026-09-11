@@ -1,7 +1,7 @@
 import { privateKeyToAccount } from 'viem/accounts';
 import { secureStorage } from './secure-storage';
 
-const WALLET_KEY_PREFIX = 'soulaan.wallet.privateKey';
+const WALLET_KEY_PREFIX = 'cahootz.wallet.privateKey';
 
 function walletKey(userId: string, walletAddress: string): string {
   return `${WALLET_KEY_PREFIX}.${userId}.${walletAddress.toLowerCase()}`;

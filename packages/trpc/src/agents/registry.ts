@@ -355,6 +355,80 @@ async function runCommunityObserver(
   return result.finalOutput ?? result.output ?? { type: "unknown", confidence: 0, summary: "The agent returned no output." };
 }
 
+// ── 7. Sage Commons Reply ──────────────────────────────────────────────────
+// The Commons' Twitter/Grok-style @-mention bot. Given a coopId and the
+// mentioning message (plus optional thread/DM context), loads that Commons'
+// own active CoopConfig (charterText + missionGoals - same fields proposal.ts
+// uses to build CoopConfigData) and answers grounded ONLY in that charter/
+// mission. Multi-tenant by construction: same agent code, different
+// instructions per coopId, because CoopConfig is looked up fresh on every
+// call rather than baked into the Agent definition. One global bot identity
+// (handle "sage") is shared across every Commons; only its knowledge/
+// personality shifts per-coopId.
+
+const SageCommonsReplyInputZ = z.object({
+  coopId: z.string().min(1).describe("Which Commons' charter/mission to ground the reply in"),
+  message: z.string().min(1).describe("The message that mentioned or was sent to Sage"),
+  threadContext: z.string().optional().describe("Prior thread/comment/DM history, oldest-first, for continuity"),
+});
+
+const SageCommonsReplyOutputZ = z.object({
+  reply: z.string(),
+});
+
+async function runSageCommonsReply(
+  input: z.infer<typeof SageCommonsReplyInputZ>
+): Promise<z.infer<typeof SageCommonsReplyOutputZ>> {
+  const { db } = await import("@repo/db");
+
+  const coopConfig = await db.coopConfig.findFirst({
+    where: { coopId: input.coopId, isActive: true },
+    orderBy: { version: "desc" },
+    select: { name: true, charterText: true, missionGoals: true },
+  });
+
+  const missionGoals = (coopConfig?.missionGoals as
+    | Array<{ key: string; label: string; priorityWeight: number; description?: string }>
+    | undefined) ?? [];
+
+  const commonsName = coopConfig?.name || input.coopId;
+  const charterText = coopConfig?.charterText?.trim();
+
+  const missionGoalsSummary = missionGoals.length
+    ? missionGoals.map((g) => `- ${g.label}${g.description ? `: ${g.description}` : ""}`).join("\n")
+    : "No mission goals have been configured for this Commons yet.";
+
+  const agent = new Agent({
+    name: "Sage",
+    model: process.env.COMMONS_AI_MODEL || "gpt-5.2",
+    instructions: [
+      `You are Sage, the AI assistant for "${commonsName}", a specific Commons (cooperative community) inside the Cahootz platform.`,
+      "You were @-mentioned or messaged directly inside this Commons' social feed or DMs. Reply in a natural, concise, conversational tone appropriate for a social feed reply - not a long essay.",
+      "Ground every answer ONLY in this Commons' own charter and mission goals below. Do not invent policies, numbers, or commitments that aren't in the charter.",
+      "If the question isn't covered by this Commons' charter or mission goals, say so plainly and briefly rather than guessing or answering generically.",
+      "Never claim to take real-world actions (payments, votes, membership changes) - you can only inform and discuss.",
+      "",
+      `${commonsName}'s charter:`,
+      charterText || "(No charter text has been configured for this Commons yet.)",
+      "",
+      `${commonsName}'s mission goals:`,
+      missionGoalsSummary,
+    ].join("\n"),
+  });
+
+  const prompt = [
+    input.threadContext ? `Prior conversation (oldest first):\n${input.threadContext}` : "",
+    `Message to reply to: ${input.message}`,
+  ].filter(Boolean).join("\n\n");
+
+  const result = (await run(agent, prompt)) as unknown as {
+    finalOutput?: string;
+    output?: string;
+  };
+
+  return { reply: result.finalOutput || result.output || "I don't have a grounded answer for that in this Commons' charter right now." };
+}
+
 // ── Registry ────────────────────────────────────────────────────────────
 // To add a new agent: define its input/output Zod schemas and a run()
 // function above, then add one entry below. No other file needs to change -
@@ -408,6 +482,14 @@ export const agentRegistry: AgentDefinition[] = [
     inputSchema: CommunityObserverInputZ,
     outputSchema: CommunityObserverOutputZ,
     run: runCommunityObserver,
+  },
+  {
+    key: "sage-commons-reply",
+    name: "Sage",
+    description: "The Commons' @-mention and DM bot. Answers grounded only in the specific Commons' own charter and mission goals (per coopId via CoopConfig).",
+    inputSchema: SageCommonsReplyInputZ,
+    outputSchema: SageCommonsReplyOutputZ,
+    run: runSageCommonsReply,
   },
 ];
 

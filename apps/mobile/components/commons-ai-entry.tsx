@@ -41,6 +41,8 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
+import { MentionText } from '@/components/mention-text';
+import { MentionComposerInput } from '@/components/mention-composer-input';
 import { PostTypeSelector } from '@/components/post-type-selector';
 import {
   api,
@@ -1047,12 +1049,13 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
         <View className="flex-row items-center gap-2">
           <View className="min-w-0 flex-1 flex-row items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5">
-            <TextInput
+            <MentionComposerInput
               value={draft}
               onChangeText={(text) => {
                 setDraft(text);
                 if (composerNotice) setComposerNotice(null);
               }}
+              coopId={selectedComposerCommons?.id}
               placeholder={postTypePlaceholder(selectedPostType)}
               placeholderTextColor={SOCIAL_THEME.muted}
               multiline
@@ -1257,10 +1260,18 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                     </View>
 
                     {post.title && post.title !== post.body ? (
-                      <Text className="mt-3 text-sm font-black leading-5 text-gray-950">{post.title}</Text>
+                      <MentionText
+                        content={post.title}
+                        className="mt-3"
+                        style={{ fontSize: 14, lineHeight: 20, fontWeight: '900', color: '#030712' }}
+                      />
                     ) : null}
                     {post.body ? (
-                      <Text className="mt-3 text-sm leading-5 text-gray-800">{post.body}</Text>
+                      <MentionText
+                        content={post.body}
+                        className="mt-3"
+                        style={{ fontSize: 14, lineHeight: 20, color: '#1F2937' }}
+                      />
                     ) : null}
                   </View>
 
@@ -1311,7 +1322,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                       <View className="mt-3 rounded-full bg-gray-50 px-3 py-2">
                         <Text className="text-xs text-slate-700" numberOfLines={2}>
                           <Text className="font-black text-gray-950">@{firstComment.author.toLowerCase().replace(/[^a-z0-9]+/g, '')}: </Text>
-                          {firstComment.body}
+                          <MentionText content={firstComment.body} numberOfLines={2} />
                         </Text>
                       </View>
                     ) : null}
@@ -1777,10 +1788,10 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                     >
                       <Text className="text-xs font-semibold text-gray-500">{post.author} · {post.time}</Text>
                       {post.title && post.title !== post.body ? (
-                        <Text className="mt-1 text-sm font-black text-gray-950" numberOfLines={1}>{post.title}</Text>
+                        <MentionText content={post.title} className="mt-1 text-sm font-black text-gray-950" numberOfLines={1} />
                       ) : null}
                       {post.body ? (
-                        <Text className="mt-1 text-sm leading-5 text-gray-700" numberOfLines={2}>{post.body}</Text>
+                        <MentionText content={post.body} className="mt-1 text-sm leading-5 text-gray-700" numberOfLines={2} />
                       ) : null}
                     </TouchableOpacity>
                   ))}

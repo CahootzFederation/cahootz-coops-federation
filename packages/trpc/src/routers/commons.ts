@@ -10,6 +10,8 @@ import {
 } from "../procedures/index.js";
 import { COMMONS_COOP_ID, ensureCommonsMembership, ensureUserHandle } from "../lib/commons.js";
 import { toE164 } from "../lib/phone.js";
+import { encodeMentions } from "../lib/mentions.js";
+import { ensureSageBotUser, SAGE_HANDLE } from "../lib/bot.js";
 import {
   sendApplicationSubmittedNotification,
   sendCommonsSuggestionNotification,
@@ -1387,9 +1389,11 @@ export const commonsRouter = router({
       const { accountUser } = ctx as AccountAuthenticatedContext;
       await requireActiveCommonsMembership(ctx.db, accountUser.id, input.coopId);
       await ensureUserHandle(ctx.db, accountUser);
+      await ensureSageBotUser(ctx.db);
+      const { content: encodedContent, mentionedUsers } = await encodeMentions(ctx.db, input.content);
       const classification = classifyPost({
         title: input.title,
-        content: input.content,
+        content: encodedContent,
         tag: input.tag,
         mediaCount: input.media.length,
       });
@@ -1398,8 +1402,8 @@ export const commonsRouter = router({
         data: {
           coopId: input.coopId,
           authorId: accountUser.id,
-          title: input.title || titleFromContent(input.content),
-          content: input.content,
+          title: input.title || titleFromContent(encodedContent),
+          content: encodedContent,
           tag: input.tag,
           classification: classification.classification,
           classificationConfidence: classification.classificationConfidence,
@@ -1441,9 +1445,40 @@ export const commonsRouter = router({
         coopId: input.coopId,
         postId: post.id,
         title: input.title,
-        content: input.content,
+        content: encodedContent,
         tag: input.tag,
       });
+
+      const sageMention = mentionedUsers.find((u) => u.isBot && u.handle === SAGE_HANDLE);
+      if (sageMention) {
+        try {
+          const sage = await ensureSageBotUser(ctx.db);
+          const agent = getAgent("sage-commons-reply");
+          if (agent) {
+            const { reply } = await agent.run({
+              coopId: input.coopId,
+              message: encodedContent,
+            });
+            await ctx.db.commonsComment.create({
+              data: { postId: post.id, authorId: sage.id, content: reply },
+            });
+          }
+        } catch (err) {
+          console.error("Sage auto-reply on createPost failed:", err);
+        }
+      }
+
+      for (const mentioned of mentionedUsers) {
+        if (mentioned.isBot || mentioned.id === accountUser.id) continue;
+        void createNotificationAndPush(ctx.db, {
+          userId: mentioned.id,
+          coopId: input.coopId,
+          type: "MENTION",
+          title: "You were mentioned",
+          body: `${displayName(accountUser)} mentioned you in a post.`,
+          data: { postId: post.id, coopId: input.coopId },
+        });
+      }
 
       return { post: mapPostWithGroup(post, coop.name) };
     }),
@@ -1500,12 +1535,14 @@ export const commonsRouter = router({
         });
       }
       await requireActiveCommonsMembership(ctx.db, accountUser.id, post.coopId);
+      await ensureSageBotUser(ctx.db);
+      const { content: encodedContent, mentionedUsers } = await encodeMentions(ctx.db, input.content);
 
       const comment = await ctx.db.commonsComment.create({
         data: {
           postId,
           authorId: accountUser.id,
-          content: input.content,
+          content: encodedContent,
           media: input.media.length
             ? {
                 create: input.media.map((media, index) => ({
@@ -1541,6 +1578,49 @@ export const commonsRouter = router({
             postId: post.id,
             coopId: post.coopId,
           },
+        });
+      }
+
+      const sageMention = mentionedUsers.find((u) => u.isBot && u.handle === SAGE_HANDLE);
+      if (sageMention) {
+        try {
+          const sage = await ensureSageBotUser(ctx.db);
+          const agent = getAgent("sage-commons-reply");
+          if (agent) {
+            const priorComments = await ctx.db.commonsComment.findMany({
+              where: { postId: post.id, id: { not: comment.id } },
+              orderBy: { createdAt: "asc" },
+              take: 10,
+              include: { author: { select: { name: true, email: true, handle: true } } },
+            });
+            const threadContext = [
+              `Original post: ${post.content}`,
+              ...priorComments.map((c) => `${displayName(c.author)}: ${c.content}`),
+            ].join("\n");
+
+            const { reply } = await agent.run({
+              coopId: post.coopId,
+              message: encodedContent,
+              threadContext,
+            });
+            await ctx.db.commonsComment.create({
+              data: { postId: post.id, authorId: sage.id, content: reply },
+            });
+          }
+        } catch (err) {
+          console.error("Sage auto-reply on createComment failed:", err);
+        }
+      }
+
+      for (const mentioned of mentionedUsers) {
+        if (mentioned.isBot || mentioned.id === accountUser.id) continue;
+        void createNotificationAndPush(ctx.db, {
+          userId: mentioned.id,
+          coopId: post.coopId,
+          type: "MENTION",
+          title: "You were mentioned",
+          body: `${displayName(accountUser)} mentioned you in a comment.`,
+          data: { postId: post.id, coopId: post.coopId },
         });
       }
 
@@ -1594,9 +1674,11 @@ export const commonsRouter = router({
         });
       }
 
+      await ensureSageBotUser(ctx.db);
+      const { content: encodedContent } = await encodeMentions(ctx.db, input.content);
       const updated = await ctx.db.commonsComment.update({
         where: { id: input.commentId },
-        data: { content: input.content },
+        data: { content: encodedContent },
         include: {
           author: { select: { name: true, email: true, handle: true } },
           media: { orderBy: { order: "asc" } },
@@ -1722,7 +1804,7 @@ export const commonsRouter = router({
 
       const receiver = await ctx.db.user.findUnique({
         where: { id: input.receiverId },
-        select: { id: true, deletedAt: true },
+        select: { id: true, deletedAt: true, isBot: true, handle: true },
       });
       if (!receiver || receiver.deletedAt) {
         throw new TRPCError({
@@ -1731,14 +1813,59 @@ export const commonsRouter = router({
         });
       }
 
+      const isSage = receiver.isBot && receiver.handle === SAGE_HANDLE;
+      if (isSage) {
+        await requireActiveCommonsMembership(ctx.db, accountUser.id, input.coopId);
+      }
+
+      const { content: encodedContent } = await encodeMentions(ctx.db, input.content);
+
       const message = await ctx.db.directMessage.create({
         data: {
           coopId: input.coopId,
           senderId: accountUser.id,
           receiverId: input.receiverId,
-          content: input.content,
+          content: encodedContent,
         },
       });
+
+      if (isSage) {
+        try {
+          const agent = getAgent("sage-commons-reply");
+          if (agent) {
+            const priorMessages = await ctx.db.directMessage.findMany({
+              where: {
+                OR: [
+                  { senderId: accountUser.id, receiverId: receiver.id },
+                  { senderId: receiver.id, receiverId: accountUser.id },
+                ],
+              },
+              orderBy: { createdAt: "asc" },
+              take: 20,
+            });
+            const threadContext = priorMessages
+              .filter((m) => m.id !== message.id)
+              .map((m) => `${m.senderId === accountUser.id ? displayName(accountUser) : "Sage"}: ${m.content}`)
+              .join("\n");
+
+            const { reply } = await agent.run({
+              coopId: input.coopId,
+              message: encodedContent,
+              threadContext,
+            });
+            await ctx.db.directMessage.create({
+              data: {
+                coopId: input.coopId,
+                senderId: receiver.id,
+                receiverId: accountUser.id,
+                content: reply,
+              },
+            });
+          }
+        } catch (err) {
+          console.error("Sage DM auto-reply failed:", err);
+        }
+      }
 
       return {
         message: {
@@ -1763,7 +1890,7 @@ export const commonsRouter = router({
       orderBy: { lastActiveAt: "desc" },
       take: 50,
       include: {
-        user: { select: { id: true, name: true, email: true } },
+        user: { select: { id: true, name: true, email: true, handle: true } },
       },
     });
 
@@ -1771,6 +1898,7 @@ export const commonsRouter = router({
       members: memberships.map((membership) => ({
         id: membership.user.id,
         name: displayName(membership.user),
+        handle: personHandle(membership.user),
         role: "Cahootz Commons",
       })),
     };

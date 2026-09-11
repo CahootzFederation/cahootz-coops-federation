@@ -7,7 +7,6 @@ import {
   Platform,
   ScrollView,
   Share,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -32,6 +31,8 @@ import {
   type CommonsMediaPreview,
 } from '@/components/commons-media-viewer';
 import { Text } from '@/components/ui/text';
+import { MentionText } from '@/components/mention-text';
+import { MentionComposerInput } from '@/components/mention-composer-input';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsPost, type CommonsProfile } from '@/lib/api';
 import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
@@ -397,8 +398,18 @@ export default function CommonsPostDetailScreen() {
               </TouchableOpacity>
               <UserCircle size={20} color={THEME.primary} />
             </View>
-            <Text className="mt-3 text-2xl font-black leading-8 text-gray-950">{post.title}</Text>
-            {post.body ? <Text className="mt-3 text-base leading-6 text-gray-700">{post.body}</Text> : null}
+            <MentionText
+              content={post.title}
+              className="mt-3"
+              style={{ fontSize: 24, lineHeight: 32, fontWeight: '900', color: '#030712' }}
+            />
+            {post.body ? (
+              <MentionText
+                content={post.body}
+                className="mt-3"
+                style={{ fontSize: 16, lineHeight: 24, color: '#374151' }}
+              />
+            ) : null}
 
             {post.media?.length ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4">
@@ -472,9 +483,10 @@ export default function CommonsPostDetailScreen() {
                     </View>
                     {editingCommentId === comment.id ? (
                       <View className="mt-1 flex-row items-center gap-2">
-                        <TextInput
+                        <MentionComposerInput
                           value={editDraft}
                           onChangeText={setEditDraft}
+                          coopId={coopId}
                           className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-sm text-gray-900"
                           multiline
                         />
@@ -491,7 +503,11 @@ export default function CommonsPostDetailScreen() {
                         </TouchableOpacity>
                       </View>
                     ) : comment.body ? (
-                      <Text className="mt-1 text-sm leading-5 text-stone-700">{comment.body}</Text>
+                      <MentionText
+                        content={comment.body}
+                        className="mt-1"
+                        style={{ fontSize: 14, lineHeight: 20, color: '#44403C' }}
+                      />
                     ) : null}
                     {comment.media?.length ? (
                       <View className="mt-2 flex-row flex-wrap gap-2">
@@ -547,12 +563,13 @@ export default function CommonsPostDetailScreen() {
             >
               <ImagePlus size={18} color={commentMedia.length >= 4 ? '#9CA3AF' : THEME.ink} />
             </TouchableOpacity>
-            <TextInput
+            <MentionComposerInput
               value={commentDraft}
               onChangeText={(text) => {
                 setCommentDraft(text);
                 if (error) setError('');
               }}
+              coopId={coopId}
               placeholder="Write a comment..."
               placeholderTextColor={THEME.muted}
               multiline

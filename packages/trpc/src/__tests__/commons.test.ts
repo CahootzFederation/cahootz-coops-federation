@@ -629,6 +629,7 @@ describe("commonsRouter", () => {
       {
         id: "user_2",
         name: "Maya R.",
+        handle: "mayar",
         role: "Cahootz Commons",
       },
     ]);

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
+import { MentionText } from '@/components/mention-text';
 import { api, type DirectMember } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 
@@ -304,9 +305,11 @@ export default function MessagesScreen() {
                     message.fromMe ? 'self-end bg-emerald-800' : 'self-start bg-stone-100'
                   }`}
                 >
-                  <Text className={`text-sm leading-5 ${message.fromMe ? 'text-white' : 'text-gray-800'}`}>
-                    {message.body}
-                  </Text>
+                  <MentionText
+                    content={message.body}
+                    style={{ fontSize: 14, lineHeight: 20, color: message.fromMe ? '#FFFFFF' : '#1F2937' }}
+                    mentionClassName={message.fromMe ? 'font-bold text-white underline' : 'font-bold text-red-700'}
+                  />
                   <View className={`mt-1 flex-row items-center gap-1 ${message.fromMe ? 'self-end' : 'self-start'}`}>
                     <Text className={`text-xs ${message.fromMe ? 'text-white/60' : 'text-gray-400'}`}>
                       {message.time}

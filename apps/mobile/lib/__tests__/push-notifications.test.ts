@@ -1,6 +1,6 @@
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 
 import { api } from "../api";
 import {

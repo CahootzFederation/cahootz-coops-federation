@@ -13,6 +13,7 @@ datasource db {
 }
 
 model User {
+  notificationPreference NotificationPreference?
   id                  String     @id @default(cuid())
   email               String     @unique
   handle              String?    @unique
@@ -1532,7 +1533,22 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@index([userId, coopId, read, createdAt])
+  @@index([userId, createdAt, id])
   @@index([coopId])
+  @@schema("public")
+}
+
+model NotificationPreference {
+  userId String @id
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pushEnabled Boolean @default(true)
+  community Boolean @default(true)
+  governance Boolean @default(true)
+  payments Boolean @default(true)
+  orders Boolean @default(true)
+  other Boolean @default(true)
+  updatedAt DateTime @updatedAt
+
   @@schema("public")
 }
 

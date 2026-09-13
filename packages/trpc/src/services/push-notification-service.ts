@@ -1,3 +1,9 @@
+import type { NotificationPreferences } from "@repo/validators/notification";
+import {
+  defaultNotificationPreferences,
+  notificationCategory,
+} from "@repo/validators/notification";
+
 type PushPayload = {
   userId: string;
   coopId: string;
@@ -10,6 +16,11 @@ type PushPayload = {
 type DbClient = {
   notification: {
     create: (args: any) => Promise<any>;
+  };
+  notificationPreference: {
+    findUnique: (args: {
+      where: { userId: string };
+    }) => Promise<NotificationPreferences | null>;
   };
   pushDevice: {
     findMany: (args: any) => Promise<Array<{ expoPushToken: string }>>;
@@ -24,8 +35,11 @@ function chunk<T>(items: T[], size: number) {
   return chunks;
 }
 
-export async function createNotificationAndPush(db: DbClient, payload: PushPayload) {
-  await db.notification.create({
+export async function createNotificationAndPush(
+  db: DbClient,
+  payload: PushPayload,
+) {
+  const notification = await db.notification.create({
     data: {
       userId: payload.userId,
       coopId: payload.coopId,
@@ -35,6 +49,16 @@ export async function createNotificationAndPush(db: DbClient, payload: PushPaylo
       data: payload.data || {},
     },
   });
+
+  const preferences =
+    (await db.notificationPreference.findUnique({
+      where: { userId: payload.userId },
+    })) || defaultNotificationPreferences;
+  if (
+    !preferences.pushEnabled ||
+    !preferences[notificationCategory(payload.type)]
+  )
+    return;
 
   const devices = await db.pushDevice.findMany({
     where: {
@@ -52,7 +76,8 @@ export async function createNotificationAndPush(db: DbClient, payload: PushPaylo
     sound: "default",
     title: payload.title,
     body: payload.body,
-    data: payload.data || {},
+    data: { ...payload.data, notificationId: notification.id },
+    channelId: "commons",
   }));
 
   for (const batch of chunk(messages, 100)) {
@@ -68,7 +93,11 @@ export async function createNotificationAndPush(db: DbClient, payload: PushPaylo
       });
 
       if (!response.ok) {
-        console.warn("Expo push send failed", response.status, await response.text());
+        console.warn(
+          "Expo push send failed",
+          response.status,
+          await response.text(),
+        );
       }
     } catch (error) {
       console.warn("Expo push send skipped", error);

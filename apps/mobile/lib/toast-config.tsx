@@ -1,5 +1,4 @@
 import React from 'react';
-import { View, Text } from 'react-native';
 import { BaseToast, ErrorToast, InfoToast } from 'react-native-toast-message';
 
 /**
@@ -10,6 +9,8 @@ export const toastConfig = {
     <BaseToast
       {...props}
       style={{
+        width: '92%',
+        maxWidth: 340,
         borderLeftColor: '#10b981',
         backgroundColor: '#064e3b',
       }}
@@ -29,6 +30,8 @@ export const toastConfig = {
     <ErrorToast
       {...props}
       style={{
+        width: '92%',
+        maxWidth: 340,
         borderLeftColor: '#ef4444',
         backgroundColor: '#7f1d1d',
       }}
@@ -48,6 +51,8 @@ export const toastConfig = {
     <InfoToast
       {...props}
       style={{
+        width: '92%',
+        maxWidth: 340,
         borderLeftColor: '#3b82f6',
         backgroundColor: '#1e3a8a',
       }}

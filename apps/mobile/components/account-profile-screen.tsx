@@ -150,9 +150,15 @@ export default function AccountProfileScreen() {
     },
     {
       label: 'Alerts',
-      description: 'Governance, payments, matches, and mentions',
+      description: 'Updates from your account activity',
       icon: Bell,
       href: '/(tabs)/notifications',
+    },
+    {
+      label: 'Notification settings',
+      description: 'Choose push notifications and categories',
+      icon: Settings,
+      href: '/(authenticated)/notification-settings',
     },
     {
       label: 'Commons Marketplace',

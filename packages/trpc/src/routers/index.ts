@@ -5,6 +5,7 @@ import { proposalRouter } from "./proposal.js";
 import { healthRouter } from "./health.js";
 import { applicationRouter } from "./application.js";
 import { authRouter } from "./auth.js";
+import { anonymousProfileRouter } from "./anonymous-profile.js";
 import { adminRouter } from "./admin";
 import { adminAuthRouter } from "./admin-auth.js";
 import { ucTransferRouter } from "./uc-transfer.js";
@@ -37,6 +38,7 @@ import { knowledgeBaseRouter } from "./knowledge-base.js";
 
 export const appRouter = router({
   user: userRouter,
+  anonymousProfile: anonymousProfileRouter,
   proposal: proposalRouter,
   health: healthRouter,
   application: applicationRouter,

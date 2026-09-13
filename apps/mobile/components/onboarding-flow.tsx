@@ -5,6 +5,7 @@ import { useSubmitApplication } from '@/hooks/use-api';
 import { useAuth } from '@/contexts/auth-context';
 import { getApiUrl } from '@/lib/config';
 import { api } from '@/lib/api';
+import { getAnonymousId, clearAnonymousId } from '@/lib/anonymous-id';
 import { buildMobileApplicationSubmissionInput } from '@/lib/application-submission';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -67,6 +68,7 @@ interface ApplicationQuestion {
 
 type OnboardingFlowProps = {
   initialStep?: 'intro' | 'browse' | 'login';
+  onBack?: () => void;
 };
 
 const getInitialStep = (initialStep: OnboardingFlowProps['initialStep']) => {
@@ -75,7 +77,7 @@ const getInitialStep = (initialStep: OnboardingFlowProps['initialStep']) => {
   return 0;
 };
 
-export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlowProps = {}) {
+export default function OnboardingFlow({ initialStep = 'intro', onBack }: OnboardingFlowProps = {}) {
   const [currentStep, setCurrentStep] = useState(getInitialStep(initialStep));
   const [selectedCoopId, setSelectedCoopId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -642,10 +644,12 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
 
     try {
       const isDemoEmail = loginData.email.trim().toLowerCase() === DEMO_LOGIN_EMAIL;
+      const anonymousId = await getAnonymousId();
       const data = await api.verifyLoginCode(
         loginData.email,
         loginData.code,
-        isDemoEmail ? DEMO_COOP_ID : undefined
+        isDemoEmail ? DEMO_COOP_ID : undefined,
+        anonymousId
       );
       console.log('📥 Verify code response:', JSON.stringify(data, null, 2));
 
@@ -660,6 +664,9 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
         };
         console.log('👤 User data:', user);
         await login(user);
+        if (anonymousId) {
+          void clearAnonymousId();
+        }
         console.log('🎉 Login complete!');
         router.replace('/(tabs)' as any);
       } else {
@@ -1530,6 +1537,17 @@ export default function OnboardingFlow({ initialStep = 'intro' }: OnboardingFlow
     <ScrollView className="flex-1 bg-background">
       <View className="min-h-screen flex-1 justify-center p-6">
         <View className="w-full max-w-md mx-auto">
+          {onBack && (
+            <Pressable
+              onPress={onBack}
+              className="flex-row items-center self-start mb-4"
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <Icon as={ChevronLeft} size={16} className="text-muted-foreground" />
+              <Text className="text-muted-foreground ml-1">Back</Text>
+            </Pressable>
+          )}
           {/* Header */}
           <View className="items-center mb-8">
             <View className="bg-primary p-3 rounded-full mb-4">

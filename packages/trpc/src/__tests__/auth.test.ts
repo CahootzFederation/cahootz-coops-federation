@@ -88,6 +88,11 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
       findFirst: vi.fn().mockResolvedValue(null),
       ...overrides.wallet,
     },
+    anonymousProfile: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      update: vi.fn().mockResolvedValue({}),
+      ...overrides.anonymousProfile,
+    },
   };
 }
 
@@ -249,6 +254,26 @@ describe('auth.requestLoginCode', () => {
     expect(db.loginCode.create).not.toHaveBeenCalled();
   });
 
+  it('bypasses login-code generation for seeded *@test.cahootz.local test users', async () => {
+    const db = makeDb({
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'tester_1',
+          status: 'ACTIVE',
+          walletAddress: null,
+          wallets: [],
+          memberships: [],
+        }),
+      },
+    });
+
+    const result = await callerFor(db).requestLoginCode({ email: 'tester1@test.cahootz.local' });
+
+    expect(result.success).toBe(true);
+    expect(db.loginCode.create).not.toHaveBeenCalled();
+    expect(sendLoginCode).not.toHaveBeenCalled();
+  });
+
   it('normalises email to lowercase before lookup', async () => {
     const db = makeDb({
       user: {
@@ -369,6 +394,47 @@ describe('auth.verifyLoginCode', () => {
     expect(result.user?.coop?.id).toBe('cahootz');
     expect(result.user?.coop?.name).toBe('Unity Coop');
     expect(result.user?.coop?.shortName).toBe('unity-coop');
+  });
+
+  it('logs in a seeded test user with code 000000 without a stored login code', async () => {
+    const db = makeDb({
+      loginCode: {
+        findFirst: vi.fn().mockResolvedValue(null), // no code was ever generated
+        update: vi.fn(),
+      },
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          ...ACTIVE_USER,
+          email: 'tester1@test.cahootz.local',
+          memberships: [ACTIVE_MEMBERSHIP],
+        }),
+      },
+      coopConfig: {
+        findFirst: vi.fn().mockResolvedValue(COOP_CONFIG),
+      },
+    });
+
+    const result = await callerFor(db).verifyLoginCode({
+      email: 'tester1@test.cahootz.local',
+      code: '000000',
+    });
+
+    expect(result.success).toBe(true);
+    expect(db.loginCode.update).not.toHaveBeenCalled();
+    expect(db.session.create).toHaveBeenCalled();
+  });
+
+  it('rejects a wrong code for a seeded test user (bypass only accepts the fixed code)', async () => {
+    const db = makeDb({
+      loginCode: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        update: vi.fn(),
+      },
+    });
+
+    await expect(
+      callerFor(db).verifyLoginCode({ email: 'tester1@test.cahootz.local', code: '999999' }),
+    ).rejects.toThrow('Invalid or expired code');
   });
 
   it('rejects an expired or already-used login code', async () => {
@@ -498,5 +564,122 @@ describe('auth.verifyLoginCode', () => {
     expect(result.user?.coop?.id).toBe('cahootz');
     expect(result.user?.coop?.name).toBe('Cahootz Commons');
     expect(result.user?.coop?.shortName).toBe('Cahootz');
+  });
+
+  describe('anonymous profile migration', () => {
+    const ANONYMOUS_PROFILE = {
+      id: 'anon_1',
+      anonymousId: 'anon-device-1',
+      selfDescription: 'I live in East Oakland and care about food access.',
+      goals: 'Meet neighbors and start a community garden.',
+      interests: ['food', 'housing'],
+      resourcesOffered: ['rides'],
+      resourcesNeeded: ['tools'],
+      businessSummary: null,
+      locationSummary: 'East Oakland',
+      migratedAt: null,
+    };
+
+    it('migrates anonymous answers onto a fresh account and marks the row migrated', async () => {
+      const db = makeDb({
+        loginCode: {
+          findFirst: vi.fn().mockResolvedValue(VALID_LOGIN_CODE),
+          update: vi.fn().mockResolvedValue({}),
+        },
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ ...ACTIVE_USER, memberships: [ACTIVE_MEMBERSHIP] }),
+          update: vi.fn().mockResolvedValue({
+            ...ACTIVE_USER,
+            selfDescription: ANONYMOUS_PROFILE.selfDescription,
+            shortTermGoals: ANONYMOUS_PROFILE.goals,
+            interests: ANONYMOUS_PROFILE.interests,
+            resourcesOffered: ANONYMOUS_PROFILE.resourcesOffered,
+            resourcesNeeded: ANONYMOUS_PROFILE.resourcesNeeded,
+            businessSummary: ANONYMOUS_PROFILE.businessSummary,
+            locationSummary: ANONYMOUS_PROFILE.locationSummary,
+            profileOnboardingCompletedAt: new Date(),
+          }),
+        },
+        anonymousProfile: {
+          findFirst: vi.fn().mockResolvedValue(ANONYMOUS_PROFILE),
+          update: vi.fn().mockResolvedValue({}),
+        },
+      });
+
+      const result = await callerFor(db).verifyLoginCode({
+        email: 'alice@example.com',
+        code: '123456',
+        anonymousId: 'anon-device-1',
+      });
+
+      expect(result.success).toBe(true);
+      expect(db.anonymousProfile.findFirst).toHaveBeenCalledWith({
+        where: { anonymousId: 'anon-device-1', migratedAt: null },
+      });
+      expect(db.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: ACTIVE_USER.id },
+          data: expect.objectContaining({
+            selfDescription: ANONYMOUS_PROFILE.selfDescription,
+            shortTermGoals: ANONYMOUS_PROFILE.goals,
+            interests: ANONYMOUS_PROFILE.interests,
+            profileOnboardingCompletedAt: expect.any(Date),
+            profileCompleted: true,
+          }),
+        }),
+      );
+      expect(db.anonymousProfile.update).toHaveBeenCalledWith({
+        where: { id: ANONYMOUS_PROFILE.id },
+        data: { migratedToUserId: ACTIVE_USER.id, migratedAt: expect.any(Date) },
+      });
+    });
+
+    it('does not look up an anonymous profile when no anonymousId is provided', async () => {
+      const db = makeDb({
+        loginCode: {
+          findFirst: vi.fn().mockResolvedValue(VALID_LOGIN_CODE),
+          update: vi.fn().mockResolvedValue({}),
+        },
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ ...ACTIVE_USER, memberships: [ACTIVE_MEMBERSHIP] }),
+        },
+      });
+
+      await callerFor(db).verifyLoginCode({ email: 'alice@example.com', code: '123456' });
+
+      expect(db.anonymousProfile.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('ignores anonymous data for an account that already completed onboarding', async () => {
+      const db = makeDb({
+        loginCode: {
+          findFirst: vi.fn().mockResolvedValue(VALID_LOGIN_CODE),
+          update: vi.fn().mockResolvedValue({}),
+        },
+        user: {
+          findUnique: vi.fn().mockResolvedValue({
+            ...ACTIVE_USER,
+            profileOnboardingCompletedAt: new Date('2026-01-02T00:00:00.000Z'),
+            memberships: [ACTIVE_MEMBERSHIP],
+          }),
+          findUniqueOrThrow: vi.fn().mockResolvedValue({
+            ...ACTIVE_USER,
+            profileOnboardingCompletedAt: new Date('2026-01-02T00:00:00.000Z'),
+            memberships: [ACTIVE_MEMBERSHIP],
+          }),
+        },
+      });
+
+      await callerFor(db).verifyLoginCode({
+        email: 'alice@example.com',
+        code: '123456',
+        anonymousId: 'anon-device-1',
+      });
+
+      expect(db.anonymousProfile.findFirst).not.toHaveBeenCalled();
+      expect(db.user.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ profileCompleted: true }) }),
+      );
+    });
   });
 });

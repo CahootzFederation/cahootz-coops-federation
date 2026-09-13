@@ -12,6 +12,7 @@ import {
   Copy,
   HelpCircle,
   LogOut,
+  RotateCcw,
   Settings,
   Shield,
   Store,
@@ -45,7 +46,7 @@ type NavItem = {
 };
 
 export default function AccountProfileScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, resetProfileOnboarding } = useAuth();
   const [copiedAddress, setCopiedAddress] = React.useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = React.useState(false);
 
@@ -69,6 +70,15 @@ export default function AccountProfileScreen() {
     } catch (error) {
       console.error('Logout error:', error);
       Alert.alert('Sign out failed', 'Please try again.');
+    }
+  };
+
+  const handleResetOnboarding = async () => {
+    try {
+      await resetProfileOnboarding();
+    } catch (error) {
+      console.error('Reset onboarding error:', error);
+      Alert.alert('Could not reset onboarding', 'Please try again.');
     }
   };
 
@@ -169,6 +179,16 @@ export default function AccountProfileScreen() {
             description: 'Switch EAS update channels for testing',
             icon: Settings,
             href: '/(authenticated)/debug-updates',
+          },
+        ]
+      : []),
+    ...(__DEV__
+      ? [
+          {
+            label: 'Reset Onboarding (Dev)',
+            description: 'Force the welcome screen to show again on this device',
+            icon: RotateCcw,
+            onPress: () => void handleResetOnboarding(),
           },
         ]
       : []),

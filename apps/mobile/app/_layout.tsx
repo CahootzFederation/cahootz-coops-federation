@@ -133,8 +133,7 @@ export default Sentry.wrap(function RootLayout() {
             <CartProvider>
               <PaymentConfirmationProvider>
                 <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-                  <Stack screenOptions={{ headerShown: false }}>
-                  </Stack>
+                  <Stack screenOptions={{ headerShown: false }} />
                   <StatusBar style="auto" />
                   <PortalHost />
                   <Toast config={toastConfig} />

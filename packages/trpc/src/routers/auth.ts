@@ -34,6 +34,18 @@ function isDemoLogin(email: string, code?: string, coopId?: string) {
   return code === undefined || code === DEMO_LOGIN_CODE;
 }
 
+// Lets bulk-seeded test users (see packages/db/scripts/seed-test-users.ts) log
+// in instantly on any device without email/SMS, so multiple simulators/phones
+// can be signed in as different people at once. Non-production only.
+const TEST_LOGIN_EMAIL_PATTERN = /^[a-z0-9_-]+@test\.cahootz\.local$/;
+const TEST_LOGIN_CODE = "000000";
+
+function isTestLogin(email: string, code?: string) {
+  if (isProduction) return false;
+  if (!TEST_LOGIN_EMAIL_PATTERN.test(normalizeEmail(email))) return false;
+  return code === undefined || code === TEST_LOGIN_CODE;
+}
+
 export const authRouter = router({
   /**
    * Login endpoint that checks user status
@@ -386,7 +398,7 @@ export const authRouter = router({
             })
           : null;
 
-        if (isDemoLogin(email, undefined, input.coopId)) {
+        if (isDemoLogin(email, undefined, input.coopId) || isTestLogin(email)) {
           return {
             success: true,
             message: "Login code sent to your email",
@@ -441,6 +453,7 @@ export const authRouter = router({
       email: z.string().email("Invalid email address"),
       code: z.string().length(6, "Code must be 6 digits"),
       coopId: z.string().min(1).optional(),
+      anonymousId: z.string().min(1).optional(),
     }))
     .output(z.object({
       success: z.boolean(),
@@ -485,9 +498,10 @@ export const authRouter = router({
       try {
         const email = normalizeEmail(input.email);
         const isDemoCode = isDemoLogin(email, input.code, input.coopId);
+        const isBypassCode = isDemoCode || isTestLogin(email, input.code);
 
         // Find the login code
-        const loginCode = isDemoCode
+        const loginCode = isBypassCode
           ? null
           : await context.db.loginCode.findFirst({
               where: {
@@ -500,7 +514,7 @@ export const authRouter = router({
               },
             });
 
-        if (!loginCode && !isDemoCode) {
+        if (!loginCode && !isBypassCode) {
           throw new TRPCError({
             code: "UNAUTHORIZED",
             message: "Invalid or expired code",
@@ -590,6 +604,39 @@ export const authRouter = router({
             code: "FORBIDDEN",
             message: "No active portal account was found for that email.",
           });
+        }
+
+        // Migrate any pre-auth "who are you / goals" answers this device
+        // collected anonymously (see AnonymousProfile) onto the account that
+        // just logged in, so they never have to answer twice. Only for
+        // accounts that haven't already completed onboarding some other way.
+        if (input.anonymousId && !user.profileOnboardingCompletedAt) {
+          const anonymousProfile = await context.db.anonymousProfile.findFirst({
+            where: { anonymousId: input.anonymousId, migratedAt: null },
+          });
+
+          if (anonymousProfile) {
+            const updatedUser = await context.db.user.update({
+              where: { id: user.id },
+              data: {
+                selfDescription: anonymousProfile.selfDescription,
+                shortTermGoals: anonymousProfile.goals,
+                interests: anonymousProfile.interests,
+                resourcesOffered: anonymousProfile.resourcesOffered,
+                resourcesNeeded: anonymousProfile.resourcesNeeded,
+                businessSummary: anonymousProfile.businessSummary,
+                locationSummary: anonymousProfile.locationSummary,
+                profileOnboardingCompletedAt: new Date(),
+                profileCompleted: true,
+              },
+            });
+            user = { ...user, ...updatedUser };
+
+            await context.db.anonymousProfile.update({
+              where: { id: anonymousProfile.id },
+              data: { migratedToUserId: user.id, migratedAt: new Date() },
+            });
+          }
         }
 
         const activeCoopId =

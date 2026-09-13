@@ -11,6 +11,7 @@ import { PortalHost } from '@rn-primitives/portal';
 import Toast from 'react-native-toast-message';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { NotificationResponseHandler } from '@/components/notification-response-handler';
 import { AuthProvider } from '@/contexts/auth-context';
 import { CartProvider } from '@/contexts/cart-context';
 import { PlatformConfigProvider } from '@/contexts/platform-config-context';
@@ -130,6 +131,7 @@ export default Sentry.wrap(function RootLayout() {
         <StripeWrapper>
           <PlatformConfigProvider>
           <AuthProvider>
+            <NotificationResponseHandler />
             <CartProvider>
               <PaymentConfirmationProvider>
                 <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

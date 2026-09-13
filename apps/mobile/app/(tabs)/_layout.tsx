@@ -1,24 +1,30 @@
-import { Tabs } from 'expo-router';
-import { Bell, LayoutGrid, Scale, UserCircle } from 'lucide-react-native';
-import { Platform } from 'react-native';
+import { Platform, useWindowDimensions } from "react-native";
+import { Tabs } from "expo-router";
+import { Bell, LayoutGrid, Scale, UserCircle } from "lucide-react-native";
 
 export default function TabLayout() {
+  const { fontScale } = useWindowDimensions();
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#FF6B00',
-        tabBarInactiveTintColor: '#64748B',
+        tabBarActiveTintColor: "#FF6B00",
+        tabBarInactiveTintColor: "#64748B",
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
-          borderTopColor: '#F0F2F5',
+          backgroundColor: "#FFFFFF",
+          borderTopColor: "#F0F2F5",
           borderTopWidth: 1,
           paddingTop: 7,
-          paddingBottom: Platform.OS === 'ios' ? 24 : 8,
-          height: Platform.OS === 'ios' ? 88 : 64,
+          paddingBottom: Platform.OS === "ios" ? 24 : 8,
+          height:
+            (Platform.OS === "ios" ? 96 : 72) + Math.max(0, fontScale - 1) * 20,
         },
         tabBarLabelStyle: {
           fontSize: 10,
-          fontWeight: '700',
+          lineHeight: 14,
+          flexShrink: 0,
+          width: "100%",
+          marginHorizontal: 0,
+          fontWeight: "700",
           marginTop: 3,
         },
         headerShown: false,
@@ -28,29 +34,33 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Commons',
-          tabBarIcon: ({ color, size }) => <LayoutGrid size={size} color={color} />,
+          title: "Commons",
+          tabBarIcon: ({ color, size }) => (
+            <LayoutGrid size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="notifications"
         options={{
-          title: 'Alerts',
+          title: "Alerts",
           tabBarIcon: ({ color, size }) => <Bell size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="proposals"
         options={{
-          title: 'Proposals',
+          title: "Proposals",
           tabBarIcon: ({ color, size }) => <Scale size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="wallet"
         options={{
-          title: 'You',
-          tabBarIcon: ({ color, size }) => <UserCircle size={size} color={color} />,
+          title: "You",
+          tabBarIcon: ({ color, size }) => (
+            <UserCircle size={size} color={color} />
+          ),
         }}
       />
 

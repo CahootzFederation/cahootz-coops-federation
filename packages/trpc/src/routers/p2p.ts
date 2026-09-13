@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { Context, CoopScopedContext } from "../context.js";
 import { authenticatedProcedure } from "../procedures/index.js";
 import { router } from "../trpc.js";
+import { legacyNotificationProcedures } from "./notification.js";
 import {
   getUSDBalance,
   sendToSoulaanUser,
@@ -484,122 +485,7 @@ export const p2pRouter = router({
   /**
    * Get notifications
    */
-  getNotifications: authenticatedProcedure
-    .input(z.object({
-      userId: z.string(),
-      unreadOnly: z.boolean().default(false),
-      limit: z.number().default(20),
-    }))
-    .output(z.object({
-      notifications: z.array(z.object({
-        id: z.string(),
-        type: z.string(),
-        title: z.string(),
-        body: z.string(),
-        read: z.boolean(),
-        createdAt: z.string(),
-        data: z.any().optional(),
-      })),
-      unreadCount: z.number(),
-    }))
-    .query(async ({ input, ctx }) => {
-      const context = ctx as Context;
-
-      try {
-        const [notifications, unreadCount] = await Promise.all([
-          context.db.notification.findMany({
-            where: {
-              userId: input.userId,
-              ...(input.unreadOnly ? { read: false } : {}),
-            },
-            orderBy: { createdAt: 'desc' },
-            take: input.limit,
-          }),
-          context.db.notification.count({
-            where: { userId: input.userId, read: false },
-          }),
-        ]);
-
-        return {
-          notifications: notifications.map(n => ({
-            id: n.id,
-            type: n.type,
-            title: n.title,
-            body: n.body,
-            read: n.read,
-            createdAt: n.createdAt.toISOString(),
-            data: n.data,
-          })),
-          unreadCount,
-        };
-      } catch (error) {
-        console.error('💥 ERROR:', error);
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to get notifications",
-          cause: error,
-        });
-      }
-    }),
-
-  /**
-   * Mark notification as read
-   */
-  markNotificationRead: authenticatedProcedure
-    .input(z.object({
-      notificationId: z.string(),
-    }))
-    .output(z.object({
-      success: z.boolean(),
-    }))
-    .mutation(async ({ input, ctx }) => {
-      const context = ctx as Context;
-
-      try {
-        await context.db.notification.update({
-          where: { id: input.notificationId },
-          data: { read: true },
-        });
-        return { success: true };
-      } catch (error) {
-        console.error('💥 ERROR:', error);
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to mark notification as read",
-          cause: error,
-        });
-      }
-    }),
-
-  /**
-   * Mark all notifications as read
-   */
-  markAllNotificationsRead: authenticatedProcedure
-    .input(z.object({
-      userId: z.string(),
-    }))
-    .output(z.object({
-      success: z.boolean(),
-      count: z.number(),
-    }))
-    .mutation(async ({ input, ctx }) => {
-      const context = ctx as Context;
-
-      try {
-        const result = await context.db.notification.updateMany({
-          where: { userId: input.userId, read: false },
-          data: { read: true },
-        });
-        return { success: true, count: result.count };
-      } catch (error) {
-        console.error('💥 ERROR:', error);
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to mark notifications as read",
-          cause: error,
-        });
-      }
-    }),
+  ...legacyNotificationProcedures,
 
   // ─────────────────────────────────────────────────────────
   // Bank Accounts

@@ -90,7 +90,8 @@
     "tailwindcss": "^3.4.17",
     "tailwindcss-animate": "^1.0.7",
     "viem": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@repo/validators": "workspace:*"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

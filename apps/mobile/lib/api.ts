@@ -1,3 +1,4 @@
+import type { NotificationCategory, NotificationCursor, NotificationPage, NotificationPreferences } from '@repo/validators/notification';
 // Expo-compatible API client for Cahootz co-op applications
 // Uses native fetch API - no additional dependencies required
 
@@ -2018,11 +2019,11 @@ export const api = {
   /**
    * Get notifications
    */
-  async getP2PNotifications(userId: string, unreadOnly = false, limit = 20, walletAddress?: string | null) {
+  async getP2PNotifications(userId: string, unreadOnly = false, limit = 20, sessionToken?: string | null) {
     const input = encodeURIComponent(JSON.stringify({ userId, unreadOnly, limit }));
     const response = await fetch(`${API_BASE_URL}/trpc/p2p.getNotifications?input=${input}`, {
       method: 'GET',
-      headers: createApiHeaders(walletAddress),
+      headers: createApiHeaders(null, sessionToken),
     });
 
     const result = await response.json();
@@ -2039,10 +2040,10 @@ export const api = {
   /**
    * Mark notification as read
    */
-  async markNotificationRead(notificationId: string, walletAddress?: string | null) {
+  async markNotificationRead(notificationId: string, sessionToken?: string | null) {
     const response = await fetch(`${API_BASE_URL}/trpc/p2p.markNotificationRead`, {
       method: 'POST',
-      headers: createApiHeaders(walletAddress),
+      headers: createApiHeaders(null, sessionToken),
       body: JSON.stringify({ notificationId })
     });
 
@@ -2060,10 +2061,10 @@ export const api = {
   /**
    * Mark all notifications as read
    */
-  async markAllNotificationsRead(userId: string, walletAddress?: string | null) {
+  async markAllNotificationsRead(userId: string, sessionToken?: string | null) {
     const response = await fetch(`${API_BASE_URL}/trpc/p2p.markAllNotificationsRead`, {
       method: 'POST',
-      headers: createApiHeaders(walletAddress),
+      headers: createApiHeaders(null, sessionToken),
       body: JSON.stringify({ userId })
     });
 
@@ -3127,66 +3128,36 @@ export const api = {
   /**
    * Get user's notifications
    */
-  async getNotifications(
-    walletAddress: string,
-    options?: { limit?: number; cursor?: string; unreadOnly?: boolean }
-  ) {
+  async getNotifications(sessionToken: string, options?: { limit?: number; cursor?: NotificationCursor; unreadOnly?: boolean; category?: NotificationCategory }) {
     const input = encodeURIComponent(JSON.stringify(options || {}));
     const response = await fetch(`${API_BASE_URL}/trpc/notification.getNotifications?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
+      headers: createApiHeaders(null, sessionToken),
     });
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message || 'Failed to get notifications');
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
+    return readTrpcResult<NotificationPage>(response, 'Could not load alerts');
   },
 
-  /**
-   * Get unread notification count
-   */
-  async getUnreadNotificationCount(walletAddress: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/notification.getUnreadCount`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message || 'Failed to get unread count');
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
+  async getUnreadNotificationCount(sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/notification.getUnreadCount`, { headers: createApiHeaders(null, sessionToken) });
+    return readTrpcResult<{ count: number }>(response, 'Could not load unread count');
   },
 
-  /**
-   * Mark notification as read
-   */
-  async markNotificationAsRead(notificationId: string, walletAddress: string) {
+  async markNotificationAsRead(notificationId: string, sessionToken: string) {
     const response = await fetch(`${API_BASE_URL}/trpc/notification.markAsRead`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ notificationId }),
+      method: 'POST', headers: createApiHeaders(null, sessionToken), body: JSON.stringify({ notificationId }),
     });
+    return readTrpcResult<{ success: boolean }>(response, 'Could not mark alert as read');
+  },
 
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message || 'Failed to mark as read');
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+  async getNotificationPreferences(sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/notification.getPreferences`, { headers: createApiHeaders(null, sessionToken) });
+    return readTrpcResult<NotificationPreferences>(response, 'Could not load notification settings');
+  },
 
-    return result.result?.data;
+  async updateNotificationPreferences(sessionToken: string, preferences: Partial<NotificationPreferences>) {
+    const response = await fetch(`${API_BASE_URL}/trpc/notification.updatePreferences`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken), body: JSON.stringify(preferences),
+    });
+    return readTrpcResult<NotificationPreferences>(response, 'Could not save notification settings');
   },
 
   // ── Coop Config ────────────────────────────────────────────────────────────
@@ -3428,22 +3399,11 @@ export const api = {
   /**
    * Mark all notifications as read
    */
-  async markAllNotificationsAsRead(walletAddress: string) {
+  async markAllNotificationsAsRead(sessionToken: string) {
     const response = await fetch(`${API_BASE_URL}/trpc/notification.markAllAsRead`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({}),
+      method: 'POST', headers: createApiHeaders(null, sessionToken), body: JSON.stringify({}),
     });
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message || 'Failed to mark all as read');
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
+    return readTrpcResult<{ success: boolean }>(response, 'Could not mark alerts as read');
   },
 
   async getActiveFeeConfig(walletAddress?: string | null): Promise<{

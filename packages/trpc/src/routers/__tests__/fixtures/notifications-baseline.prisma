@@ -1,0 +1,92 @@
+generator client {
+ provider = "prisma-client-js"
+}
+datasource db {
+ provider = "postgresql"
+ url = env("DATABASE_URL")
+ schemas = ["auth", "public"]
+}
+model User {
+ id String @id
+ email String @unique
+ handle String?
+ name String?
+ phone String?
+ roles String[] @default(["member"])
+ status UserStatus @default(ACTIVE)
+ deletedAt DateTime?
+ walletAddress String?
+ notifications Notification[]
+ pushDevices PushDevice[]
+ @@schema("public")
+}
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REJECTED
+
+  @@schema("public")
+}
+model Session {
+  id     String @id @default(cuid())
+  userId String
+  token  String @unique
+
+  // Session metadata
+  deviceId   String?
+  deviceName String?
+  ipAddress  String
+  userAgent  String?
+
+  // Security
+  issuedAt      DateTime  @default(now())
+  expiresAt     DateTime
+  lastActiveAt  DateTime  @default(now())
+  isRevoked     Boolean   @default(false)
+  revokedAt     DateTime?
+  revokedReason String?
+
+  @@index([userId, isRevoked])
+  @@index([token])
+  @@index([expiresAt])
+  @@schema("auth")
+}
+model Notification {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coopId String
+
+  type  String // PAYMENT_RECEIVED, PAYMENT_SENT, WITHDRAWAL_COMPLETE, etc.
+  title String
+  body  String
+  data  Json? // Additional data (transferId, amount, etc)
+  read  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, coopId, read, createdAt])
+  @@index([coopId])
+  @@schema("public")
+}
+model PushDevice {
+  id        String @id @default(cuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coopId    String @default("cahootz")
+
+  expoPushToken String  @unique
+  platform      String
+  deviceName    String?
+  appVersion    String?
+  enabled       Boolean @default(true)
+
+  lastRegisteredAt DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId, enabled])
+  @@index([coopId, enabled])
+  @@schema("public")
+}

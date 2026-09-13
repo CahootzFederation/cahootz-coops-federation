@@ -29,12 +29,15 @@ export async function registerForNativePushNotifications(
 ) {
   if (!sessionToken || Platform.OS === 'web') return { registered: false };
 
+  const preferences = await api.getNotificationPreferences(sessionToken);
+  if (!preferences.pushEnabled) return { registered: false };
+
   const existingPermission = await Notifications.getPermissionsAsync();
   const existingPermissionState = existingPermission as unknown as {
     granted?: boolean;
     status?: string;
   };
-  let granted = existingPermissionState.granted || existingPermissionState.status === 'granted';
+  let granted = existingPermissionState.granted || existingPermissionState.status === 'granted' || existingPermission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
 
   if (!granted) {
     const requestedPermission = await Notifications.requestPermissionsAsync();
@@ -74,4 +77,11 @@ export async function registerForNativePushNotifications(
   );
 
   return { registered: true };
+}
+
+export async function getPushPermissionStatus(): Promise<string> {
+  if (Platform.OS === 'web') return 'Push notifications are available in the mobile app. Your preferences still apply to your mobile devices.';
+  const permission = await Notifications.getPermissionsAsync();
+  if (permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL) return 'Notifications are allowed on this device.';
+  return permission.canAskAgain ? 'Notifications are not enabled on this device yet.' : 'Notifications are blocked. Allow them in your device settings.';
 }

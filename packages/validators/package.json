@@ -13,6 +13,11 @@
       "import": "./dist/index.js",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./notification": {
+      "types": "./dist/notification.d.ts",
+      "import": "./dist/notification.js",
+      "default": "./dist/notification.js"
     }
   },
   "scripts": {

@@ -6,6 +6,7 @@ import { setActiveCoopConfig, resetCoopConfig, type CoopConfig } from '@/lib/coo
 import { onSessionExpired } from '@/lib/api';
 import { registerForNativePushNotifications } from '@/lib/push-notifications';
 import { canAccessUpdateChannelDebug, clearUpdateChannelOverrideQuietly } from '@/lib/update-channel-debug';
+import { clearAnonymousProfileIntroSeen } from '@/lib/anonymous-id';
 
 interface User {
   id: string;
@@ -50,6 +51,16 @@ interface AuthContextType {
   login: (user: User) => Promise<void>;
   logout: () => Promise<void>;
   deferProfileOnboarding: () => Promise<void>;
+  resetProfileOnboarding: () => Promise<void>;
+  // Dev/QA only: true while the root layout should show the welcome tour
+  // in place of the normal navigator, regardless of which screen/tab the
+  // "Preview Welcome Screen" admin action was triggered from. A plain
+  // router navigation to "/" doesn't reliably work here, since the tabs
+  // group's own index route can resolve to the same path and no-op the
+  // navigation — this bypasses routing entirely.
+  forceWelcomeIntro: boolean;
+  previewWelcomeScreen: () => Promise<void>;
+  dismissForcedWelcomeIntro: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -58,6 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [profileOnboardingDeferredUserId, setProfileOnboardingDeferredUserId] = useState<string | null>(null);
+  const [forceWelcomeIntro, setForceWelcomeIntro] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const segments = useSegments();
@@ -220,6 +232,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfileOnboardingDeferredUserId(user.id);
   };
 
+  // Dev/QA helper: forces the welcome/profile-onboarding screen to show again
+  // for the current device, without touching the server-side record. Clears
+  // the local "deferred" flag and the locally cached completion timestamp so
+  // the navigation effect above redirects to /profile-onboarding on its own.
+  const resetProfileOnboarding = async () => {
+    if (!user) return;
+
+    await secureStorage.removeItem(secureStorage.keys.PROFILE_ONBOARDING_DEFERRED_USER);
+    setProfileOnboardingDeferredUserId(null);
+
+    const updatedUser = { ...user, profileOnboardingCompletedAt: null };
+    await secureStorage.setItem(secureStorage.keys.USER, JSON.stringify(updatedUser));
+    setUser(updatedUser);
+  };
+
+  // Dev/QA helper: the Welcome Wizard only ever shows on a logged-out
+  // device, so previewing it again means clearing its "seen" flag and
+  // signing out. Setting forceWelcomeIntro makes app/index.tsx route back
+  // into the wizard immediately, from whichever screen this was triggered
+  // from — no router navigation involved here.
+  const previewWelcomeScreen = async () => {
+    await clearAnonymousProfileIntroSeen();
+    if (user) {
+      await logout();
+    }
+    setForceWelcomeIntro(true);
+  };
+
+  const dismissForcedWelcomeIntro = () => {
+    setForceWelcomeIntro(false);
+  };
+
   const userRef = useRef(user);
   userRef.current = user;
 
@@ -248,6 +292,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         deferProfileOnboarding,
+        resetProfileOnboarding,
+        forceWelcomeIntro,
+        previewWelcomeScreen,
+        dismissForcedWelcomeIntro,
       }}
     >
       {children}

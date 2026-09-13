@@ -1168,7 +1168,7 @@ export const api = {
     );
   },
 
-  async verifyLoginCode(email: string, code: string, coopId?: string) {
+  async verifyLoginCode(email: string, code: string, coopId?: string, anonymousId?: string | null) {
     const response = await fetch(`${API_BASE_URL}/trpc/auth.verifyLoginCode`, {
       method: 'POST',
       headers: {
@@ -1178,10 +1178,32 @@ export const api = {
         email: email.trim().toLowerCase(),
         code: code.trim(),
         ...(coopId ? { coopId } : {}),
+        ...(anonymousId ? { anonymousId } : {}),
       }),
     });
 
     return readTrpcResult<EmailCodeAuthResult>(response, 'Failed to verify login code');
+  },
+
+  async saveAnonymousProfile(data: {
+    anonymousId: string;
+    selfDescription: string;
+    goals?: string;
+    interests?: string[];
+    resourcesOffered?: string[];
+    resourcesNeeded?: string[];
+    businessSummary?: string;
+    locationSummary?: string;
+  }) {
+    const response = await fetch(`${API_BASE_URL}/trpc/anonymousProfile.upsert`, {
+      method: 'POST',
+      headers: {
+        ...networkConfig.defaultHeaders,
+      },
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{ success: boolean }>(response, 'Could not save your answers');
   },
 
   async completeProfileOnboarding(

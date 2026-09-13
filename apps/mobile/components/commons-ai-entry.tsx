@@ -29,6 +29,7 @@ import {
   Menu,
   MessageCircle,
   Repeat2,
+  RotateCcw,
   Search,
   Send,
   Sparkles,
@@ -36,6 +37,7 @@ import {
   Trash2,
   UserCircle,
   Users,
+  Wrench,
   X,
 } from 'lucide-react-native';
 
@@ -140,7 +142,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
   const params = useLocalSearchParams<{ welcome?: string }>();
   const scrollRef = useRef<ScrollView>(null);
   const pendingActionRef = useRef<PendingAction | null>(null);
-  const { isAuthenticated, login, logout, sessionToken, user } = useAuth();
+  const { isAuthenticated, login, logout, sessionToken, user, previewWelcomeScreen } = useAuth();
   const [draft, setDraft] = useState('');
   const [feedPosts, setFeedPosts] = useState<CommonsPost[]>([]);
   const [nextFeedCursor, setNextFeedCursor] = useState<string | null>(null);
@@ -149,6 +151,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
   const [memberCommons, setMemberCommons] = useState<CommonsDirectoryItem[]>([]);
   const [directoryLoaded, setDirectoryLoaded] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
   const [composerPickerOpen, setComposerPickerOpen] = useState(false);
   const [selectedComposerCoopId, setSelectedComposerCoopId] = useState(feedCoopId === 'all' ? 'cahootz' : feedCoopId);
   const [feedError, setFeedError] = useState('');
@@ -868,6 +871,23 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
     router.replace('/' as any);
   };
 
+  const handlePreviewWelcomeScreen = async () => {
+    setAdminPanelOpen(false);
+    setDrawerOpen(false);
+    await previewWelcomeScreen();
+  };
+
+  // Dev-only actions surfaced in the Admin Panel drawer. Add new dev/QA
+  // tools here rather than as separate rows in the main drawer.
+  const adminPanelActions = [
+    {
+      label: 'Preview Welcome Screen',
+      description: 'Clears the "seen" flag and signs you out so the first-launch welcome tour shows again.',
+      icon: RotateCcw,
+      onPress: () => void handlePreviewWelcomeScreen(),
+    },
+  ];
+
   const finishProfileBanner = topBanner ?? (
     hasAccountSession && !user?.profileOnboardingCompletedAt ? (
       <TouchableOpacity
@@ -1558,6 +1578,20 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                 </TouchableOpacity>
               )}
 
+              {__DEV__ && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setDrawerOpen(false);
+                    setAdminPanelOpen(true);
+                  }}
+                  className="mt-2 flex-row items-center justify-center gap-2 rounded-2xl bg-stone-100 py-3"
+                  activeOpacity={0.8}
+                >
+                  <Wrench size={16} color={SOCIAL_THEME.primary} />
+                  <Text className="text-sm font-black text-gray-900">Admin Panel (Dev)</Text>
+                </TouchableOpacity>
+              )}
+
               <Text className="mt-4 text-center text-[11px] font-semibold text-stone-300">
                 Cahootz v1.1
               </Text>
@@ -1566,6 +1600,63 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
           <TouchableOpacity className="flex-1" onPress={() => setDrawerOpen(false)} activeOpacity={1} />
         </View>
       </Modal>
+
+      {__DEV__ && (
+        <Modal visible={adminPanelOpen} transparent animationType="fade" onRequestClose={() => setAdminPanelOpen(false)}>
+          <View className="flex-1 flex-row bg-black/35">
+            <View className="w-4/5 bg-white pt-14">
+              <View className="border-b border-stone-200 px-4 pb-3">
+                <View className="flex-row items-center justify-between">
+                  <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
+                    <View className="h-10 w-10 items-center justify-center rounded-full bg-stone-800">
+                      <Wrench size={17} color="#FFFFFF" />
+                    </View>
+                    <View className="min-w-0 flex-1">
+                      <Text className="text-sm font-black text-gray-900" numberOfLines={1}>Admin Panel</Text>
+                      <Text className="text-xs font-semibold text-gray-500" numberOfLines={1}>Dev-only tools, not shown in production</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setAdminPanelOpen(false)}
+                    className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100"
+                    accessibilityLabel="Close admin panel"
+                  >
+                    <X size={16} color="#44403C" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 28 }}>
+                <Text className="mb-2 text-[11px] font-black uppercase tracking-wide text-stone-400">Dev tools</Text>
+                <View className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
+                  {adminPanelActions.map((action, index) => {
+                    const Icon = action.icon;
+                    return (
+                      <TouchableOpacity
+                        key={action.label}
+                        onPress={action.onPress}
+                        className={`flex-row items-center gap-2.5 px-3 py-3 ${
+                          index < adminPanelActions.length - 1 ? 'border-b border-stone-100' : ''
+                        }`}
+                        activeOpacity={0.75}
+                      >
+                        <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
+                          <Icon size={17} color={SOCIAL_THEME.primary} />
+                        </View>
+                        <View className="min-w-0 flex-1">
+                          <Text className="text-sm font-black text-gray-900">{action.label}</Text>
+                          <Text className="text-xs font-semibold text-gray-500">{action.description}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </View>
+            <TouchableOpacity className="flex-1" onPress={() => setAdminPanelOpen(false)} activeOpacity={1} />
+          </View>
+        </Modal>
+      )}
 
       <Modal
         visible={suggestCommonsOpen}

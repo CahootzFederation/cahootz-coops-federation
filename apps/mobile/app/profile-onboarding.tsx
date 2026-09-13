@@ -15,18 +15,50 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, ArrowRight, HandHeart, Lightbulb, MessageCircle, UserCircle, Users } from 'lucide-react-native';
+import { ArrowRight, HandHeart, Lightbulb, MessageCircle, UserCircle, Users } from 'lucide-react-native';
 
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { getOrCreateAnonymousId, markAnonymousProfileIntroSeen } from '@/lib/anonymous-id';
 
 const MIN_SELF_DESCRIPTION = 40;
 const MIN_SIGNAL_ITEMS = 1;
 const INTRO_CAROUSEL_INTERVAL_MS = 4500;
 
+const appIntroItems = [
+  {
+    title: 'Post on your community feeds',
+    body: 'Introduce yourself, ask a question, share an idea, or tell people what you are working on.',
+    visual: '💬',
+    visualBg: '#EFF6FF',
+    Icon: MessageCircle,
+  },
+  {
+    title: 'Join commons',
+    body: 'Commons are shared spaces where people with a real connection can post, ask for help, offer support, plan things, and build trust over time.',
+    visual: '🤝',
+    visualBg: '#F0FDF4',
+    Icon: Users,
+  },
+  {
+    title: 'Ask for help and offer help',
+    body: 'People can share needs, skills, time, tools, advice, rides, space, or support.',
+    visual: '🛠️',
+    visualBg: '#FFF7ED',
+    Icon: HandHeart,
+  },
+  {
+    title: 'Turn good conversations into action',
+    body: 'Start simple. A useful post can become a meetup, project, event, service, or local connection.',
+    visual: '💡',
+    visualBg: '#FEFCE8',
+    Icon: Lightbulb,
+  },
+] as const;
+
+type WizardStep = 'intro' | 'profile';
 type ListFieldName = 'interests' | 'resourcesOffered' | 'resourcesNeeded';
 type OptionalFieldName = 'goals' | 'businessSummary' | 'locationSummary';
-type WizardStep = 'intro' | 'profile';
 
 type FieldConfig = {
   label: string;
@@ -78,37 +110,6 @@ const signalFields: {
   },
 ];
 
-const appIntroItems = [
-  {
-    title: 'Post on your community feeds',
-    body: 'Introduce yourself, ask a question, share an idea, or tell people what you are working on.',
-    visual: '💬',
-    visualBg: '#EFF6FF',
-    Icon: MessageCircle,
-  },
-  {
-    title: 'Join commons',
-    body: 'Commons are shared spaces where people with a real connection can post, ask for help, offer support, plan things, and build trust over time.',
-    visual: '🤝',
-    visualBg: '#F0FDF4',
-    Icon: Users,
-  },
-  {
-    title: 'Ask for help and offer help',
-    body: 'People can share needs, skills, time, tools, advice, rides, space, or support.',
-    visual: '🛠️',
-    visualBg: '#FFF7ED',
-    Icon: HandHeart,
-  },
-  {
-    title: 'Turn good conversations into action',
-    body: 'Start simple. A useful post can become a meetup, project, event, service, or local connection.',
-    visual: '💡',
-    visualBg: '#FEFCE8',
-    Icon: Lightbulb,
-  },
-] as const;
-
 function parseSignalList(value: string, maxItemLength = 120) {
   return Array.from(
     new Set(
@@ -121,13 +122,48 @@ function parseSignalList(value: string, maxItemLength = 120) {
   ).slice(0, 30);
 }
 
+// The Welcome Wizard: an app-intro carousel followed by a "build your
+// profile" form, always shown in that order. This single page handles both
+// entry points — a fresh anonymous visitor (routed here from app/index.tsx
+// before they've signed in at all) and an existing account finishing
+// onboarding after login (routed here by AuthContext's navigation effect).
+// Anonymous visitors save against a device-generated id instead of a user
+// record; that data gets migrated onto their account automatically once
+// they do sign in (see verifyLoginCode in packages/trpc/src/routers/auth.ts).
 export default function ProfileOnboardingScreen() {
   const { user, sessionToken, isLoading, login, deferProfileOnboarding } = useAuth();
+  const [wizardStep, setWizardStep] = useState<WizardStep>('intro');
+
   const { width } = useWindowDimensions();
-  const scrollRef = useRef<ScrollView>(null);
   const introCarouselRef = useRef<ScrollView>(null);
-  const [step, setStep] = useState<WizardStep>('intro');
   const [introCarouselIndex, setIntroCarouselIndex] = useState(0);
+  const introCardWidth = Math.max(width - 40, 280);
+
+  useEffect(() => {
+    if (wizardStep !== 'intro') return;
+
+    const interval = setInterval(() => {
+      setIntroCarouselIndex((currentIndex) => {
+        const nextIndex = (currentIndex + 1) % appIntroItems.length;
+        introCarouselRef.current?.scrollTo({ x: nextIndex * introCardWidth, animated: true });
+        return nextIndex;
+      });
+    }, INTRO_CAROUSEL_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [introCardWidth, wizardStep]);
+
+  const updateIntroCarouselIndex = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const nextIndex = Math.round(event.nativeEvent.contentOffset.x / introCardWidth);
+    setIntroCarouselIndex(Math.min(Math.max(nextIndex, 0), appIntroItems.length - 1));
+  };
+
+  const goToIntroSlide = (index: number) => {
+    introCarouselRef.current?.scrollTo({ x: index * introCardWidth, animated: true });
+    setIntroCarouselIndex(index);
+  };
+
+  const scrollRef = useRef<ScrollView>(null);
   const [selfDescription, setSelfDescription] = useState(user?.selfDescription || '');
   const [signalValues, setSignalValues] = useState<Record<ListFieldName, string>>({
     interests: user?.interests?.join(', ') || '',
@@ -142,28 +178,7 @@ export default function ProfileOnboardingScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (!isLoading && !user) {
-      router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
-    }
-  }, [isLoading, user]);
-
   const introComplete = selfDescription.trim().length >= introField.minChars;
-  const introCardWidth = Math.max(width - 40, 280);
-
-  useEffect(() => {
-    if (step !== 'intro') return;
-
-    const interval = setInterval(() => {
-      setIntroCarouselIndex((currentIndex) => {
-        const nextIndex = (currentIndex + 1) % appIntroItems.length;
-        introCarouselRef.current?.scrollTo({ x: nextIndex * introCardWidth, animated: true });
-        return nextIndex;
-      });
-    }, INTRO_CAROUSEL_INTERVAL_MS);
-
-    return () => clearInterval(interval);
-  }, [introCardWidth, step]);
 
   const signalProgress = useMemo(() => {
     return signalFields.reduce<Record<ListFieldName, { count: number; complete: boolean }>>((acc, field) => {
@@ -177,10 +192,7 @@ export default function ProfileOnboardingScreen() {
   }, [signalValues]);
 
   const canSubmit =
-    introComplete &&
-    signalFields.every((field) => signalProgress[field.name].complete) &&
-    !!sessionToken &&
-    !!user;
+    introComplete && signalFields.every((field) => signalProgress[field.name].complete);
 
   const updateIntro = (value: string) => {
     setSelfDescription(value);
@@ -197,31 +209,14 @@ export default function ProfileOnboardingScreen() {
     setError('');
   };
 
-  const goToStep = async (nextStep: WizardStep) => {
-    if (nextStep === 'profile') {
-      try {
-        await deferProfileOnboarding();
-      } catch (err) {
-        console.error('Profile onboarding seen-state save failed:', err);
-      }
-    }
-
-    setStep(nextStep);
-    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }));
-  };
-
-  const updateIntroCarouselIndex = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const nextIndex = Math.round(event.nativeEvent.contentOffset.x / introCardWidth);
-    setIntroCarouselIndex(Math.min(Math.max(nextIndex, 0), appIntroItems.length - 1));
-  };
-
-  const goToIntroSlide = (index: number) => {
-    introCarouselRef.current?.scrollTo({ x: index * introCardWidth, animated: true });
-    setIntroCarouselIndex(index);
-  };
-
   const handleSkip = async () => {
-    if (!user || isSaving) return;
+    if (isSaving) return;
+
+    if (!user) {
+      void markAnonymousProfileIntroSeen();
+      router.replace('/' as any);
+      return;
+    }
 
     try {
       await deferProfileOnboarding();
@@ -233,7 +228,7 @@ export default function ProfileOnboardingScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!user || !sessionToken || isSaving) return;
+    if (isSaving) return;
 
     if (!introComplete) {
       setError('Your short intro needs a little more detail before you continue.');
@@ -250,6 +245,24 @@ export default function ProfileOnboardingScreen() {
     setError('');
 
     try {
+      if (!user || !sessionToken) {
+        const anonymousId = await getOrCreateAnonymousId();
+        await api.saveAnonymousProfile({
+          anonymousId,
+          selfDescription: selfDescription.trim(),
+          goals: optionalValues.goals.trim(),
+          interests: parseSignalList(signalValues.interests, 80),
+          resourcesOffered: parseSignalList(signalValues.resourcesOffered, 120),
+          resourcesNeeded: parseSignalList(signalValues.resourcesNeeded, 120),
+          businessSummary: optionalValues.businessSummary.trim(),
+          locationSummary: optionalValues.locationSummary.trim(),
+        });
+
+        void markAnonymousProfileIntroSeen();
+        router.replace('/' as any);
+        return;
+      }
+
       const result = await api.completeProfileOnboarding(
         {
           selfDescription: selfDescription.trim(),
@@ -283,10 +296,82 @@ export default function ProfileOnboardingScreen() {
     }
   };
 
-  if (isLoading || !user) {
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.loadingScreen}>
         <ActivityIndicator color="#FF6B00" size="large" />
+      </SafeAreaView>
+    );
+  }
+
+  if (wizardStep === 'intro') {
+    return (
+      <SafeAreaView style={introStyles.screen}>
+        <ScrollView style={introStyles.scroll} contentContainerStyle={introStyles.content}>
+          <View style={introStyles.header}>
+            <View style={introStyles.badge}>
+              <UserCircle color="#FF6B00" size={18} strokeWidth={2.4} />
+              <Text style={introStyles.badgeText}>Welcome to Cahootz</Text>
+            </View>
+            <Text style={introStyles.title}>A community app for everyday help and action</Text>
+            <Text style={introStyles.subtitle}>
+              Cahootz is a place to meet people, share what you need, offer what you can, and start real conversations.
+            </Text>
+          </View>
+
+          <View style={introStyles.appIntro}>
+            <ScrollView
+              ref={introCarouselRef}
+              horizontal
+              pagingEnabled
+              snapToInterval={introCardWidth}
+              decelerationRate="fast"
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={updateIntroCarouselIndex}
+              style={introStyles.carousel}
+            >
+              {appIntroItems.map(({ title, body, visual, visualBg, Icon }) => (
+                <View key={title} style={[introStyles.carouselCard, { width: introCardWidth }]}>
+                  <View style={[introStyles.carouselVisual, { backgroundColor: visualBg }]}>
+                    <Text style={introStyles.carouselEmoji}>{visual}</Text>
+                    <View style={introStyles.carouselIcon}>
+                      <Icon color="#FF6B00" size={20} strokeWidth={2.5} />
+                    </View>
+                  </View>
+                  <Text style={introStyles.carouselTitle}>{title}</Text>
+                  <Text style={introStyles.carouselBody}>{body}</Text>
+                </View>
+              ))}
+            </ScrollView>
+
+            <View style={introStyles.carouselDots}>
+              {appIntroItems.map((item, index) => {
+                const active = introCarouselIndex === index;
+
+                return (
+                  <Pressable
+                    key={item.title}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Show ${item.title}`}
+                    onPress={() => goToIntroSlide(index)}
+                    style={[introStyles.carouselDot, active && introStyles.carouselDotActive]}
+                  />
+                );
+              })}
+            </View>
+          </View>
+        </ScrollView>
+
+        <View style={introStyles.footer}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setWizardStep('profile')}
+            style={introStyles.submitButton}
+          >
+            <Text style={introStyles.submitText}>Continue</Text>
+            <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.6} />
+          </Pressable>
+        </View>
       </SafeAreaView>
     );
   }
@@ -302,95 +387,6 @@ export default function ProfileOnboardingScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.content}
         >
-          {step === 'intro' ? (
-            <>
-          <View style={styles.header}>
-            <View style={styles.stepPill}>
-              <Text style={styles.stepPillText}>Step 1 of 2</Text>
-            </View>
-            <View style={styles.badge}>
-              <UserCircle color="#FF6B00" size={18} strokeWidth={2.4} />
-              <Text style={styles.badgeText}>Welcome to Cahootz</Text>
-            </View>
-            <Text style={styles.title}>A community app for everyday help and action</Text>
-            <Text style={styles.subtitle}>
-              Cahootz is a place to meet people, share what you need, offer what you can, and start real conversations.
-            </Text>
-          </View>
-
-          <View style={styles.appIntro}>
-            <ScrollView
-              ref={introCarouselRef}
-              horizontal
-              pagingEnabled
-              snapToInterval={introCardWidth}
-              decelerationRate="fast"
-              showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={updateIntroCarouselIndex}
-              style={styles.carousel}
-            >
-              {appIntroItems.map(({ title, body, visual, visualBg, Icon }) => (
-                <View key={title} style={[styles.carouselCard, { width: introCardWidth }]}>
-                  <View style={[styles.carouselVisual, { backgroundColor: visualBg }]}>
-                    <Text style={styles.carouselEmoji}>{visual}</Text>
-                    <View style={styles.carouselIcon}>
-                      <Icon color="#FF6B00" size={20} strokeWidth={2.5} />
-                    </View>
-                  </View>
-                  <Text style={styles.carouselTitle}>{title}</Text>
-                  <Text style={styles.carouselBody}>{body}</Text>
-                </View>
-              ))}
-            </ScrollView>
-
-            <View style={styles.carouselDots}>
-              {appIntroItems.map((item, index) => {
-                const active = introCarouselIndex === index;
-
-                return (
-                  <Pressable
-                    key={item.title}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Show ${item.title}`}
-                    onPress={() => goToIntroSlide(index)}
-                    style={[styles.carouselDot, active && styles.carouselDotActive]}
-                  />
-                );
-              })}
-            </View>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => goToStep('profile')}
-            style={({ pressed }) => [
-              styles.submitButton,
-              pressed && styles.submitButtonPressed,
-            ]}
-          >
-            <Text style={styles.submitText}>Continue</Text>
-            <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.6} />
-          </Pressable>
-            </>
-          ) : (
-            <>
-          <View style={styles.wizardTop}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => goToStep('intro')}
-              style={({ pressed }) => [
-                styles.backButton,
-                pressed && styles.backButtonPressed,
-              ]}
-            >
-              <ArrowLeft color="#475569" size={18} strokeWidth={2.5} />
-              <Text style={styles.backButtonText}>Back</Text>
-            </Pressable>
-            <View style={[styles.stepPill, styles.stepPillFlush]}>
-              <Text style={styles.stepPillText}>Step 2 of 2</Text>
-            </View>
-          </View>
-
           <View style={styles.profileIntro}>
             <Text style={styles.sectionEyebrow}>Before your first post</Text>
             <Text style={styles.sectionTitle}>Build your profile</Text>
@@ -499,11 +495,7 @@ export default function ProfileOnboardingScreen() {
             accessibilityRole="button"
             disabled={!canSubmit || isSaving}
             onPress={handleSubmit}
-            style={({ pressed }) => [
-              styles.submitButton,
-              (!canSubmit || isSaving) && styles.submitButtonDisabled,
-              pressed && canSubmit && !isSaving && styles.submitButtonPressed,
-            ]}
+            style={[styles.submitButton, (!canSubmit || isSaving) && styles.submitButtonDisabled]}
           >
             {isSaving ? (
               <ActivityIndicator color="#FFFFFF" />
@@ -517,83 +509,37 @@ export default function ProfileOnboardingScreen() {
           <Pressable accessibilityRole="button" disabled={isSaving} onPress={handleSkip} style={styles.secondaryButton}>
             <Text style={styles.secondaryButtonText}>Do this later</Text>
           </Pressable>
-            </>
-          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const introStyles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-  keyboardView: {
+  scroll: {
     flex: 1,
-  },
-  loadingScreen: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
   },
   content: {
     flexGrow: 1,
     paddingHorizontal: 20,
     paddingTop: 18,
-    paddingBottom: 28,
+    paddingBottom: 12,
+  },
+  footer: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F2F5',
+    backgroundColor: '#FFFFFF',
   },
   header: {
     paddingTop: 8,
     paddingBottom: 18,
-  },
-  wizardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 18,
-  },
-  stepPill: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginBottom: 14,
-  },
-  stepPillFlush: {
-    marginBottom: 0,
-  },
-  stepPillText: {
-    color: '#475569',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '800',
-  },
-  backButton: {
-    minHeight: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    borderRadius: 999,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 12,
-  },
-  backButtonPressed: {
-    opacity: 0.72,
-  },
-  backButtonText: {
-    color: '#475569',
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '800',
   },
   badge: {
     alignSelf: 'flex-start',
@@ -694,6 +640,43 @@ const styles = StyleSheet.create({
   carouselDotActive: {
     width: 22,
     backgroundColor: '#FF6B00',
+  },
+  submitButton: {
+    minHeight: 58,
+    borderRadius: 16,
+    backgroundColor: '#FF6B00',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  submitText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+});
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  loadingScreen: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  content: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 28,
   },
   profileIntro: {
     borderTopWidth: 1,
@@ -799,9 +782,6 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: {
     opacity: 0.45,
-  },
-  submitButtonPressed: {
-    transform: [{ scale: 0.99 }],
   },
   submitText: {
     color: '#FFFFFF',

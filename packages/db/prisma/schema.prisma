@@ -2658,3 +2658,25 @@ model PlatformConfig {
 
   @@schema("public")
 }
+
+// Pre-auth "who are you / goals" answers, keyed by a device-generated id
+// (see apps/mobile/lib/anonymous-id.ts) collected before the person has an
+// account. Migrated onto their User row at login time once they sign in for
+// real (see verifyLoginCode in packages/trpc/src/routers/auth.ts).
+model AnonymousProfile {
+  id               String    @id @default(cuid())
+  anonymousId      String    @unique
+  selfDescription  String?
+  goals            String?
+  interests        String[]  @default([])
+  resourcesOffered String[]  @default([])
+  resourcesNeeded  String[]  @default([])
+  businessSummary  String?
+  locationSummary  String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  migratedToUserId String?
+  migratedAt       DateTime?
+
+  @@schema("public")
+}

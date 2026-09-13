@@ -62,6 +62,12 @@ import {
 } from '@/components/commons-media-viewer';
 import { DEFAULT_POST_TYPE, postTypeLabel, postTypePlaceholder, shouldShowPostType, type SelectedPostType } from '@/lib/post-types';
 import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
+import {
+  PERSONAL_PAGE_DESTINATION_ID,
+  composerDestinationNavigation,
+  reconcileComposerDestination,
+} from '@/lib/composer-destination';
+import { drawerNavigationMethod } from '@/lib/drawer-navigation';
 
 type PendingAction = (sessionToken: string) => Promise<void>;
 type ComposerNotice = { type: 'success' | 'error' | 'info'; body: string } | null;
@@ -98,7 +104,6 @@ const DEFAULT_COMMONS_PROFILE: CommonsProfile = {
 };
 
 const MAX_MEDIA_ATTACHMENTS = 4;
-const PERSONAL_PAGE_DESTINATION_ID = '__personal_page__';
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
 const ALLOWED_POST_MEDIA_MIMES = new Set([
@@ -398,16 +403,14 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
   useEffect(() => {
     if (postableCommons.length === 0) return;
-    const preferredCoopId = isScopedFeed ? feedCoopId : selectedComposerCoopId;
-    const preferredExists = postableCommons.some((commons) => commons.id === preferredCoopId);
-
-    if (preferredExists) {
-      setSelectedComposerCoopId(preferredCoopId);
-      return;
-    }
-
-    setSelectedComposerCoopId(postableCommons[0].id);
-  }, [feedCoopId, isScopedFeed, postableCommons, selectedComposerCoopId]);
+    setSelectedComposerCoopId((currentCoopId) =>
+      reconcileComposerDestination(
+        currentCoopId,
+        postableCommons,
+        isScopedFeed ? feedCoopId : undefined,
+      ),
+    );
+  }, [feedCoopId, isScopedFeed, postableCommons]);
 
   const visiblePosts = useMemo(() => {
     return [...feedPosts].sort((a, b) => b.support - a.support || b.replies - a.replies);
@@ -851,7 +854,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
     }
 
     setDrawerOpen(false);
-    router.push(href as any);
+    router[drawerNavigationMethod(href)](href as any);
   };
 
   const openSignIn = () => {
@@ -1396,6 +1399,12 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                         setSelectedComposerCoopId(commons.id);
                         setComposerPickerOpen(false);
                         setComposerNotice(null);
+                        const navigation = composerDestinationNavigation(feedCoopId, commons.id);
+                        if (navigation.method === 'setParams') {
+                          router.setParams(navigation.params);
+                        } else if (navigation.method === 'replace') {
+                          router.replace(navigation.href as any);
+                        }
                       }}
                       className="flex-row items-center gap-3 rounded-xl border p-3"
                       style={{

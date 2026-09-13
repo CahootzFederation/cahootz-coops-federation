@@ -9,7 +9,7 @@ import { hasSeenAnonymousProfileIntro } from '@/lib/anonymous-id';
 type EntryMode = 'commons' | 'sign-in';
 
 export default function OnboardingScreen() {
-  const params = useLocalSearchParams<{ entry?: string }>();
+  const params = useLocalSearchParams<{ entry?: string; coopId?: string }>();
   const { isAuthenticated, sessionToken, forceWelcomeIntro, dismissForcedWelcomeIntro } = useAuth();
   const [entryMode, setEntryMode] = useState<EntryMode>('commons');
   // null while we haven't checked device storage yet, to avoid flashing the
@@ -74,6 +74,7 @@ export default function OnboardingScreen() {
 
   return (
     <CommonsAiEntry
+      feedCoopId={params.coopId || 'all'}
       onMessagesPress={() => {
         if (isAuthenticated && sessionToken) {
           router.push('/(tabs)/messages' as any);

@@ -27,6 +27,8 @@ No migration was applied to the user's existing databases. Testing used a separa
 
 ## Automated checks
 
+EAS builds compile the shared validators through the mobile `eas-build-post-install` hook before bundling. The hook disables TypeScript incremental compilation so an existing compiler cache cannot skip generating missing `dist/notification.js` files. To reproduce locally, run `pnpm --filter @cahootz/mobile eas-build-post-install` before exporting the iOS bundle.
+
 ```sh
 pnpm --filter @cahootz/mobile type-check
 pnpm --filter @repo/trpc exec tsc --noEmit

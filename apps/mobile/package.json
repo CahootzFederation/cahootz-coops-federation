@@ -3,6 +3,7 @@
   "main": "expo-router/entry",
   "version": "0.1.0",
   "scripts": {
+    "eas-build-post-install": "pnpm --filter @repo/validators build --incremental false",
     "validate-env": "tsx ./scripts/validate-env.ts",
     "start": "expo start",
     "dev": "expo start --web",

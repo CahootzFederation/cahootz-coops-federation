@@ -27,11 +27,19 @@ export async function registerForNativePushNotifications(
   sessionToken: string | null | undefined,
   coopId = 'cahootz'
 ) {
-  if (!sessionToken || Platform.OS === 'web') return { registered: false };
+  if (!sessionToken || Platform.OS === 'web') {
+    if (__DEV__) console.info('[push] Registration skipped: no session or web platform');
+    return { registered: false };
+  }
 
+  if (__DEV__) console.info('[push] Loading account preferences');
   const preferences = await api.getNotificationPreferences(sessionToken);
-  if (!preferences.pushEnabled) return { registered: false };
+  if (!preferences.pushEnabled) {
+    if (__DEV__) console.info('[push] Registration skipped: push disabled in preferences');
+    return { registered: false };
+  }
 
+  if (__DEV__) console.info('[push] Checking device permission');
   const existingPermission = await Notifications.getPermissionsAsync();
   const existingPermissionState = existingPermission as unknown as {
     granted?: boolean;
@@ -49,6 +57,7 @@ export async function registerForNativePushNotifications(
   }
 
   if (!granted) {
+    if (__DEV__) console.info('[push] Registration skipped: permission not granted');
     return { registered: false };
   }
 
@@ -62,10 +71,12 @@ export async function registerForNativePushNotifications(
   }
 
   const projectId = getExpoProjectId();
+  if (__DEV__) console.info('[push] Requesting Expo push token', { projectConfigured: !!projectId });
   const pushToken = await Notifications.getExpoPushTokenAsync(
     projectId ? { projectId } : undefined
   );
 
+  if (__DEV__) console.info('[push] Token obtained; registering device with API');
   await api.registerPushDevice(
     {
       expoPushToken: pushToken.data,
@@ -76,6 +87,7 @@ export async function registerForNativePushNotifications(
     sessionToken
   );
 
+  if (__DEV__) console.info('[push] Device registered successfully');
   return { registered: true };
 }
 

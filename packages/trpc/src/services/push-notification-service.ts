@@ -57,8 +57,11 @@ export async function createNotificationAndPush(
   if (
     !preferences.pushEnabled ||
     !preferences[notificationCategory(payload.type)]
-  )
+  ) {
+    if (process.env.NODE_ENV !== "production")
+      console.info("[push] Skipped: account/category preference disabled");
     return;
+  }
 
   const devices = await db.pushDevice.findMany({
     where: {
@@ -69,6 +72,8 @@ export async function createNotificationAndPush(
     select: { expoPushToken: true },
   });
 
+  if (process.env.NODE_ENV !== "production")
+    console.info("[push] Matching enabled devices", { count: devices.length });
   if (!devices.length) return;
 
   const messages = devices.map((device) => ({
@@ -93,14 +98,51 @@ export async function createNotificationAndPush(
       });
 
       if (!response.ok) {
-        console.warn(
-          "Expo push send failed",
-          response.status,
-          await response.text(),
-        );
+        console.warn("Expo push send failed", response.status);
+        continue;
       }
-    } catch (error) {
-      console.warn("Expo push send skipped", error);
+      const result = (await response.json()) as {
+        data?: Array<{
+          status?: string;
+          id?: string;
+          details?: { error?: string };
+        }>;
+        errors?: Array<{ code?: string }>;
+      };
+      // Provider messages can contain device tokens; log only known error codes.
+      const safeCode = (code?: string) =>
+        [
+          "DeviceNotRegistered",
+          "InvalidCredentials",
+          "MessageTooBig",
+          "MessageRateExceeded",
+          "MismatchSenderId",
+          "UNAUTHORIZED",
+          "PUSH_TOO_MANY_NOTIFICATIONS",
+          "PUSH_TOO_MANY_EXPERIENCE_IDS",
+        ].includes(code || "")
+          ? code
+          : "UnknownProviderError";
+      for (const error of result.errors || [])
+        console.warn("[push] Expo request rejected", {
+          code: safeCode(error.code),
+        });
+      for (const ticket of result.data || []) {
+        if (ticket.status === "error")
+          console.warn("[push] Expo ticket rejected", {
+            code: safeCode(ticket.details?.error),
+          });
+        else if (
+          ticket.status === "ok" &&
+          process.env.NODE_ENV !== "production"
+        )
+          console.info(
+            "[push] Expo accepted notification (delivery not yet confirmed)",
+            { receiptId: ticket.id },
+          );
+      }
+    } catch {
+      console.warn("[push] Expo request or response processing failed");
     }
   }
 }

@@ -74,6 +74,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
+  const pushRegistrationAttempt = useRef<string | null>(null);
+  const inProfileOnboarding = segments[0] === 'profile-onboarding';
+  const readyForPushRegistration = !!user && (
+    !!user.profileOnboardingCompletedAt || profileOnboardingDeferredUserId === user.id
+  );
 
   // Load session on mount
   useEffect(() => {
@@ -81,12 +86,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!user?.profileOnboardingCompletedAt || !sessionToken) return;
+    if (!sessionToken) {
+      pushRegistrationAttempt.current = null;
+      return;
+    }
+    // Wait until onboarding is completed or skipped and its screen has closed.
+    if (isLoading || !readyForPushRegistration || inProfileOnboarding) return;
+    const registrationKey = `${sessionToken}:${user?.coop?.id || 'cahootz'}`;
+    if (pushRegistrationAttempt.current === registrationKey) return;
+    pushRegistrationAttempt.current = registrationKey;
 
-    registerForNativePushNotifications(sessionToken, user.coop?.id || 'cahootz').catch((error) => {
+    registerForNativePushNotifications(sessionToken, user?.coop?.id || 'cahootz', {
+      onlyAskIfUndetermined: true,
+    }).catch((error) => {
       console.warn('Native push registration skipped:', error);
     });
-  }, [sessionToken, user?.profileOnboardingCompletedAt, user?.coop?.id]);
+  }, [sessionToken, user?.coop?.id, isLoading, readyForPushRegistration, inProfileOnboarding]);
 
   useEffect(() => {
     if (isLoading || canAccessUpdateChannelDebug(user?.email)) return;

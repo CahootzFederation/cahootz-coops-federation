@@ -6,6 +6,7 @@
     "eas-build-post-install": "pnpm --filter @repo/validators build --incremental false",
     "validate-env": "tsx ./scripts/validate-env.ts",
     "start": "expo start",
+    "dev:production": "EXPO_NO_DOTENV=1 dotenv -e .env.production -o -- expo start --dev-client --clear",
     "dev": "expo start --web",
     "dev:ios": "expo start --ios",
     "web": "expo start --web",

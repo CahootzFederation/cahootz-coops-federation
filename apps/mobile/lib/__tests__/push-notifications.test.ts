@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 
@@ -26,6 +26,7 @@ jest.mock("expo-notifications", () => ({
 }));
 
 describe("native push permissions", () => {
+  afterEach(() => { jest.restoreAllMocks(); });
   beforeEach(() => {
     jest.clearAllMocks();
     Platform.OS = "ios";
@@ -85,6 +86,20 @@ describe("native push permissions", () => {
     });
     expect(api.registerPushDevice).not.toHaveBeenCalled();
     expect(await getPushPermissionStatus()).toContain("blocked");
+    expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+  });
+  it("asks an undecided user automatically after sign-in", async () => {
+    jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ granted: false, status: 'undetermined', canAskAgain: true } as never);
+    jest.mocked(Notifications.requestPermissionsAsync).mockResolvedValue({ granted: true, status: 'granted' } as never);
+    await expect(registerForNativePushNotifications('session', 'cahootz', { onlyAskIfUndetermined: true })).resolves.toEqual({ registered: true });
+    expect(Notifications.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(api.registerPushDevice).toHaveBeenCalledTimes(1);
+  });
+  it("does not automatically ask again after an earlier denial", async () => {
+    jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ granted: false, status: 'denied', canAskAgain: true } as never);
+    await expect(registerForNativePushNotifications('session', 'cahootz', { onlyAskIfUndetermined: true })).resolves.toEqual({ registered: false });
+    expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    expect(api.registerPushDevice).not.toHaveBeenCalled();
   });
   it("registers a granted device with the session without prompting again", async () => {
     jest
@@ -125,5 +140,30 @@ describe("native push permissions", () => {
       "commons",
       expect.any(Object),
     );
+  });
+
+  it("identifies an Expo token failure before attempting API registration", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ granted: true } as never);
+    jest.mocked(Notifications.getExpoPushTokenAsync).mockRejectedValueOnce(
+      Object.assign(new Error('Missing aps-environment entitlement'), { code: 'ERR_NOTIFICATIONS' }),
+    );
+    await expect(registerForNativePushNotifications('test-session-secret')).rejects.toMatchObject({
+      step: 'Get Expo push token', message: 'Missing aps-environment entitlement',
+    });
+    expect(warn).toHaveBeenCalledWith('[push] Registration failed', expect.objectContaining({ step: 'Get Expo push token', code: 'ERR_NOTIFICATIONS' }));
+    expect(api.registerPushDevice).not.toHaveBeenCalled();
+  });
+
+  it("redacts session and device tokens from API failure logs and rethrown errors", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ granted: true } as never);
+    jest.mocked(api.registerPushDevice).mockRejectedValueOnce(new Error('Failed for test-session-secret ExponentPushToken[test]'));
+    await expect(registerForNativePushNotifications('test-session-secret')).rejects.toMatchObject({
+      step: 'Save device with API', message: 'Failed for [redacted] [redacted]',
+    });
+    const logs = JSON.stringify(warn.mock.calls);
+    expect(logs).not.toContain('test-session-secret');
+    expect(logs).not.toContain('ExponentPushToken[test]');
   });
 });

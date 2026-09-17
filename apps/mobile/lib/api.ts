@@ -1250,6 +1250,7 @@ export const api = {
       body: JSON.stringify(data),
     });
 
+    console.info('[push] Device registration API response', { status: response.status, ok: response.ok });
     return readTrpcResult<{ success: boolean }>(response, 'Could not register notifications');
   },
 

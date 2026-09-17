@@ -28,6 +28,8 @@ export const notificationRouter = router({
     .mutation(async ({ input, ctx }) => {
       const context = ctx as AccountAuthenticatedContext;
 
+      console.info('[push] Registration authenticated; saving device', { platform: input.platform });
+
       await context.db.pushDevice.upsert({
         where: { expoPushToken: input.expoPushToken },
         create: {
@@ -49,6 +51,7 @@ export const notificationRouter = router({
         },
       });
 
+      console.info('[push] Device registration saved');
       return { success: true };
     }),
 

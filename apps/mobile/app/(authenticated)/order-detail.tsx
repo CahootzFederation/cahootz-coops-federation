@@ -24,7 +24,7 @@ import {
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
-import { api } from '@/lib/api';
+import { api, API_BASE_URL } from '@/lib/api';
 import OrderDetailHybrid from '@/components/order-detail-hybrid';
 
 interface OrderItem {
@@ -72,7 +72,7 @@ export default function OrderDetailScreen() {
   useEffect(() => {
     async function checkFeatureFlag() {
       try {
-        const response = await fetch('http://localhost:3001/api/feature-flags/hybrid-architecture');
+        const response = await fetch(`${API_BASE_URL}/api/feature-flags/hybrid-architecture`);
         const data = await response.json();
         setUseHybrid(data.enabled);
       } catch (error) {

@@ -4,6 +4,8 @@ import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
 import { useEffect } from 'react';
+import { View } from 'react-native';
+import { AppBottomNavigation } from '@/components/app-bottom-navigation';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 import "../global.css"
@@ -135,7 +137,12 @@ export default Sentry.wrap(function RootLayout() {
             <CartProvider>
               <PaymentConfirmationProvider>
                 <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-                  <Stack screenOptions={{ headerShown: false }} />
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flex: 1, minHeight: 0 }}>
+                      <Stack screenOptions={{ headerShown: false }} />
+                    </View>
+                    <AppBottomNavigation />
+                  </View>
                   <StatusBar style="auto" />
                   <PortalHost />
                   <Toast config={toastConfig} />

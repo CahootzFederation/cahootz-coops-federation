@@ -1,11 +1,14 @@
 import { Platform, useWindowDimensions } from "react-native";
 import { Tabs } from "expo-router";
 import { Bell, LayoutGrid, Scale, UserCircle } from "lucide-react-native";
+import { useAuth } from '@/contexts/auth-context';
 
 export default function TabLayout() {
   const { fontScale } = useWindowDimensions();
+  const { isAuthenticated } = useAuth();
   return (
     <Tabs
+      tabBar={isAuthenticated ? () => null : undefined}
       screenOptions={{
         tabBarActiveTintColor: "#FF6B00",
         tabBarInactiveTintColor: "#64748B",

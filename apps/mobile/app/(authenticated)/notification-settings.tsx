@@ -20,6 +20,7 @@ import { api } from "@/lib/api";
 import {
   getPushPermissionStatus,
   registerForNativePushNotifications,
+  PushRegistrationError,
 } from "@/lib/push-notifications";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -152,8 +153,10 @@ export default function NotificationSettings() {
         user?.coop?.id || "cahootz",
       );
       await refreshPermission();
-    } catch {
-      setDeviceError("Could not register this device. Try again.");
+    } catch (error) {
+      setDeviceError(error instanceof PushRegistrationError
+        ? `Could not register this device. Failed step: ${error.step}. Check the device logs for details.`
+        : "Could not register this device. Try again.");
     } finally {
       setDeviceBusy(false);
     }

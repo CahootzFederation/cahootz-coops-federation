@@ -2100,7 +2100,7 @@ export default function CommonsAiEntry({
                           <TouchableOpacity
                             onPress={() =>
                               goToDrawerItem(
-                                `/(authenticated)/spaces?coopId=${activeDrawerCommons.id}&coopName=${encodeURIComponent(activeDrawerCommons.label)}`,
+                                `/(authenticated)/spaces?coopId=${activeDrawerCommons.id}&coopName=${encodeURIComponent(activeDrawerCommons.label)}&mode=create`,
                               )
                             }
                             className="flex-row items-center gap-2.5 px-3 py-2.5"

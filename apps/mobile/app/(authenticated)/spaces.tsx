@@ -30,6 +30,13 @@ const SPACES_THEME = {
   primarySoft: "#FFF7ED",
   border: "#E5E7EB",
   muted: "#64748B",
+  ink: "#111827",
+  inkSoft: "#1F2937",
+  white: "#FFFFFF",
+  quietIcon: "#94A3B8",
+  lockIcon: "#475569",
+  danger: "#DC2626",
+  dangerSoft: "#FEF2F2",
 };
 
 function formatDate(value: string) {
@@ -45,7 +52,7 @@ export default function SpacesScreen() {
     coopName?: string;
     mode?: string;
   }>();
-  const { user, isLoading, isAuthenticated, sessionToken } = useAuth();
+  const { isLoading, isAuthenticated, sessionToken } = useAuth();
   const [groups, setGroups] = React.useState<PrivateGroupSummary[]>([]);
   const [isLoadingGroups, setIsLoadingGroups] = React.useState(true);
   const [name, setName] = React.useState("");
@@ -180,68 +187,386 @@ export default function SpacesScreen() {
     );
   }
 
+  const creationBlocked = requirements ? !requirements.canCreate : false;
+  const createDisabled = isSaving || !name.trim() || creationBlocked;
+
   return (
     <SafeAreaView
       className="flex-1"
       style={{ backgroundColor: SPACES_THEME.paper }}
     >
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 32 }}
+      <View
+        className="border-b bg-white px-4 pb-3 pt-3"
+        style={{ borderColor: SPACES_THEME.border }}
       >
-        <View
-          className="border-b bg-white px-3 pb-2 pt-3"
-          style={{ borderColor: SPACES_THEME.border }}
-        >
-          <View className="flex-row items-center gap-2">
-            <TouchableOpacity
-              onPress={handleBack}
-              className="h-9 w-9 items-center justify-center rounded-full border bg-white"
-              style={{ borderColor: SPACES_THEME.border }}
-              accessibilityLabel="Go back"
+        <View className="flex-row items-center gap-3">
+          <TouchableOpacity
+            onPress={handleBack}
+            className="h-10 w-10 items-center justify-center rounded-full border bg-white"
+            style={{ borderColor: SPACES_THEME.border }}
+            accessibilityLabel="Go back"
+          >
+            <ArrowLeft
+              size={18}
+              color={SPACES_THEME.inkSoft}
+              strokeWidth={2.6}
+            />
+          </TouchableOpacity>
+          <View className="min-w-0 flex-1">
+            <Text
+              className="text-[10px] font-black uppercase tracking-wide text-gray-500"
+              numberOfLines={1}
             >
-              <ArrowLeft size={18} color="#1F2937" strokeWidth={2.6} />
-            </TouchableOpacity>
-            <View className="min-w-0 flex-1">
-              <Text className="text-[10px] font-black uppercase text-gray-500">
-                {coopName ? `Circles in ${coopName}` : "Commons Circles"}
-              </Text>
-              <Text
-                className="text-base font-black text-gray-950"
-                numberOfLines={1}
-              >
-                Find your circle
-              </Text>
-            </View>
-            <View
-              className="h-9 w-9 items-center justify-center rounded-xl"
-              style={{ backgroundColor: SPACES_THEME.primary }}
+              {coopName || "Commons"}
+            </Text>
+            <Text
+              className="text-lg font-black text-gray-950"
+              numberOfLines={1}
             >
-              <Users size={17} color="#FFFFFF" />
-            </View>
+              {activeView === "create" ? "Create a circle" : "Circles"}
+            </Text>
+          </View>
+          <View
+            className="h-10 w-10 items-center justify-center rounded-2xl"
+            style={{ backgroundColor: SPACES_THEME.primary }}
+          >
+            <Users size={18} color={SPACES_THEME.white} />
           </View>
         </View>
 
-        <View className="px-5 py-4">
-          <View
-            className="rounded-2xl border bg-white p-5"
-            style={{ borderColor: SPACES_THEME.border }}
+        <View className="mt-3 flex-row rounded-2xl bg-gray-100 p-1">
+          <TouchableOpacity
+            onPress={() => setActiveView("circles")}
+            className="flex-1 items-center rounded-xl py-2.5"
+            style={
+              activeView === "circles"
+                ? { backgroundColor: SPACES_THEME.white }
+                : undefined
+            }
+            activeOpacity={0.8}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeView === "circles" }}
           >
-            <Text className="text-xl font-black text-gray-950">
-              Connect around what matters
+            <Text
+              className="text-sm font-black"
+              style={{
+                color:
+                  activeView === "circles"
+                    ? SPACES_THEME.ink
+                    : SPACES_THEME.muted,
+              }}
+            >
+              Your circles
             </Text>
-            <Text className="mt-2 text-sm font-semibold leading-5 text-gray-500">
-              Discover circles built around shared interests, projects, places,
-              and community life — or create one for a conversation you want to
-              grow.
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setActiveView("create")}
+            className="flex-1 items-center rounded-xl py-2.5"
+            style={
+              activeView === "create"
+                ? { backgroundColor: SPACES_THEME.white }
+                : undefined
+            }
+            activeOpacity={0.8}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeView === "create" }}
+          >
+            <Text
+              className="text-sm font-black"
+              style={{
+                color:
+                  activeView === "create"
+                    ? SPACES_THEME.primary
+                    : SPACES_THEME.muted,
+              }}
+            >
+              Create
             </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        {activeView === "circles" ? (
+          <>
+            <View className="flex-row items-start gap-3">
+              <View
+                className="h-10 w-10 items-center justify-center rounded-2xl"
+                style={{ backgroundColor: SPACES_THEME.primarySoft }}
+              >
+                <MessageCircle size={18} color={SPACES_THEME.primary} />
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text className="text-xl font-black text-gray-950">
+                  Conversations with a home
+                </Text>
+                <Text className="mt-1 text-sm font-semibold leading-5 text-gray-500">
+                  Circles bring members together around shared interests,
+                  projects, places, and community life.
+                </Text>
+              </View>
+            </View>
+
+            <View className="mt-6 flex-row items-center justify-between">
+              <View>
+                <Text className="text-base font-black text-gray-950">
+                  Your circles
+                </Text>
+                <Text className="mt-0.5 text-xs font-semibold text-gray-500">
+                  {groups.length} {groups.length === 1 ? "circle" : "circles"}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setActiveView("create")}
+                className="flex-row items-center gap-1.5 rounded-full px-3 py-2"
+                style={{ backgroundColor: SPACES_THEME.primarySoft }}
+                activeOpacity={0.8}
+              >
+                <Plus size={14} color={SPACES_THEME.primary} />
+                <Text
+                  className="text-xs font-black"
+                  style={{ color: SPACES_THEME.primary }}
+                >
+                  New circle
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View className="mt-3 gap-3">
+              {isLoadingGroups ? (
+                <View className="items-center py-8">
+                  <ActivityIndicator
+                    size="small"
+                    color={SPACES_THEME.primary}
+                  />
+                </View>
+              ) : groups.length === 0 ? (
+                <View className="rounded-3xl border border-dashed border-gray-300 bg-white p-5">
+                  <Text className="text-base font-black text-gray-950">
+                    No circles yet
+                  </Text>
+                  <Text className="mt-1 text-sm leading-5 text-gray-600">
+                    Start one around a topic or project members will want to
+                    return to.
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setActiveView("create")}
+                    className="mt-4 flex-row items-center justify-center gap-2 rounded-2xl py-3"
+                    style={{ backgroundColor: SPACES_THEME.primary }}
+                    activeOpacity={0.82}
+                  >
+                    <Plus size={16} color={SPACES_THEME.white} />
+                    <Text className="text-sm font-black text-white">
+                      Create your first circle
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                groups.map((group) => (
+                  <TouchableOpacity
+                    key={group.id}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/(authenticated)/group/[groupId]",
+                        params: { groupId: group.id },
+                      } as any)
+                    }
+                    activeOpacity={0.8}
+                    className="rounded-3xl border bg-white p-4"
+                    style={{ borderColor: SPACES_THEME.border }}
+                  >
+                    <View className="flex-row items-start gap-3">
+                      <View
+                        className="h-11 w-11 items-center justify-center rounded-2xl"
+                        style={{ backgroundColor: SPACES_THEME.primarySoft }}
+                      >
+                        <Lock size={18} color={SPACES_THEME.primary} />
+                      </View>
+                      <View className="min-w-0 flex-1">
+                        <View className="flex-row items-center gap-2">
+                          <Text
+                            className="min-w-0 flex-1 text-base font-black text-gray-950"
+                            numberOfLines={1}
+                          >
+                            {group.name}
+                          </Text>
+                          <ChevronRight
+                            size={17}
+                            color={SPACES_THEME.quietIcon}
+                          />
+                        </View>
+                        <Text
+                          className="mt-1 text-sm leading-5 text-gray-600"
+                          numberOfLines={2}
+                        >
+                          {group.purpose || "A circle for focused conversation"}
+                        </Text>
+                        <View className="mt-2 flex-row flex-wrap items-center gap-2">
+                          <Text className="text-[10px] font-black uppercase text-gray-400">
+                            {group.memberCount}{" "}
+                            {group.memberCount === 1 ? "member" : "members"}
+                          </Text>
+                          {group.isLeader ? (
+                            <Text
+                              className="text-[10px] font-black uppercase"
+                              style={{ color: SPACES_THEME.primary }}
+                            >
+                              Leader
+                            </Text>
+                          ) : null}
+                          <Text className="text-[10px] font-semibold text-gray-400">
+                            Updated {formatDate(group.createdAt)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+
+            <View
+              className="mt-6 rounded-3xl border bg-white p-4"
+              style={{ borderColor: SPACES_THEME.border }}
+            >
+              <View className="flex-row items-center gap-2">
+                <KeyRound size={16} color={SPACES_THEME.primary} />
+                <Text className="text-sm font-black text-gray-950">
+                  Join with an invite code
+                </Text>
+              </View>
+              <Text className="mt-1 text-xs leading-5 text-gray-500">
+                Enter a code shared by a circle member.
+              </Text>
+              <View className="mt-3 flex-row items-center gap-2">
+                <TextInput
+                  value={joinCode}
+                  onChangeText={(text) => setJoinCode(text.toUpperCase())}
+                  placeholder="Invite code"
+                  autoCapitalize="characters"
+                  placeholderTextColor={SPACES_THEME.muted}
+                  className="min-h-12 flex-1 rounded-2xl border bg-gray-50 px-3 text-sm text-gray-900"
+                  style={{ borderColor: SPACES_THEME.border }}
+                />
+                <TouchableOpacity
+                  onPress={() => void joinSpace()}
+                  disabled={isJoining || !joinCode.trim()}
+                  className="min-h-12 items-center justify-center rounded-2xl px-5"
+                  style={{
+                    backgroundColor: SPACES_THEME.primary,
+                    opacity: isJoining || !joinCode.trim() ? 0.55 : 1,
+                  }}
+                  activeOpacity={0.82}
+                >
+                  {isJoining ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={SPACES_THEME.white}
+                    />
+                  ) : (
+                    <Text className="text-sm font-black text-white">Join</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        ) : (
+          <>
+            <View className="flex-row items-start gap-3">
+              <View
+                className="h-10 w-10 items-center justify-center rounded-2xl"
+                style={{ backgroundColor: SPACES_THEME.primarySoft }}
+              >
+                <Plus size={18} color={SPACES_THEME.primary} />
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text className="text-xl font-black text-gray-950">
+                  Give the conversation a clear home
+                </Text>
+                <Text className="mt-1 text-sm font-semibold leading-5 text-gray-500">
+                  Choose a specific name and purpose so members immediately
+                  understand why this circle exists.
+                </Text>
+              </View>
+            </View>
+
+            <View
+              className="mt-6 rounded-3xl border bg-white p-5"
+              style={{ borderColor: SPACES_THEME.border }}
+            >
+              <Text className="text-sm font-black text-gray-950">
+                Circle name
+              </Text>
+              <Text className="mt-1 text-xs leading-5 text-gray-500">
+                Name the topic, group, project, or place—not the people in it.
+              </Text>
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                placeholder="Example: South LA Gardeners"
+                placeholderTextColor={SPACES_THEME.muted}
+                maxLength={120}
+                autoFocus={mode === "create"}
+                className="mt-3 min-h-12 rounded-2xl border bg-gray-50 px-3 text-sm text-gray-900"
+                style={{ borderColor: SPACES_THEME.border }}
+              />
+              <Text className="mt-2 text-right text-[10px] font-semibold text-gray-400">
+                {name.length}/120
+              </Text>
+
+              <Text className="mt-5 text-sm font-black text-gray-950">
+                Purpose
+              </Text>
+              <Text className="mt-1 text-xs leading-5 text-gray-500">
+                Explain what members will talk about or build together.
+              </Text>
+              <TextInput
+                value={purpose}
+                onChangeText={setPurpose}
+                placeholder="What brings this circle together?"
+                placeholderTextColor={SPACES_THEME.muted}
+                maxLength={2000}
+                multiline
+                className="mt-3 min-h-28 rounded-2xl border bg-gray-50 px-3 py-3 text-sm text-gray-900"
+                style={{
+                  borderColor: SPACES_THEME.border,
+                  textAlignVertical: "top",
+                }}
+              />
+            </View>
+
+            <View
+              className="mt-4 rounded-3xl border bg-white p-4"
+              style={{ borderColor: SPACES_THEME.border }}
+            >
+              <View className="flex-row items-start gap-3">
+                <View className="h-9 w-9 items-center justify-center rounded-2xl bg-gray-100">
+                  <Lock size={16} color={SPACES_THEME.lockIcon} />
+                </View>
+                <View className="min-w-0 flex-1">
+                  <Text className="text-sm font-black text-gray-950">
+                    Invite-only at launch
+                  </Text>
+                  <Text className="mt-1 text-xs leading-5 text-gray-500">
+                    You will receive an invite code after creation and can
+                    decide who joins the first conversation.
+                  </Text>
+                </View>
+                <Check size={17} color={SPACES_THEME.primary} />
+              </View>
+            </View>
+
             {requirements && requirements.minScBalance > 0 ? (
               <View
-                className="mt-3 rounded-xl px-3 py-2"
+                className="mt-4 rounded-2xl px-4 py-3"
                 style={{
                   backgroundColor: requirements.canCreate
                     ? SPACES_THEME.primarySoft
-                    : "#FEF2F2",
+                    : SPACES_THEME.dangerSoft,
                 }}
               >
                 <Text
@@ -249,193 +574,40 @@ export default function SpacesScreen() {
                   style={{
                     color: requirements.canCreate
                       ? SPACES_THEME.primary
-                      : "#DC2626",
+                      : SPACES_THEME.danger,
                   }}
                 >
                   {requirements.canCreate
-                    ? `You have ${requirements.currentScBalance.toFixed(2)} SC — enough to create a circle.`
-                    : `Requires ${requirements.minScBalance} SC to create a circle. You have ${requirements.currentScBalance.toFixed(2)} SC.`}
+                    ? `You meet the ${requirements.minScBalance} SC requirement.`
+                    : `Creating a circle requires ${requirements.minScBalance} SC. Your balance is ${requirements.currentScBalance.toFixed(2)} SC.`}
                 </Text>
               </View>
             ) : null}
-          </View>
 
-          <View
-            className="mt-4 rounded-2xl border bg-white p-4"
-            style={{ borderColor: SPACES_THEME.border }}
-          >
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="Circle name"
-              placeholderTextColor={SPACES_THEME.muted}
-              className="rounded-2xl border bg-gray-50 px-3 py-3 text-sm text-gray-900"
-              style={{ borderColor: SPACES_THEME.border }}
-            />
-            <TextInput
-              value={purpose}
-              onChangeText={setPurpose}
-              placeholder="What is this group for?"
-              placeholderTextColor={SPACES_THEME.muted}
-              multiline
-              className="mt-3 min-h-20 rounded-2xl border bg-gray-50 px-3 py-3 text-sm text-gray-900"
-              style={{
-                borderColor: SPACES_THEME.border,
-                textAlignVertical: "top",
-              }}
-            />
             <TouchableOpacity
               onPress={() => void createSpace()}
-              disabled={
-                isSaving ||
-                !name.trim() ||
-                (requirements ? !requirements.canCreate : false)
-              }
-              className="mt-3 flex-row items-center justify-center gap-2 rounded-2xl py-3"
+              disabled={createDisabled}
+              className="mt-6 flex-row items-center justify-center gap-2 rounded-2xl py-4"
               style={{
                 backgroundColor: SPACES_THEME.primary,
-                opacity:
-                  isSaving ||
-                  !name.trim() ||
-                  (requirements ? !requirements.canCreate : false)
-                    ? 0.6
-                    : 1,
+                opacity: createDisabled ? 0.55 : 1,
               }}
               activeOpacity={0.82}
             >
               {isSaving ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <ActivityIndicator size="small" color={SPACES_THEME.white} />
               ) : (
-                <Plus size={16} color="#FFFFFF" />
+                <Plus size={17} color={SPACES_THEME.white} />
               )}
               <Text className="text-sm font-black text-white">
-                Create Circle
+                Create circle
               </Text>
             </TouchableOpacity>
-          </View>
-
-          <View
-            className="mt-4 rounded-2xl border bg-white p-4"
-            style={{ borderColor: SPACES_THEME.border }}
-          >
-            <Text className="text-xs font-black uppercase text-gray-500">
-              Have an invite code?
+            <Text className="mt-3 text-center text-xs leading-5 text-gray-500">
+              You will become the circle leader and can invite members next.
             </Text>
-            <View className="mt-2 flex-row items-center gap-2">
-              <TextInput
-                value={joinCode}
-                onChangeText={(text) => setJoinCode(text.toUpperCase())}
-                placeholder="Enter code"
-                autoCapitalize="characters"
-                placeholderTextColor={SPACES_THEME.muted}
-                className="flex-1 rounded-2xl border bg-gray-50 px-3 py-3 text-sm text-gray-900"
-                style={{ borderColor: SPACES_THEME.border }}
-              />
-              <TouchableOpacity
-                onPress={() => void joinSpace()}
-                disabled={isJoining || !joinCode.trim()}
-                className="flex-row items-center justify-center gap-2 rounded-2xl px-4 py-3"
-                style={{
-                  backgroundColor: SPACES_THEME.primarySoft,
-                  opacity: isJoining || !joinCode.trim() ? 0.6 : 1,
-                }}
-                activeOpacity={0.82}
-              >
-                {isJoining ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={SPACES_THEME.primary}
-                  />
-                ) : (
-                  <KeyRound size={16} color={SPACES_THEME.primary} />
-                )}
-                <Text
-                  className="text-sm font-black"
-                  style={{ color: SPACES_THEME.primary }}
-                >
-                  Join
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View className="mt-4 gap-3">
-            {isLoadingGroups ? (
-              <View className="items-center py-6">
-                <ActivityIndicator size="small" color={SPACES_THEME.primary} />
-              </View>
-            ) : groups.length === 0 ? (
-              <View className="rounded-2xl border border-dashed border-gray-300 bg-white p-5">
-                <Text className="text-base font-black text-gray-950">
-                  {coopName
-                    ? `No circles in ${coopName} yet`
-                    : "No circles yet"}
-                </Text>
-                <Text className="mt-1 text-sm leading-5 text-gray-600">
-                  Create a circle around an interest, project, place, or
-                  conversation members can return to.
-                </Text>
-              </View>
-            ) : null}
-
-            {groups.map((group) => (
-              <TouchableOpacity
-                key={group.id}
-                onPress={() =>
-                  router.push({
-                    pathname: "/(authenticated)/group/[groupId]",
-                    params: { groupId: group.id },
-                  } as any)
-                }
-                activeOpacity={0.8}
-                className="rounded-2xl border bg-white p-4"
-                style={{ borderColor: SPACES_THEME.border }}
-              >
-                <View className="flex-row items-start gap-3">
-                  <View
-                    className="h-10 w-10 items-center justify-center rounded-xl"
-                    style={{ backgroundColor: SPACES_THEME.primarySoft }}
-                  >
-                    <Lock size={18} color={SPACES_THEME.primary} />
-                  </View>
-                  <View className="min-w-0 flex-1">
-                    <View className="flex-row items-center justify-between gap-3">
-                      <Text
-                        className="text-base font-black text-gray-950"
-                        numberOfLines={1}
-                      >
-                        {group.name}
-                      </Text>
-                      <Text className="text-xs font-semibold text-gray-400">
-                        {formatDate(group.createdAt)}
-                      </Text>
-                    </View>
-                    <Text className="mt-1 text-sm leading-5 text-gray-600">
-                      {group.purpose || "A circle for focused conversation"}
-                    </Text>
-                    <View className="mt-2 flex-row items-center gap-2">
-                      <Text className="text-xs font-black uppercase text-gray-400">
-                        {group.privacy.replace("-", " ")}
-                      </Text>
-                      <Text className="text-xs font-black uppercase text-gray-300">
-                        · {group.memberCount}{" "}
-                        {group.memberCount === 1 ? "member" : "members"}
-                      </Text>
-                      {group.isLeader && (
-                        <Text
-                          className="text-xs font-black uppercase"
-                          style={{ color: SPACES_THEME.primary }}
-                        >
-                          · leader
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

@@ -50,6 +50,8 @@ export async function createNotificationAndPush(
     },
   });
 
+  const logContext = { notificationId: notification.id, type: payload.type };
+  console.info('[push] Inbox notification created', logContext);
   const preferences =
     (await db.notificationPreference.findUnique({
       where: { userId: payload.userId },
@@ -58,8 +60,7 @@ export async function createNotificationAndPush(
     !preferences.pushEnabled ||
     !preferences[notificationCategory(payload.type)]
   ) {
-    if (process.env.NODE_ENV !== "production")
-      console.info("[push] Skipped: account/category preference disabled");
+    console.info("[push] Skipped: account/category preference disabled", logContext);
     return;
   }
 
@@ -72,8 +73,7 @@ export async function createNotificationAndPush(
     select: { expoPushToken: true },
   });
 
-  if (process.env.NODE_ENV !== "production")
-    console.info("[push] Matching enabled devices", { count: devices.length });
+  console.info("[push] Matching enabled devices", { ...logContext, count: devices.length });
   if (!devices.length) return;
 
   const messages = devices.map((device) => ({
@@ -98,8 +98,7 @@ export async function createNotificationAndPush(
       });
 
       if (!response.ok) {
-        console.warn("Expo push send failed", response.status);
-        continue;
+        console.warn("[push] Expo HTTP error", { ...logContext, status: response.status });
       }
       const result = (await response.json()) as {
         data?: Array<{
@@ -125,24 +124,24 @@ export async function createNotificationAndPush(
           : "UnknownProviderError";
       for (const error of result.errors || [])
         console.warn("[push] Expo request rejected", {
+          ...logContext,
           code: safeCode(error.code),
         });
+      if (!response.ok) continue;
       for (const ticket of result.data || []) {
         if (ticket.status === "error")
           console.warn("[push] Expo ticket rejected", {
+            ...logContext,
             code: safeCode(ticket.details?.error),
           });
-        else if (
-          ticket.status === "ok" &&
-          process.env.NODE_ENV !== "production"
-        )
+        else if (ticket.status === "ok")
           console.info(
             "[push] Expo accepted notification (delivery not yet confirmed)",
-            { receiptId: ticket.id },
+            { ...logContext, receiptId: ticket.id },
           );
       }
     } catch {
-      console.warn("[push] Expo request or response processing failed");
+      console.warn("[push] Expo request or response processing failed", logContext);
     }
   }
 }

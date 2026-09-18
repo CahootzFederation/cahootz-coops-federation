@@ -1,41 +1,72 @@
-import React from 'react';
-import { ActivityIndicator, Alert, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, KeyRound, Lock, Plus, Users } from 'lucide-react-native';
-
-import { Text } from '@/components/ui/text';
-import { useAuth } from '@/contexts/auth-context';
-import { api, type GroupCreateRequirements, type PrivateGroupSummary } from '@/lib/api';
+import type { GroupCreateRequirements, PrivateGroupSummary } from "@/lib/api";
+import React from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { router, useLocalSearchParams } from "expo-router";
+import { Text } from "@/components/ui/text";
+import { useAuth } from "@/contexts/auth-context";
+import { api } from "@/lib/api";
+import {
+  ArrowLeft,
+  Check,
+  ChevronRight,
+  KeyRound,
+  Lock,
+  MessageCircle,
+  Plus,
+  Users,
+} from "lucide-react-native";
 
 const SPACES_THEME = {
-  paper: '#F8FAFC',
-  primary: '#FF6B00',
-  primarySoft: '#FFF7ED',
-  border: '#E5E7EB',
-  muted: '#64748B',
+  paper: "#F8FAFC",
+  primary: "#FF6B00",
+  primarySoft: "#FFF7ED",
+  border: "#E5E7EB",
+  muted: "#64748B",
 };
 
 function formatDate(value: string) {
-  return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return new Date(value).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 export default function SpacesScreen() {
-  const { coopId, coopName } = useLocalSearchParams<{ coopId?: string; coopName?: string }>();
+  const { coopId, coopName, mode } = useLocalSearchParams<{
+    coopId?: string;
+    coopName?: string;
+    mode?: string;
+  }>();
   const { user, isLoading, isAuthenticated, sessionToken } = useAuth();
   const [groups, setGroups] = React.useState<PrivateGroupSummary[]>([]);
   const [isLoadingGroups, setIsLoadingGroups] = React.useState(true);
-  const [name, setName] = React.useState('');
-  const [purpose, setPurpose] = React.useState('');
+  const [name, setName] = React.useState("");
+  const [purpose, setPurpose] = React.useState("");
   const [isSaving, setIsSaving] = React.useState(false);
-  const [joinCode, setJoinCode] = React.useState('');
+  const [joinCode, setJoinCode] = React.useState("");
   const [isJoining, setIsJoining] = React.useState(false);
-  const [requirements, setRequirements] = React.useState<GroupCreateRequirements | null>(null);
+  const [requirements, setRequirements] =
+    React.useState<GroupCreateRequirements | null>(null);
+  const [activeView, setActiveView] = React.useState<"circles" | "create">(
+    mode === "create" ? "create" : "circles",
+  );
+
+  React.useEffect(() => {
+    setActiveView(mode === "create" ? "create" : "circles");
+  }, [mode]);
 
   React.useEffect(() => {
     if (isLoading || (isAuthenticated && sessionToken)) return;
 
-    router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
+    router.replace({ pathname: "/", params: { entry: "sign-in" } } as any);
   }, [isAuthenticated, isLoading, sessionToken]);
 
   const loadGroups = React.useCallback(() => {
@@ -45,7 +76,7 @@ export default function SpacesScreen() {
     api
       .listMyGroups(sessionToken, coopId)
       .then(({ groups: next }) => setGroups(next))
-      .catch((error) => console.warn('Could not load groups:', error))
+      .catch((error) => console.warn("Could not load groups:", error))
       .finally(() => setIsLoadingGroups(false));
   }, [sessionToken, coopId]);
 
@@ -58,7 +89,9 @@ export default function SpacesScreen() {
     api
       .getGroupCreateRequirements(sessionToken, coopId)
       .then(setRequirements)
-      .catch((error) => console.warn('Could not load create requirements:', error));
+      .catch((error) =>
+        console.warn("Could not load create requirements:", error),
+      );
   }, [sessionToken, coopId]);
 
   const handleBack = () => {
@@ -67,7 +100,7 @@ export default function SpacesScreen() {
       return;
     }
 
-    router.replace('/(tabs)/wallet' as any);
+    router.replace("/(tabs)/wallet" as any);
   };
 
   const createSpace = async () => {
@@ -76,23 +109,35 @@ export default function SpacesScreen() {
 
     if (requirements && !requirements.canCreate) {
       Alert.alert(
-        'Not enough SC',
-        `You need at least ${requirements.minScBalance} SC to create a space (you have ${requirements.currentScBalance.toFixed(2)} SC).`
+        "Not enough SC",
+        `You need at least ${requirements.minScBalance} SC to create a circle (you have ${requirements.currentScBalance.toFixed(2)} SC).`,
       );
       return;
     }
 
     setIsSaving(true);
     try {
-      await api.createGroup(
-        { name: trimmedName, purpose: purpose.trim() || undefined, privacy: 'invite-only', coopId },
-        sessionToken
+      const result = await api.createGroup(
+        {
+          name: trimmedName,
+          purpose: purpose.trim() || undefined,
+          privacy: "invite-only",
+          coopId,
+        },
+        sessionToken,
       );
-      setName('');
-      setPurpose('');
+      setName("");
+      setPurpose("");
       loadGroups();
+      router.replace({
+        pathname: "/(authenticated)/group/[groupId]",
+        params: { groupId: result.group.id },
+      } as any);
     } catch (error) {
-      Alert.alert('Could not create space', error instanceof Error ? error.message : 'Try again.');
+      Alert.alert(
+        "Could not create circle",
+        error instanceof Error ? error.message : "Try again.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -104,12 +149,24 @@ export default function SpacesScreen() {
 
     setIsJoining(true);
     try {
-      const { groupId } = await api.joinGroupByCode(trimmedCode, sessionToken, coopId);
-      setJoinCode('');
+      const { groupId } = await api.joinGroupByCode(
+        trimmedCode,
+        sessionToken,
+        coopId,
+      );
+      setJoinCode("");
       loadGroups();
-      router.push({ pathname: '/(authenticated)/group/[groupId]', params: { groupId } } as any);
+      router.push({
+        pathname: "/(authenticated)/group/[groupId]",
+        params: { groupId },
+      } as any);
     } catch (error) {
-      Alert.alert('Could not join space', error instanceof Error ? error.message : 'Check the code and try again.');
+      Alert.alert(
+        "Could not join circle",
+        error instanceof Error
+          ? error.message
+          : "Check the code and try again.",
+      );
     } finally {
       setIsJoining(false);
     }
@@ -124,9 +181,18 @@ export default function SpacesScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: SPACES_THEME.paper }}>
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
-        <View className="border-b bg-white px-3 pt-3 pb-2" style={{ borderColor: SPACES_THEME.border }}>
+    <SafeAreaView
+      className="flex-1"
+      style={{ backgroundColor: SPACES_THEME.paper }}
+    >
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 32 }}
+      >
+        <View
+          className="border-b bg-white px-3 pb-2 pt-3"
+          style={{ borderColor: SPACES_THEME.border }}
+        >
           <View className="flex-row items-center gap-2">
             <TouchableOpacity
               onPress={handleBack}
@@ -138,46 +204,70 @@ export default function SpacesScreen() {
             </TouchableOpacity>
             <View className="min-w-0 flex-1">
               <Text className="text-[10px] font-black uppercase text-gray-500">
-                {coopName ? `Circles in ${coopName}` : 'Small Groups'}
+                {coopName ? `Circles in ${coopName}` : "Commons Circles"}
               </Text>
-              <Text className="text-base font-black text-gray-950" numberOfLines={1}>
-                Private Spaces
+              <Text
+                className="text-base font-black text-gray-950"
+                numberOfLines={1}
+              >
+                Find your circle
               </Text>
             </View>
-            <View className="h-9 w-9 items-center justify-center rounded-xl" style={{ backgroundColor: SPACES_THEME.primary }}>
+            <View
+              className="h-9 w-9 items-center justify-center rounded-xl"
+              style={{ backgroundColor: SPACES_THEME.primary }}
+            >
               <Users size={17} color="#FFFFFF" />
             </View>
           </View>
         </View>
 
         <View className="px-5 py-4">
-          <View className="rounded-2xl border bg-white p-5" style={{ borderColor: SPACES_THEME.border }}>
-            <Text className="text-xl font-black text-gray-950">Start Small</Text>
+          <View
+            className="rounded-2xl border bg-white p-5"
+            style={{ borderColor: SPACES_THEME.border }}
+          >
+            <Text className="text-xl font-black text-gray-950">
+              Connect around what matters
+            </Text>
             <Text className="mt-2 text-sm font-semibold leading-5 text-gray-500">
-              Create a private or invite-only space before something needs to become a full commons.
+              Discover circles built around shared interests, projects, places,
+              and community life — or create one for a conversation you want to
+              grow.
             </Text>
             {requirements && requirements.minScBalance > 0 ? (
               <View
                 className="mt-3 rounded-xl px-3 py-2"
-                style={{ backgroundColor: requirements.canCreate ? SPACES_THEME.primarySoft : '#FEF2F2' }}
+                style={{
+                  backgroundColor: requirements.canCreate
+                    ? SPACES_THEME.primarySoft
+                    : "#FEF2F2",
+                }}
               >
                 <Text
                   className="text-xs font-bold"
-                  style={{ color: requirements.canCreate ? SPACES_THEME.primary : '#DC2626' }}
+                  style={{
+                    color: requirements.canCreate
+                      ? SPACES_THEME.primary
+                      : "#DC2626",
+                  }}
                 >
                   {requirements.canCreate
-                    ? `You have ${requirements.currentScBalance.toFixed(2)} SC — enough to create a space.`
-                    : `Requires ${requirements.minScBalance} SC to create a space. You have ${requirements.currentScBalance.toFixed(2)} SC.`}
+                    ? `You have ${requirements.currentScBalance.toFixed(2)} SC — enough to create a circle.`
+                    : `Requires ${requirements.minScBalance} SC to create a circle. You have ${requirements.currentScBalance.toFixed(2)} SC.`}
                 </Text>
               </View>
             ) : null}
           </View>
 
-          <View className="mt-4 rounded-2xl border bg-white p-4" style={{ borderColor: SPACES_THEME.border }}>
+          <View
+            className="mt-4 rounded-2xl border bg-white p-4"
+            style={{ borderColor: SPACES_THEME.border }}
+          >
             <TextInput
               value={name}
               onChangeText={setName}
-              placeholder="Space name"
+              placeholder="Circle name"
               placeholderTextColor={SPACES_THEME.muted}
               className="rounded-2xl border bg-gray-50 px-3 py-3 text-sm text-gray-900"
               style={{ borderColor: SPACES_THEME.border }}
@@ -189,25 +279,48 @@ export default function SpacesScreen() {
               placeholderTextColor={SPACES_THEME.muted}
               multiline
               className="mt-3 min-h-20 rounded-2xl border bg-gray-50 px-3 py-3 text-sm text-gray-900"
-              style={{ borderColor: SPACES_THEME.border, textAlignVertical: 'top' }}
+              style={{
+                borderColor: SPACES_THEME.border,
+                textAlignVertical: "top",
+              }}
             />
             <TouchableOpacity
               onPress={() => void createSpace()}
-              disabled={isSaving || !name.trim() || (requirements ? !requirements.canCreate : false)}
+              disabled={
+                isSaving ||
+                !name.trim() ||
+                (requirements ? !requirements.canCreate : false)
+              }
               className="mt-3 flex-row items-center justify-center gap-2 rounded-2xl py-3"
               style={{
                 backgroundColor: SPACES_THEME.primary,
-                opacity: isSaving || !name.trim() || (requirements ? !requirements.canCreate : false) ? 0.6 : 1,
+                opacity:
+                  isSaving ||
+                  !name.trim() ||
+                  (requirements ? !requirements.canCreate : false)
+                    ? 0.6
+                    : 1,
               }}
               activeOpacity={0.82}
             >
-              {isSaving ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Plus size={16} color="#FFFFFF" />}
-              <Text className="text-sm font-black text-white">Create Space</Text>
+              {isSaving ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Plus size={16} color="#FFFFFF" />
+              )}
+              <Text className="text-sm font-black text-white">
+                Create Circle
+              </Text>
             </TouchableOpacity>
           </View>
 
-          <View className="mt-4 rounded-2xl border bg-white p-4" style={{ borderColor: SPACES_THEME.border }}>
-            <Text className="text-xs font-black uppercase text-gray-500">Have an invite code?</Text>
+          <View
+            className="mt-4 rounded-2xl border bg-white p-4"
+            style={{ borderColor: SPACES_THEME.border }}
+          >
+            <Text className="text-xs font-black uppercase text-gray-500">
+              Have an invite code?
+            </Text>
             <View className="mt-2 flex-row items-center gap-2">
               <TextInput
                 value={joinCode}
@@ -222,15 +335,24 @@ export default function SpacesScreen() {
                 onPress={() => void joinSpace()}
                 disabled={isJoining || !joinCode.trim()}
                 className="flex-row items-center justify-center gap-2 rounded-2xl px-4 py-3"
-                style={{ backgroundColor: SPACES_THEME.primarySoft, opacity: isJoining || !joinCode.trim() ? 0.6 : 1 }}
+                style={{
+                  backgroundColor: SPACES_THEME.primarySoft,
+                  opacity: isJoining || !joinCode.trim() ? 0.6 : 1,
+                }}
                 activeOpacity={0.82}
               >
                 {isJoining ? (
-                  <ActivityIndicator size="small" color={SPACES_THEME.primary} />
+                  <ActivityIndicator
+                    size="small"
+                    color={SPACES_THEME.primary}
+                  />
                 ) : (
                   <KeyRound size={16} color={SPACES_THEME.primary} />
                 )}
-                <Text className="text-sm font-black" style={{ color: SPACES_THEME.primary }}>
+                <Text
+                  className="text-sm font-black"
+                  style={{ color: SPACES_THEME.primary }}
+                >
                   Join
                 </Text>
               </TouchableOpacity>
@@ -245,10 +367,13 @@ export default function SpacesScreen() {
             ) : groups.length === 0 ? (
               <View className="rounded-2xl border border-dashed border-gray-300 bg-white p-5">
                 <Text className="text-base font-black text-gray-950">
-                  {coopName ? `No circles in ${coopName} yet` : 'No spaces yet'}
+                  {coopName
+                    ? `No circles in ${coopName} yet`
+                    : "No circles yet"}
                 </Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">
-                  A space can start as just you and a few people, then graduate when it has momentum.
+                  Create a circle around an interest, project, place, or
+                  conversation members can return to.
                 </Text>
               </View>
             ) : null}
@@ -257,35 +382,50 @@ export default function SpacesScreen() {
               <TouchableOpacity
                 key={group.id}
                 onPress={() =>
-                  router.push({ pathname: '/(authenticated)/group/[groupId]', params: { groupId: group.id } } as any)
+                  router.push({
+                    pathname: "/(authenticated)/group/[groupId]",
+                    params: { groupId: group.id },
+                  } as any)
                 }
                 activeOpacity={0.8}
                 className="rounded-2xl border bg-white p-4"
                 style={{ borderColor: SPACES_THEME.border }}
               >
                 <View className="flex-row items-start gap-3">
-                  <View className="h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: SPACES_THEME.primarySoft }}>
+                  <View
+                    className="h-10 w-10 items-center justify-center rounded-xl"
+                    style={{ backgroundColor: SPACES_THEME.primarySoft }}
+                  >
                     <Lock size={18} color={SPACES_THEME.primary} />
                   </View>
                   <View className="min-w-0 flex-1">
                     <View className="flex-row items-center justify-between gap-3">
-                      <Text className="text-base font-black text-gray-950" numberOfLines={1}>
+                      <Text
+                        className="text-base font-black text-gray-950"
+                        numberOfLines={1}
+                      >
                         {group.name}
                       </Text>
-                      <Text className="text-xs font-semibold text-gray-400">{formatDate(group.createdAt)}</Text>
+                      <Text className="text-xs font-semibold text-gray-400">
+                        {formatDate(group.createdAt)}
+                      </Text>
                     </View>
                     <Text className="mt-1 text-sm leading-5 text-gray-600">
-                      {group.purpose || 'Invite-only coordination space'}
+                      {group.purpose || "A circle for focused conversation"}
                     </Text>
                     <View className="mt-2 flex-row items-center gap-2">
                       <Text className="text-xs font-black uppercase text-gray-400">
-                        {group.privacy.replace('-', ' ')}
+                        {group.privacy.replace("-", " ")}
                       </Text>
                       <Text className="text-xs font-black uppercase text-gray-300">
-                        · {group.memberCount} {group.memberCount === 1 ? 'member' : 'members'}
+                        · {group.memberCount}{" "}
+                        {group.memberCount === 1 ? "member" : "members"}
                       </Text>
                       {group.isLeader && (
-                        <Text className="text-xs font-black uppercase" style={{ color: SPACES_THEME.primary }}>
+                        <Text
+                          className="text-xs font-black uppercase"
+                          style={{ color: SPACES_THEME.primary }}
+                        >
                           · leader
                         </Text>
                       )}

@@ -1,5 +1,14 @@
-// Hallmark - pre-emit critique: P4 H4 E4 S4 R4 V4
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  CommonsDirectoryItem,
+  CommonsPost,
+  CommonsPostMedia,
+  CommonsProfile,
+  PrivateGroupSummary,
+  SearchPerson,
+} from "@/lib/api";
+import type { SelectedPostType } from "@/lib/post-types";
+import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,10 +19,44 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as ImagePicker from "expo-image-picker";
+import { router, useLocalSearchParams } from "expo-router";
+import {
+  CommonsMediaTile,
+  COMPOSER_MEDIA_TILE_SIZE,
+  FEED_MEDIA_TILE_SIZE,
+} from "@/components/commons-media-viewer";
+import { MentionComposerInput } from "@/components/mention-composer-input";
+import { MentionText } from "@/components/mention-text";
+import { PostTypeSelector } from "@/components/post-type-selector";
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
+import { useAuth } from "@/contexts/auth-context";
+import { api } from "@/lib/api";
+import {
+  composerDestinationNavigation,
+  PERSONAL_PAGE_DESTINATION_ID,
+  reconcileComposerDestination,
+} from "@/lib/composer-destination";
+import {
+  buildDrawerCirclePreview,
+  hiddenDrawerCircleCount,
+  shouldShowCreateCircle,
+} from "@/lib/drawer-circles";
+import { drawerNavigationMethod } from "@/lib/drawer-navigation";
+import {
+  DEFAULT_POST_TYPE,
+  postTypeLabel,
+  postTypePlaceholder,
+  shouldShowPostType,
+} from "@/lib/post-types";
+import {
+  personDisplayHandle,
+  personHandleFromName,
+  personInitials,
+} from "@/lib/social-profile";
 import {
   Bookmark,
   CheckCircle2,
@@ -28,6 +71,7 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  Plus,
   Repeat2,
   RotateCcw,
   Search,
@@ -39,40 +83,19 @@ import {
   Users,
   Wrench,
   X,
-} from 'lucide-react-native';
+} from "lucide-react-native";
 
-import { Button } from '@/components/ui/button';
-import { Text } from '@/components/ui/text';
-import { MentionText } from '@/components/mention-text';
-import { MentionComposerInput } from '@/components/mention-composer-input';
-import { PostTypeSelector } from '@/components/post-type-selector';
-import {
-  api,
-  type CommonsDirectoryItem,
-  type CommonsPost,
-  type CommonsPostMedia,
-  type CommonsProfile,
-  type SearchPerson,
-} from '@/lib/api';
-import { useAuth } from '@/contexts/auth-context';
-import {
-  COMPOSER_MEDIA_TILE_SIZE,
-  FEED_MEDIA_TILE_SIZE,
-  CommonsMediaTile,
-} from '@/components/commons-media-viewer';
-import { DEFAULT_POST_TYPE, postTypeLabel, postTypePlaceholder, shouldShowPostType, type SelectedPostType } from '@/lib/post-types';
-import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
-import {
-  PERSONAL_PAGE_DESTINATION_ID,
-  composerDestinationNavigation,
-  reconcileComposerDestination,
-} from '@/lib/composer-destination';
-import { drawerNavigationMethod } from '@/lib/drawer-navigation';
+// Hallmark - pre-emit critique: P4 H4 E4 S4 R4 V4
 
 type PendingAction = (sessionToken: string) => Promise<void>;
-type ComposerNotice = { type: 'success' | 'error' | 'info'; body: string } | null;
-type SuggestionStatus = 'idle' | 'submitting' | 'success' | 'error';
-type ComposerMedia = Omit<CommonsPostMedia, 'pathname' | 'url' | 'id'> & { uri: string };
+type ComposerNotice = {
+  type: "success" | "error" | "info";
+  body: string;
+} | null;
+type SuggestionStatus = "idle" | "submitting" | "success" | "error";
+type ComposerMedia = Omit<CommonsPostMedia, "pathname" | "url" | "id"> & {
+  uri: string;
+};
 type FirstStepAction = {
   label: string;
   type: SelectedPostType;
@@ -87,119 +110,169 @@ type CommonsAiEntryProps = {
 };
 
 const SOCIAL_THEME = {
-  paper: '#F6F7F8',
-  primary: '#FF6B00',
-  primarySoft: '#FFF7ED',
-  primaryBorder: '#FED7AA',
-  ink: '#111827',
-  muted: '#6B7280',
-  border: '#E5E7EB',
+  paper: "#F6F7F8",
+  primary: "#FF6B00",
+  primarySoft: "#FFF7ED",
+  primaryBorder: "#FED7AA",
+  ink: "#111827",
+  muted: "#6B7280",
+  border: "#E5E7EB",
 };
 
 const DEFAULT_COMMONS_PROFILE: CommonsProfile = {
-  id: 'cahootz',
-  name: 'Cahootz Commons',
-  shortName: 'Cahootz',
-  description: 'A social commons for conversation, resources, and coordinated action.',
+  id: "cahootz",
+  name: "Cahootz Commons",
+  shortName: "Cahootz",
+  description:
+    "A social commons for conversation, resources, and coordinated action.",
 };
 
 const MAX_MEDIA_ATTACHMENTS = 4;
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
 const ALLOWED_POST_MEDIA_MIMES = new Set([
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/webp',
-  'video/mp4',
-  'video/quicktime',
-  'video/webm',
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
 ]);
 
 const COMMONS_RULES = [
-  'A commons is a social space for a real group, place, identity, craft, or shared interest.',
-  'Members can talk normally, share wins, post needs, support businesses, and turn useful threads into action.',
-  'Every commons should create value for its members. No scams, harassment, hate, extraction, or charity-only spaces.',
+  "A commons is a social space for a real group, place, identity, craft, or shared interest.",
+  "Members can talk normally, share wins, post needs, support businesses, and turn useful threads into action.",
+  "Every commons should create value for its members. No scams, harassment, hate, extraction, or charity-only spaces.",
 ] as const;
 
 const DRAWER_SECTIONS = [
-  { label: 'Personal Page', icon: UserCircle, action: '/(authenticated)/personal-page', requiresAuth: true },
+  {
+    label: "Personal Page",
+    icon: UserCircle,
+    action: "/(authenticated)/personal-page",
+    requiresAuth: true,
+  },
   // No global "Private Spaces" entry here on purpose — Circles now live
   // under a commons (see the Circles section on /commons/[coopId]), and a
   // standalone drawer link made it look like they existed outside one.
-  { label: 'Commons Stores & Shops', icon: Store, action: '/(tabs)/store' },
-  { label: 'Messages & Direct Chat', icon: MessageCircle, action: '/(tabs)/messages' },
+  { label: "Commons Stores & Shops", icon: Store, action: "/(tabs)/store" },
+  {
+    label: "Messages & Direct Chat",
+    icon: MessageCircle,
+    action: "/(tabs)/messages",
+  },
 ];
 
-function mimeFromFileName(fileName: string | null | undefined, mediaType: 'image' | 'video') {
-  const lower = fileName?.toLowerCase() || '';
-  if (lower.endsWith('.png')) return 'image/png';
-  if (lower.endsWith('.webp')) return 'image/webp';
-  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-  if (lower.endsWith('.mov')) return 'video/quicktime';
-  if (lower.endsWith('.webm')) return 'video/webm';
-  if (lower.endsWith('.mp4')) return 'video/mp4';
-  return mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+function mimeFromFileName(
+  fileName: string | null | undefined,
+  mediaType: "image" | "video",
+) {
+  const lower = fileName?.toLowerCase() || "";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".mov")) return "video/quicktime";
+  if (lower.endsWith(".webm")) return "video/webm";
+  if (lower.endsWith(".mp4")) return "video/mp4";
+  return mediaType === "video" ? "video/mp4" : "image/jpeg";
 }
 
-export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topBanner }: CommonsAiEntryProps) {
+export default function CommonsAiEntry({
+  feedCoopId = "all",
+  onSignInPress,
+  topBanner,
+}: CommonsAiEntryProps) {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ welcome?: string }>();
   const scrollRef = useRef<ScrollView>(null);
   const pendingActionRef = useRef<PendingAction | null>(null);
-  const { isAuthenticated, login, logout, sessionToken, user, previewWelcomeScreen } = useAuth();
-  const [draft, setDraft] = useState('');
+  const {
+    isAuthenticated,
+    login,
+    logout,
+    sessionToken,
+    user,
+    previewWelcomeScreen,
+  } = useAuth();
+  const [draft, setDraft] = useState("");
   const [feedPosts, setFeedPosts] = useState<CommonsPost[]>([]);
   const [nextFeedCursor, setNextFeedCursor] = useState<string | null>(null);
   const [isLoadingMoreFeed, setIsLoadingMoreFeed] = useState(false);
-  const [commonsProfile, setCommonsProfile] = useState<CommonsProfile>(DEFAULT_COMMONS_PROFILE);
-  const [memberCommons, setMemberCommons] = useState<CommonsDirectoryItem[]>([]);
+  const [commonsProfile, setCommonsProfile] = useState<CommonsProfile>(
+    DEFAULT_COMMONS_PROFILE,
+  );
+  const [memberCommons, setMemberCommons] = useState<CommonsDirectoryItem[]>(
+    [],
+  );
+  const [drawerCircles, setDrawerCircles] = useState<PrivateGroupSummary[]>([]);
+  const [drawerCirclesLoading, setDrawerCirclesLoading] = useState(false);
   const [directoryLoaded, setDirectoryLoaded] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
   const [composerPickerOpen, setComposerPickerOpen] = useState(false);
-  const [selectedComposerCoopId, setSelectedComposerCoopId] = useState(feedCoopId === 'all' ? 'cahootz' : feedCoopId);
-  const [feedError, setFeedError] = useState('');
+  const [selectedComposerCoopId, setSelectedComposerCoopId] = useState(
+    feedCoopId === "all" ? "cahootz" : feedCoopId,
+  );
+  const [feedError, setFeedError] = useState("");
   const [isPosting, setIsPosting] = useState(false);
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
-  const [selectedMediaItems, setSelectedMediaItems] = useState<ComposerMedia[]>([]);
-  const [selectedPostType, setSelectedPostType] = useState<SelectedPostType>(DEFAULT_POST_TYPE);
+  const [selectedMediaItems, setSelectedMediaItems] = useState<ComposerMedia[]>(
+    [],
+  );
+  const [selectedPostType, setSelectedPostType] =
+    useState<SelectedPostType>(DEFAULT_POST_TYPE);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [composerNotice, setComposerNotice] = useState<ComposerNotice>(null);
   const [accountPromptOpen, setAccountPromptOpen] = useState(false);
-  const [accountEmail, setAccountEmail] = useState('');
-  const [accountCode, setAccountCode] = useState('');
+  const [accountEmail, setAccountEmail] = useState("");
+  const [accountCode, setAccountCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
-  const [authError, setAuthError] = useState('');
+  const [authError, setAuthError] = useState("");
   const [isAuthBusy, setIsAuthBusy] = useState(false);
   const [suggestCommonsOpen, setSuggestCommonsOpen] = useState(false);
-  const [suggestedCommonsName, setSuggestedCommonsName] = useState('');
-  const [suggestedCommonsReason, setSuggestedCommonsReason] = useState('');
-  const [suggestedCommonsEmail, setSuggestedCommonsEmail] = useState('');
-  const [suggestionStatus, setSuggestionStatus] = useState<SuggestionStatus>('idle');
-  const [suggestionMessage, setSuggestionMessage] = useState('');
+  const [suggestedCommonsName, setSuggestedCommonsName] = useState("");
+  const [suggestedCommonsReason, setSuggestedCommonsReason] = useState("");
+  const [suggestedCommonsEmail, setSuggestedCommonsEmail] = useState("");
+  const [suggestionStatus, setSuggestionStatus] =
+    useState<SuggestionStatus>("idle");
+  const [suggestionMessage, setSuggestionMessage] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [searchPeople, setSearchPeople] = useState<SearchPerson[]>([]);
   const [searchPosts, setSearchPosts] = useState<CommonsPost[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [searchError, setSearchError] = useState('');
+  const [searchError, setSearchError] = useState("");
   const [nextStepHidden, setNextStepHidden] = useState(false);
   const hasAccountSession = isAuthenticated && !!sessionToken;
-  const accountName = user?.name?.trim() || user?.email?.split('@')[0] || 'member';
-  const accountHandle = user?.handle || (user?.email?.split('@')[0] || accountName).toLowerCase().replace(/[^a-z0-9]/g, '');
-  const isScopedFeed = feedCoopId !== 'all';
-  const headerCommonsName = isScopedFeed ? commonsProfile.name : 'Commons';
+  const accountName =
+    user?.name?.trim() || user?.email?.split("@")[0] || "member";
+  const accountHandle =
+    user?.handle ||
+    (user?.email?.split("@")[0] || accountName)
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+  const isScopedFeed = feedCoopId !== "all";
+  const headerCommonsName = isScopedFeed ? commonsProfile.name : "Commons";
+  const currentDrawerCoopId = isScopedFeed
+    ? feedCoopId
+    : commonsProfile.id || DEFAULT_COMMONS_PROFILE.id;
+  const drawerCirclePreview = useMemo(
+    () => buildDrawerCirclePreview(currentDrawerCoopId, drawerCircles),
+    [currentDrawerCoopId, drawerCircles],
+  );
+  const hiddenCircleCount = hiddenDrawerCircleCount(drawerCircles);
+  const hasCirclePreviewRoom = shouldShowCreateCircle(drawerCircles);
   const postableCommons = useMemo(() => {
     const byId = new Map<string, CommonsDirectoryItem>();
     if (hasAccountSession) {
       byId.set(PERSONAL_PAGE_DESTINATION_ID, {
         id: PERSONAL_PAGE_DESTINATION_ID,
-        name: 'My Personal Page',
-        shortName: 'Page',
-        description: 'Post directly to your public personal page.',
-        accessStatus: 'ACTIVE' as const,
+        name: "My Personal Page",
+        shortName: "Page",
+        description: "Post directly to your public personal page.",
+        accessStatus: "ACTIVE" as const,
         isMember: true,
         isLocked: false,
         canApply: false,
@@ -207,7 +280,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
     }
     const fallback = {
       ...DEFAULT_COMMONS_PROFILE,
-      accessStatus: 'ACTIVE' as const,
+      accessStatus: "ACTIVE" as const,
       isMember: true,
       isLocked: false,
       canApply: false,
@@ -217,53 +290,65 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
     memberCommons.forEach((commons) => byId.set(commons.id, commons));
     return Array.from(byId.values());
   }, [hasAccountSession, memberCommons]);
-  const selectedComposerCommons = postableCommons.find((commons) => commons.id === selectedComposerCoopId) || postableCommons[0];
+  const selectedComposerCommons =
+    postableCommons.find((commons) => commons.id === selectedComposerCoopId) ||
+    postableCommons[0];
   const scopedFeedLocked =
     isScopedFeed &&
     feedCoopId !== DEFAULT_COMMONS_PROFILE.id &&
     directoryLoaded &&
     !memberCommons.some((commons) => commons.id === feedCoopId);
-  const commonsDrawerItems = useMemo(
-    () => {
-      const activeCommonsForDrawer = memberCommons.length > 0
+  const commonsDrawerItems = useMemo(() => {
+    const activeCommonsForDrawer =
+      memberCommons.length > 0
         ? memberCommons
-        : [{
-            ...DEFAULT_COMMONS_PROFILE,
-            accessStatus: 'ACTIVE' as const,
-            isMember: true,
-            isLocked: false,
-            canApply: false,
-          }];
-
-      const commonsItems = activeCommonsForDrawer.map((commons) => ({
-        id: commons.id,
-        label: commons.name,
-        description: commons.description,
-        icon: commons.name.slice(0, 1).toUpperCase(),
-        accessStatus: commons.accessStatus,
-        action: `/${commons.id}/posts`,
-      }));
-
-      return hasAccountSession
-        ? [
+        : [
             {
-              id: PERSONAL_PAGE_DESTINATION_ID,
-              label: 'My Personal Page',
-              description: 'Your public page feed',
-              icon: accountName.slice(0, 1).toUpperCase(),
-              accessStatus: 'ACTIVE' as const,
-              action: '/(authenticated)/personal-page',
+              ...DEFAULT_COMMONS_PROFILE,
+              accessStatus: "ACTIVE" as const,
+              isMember: true,
+              isLocked: false,
+              canApply: false,
             },
-            ...commonsItems,
-          ]
-        : commonsItems;
-    },
-    [accountName, hasAccountSession, memberCommons]
+          ];
+
+    const commonsItems = activeCommonsForDrawer.map((commons) => ({
+      id: commons.id,
+      label: commons.name,
+      description: commons.description,
+      icon: commons.name.slice(0, 1).toUpperCase(),
+      accessStatus: commons.accessStatus,
+      action: `/${commons.id}/posts`,
+    }));
+
+    return hasAccountSession
+      ? [
+          {
+            id: PERSONAL_PAGE_DESTINATION_ID,
+            label: "My Personal Page",
+            description: "Your public page feed",
+            icon: accountName.slice(0, 1).toUpperCase(),
+            accessStatus: "ACTIVE" as const,
+            action: "/(authenticated)/personal-page",
+          },
+          ...commonsItems,
+        ]
+      : commonsItems;
+  }, [accountName, hasAccountSession, memberCommons]);
+  const activeDrawerCommons = useMemo(
+    () =>
+      commonsDrawerItems.find(
+        (item) =>
+          item.id === commonsProfile.id &&
+          item.id !== PERSONAL_PAGE_DESTINATION_ID,
+      ) || null,
+    [commonsDrawerItems, commonsProfile.id],
   );
 
   const visibleDrawerSections = useMemo(
-    () => DRAWER_SECTIONS.filter((item) => !item.requiresAuth || hasAccountSession),
-    [hasAccountSession]
+    () =>
+      DRAWER_SECTIONS.filter((item) => !item.requiresAuth || hasAccountSession),
+    [hasAccountSession],
   );
 
   useEffect(() => {
@@ -274,8 +359,10 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
     api
       .listFollowing(sessionToken)
-      .then((result) => setFollowingIds(new Set(result.members.map((member) => member.id))))
-      .catch((error) => console.warn('Could not load following list:', error));
+      .then((result) =>
+        setFollowingIds(new Set(result.members.map((member) => member.id))),
+      )
+      .catch((error) => console.warn("Could not load following list:", error));
   }, [hasAccountSession, sessionToken]);
 
   useEffect(() => {
@@ -289,11 +376,14 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
         setCommonsProfile(result.coop || DEFAULT_COMMONS_PROFILE);
         setFeedPosts(result.posts);
         setNextFeedCursor(result.nextCursor);
-        setFeedError('');
+        setFeedError("");
       })
       .catch((error) => {
-        console.error('Failed to load Commons feed:', error);
-        if (mounted) setFeedError('Could not load the Commons feed. Pull to refresh when the connection is back.');
+        console.error("Failed to load Commons feed:", error);
+        if (mounted)
+          setFeedError(
+            "Could not load the Commons feed. Pull to refresh when the connection is back.",
+          );
       });
 
     return () => {
@@ -306,19 +396,30 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
     setIsLoadingMoreFeed(true);
     try {
-      const result = await api.listCommonsFeed(feedCoopId, sessionToken, nextFeedCursor);
+      const result = await api.listCommonsFeed(
+        feedCoopId,
+        sessionToken,
+        nextFeedCursor,
+      );
       setFeedPosts((current) => [...current, ...result.posts]);
       setNextFeedCursor(result.nextCursor);
     } catch (error) {
-      console.error('Failed to load more Commons posts:', error);
+      console.error("Failed to load more Commons posts:", error);
     } finally {
       setIsLoadingMoreFeed(false);
     }
   };
 
-  const handleFeedScroll = (event: { nativeEvent: { contentOffset: { y: number }; layoutMeasurement: { height: number }; contentSize: { height: number } } }) => {
+  const handleFeedScroll = (event: {
+    nativeEvent: {
+      contentOffset: { y: number };
+      layoutMeasurement: { height: number };
+      contentSize: { height: number };
+    };
+  }) => {
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
-    const isNearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 400;
+    const isNearBottom =
+      contentOffset.y + layoutMeasurement.height >= contentSize.height - 400;
     if (isNearBottom) void loadMoreFeedPosts();
   };
 
@@ -331,7 +432,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
     if (!trimmed) {
       setSearchPeople([]);
       setSearchPosts([]);
-      setSearchError('');
+      setSearchError("");
       setIsSearching(false);
       return;
     }
@@ -345,11 +446,11 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
           if (cancelled) return;
           setSearchPeople(result.people);
           setSearchPosts(result.posts);
-          setSearchError('');
+          setSearchError("");
         })
         .catch((error) => {
-          console.error('Search failed:', error);
-          if (!cancelled) setSearchError('Could not search right now.');
+          console.error("Search failed:", error);
+          if (!cancelled) setSearchError("Could not search right now.");
         })
         .finally(() => {
           if (!cancelled) setIsSearching(false);
@@ -364,10 +465,10 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
   const closeSearch = () => {
     setSearchOpen(false);
-    setSearchQuery('');
+    setSearchQuery("");
     setSearchPeople([]);
     setSearchPosts([]);
-    setSearchError('');
+    setSearchError("");
   };
 
   useEffect(() => {
@@ -386,10 +487,12 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
       .listCommonsDirectory(sessionToken)
       .then((result) => {
         if (!mounted) return;
-        setMemberCommons(result.coops.filter((commons) => commons.accessStatus === 'ACTIVE'));
+        setMemberCommons(
+          result.coops.filter((commons) => commons.accessStatus === "ACTIVE"),
+        );
       })
       .catch((error) => {
-        console.error('Failed to load member commons:', error);
+        console.error("Failed to load member commons:", error);
         if (mounted) setMemberCommons([]);
       })
       .finally(() => {
@@ -400,6 +503,36 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
       mounted = false;
     };
   }, [sessionToken]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    if (!hasAccountSession || !sessionToken || !currentDrawerCoopId) {
+      setDrawerCircles([]);
+      setDrawerCirclesLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    setDrawerCirclesLoading(true);
+    api
+      .listMyGroups(sessionToken, currentDrawerCoopId)
+      .then((result) => {
+        if (mounted) setDrawerCircles(result.groups || []);
+      })
+      .catch((error) => {
+        console.error("Failed to load drawer circles:", error);
+        if (mounted) setDrawerCircles([]);
+      })
+      .finally(() => {
+        if (mounted) setDrawerCirclesLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [currentDrawerCoopId, hasAccountSession, sessionToken]);
 
   useEffect(() => {
     if (postableCommons.length === 0) return;
@@ -413,10 +546,14 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
   }, [feedCoopId, isScopedFeed, postableCommons]);
 
   const visiblePosts = useMemo(() => {
-    return [...feedPosts].sort((a, b) => b.support - a.support || b.replies - a.replies);
+    return [...feedPosts].sort(
+      (a, b) => b.support - a.support || b.replies - a.replies,
+    );
   }, [feedPosts]);
-  const hasCurrentUserPost = visiblePosts.some((post) => post.authorId === user?.id);
-  const isWelcomeHandoff = params.welcome === '1';
+  const hasCurrentUserPost = visiblePosts.some(
+    (post) => post.authorId === user?.id,
+  );
+  const isWelcomeHandoff = params.welcome === "1";
   const shouldShowNextStep =
     hasAccountSession &&
     !scopedFeedLocked &&
@@ -430,7 +567,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
     }
 
     pendingActionRef.current = action;
-    setAuthError('');
+    setAuthError("");
     setAccountPromptOpen(true);
   };
 
@@ -438,16 +575,22 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
     const trimmed = draft.trim();
     if (isPosting || isUploadingMedia) return;
     if (!trimmed && selectedMediaItems.length === 0) {
-      setComposerNotice({ type: 'error', body: 'Write something or add a photo/video first.' });
+      setComposerNotice({
+        type: "error",
+        body: "Write something or add a photo/video first.",
+      });
       return;
     }
 
     if (!hasAccountSession) {
-      setComposerNotice({ type: 'info', body: `Sign in once to publish posts in ${selectedComposerCommons?.name || 'a commons or page'}.` });
+      setComposerNotice({
+        type: "info",
+        body: `Sign in once to publish posts in ${selectedComposerCommons?.name || "a commons or page"}.`,
+      });
     }
 
     if (!selectedComposerCommons) {
-      setComposerNotice({ type: 'error', body: 'Choose where to post first.' });
+      setComposerNotice({ type: "error", body: "Choose where to post first." });
       return;
     }
 
@@ -455,12 +598,18 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
       setIsPosting(true);
       setComposerNotice(null);
       try {
-        const isPersonalPageDestination = selectedComposerCommons.id === PERSONAL_PAGE_DESTINATION_ID;
-        const uploadResourceId = isPersonalPageDestination ? 'personal-page' : selectedComposerCommons.id;
+        const isPersonalPageDestination =
+          selectedComposerCommons.id === PERSONAL_PAGE_DESTINATION_ID;
+        const uploadResourceId = isPersonalPageDestination
+          ? "personal-page"
+          : selectedComposerCommons.id;
         const uploadedMedia = selectedMediaItems.length
           ? await (async () => {
               setIsUploadingMedia(true);
-              setComposerNotice({ type: 'info', body: `Uploading ${selectedMediaItems.length} attachment${selectedMediaItems.length === 1 ? '' : 's'}...` });
+              setComposerNotice({
+                type: "info",
+                body: `Uploading ${selectedMediaItems.length} attachment${selectedMediaItems.length === 1 ? "" : "s"}...`,
+              });
               return Promise.all(
                 selectedMediaItems.map((media) =>
                   api.uploadCommonsPostMedia({
@@ -473,51 +622,62 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                     height: media.height,
                     durationMs: media.durationMs,
                     sizeBytes: media.sizeBytes,
-                  })
-                )
+                  }),
+                ),
               );
             })()
           : [];
 
         if (isPersonalPageDestination) {
-          await api.createPersonalPagePost({
-            content: trimmed,
-            tag: selectedPostType,
-            media: uploadedMedia,
-          }, token);
+          await api.createPersonalPagePost(
+            {
+              content: trimmed,
+              tag: selectedPostType,
+              media: uploadedMedia,
+            },
+            token,
+          );
           setNextStepHidden(true);
-          setDraft('');
+          setDraft("");
           setSelectedPostType(DEFAULT_POST_TYPE);
           clearSelectedMedia();
-          setComposerNotice({ type: 'success', body: 'Posted to your Personal Page.' });
+          setComposerNotice({
+            type: "success",
+            body: "Posted to your Personal Page.",
+          });
           return;
         }
 
-        const result = await api.createCommonsPost({
-          content: trimmed,
-          coopId: selectedComposerCommons.id,
-          tag: selectedPostType,
-          media: uploadedMedia,
-        }, token);
-        const belongsInCurrentFeed = feedCoopId === 'all' || result.post.coopId === feedCoopId;
+        const result = await api.createCommonsPost(
+          {
+            content: trimmed,
+            coopId: selectedComposerCommons.id,
+            tag: selectedPostType,
+            media: uploadedMedia,
+          },
+          token,
+        );
+        const belongsInCurrentFeed =
+          feedCoopId === "all" || result.post.coopId === feedCoopId;
         if (belongsInCurrentFeed) {
           setFeedPosts((current) => [result.post, ...current]);
         }
         setNextStepHidden(true);
-        setDraft('');
+        setDraft("");
         setSelectedPostType(DEFAULT_POST_TYPE);
         clearSelectedMedia();
         setComposerNotice({
-          type: 'success',
+          type: "success",
           body: belongsInCurrentFeed
             ? `Posted to ${selectedComposerCommons.name}.`
             : `Posted to ${selectedComposerCommons.name}. It will show in Home.`,
         });
       } catch (error) {
-        console.error('Failed to publish post:', error);
-        const message = error instanceof Error ? error.message : 'Could not publish post.';
+        console.error("Failed to publish post:", error);
+        const message =
+          error instanceof Error ? error.message : "Could not publish post.";
         setAuthError(message);
-        setComposerNotice({ type: 'error', body: message });
+        setComposerNotice({ type: "error", body: message });
       } finally {
         setIsUploadingMedia(false);
         setIsPosting(false);
@@ -529,18 +689,25 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
     try {
       const remainingSlots = MAX_MEDIA_ATTACHMENTS - selectedMediaItems.length;
       if (remainingSlots <= 0) {
-        setComposerNotice({ type: 'error', body: `You can attach up to ${MAX_MEDIA_ATTACHMENTS} media items.` });
+        setComposerNotice({
+          type: "error",
+          body: `You can attach up to ${MAX_MEDIA_ATTACHMENTS} media items.`,
+        });
         return;
       }
 
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        setComposerNotice({ type: 'error', body: 'Allow photo library access to attach media.' });
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        setComposerNotice({
+          type: "error",
+          body: "Allow photo library access to attach media.",
+        });
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images', 'videos'],
+        mediaTypes: ["images", "videos"],
         allowsEditing: false,
         allowsMultipleSelection: true,
         selectionLimit: remainingSlots,
@@ -552,11 +719,13 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
       const acceptedMedia: ComposerMedia[] = [];
       for (const asset of result.assets.slice(0, remainingSlots)) {
-        const resolvedMediaType = asset.type === 'video' ? 'video' : 'image';
+        const resolvedMediaType = asset.type === "video" ? "video" : "image";
         const media: ComposerMedia = {
           uri: asset.uri,
           mediaType: resolvedMediaType,
-          mimeType: asset.mimeType || mimeFromFileName(asset.fileName, resolvedMediaType),
+          mimeType:
+            asset.mimeType ||
+            mimeFromFileName(asset.fileName, resolvedMediaType),
           fileName: asset.fileName || null,
           width: asset.width || null,
           height: asset.height || null,
@@ -566,7 +735,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
         const validationError = validateComposerMedia(media);
 
         if (validationError) {
-          setComposerNotice({ type: 'error', body: validationError });
+          setComposerNotice({ type: "error", body: validationError });
           continue;
         }
 
@@ -579,20 +748,27 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
       addComposerMedia(acceptedMedia);
     } catch (error) {
-      console.error('Failed to pick post media:', error);
-      setComposerNotice({ type: 'error', body: 'Could not attach that media.' });
+      console.error("Failed to pick post media:", error);
+      setComposerNotice({
+        type: "error",
+        body: "Could not attach that media.",
+      });
     }
   };
 
   const composerNoticeColor = () => {
     if (!composerNotice) return SOCIAL_THEME.muted;
-    if (composerNotice.type === 'error') return '#DC2626';
-    if (composerNotice.type === 'success') return '#047857';
+    if (composerNotice.type === "error") return "#DC2626";
+    if (composerNotice.type === "success") return "#047857";
     return SOCIAL_THEME.muted;
   };
 
   const revokeComposerMediaUri = (media: ComposerMedia) => {
-    if (Platform.OS === 'web' && media.uri.startsWith('blob:') && typeof URL !== 'undefined') {
+    if (
+      Platform.OS === "web" &&
+      media.uri.startsWith("blob:") &&
+      typeof URL !== "undefined"
+    ) {
       URL.revokeObjectURL(media.uri);
     }
   };
@@ -620,7 +796,10 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
       rejected.forEach(revokeComposerMediaUri);
 
       if (rejected.length > 0) {
-        setComposerNotice({ type: 'error', body: `You can attach up to ${MAX_MEDIA_ATTACHMENTS} media items.` });
+        setComposerNotice({
+          type: "error",
+          body: `You can attach up to ${MAX_MEDIA_ATTACHMENTS} media items.`,
+        });
       } else {
         setComposerNotice(null);
       }
@@ -631,13 +810,14 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
   const validateComposerMedia = (media: ComposerMedia) => {
     if (!ALLOWED_POST_MEDIA_MIMES.has(media.mimeType)) {
-      return 'Use JPG, PNG, WebP, MP4, MOV, or WebM files.';
+      return "Use JPG, PNG, WebP, MP4, MOV, or WebM files.";
     }
 
-    const maxSize = media.mediaType === 'video' ? MAX_VIDEO_SIZE_BYTES : MAX_IMAGE_SIZE_BYTES;
+    const maxSize =
+      media.mediaType === "video" ? MAX_VIDEO_SIZE_BYTES : MAX_IMAGE_SIZE_BYTES;
     if (media.sizeBytes && media.sizeBytes > maxSize) {
       const maxMb = Math.round(maxSize / 1024 / 1024);
-      return `${media.mediaType === 'video' ? 'Video' : 'Image'} must be under ${maxMb}MB.`;
+      return `${media.mediaType === "video" ? "Video" : "Image"} must be under ${maxMb}MB.`;
     }
 
     return null;
@@ -645,33 +825,33 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
   const openSuggestCommons = () => {
     setDrawerOpen(false);
-    setSuggestionStatus('idle');
-    setSuggestionMessage('');
+    setSuggestionStatus("idle");
+    setSuggestionMessage("");
     if (user?.email) setSuggestedCommonsEmail(user.email);
     setSuggestCommonsOpen(true);
   };
 
   const submitCommonsSuggestion = async () => {
-    if (suggestionStatus === 'submitting') return;
+    if (suggestionStatus === "submitting") return;
 
     const name = suggestedCommonsName.trim();
     const reason = suggestedCommonsReason.trim();
     const email = (user?.email || suggestedCommonsEmail).trim().toLowerCase();
 
     if (!name) {
-      setSuggestionStatus('error');
-      setSuggestionMessage('Name the commons you want to see.');
+      setSuggestionStatus("error");
+      setSuggestionMessage("Name the commons you want to see.");
       return;
     }
 
-    if (!email.includes('@')) {
-      setSuggestionStatus('error');
-      setSuggestionMessage('Add an email so we can follow up.');
+    if (!email.includes("@")) {
+      setSuggestionStatus("error");
+      setSuggestionMessage("Add an email so we can follow up.");
       return;
     }
 
-    setSuggestionStatus('submitting');
-    setSuggestionMessage('');
+    setSuggestionStatus("submitting");
+    setSuggestionMessage("");
 
     try {
       await api.suggestCommons(
@@ -681,16 +861,22 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
           email,
           suggestedByName: user?.name || undefined,
         },
-        sessionToken
+        sessionToken,
       );
-      setSuggestionStatus('success');
-      setSuggestionMessage('Suggestion sent. We will use it to decide which commons to open next.');
-      setSuggestedCommonsName('');
-      setSuggestedCommonsReason('');
+      setSuggestionStatus("success");
+      setSuggestionMessage(
+        "Suggestion sent. We will use it to decide which commons to open next.",
+      );
+      setSuggestedCommonsName("");
+      setSuggestedCommonsReason("");
     } catch (error) {
-      console.error('Commons suggestion failed:', error);
-      setSuggestionStatus('error');
-      setSuggestionMessage(error instanceof Error ? error.message : 'Could not send the suggestion. Try again.');
+      console.error("Commons suggestion failed:", error);
+      setSuggestionStatus("error");
+      setSuggestionMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not send the suggestion. Try again.",
+      );
     }
   };
   const supportPost = (post: CommonsPost) => {
@@ -700,13 +886,21 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
         setFeedPosts((current) =>
           current.map((item) =>
             item.id === post.id
-              ? { ...item, support: Math.max(0, item.support + (result.supported ? 1 : -1)) }
-              : item
-          )
+              ? {
+                  ...item,
+                  support: Math.max(
+                    0,
+                    item.support + (result.supported ? 1 : -1),
+                  ),
+                }
+              : item,
+          ),
         );
       } catch (error) {
-        console.error('Failed to support post:', error);
-        setAuthError(error instanceof Error ? error.message : 'Could not update support.');
+        console.error("Failed to support post:", error);
+        setAuthError(
+          error instanceof Error ? error.message : "Could not update support.",
+        );
       }
     });
   };
@@ -714,18 +908,23 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
   const deletePost = (post: CommonsPost) => {
     if (deletingPostId || !sessionToken) return;
 
-    Alert.alert('Delete post?', 'This can\'t be undone.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert("Delete post?", "This can't be undone.", [
+      { text: "Cancel", style: "cancel" },
       {
-        text: 'Delete',
-        style: 'destructive',
+        text: "Delete",
+        style: "destructive",
         onPress: async () => {
           setDeletingPostId(post.id);
           try {
             await api.deleteCommonsPost(post.id, sessionToken);
-            setFeedPosts((current) => current.filter((item) => item.id !== post.id));
+            setFeedPosts((current) =>
+              current.filter((item) => item.id !== post.id),
+            );
           } catch (error) {
-            Alert.alert('Could not delete post', error instanceof Error ? error.message : 'Please try again.');
+            Alert.alert(
+              "Could not delete post",
+              error instanceof Error ? error.message : "Please try again.",
+            );
           } finally {
             setDeletingPostId(null);
           }
@@ -736,9 +935,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
   const openPostDetail = (post: CommonsPost) => {
     router.push({
-      pathname: '/[coopId]/posts/[postId]',
+      pathname: "/[coopId]/posts/[postId]",
       params: {
-        coopId: post.coopId || feedCoopId || 'cahootz',
+        coopId: post.coopId || feedCoopId || "cahootz",
         postId: post.id,
       },
     } as any);
@@ -746,7 +945,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
   const openPersonPage = (author: string, handle?: string) => {
     router.push({
-      pathname: '/people/[handle]',
+      pathname: "/people/[handle]",
       params: {
         handle: handle || personHandleFromName(author),
         name: author,
@@ -756,20 +955,24 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
   const requestCode = async () => {
     const email = accountEmail.trim().toLowerCase();
-    if (isAuthBusy || !email.includes('@')) {
-      setAuthError('Enter a valid email address.');
+    if (isAuthBusy || !email.includes("@")) {
+      setAuthError("Enter a valid email address.");
       return;
     }
 
     setIsAuthBusy(true);
-    setAuthError('');
+    setAuthError("");
 
     try {
       await api.requestLoginCode(email);
       setCodeSent(true);
     } catch (error) {
-      console.error('Request code failed:', error);
-      setAuthError(error instanceof Error ? error.message : 'Could not send a code. Try again.');
+      console.error("Request code failed:", error);
+      setAuthError(
+        error instanceof Error
+          ? error.message
+          : "Could not send a code. Try again.",
+      );
     } finally {
       setIsAuthBusy(false);
     }
@@ -778,12 +981,12 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
   const verifyCode = async () => {
     const email = accountEmail.trim().toLowerCase();
     if (isAuthBusy || !email || accountCode.trim().length !== 6) {
-      setAuthError('Enter the 6 digit code from your email.');
+      setAuthError("Enter the 6 digit code from your email.");
       return;
     }
 
     setIsAuthBusy(true);
-    setAuthError('');
+    setAuthError("");
 
     try {
       const data = await api.verifyLoginCode(email, accountCode);
@@ -798,35 +1001,49 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
         };
         await login(verifiedUser);
         setAccountPromptOpen(false);
-        setAccountCode('');
+        setAccountCode("");
         setCodeSent(false);
 
         const pendingAction = pendingActionRef.current;
         pendingActionRef.current = null;
-        if (verifiedUser.sessionToken && pendingAction && verifiedUser.profileOnboardingCompletedAt) {
+        if (
+          verifiedUser.sessionToken &&
+          pendingAction &&
+          verifiedUser.profileOnboardingCompletedAt
+        ) {
           await pendingAction(verifiedUser.sessionToken);
         }
       } else {
-        setAuthError('Invalid code.');
+        setAuthError("Invalid code.");
       }
     } catch (error) {
-      console.error('Verify code failed:', error);
-      setAuthError(error instanceof Error ? error.message : 'Could not verify the code. Try again.');
+      console.error("Verify code failed:", error);
+      setAuthError(
+        error instanceof Error
+          ? error.message
+          : "Could not verify the code. Try again.",
+      );
     } finally {
       setIsAuthBusy(false);
     }
   };
 
-  const tagColor = (tag: CommonsPost['tag']) => {
-    if (tag === 'Social' || tag === 'Thought') return { bg: '#F3F4F6', fg: '#374151' };
-    if (tag === 'Intro') return { bg: SOCIAL_THEME.primarySoft, fg: '#C2410C' };
-    if (tag === 'Meme') return { bg: SOCIAL_THEME.primarySoft, fg: '#C2410C' };
-    if (tag === 'Win' || tag === 'Update') return { bg: '#D1FAE5', fg: '#047857' };
-    if (tag === 'Opportunity' || tag === 'Offer' || tag === 'Product') return { bg: '#E0E7FF', fg: '#3730A3' };
-    if (tag === 'Need' || tag === 'Ask') return { bg: '#DCFCE7', fg: '#166534' };
-    if (tag === 'Vote' || tag === 'Proposal' || tag === 'Decision') return { bg: SOCIAL_THEME.primarySoft, fg: '#C2410C' };
-    if (tag === 'Resource' || tag === 'Receipt' || tag === 'Project') return { bg: '#FEE2E2', fg: '#B91C1C' };
-    return { bg: '#E0F2FE', fg: '#075985' };
+  const tagColor = (tag: CommonsPost["tag"]) => {
+    if (tag === "Social" || tag === "Thought")
+      return { bg: "#F3F4F6", fg: "#374151" };
+    if (tag === "Intro") return { bg: SOCIAL_THEME.primarySoft, fg: "#C2410C" };
+    if (tag === "Meme") return { bg: SOCIAL_THEME.primarySoft, fg: "#C2410C" };
+    if (tag === "Win" || tag === "Update")
+      return { bg: "#D1FAE5", fg: "#047857" };
+    if (tag === "Opportunity" || tag === "Offer" || tag === "Product")
+      return { bg: "#E0E7FF", fg: "#3730A3" };
+    if (tag === "Need" || tag === "Ask")
+      return { bg: "#DCFCE7", fg: "#166534" };
+    if (tag === "Vote" || tag === "Proposal" || tag === "Decision")
+      return { bg: SOCIAL_THEME.primarySoft, fg: "#C2410C" };
+    if (tag === "Resource" || tag === "Receipt" || tag === "Project")
+      return { bg: "#FEE2E2", fg: "#B91C1C" };
+    return { bg: "#E0F2FE", fg: "#075985" };
   };
 
   const toggleFollow = (authorId: string) => {
@@ -841,8 +1058,10 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
           return next;
         });
       } catch (error) {
-        console.error('Failed to update follow:', error);
-        setAuthError(error instanceof Error ? error.message : 'Could not update follow.');
+        console.error("Failed to update follow:", error);
+        setAuthError(
+          error instanceof Error ? error.message : "Could not update follow.",
+        );
       }
     });
   };
@@ -865,13 +1084,13 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
       return;
     }
 
-    router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
+    router.replace({ pathname: "/", params: { entry: "sign-in" } } as any);
   };
 
   const handleDrawerSignOut = async () => {
     setDrawerOpen(false);
     await logout();
-    router.replace('/' as any);
+    router.replace("/" as any);
   };
 
   const handlePreviewWelcomeScreen = async () => {
@@ -884,18 +1103,20 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
   // tools here rather than as separate rows in the main drawer.
   const adminPanelActions = [
     {
-      label: 'Preview Welcome Screen',
-      description: 'Clears the "seen" flag and signs you out so the first-launch welcome tour shows again.',
+      label: "Preview Welcome Screen",
+      description:
+        'Clears the "seen" flag and signs you out so the first-launch welcome tour shows again.',
       icon: RotateCcw,
       onPress: () => void handlePreviewWelcomeScreen(),
     },
   ];
 
-  const finishProfileBanner = topBanner ?? (
-    hasAccountSession && !user?.profileOnboardingCompletedAt ? (
+  const finishProfileBanner =
+    topBanner ??
+    (hasAccountSession && !user?.profileOnboardingCompletedAt ? (
       <TouchableOpacity
         accessibilityRole="button"
-        onPress={() => router.push('/profile-onboarding' as any)}
+        onPress={() => router.push("/profile-onboarding" as any)}
         className="mb-5 overflow-hidden rounded-[28px]"
         style={{ backgroundColor: SOCIAL_THEME.primary }}
         activeOpacity={0.86}
@@ -905,45 +1126,56 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
             <Sparkles color="#FFFFFF" size={18} strokeWidth={2.8} />
           </View>
           <View className="min-w-0 flex-1">
-            <Text className="text-sm font-black leading-5 text-white">Finish your profile setup</Text>
+            <Text className="text-sm font-black leading-5 text-white">
+              Finish your profile setup
+            </Text>
             <Text className="mt-0.5 text-xs leading-4 text-white">
               Help people know who you are and what you care about
             </Text>
           </View>
           <View className="rounded-full bg-white px-3.5 py-2">
-            <Text className="text-xs font-black" style={{ color: SOCIAL_THEME.primary }}>
+            <Text
+              className="text-xs font-black"
+              style={{ color: SOCIAL_THEME.primary }}
+            >
               Complete
             </Text>
           </View>
         </View>
       </TouchableOpacity>
-    ) : null
-  );
+    ) : null);
 
   const listPreview = (items?: string[]) => {
-    const list = (items || []).map((item) => item.trim()).filter(Boolean).slice(0, 3);
-    return list.join(', ');
+    const list = (items || [])
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    return list.join(", ");
   };
 
   const firstStepActions: FirstStepAction[] = [
     {
-      label: 'Introduce myself',
-      type: 'Intro',
+      label: "Introduce myself",
+      type: "Intro",
       buildDraft: () => {
         const interests = listPreview(user?.interests);
         const offers = listPreview(user?.resourcesOffered);
         const needs = listPreview(user?.resourcesNeeded);
         return [
           `Hey everyone, I'm ${accountName}.`,
-          interests ? `I'm interested in ${interests}.` : "I'm excited to connect with people here.",
+          interests
+            ? `I'm interested in ${interests}.`
+            : "I'm excited to connect with people here.",
           offers ? `I can help with ${offers}.` : null,
           needs ? `I'm looking to connect around ${needs}.` : null,
-        ].filter(Boolean).join(' ');
+        ]
+          .filter(Boolean)
+          .join(" ");
       },
     },
     {
-      label: 'Ask for help',
-      type: 'Ask',
+      label: "Ask for help",
+      type: "Ask",
       buildDraft: () => {
         const needs = listPreview(user?.resourcesNeeded);
         return needs
@@ -952,19 +1184,19 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
       },
     },
     {
-      label: 'Offer help',
-      type: 'Offer',
+      label: "Offer help",
+      type: "Offer",
       buildDraft: () => {
         const offers = listPreview(user?.resourcesOffered);
         return offers
           ? `I can help with ${offers}. Reach out if this would be useful.`
-          : 'I can help with...';
+          : "I can help with...";
       },
     },
     {
-      label: 'Share an idea',
-      type: 'Project',
-      buildDraft: () => 'I have an idea for the community: ',
+      label: "Share an idea",
+      type: "Project",
+      buildDraft: () => "I have an idea for the community: ",
     },
   ];
 
@@ -972,21 +1204,38 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
     setSelectedPostType(action.type);
     setDraft(action.buildDraft());
     setNextStepHidden(true);
-    setComposerNotice({ type: 'info', body: "Edit this however you want, then tap Post when you're ready." });
-    requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+    setComposerNotice({
+      type: "info",
+      body: "Edit this however you want, then tap Post when you're ready.",
+    });
+    requestAnimationFrame(() =>
+      scrollRef.current?.scrollToEnd({ animated: true }),
+    );
   };
 
   const renderNextStepPanel = () => {
     if (!shouldShowNextStep) return null;
 
     return (
-      <View className="mb-4 rounded-[24px] border bg-white p-4" style={{ borderColor: SOCIAL_THEME.border }}>
+      <View
+        className="mb-4 rounded-[24px] border bg-white p-4"
+        style={{ borderColor: SOCIAL_THEME.border }}
+      >
         <View className="flex-row items-start gap-3">
-          <View className="h-10 w-10 items-center justify-center rounded-2xl" style={{ backgroundColor: SOCIAL_THEME.primarySoft }}>
-            <Sparkles size={18} color={SOCIAL_THEME.primary} strokeWidth={2.6} />
+          <View
+            className="h-10 w-10 items-center justify-center rounded-2xl"
+            style={{ backgroundColor: SOCIAL_THEME.primarySoft }}
+          >
+            <Sparkles
+              size={18}
+              color={SOCIAL_THEME.primary}
+              strokeWidth={2.6}
+            />
           </View>
           <View className="min-w-0 flex-1">
-            <Text className="text-base font-black text-gray-950">Your next step</Text>
+            <Text className="text-base font-black text-gray-950">
+              Your next step
+            </Text>
             <Text className="mt-1 text-sm leading-5 text-gray-600">
               Start by sharing one thing with the community.
             </Text>
@@ -998,10 +1247,16 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
               key={action.label}
               onPress={() => startFirstStep(action)}
               className="rounded-full border px-3.5 py-2"
-              style={{ borderColor: SOCIAL_THEME.primaryBorder, backgroundColor: SOCIAL_THEME.primarySoft }}
+              style={{
+                borderColor: SOCIAL_THEME.primaryBorder,
+                backgroundColor: SOCIAL_THEME.primarySoft,
+              }}
               activeOpacity={0.8}
             >
-              <Text className="text-xs font-black" style={{ color: SOCIAL_THEME.primary }}>
+              <Text
+                className="text-xs font-black"
+                style={{ color: SOCIAL_THEME.primary }}
+              >
                 {action.label}
               </Text>
             </TouchableOpacity>
@@ -1017,18 +1272,30 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
     return (
       <View className="border-t border-gray-200 bg-white px-4 pb-3 pt-3">
         {selectedMediaItems.length > 0 ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            className="mb-2"
+          >
             <View className="flex-row gap-2">
               {selectedMediaItems.map((media, index) => (
                 <View
                   key={`${media.uri}-${index}`}
                   className="overflow-hidden rounded-xl border border-gray-100 bg-white"
-                  style={{ width: COMPOSER_MEDIA_TILE_SIZE, height: COMPOSER_MEDIA_TILE_SIZE }}
+                  style={{
+                    width: COMPOSER_MEDIA_TILE_SIZE,
+                    height: COMPOSER_MEDIA_TILE_SIZE,
+                  }}
                 >
-                  <CommonsMediaTile media={media} size={COMPOSER_MEDIA_TILE_SIZE} />
-                  {media.mediaType === 'video' ? (
+                  <CommonsMediaTile
+                    media={media}
+                    size={COMPOSER_MEDIA_TILE_SIZE}
+                  />
+                  {media.mediaType === "video" ? (
                     <View className="absolute bottom-1 left-1 rounded-md bg-black/65 px-1.5 py-0.5">
-                      <Text className="text-[10px] font-black text-white">Video</Text>
+                      <Text className="text-[10px] font-black text-white">
+                        Video
+                      </Text>
                     </View>
                   ) : null}
                   <TouchableOpacity
@@ -1045,7 +1312,10 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
         ) : null}
 
         {composerNotice ? (
-          <Text className="mb-2 text-xs font-semibold" style={{ color: composerNoticeColor() }}>
+          <Text
+            className="mb-2 text-xs font-semibold"
+            style={{ color: composerNoticeColor() }}
+          >
             {composerNotice.body}
           </Text>
         ) : null}
@@ -1055,19 +1325,25 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
             onPress={() => setComposerPickerOpen(true)}
             className="min-w-0 flex-1 flex-row items-center gap-2"
             activeOpacity={0.8}
-            accessibilityLabel={`Posting to ${selectedComposerCommons?.shortName || selectedComposerCommons?.name || 'Commons'}. Tap to switch.`}
+            accessibilityLabel={`Posting to ${selectedComposerCommons?.shortName || selectedComposerCommons?.name || "Commons"}. Tap to switch.`}
           >
             <View className="h-8 w-8 items-center justify-center rounded-full bg-slate-400">
               <Text className="text-sm font-black text-white">
                 {accountName.slice(0, 1).toUpperCase()}
               </Text>
             </View>
-            <Text className="min-w-0 text-xs font-black text-slate-600" numberOfLines={1}>
-              {selectedComposerCommons?.name || 'Choose where to post'}
+            <Text
+              className="min-w-0 text-xs font-black text-slate-600"
+              numberOfLines={1}
+            >
+              {selectedComposerCommons?.name || "Choose where to post"}
             </Text>
             <ChevronDown size={13} color="#64748B" />
           </TouchableOpacity>
-          <PostTypeSelector value={selectedPostType} onChange={setSelectedPostType} />
+          <PostTypeSelector
+            value={selectedPostType}
+            onChange={setSelectedPostType}
+          />
         </View>
 
         <View className="flex-row items-center gap-2">
@@ -1083,7 +1359,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
               placeholderTextColor={SOCIAL_THEME.muted}
               multiline
               className="max-h-20 min-h-8 flex-1 text-left text-sm text-gray-900"
-              style={{ textAlignVertical: 'top' }}
+              style={{ textAlignVertical: "top" }}
             />
             <TouchableOpacity
               onPress={() => void pickPostMedia()}
@@ -1117,9 +1393,12 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
     <KeyboardAvoidingView
       className="flex-1"
       style={{ backgroundColor: SOCIAL_THEME.paper }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View className="border-b border-gray-200 bg-white px-3 pb-2" style={{ paddingTop: insets.top + 12 }}>
+      <View
+        className="border-b border-gray-200 bg-white px-3 pb-2"
+        style={{ paddingTop: insets.top + 12 }}
+      >
         <View className="flex-row items-center gap-2">
           <TouchableOpacity
             onPress={() => setDrawerOpen(true)}
@@ -1128,20 +1407,28 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
           >
             <Menu size={18} color="#1F2937" strokeWidth={2.6} />
           </TouchableOpacity>
-          <View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: SOCIAL_THEME.primary }}>
+          <View
+            className="h-9 w-9 items-center justify-center rounded-full"
+            style={{ backgroundColor: SOCIAL_THEME.primary }}
+          >
             <LayoutGrid size={17} color="#FFFFFF" strokeWidth={2.6} />
           </View>
           <View className="min-w-0 flex-1">
-            <Text className="min-w-0 text-base font-black text-gray-950" numberOfLines={1}>
+            <Text
+              className="min-w-0 text-base font-black text-gray-950"
+              numberOfLines={1}
+            >
               {headerCommonsName}
             </Text>
             <TouchableOpacity
               onPress={() => setDrawerOpen(true)}
               className="mt-0.5 flex-row items-center"
               activeOpacity={0.75}
-              accessibilityLabel="Switch commons"
+              accessibilityLabel="Open commons and circle navigation"
             >
-              <Text className="text-xs font-semibold text-slate-600">Switch commons</Text>
+              <Text className="text-xs font-semibold text-slate-600">
+                {isScopedFeed ? "General" : "Switch commons"}
+              </Text>
               <ChevronDown size={13} color="#475569" />
             </TouchableOpacity>
           </View>
@@ -1162,18 +1449,29 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
           {feedError ? (
             <View className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4">
-              <Text className="text-sm font-semibold text-red-700">{feedError}</Text>
+              <Text className="text-sm font-semibold text-red-700">
+                {feedError}
+              </Text>
             </View>
           ) : null}
 
           {scopedFeedLocked ? (
-            <View className="mb-4 rounded-2xl border p-4" style={{ backgroundColor: SOCIAL_THEME.primarySoft, borderColor: SOCIAL_THEME.primaryBorder }}>
+            <View
+              className="mb-4 rounded-2xl border p-4"
+              style={{
+                backgroundColor: SOCIAL_THEME.primarySoft,
+                borderColor: SOCIAL_THEME.primaryBorder,
+              }}
+            >
               <View className="flex-row items-start gap-2">
                 <Lock size={18} color={SOCIAL_THEME.primary} />
                 <View className="min-w-0 flex-1">
-                  <Text className="text-sm font-black text-gray-950">This commons is locked</Text>
+                  <Text className="text-sm font-black text-gray-950">
+                    This commons is locked
+                  </Text>
                   <Text className="mt-1 text-xs leading-4 text-gray-700">
-                    Apply from the Wall to see member posts, comment, and publish here.
+                    Apply from the Wall to see member posts, comment, and
+                    publish here.
                   </Text>
                 </View>
               </View>
@@ -1183,7 +1481,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
           <View className="gap-5">
             {visiblePosts.length === 0 ? (
               <View className="rounded-[28px] border border-dashed border-gray-300 bg-white p-5">
-                <Text className="text-base font-black text-gray-900">Start the conversation</Text>
+                <Text className="text-base font-black text-gray-900">
+                  Start the conversation
+                </Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">
                   Introduce yourself, ask for help, or offer help.
                 </Text>
@@ -1192,9 +1492,11 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
             {visiblePosts.map((post) => {
               const colors = tagColor(post.tag);
-              const authorFollowId = post.authorHandle || personHandleFromName(post.author);
+              const authorFollowId =
+                post.authorHandle || personHandleFromName(post.author);
               const authorHandle = personDisplayHandle(authorFollowId);
-              const followsAuthor = !!post.authorId && followingIds.has(post.authorId);
+              const followsAuthor =
+                !!post.authorId && followingIds.has(post.authorId);
               const firstComment = post.comments[0];
               return (
                 <TouchableOpacity
@@ -1215,7 +1517,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                         activeOpacity={0.75}
                         accessibilityLabel={`Open ${post.author}'s personal page`}
                       >
-                        <Text className="text-base font-black text-slate-600">{personInitials(post.author)}</Text>
+                        <Text className="text-base font-black text-slate-600">
+                          {personInitials(post.author)}
+                        </Text>
                       </TouchableOpacity>
                       <View className="min-w-0 flex-1">
                         <TouchableOpacity
@@ -1227,21 +1531,38 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                           accessibilityLabel={`Open ${post.author}'s personal page`}
                         >
                           <View className="flex-row flex-wrap items-center gap-1.5">
-                            <Text className="text-sm font-black text-gray-950">{post.author}</Text>
-                            <Text className="text-xs font-semibold text-slate-500">{authorHandle}</Text>
-                            <Text className="text-xs font-semibold text-slate-400">·</Text>
-                            <Text className="text-xs font-semibold text-slate-500">{post.time}</Text>
+                            <Text className="text-sm font-black text-gray-950">
+                              {post.author}
+                            </Text>
+                            <Text className="text-xs font-semibold text-slate-500">
+                              {authorHandle}
+                            </Text>
+                            <Text className="text-xs font-semibold text-slate-400">
+                              ·
+                            </Text>
+                            <Text className="text-xs font-semibold text-slate-500">
+                              {post.time}
+                            </Text>
                           </View>
                         </TouchableOpacity>
                         <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5">
                           {shouldShowPostType(post.tag) ? (
-                            <View className="self-start rounded-md px-2 py-0.5" style={{ backgroundColor: colors.bg }}>
-                              <Text className="text-[10px] font-black" style={{ color: colors.fg }}>
+                            <View
+                              className="self-start rounded-md px-2 py-0.5"
+                              style={{ backgroundColor: colors.bg }}
+                            >
+                              <Text
+                                className="text-[10px] font-black"
+                                style={{ color: colors.fg }}
+                              >
                                 {postTypeLabel(post.tag)}
                               </Text>
                             </View>
                           ) : null}
-                          <Text className="text-[11px] font-semibold text-slate-400" numberOfLines={1}>
+                          <Text
+                            className="text-[11px] font-semibold text-slate-400"
+                            numberOfLines={1}
+                          >
                             {post.group}
                           </Text>
                         </View>
@@ -1270,13 +1591,24 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                           }}
                           className="rounded-full border px-3 py-1.5"
                           style={{
-                            borderColor: followsAuthor ? SOCIAL_THEME.primary : SOCIAL_THEME.border,
-                            backgroundColor: followsAuthor ? SOCIAL_THEME.primarySoft : '#FFFFFF',
+                            borderColor: followsAuthor
+                              ? SOCIAL_THEME.primary
+                              : SOCIAL_THEME.border,
+                            backgroundColor: followsAuthor
+                              ? SOCIAL_THEME.primarySoft
+                              : "#FFFFFF",
                           }}
                           activeOpacity={0.75}
                         >
-                          <Text className="text-[10px] font-black" style={{ color: followsAuthor ? SOCIAL_THEME.primary : '#475569' }}>
-                            {followsAuthor ? 'Following' : 'Follow'}
+                          <Text
+                            className="text-[10px] font-black"
+                            style={{
+                              color: followsAuthor
+                                ? SOCIAL_THEME.primary
+                                : "#475569",
+                            }}
+                          >
+                            {followsAuthor ? "Following" : "Follow"}
                           </Text>
                         </TouchableOpacity>
                       )}
@@ -1286,29 +1618,53 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                       <MentionText
                         content={post.title}
                         className="mt-3"
-                        style={{ fontSize: 14, lineHeight: 20, fontWeight: '900', color: '#030712' }}
+                        style={{
+                          fontSize: 14,
+                          lineHeight: 20,
+                          fontWeight: "900",
+                          color: "#030712",
+                        }}
                       />
                     ) : null}
                     {post.body ? (
                       <MentionText
                         content={post.body}
                         className="mt-3"
-                        style={{ fontSize: 14, lineHeight: 20, color: '#1F2937' }}
+                        style={{
+                          fontSize: 14,
+                          lineHeight: 20,
+                          color: "#1F2937",
+                        }}
                       />
                     ) : null}
                   </View>
 
                   {post.media.length > 0 ? (
                     <View className="border-y border-gray-100 bg-gray-50">
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                      >
                         <View className="flex-row gap-2 p-2">
                           {post.media.map((media) => (
-                            <View key={media.id || media.url} className="overflow-hidden rounded-2xl bg-gray-200">
-                              <CommonsMediaTile media={media} size={post.media.length === 1 ? 286 : FEED_MEDIA_TILE_SIZE} />
+                            <View
+                              key={media.id || media.url}
+                              className="overflow-hidden rounded-2xl bg-gray-200"
+                            >
+                              <CommonsMediaTile
+                                media={media}
+                                size={
+                                  post.media.length === 1
+                                    ? 286
+                                    : FEED_MEDIA_TILE_SIZE
+                                }
+                              />
                               {post.pledges ? (
                                 <View className="absolute bottom-3 right-3 flex-row items-center gap-1 rounded-full bg-slate-900/85 px-3 py-2">
                                   <Bookmark size={15} color="#FFFFFF" />
-                                  <Text className="text-sm font-black text-white">{post.pledges}</Text>
+                                  <Text className="text-sm font-black text-white">
+                                    {post.pledges}
+                                  </Text>
                                 </View>
                               ) : null}
                             </View>
@@ -1327,25 +1683,47 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                         }}
                         className="flex-row items-center gap-1.5"
                       >
-                        <Heart size={19} color={SOCIAL_THEME.primary} fill={SOCIAL_THEME.primary} />
-                        <Text className="text-sm font-black text-slate-800">{post.support}</Text>
+                        <Heart
+                          size={19}
+                          color={SOCIAL_THEME.primary}
+                          fill={SOCIAL_THEME.primary}
+                        />
+                        <Text className="text-sm font-black text-slate-800">
+                          {post.support}
+                        </Text>
                       </TouchableOpacity>
                       <View className="flex-row items-center gap-1.5">
                         <MessageCircle size={19} color="#334155" />
-                        <Text className="text-sm font-semibold text-slate-700">{post.replies}</Text>
+                        <Text className="text-sm font-semibold text-slate-700">
+                          {post.replies}
+                        </Text>
                       </View>
                       <View className="flex-row items-center gap-1.5">
                         <Repeat2 size={18} color="#334155" />
-                        <Text className="text-sm font-semibold text-slate-700">{Math.max(0, Math.round(post.replies / 2))}</Text>
+                        <Text className="text-sm font-semibold text-slate-700">
+                          {Math.max(0, Math.round(post.replies / 2))}
+                        </Text>
                       </View>
                       <Bookmark size={19} color="#334155" />
                     </View>
 
                     {firstComment ? (
                       <View className="mt-3 rounded-full bg-gray-50 px-3 py-2">
-                        <Text className="text-xs text-slate-700" numberOfLines={2}>
-                          <Text className="font-black text-gray-950">@{firstComment.author.toLowerCase().replace(/[^a-z0-9]+/g, '')}: </Text>
-                          <MentionText content={firstComment.body} numberOfLines={2} />
+                        <Text
+                          className="text-xs text-slate-700"
+                          numberOfLines={2}
+                        >
+                          <Text className="font-black text-gray-950">
+                            @
+                            {firstComment.author
+                              .toLowerCase()
+                              .replace(/[^a-z0-9]+/g, "")}
+                            :{" "}
+                          </Text>
+                          <MentionText
+                            content={firstComment.body}
+                            numberOfLines={2}
+                          />
                         </Text>
                       </View>
                     ) : null}
@@ -1374,9 +1752,13 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
           <View className="max-h-[70%] rounded-t-2xl bg-white">
             <View className="border-b border-gray-200 px-5 pb-4 pt-5">
               <View className="flex-row items-center justify-between gap-3">
-              <View className="min-w-0 flex-1">
-                <Text className="text-xs font-black uppercase text-gray-500">Post destination</Text>
-                  <Text className="text-2xl font-black text-gray-950">Choose where to post</Text>
+                <View className="min-w-0 flex-1">
+                  <Text className="text-xs font-black uppercase text-gray-500">
+                    Post destination
+                  </Text>
+                  <Text className="text-2xl font-black text-gray-950">
+                    Choose where to post
+                  </Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setComposerPickerOpen(false)}
@@ -1388,7 +1770,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
               </View>
             </View>
 
-            <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 26 }}>
+            <ScrollView
+              contentContainerStyle={{ padding: 16, paddingBottom: 26 }}
+            >
               <View className="gap-2">
                 {postableCommons.map((commons) => {
                   const selected = commons.id === selectedComposerCoopId;
@@ -1399,35 +1783,56 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                         setSelectedComposerCoopId(commons.id);
                         setComposerPickerOpen(false);
                         setComposerNotice(null);
-                        const navigation = composerDestinationNavigation(feedCoopId, commons.id);
-                        if (navigation.method === 'setParams') {
+                        const navigation = composerDestinationNavigation(
+                          feedCoopId,
+                          commons.id,
+                        );
+                        if (navigation.method === "setParams") {
                           router.setParams(navigation.params);
-                        } else if (navigation.method === 'replace') {
+                        } else if (navigation.method === "replace") {
                           router.replace(navigation.href as any);
                         }
                       }}
                       className="flex-row items-center gap-3 rounded-xl border p-3"
                       style={{
-                        backgroundColor: selected ? SOCIAL_THEME.primarySoft : '#FFFFFF',
-                        borderColor: selected ? SOCIAL_THEME.primary : SOCIAL_THEME.border,
+                        backgroundColor: selected
+                          ? SOCIAL_THEME.primarySoft
+                          : "#FFFFFF",
+                        borderColor: selected
+                          ? SOCIAL_THEME.primary
+                          : SOCIAL_THEME.border,
                       }}
                       activeOpacity={0.75}
                     >
                       <View
                         className="h-11 w-11 items-center justify-center rounded-xl"
-                        style={{ backgroundColor: selected ? SOCIAL_THEME.primary : '#111827' }}
+                        style={{
+                          backgroundColor: selected
+                            ? SOCIAL_THEME.primary
+                            : "#111827",
+                        }}
                       >
-                        <Text className="font-black text-white">{commons.name.slice(0, 1).toUpperCase()}</Text>
+                        <Text className="font-black text-white">
+                          {commons.name.slice(0, 1).toUpperCase()}
+                        </Text>
                       </View>
                       <View className="min-w-0 flex-1">
-                        <Text className="font-black text-gray-950" numberOfLines={1}>
+                        <Text
+                          className="font-black text-gray-950"
+                          numberOfLines={1}
+                        >
                           {commons.name}
                         </Text>
-                        <Text className="mt-0.5 text-xs leading-4 text-gray-500" numberOfLines={2}>
-                          {commons.description || 'Member commons'}
+                        <Text
+                          className="mt-0.5 text-xs leading-4 text-gray-500"
+                          numberOfLines={2}
+                        >
+                          {commons.description || "Member commons"}
                         </Text>
                       </View>
-                      {selected ? <CheckCircle2 size={19} color={SOCIAL_THEME.primary} /> : null}
+                      {selected ? (
+                        <CheckCircle2 size={19} color={SOCIAL_THEME.primary} />
+                      ) : null}
                     </TouchableOpacity>
                   );
                 })}
@@ -1437,7 +1842,12 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
         </View>
       </Modal>
 
-      <Modal visible={drawerOpen} transparent animationType="fade" onRequestClose={() => setDrawerOpen(false)}>
+      <Modal
+        visible={drawerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDrawerOpen(false)}
+      >
         <View className="flex-1 flex-row bg-black/35">
           <View className="w-4/5 bg-white pt-14">
             <View className="border-b border-stone-200 px-4 pb-3">
@@ -1446,7 +1856,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                   onPress={() => {
                     setDrawerOpen(false);
                     if (hasAccountSession) {
-                      router.push('/(authenticated)/personal-page' as any);
+                      router.push("/(authenticated)/personal-page" as any);
                     } else {
                       openSignIn();
                     }
@@ -1455,14 +1865,24 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                   activeOpacity={0.75}
                 >
                   <View className="h-10 w-10 items-center justify-center rounded-full bg-slate-400">
-                    <Text className="text-sm font-black text-white">{accountName.slice(0, 1).toUpperCase()}</Text>
+                    <Text className="text-sm font-black text-white">
+                      {accountName.slice(0, 1).toUpperCase()}
+                    </Text>
                   </View>
                   <View className="min-w-0 flex-1">
-                    <Text className="text-sm font-black text-gray-900" numberOfLines={1}>
-                      {hasAccountSession ? accountName : 'Sign in'}
+                    <Text
+                      className="text-sm font-black text-gray-900"
+                      numberOfLines={1}
+                    >
+                      {hasAccountSession ? accountName : "Sign in"}
                     </Text>
-                    <Text className="text-xs font-semibold text-gray-500" numberOfLines={1}>
-                      {hasAccountSession ? `@${accountHandle} · Member` : 'Tap to sign in'}
+                    <Text
+                      className="text-xs font-semibold text-gray-500"
+                      numberOfLines={1}
+                    >
+                      {hasAccountSession
+                        ? `@${accountHandle} · Member`
+                        : "Tap to sign in"}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -1476,74 +1896,270 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
               </View>
             </View>
 
-            <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 28 }}>
+            <ScrollView
+              className="flex-1"
+              contentContainerStyle={{ padding: 16, paddingBottom: 28 }}
+            >
               <View className="mb-2 flex-row items-center justify-between">
-                <Text className="text-[11px] font-black uppercase tracking-wide text-stone-400">Switch commons</Text>
-                <TouchableOpacity onPress={() => goToDrawerItem('/commons')} activeOpacity={0.75}>
-                  <Text className="text-[11px] font-black" style={{ color: SOCIAL_THEME.primary }}>Active Co-ops</Text>
+                <Text className="text-[11px] font-black uppercase tracking-wide text-stone-400">
+                  Switch commons
+                </Text>
+                <TouchableOpacity
+                  onPress={() => goToDrawerItem("/commons")}
+                  activeOpacity={0.75}
+                >
+                  <Text
+                    className="text-[11px] font-black"
+                    style={{ color: SOCIAL_THEME.primary }}
+                  >
+                    Active Co-ops
+                  </Text>
                 </TouchableOpacity>
               </View>
               <View className="mb-3 overflow-hidden rounded-2xl border border-stone-200 bg-white">
                 {commonsDrawerItems.map((item) => {
                   const isActive = item.id === commonsProfile.id;
                   return (
-                    <TouchableOpacity
-                      key={item.id}
-                      onPress={() => goToDrawerItem(item.action)}
-                      className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
-                      style={isActive ? { backgroundColor: SOCIAL_THEME.primarySoft } : undefined}
-                      activeOpacity={0.75}
-                    >
-                      <View
-                        className="h-9 w-9 items-center justify-center rounded-xl"
-                        style={{ backgroundColor: isActive ? SOCIAL_THEME.primary : '#F5F5F4' }}
+                    <View key={item.id}>
+                      <TouchableOpacity
+                        onPress={() => goToDrawerItem(item.action)}
+                        className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
+                        style={
+                          isActive
+                            ? { backgroundColor: SOCIAL_THEME.primarySoft }
+                            : undefined
+                        }
+                        activeOpacity={0.75}
                       >
-                        <Text className="text-sm font-black" style={{ color: isActive ? '#FFFFFF' : '#57534E' }}>{item.icon}</Text>
-                      </View>
-                      <View className="min-w-0 flex-1">
-                        <Text className="text-sm font-black text-gray-900" numberOfLines={1}>{item.label}</Text>
-                        <Text
-                          className="text-xs font-semibold"
-                          style={{ color: item.accessStatus === 'ACTIVE' ? '#059669' : '#6B7280' }}
+                        <View
+                          className="h-9 w-9 items-center justify-center rounded-xl"
+                          style={{
+                            backgroundColor: isActive
+                              ? SOCIAL_THEME.primary
+                              : "#F5F5F4",
+                          }}
                         >
-                          {item.accessStatus === 'ACTIVE' ? (isActive ? 'Active Member' : 'Member') : 'Pending'}
-                        </Text>
-                      </View>
-                      {item.id !== PERSONAL_PAGE_DESTINATION_ID ? (
-                        <TouchableOpacity
-                          onPress={() => goToDrawerItem(`/commons/${item.id}`)}
-                          className="h-8 w-8 items-center justify-center rounded-full bg-stone-100"
-                          accessibilityLabel={`Open ${item.label} page`}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <Info size={15} color="#57534E" />
-                        </TouchableOpacity>
-                      ) : null}
-                      {isActive ? (
-                        <CheckCircle2 size={17} color={SOCIAL_THEME.primary} />
-                      ) : (
-                        <ChevronRight size={15} color="#A8A29E" />
-                      )}
-                    </TouchableOpacity>
+                          <Text
+                            className="text-sm font-black"
+                            style={{ color: isActive ? "#FFFFFF" : "#57534E" }}
+                          >
+                            {item.icon}
+                          </Text>
+                        </View>
+                        <View className="min-w-0 flex-1">
+                          <Text
+                            className="text-sm font-black text-gray-900"
+                            numberOfLines={1}
+                          >
+                            {item.label}
+                          </Text>
+                          <Text
+                            className="text-xs font-semibold"
+                            style={{
+                              color:
+                                item.accessStatus === "ACTIVE"
+                                  ? "#059669"
+                                  : "#6B7280",
+                            }}
+                          >
+                            {item.accessStatus === "ACTIVE"
+                              ? isActive
+                                ? "Active Member"
+                                : "Member"
+                              : "Pending"}
+                          </Text>
+                        </View>
+                        {item.id !== PERSONAL_PAGE_DESTINATION_ID ? (
+                          <TouchableOpacity
+                            onPress={() =>
+                              goToDrawerItem(`/commons/${item.id}`)
+                            }
+                            className="h-8 w-8 items-center justify-center rounded-full bg-stone-100"
+                            accessibilityLabel={`Open ${item.label} page`}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Info size={15} color="#57534E" />
+                          </TouchableOpacity>
+                        ) : null}
+                        {isActive ? (
+                          <CheckCircle2
+                            size={17}
+                            color={SOCIAL_THEME.primary}
+                          />
+                        ) : (
+                          <ChevronRight size={15} color="#A8A29E" />
+                        )}
+                      </TouchableOpacity>
+                    </View>
                   );
                 })}
               </View>
 
+              {activeDrawerCommons ? (
+                <>
+                  <View className="mb-2 mt-4 flex-row items-center justify-between">
+                    <Text className="text-[11px] font-black uppercase tracking-wide text-stone-400">
+                      Circles in this common
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() =>
+                        goToDrawerItem(
+                          `/(authenticated)/spaces?coopId=${activeDrawerCommons.id}&coopName=${encodeURIComponent(activeDrawerCommons.label)}`,
+                        )
+                      }
+                      activeOpacity={0.75}
+                      accessibilityLabel={`View all circles in ${activeDrawerCommons.label}`}
+                    >
+                      <Text
+                        className="text-[11px] font-black"
+                        style={{ color: SOCIAL_THEME.primary }}
+                      >
+                        View more
+                        {hiddenCircleCount > 0 ? ` · ${hiddenCircleCount}` : ""}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View className="mb-3 overflow-hidden rounded-2xl border border-stone-200 bg-white">
+                    {drawerCirclesLoading ? (
+                      <View className="items-center py-4">
+                        <ActivityIndicator
+                          size="small"
+                          color={SOCIAL_THEME.primary}
+                        />
+                      </View>
+                    ) : (
+                      <>
+                        {drawerCirclePreview.map((circle) => (
+                          <TouchableOpacity
+                            key={circle.id}
+                            onPress={() =>
+                              circle.kind === "main"
+                                ? goToDrawerItem(activeDrawerCommons.action)
+                                : goToDrawerItem(
+                                    `/(authenticated)/group/${circle.id}`,
+                                  )
+                            }
+                            className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-2.5"
+                            style={
+                              circle.kind === "main"
+                                ? {
+                                    backgroundColor: SOCIAL_THEME.primarySoft,
+                                  }
+                                : undefined
+                            }
+                            activeOpacity={0.75}
+                            accessibilityLabel={`Open ${circle.label}`}
+                          >
+                            <View
+                              className="h-8 w-8 items-center justify-center rounded-full"
+                              style={{
+                                backgroundColor:
+                                  circle.kind === "main"
+                                    ? SOCIAL_THEME.primarySoft
+                                    : "#F5F5F4",
+                              }}
+                            >
+                              {circle.kind === "main" ? (
+                                <MessageCircle
+                                  size={14}
+                                  color={SOCIAL_THEME.primary}
+                                />
+                              ) : (
+                                <Lock size={13} color="#57534E" />
+                              )}
+                            </View>
+                            <View className="min-w-0 flex-1">
+                              <Text
+                                className="text-xs font-black text-gray-900"
+                                numberOfLines={1}
+                              >
+                                {circle.label}
+                              </Text>
+                              <Text
+                                className="text-[10px] font-semibold text-stone-500"
+                                numberOfLines={1}
+                              >
+                                {circle.kind === "main"
+                                  ? "Default conversation"
+                                  : `${circle.memberCount} ${circle.memberCount === 1 ? "member" : "members"}${circle.isLeader ? " · leader" : ""}`}
+                              </Text>
+                            </View>
+                            {circle.kind === "main" ? (
+                              <CheckCircle2
+                                size={14}
+                                color={SOCIAL_THEME.primary}
+                              />
+                            ) : (
+                              <ChevronRight size={14} color="#A8A29E" />
+                            )}
+                          </TouchableOpacity>
+                        ))}
+
+                        {hasCirclePreviewRoom ? (
+                          <TouchableOpacity
+                            onPress={() =>
+                              goToDrawerItem(
+                                `/(authenticated)/spaces?coopId=${activeDrawerCommons.id}&coopName=${encodeURIComponent(activeDrawerCommons.label)}`,
+                              )
+                            }
+                            className="flex-row items-center gap-2.5 px-3 py-2.5"
+                            activeOpacity={0.75}
+                            accessibilityLabel={`Create a circle in ${activeDrawerCommons.label}`}
+                          >
+                            <View
+                              className="h-8 w-8 items-center justify-center rounded-full"
+                              style={{
+                                backgroundColor: SOCIAL_THEME.primarySoft,
+                              }}
+                            >
+                              <Plus size={14} color={SOCIAL_THEME.primary} />
+                            </View>
+                            <View className="min-w-0 flex-1">
+                              <Text
+                                className="text-xs font-black"
+                                style={{ color: SOCIAL_THEME.primary }}
+                              >
+                                Create circle
+                              </Text>
+                              <Text className="text-[10px] font-semibold text-stone-500">
+                                Start a focused conversation
+                              </Text>
+                            </View>
+                            <ChevronRight size={14} color="#A8A29E" />
+                          </TouchableOpacity>
+                        ) : null}
+                      </>
+                    )}
+                  </View>
+                </>
+              ) : null}
+
               <TouchableOpacity
-                onPress={() => goToDrawerItem('/commons')}
+                onPress={() => goToDrawerItem("/commons")}
                 className="flex-row items-center justify-center gap-1.5 py-1.5"
                 activeOpacity={0.75}
               >
                 <Compass size={14} color={SOCIAL_THEME.primary} />
-                <Text className="text-xs font-black" style={{ color: SOCIAL_THEME.primary }}>Explore all Commons directory</Text>
+                <Text
+                  className="text-xs font-black"
+                  style={{ color: SOCIAL_THEME.primary }}
+                >
+                  Explore all Commons directory
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={openSuggestCommons} activeOpacity={0.75}>
+              <TouchableOpacity
+                onPress={openSuggestCommons}
+                activeOpacity={0.75}
+              >
                 <Text className="mb-4 mt-1 text-center text-[11px] font-semibold text-stone-400">
                   Don&apos;t see your community? Suggest a commons
                 </Text>
               </TouchableOpacity>
 
-              <Text className="mb-2 text-[11px] font-black uppercase tracking-wide text-stone-400">Sections</Text>
+              <Text className="mb-2 text-[11px] font-black uppercase tracking-wide text-stone-400">
+                Sections
+              </Text>
               <View className="mb-5 overflow-hidden rounded-2xl border border-stone-200 bg-white">
                 {visibleDrawerSections.map((item, index) => {
                   const Icon = item.icon;
@@ -1552,14 +2168,18 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                       key={item.label}
                       onPress={() => goToDrawerItem(item.action)}
                       className={`flex-row items-center gap-2.5 px-3 py-3 ${
-                        index < visibleDrawerSections.length - 1 ? 'border-b border-stone-100' : ''
+                        index < visibleDrawerSections.length - 1
+                          ? "border-b border-stone-100"
+                          : ""
                       }`}
                       activeOpacity={0.75}
                     >
                       <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
                         <Icon size={17} color={SOCIAL_THEME.primary} />
                       </View>
-                      <Text className="flex-1 text-sm font-black text-gray-900">{item.label}</Text>
+                      <Text className="flex-1 text-sm font-black text-gray-900">
+                        {item.label}
+                      </Text>
                       <ChevronRight size={15} color="#D6D3D1" />
                     </TouchableOpacity>
                   );
@@ -1573,7 +2193,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                   activeOpacity={0.8}
                 >
                   <LogOut size={16} color="#DC2626" />
-                  <Text className="text-sm font-black text-red-600">Sign Out (@{accountHandle})</Text>
+                  <Text className="text-sm font-black text-red-600">
+                    Sign Out (@{accountHandle})
+                  </Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
@@ -1597,7 +2219,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                   activeOpacity={0.8}
                 >
                   <Wrench size={16} color={SOCIAL_THEME.primary} />
-                  <Text className="text-sm font-black text-gray-900">Admin Panel (Dev)</Text>
+                  <Text className="text-sm font-black text-gray-900">
+                    Admin Panel (Dev)
+                  </Text>
                 </TouchableOpacity>
               )}
 
@@ -1606,12 +2230,21 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
               </Text>
             </ScrollView>
           </View>
-          <TouchableOpacity className="flex-1" onPress={() => setDrawerOpen(false)} activeOpacity={1} />
+          <TouchableOpacity
+            className="flex-1"
+            onPress={() => setDrawerOpen(false)}
+            activeOpacity={1}
+          />
         </View>
       </Modal>
 
       {__DEV__ && (
-        <Modal visible={adminPanelOpen} transparent animationType="fade" onRequestClose={() => setAdminPanelOpen(false)}>
+        <Modal
+          visible={adminPanelOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setAdminPanelOpen(false)}
+        >
           <View className="flex-1 flex-row bg-black/35">
             <View className="w-4/5 bg-white pt-14">
               <View className="border-b border-stone-200 px-4 pb-3">
@@ -1621,8 +2254,18 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                       <Wrench size={17} color="#FFFFFF" />
                     </View>
                     <View className="min-w-0 flex-1">
-                      <Text className="text-sm font-black text-gray-900" numberOfLines={1}>Admin Panel</Text>
-                      <Text className="text-xs font-semibold text-gray-500" numberOfLines={1}>Dev-only tools, not shown in production</Text>
+                      <Text
+                        className="text-sm font-black text-gray-900"
+                        numberOfLines={1}
+                      >
+                        Admin Panel
+                      </Text>
+                      <Text
+                        className="text-xs font-semibold text-gray-500"
+                        numberOfLines={1}
+                      >
+                        Dev-only tools, not shown in production
+                      </Text>
                     </View>
                   </View>
                   <TouchableOpacity
@@ -1635,8 +2278,13 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                 </View>
               </View>
 
-              <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 28 }}>
-                <Text className="mb-2 text-[11px] font-black uppercase tracking-wide text-stone-400">Dev tools</Text>
+              <ScrollView
+                className="flex-1"
+                contentContainerStyle={{ padding: 16, paddingBottom: 28 }}
+              >
+                <Text className="mb-2 text-[11px] font-black uppercase tracking-wide text-stone-400">
+                  Dev tools
+                </Text>
                 <View className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
                   {adminPanelActions.map((action, index) => {
                     const Icon = action.icon;
@@ -1645,7 +2293,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                         key={action.label}
                         onPress={action.onPress}
                         className={`flex-row items-center gap-2.5 px-3 py-3 ${
-                          index < adminPanelActions.length - 1 ? 'border-b border-stone-100' : ''
+                          index < adminPanelActions.length - 1
+                            ? "border-b border-stone-100"
+                            : ""
                         }`}
                         activeOpacity={0.75}
                       >
@@ -1653,8 +2303,12 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                           <Icon size={17} color={SOCIAL_THEME.primary} />
                         </View>
                         <View className="min-w-0 flex-1">
-                          <Text className="text-sm font-black text-gray-900">{action.label}</Text>
-                          <Text className="text-xs font-semibold text-gray-500">{action.description}</Text>
+                          <Text className="text-sm font-black text-gray-900">
+                            {action.label}
+                          </Text>
+                          <Text className="text-xs font-semibold text-gray-500">
+                            {action.description}
+                          </Text>
                         </View>
                       </TouchableOpacity>
                     );
@@ -1662,7 +2316,11 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                 </View>
               </ScrollView>
             </View>
-            <TouchableOpacity className="flex-1" onPress={() => setAdminPanelOpen(false)} activeOpacity={1} />
+            <TouchableOpacity
+              className="flex-1"
+              onPress={() => setAdminPanelOpen(false)}
+              activeOpacity={1}
+            />
           </View>
         </Modal>
       )}
@@ -1675,16 +2333,21 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
       >
         <KeyboardAvoidingView
           className="flex-1 justify-end bg-black/35"
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <View className="max-h-[88%] rounded-t-2xl bg-white">
-            <View className="border-b border-gray-200 px-5 pt-5 pb-4">
+            <View className="border-b border-gray-200 px-5 pb-4 pt-5">
               <View className="flex-row items-start justify-between gap-3">
                 <View className="min-w-0 flex-1">
-                  <Text className="text-xs font-black uppercase text-gray-500">Commons</Text>
-                  <Text className="text-2xl font-black text-gray-950">Suggest a commons</Text>
+                  <Text className="text-xs font-black uppercase text-gray-500">
+                    Commons
+                  </Text>
+                  <Text className="text-2xl font-black text-gray-950">
+                    Suggest a commons
+                  </Text>
                   <Text className="mt-1 text-sm leading-5 text-gray-600">
-                    Tell Cahootz what community, neighborhood, identity, craft, or shared interest should have a space next.
+                    Tell Cahootz what community, neighborhood, identity, craft,
+                    or shared interest should have a space next.
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -1697,12 +2360,18 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
               </View>
             </View>
 
-            <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 28 }} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              contentContainerStyle={{ padding: 20, paddingBottom: 28 }}
+              keyboardShouldPersistTaps="handled"
+            >
               <View className="rounded-xl border border-gray-200 bg-white p-4">
-                <Text className="font-black text-gray-950">How commons work</Text>
+                <Text className="font-black text-gray-950">
+                  How commons work
+                </Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">
-                  Everyone starts in {commonsProfile.name}. Later, people can join more focused commons that match who they are, where
-                  they live, what they build, or what they want to do together.
+                  Everyone starts in {commonsProfile.name}. Later, people can
+                  join more focused commons that match who they are, where they
+                  live, what they build, or what they want to do together.
                 </Text>
               </View>
 
@@ -1715,11 +2384,16 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                         className="mt-0.5 h-5 w-5 items-center justify-center rounded-full"
                         style={{ backgroundColor: SOCIAL_THEME.primarySoft }}
                       >
-                        <Text className="text-xs font-black" style={{ color: SOCIAL_THEME.primary }}>
+                        <Text
+                          className="text-xs font-black"
+                          style={{ color: SOCIAL_THEME.primary }}
+                        >
                           {index + 1}
                         </Text>
                       </View>
-                      <Text className="flex-1 text-sm leading-5 text-gray-600">{rule}</Text>
+                      <Text className="flex-1 text-sm leading-5 text-gray-600">
+                        {rule}
+                      </Text>
                     </View>
                   ))}
                 </View>
@@ -1730,8 +2404,8 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                   value={suggestedCommonsName}
                   onChangeText={(text) => {
                     setSuggestedCommonsName(text);
-                    setSuggestionMessage('');
-                    setSuggestionStatus('idle');
+                    setSuggestionMessage("");
+                    setSuggestionStatus("idle");
                   }}
                   placeholder="Commons name, like Artists, South LA, Black founders..."
                   placeholderTextColor={SOCIAL_THEME.muted}
@@ -1742,22 +2416,25 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                   value={suggestedCommonsReason}
                   onChangeText={(text) => {
                     setSuggestedCommonsReason(text);
-                    setSuggestionMessage('');
-                    setSuggestionStatus('idle');
+                    setSuggestionMessage("");
+                    setSuggestionStatus("idle");
                   }}
                   placeholder="Why should this commons exist?"
                   placeholderTextColor={SOCIAL_THEME.muted}
                   multiline
                   className="min-h-24 rounded-xl border border-gray-200 px-4 py-3 text-base text-gray-900"
-                  style={{ backgroundColor: SOCIAL_THEME.paper, textAlignVertical: 'top' }}
+                  style={{
+                    backgroundColor: SOCIAL_THEME.paper,
+                    textAlignVertical: "top",
+                  }}
                 />
                 {!user?.email ? (
                   <TextInput
                     value={suggestedCommonsEmail}
                     onChangeText={(text) => {
                       setSuggestedCommonsEmail(text);
-                      setSuggestionMessage('');
-                      setSuggestionStatus('idle');
+                      setSuggestionMessage("");
+                      setSuggestionStatus("idle");
                     }}
                     placeholder="Email for follow-up"
                     placeholderTextColor={SOCIAL_THEME.muted}
@@ -1772,7 +2449,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
               {suggestionMessage ? (
                 <Text
                   className="mt-3 text-sm font-semibold"
-                  style={{ color: suggestionStatus === 'error' ? '#DC2626' : '#047857' }}
+                  style={{
+                    color: suggestionStatus === "error" ? "#DC2626" : "#047857",
+                  }}
                 >
                   {suggestionMessage}
                 </Text>
@@ -1788,14 +2467,18 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={submitCommonsSuggestion}
-                  disabled={suggestionStatus === 'submitting'}
+                  disabled={suggestionStatus === "submitting"}
                   className="h-12 flex-1 flex-row items-center justify-center gap-2 rounded-xl"
                   style={{ backgroundColor: SOCIAL_THEME.primary }}
                   activeOpacity={0.82}
                 >
-                  {suggestionStatus === 'submitting' ? <ActivityIndicator size="small" color="white" /> : null}
+                  {suggestionStatus === "submitting" ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : null}
                   <Text className="font-black text-white">
-                    {suggestionStatus === 'submitting' ? 'Sending...' : 'Suggest'}
+                    {suggestionStatus === "submitting"
+                      ? "Sending..."
+                      : "Suggest"}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1804,22 +2487,32 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={searchOpen} animationType="slide" onRequestClose={closeSearch}>
-        <View className="flex-1" style={{ backgroundColor: SOCIAL_THEME.paper, paddingTop: insets.top }}>
+      <Modal
+        visible={searchOpen}
+        animationType="slide"
+        onRequestClose={closeSearch}
+      >
+        <View
+          className="flex-1"
+          style={{
+            backgroundColor: SOCIAL_THEME.paper,
+            paddingTop: insets.top,
+          }}
+        >
           <View className="flex-row items-center gap-2 border-b border-gray-200 bg-white px-4 pb-3 pt-3">
-            <View
-              className="min-w-0 flex-1 flex-row items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-4 py-2.5"
-            >
+            <View className="min-w-0 flex-1 flex-row items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-4 py-2.5">
               <Search size={16} color={SOCIAL_THEME.muted} />
               <TextInput
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder={`Search people and posts in ${isScopedFeed ? commonsProfile.name : 'Cahootz Commons'}`}
+                placeholder={`Search people and posts in ${isScopedFeed ? commonsProfile.name : "Cahootz Commons"}`}
                 placeholderTextColor={SOCIAL_THEME.muted}
                 autoFocus
                 className="min-w-0 flex-1 text-sm text-gray-900"
               />
-              {isSearching ? <ActivityIndicator size="small" color={SOCIAL_THEME.primary} /> : null}
+              {isSearching ? (
+                <ActivityIndicator size="small" color={SOCIAL_THEME.primary} />
+              ) : null}
             </View>
             <TouchableOpacity
               onPress={closeSearch}
@@ -1830,22 +2523,37 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
             </TouchableOpacity>
           </View>
 
-          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+            keyboardShouldPersistTaps="handled"
+          >
             {searchError ? (
-              <Text className="mb-3 text-sm font-semibold text-red-600">{searchError}</Text>
+              <Text className="mb-3 text-sm font-semibold text-red-600">
+                {searchError}
+              </Text>
             ) : null}
 
             {!searchQuery.trim() ? (
-              <Text className="text-sm text-gray-500">Start typing to find people or posts.</Text>
+              <Text className="text-sm text-gray-500">
+                Start typing to find people or posts.
+              </Text>
             ) : null}
 
-            {searchQuery.trim() && !isSearching && searchPeople.length === 0 && searchPosts.length === 0 && !searchError ? (
-              <Text className="text-sm text-gray-500">No matches for &ldquo;{searchQuery.trim()}&rdquo;.</Text>
+            {searchQuery.trim() &&
+            !isSearching &&
+            searchPeople.length === 0 &&
+            searchPosts.length === 0 &&
+            !searchError ? (
+              <Text className="text-sm text-gray-500">
+                No matches for &ldquo;{searchQuery.trim()}&rdquo;.
+              </Text>
             ) : null}
 
             {searchPeople.length > 0 ? (
               <View className="mb-5">
-                <Text className="mb-2 text-xs font-black uppercase text-gray-500">People</Text>
+                <Text className="mb-2 text-xs font-black uppercase text-gray-500">
+                  People
+                </Text>
                 <View className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
                   {searchPeople.map((person, index) => (
                     <TouchableOpacity
@@ -1855,16 +2563,27 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                         openPersonPage(person.name, person.handle);
                       }}
                       className={`flex-row items-center gap-3 px-4 py-3 ${
-                        index < searchPeople.length - 1 ? 'border-b border-gray-100' : ''
+                        index < searchPeople.length - 1
+                          ? "border-b border-gray-100"
+                          : ""
                       }`}
                       activeOpacity={0.75}
                     >
                       <View className="h-9 w-9 items-center justify-center rounded-full bg-slate-200">
-                        <Text className="text-sm font-black text-slate-600">{personInitials(person.name)}</Text>
+                        <Text className="text-sm font-black text-slate-600">
+                          {personInitials(person.name)}
+                        </Text>
                       </View>
                       <View className="min-w-0 flex-1">
-                        <Text className="text-sm font-black text-gray-950" numberOfLines={1}>{person.name}</Text>
-                        <Text className="text-xs font-semibold text-gray-500">{personDisplayHandle(person.handle)}</Text>
+                        <Text
+                          className="text-sm font-black text-gray-950"
+                          numberOfLines={1}
+                        >
+                          {person.name}
+                        </Text>
+                        <Text className="text-xs font-semibold text-gray-500">
+                          {personDisplayHandle(person.handle)}
+                        </Text>
                       </View>
                     </TouchableOpacity>
                   ))}
@@ -1874,7 +2593,9 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
 
             {searchPosts.length > 0 ? (
               <View>
-                <Text className="mb-2 text-xs font-black uppercase text-gray-500">Posts</Text>
+                <Text className="mb-2 text-xs font-black uppercase text-gray-500">
+                  Posts
+                </Text>
                 <View className="gap-2">
                   {searchPosts.map((post) => (
                     <TouchableOpacity
@@ -1886,12 +2607,22 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                       className="rounded-2xl border border-gray-200 bg-white p-4"
                       activeOpacity={0.75}
                     >
-                      <Text className="text-xs font-semibold text-gray-500">{post.author} · {post.time}</Text>
+                      <Text className="text-xs font-semibold text-gray-500">
+                        {post.author} · {post.time}
+                      </Text>
                       {post.title && post.title !== post.body ? (
-                        <MentionText content={post.title} className="mt-1 text-sm font-black text-gray-950" numberOfLines={1} />
+                        <MentionText
+                          content={post.title}
+                          className="mt-1 text-sm font-black text-gray-950"
+                          numberOfLines={1}
+                        />
                       ) : null}
                       {post.body ? (
-                        <MentionText content={post.body} className="mt-1 text-sm leading-5 text-gray-700" numberOfLines={2} />
+                        <MentionText
+                          content={post.body}
+                          className="mt-1 text-sm leading-5 text-gray-700"
+                          numberOfLines={2}
+                        />
                       ) : null}
                     </TouchableOpacity>
                   ))}
@@ -1902,20 +2633,31 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
         </View>
       </Modal>
 
-      <Modal visible={accountPromptOpen} transparent animationType="slide" onRequestClose={() => setAccountPromptOpen(false)}>
+      <Modal
+        visible={accountPromptOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAccountPromptOpen(false)}
+      >
         <KeyboardAvoidingView
           className="flex-1 justify-end bg-black/35"
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <View className="rounded-t-2xl bg-white p-5">
             <View className="mb-4 flex-row items-start gap-3">
-              <View className="h-11 w-11 items-center justify-center rounded-xl" style={{ backgroundColor: SOCIAL_THEME.primarySoft }}>
+              <View
+                className="h-11 w-11 items-center justify-center rounded-xl"
+                style={{ backgroundColor: SOCIAL_THEME.primarySoft }}
+              >
                 <Users size={21} color={SOCIAL_THEME.primary} />
               </View>
               <View className="flex-1">
-                <Text className="text-xl font-black text-gray-900">Create your Commons account</Text>
+                <Text className="text-xl font-black text-gray-900">
+                  Create your Commons account
+                </Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">
-                  Keep browsing without one. To post, comment, or message, verify your email first.
+                  Keep browsing without one. To post, comment, or message,
+                  verify your email first.
                 </Text>
               </View>
             </View>
@@ -1925,7 +2667,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                 value={accountEmail}
                 onChangeText={(text) => {
                   setAccountEmail(text);
-                  setAuthError('');
+                  setAuthError("");
                 }}
                 placeholder="Email address"
                 placeholderTextColor={SOCIAL_THEME.muted}
@@ -1938,7 +2680,7 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                   value={accountCode}
                   onChangeText={(text) => {
                     setAccountCode(text);
-                    setAuthError('');
+                    setAuthError("");
                   }}
                   placeholder="6 digit code"
                   placeholderTextColor={SOCIAL_THEME.muted}
@@ -1948,7 +2690,11 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
               ) : null}
             </View>
 
-            {authError ? <Text className="mt-3 text-sm font-semibold text-red-600">{authError}</Text> : null}
+            {authError ? (
+              <Text className="mt-3 text-sm font-semibold text-red-600">
+                {authError}
+              </Text>
+            ) : null}
 
             <View className="mt-4 flex-row gap-2">
               <Button
@@ -1964,8 +2710,12 @@ export default function CommonsAiEntry({ feedCoopId = 'all', onSignInPress, topB
                 className="h-12 flex-1 rounded-xl"
                 style={{ backgroundColor: SOCIAL_THEME.primary }}
               >
-                {isAuthBusy ? <ActivityIndicator size="small" color="white" /> : null}
-                <Text className="font-black text-white">{codeSent ? 'Verify' : 'Send code'}</Text>
+                {isAuthBusy ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : null}
+                <Text className="font-black text-white">
+                  {codeSent ? "Verify" : "Send code"}
+                </Text>
               </Button>
             </View>
           </View>

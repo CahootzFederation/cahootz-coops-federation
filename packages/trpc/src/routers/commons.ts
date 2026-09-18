@@ -1468,6 +1468,10 @@ export const commonsRouter = router({
         }
       }
 
+      console.info('[push] createPost mention notifications', {
+        postId: post.id,
+        recipients: mentionedUsers.filter((mentioned) => !mentioned.isBot && mentioned.id !== accountUser.id).length,
+      });
       for (const mentioned of mentionedUsers) {
         if (mentioned.isBot || mentioned.id === accountUser.id) continue;
         void createNotificationAndPush(ctx.db, {
@@ -1477,6 +1481,8 @@ export const commonsRouter = router({
           title: "You were mentioned",
           body: `${displayName(accountUser)} mentioned you in a post.`,
           data: { postId: post.id, coopId: input.coopId },
+        }).catch(() => {
+          console.error('[push] createPost notification preparation failed', { postId: post.id });
         });
       }
 

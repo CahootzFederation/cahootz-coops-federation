@@ -43,7 +43,7 @@ async function getActiveCoops(): Promise<CoopOption[]> {
 export const metadata: Metadata = {
   title: "Cahootz | A place for your commons to move together",
   description:
-    "Cahootz connects members, local businesses, and shared decisions, with AI that helps coordinate the commons and evaluates proposals against community-set rules.",
+    "Cahootz connects members, local businesses, and shared decisions. Sage, its AI, helps coordinate the commons and evaluates proposals against community-set rules.",
   alternates: { canonical: "https://cahootz.coop" },
 };
 
@@ -55,7 +55,7 @@ const pathways = [
     index: "01",
     label: "Find your people",
     title: "A home for the conversation and the work.",
-    body: "Join a commons, find member spaces and circles, and follow the activity that matters to you. AI can summarize conversations and surface needs or resources so useful signals do not get lost.",
+    body: "Join a commons, find member spaces and circles, and follow the activity that matters to you. Sage can summarize conversations and surface needs or resources so useful signals do not get lost.",
     details: ["Member spaces", "Group activity", "Community updates"],
     className: "pathway-community",
   },
@@ -71,7 +71,7 @@ const pathways = [
     index: "03",
     label: "Decide together",
     title: "Turn a shared need into a shared decision.",
-    body: "Members can bring forward proposals and discuss tradeoffs. AI reviews each idea against the commons' rules and explains its reasoning. Qualifying small requests can be approved automatically; larger ones go to a council vote.",
+    body: "Members can bring forward proposals and discuss tradeoffs. Sage reviews each idea against the commons' rules and explains its reasoning. Qualifying small requests can be approved automatically; larger ones go to a council vote.",
     details: ["Proposals", "Discussion", "Voting"],
     className: "pathway-governance",
   },
@@ -87,16 +87,16 @@ const faqs = [
     a: "No. Members can take part in community spaces, support local businesses, and participate in decisions. Businesses have a separate interest form below.",
   },
   {
-    q: "Does AI make decisions for members?",
-    a: "Yes, within limits the commons sets. AI evaluates proposals against the commons' mission and rules. It can approve qualifying proposals below that commons' small-spending limit, ask for revisions, or keep a proposal from advancing. Proposals above the automatic approval limit go to a council vote.",
+    q: "Does Sage make decisions for members?",
+    a: "Yes, within limits the commons sets. Sage evaluates proposals against the commons' mission and rules. It can approve qualifying proposals below that commons' small-spending limit, ask for revisions, or keep a proposal from advancing. Proposals above the automatic approval limit go to a council vote.",
   },
   {
-    q: "How is AI used elsewhere in the commons?",
-    a: "AI can help summarize circle activity, identify needs and resources in posts, recommend relevant commons, and answer questions using a commons' charter and mission. Its observations are meant to help people understand and act on what is happening.",
+    q: "What else can Sage do?",
+    a: "Sage can help summarize circle activity, identify needs and resources in posts, recommend relevant commons, and answer questions using a commons' charter and mission. Its observations are meant to help people understand and act on what is happening.",
   },
   {
-    q: "How do you work toward fair AI decisions?",
-    a: "Each commons sets the goals, scoring weights, and spending limits that guide proposal reviews. Cahootz records scores and reasons so people can see how a proposal was judged. That is a way to make decisions more consistent and open to scrutiny, but AI can still make mistakes or reflect bias.",
+    q: "How do you work toward fair decisions?",
+    a: "Each commons sets the goals, scoring weights, and spending limits that guide Sage's proposal reviews. Cahootz records scores and reasons so people can see how a proposal was judged. That is a way to make decisions more consistent and open to scrutiny, but Sage can still make mistakes or reflect bias.",
   },
   {
     q: "What if my commons is not listed?",
@@ -147,8 +147,9 @@ export default async function HomePage() {
               <p className="hero-description">
                 Cahootz gives a commons one place to connect its members, local
                 businesses, shared spaces, and decisions. See what is happening.
-                Take part. AI helps members see what matters and reviews
-                proposals under the rules each community sets.
+                Take part. Sage, the commons&apos; AI, helps members see what
+                matters and reviews proposals under the rules each community
+                sets.
               </p>
               <div className="hero-actions">
                 <a className="button button-primary" href="#join">
@@ -194,7 +195,7 @@ export default async function HomePage() {
               <div className="map-node map-decisions">
                 <span className="node-kicker">DIRECTION</span>
                 <strong>Decisions</strong>
-                <small>AI review + votes</small>
+                <small>Sage review + votes</small>
               </div>
             </div>
           </div>
@@ -265,19 +266,19 @@ export default async function HomePage() {
             </div>
             <div>
               <p>
-                Each commons sets its charter, goals, and spending limits. AI
+                Each commons sets its charter, goals, and spending limits. Sage
                 checks proposals for mission fit, feasibility, risk, and
                 accountability, then shows its scores and reasons.
               </p>
               <p>
-                AI can approve a qualifying request below the commons&apos;
+                It can approve a qualifying request below the commons&apos;
                 automatic approval limit. Larger requests go to a council vote.
-                If an idea needs work, AI can ask for revisions or keep it from
-                advancing.
+                If an idea needs work, Sage can ask for revisions or keep it
+                from advancing.
               </p>
               <p>
                 Applying the same rules openly can support fairer decisions,
-                though AI can still be wrong or biased. The community controls
+                though it can still be wrong or biased. The community controls
                 the rules and can see how each proposal was judged.
               </p>
               <a className="text-link" href="#join">

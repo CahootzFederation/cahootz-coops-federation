@@ -103,7 +103,7 @@ body {
 }
 .hero h1,
 .intro-band h2,
-.ai-section h2,
+.decision-section h2,
 .section-heading h2,
 .join-intro h2,
 .faq-section h2 {
@@ -128,29 +128,6 @@ body {
   font-size: var(--text-md);
   line-height: 1.65;
   max-width: 55ch;
-}
-.hero-ai-disclosure {
-  max-width: 55ch;
-  border-top: var(--rule-thin) solid var(--color-rule);
-  margin-top: var(--space-xl);
-  padding-top: var(--space-sm);
-  color: var(--color-ink-2);
-  font-size: var(--text-sm);
-  line-height: 1.6;
-}
-.hero-ai-disclosure strong {
-  color: var(--color-ink);
-}
-.hero-ai-disclosure a {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  color: var(--color-accent-deep);
-  font-weight: 800;
-  white-space: nowrap;
-}
-.hero-ai-disclosure a:hover {
-  text-decoration: underline;
 }
 .hero-actions {
   display: flex;
@@ -410,83 +387,33 @@ body {
   border-radius: 50% 50% 0 0;
   background: var(--color-accent-deep);
 }
-.ai-section {
+.decision-section {
   background: var(--color-paper-2);
   padding-block: var(--space-3xl);
 }
-.ai-section-head {
+.decision-inner {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
   gap: var(--space-3xl);
-  align-items: end;
-  padding-bottom: var(--space-2xl);
 }
-.ai-section h2 {
-  font-size: clamp(3.1rem, 5.7vw, 6rem);
+.decision-section h2 {
+  font-size: clamp(3rem, 5vw, 5rem);
   line-height: 1.02;
   margin: var(--space-sm) 0 0;
-  max-width: 15ch;
+  max-width: 12ch;
 }
-.ai-section h2 span {
-  color: var(--color-accent-deep);
+.decision-inner > div:last-child {
+  align-self: end;
 }
-.ai-section-head > p {
-  max-width: 48ch;
-  font-size: var(--text-md);
-  line-height: 1.65;
-  margin: 0;
-}
-.ai-roles {
-  border-top: var(--rule-thin) solid var(--color-rule);
-}
-.ai-roles article {
-  display: grid;
-  grid-template-columns: minmax(0, 0.45fr) minmax(0, 1fr);
-  gap: var(--space-xl);
-  padding-block: var(--space-lg);
-  border-bottom: var(--rule-thin) solid var(--color-rule);
-}
-.ai-role-index {
-  color: var(--color-accent-deep);
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-}
-.ai-roles h3 {
-  font-family: var(--font-display);
-  font-size: clamp(2rem, 3vw, 3rem);
-  font-weight: 400;
-  letter-spacing: -0.04em;
-  line-height: 1.1;
-  margin: 0;
-}
-.ai-roles p {
-  max-width: 65ch;
+.decision-inner p {
+  max-width: 60ch;
   color: var(--color-ink-2);
   font-size: var(--text-md);
   line-height: 1.65;
-  margin: var(--space-sm) 0 0;
+  margin: 0 0 var(--space-md);
 }
-.ai-fairness {
-  display: grid;
-  grid-template-columns: minmax(0, 0.45fr) minmax(0, 1fr);
-  gap: var(--space-xl);
-  margin-top: var(--space-2xl);
-  padding: var(--space-lg);
-  background: var(--color-dark);
-  color: var(--color-light);
-}
-.ai-fairness span {
-  color: var(--color-accent);
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-}
-.ai-fairness p {
-  max-width: 65ch;
-  font-size: var(--text-md);
-  line-height: 1.65;
-  margin: 0;
+.decision-inner .text-link {
+  margin-top: var(--space-sm);
 }
 .commons-section,
 .journal-section,
@@ -840,13 +767,13 @@ body {
     bottom: 10%;
   }
   .intro-inner,
-  .ai-section-head,
+  .decision-inner,
   .faq-inner {
     grid-template-columns: minmax(0, 1fr);
     gap: 2rem;
   }
   .intro-inner,
-  .ai-section,
+  .decision-section,
   .commons-section,
   .journal-section,
   .faq-section,
@@ -861,17 +788,6 @@ body {
   .pathway-index {
     flex-direction: row;
     gap: 1rem;
-  }
-  .ai-section-head {
-    padding-bottom: var(--space-lg);
-  }
-  .ai-roles article,
-  .ai-fairness {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-sm);
-  }
-  .ai-fairness {
-    margin-top: var(--space-xl);
   }
   .section-heading {
     flex-direction: column;

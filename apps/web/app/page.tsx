@@ -149,10 +149,9 @@ export default async function HomePage() {
                 <span>move together.</span>
               </h1>
               <p className="hero-description">
-                Cahootz gives a commons one place to connect its members, local
-                businesses, shared spaces, and decisions. See what is happening.
-                Take part. AI helps members see what matters and reviews
-                proposals under the rules each community sets.
+                Cahootz brings the people, places, businesses, and decisions in
+                a commons together. Find your people, support local businesses,
+                and help decide what your community does next.
               </p>
               <div className="hero-actions">
                 <a className="button button-primary" href="#join">
@@ -198,7 +197,7 @@ export default async function HomePage() {
               <div className="map-node map-decisions">
                 <span className="node-kicker">DIRECTION</span>
                 <strong>Decisions</strong>
-                <small>AI review + votes</small>
+                <small>Ideas, reviews, votes</small>
               </div>
             </div>
           </div>

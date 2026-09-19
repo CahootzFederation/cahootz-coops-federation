@@ -268,21 +268,24 @@ export default async function HomePage() {
             </div>
             <div>
               <p>
-                AI serves the commons whose decisions it helps make. Each
-                commons sets its own charter, goals, and spending limits. AI
-                uses those rules to check proposals for mission fit,
-                feasibility, risk, and accountability, then shows its scores
-                and reasons.
+                Members bring forward ideas, discuss tradeoffs, and decide
+                together what their commons should do. Each commons sets the
+                charter, goals, and spending limits that guide those decisions.
+                As the number of proposals grows, it gets harder to review
+                every idea carefully, apply the rules consistently, and explain
+                why a decision was made.
               </p>
               <p>
-                AI can approve a qualifying request below the commons&apos;
-                automatic approval limit. Larger requests go to a council vote.
-                If an idea needs work, AI can ask for revisions or keep it from
-                advancing.
+                AI helps with that work. It checks proposals for mission fit,
+                feasibility, risk, and accountability using the commons&apos;
+                rules, then shows its scores and reasons. It can approve a
+                qualifying request below the commons&apos; automatic approval
+                limit, ask for revisions, or keep an idea from advancing.
+                Larger requests go to a council vote.
               </p>
               <p>
-                Applying the same rules openly can support fairer decisions,
-                though AI can still be wrong or biased. The community controls
+                Shared rules and visible reasons can support fairer decisions,
+                though AI can still be wrong or biased. The commons controls
                 the rules and can see how each proposal was judged.
               </p>
               <a className="text-link" href="#join">

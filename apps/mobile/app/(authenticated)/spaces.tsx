@@ -1,5 +1,5 @@
-import type { GroupCreateRequirements, PrivateGroupSummary } from "@/lib/api";
-import React from "react";
+import type { GroupCreateRequirements, PrivateGroupSummary } from '@/lib/api';
+import React from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -7,12 +7,12 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { router, useLocalSearchParams } from "expo-router";
-import { Text } from "@/components/ui/text";
-import { useAuth } from "@/contexts/auth-context";
-import { api } from "@/lib/api";
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { router, useLocalSearchParams } from 'expo-router';
+import { Text } from '@/components/ui/text';
+import { useAuth } from '@/contexts/auth-context';
+import { api } from '@/lib/api';
 import {
   ArrowLeft,
   Check,
@@ -22,27 +22,27 @@ import {
   MessageCircle,
   Plus,
   Users,
-} from "lucide-react-native";
+} from 'lucide-react-native';
 
 const SPACES_THEME = {
-  paper: "#F8FAFC",
-  primary: "#FF6B00",
-  primarySoft: "#FFF7ED",
-  border: "#E5E7EB",
-  muted: "#64748B",
-  ink: "#111827",
-  inkSoft: "#1F2937",
-  white: "#FFFFFF",
-  quietIcon: "#94A3B8",
-  lockIcon: "#475569",
-  danger: "#DC2626",
-  dangerSoft: "#FEF2F2",
+  paper: '#F8FAFC',
+  primary: '#FF6B00',
+  primarySoft: '#FFF7ED',
+  border: '#E5E7EB',
+  muted: '#64748B',
+  ink: '#111827',
+  inkSoft: '#1F2937',
+  white: '#FFFFFF',
+  quietIcon: '#94A3B8',
+  lockIcon: '#475569',
+  danger: '#DC2626',
+  dangerSoft: '#FEF2F2',
 };
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
+    month: 'short',
+    day: 'numeric',
   });
 }
 
@@ -55,35 +55,39 @@ export default function SpacesScreen() {
   const { isLoading, isAuthenticated, sessionToken } = useAuth();
   const [groups, setGroups] = React.useState<PrivateGroupSummary[]>([]);
   const [isLoadingGroups, setIsLoadingGroups] = React.useState(true);
-  const [name, setName] = React.useState("");
-  const [purpose, setPurpose] = React.useState("");
+  const [name, setName] = React.useState('');
+  const [purpose, setPurpose] = React.useState('');
+  const [privacy, setPrivacy] = React.useState<'public' | 'private'>('public');
   const [isSaving, setIsSaving] = React.useState(false);
-  const [joinCode, setJoinCode] = React.useState("");
+  const [joinCode, setJoinCode] = React.useState('');
   const [isJoining, setIsJoining] = React.useState(false);
   const [requirements, setRequirements] =
     React.useState<GroupCreateRequirements | null>(null);
-  const [activeView, setActiveView] = React.useState<"circles" | "create">(
-    mode === "create" ? "create" : "circles",
+  const [activeView, setActiveView] = React.useState<'circles' | 'create'>(
+    mode === 'create' ? 'create' : 'circles',
   );
 
   React.useEffect(() => {
-    setActiveView(mode === "create" ? "create" : "circles");
+    setActiveView(mode === 'create' ? 'create' : 'circles');
   }, [mode]);
+
+  React.useEffect(() => {
+    if (activeView === 'create') setPrivacy('public');
+  }, [activeView]);
 
   React.useEffect(() => {
     if (isLoading || (isAuthenticated && sessionToken)) return;
 
-    router.replace({ pathname: "/", params: { entry: "sign-in" } } as any);
+    router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
   }, [isAuthenticated, isLoading, sessionToken]);
 
   const loadGroups = React.useCallback(() => {
     if (!sessionToken) return;
 
     setIsLoadingGroups(true);
-    api
-      .listMyGroups(sessionToken, coopId)
+    (coopId ? api.listVisibleCircles(sessionToken, coopId) : api.listMyGroups(sessionToken))
       .then(({ groups: next }) => setGroups(next))
-      .catch((error) => console.warn("Could not load groups:", error))
+      .catch((error) => console.warn('Could not load groups:', error))
       .finally(() => setIsLoadingGroups(false));
   }, [sessionToken, coopId]);
 
@@ -97,7 +101,7 @@ export default function SpacesScreen() {
       .getGroupCreateRequirements(sessionToken, coopId)
       .then(setRequirements)
       .catch((error) =>
-        console.warn("Could not load create requirements:", error),
+        console.warn('Could not load create requirements:', error),
       );
   }, [sessionToken, coopId]);
 
@@ -107,7 +111,7 @@ export default function SpacesScreen() {
       return;
     }
 
-    router.replace("/(tabs)/wallet" as any);
+    router.replace('/(tabs)/wallet' as any);
   };
 
   const createSpace = async () => {
@@ -116,7 +120,7 @@ export default function SpacesScreen() {
 
     if (requirements && !requirements.canCreate) {
       Alert.alert(
-        "Not enough SC",
+        'Not enough SC',
         `You need at least ${requirements.minScBalance} SC to create a circle (you have ${requirements.currentScBalance.toFixed(2)} SC).`,
       );
       return;
@@ -128,22 +132,23 @@ export default function SpacesScreen() {
         {
           name: trimmedName,
           purpose: purpose.trim() || undefined,
-          privacy: "invite-only",
+          privacy,
           coopId,
         },
         sessionToken,
       );
-      setName("");
-      setPurpose("");
+      setName('');
+      setPurpose('');
+      setPrivacy('public');
       loadGroups();
       router.replace({
-        pathname: "/(authenticated)/group/[groupId]",
-        params: { groupId: result.group.id },
+        pathname: '/[coopId]/posts',
+        params: { coopId: coopId || 'cahootz', circleId: result.group.id },
       } as any);
     } catch (error) {
       Alert.alert(
-        "Could not create circle",
-        error instanceof Error ? error.message : "Try again.",
+        'Could not create circle',
+        error instanceof Error ? error.message : 'Try again.',
       );
     } finally {
       setIsSaving(false);
@@ -161,18 +166,18 @@ export default function SpacesScreen() {
         sessionToken,
         coopId,
       );
-      setJoinCode("");
+      setJoinCode('');
       loadGroups();
       router.push({
-        pathname: "/(authenticated)/group/[groupId]",
-        params: { groupId },
+        pathname: '/[coopId]/posts',
+        params: { coopId: coopId || 'cahootz', circleId: groupId },
       } as any);
     } catch (error) {
       Alert.alert(
-        "Could not join circle",
+        'Could not join circle',
         error instanceof Error
           ? error.message
-          : "Check the code and try again.",
+          : 'Check the code and try again.',
       );
     } finally {
       setIsJoining(false);
@@ -217,13 +222,13 @@ export default function SpacesScreen() {
               className="text-[10px] font-black uppercase tracking-wide text-gray-500"
               numberOfLines={1}
             >
-              {coopName || "Commons"}
+              {coopName || 'Commons'}
             </Text>
             <Text
               className="text-lg font-black text-gray-950"
               numberOfLines={1}
             >
-              {activeView === "create" ? "Create a circle" : "Circles"}
+              {activeView === 'create' ? 'Create a circle' : 'Circles'}
             </Text>
           </View>
           <View
@@ -236,22 +241,22 @@ export default function SpacesScreen() {
 
         <View className="mt-3 flex-row rounded-2xl bg-gray-100 p-1">
           <TouchableOpacity
-            onPress={() => setActiveView("circles")}
+            onPress={() => setActiveView('circles')}
             className="flex-1 items-center rounded-xl py-2.5"
             style={
-              activeView === "circles"
+              activeView === 'circles'
                 ? { backgroundColor: SPACES_THEME.white }
                 : undefined
             }
             activeOpacity={0.8}
             accessibilityRole="tab"
-            accessibilityState={{ selected: activeView === "circles" }}
+            accessibilityState={{ selected: activeView === 'circles' }}
           >
             <Text
               className="text-sm font-black"
               style={{
                 color:
-                  activeView === "circles"
+                  activeView === 'circles'
                     ? SPACES_THEME.ink
                     : SPACES_THEME.muted,
               }}
@@ -260,22 +265,22 @@ export default function SpacesScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={() => setActiveView("create")}
+            onPress={() => setActiveView('create')}
             className="flex-1 items-center rounded-xl py-2.5"
             style={
-              activeView === "create"
+              activeView === 'create'
                 ? { backgroundColor: SPACES_THEME.white }
                 : undefined
             }
             activeOpacity={0.8}
             accessibilityRole="tab"
-            accessibilityState={{ selected: activeView === "create" }}
+            accessibilityState={{ selected: activeView === 'create' }}
           >
             <Text
               className="text-sm font-black"
               style={{
                 color:
-                  activeView === "create"
+                  activeView === 'create'
                     ? SPACES_THEME.primary
                     : SPACES_THEME.muted,
               }}
@@ -291,7 +296,7 @@ export default function SpacesScreen() {
         contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
       >
-        {activeView === "circles" ? (
+        {activeView === 'circles' ? (
           <>
             <View className="flex-row items-start gap-3">
               <View
@@ -314,14 +319,14 @@ export default function SpacesScreen() {
             <View className="mt-6 flex-row items-center justify-between">
               <View>
                 <Text className="text-base font-black text-gray-950">
-                  Your circles
+                  {coopId ? 'Circles in this common' : 'Your circles'}
                 </Text>
                 <Text className="mt-0.5 text-xs font-semibold text-gray-500">
-                  {groups.length} {groups.length === 1 ? "circle" : "circles"}
+                  {groups.length} {groups.length === 1 ? 'circle' : 'circles'}
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() => setActiveView("create")}
+                onPress={() => setActiveView('create')}
                 className="flex-row items-center gap-1.5 rounded-full px-3 py-2"
                 style={{ backgroundColor: SPACES_THEME.primarySoft }}
                 activeOpacity={0.8}
@@ -354,7 +359,7 @@ export default function SpacesScreen() {
                     return to.
                   </Text>
                   <TouchableOpacity
-                    onPress={() => setActiveView("create")}
+                    onPress={() => setActiveView('create')}
                     className="mt-4 flex-row items-center justify-center gap-2 rounded-2xl py-3"
                     style={{ backgroundColor: SPACES_THEME.primary }}
                     activeOpacity={0.82}
@@ -371,8 +376,11 @@ export default function SpacesScreen() {
                     key={group.id}
                     onPress={() =>
                       router.push({
-                        pathname: "/(authenticated)/group/[groupId]",
-                        params: { groupId: group.id },
+                        pathname: '/[coopId]/posts',
+                        params: {
+                          coopId: coopId || 'cahootz',
+                          circleId: group.id,
+                        },
                       } as any)
                     }
                     activeOpacity={0.8}
@@ -384,7 +392,11 @@ export default function SpacesScreen() {
                         className="h-11 w-11 items-center justify-center rounded-2xl"
                         style={{ backgroundColor: SPACES_THEME.primarySoft }}
                       >
-                        <Lock size={18} color={SPACES_THEME.primary} />
+                        {group.privacy === 'public' ? (
+                          <Users size={18} color={SPACES_THEME.primary} />
+                        ) : (
+                          <Lock size={18} color={SPACES_THEME.primary} />
+                        )}
                       </View>
                       <View className="min-w-0 flex-1">
                         <View className="flex-row items-center gap-2">
@@ -403,12 +415,12 @@ export default function SpacesScreen() {
                           className="mt-1 text-sm leading-5 text-gray-600"
                           numberOfLines={2}
                         >
-                          {group.purpose || "A circle for focused conversation"}
+                          {group.purpose || 'A circle for focused conversation'}
                         </Text>
                         <View className="mt-2 flex-row flex-wrap items-center gap-2">
                           <Text className="text-[10px] font-black uppercase text-gray-400">
-                            {group.memberCount}{" "}
-                            {group.memberCount === 1 ? "member" : "members"}
+                            {group.memberCount}{' '}
+                            {group.memberCount === 1 ? 'member' : 'members'}
                           </Text>
                           {group.isLeader ? (
                             <Text
@@ -418,6 +430,13 @@ export default function SpacesScreen() {
                               Leader
                             </Text>
                           ) : null}
+                          <Text className="text-[10px] font-black uppercase text-gray-400">
+                            {group.privacy === 'public'
+                              ? 'Public'
+                              : group.privacy === 'private'
+                                ? 'Private'
+                                : 'Invite-only'}
+                          </Text>
                           <Text className="text-[10px] font-semibold text-gray-400">
                             Updated {formatDate(group.createdAt)}
                           </Text>
@@ -510,7 +529,7 @@ export default function SpacesScreen() {
                 placeholder="Example: South LA Gardeners"
                 placeholderTextColor={SPACES_THEME.muted}
                 maxLength={120}
-                autoFocus={mode === "create"}
+                autoFocus={mode === 'create'}
                 className="mt-3 min-h-12 rounded-2xl border bg-gray-50 px-3 text-sm text-gray-900"
                 style={{ borderColor: SPACES_THEME.border }}
               />
@@ -534,7 +553,7 @@ export default function SpacesScreen() {
                 className="mt-3 min-h-28 rounded-2xl border bg-gray-50 px-3 py-3 text-sm text-gray-900"
                 style={{
                   borderColor: SPACES_THEME.border,
-                  textAlignVertical: "top",
+                  textAlignVertical: 'top',
                 }}
               />
             </View>
@@ -543,21 +562,53 @@ export default function SpacesScreen() {
               className="mt-4 rounded-3xl border bg-white p-4"
               style={{ borderColor: SPACES_THEME.border }}
             >
-              <View className="flex-row items-start gap-3">
-                <View className="h-9 w-9 items-center justify-center rounded-2xl bg-gray-100">
-                  <Lock size={16} color={SPACES_THEME.lockIcon} />
-                </View>
+              <Text className="mb-3 text-sm font-black text-gray-950">
+                Who can see this circle?
+              </Text>
+              <TouchableOpacity
+                onPress={() => setPrivacy('public')}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: privacy === 'public' }}
+                className="flex-row items-start gap-3 rounded-2xl p-3"
+                style={{
+                  backgroundColor:
+                    privacy === 'public' ? SPACES_THEME.primarySoft : '#F9FAFB',
+                }}
+              >
+                <Users size={17} color={SPACES_THEME.primary} />
                 <View className="min-w-0 flex-1">
                   <Text className="text-sm font-black text-gray-950">
-                    Invite-only at launch
+                    Public to this common
                   </Text>
                   <Text className="mt-1 text-xs leading-5 text-gray-500">
-                    You will receive an invite code after creation and can
-                    decide who joins the first conversation.
+                    Members can discover, read, and post in this circle.
                   </Text>
                 </View>
-                <Check size={17} color={SPACES_THEME.primary} />
-              </View>
+                {privacy === 'public' ? (
+                  <Check size={17} color={SPACES_THEME.primary} />
+                ) : null}
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setPrivacy('private')}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: privacy === 'private' }}
+                className="mt-2 flex-row items-start gap-3 rounded-2xl p-3"
+                style={{
+                  backgroundColor:
+                    privacy === 'private' ? SPACES_THEME.primarySoft : '#F9FAFB',
+                }}
+              >
+                <Lock size={17} color={SPACES_THEME.lockIcon} />
+                <View className="min-w-0 flex-1">
+                  <Text className="text-sm font-black text-gray-950">Private</Text>
+                  <Text className="mt-1 text-xs leading-5 text-gray-500">
+                    Only you and people you invite can find, read, and post in this circle.
+                  </Text>
+                </View>
+                {privacy === 'private' ? (
+                  <Check size={17} color={SPACES_THEME.primary} />
+                ) : null}
+              </TouchableOpacity>
             </View>
 
             {requirements && requirements.minScBalance > 0 ? (
@@ -604,7 +655,9 @@ export default function SpacesScreen() {
               </Text>
             </TouchableOpacity>
             <Text className="mt-3 text-center text-xs leading-5 text-gray-500">
-              You will become the circle leader and can invite members next.
+              {privacy === 'public'
+                ? 'Your circle will appear to members of this common.'
+                : 'You will become the circle leader and can invite members next.'}
             </Text>
           </>
         )}

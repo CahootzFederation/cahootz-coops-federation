@@ -27,7 +27,7 @@
     "update-contract-artifacts": "bash scripts/update-contract-artifacts.sh",
     "check:versions": "node scripts/check-package-versions.mjs",
     "dev": "turbo watch dev --continue",
-    "dev:api": "pnpm -F @cahootz/api dev",
+    "dev:api": "pnpm -F @repo/trpc build && pnpm -F @cahootz/api dev",
     "dev:api:full": "pnpm -F @cahootz/api dev:full",
     "dev:trigger": "trigger dev",
     "dev:web": "pnpm -F @cahootz/web dev",

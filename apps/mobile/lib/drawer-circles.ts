@@ -10,7 +10,7 @@ export type DrawerCirclePreview =
     }
   | {
       id: string;
-      kind: "private";
+      kind: "public" | "private";
       label: string;
       memberCount: number;
       isLeader: boolean;
@@ -18,7 +18,7 @@ export type DrawerCirclePreview =
 
 /**
  * Every commons has one durable public circle: its existing commons feed.
- * Focused private circles follow it, keeping the drawer preview intentionally
+ * Public and joined circles follow it, keeping the drawer preview intentionally
  * short while preserving the existing feed and post data model.
  */
 export function buildDrawerCirclePreview(
@@ -29,10 +29,10 @@ export function buildDrawerCirclePreview(
   if (limit <= 0) return [];
 
   return [
-    { id: `main:${coopId}`, kind: "main", label: "General" as const },
-    ...circles.slice(0, Math.max(0, limit - 1)).map((circle) => ({
+    { id: `general:${coopId}`, kind: "main", label: "General" as const },
+    ...eligibleDrawerCircles(circles).slice(0, Math.max(0, limit - 1)).map((circle) => ({
       id: circle.id,
-      kind: "private" as const,
+      kind: circle.privacy === "public" ? "public" as const : "private" as const,
       label: circle.name,
       memberCount: circle.memberCount,
       isLeader: circle.isLeader,
@@ -40,12 +40,16 @@ export function buildDrawerCirclePreview(
   ];
 }
 
+export function eligibleDrawerCircles(circles: PrivateGroupSummary[]) {
+  return circles.filter((circle) => circle.privacy === "public" || circle.isMember === true);
+}
+
 export function shouldShowCreateCircle(
   circles: PrivateGroupSummary[],
   limit = DRAWER_CIRCLE_PREVIEW_LIMIT,
 ) {
   const privateCircleSlots = Math.max(0, limit - 1);
-  return circles.length < privateCircleSlots;
+  return eligibleDrawerCircles(circles).length < privateCircleSlots;
 }
 
 export function hiddenDrawerCircleCount(
@@ -53,5 +57,5 @@ export function hiddenDrawerCircleCount(
   limit = DRAWER_CIRCLE_PREVIEW_LIMIT,
 ) {
   const visiblePrivateCircleCount = Math.max(0, limit - 1);
-  return Math.max(0, circles.length - visiblePrivateCircleCount);
+  return Math.max(0, eligibleDrawerCircles(circles).length - visiblePrivateCircleCount);
 }

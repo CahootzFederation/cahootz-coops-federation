@@ -71,7 +71,7 @@ const pathways = [
     index: "03",
     label: "Decide together",
     title: "Turn a shared need into a shared decision.",
-    body: "Members can bring forward proposals and discuss tradeoffs. AI reviews each idea against the commons' rules and explains its reasoning. Qualifying small requests can be approved automatically; larger ones go to a council vote.",
+    body: "Members propose ideas and discuss tradeoffs. AI checks each proposal against the commons' goals and rules: does it fit the mission, seem workable, and account for risks? It shows its scores and reasons so members can understand the decision. Within limits the commons sets, AI can approve a small request, ask for changes, or stop it from advancing. Larger requests go to a council vote.",
     details: ["Proposals", "Discussion", "Voting"],
     className: "pathway-governance",
   },

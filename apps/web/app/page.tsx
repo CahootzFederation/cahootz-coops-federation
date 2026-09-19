@@ -43,7 +43,7 @@ async function getActiveCoops(): Promise<CoopOption[]> {
 export const metadata: Metadata = {
   title: "Cahootz | A place for your commons to move together",
   description:
-    "Cahootz brings members, local businesses, spaces, and community decisions into one commons. Find your place and help shape what comes next.",
+    "Cahootz connects members, local businesses, and shared decisions, with AI that helps coordinate the commons and evaluates proposals against community-set rules.",
   alternates: { canonical: "https://cahootz.coop" },
 };
 
@@ -88,7 +88,15 @@ const faqs = [
   },
   {
     q: "Does AI make decisions for members?",
-    a: "No. Cahootz can help review proposals against a commons' rules. Members set those rules and make the governing decisions.",
+    a: "Yes, within limits the commons sets. AI evaluates proposals against the commons' mission and rules. It can approve qualifying proposals below that commons' small-spending limit, ask for revisions, or keep a proposal from advancing. Proposals above the automatic approval limit go to a council vote.",
+  },
+  {
+    q: "How is AI used elsewhere in the commons?",
+    a: "AI can help summarize circle activity, identify needs and resources in posts, recommend relevant commons, and answer questions using a commons' charter and mission. Its observations are meant to help people understand and act on what is happening.",
+  },
+  {
+    q: "How do you work toward fair AI decisions?",
+    a: "Each commons sets the goals, scoring weights, and spending limits that guide proposal reviews. Cahootz records scores and reasons so people can see how a proposal was judged. That is a way to make decisions more consistent and open to scrutiny, but AI can still make mistakes or reflect bias.",
   },
   {
     q: "What if my commons is not listed?",
@@ -116,6 +124,7 @@ export default async function HomePage() {
           </Link>
           <nav aria-label="Main navigation" className="header-nav">
             <a href="#how-it-works">How it works</a>
+            <a href="#ai-role">How AI is used</a>
             <a href="#find-a-commons">Find a commons</a>
             <Link href="/blog">Journal</Link>
           </nav>
@@ -139,7 +148,8 @@ export default async function HomePage() {
               <p className="hero-description">
                 Cahootz gives a commons one place to connect its members, local
                 businesses, shared spaces, and decisions. See what is happening.
-                Take part. Help shape what gets built.
+                Take part. AI helps guide the work and can make limited proposal
+                decisions under rules the community sets.
               </p>
               <div className="hero-actions">
                 <a className="button button-primary" href="#join">
@@ -149,6 +159,14 @@ export default async function HomePage() {
                   See how it works <ArrowDownRight size={18} />
                 </a>
               </div>
+              <p className="hero-ai-disclosure">
+                <strong>AI is part of the commons.</strong> It helps guide
+                activity and can make limited proposal decisions under
+                community-set rules.{" "}
+                <a href="#ai-role">
+                  See exactly how <ArrowRight size={15} />
+                </a>
+              </p>
             </div>
             <div
               className="commons-map"
@@ -185,7 +203,7 @@ export default async function HomePage() {
               <div className="map-node map-decisions">
                 <span className="node-kicker">DIRECTION</span>
                 <strong>Decisions</strong>
-                <small>Propose, discuss, vote</small>
+                <small>AI review + votes</small>
               </div>
             </div>
           </div>
@@ -248,25 +266,72 @@ export default async function HomePage() {
           ))}
         </section>
 
-        <section className="decision-section">
-          <div className="landing-shell decision-inner">
-            <div>
-              <p className="eyebrow">MEMBER-LED BY DESIGN</p>
-              <h2>The community sets the direction.</h2>
+        <section className="ai-section" id="ai-role" aria-labelledby="ai-title">
+          <div className="landing-shell">
+            <div className="ai-section-head">
+              <div>
+                <p className="eyebrow">AI IN THE COMMONS</p>
+                <h2 id="ai-title">
+                  AI helps lead the work.{" "}
+                  <span>The community sets the rules.</span>
+                </h2>
+              </div>
+              <p>
+                Cahootz uses AI as an active part of community coordination and
+                decision-making. Here is what it does, and where its authority
+                stops.
+              </p>
             </div>
-            <div>
+
+            <div className="ai-roles">
+              <article>
+                <span className="ai-role-index">01 / NOTICE</span>
+                <div>
+                  <h3>Help people see what is happening.</h3>
+                  <p>
+                    AI can summarize circle activity, identify needs and
+                    resources in posts, and recommend relevant commons. Sage,
+                    the commons assistant, answers questions using that
+                    commons&apos; charter and mission.
+                  </p>
+                </div>
+              </article>
+              <article>
+                <span className="ai-role-index">02 / EVALUATE</span>
+                <div>
+                  <h3>Review ideas against shared standards.</h3>
+                  <p>
+                    For funding proposals, AI checks mission fit, feasibility,
+                    risk, accountability, and missing information. It gives
+                    scores and reasons, and can suggest what needs to change
+                    before an idea moves forward.
+                  </p>
+                </div>
+              </article>
+              <article>
+                <span className="ai-role-index">03 / DECIDE</span>
+                <div>
+                  <h3>Make decisions within a set limit.</h3>
+                  <p>
+                    A commons sets its own automatic approval limit. AI can
+                    approve a qualifying proposal below that limit without a
+                    vote. It can ask for revisions or keep a proposal from
+                    advancing when the rules are not met. Proposals above that
+                    limit go to a council vote.
+                  </p>
+                </div>
+              </article>
+            </div>
+
+            <div className="ai-fairness">
+              <span>THE FAIRNESS PRINCIPLE</span>
               <p>
-                Bring an idea forward. Make the case. Hear from the people it
-                affects. Then decide together what deserves support.
+                The commons chooses the goals, scoring weights, and spending
+                limits. Cahootz shows the AI&apos;s reasons and records its
+                evaluations so people can examine how a proposal was judged.
+                Consistent rules and visible reasoning help make decisions
+                fairer; AI can still be wrong or biased.
               </p>
-              <p>
-                AI can help check proposals against a commons&apos; rules and
-                make its reasoning visible. Members remain responsible for the
-                rules and the vote.
-              </p>
-              <a className="text-link" href="#join">
-                Get involved <MoveUpRight size={18} />
-              </a>
             </div>
           </div>
         </section>

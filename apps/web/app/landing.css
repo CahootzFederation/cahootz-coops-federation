@@ -22,6 +22,13 @@ body {
   outline: 3px solid var(--color-focus);
   outline-offset: 4px;
 }
+#how-it-works,
+#ai-role,
+#find-a-commons,
+#join,
+#business-form {
+  scroll-margin-top: 76px;
+}
 .landing-shell {
   width: min(100% - 3rem, 1320px);
   margin-inline: auto;
@@ -96,7 +103,7 @@ body {
 }
 .hero h1,
 .intro-band h2,
-.decision-section h2,
+.ai-section h2,
 .section-heading h2,
 .join-intro h2,
 .faq-section h2 {
@@ -121,6 +128,29 @@ body {
   font-size: var(--text-md);
   line-height: 1.65;
   max-width: 55ch;
+}
+.hero-ai-disclosure {
+  max-width: 55ch;
+  border-top: var(--rule-thin) solid var(--color-rule);
+  margin-top: var(--space-xl);
+  padding-top: var(--space-sm);
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+.hero-ai-disclosure strong {
+  color: var(--color-ink);
+}
+.hero-ai-disclosure a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--color-accent-deep);
+  font-weight: 800;
+  white-space: nowrap;
+}
+.hero-ai-disclosure a:hover {
+  text-decoration: underline;
 }
 .hero-actions {
   display: flex;
@@ -380,31 +410,83 @@ body {
   border-radius: 50% 50% 0 0;
   background: var(--color-accent-deep);
 }
-.decision-section {
+.ai-section {
   background: var(--color-paper-2);
-  padding-block: 6.5rem;
+  padding-block: var(--space-3xl);
 }
-.decision-inner {
+.ai-section-head {
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 6rem;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: var(--space-3xl);
+  align-items: end;
+  padding-bottom: var(--space-2xl);
 }
-.decision-section .eyebrow {
-  color: var(--color-accent-deep);
-}
-.decision-section h2 {
+.ai-section h2 {
   font-size: clamp(3.1rem, 5.7vw, 6rem);
   line-height: 1.02;
-  margin: 1rem 0 0;
-  max-width: 11ch;
+  margin: var(--space-sm) 0 0;
+  max-width: 15ch;
 }
-.decision-inner > div:last-child {
-  align-self: end;
+.ai-section h2 span {
+  color: var(--color-accent-deep);
 }
-.decision-inner p:not(.eyebrow) {
+.ai-section-head > p {
+  max-width: 48ch;
   font-size: var(--text-md);
   line-height: 1.65;
-  margin-bottom: 1.25rem;
+  margin: 0;
+}
+.ai-roles {
+  border-top: var(--rule-thin) solid var(--color-rule);
+}
+.ai-roles article {
+  display: grid;
+  grid-template-columns: minmax(0, 0.45fr) minmax(0, 1fr);
+  gap: var(--space-xl);
+  padding-block: var(--space-lg);
+  border-bottom: var(--rule-thin) solid var(--color-rule);
+}
+.ai-role-index {
+  color: var(--color-accent-deep);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+.ai-roles h3 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 3vw, 3rem);
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  margin: 0;
+}
+.ai-roles p {
+  max-width: 65ch;
+  color: var(--color-ink-2);
+  font-size: var(--text-md);
+  line-height: 1.65;
+  margin: var(--space-sm) 0 0;
+}
+.ai-fairness {
+  display: grid;
+  grid-template-columns: minmax(0, 0.45fr) minmax(0, 1fr);
+  gap: var(--space-xl);
+  margin-top: var(--space-2xl);
+  padding: var(--space-lg);
+  background: var(--color-dark);
+  color: var(--color-light);
+}
+.ai-fairness span {
+  color: var(--color-accent);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+.ai-fairness p {
+  max-width: 65ch;
+  font-size: var(--text-md);
+  line-height: 1.65;
+  margin: 0;
 }
 .commons-section,
 .journal-section,
@@ -758,13 +840,13 @@ body {
     bottom: 10%;
   }
   .intro-inner,
-  .decision-inner,
+  .ai-section-head,
   .faq-inner {
     grid-template-columns: minmax(0, 1fr);
     gap: 2rem;
   }
   .intro-inner,
-  .decision-section,
+  .ai-section,
   .commons-section,
   .journal-section,
   .faq-section,
@@ -779,6 +861,17 @@ body {
   .pathway-index {
     flex-direction: row;
     gap: 1rem;
+  }
+  .ai-section-head {
+    padding-bottom: var(--space-lg);
+  }
+  .ai-roles article,
+  .ai-fairness {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-sm);
+  }
+  .ai-fairness {
+    margin-top: var(--space-xl);
   }
   .section-heading {
     flex-direction: column;

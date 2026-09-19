@@ -92,7 +92,11 @@ const faqs = [
   },
   {
     q: "How is AI used elsewhere in the commons?",
-    a: "AI can help summarize circle activity, identify needs and resources in posts, recommend relevant commons, and answer questions using a commons' charter and mission. Its observations are meant to help people understand and act on what is happening.",
+    a: "AI can help summarize circle activity, identify needs and resources in posts, recommend relevant commons, and answer questions using a commons' charter and mission. These uses are designed to serve the commons and its members. Each commons sets the rules for its decisions; Cahootz currently runs the underlying AI service across commons.",
+  },
+  {
+    q: "Will each commons own its own AI?",
+    a: "That is the direction we are building toward: an AI owned by each commons, isolated for that commons, and used only to serve it. Today, each commons controls the charter, goals, and limits that guide its AI decisions, while Cahootz runs a shared AI service. Separate ownership and isolation are not in place yet.",
   },
   {
     q: "How do you work toward fair AI decisions?",
@@ -265,9 +269,11 @@ export default async function HomePage() {
             </div>
             <div>
               <p>
-                Each commons sets its charter, goals, and spending limits. AI
-                checks proposals for mission fit, feasibility, risk, and
-                accountability, then shows its scores and reasons.
+                AI serves the commons whose decisions it helps make. Each
+                commons sets its own charter, goals, and spending limits. AI
+                uses those rules to check proposals for mission fit,
+                feasibility, risk, and accountability, then shows its scores
+                and reasons.
               </p>
               <p>
                 AI can approve a qualifying request below the commons&apos;

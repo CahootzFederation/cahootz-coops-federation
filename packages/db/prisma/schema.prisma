@@ -860,6 +860,7 @@ model AIObservationSource {
 model CommonsPost {
   id       String @id @default(cuid())
   coopId   String @default("cahootz")
+  circleId String?
   authorId String
   author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
@@ -878,6 +879,7 @@ model CommonsPost {
   supports CommonsPostSupport[]
 
   @@index([coopId, createdAt])
+  @@index([coopId, circleId, createdAt])
   @@index([coopId, classification, createdAt])
   @@index([authorId, createdAt])
   @@schema("public")
@@ -1033,7 +1035,7 @@ model Group {
   coopId         String   @default("cahootz")
   name           String
   purpose        String?  @db.Text
-  privacy        String   @default("invite-only") // "private" | "invite-only"
+  privacy        String   @default("invite-only") // "public" | "private" | "invite-only"
   inviteCode     String   @unique
   leaderId       String
   leader         User     @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: Cascade)

@@ -1,49 +1,54 @@
-import { Agent, run } from "@openai/agents";
-import { z } from "zod";
-import { TRPCError } from "@trpc/server";
-import type { Prisma } from "@repo/db";
+import { Agent, run } from '@openai/agents';
+import { TRPCError } from '@trpc/server';
+import { z } from 'zod';
 
-import type { AccountAuthenticatedContext, Context } from "../context.js";
+import type { Prisma } from '@repo/db';
+
+import type { AccountAuthenticatedContext, Context } from '../context.js';
+import { COMMUNITY_OBSERVER_POST_TYPES, getAgent } from '../agents/registry.js';
+import { ensureSageBotUser, SAGE_HANDLE } from '../lib/bot.js';
+import {
+  COMMONS_COOP_ID,
+  ensureCommonsMembership,
+  ensureUserHandle,
+} from '../lib/commons.js';
+import { encodeMentions } from '../lib/mentions.js';
+import { toE164 } from '../lib/phone.js';
 import {
   accountAuthenticatedProcedure,
   publicProcedure,
-} from "../procedures/index.js";
-import { COMMONS_COOP_ID, ensureCommonsMembership, ensureUserHandle } from "../lib/commons.js";
-import { toE164 } from "../lib/phone.js";
-import { encodeMentions } from "../lib/mentions.js";
-import { ensureSageBotUser, SAGE_HANDLE } from "../lib/bot.js";
+} from '../procedures/index.js';
+import { recordObservation } from '../services/ai-memory.js';
+import { createNotificationAndPush } from '../services/push-notification-service.js';
 import {
   sendApplicationSubmittedNotification,
   sendCommonsSuggestionNotification,
-} from "../services/slack-notification-service.js";
-import { createNotificationAndPush } from "../services/push-notification-service.js";
-import { getAgent, COMMUNITY_OBSERVER_POST_TYPES } from "../agents/registry.js";
-import { recordObservation } from "../services/ai-memory.js";
-import { router } from "../trpc.js";
+} from '../services/slack-notification-service.js';
+import { router } from '../trpc.js';
 
 const postTagSchema = z.enum([
-  "Intro",
-  "Thought",
-  "Ask",
-  "Offer",
-  "Event",
-  "Project",
-  "Proposal",
-  "Product",
-  "Update",
-  "Decision",
-  "Receipt",
-  "Social",
-  "Meme",
-  "Win",
-  "Need",
-  "Idea",
-  "Vote",
-  "Resource",
-  "Opportunity",
+  'Intro',
+  'Thought',
+  'Ask',
+  'Offer',
+  'Event',
+  'Project',
+  'Proposal',
+  'Product',
+  'Update',
+  'Decision',
+  'Receipt',
+  'Social',
+  'Meme',
+  'Win',
+  'Need',
+  'Idea',
+  'Vote',
+  'Resource',
+  'Opportunity',
 ]);
 
-const postMediaTypeSchema = z.enum(["image", "video"]);
+const postMediaTypeSchema = z.enum(['image', 'video']);
 
 const uploadedPostMediaSchema = z.object({
   pathname: z.string().min(1).max(1024),
@@ -74,21 +79,31 @@ function toJsonValue(value: unknown): Prisma.InputJsonValue {
 function isEmailQuestion(question: ApplicationQuestion) {
   const id = question.id.toLowerCase();
   const label = question.label.toLowerCase();
-  return question.type === "email" || id === "email" || id.includes("email") || label.includes("email");
+  return (
+    question.type === 'email' ||
+    id === 'email' ||
+    id.includes('email') ||
+    label.includes('email')
+  );
 }
 
 function isPhoneQuestion(question: ApplicationQuestion) {
   const id = question.id.toLowerCase();
   const label = question.label.toLowerCase();
-  return question.type === "phone" || id === "phone" || id.includes("phone") || label.includes("phone");
+  return (
+    question.type === 'phone' ||
+    id === 'phone' ||
+    id.includes('phone') ||
+    label.includes('phone')
+  );
 }
 
 function nameParts(name: string | null | undefined) {
-  const trimmed = name?.trim() || "Cahootz Member";
+  const trimmed = name?.trim() || 'Cahootz Member';
   const [firstName, ...rest] = trimmed.split(/\s+/);
   return {
-    firstName: firstName || "Cahootz",
-    lastName: rest.join(" ") || "Member",
+    firstName: firstName || 'Cahootz',
+    lastName: rest.join(' ') || 'Member',
   };
 }
 
@@ -97,22 +112,32 @@ async function loadFeedPosts(
   coopId: string | string[],
   limit: number,
   cursor?: string,
+  circleId?: string,
 ) {
   const coopIds = Array.isArray(coopId) ? coopId : [coopId];
   const posts = await db.commonsPost.findMany({
-    where: coopIds.length === 1 ? { coopId: coopIds[0] } : { coopId: { in: coopIds } },
-    orderBy: { createdAt: "desc" },
+    where: circleId
+      ? { coopId: coopIds[0], circleId }
+      : {
+          OR: coopIds.flatMap((id) => [
+            { coopId: id, circleId: generalCircleId(id) },
+            { coopId: id, circleId: null },
+          ]),
+        },
+    orderBy: { createdAt: 'desc' },
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     include: {
       author: { select: { name: true, email: true, handle: true } },
       comments: {
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: 'asc' },
         take: 2,
-        include: { author: { select: { name: true, email: true, handle: true } } },
+        include: {
+          author: { select: { name: true, email: true, handle: true } },
+        },
       },
       media: {
-        orderBy: { order: "asc" },
+        orderBy: { order: 'asc' },
       },
       _count: { select: { comments: true, supports: true } },
     },
@@ -123,15 +148,103 @@ async function loadFeedPosts(
   return { page, nextCursor: hasMore ? page[page.length - 1].id : null };
 }
 
-function displayName(user: { name: string | null; email: string }) {
-  return user.name || user.email.split("@")[0] || "Commons member";
+export function generalCircleId(coopId: string) {
+  return `general:${coopId}`;
 }
 
-function personHandle(user: { handle?: string | null; name: string | null; email: string }) {
+async function requireCircleAccess(
+  db: any,
+  userId: string,
+  coopId: string,
+  circleId: string,
+) {
+  const membership = await db.groupMember.findUnique({
+    where: { groupId_userId: { groupId: circleId, userId } },
+    include: { group: { select: { coopId: true, name: true, privacy: true } } },
+  });
+  if (membership?.group.coopId === coopId) {
+    return { ...membership.group, isMember: true };
+  }
+  const publicCircle = await db.group.findUnique({
+    where: { id: circleId },
+    select: { coopId: true, name: true, privacy: true },
+  });
+  if (!publicCircle || publicCircle.coopId !== coopId || publicCircle.privacy !== 'public') {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Join this circle to view its conversation.',
+    });
+  }
+  return { ...publicCircle, isMember: false };
+}
+
+async function requireCircleMembership(
+  db: any,
+  userId: string,
+  coopId: string,
+  circleId: string,
+) {
+  const membership = await db.groupMember.findUnique({
+    where: { groupId_userId: { groupId: circleId, userId } },
+    select: { group: { select: { coopId: true } } },
+  });
+  if (membership?.group.coopId !== coopId) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Join this circle to participate.',
+    });
+  }
+}
+
+async function requirePostCircleMembership(
+  db: any,
+  userId: string,
+  post: { coopId: string; circleId?: string | null },
+) {
+  const circleId = post.circleId;
+  if (circleId && circleId !== generalCircleId(post.coopId)) {
+    await requireCircleMembership(db, userId, post.coopId, circleId);
+  }
+}
+
+async function canReadPostCircle(
+  db: any,
+  userId: string | undefined,
+  post: { coopId: string; circleId?: string | null },
+) {
+  if (!post.circleId || post.circleId === generalCircleId(post.coopId))
+    return true;
+  if (userId) {
+    const membership = await db.groupMember.findUnique({
+      where: { groupId_userId: { groupId: post.circleId, userId } },
+      select: { group: { select: { coopId: true } } },
+    });
+    if (membership?.group.coopId === post.coopId) return true;
+  }
+  const circle = await db.group.findUnique({
+    where: { id: post.circleId },
+    select: { coopId: true, privacy: true },
+  });
+  return circle?.coopId === post.coopId && circle.privacy === 'public';
+}
+
+function displayName(user: { name: string | null; email: string }) {
+  return user.name || user.email.split('@')[0] || 'Commons member';
+}
+
+function personHandle(user: {
+  handle?: string | null;
+  name: string | null;
+  email: string;
+}) {
   if (user.handle) return user.handle;
   // Fallback for authors who somehow don't have a persisted handle yet (should be rare —
   // ensureUserHandle assigns one at login and at post creation).
-  return displayName(user).toLowerCase().replace(/[^a-z0-9]+/g, "") || "member";
+  return (
+    displayName(user)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '') || 'member'
+  );
 }
 
 function mapPersonalPagePost(record: any) {
@@ -173,7 +286,10 @@ async function findUserByPersonalHandle(db: any, handle: string) {
 }
 
 function relativeTime(date: Date) {
-  const minutes = Math.max(1, Math.round((Date.now() - date.getTime()) / 60000));
+  const minutes = Math.max(
+    1,
+    Math.round((Date.now() - date.getTime()) / 60000),
+  );
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours}h`;
@@ -181,9 +297,9 @@ function relativeTime(date: Date) {
 }
 
 function titleFromContent(content: string) {
-  const cleaned = content.trim().replace(/\s+/g, " ");
+  const cleaned = content.trim().replace(/\s+/g, ' ');
   const sentence = cleaned.split(/[.!?]/)[0] || cleaned;
-  return sentence.slice(0, 84) || "Community post";
+  return sentence.slice(0, 84) || 'Community post';
 }
 
 function classifyPost(input: {
@@ -192,9 +308,9 @@ function classifyPost(input: {
   tag: z.infer<typeof postTagSchema>;
   mediaCount: number;
 }) {
-  const text = `${input.title || ""} ${input.content}`.toLowerCase();
+  const text = `${input.title || ''} ${input.content}`.toLowerCase();
   const hits: string[] = [];
-  let classification = "social";
+  let classification = 'social';
 
   const match = (label: string, terms: string[]) => {
     const found = terms.some((term) => text.includes(term));
@@ -202,39 +318,99 @@ function classifyPost(input: {
     return found;
   };
 
-  if (input.tag === "Intro") {
-    hits.push("intro");
-  } else if (input.tag === "Proposal" || input.tag === "Vote" || match("proposal", ["proposal", "vote", "decide", "approve", "policy"])) {
-    classification = "proposal_seed";
-  } else if (input.tag === "Event" || match("event", ["event", "meetup", "meeting", "pull up", "rsvp", "tomorrow", "tonight"])) {
-    classification = "event";
-  } else if (input.tag === "Ask" || input.tag === "Need" || match("need", ["need", "looking for", "help with", "does anyone have", "who can"])) {
-    classification = "need";
-  } else if (input.tag === "Resource" || input.tag === "Receipt" || match("resource", ["resource", "template", "guide", "link", "toolkit", "receipt"])) {
-    classification = "resource";
-  } else if (input.tag === "Offer" || input.tag === "Product" || input.tag === "Opportunity" || match("market", ["job", "gig", "hiring", "selling", "available", "vendor", "client"])) {
-    classification = "market";
-  } else if (input.tag === "Project") {
-    classification = "project";
-  } else if (input.tag === "Decision") {
-    classification = "decision";
-  } else if (input.tag === "Update") {
-    classification = "update";
-  } else if (match("support", ["support", "congratulations", "proud", "show love", "celebrate"])) {
-    classification = "support";
-  } else if (input.tag === "Win") {
-    classification = "win";
-  } else if (input.tag === "Meme") {
-    classification = "social";
-    hits.push("meme");
+  if (input.tag === 'Intro') {
+    hits.push('intro');
+  } else if (
+    input.tag === 'Proposal' ||
+    input.tag === 'Vote' ||
+    match('proposal', ['proposal', 'vote', 'decide', 'approve', 'policy'])
+  ) {
+    classification = 'proposal_seed';
+  } else if (
+    input.tag === 'Event' ||
+    match('event', [
+      'event',
+      'meetup',
+      'meeting',
+      'pull up',
+      'rsvp',
+      'tomorrow',
+      'tonight',
+    ])
+  ) {
+    classification = 'event';
+  } else if (
+    input.tag === 'Ask' ||
+    input.tag === 'Need' ||
+    match('need', [
+      'need',
+      'looking for',
+      'help with',
+      'does anyone have',
+      'who can',
+    ])
+  ) {
+    classification = 'need';
+  } else if (
+    input.tag === 'Resource' ||
+    input.tag === 'Receipt' ||
+    match('resource', [
+      'resource',
+      'template',
+      'guide',
+      'link',
+      'toolkit',
+      'receipt',
+    ])
+  ) {
+    classification = 'resource';
+  } else if (
+    input.tag === 'Offer' ||
+    input.tag === 'Product' ||
+    input.tag === 'Opportunity' ||
+    match('market', [
+      'job',
+      'gig',
+      'hiring',
+      'selling',
+      'available',
+      'vendor',
+      'client',
+    ])
+  ) {
+    classification = 'market';
+  } else if (input.tag === 'Project') {
+    classification = 'project';
+  } else if (input.tag === 'Decision') {
+    classification = 'decision';
+  } else if (input.tag === 'Update') {
+    classification = 'update';
+  } else if (
+    match('support', [
+      'support',
+      'congratulations',
+      'proud',
+      'show love',
+      'celebrate',
+    ])
+  ) {
+    classification = 'support';
+  } else if (input.tag === 'Win') {
+    classification = 'win';
+  } else if (input.tag === 'Meme') {
+    classification = 'social';
+    hits.push('meme');
   }
 
   return {
     classification,
-    classificationConfidence: Math.min(0.95, 0.55 + hits.length * 0.12 + (input.mediaCount > 0 ? 0.05 : 0)),
+    classificationConfidence: Math.min(
+      0.95,
+      0.55 + hits.length * 0.12 + (input.mediaCount > 0 ? 0.05 : 0),
+    ),
     classificationSignals: toJsonValue({
       version: 1,
-      source: "keyword_rule",
+      source: 'keyword_rule',
       matchedSignals: hits,
       tag: input.tag,
       mediaCount: input.mediaCount,
@@ -262,32 +438,34 @@ async function recordPostClassificationObservation(params: {
   if (!process.env.OPENAI_API_KEY) return;
 
   try {
-    const agent = getAgent("community-observer");
+    const agent = getAgent('community-observer');
     if (!agent) return;
 
     const output = await agent.run({
-      task: "Classify this single community post into exactly one of the allowed types.",
+      task: 'Classify this single community post into exactly one of the allowed types.',
       content: [
-        params.title ? `Title: ${params.title}` : "",
+        params.title ? `Title: ${params.title}` : '',
         `Content: ${params.content}`,
         `User-selected tag: ${params.tag}`,
-      ].filter(Boolean).join("\n"),
+      ]
+        .filter(Boolean)
+        .join('\n'),
       allowedTypes: [...COMMUNITY_OBSERVER_POST_TYPES],
     });
 
     await recordObservation({
-      type: "post_classification",
-      scopeType: "commons",
+      type: 'post_classification',
+      scopeType: 'commons',
       scopeId: params.coopId,
       confidence: output.confidence,
       summary: output.summary,
       details: { classification: output.type, ...output.details },
-      sources: [{ type: "commons_post", id: params.postId }],
-      visibility: "COMMONS_MEMBERS",
-      generatedByAgentKey: "community-observer",
+      sources: [{ type: 'commons_post', id: params.postId }],
+      visibility: 'COMMONS_MEMBERS',
+      generatedByAgentKey: 'community-observer',
     });
   } catch (err) {
-    console.error("Failed to record post_classification AIObservation:", err);
+    console.error('Failed to record post_classification AIObservation:', err);
   }
 }
 
@@ -295,6 +473,7 @@ function mapPostWithGroup(record: any, groupName: string) {
   return {
     id: record.id,
     coopId: record.coopId,
+    circleId: record.circleId || generalCircleId(record.coopId),
     authorId: record.authorId,
     author: displayName(record.author),
     authorHandle: personHandle(record.author),
@@ -303,7 +482,7 @@ function mapPostWithGroup(record: any, groupName: string) {
     title: record.title,
     body: record.content,
     tag: record.tag,
-    classification: record.classification ?? "social",
+    classification: record.classification ?? 'social',
     replies: record._count?.comments ?? record.comments?.length ?? 0,
     support: record._count?.supports ?? record.supports?.length ?? 0,
     pledges: undefined as string | undefined,
@@ -344,12 +523,14 @@ function mapPostWithGroup(record: any, groupName: string) {
 }
 
 function mapCoopSummaryRecord(coopConfig: any, coopId: string) {
-  const name = coopConfig?.name?.trim() || (coopId === COMMONS_COOP_ID ? "Cahootz Commons" : coopId);
+  const name =
+    coopConfig?.name?.trim() ||
+    (coopId === COMMONS_COOP_ID ? 'Cahootz Commons' : coopId);
   const description =
     coopConfig?.description?.trim() ||
     coopConfig?.tagline?.trim() ||
     coopConfig?.displayMission?.trim() ||
-    "A social commons for conversation, resources, and coordinated action.";
+    'A social commons for conversation, resources, and coordinated action.';
 
   return {
     id: coopId,
@@ -362,7 +543,7 @@ function mapCoopSummaryRecord(coopConfig: any, coopId: string) {
 async function loadCoopSummary(db: any, coopId: string) {
   const coopConfig = await db.coopConfig.findFirst({
     where: { coopId, isActive: true },
-    orderBy: { version: "desc" },
+    orderBy: { version: 'desc' },
     select: {
       coopId: true,
       name: true,
@@ -377,7 +558,7 @@ async function loadCoopSummary(db: any, coopId: string) {
 }
 
 async function resolveOptionalAccountUser(context: Context) {
-  const token = getHeaderValue(context.req.headers["x-session-token"]);
+  const token = getHeaderValue(context.req.headers['x-session-token']);
   if (!token) return null;
 
   const session = await context.db.session.findUnique({
@@ -402,7 +583,11 @@ async function resolveOptionalAccountUser(context: Context) {
   return user && !user.deletedAt ? user : null;
 }
 
-async function hasActiveCommonsMembership(db: any, userId: string, coopId: string) {
+async function hasActiveCommonsMembership(
+  db: any,
+  userId: string,
+  coopId: string,
+) {
   const membership = await db.userCoopMembership.findUnique({
     where: {
       userId_coopId: {
@@ -413,10 +598,14 @@ async function hasActiveCommonsMembership(db: any, userId: string, coopId: strin
     select: { status: true },
   });
 
-  return membership?.status === "ACTIVE";
+  return membership?.status === 'ACTIVE';
 }
 
-export async function requireActiveCommonsMembership(db: any, userId: string, coopId: string) {
+export async function requireActiveCommonsMembership(
+  db: any,
+  userId: string,
+  coopId: string,
+) {
   if (coopId === COMMONS_COOP_ID) {
     await ensureCommonsMembership(db, userId);
     return;
@@ -425,8 +614,8 @@ export async function requireActiveCommonsMembership(db: any, userId: string, co
   const isMember = await hasActiveCommonsMembership(db, userId, coopId);
   if (!isMember) {
     throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Join this commons before posting here.",
+      code: 'FORBIDDEN',
+      message: 'Join this commons before posting here.',
     });
   }
 }
@@ -434,40 +623,40 @@ export async function requireActiveCommonsMembership(db: any, userId: string, co
 function fallbackAiResponse(prompt: string) {
   const lower = prompt.toLowerCase();
 
-  if (lower.includes("vote")) {
+  if (lower.includes('vote')) {
     return [
-      "Start with the decision: what exactly should members choose?",
-      "Then define options, deadline, eligible voters, budget impact, and who reports back.",
-    ].join("\n");
+      'Start with the decision: what exactly should members choose?',
+      'Then define options, deadline, eligible voters, budget impact, and who reports back.',
+    ].join('\n');
   }
 
   if (
-    lower.includes("cost") ||
-    lower.includes("fund") ||
-    lower.includes("money") ||
-    lower.includes("$")
+    lower.includes('cost') ||
+    lower.includes('fund') ||
+    lower.includes('money') ||
+    lower.includes('$')
   ) {
     return [
-      "Break this into money, time, space, tools, and people.",
-      "A good next step is a small pledge list before turning it into a proposal.",
-    ].join("\n");
+      'Break this into money, time, space, tools, and people.',
+      'A good next step is a small pledge list before turning it into a proposal.',
+    ].join('\n');
   }
 
   if (
-    lower.includes("proposal") ||
-    lower.includes("plan") ||
-    lower.includes("help")
+    lower.includes('proposal') ||
+    lower.includes('plan') ||
+    lower.includes('help')
   ) {
     return [
-      "This can become a Commons thread first.",
-      "Ask people to name the need, who is affected, what help exists, and the smallest useful pilot.",
-    ].join("\n");
+      'This can become a Commons thread first.',
+      'Ask people to name the need, who is affected, what help exists, and the smallest useful pilot.',
+    ].join('\n');
   }
 
   return [
-    "I can help you turn this into action.",
-    "Try framing it as: need, people affected, helpers, resources, decision needed, and first step.",
-  ].join("\n");
+    'I can help you turn this into action.',
+    'Try framing it as: need, people affected, helpers, resources, decision needed, and first step.',
+  ].join('\n');
 }
 
 async function runCommonsAi(prompt: string) {
@@ -477,14 +666,14 @@ async function runCommonsAi(prompt: string) {
 
   try {
     const agent = new Agent({
-      name: "Cahootz Commons Assistant",
-      model: process.env.COMMONS_AI_MODEL || "gpt-5.2",
+      name: 'Cahootz Commons Assistant',
+      model: process.env.COMMONS_AI_MODEL || 'gpt-5.2',
       instructions: [
-        "You are the general AI assistant inside Cahootz Commons, a community social network for coordinating help, proposals, votes, and shared resources.",
-        "Answer in plain language and move conversation toward practical community action.",
-        "When useful, organize answers into need, helpers, resources, decision, and next step.",
-        "Do not pretend an anonymous visitor is a logged-in member.",
-      ].join("\n"),
+        'You are the general AI assistant inside Cahootz Commons, a community social network for coordinating help, proposals, votes, and shared resources.',
+        'Answer in plain language and move conversation toward practical community action.',
+        'When useful, organize answers into need, helpers, resources, decision, and next step.',
+        'Do not pretend an anonymous visitor is a logged-in member.',
+      ].join('\n'),
     });
     const result = (await run(agent, prompt)) as unknown as {
       finalOutput?: string;
@@ -493,7 +682,7 @@ async function runCommonsAi(prompt: string) {
 
     return result.finalOutput || result.output || fallbackAiResponse(prompt);
   } catch (error) {
-    console.error("Commons AI failed:", error);
+    console.error('Commons AI failed:', error);
     return fallbackAiResponse(prompt);
   }
 }
@@ -504,6 +693,7 @@ export const commonsRouter = router({
       z
         .object({
           coopId: z.string().min(1).default(COMMONS_COOP_ID),
+          circleId: z.string().min(1).optional(),
           limit: z.number().min(1).max(50).default(20),
           cursor: z.string().optional(),
         })
@@ -511,7 +701,12 @@ export const commonsRouter = router({
     )
     .query(async ({ input, ctx }) => {
       const context = ctx as Context;
-      if (input.coopId === "all") {
+      if (input.coopId === 'all') {
+        if (input.circleId)
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Choose a commons for this circle.',
+          });
         const accountUser = await resolveOptionalAccountUser(context);
         const coopIds = new Set<string>([COMMONS_COOP_ID]);
 
@@ -519,15 +714,22 @@ export const commonsRouter = router({
           const memberships = await context.db.userCoopMembership.findMany({
             where: {
               userId: accountUser.id,
-              status: "ACTIVE",
+              status: 'ACTIVE',
             },
             select: { coopId: true },
           });
-          memberships.forEach((membership: any) => coopIds.add(membership.coopId));
+          memberships.forEach((membership: any) =>
+            coopIds.add(membership.coopId),
+          );
         }
 
         const activeCoopIds = [...coopIds];
-        const { page, nextCursor } = await loadFeedPosts(ctx.db, activeCoopIds, input.limit, input.cursor);
+        const { page, nextCursor } = await loadFeedPosts(
+          ctx.db,
+          activeCoopIds,
+          input.limit,
+          input.cursor,
+        );
 
         const coopConfigs = await context.db.coopConfig.findMany({
           where: {
@@ -552,13 +754,16 @@ export const commonsRouter = router({
 
         return {
           coop: {
-            id: "all",
-            name: "Home",
-            shortName: "Home",
-            description: "Posts from every commons you are approved to access.",
+            id: 'all',
+            name: 'Home',
+            shortName: 'Home',
+            description: 'Posts from every commons you are approved to access.',
           },
           posts: page.map((post: any) =>
-            mapPostWithGroup(post, coopNameById.get(post.coopId) || post.coopId),
+            mapPostWithGroup(
+              post,
+              coopNameById.get(post.coopId) || post.coopId,
+            ),
           ),
           nextCursor,
         };
@@ -566,19 +771,53 @@ export const commonsRouter = router({
 
       const coop = await loadCoopSummary(ctx.db, input.coopId);
       const accountUser = await resolveOptionalAccountUser(context);
+      const requestedCircleId =
+        input.circleId && input.circleId !== generalCircleId(input.coopId)
+          ? input.circleId
+          : undefined;
+      const circle =
+        requestedCircleId && accountUser
+          ? await requireCircleAccess(
+              context.db,
+              accountUser.id,
+              input.coopId,
+              requestedCircleId,
+            )
+          : null;
+      if (requestedCircleId && !circle) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Join this circle to view its conversation.',
+        });
+      }
       const canRead =
         input.coopId === COMMONS_COOP_ID ||
-        (!!accountUser && (await hasActiveCommonsMembership(context.db, accountUser.id, input.coopId)));
+        (!!accountUser &&
+          (await hasActiveCommonsMembership(
+            context.db,
+            accountUser.id,
+            input.coopId,
+          )));
 
       if (!canRead) {
         return { coop, posts: [], nextCursor: null };
       }
 
-      const { page, nextCursor } = await loadFeedPosts(ctx.db, input.coopId, input.limit, input.cursor);
+      const { page, nextCursor } = await loadFeedPosts(
+        ctx.db,
+        input.coopId,
+        input.limit,
+        input.cursor,
+        requestedCircleId,
+      );
 
       return {
         coop,
-        posts: page.map((post: any) => mapPostWithGroup(post, coop.name)),
+        circleName: circle?.name || null,
+        circleIsMember: circle?.isMember ?? null,
+        posts: page.map((post: any) =>
+          mapPostWithGroup(post, circle?.name || coop.name),
+        ),
         nextCursor,
       };
     }),
@@ -597,18 +836,23 @@ export const commonsRouter = router({
       const accountUser = await resolveOptionalAccountUser(context);
       const canReadPosts =
         input.coopId === COMMONS_COOP_ID ||
-        (!!accountUser && (await hasActiveCommonsMembership(context.db, accountUser.id, input.coopId)));
+        (!!accountUser &&
+          (await hasActiveCommonsMembership(
+            context.db,
+            accountUser.id,
+            input.coopId,
+          )));
 
       const [people, posts] = await Promise.all([
         context.db.user.findMany({
           where: {
             deletedAt: null,
             OR: [
-              { name: { contains: input.query, mode: "insensitive" } },
-              { handle: { contains: input.query, mode: "insensitive" } },
+              { name: { contains: input.query, mode: 'insensitive' } },
+              { handle: { contains: input.query, mode: 'insensitive' } },
             ],
           },
-          orderBy: { createdAt: "desc" },
+          orderBy: { createdAt: 'desc' },
           take: input.limit,
           select: { id: true, name: true, email: true, handle: true },
         }),
@@ -616,21 +860,37 @@ export const commonsRouter = router({
           ? context.db.commonsPost.findMany({
               where: {
                 coopId: input.coopId,
-                OR: [
-                  { title: { contains: input.query, mode: "insensitive" } },
-                  { content: { contains: input.query, mode: "insensitive" } },
+                AND: [
+                  {
+                    OR: [
+                      { circleId: generalCircleId(input.coopId) },
+                      { circleId: null },
+                    ],
+                  },
+                  {
+                    OR: [
+                      { title: { contains: input.query, mode: 'insensitive' } },
+                      {
+                        content: { contains: input.query, mode: 'insensitive' },
+                      },
+                    ],
+                  },
                 ],
               },
-              orderBy: { createdAt: "desc" },
+              orderBy: { createdAt: 'desc' },
               take: input.limit,
               include: {
                 author: { select: { name: true, email: true, handle: true } },
                 comments: {
-                  orderBy: { createdAt: "asc" },
+                  orderBy: { createdAt: 'asc' },
                   take: 2,
-                  include: { author: { select: { name: true, email: true, handle: true } } },
+                  include: {
+                    author: {
+                      select: { name: true, email: true, handle: true },
+                    },
+                  },
                 },
-                media: { orderBy: { order: "asc" } },
+                media: { orderBy: { order: 'asc' } },
                 _count: { select: { comments: true, supports: true } },
               },
             })
@@ -647,117 +907,127 @@ export const commonsRouter = router({
       };
     }),
 
-  listDirectory: publicProcedure
-    .query(async ({ ctx }) => {
-      const context = ctx as Context;
-      const accountUser = await resolveOptionalAccountUser(context);
-      const coops = await context.db.coopConfig.findMany({
-        where: {
-          isActive: true,
-          isDemo: false,
-          name: { not: null },
-        },
-        orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
-        select: {
-          coopId: true,
-          name: true,
-          slug: true,
-          tagline: true,
-          description: true,
-          displayMission: true,
-          eligibility: true,
-        },
-      });
-      const coopIds = coops.map((coop: any) => coop.coopId);
-      const [memberships, applications, circleMemberships] = accountUser
-        ? await Promise.all([
-            context.db.userCoopMembership.findMany({
-              where: {
-                userId: accountUser.id,
-                coopId: { in: coopIds },
-              },
-              select: {
-                coopId: true,
-                status: true,
-                roles: true,
-              },
-            }),
-            context.db.application.findMany({
-              where: {
-                userId: accountUser.id,
-                coopId: { in: coopIds },
-              },
-              select: {
-                id: true,
-                coopId: true,
-                status: true,
-                createdAt: true,
-                reviewedAt: true,
-              },
-            }),
-            // Just "circles I'm in" per commons, not a total across every
-            // member - circles are private/invite-only, so a raw total would
-            // surface the existence of spaces this user isn't part of.
-            context.db.groupMember.findMany({
-              where: {
-                userId: accountUser.id,
-                group: { coopId: { in: coopIds } },
-              },
-              select: { group: { select: { coopId: true } } },
-            }),
-          ])
-        : [[], [], []];
+  listDirectory: publicProcedure.query(async ({ ctx }) => {
+    const context = ctx as Context;
+    const accountUser = await resolveOptionalAccountUser(context);
+    const coops = await context.db.coopConfig.findMany({
+      where: {
+        isActive: true,
+        isDemo: false,
+        name: { not: null },
+      },
+      orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+      select: {
+        coopId: true,
+        name: true,
+        slug: true,
+        tagline: true,
+        description: true,
+        displayMission: true,
+        eligibility: true,
+      },
+    });
+    const coopIds = coops.map((coop: any) => coop.coopId);
+    const [memberships, applications, circleMemberships] = accountUser
+      ? await Promise.all([
+          context.db.userCoopMembership.findMany({
+            where: {
+              userId: accountUser.id,
+              coopId: { in: coopIds },
+            },
+            select: {
+              coopId: true,
+              status: true,
+              roles: true,
+            },
+          }),
+          context.db.application.findMany({
+            where: {
+              userId: accountUser.id,
+              coopId: { in: coopIds },
+            },
+            select: {
+              id: true,
+              coopId: true,
+              status: true,
+              createdAt: true,
+              reviewedAt: true,
+            },
+          }),
+          // Just "circles I'm in" per commons, not a total across every
+          // member - circles are private/invite-only, so a raw total would
+          // surface the existence of spaces this user isn't part of.
+          context.db.groupMember.findMany({
+            where: {
+              userId: accountUser.id,
+              group: { coopId: { in: coopIds } },
+            },
+            select: { group: { select: { coopId: true } } },
+          }),
+        ])
+      : [[], [], []];
 
-      const membershipByCoop = new Map(memberships.map((membership: any) => [membership.coopId, membership]));
-      const applicationByCoop = new Map(applications.map((application: any) => [application.coopId, application]));
-      const circleCountByCoop = new Map<string, number>();
-      for (const { group } of circleMemberships as { group: { coopId: string } }[]) {
-        circleCountByCoop.set(group.coopId, (circleCountByCoop.get(group.coopId) || 0) + 1);
-      }
+    const membershipByCoop = new Map(
+      memberships.map((membership: any) => [membership.coopId, membership]),
+    );
+    const applicationByCoop = new Map(
+      applications.map((application: any) => [application.coopId, application]),
+    );
+    const circleCountByCoop = new Map<string, number>();
+    for (const { group } of circleMemberships as {
+      group: { coopId: string };
+    }[]) {
+      circleCountByCoop.set(
+        group.coopId,
+        (circleCountByCoop.get(group.coopId) || 0) + 1,
+      );
+    }
 
-      const sortedCoops = [...coops].sort((a: any, b: any) => {
-        if (a.coopId === COMMONS_COOP_ID) return -1;
-        if (b.coopId === COMMONS_COOP_ID) return 1;
-        return 0;
-      });
+    const sortedCoops = [...coops].sort((a: any, b: any) => {
+      if (a.coopId === COMMONS_COOP_ID) return -1;
+      if (b.coopId === COMMONS_COOP_ID) return 1;
+      return 0;
+    });
 
-      return {
-        coops: sortedCoops.map((coop: any) => {
-          const membership = membershipByCoop.get(coop.coopId);
-          const application = applicationByCoop.get(coop.coopId);
-          const membershipStatus = membership?.status as string | undefined;
-          const applicationStatus = application?.status as string | undefined;
-          const accessStatus =
-            membershipStatus === "ACTIVE"
-              ? "ACTIVE"
-              : membershipStatus === "PENDING" || applicationStatus === "SUBMITTED"
-                ? "PENDING"
-                : membershipStatus === "REJECTED" || applicationStatus === "REJECTED"
-                  ? "REJECTED"
-                  : "LOCKED";
+    return {
+      coops: sortedCoops.map((coop: any) => {
+        const membership = membershipByCoop.get(coop.coopId);
+        const application = applicationByCoop.get(coop.coopId);
+        const membershipStatus = membership?.status as string | undefined;
+        const applicationStatus = application?.status as string | undefined;
+        const accessStatus =
+          membershipStatus === 'ACTIVE'
+            ? 'ACTIVE'
+            : membershipStatus === 'PENDING' ||
+                applicationStatus === 'SUBMITTED'
+              ? 'PENDING'
+              : membershipStatus === 'REJECTED' ||
+                  applicationStatus === 'REJECTED'
+                ? 'REJECTED'
+                : 'LOCKED';
 
-          return {
-            id: coop.coopId,
-            name: coop.name,
-            shortName: coop.slug || coop.name,
-            tagline: coop.tagline,
-            description:
-              coop.description ||
-              coop.displayMission ||
-              "A commons for shared conversation, resources, and coordinated action.",
-            mission: coop.displayMission,
-            eligibility: coop.eligibility,
-            accessStatus,
-            isMember: accessStatus === "ACTIVE",
-            isLocked: accessStatus !== "ACTIVE",
-            canApply: accessStatus === "LOCKED",
-            applicationId: application?.id || null,
-            applicationStatus: applicationStatus || null,
-            circleCount: circleCountByCoop.get(coop.coopId) || 0,
-          };
-        }),
-      };
-    }),
+        return {
+          id: coop.coopId,
+          name: coop.name,
+          shortName: coop.slug || coop.name,
+          tagline: coop.tagline,
+          description:
+            coop.description ||
+            coop.displayMission ||
+            'A commons for shared conversation, resources, and coordinated action.',
+          mission: coop.displayMission,
+          eligibility: coop.eligibility,
+          accessStatus,
+          isMember: accessStatus === 'ACTIVE',
+          isLocked: accessStatus !== 'ACTIVE',
+          canApply: accessStatus === 'LOCKED',
+          applicationId: application?.id || null,
+          applicationStatus: applicationStatus || null,
+          circleCount: circleCountByCoop.get(coop.coopId) || 0,
+        };
+      }),
+    };
+  }),
 
   applyToCommons: accountAuthenticatedProcedure
     .input(
@@ -789,8 +1059,8 @@ export const commonsRouter = router({
 
       if (!coopConfig) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Commons not found.",
+          code: 'NOT_FOUND',
+          message: 'Commons not found.',
         });
       }
 
@@ -805,14 +1075,14 @@ export const commonsRouter = router({
 
       if (existingApplication) {
         throw new TRPCError({
-          code: "CONFLICT",
-          message: "You have already applied to this commons.",
+          code: 'CONFLICT',
+          message: 'You have already applied to this commons.',
         });
       }
 
-      const questions = ((coopConfig.applicationQuestions as ApplicationQuestion[] | null) || []).filter(
-        (question) => !isEmailQuestion(question),
-      );
+      const questions = (
+        (coopConfig.applicationQuestions as ApplicationQuestion[] | null) || []
+      ).filter((question) => !isEmailQuestion(question));
       const missingQuestions = questions
         .filter((question) => question.required)
         .filter((question) => {
@@ -822,19 +1092,23 @@ export const commonsRouter = router({
 
       if (missingQuestions.length > 0) {
         throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `Please answer: ${missingQuestions.map((question) => question.label).join(", ")}`,
+          code: 'BAD_REQUEST',
+          message: `Please answer: ${missingQuestions.map((question) => question.label).join(', ')}`,
         });
       }
 
       const phoneAnswer = questions.find(isPhoneQuestion)?.id;
-      const phoneFromAnswer = phoneAnswer ? String(input.dynamicAnswers[phoneAnswer] || "") : "";
-      const normalizedPhone = toE164(input.phone || phoneFromAnswer || user.phone);
+      const phoneFromAnswer = phoneAnswer
+        ? String(input.dynamicAnswers[phoneAnswer] || '')
+        : '';
+      const normalizedPhone = toE164(
+        input.phone || phoneFromAnswer || user.phone,
+      );
 
       if (!normalizedPhone) {
         throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "A phone number is required to apply.",
+          code: 'BAD_REQUEST',
+          message: 'A phone number is required to apply.',
         });
       }
 
@@ -856,7 +1130,7 @@ export const commonsRouter = router({
           data: {
             userId: user.id,
             coopId: input.coopId,
-            status: "SUBMITTED",
+            status: 'SUBMITTED',
             data: toJsonValue({
               firstName,
               lastName,
@@ -879,12 +1153,12 @@ export const commonsRouter = router({
           create: {
             userId: user.id,
             coopId: input.coopId,
-            status: input.coopId === COMMONS_COOP_ID ? "ACTIVE" : "PENDING",
-            roles: ["member"],
+            status: input.coopId === COMMONS_COOP_ID ? 'ACTIVE' : 'PENDING',
+            roles: ['member'],
             joinedAt: input.coopId === COMMONS_COOP_ID ? new Date() : undefined,
           },
           update: {
-            status: input.coopId === COMMONS_COOP_ID ? "ACTIVE" : "PENDING",
+            status: input.coopId === COMMONS_COOP_ID ? 'ACTIVE' : 'PENDING',
           },
         });
 
@@ -898,12 +1172,12 @@ export const commonsRouter = router({
         applicantName: `${firstName} ${lastName}`,
         applicationId: application.id,
       }).catch((err) => {
-        console.error("Failed to send Slack notification:", err);
+        console.error('Failed to send Slack notification:', err);
       });
 
       return {
         success: true,
-        message: "Application submitted successfully.",
+        message: 'Application submitted successfully.',
         applicationId: application.id,
       };
     }),
@@ -928,7 +1202,8 @@ export const commonsRouter = router({
       const context = ctx as Context;
       const accountUser = await resolveOptionalAccountUser(context);
       const suggestedByEmail = accountUser?.email || input.email.toLowerCase();
-      const suggestedByName = accountUser?.name || input.suggestedByName || null;
+      const suggestedByName =
+        accountUser?.name || input.suggestedByName || null;
 
       const suggestion = await context.db.commonsSuggestion.create({
         data: {
@@ -956,10 +1231,35 @@ export const commonsRouter = router({
   listComments: publicProcedure
     .input(z.object({ postId: z.string().min(1) }))
     .query(async ({ input, ctx }) => {
+      const context = ctx as Context;
+      const post = await context.db.commonsPost.findUnique({
+        where: { id: input.postId },
+        select: { coopId: true, circleId: true },
+      });
+      if (!post)
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Post not found.' });
+      const accountUser = await resolveOptionalAccountUser(context);
+      if (
+        !(await canReadPostCircle(context.db, accountUser?.id, post)) ||
+        (post.coopId !== COMMONS_COOP_ID &&
+          (!accountUser ||
+            !(await hasActiveCommonsMembership(
+              context.db,
+              accountUser.id,
+              post.coopId,
+            ))))
+      ) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You cannot view this conversation.',
+        });
+      }
       const comments = await ctx.db.commonsComment.findMany({
         where: { postId: input.postId },
-        orderBy: { createdAt: "asc" },
-        include: { author: { select: { name: true, email: true, handle: true } } },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          author: { select: { name: true, email: true, handle: true } },
+        },
       });
 
       return {
@@ -986,14 +1286,14 @@ export const commonsRouter = router({
         include: {
           author: { select: { name: true, email: true, handle: true } },
           media: {
-            orderBy: { order: "asc" },
+            orderBy: { order: 'asc' },
           },
           comments: {
-            orderBy: { createdAt: "asc" },
+            orderBy: { createdAt: 'asc' },
             take: 100,
             include: {
               author: { select: { name: true, email: true, handle: true } },
-              media: { orderBy: { order: "asc" } },
+              media: { orderBy: { order: 'asc' } },
             },
           },
           _count: { select: { comments: true, supports: true } },
@@ -1002,28 +1302,42 @@ export const commonsRouter = router({
 
       if (!post || (input.coopId && post.coopId !== input.coopId)) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Post not found.",
+          code: 'NOT_FOUND',
+          message: 'Post not found.',
         });
       }
 
       const accountUser = await resolveOptionalAccountUser(context);
       const canRead =
-        post.coopId === COMMONS_COOP_ID ||
-        (!!accountUser && (await hasActiveCommonsMembership(context.db, accountUser.id, post.coopId)));
+        (post.coopId === COMMONS_COOP_ID ||
+          (!!accountUser &&
+            (await hasActiveCommonsMembership(
+              context.db,
+              accountUser.id,
+              post.coopId,
+            )))) &&
+        (await canReadPostCircle(context.db, accountUser?.id, post));
 
       if (!canRead) {
         throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Join this commons to view this post.",
+          code: 'FORBIDDEN',
+          message: 'Join this commons to view this post.',
         });
       }
 
       const coop = await loadCoopSummary(context.db, post.coopId);
+      const isCirclePost = !!post.circleId && post.circleId !== generalCircleId(post.coopId);
+      const circleMembership = isCirclePost && accountUser
+        ? await context.db.groupMember.findUnique({
+            where: { groupId_userId: { groupId: post.circleId!, userId: accountUser.id } },
+            select: { group: { select: { coopId: true } } },
+          })
+        : null;
 
       return {
         coop,
         post: mapPostWithGroup(post, coop.name),
+        circleIsMember: isCirclePost ? circleMembership?.group.coopId === post.coopId : null,
       };
     }),
 
@@ -1035,35 +1349,47 @@ export const commonsRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      let context = "";
+      let context = '';
 
       if (input.postId) {
         const post = await ctx.db.commonsPost.findUnique({
           where: { id: input.postId },
           include: {
             comments: {
-              orderBy: { createdAt: "asc" },
+              orderBy: { createdAt: 'asc' },
               take: 10,
-              include: { author: { select: { name: true, email: true, handle: true } } },
+              include: {
+                author: { select: { name: true, email: true, handle: true } },
+              },
             },
           },
         });
 
-        if (post) {
+        const accountUser = await resolveOptionalAccountUser(ctx as Context);
+        if (
+          post &&
+          (await canReadPostCircle(ctx.db, accountUser?.id, post)) &&
+          (post.coopId === COMMONS_COOP_ID ||
+            (accountUser &&
+              (await hasActiveCommonsMembership(
+                ctx.db,
+                accountUser.id,
+                post.coopId,
+              ))))
+        ) {
           context = [
             `Thread title: ${post.title}`,
             `Thread body: ${post.content}`,
-            "Recent comments:",
+            'Recent comments:',
             ...post.comments.map(
-              (comment) =>
-                `${displayName(comment.author)}: ${comment.content}`,
+              (comment) => `${displayName(comment.author)}: ${comment.content}`,
             ),
-          ].join("\n");
+          ].join('\n');
         }
       }
 
       const answer = await runCommonsAi(
-        [input.prompt, context ? `\nContext:\n${context}` : ""].join(""),
+        [input.prompt, context ? `\nContext:\n${context}` : ''].join(''),
       );
 
       return { answer };
@@ -1079,36 +1405,39 @@ export const commonsRouter = router({
     )
     .query(async ({ input, ctx }) => {
       const context = ctx as Context;
-      const handle = input.handle.toLowerCase().replace(/[^a-z0-9]+/g, "");
+      const handle = input.handle.toLowerCase().replace(/[^a-z0-9]+/g, '');
       const user = await findUserByPersonalHandle(ctx.db, handle);
 
       if (!user) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Personal page not found.",
+          code: 'NOT_FOUND',
+          message: 'Personal page not found.',
         });
       }
 
-      const [rawPosts, followerCount, followingCount, viewerUser] = await Promise.all([
-        context.db.personalPagePost.findMany({
-          where: { authorId: user.id },
-          orderBy: { createdAt: "desc" },
-          take: input.limit + 1,
-          ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
-          include: {
-            author: { select: { name: true, email: true, handle: true } },
-            comments: {
-              orderBy: { createdAt: "asc" },
-              take: 50,
-              include: { author: { select: { name: true, email: true, handle: true } } },
+      const [rawPosts, followerCount, followingCount, viewerUser] =
+        await Promise.all([
+          context.db.personalPagePost.findMany({
+            where: { authorId: user.id },
+            orderBy: { createdAt: 'desc' },
+            take: input.limit + 1,
+            ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+            include: {
+              author: { select: { name: true, email: true, handle: true } },
+              comments: {
+                orderBy: { createdAt: 'asc' },
+                take: 50,
+                include: {
+                  author: { select: { name: true, email: true, handle: true } },
+                },
+              },
+              _count: { select: { comments: true, supports: true } },
             },
-            _count: { select: { comments: true, supports: true } },
-          },
-        }),
-        context.db.follow.count({ where: { followingId: user.id } }),
-        context.db.follow.count({ where: { followerId: user.id } }),
-        resolveOptionalAccountUser(context),
-      ]);
+          }),
+          context.db.follow.count({ where: { followingId: user.id } }),
+          context.db.follow.count({ where: { followerId: user.id } }),
+          resolveOptionalAccountUser(context),
+        ]);
 
       const hasMore = rawPosts.length > input.limit;
       const posts = hasMore ? rawPosts.slice(0, input.limit) : rawPosts;
@@ -1117,7 +1446,12 @@ export const commonsRouter = router({
       const viewerIsFollowing =
         viewerUser && viewerUser.id !== user.id
           ? (await context.db.follow.findUnique({
-              where: { followerId_followingId: { followerId: viewerUser.id, followingId: user.id } },
+              where: {
+                followerId_followingId: {
+                  followerId: viewerUser.id,
+                  followingId: user.id,
+                },
+              },
               select: { id: true },
             })) !== null
           : false;
@@ -1141,14 +1475,16 @@ export const commonsRouter = router({
 
   createPersonalPagePost: accountAuthenticatedProcedure
     .input(
-      z.object({
-        content: z.string().trim().max(5000).default(""),
-        tag: postTagSchema.nullable().optional(),
-        media: z.array(uploadedPostMediaSchema).max(4).default([]),
-      }).refine((input) => input.content.length > 0 || input.media.length > 0, {
-        message: "Write something or attach media before posting.",
-        path: ["content"],
-      }),
+      z
+        .object({
+          content: z.string().trim().max(5000).default(''),
+          tag: postTagSchema.nullable().optional(),
+          media: z.array(uploadedPostMediaSchema).max(4).default([]),
+        })
+        .refine((input) => input.content.length > 0 || input.media.length > 0, {
+          message: 'Write something or attach media before posting.',
+          path: ['content'],
+        }),
     )
     .mutation(async ({ input, ctx }) => {
       const { accountUser } = ctx as AccountAuthenticatedContext;
@@ -1163,8 +1499,10 @@ export const commonsRouter = router({
         include: {
           author: { select: { name: true, email: true, handle: true } },
           comments: {
-            orderBy: { createdAt: "asc" },
-            include: { author: { select: { name: true, email: true, handle: true } } },
+            orderBy: { createdAt: 'asc' },
+            include: {
+              author: { select: { name: true, email: true, handle: true } },
+            },
           },
           _count: { select: { comments: true, supports: true } },
         },
@@ -1184,14 +1522,14 @@ export const commonsRouter = router({
 
       if (!post) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Post not found.",
+          code: 'NOT_FOUND',
+          message: 'Post not found.',
         });
       }
       if (post.authorId !== accountUser.id) {
         throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "You can only delete your own posts.",
+          code: 'FORBIDDEN',
+          message: 'You can only delete your own posts.',
         });
       }
 
@@ -1217,8 +1555,8 @@ export const commonsRouter = router({
       });
       if (!post) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Post not found.",
+          code: 'NOT_FOUND',
+          message: 'Post not found.',
         });
       }
 
@@ -1228,15 +1566,17 @@ export const commonsRouter = router({
           authorId: accountUser.id,
           content: input.content,
         },
-        include: { author: { select: { name: true, email: true, handle: true } } },
+        include: {
+          author: { select: { name: true, email: true, handle: true } },
+        },
       });
 
       if (post.authorId && post.authorId !== accountUser.id) {
         void createNotificationAndPush(ctx.db, {
           userId: post.authorId,
           coopId: COMMONS_COOP_ID,
-          type: "PERSONAL_PAGE_COMMENT",
-          title: "New comment",
+          type: 'PERSONAL_PAGE_COMMENT',
+          title: 'New comment',
           body: `${displayName(comment.author)} commented on your page.`,
           data: { postId: input.postId },
         });
@@ -1269,21 +1609,23 @@ export const commonsRouter = router({
 
       if (!comment) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Comment not found.",
+          code: 'NOT_FOUND',
+          message: 'Comment not found.',
         });
       }
       if (comment.authorId !== accountUser.id) {
         throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "You can only edit your own comments.",
+          code: 'FORBIDDEN',
+          message: 'You can only edit your own comments.',
         });
       }
 
       const updated = await ctx.db.personalPagePostComment.update({
         where: { id: input.commentId },
         data: { content: input.content },
-        include: { author: { select: { name: true, email: true, handle: true } } },
+        include: {
+          author: { select: { name: true, email: true, handle: true } },
+        },
       });
 
       return {
@@ -1308,18 +1650,20 @@ export const commonsRouter = router({
 
       if (!comment) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Comment not found.",
+          code: 'NOT_FOUND',
+          message: 'Comment not found.',
         });
       }
       if (comment.authorId !== accountUser.id) {
         throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "You can only delete your own comments.",
+          code: 'FORBIDDEN',
+          message: 'You can only delete your own comments.',
         });
       }
 
-      await ctx.db.personalPagePostComment.delete({ where: { id: input.commentId } });
+      await ctx.db.personalPagePostComment.delete({
+        where: { id: input.commentId },
+      });
 
       return { success: true };
     }),
@@ -1335,8 +1679,8 @@ export const commonsRouter = router({
 
       if (!post) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Post not found.",
+          code: 'NOT_FOUND',
+          message: 'Post not found.',
         });
       }
 
@@ -1350,7 +1694,9 @@ export const commonsRouter = router({
       });
 
       if (existing) {
-        await ctx.db.personalPagePostSupport.delete({ where: { id: existing.id } });
+        await ctx.db.personalPagePostSupport.delete({
+          where: { id: existing.id },
+        });
         return { supported: false };
       }
 
@@ -1362,9 +1708,9 @@ export const commonsRouter = router({
         void createNotificationAndPush(ctx.db, {
           userId: post.authorId,
           coopId: COMMONS_COOP_ID,
-          type: "PERSONAL_PAGE_SUPPORT",
-          title: "Someone liked your post",
-          body: "A member liked what you shared on your page.",
+          type: 'PERSONAL_PAGE_SUPPORT',
+          title: 'Someone liked your post',
+          body: 'A member liked what you shared on your page.',
           data: { postId: input.postId },
         });
       }
@@ -1374,23 +1720,45 @@ export const commonsRouter = router({
 
   createPost: accountAuthenticatedProcedure
     .input(
-      z.object({
-        coopId: z.string().min(1).default(COMMONS_COOP_ID),
-        title: z.string().trim().min(1).max(120).optional(),
-        content: z.string().trim().max(5000).default(""),
-        tag: postTagSchema.default("Social"),
-        media: z.array(uploadedPostMediaSchema).max(4).default([]),
-      }).refine((input) => input.content.length > 0 || input.media.length > 0, {
-        message: "Write something or attach media before posting.",
-        path: ["content"],
-      }),
+      z
+        .object({
+          coopId: z.string().min(1).default(COMMONS_COOP_ID),
+          circleId: z.string().min(1).optional(),
+          title: z.string().trim().min(1).max(120).optional(),
+          content: z.string().trim().max(5000).default(''),
+          tag: postTagSchema.default('Social'),
+          media: z.array(uploadedPostMediaSchema).max(4).default([]),
+        })
+        .refine((input) => input.content.length > 0 || input.media.length > 0, {
+          message: 'Write something or attach media before posting.',
+          path: ['content'],
+        }),
     )
     .mutation(async ({ input, ctx }) => {
       const { accountUser } = ctx as AccountAuthenticatedContext;
-      await requireActiveCommonsMembership(ctx.db, accountUser.id, input.coopId);
+      await requireActiveCommonsMembership(
+        ctx.db,
+        accountUser.id,
+        input.coopId,
+      );
+      const circleId =
+        input.circleId && input.circleId !== generalCircleId(input.coopId)
+          ? input.circleId
+          : generalCircleId(input.coopId);
+      if (circleId !== generalCircleId(input.coopId)) {
+        await requireCircleMembership(
+          ctx.db,
+          accountUser.id,
+          input.coopId,
+          circleId,
+        );
+      }
       await ensureUserHandle(ctx.db, accountUser);
       await ensureSageBotUser(ctx.db);
-      const { content: encodedContent, mentionedUsers } = await encodeMentions(ctx.db, input.content);
+      const { content: encodedContent, mentionedUsers } = await encodeMentions(
+        ctx.db,
+        input.content,
+      );
       const classification = classifyPost({
         title: input.title,
         content: encodedContent,
@@ -1401,6 +1769,7 @@ export const commonsRouter = router({
       const post = await ctx.db.commonsPost.create({
         data: {
           coopId: input.coopId,
+          circleId,
           authorId: accountUser.id,
           title: input.title || titleFromContent(encodedContent),
           content: encodedContent,
@@ -1411,7 +1780,7 @@ export const commonsRouter = router({
           media: input.media.length
             ? {
                 create: input.media.map((media, index) => ({
-                  storageProvider: "vercel-blob",
+                  storageProvider: 'vercel-blob',
                   pathname: media.pathname,
                   url: media.url,
                   mediaType: media.mediaType,
@@ -1429,31 +1798,37 @@ export const commonsRouter = router({
         include: {
           author: { select: { name: true, email: true, handle: true } },
           media: {
-            orderBy: { order: "asc" },
+            orderBy: { order: 'asc' },
           },
           comments: {
-            orderBy: { createdAt: "asc" },
+            orderBy: { createdAt: 'asc' },
             take: 2,
-            include: { author: { select: { name: true, email: true, handle: true } } },
+            include: {
+              author: { select: { name: true, email: true, handle: true } },
+            },
           },
           _count: { select: { comments: true, supports: true } },
         },
       });
       const coop = await loadCoopSummary(ctx.db, input.coopId);
 
-      await recordPostClassificationObservation({
-        coopId: input.coopId,
-        postId: post.id,
-        title: input.title,
-        content: encodedContent,
-        tag: input.tag,
-      });
+      if (circleId === generalCircleId(input.coopId)) {
+        await recordPostClassificationObservation({
+          coopId: input.coopId,
+          postId: post.id,
+          title: input.title,
+          content: encodedContent,
+          tag: input.tag,
+        });
+      }
 
-      const sageMention = mentionedUsers.find((u) => u.isBot && u.handle === SAGE_HANDLE);
-      if (sageMention) {
+      const sageMention = mentionedUsers.find(
+        (u) => u.isBot && u.handle === SAGE_HANDLE,
+      );
+      if (sageMention && circleId === generalCircleId(input.coopId)) {
         try {
           const sage = await ensureSageBotUser(ctx.db);
-          const agent = getAgent("sage-commons-reply");
+          const agent = getAgent('sage-commons-reply');
           if (agent) {
             const { reply } = await agent.run({
               coopId: input.coopId,
@@ -1464,25 +1839,34 @@ export const commonsRouter = router({
             });
           }
         } catch (err) {
-          console.error("Sage auto-reply on createPost failed:", err);
+          console.error('Sage auto-reply on createPost failed:', err);
         }
       }
 
       console.info('[push] createPost mention notifications', {
         postId: post.id,
-        recipients: mentionedUsers.filter((mentioned) => !mentioned.isBot && mentioned.id !== accountUser.id).length,
+        recipients: mentionedUsers.filter(
+          (mentioned) => !mentioned.isBot && mentioned.id !== accountUser.id,
+        ).length,
       });
       for (const mentioned of mentionedUsers) {
         if (mentioned.isBot || mentioned.id === accountUser.id) continue;
+        if (
+          circleId !== generalCircleId(input.coopId) &&
+          !(await canReadPostCircle(ctx.db, mentioned.id, post))
+        )
+          continue;
         void createNotificationAndPush(ctx.db, {
           userId: mentioned.id,
           coopId: input.coopId,
-          type: "MENTION",
-          title: "You were mentioned",
+          type: 'MENTION',
+          title: 'You were mentioned',
           body: `${displayName(accountUser)} mentioned you in a post.`,
           data: { postId: post.id, coopId: input.coopId },
         }).catch(() => {
-          console.error('[push] createPost notification preparation failed', { postId: post.id });
+          console.error('[push] createPost notification preparation failed', {
+            postId: post.id,
+          });
         });
       }
 
@@ -1500,14 +1884,14 @@ export const commonsRouter = router({
 
       if (!post) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Post not found.",
+          code: 'NOT_FOUND',
+          message: 'Post not found.',
         });
       }
       if (post.authorId !== accountUser.id) {
         throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "You can only delete your own posts.",
+          code: 'FORBIDDEN',
+          message: 'You can only delete your own posts.',
         });
       }
 
@@ -1518,14 +1902,16 @@ export const commonsRouter = router({
 
   createComment: accountAuthenticatedProcedure
     .input(
-      z.object({
-        postId: z.string().min(1),
-        content: z.string().trim().max(2000).default(""),
-        media: z.array(uploadedPostMediaSchema).max(4).default([]),
-      }).refine((input) => input.content.length > 0 || input.media.length > 0, {
-        message: "Write something or attach an image before commenting.",
-        path: ["content"],
-      }),
+      z
+        .object({
+          postId: z.string().min(1),
+          content: z.string().trim().max(2000).default(''),
+          media: z.array(uploadedPostMediaSchema).max(4).default([]),
+        })
+        .refine((input) => input.content.length > 0 || input.media.length > 0, {
+          message: 'Write something or attach an image before commenting.',
+          path: ['content'],
+        }),
     )
     .mutation(async ({ input, ctx }) => {
       const { accountUser } = ctx as AccountAuthenticatedContext;
@@ -1536,13 +1922,17 @@ export const commonsRouter = router({
       });
       if (!post) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Post not found.",
+          code: 'NOT_FOUND',
+          message: 'Post not found.',
         });
       }
       await requireActiveCommonsMembership(ctx.db, accountUser.id, post.coopId);
+      await requirePostCircleMembership(ctx.db, accountUser.id, post);
       await ensureSageBotUser(ctx.db);
-      const { content: encodedContent, mentionedUsers } = await encodeMentions(ctx.db, input.content);
+      const { content: encodedContent, mentionedUsers } = await encodeMentions(
+        ctx.db,
+        input.content,
+      );
 
       const comment = await ctx.db.commonsComment.create({
         data: {
@@ -1552,7 +1942,7 @@ export const commonsRouter = router({
           media: input.media.length
             ? {
                 create: input.media.map((media, index) => ({
-                  storageProvider: "vercel-blob",
+                  storageProvider: 'vercel-blob',
                   pathname: media.pathname,
                   url: media.url,
                   mediaType: media.mediaType,
@@ -1569,16 +1959,20 @@ export const commonsRouter = router({
         },
         include: {
           author: { select: { name: true, email: true, handle: true } },
-          media: { orderBy: { order: "asc" } },
+          media: { orderBy: { order: 'asc' } },
         },
       });
 
-      if (post.authorId && post.authorId !== accountUser.id) {
+      if (
+        post.authorId &&
+        post.authorId !== accountUser.id &&
+        (await canReadPostCircle(ctx.db, post.authorId, post))
+      ) {
         void createNotificationAndPush(ctx.db, {
           userId: post.authorId,
           coopId: post.coopId,
-          type: "COMMONS_COMMENT",
-          title: "New comment",
+          type: 'COMMONS_COMMENT',
+          title: 'New comment',
           body: `${displayName(comment.author)} replied to your post.`,
           data: {
             postId: post.id,
@@ -1587,22 +1981,31 @@ export const commonsRouter = router({
         });
       }
 
-      const sageMention = mentionedUsers.find((u) => u.isBot && u.handle === SAGE_HANDLE);
-      if (sageMention) {
+      const sageMention = mentionedUsers.find(
+        (u) => u.isBot && u.handle === SAGE_HANDLE,
+      );
+      if (
+        sageMention &&
+        (!post.circleId || post.circleId === generalCircleId(post.coopId))
+      ) {
         try {
           const sage = await ensureSageBotUser(ctx.db);
-          const agent = getAgent("sage-commons-reply");
+          const agent = getAgent('sage-commons-reply');
           if (agent) {
             const priorComments = await ctx.db.commonsComment.findMany({
               where: { postId: post.id, id: { not: comment.id } },
-              orderBy: { createdAt: "asc" },
+              orderBy: { createdAt: 'asc' },
               take: 10,
-              include: { author: { select: { name: true, email: true, handle: true } } },
+              include: {
+                author: { select: { name: true, email: true, handle: true } },
+              },
             });
             const threadContext = [
               `Original post: ${post.content}`,
-              ...priorComments.map((c) => `${displayName(c.author)}: ${c.content}`),
-            ].join("\n");
+              ...priorComments.map(
+                (c) => `${displayName(c.author)}: ${c.content}`,
+              ),
+            ].join('\n');
 
             const { reply } = await agent.run({
               coopId: post.coopId,
@@ -1614,17 +2017,18 @@ export const commonsRouter = router({
             });
           }
         } catch (err) {
-          console.error("Sage auto-reply on createComment failed:", err);
+          console.error('Sage auto-reply on createComment failed:', err);
         }
       }
 
       for (const mentioned of mentionedUsers) {
         if (mentioned.isBot || mentioned.id === accountUser.id) continue;
+        if (!(await canReadPostCircle(ctx.db, mentioned.id, post))) continue;
         void createNotificationAndPush(ctx.db, {
           userId: mentioned.id,
           coopId: post.coopId,
-          type: "MENTION",
-          title: "You were mentioned",
+          type: 'MENTION',
+          title: 'You were mentioned',
           body: `${displayName(accountUser)} mentioned you in a comment.`,
           data: { postId: post.id, coopId: post.coopId },
         });
@@ -1669,25 +2073,28 @@ export const commonsRouter = router({
 
       if (!comment) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Comment not found.",
+          code: 'NOT_FOUND',
+          message: 'Comment not found.',
         });
       }
       if (comment.authorId !== accountUser.id) {
         throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "You can only edit your own comments.",
+          code: 'FORBIDDEN',
+          message: 'You can only edit your own comments.',
         });
       }
 
       await ensureSageBotUser(ctx.db);
-      const { content: encodedContent } = await encodeMentions(ctx.db, input.content);
+      const { content: encodedContent } = await encodeMentions(
+        ctx.db,
+        input.content,
+      );
       const updated = await ctx.db.commonsComment.update({
         where: { id: input.commentId },
         data: { content: encodedContent },
         include: {
           author: { select: { name: true, email: true, handle: true } },
-          media: { orderBy: { order: "asc" } },
+          media: { orderBy: { order: 'asc' } },
         },
       });
 
@@ -1725,14 +2132,14 @@ export const commonsRouter = router({
 
       if (!comment) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Comment not found.",
+          code: 'NOT_FOUND',
+          message: 'Comment not found.',
         });
       }
       if (comment.authorId !== accountUser.id) {
         throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "You can only delete your own comments.",
+          code: 'FORBIDDEN',
+          message: 'You can only delete your own comments.',
         });
       }
 
@@ -1751,11 +2158,12 @@ export const commonsRouter = router({
 
       if (!post) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Post not found.",
+          code: 'NOT_FOUND',
+          message: 'Post not found.',
         });
       }
       await requireActiveCommonsMembership(ctx.db, accountUser.id, post.coopId);
+      await requirePostCircleMembership(ctx.db, accountUser.id, post);
 
       const existing = await ctx.db.commonsPostSupport.findUnique({
         where: {
@@ -1779,9 +2187,9 @@ export const commonsRouter = router({
         void createNotificationAndPush(ctx.db, {
           userId: post.authorId,
           coopId: post.coopId,
-          type: "COMMONS_SUPPORT",
-          title: "Someone liked your post",
-          body: "A commons member liked what you shared.",
+          type: 'COMMONS_SUPPORT',
+          title: 'Someone liked your post',
+          body: 'A commons member liked what you shared.',
           data: {
             postId: post.id,
             coopId: post.coopId,
@@ -1803,8 +2211,8 @@ export const commonsRouter = router({
       const { accountUser } = ctx as AccountAuthenticatedContext;
       if (input.receiverId === accountUser.id) {
         throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Pick another member to message.",
+          code: 'BAD_REQUEST',
+          message: 'Pick another member to message.',
         });
       }
 
@@ -1814,17 +2222,24 @@ export const commonsRouter = router({
       });
       if (!receiver || receiver.deletedAt) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Member not found.",
+          code: 'NOT_FOUND',
+          message: 'Member not found.',
         });
       }
 
       const isSage = receiver.isBot && receiver.handle === SAGE_HANDLE;
       if (isSage) {
-        await requireActiveCommonsMembership(ctx.db, accountUser.id, input.coopId);
+        await requireActiveCommonsMembership(
+          ctx.db,
+          accountUser.id,
+          input.coopId,
+        );
       }
 
-      const { content: encodedContent } = await encodeMentions(ctx.db, input.content);
+      const { content: encodedContent } = await encodeMentions(
+        ctx.db,
+        input.content,
+      );
 
       const message = await ctx.db.directMessage.create({
         data: {
@@ -1837,7 +2252,7 @@ export const commonsRouter = router({
 
       if (isSage) {
         try {
-          const agent = getAgent("sage-commons-reply");
+          const agent = getAgent('sage-commons-reply');
           if (agent) {
             const priorMessages = await ctx.db.directMessage.findMany({
               where: {
@@ -1846,13 +2261,16 @@ export const commonsRouter = router({
                   { senderId: receiver.id, receiverId: accountUser.id },
                 ],
               },
-              orderBy: { createdAt: "asc" },
+              orderBy: { createdAt: 'asc' },
               take: 20,
             });
             const threadContext = priorMessages
               .filter((m) => m.id !== message.id)
-              .map((m) => `${m.senderId === accountUser.id ? displayName(accountUser) : "Sage"}: ${m.content}`)
-              .join("\n");
+              .map(
+                (m) =>
+                  `${m.senderId === accountUser.id ? displayName(accountUser) : 'Sage'}: ${m.content}`,
+              )
+              .join('\n');
 
             const { reply } = await agent.run({
               coopId: input.coopId,
@@ -1869,7 +2287,7 @@ export const commonsRouter = router({
             });
           }
         } catch (err) {
-          console.error("Sage DM auto-reply failed:", err);
+          console.error('Sage DM auto-reply failed:', err);
         }
       }
 
@@ -1889,11 +2307,11 @@ export const commonsRouter = router({
     const memberships = await ctx.db.userCoopMembership.findMany({
       where: {
         coopId: COMMONS_COOP_ID,
-        status: "ACTIVE",
+        status: 'ACTIVE',
         userId: { not: accountUser.id },
         user: { deletedAt: null },
       },
-      orderBy: { lastActiveAt: "desc" },
+      orderBy: { lastActiveAt: 'desc' },
       take: 50,
       include: {
         user: { select: { id: true, name: true, email: true, handle: true } },
@@ -1905,7 +2323,7 @@ export const commonsRouter = router({
         id: membership.user.id,
         name: displayName(membership.user),
         handle: personHandle(membership.user),
-        role: "Cahootz Commons",
+        role: 'Cahootz Commons',
       })),
     };
   }),
@@ -1916,7 +2334,7 @@ export const commonsRouter = router({
       where: {
         OR: [{ senderId: accountUser.id }, { receiverId: accountUser.id }],
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
       take: 100,
       include: {
         sender: { select: { id: true, name: true, email: true } },
@@ -1932,7 +2350,7 @@ export const commonsRouter = router({
         threads.set(other.id, {
           id: other.id,
           name: displayName(other),
-          role: "Cahootz Commons",
+          role: 'Cahootz Commons',
           time: relativeTime(message.createdAt),
           unread:
             message.receiverId === accountUser.id && !message.readAt ? 1 : 0,
@@ -1945,9 +2363,9 @@ export const commonsRouter = router({
         id: message.id,
         fromMe: message.senderId === accountUser.id,
         body: message.content,
-        time: message.createdAt.toLocaleTimeString("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
+        time: message.createdAt.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
         }),
       });
     }
@@ -1962,7 +2380,7 @@ export const commonsRouter = router({
 
       if (input.userId === accountUser.id) {
         throw new TRPCError({
-          code: "BAD_REQUEST",
+          code: 'BAD_REQUEST',
           message: "You can't follow yourself.",
         });
       }
@@ -1973,8 +2391,8 @@ export const commonsRouter = router({
       });
       if (!target || target.deletedAt) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Member not found.",
+          code: 'NOT_FOUND',
+          message: 'Member not found.',
         });
       }
 
@@ -1999,8 +2417,8 @@ export const commonsRouter = router({
       void createNotificationAndPush(ctx.db, {
         userId: input.userId,
         coopId: COMMONS_COOP_ID,
-        type: "NEW_FOLLOWER",
-        title: "New follower",
+        type: 'NEW_FOLLOWER',
+        title: 'New follower',
         body: `${displayName(accountUser)} started following you.`,
         data: { followerId: accountUser.id },
       });
@@ -2009,14 +2427,22 @@ export const commonsRouter = router({
     }),
 
   listFollowing: accountAuthenticatedProcedure
-    .input(z.object({ limit: z.number().min(1).max(100).default(50) }).default({ limit: 50 }))
+    .input(
+      z
+        .object({ limit: z.number().min(1).max(100).default(50) })
+        .default({ limit: 50 }),
+    )
     .query(async ({ input, ctx }) => {
       const { accountUser } = ctx as AccountAuthenticatedContext;
       const follows = await ctx.db.follow.findMany({
         where: { followerId: accountUser.id },
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
         take: input.limit,
-        include: { following: { select: { id: true, name: true, email: true, handle: true } } },
+        include: {
+          following: {
+            select: { id: true, name: true, email: true, handle: true },
+          },
+        },
       });
 
       return {
@@ -2029,14 +2455,22 @@ export const commonsRouter = router({
     }),
 
   listFollowers: accountAuthenticatedProcedure
-    .input(z.object({ limit: z.number().min(1).max(100).default(50) }).default({ limit: 50 }))
+    .input(
+      z
+        .object({ limit: z.number().min(1).max(100).default(50) })
+        .default({ limit: 50 }),
+    )
     .query(async ({ input, ctx }) => {
       const { accountUser } = ctx as AccountAuthenticatedContext;
       const follows = await ctx.db.follow.findMany({
         where: { followingId: accountUser.id },
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
         take: input.limit,
-        include: { follower: { select: { id: true, name: true, email: true, handle: true } } },
+        include: {
+          follower: {
+            select: { id: true, name: true, email: true, handle: true },
+          },
+        },
       });
 
       return {

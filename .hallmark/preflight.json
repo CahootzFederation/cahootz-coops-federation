@@ -1,0 +1,12 @@
+{
+  "scannedAt": "2026-09-18",
+  "scope": "apps/mobile",
+  "framework": "Expo Router with React Native",
+  "styling": "NativeWind with existing semantic and Cahootz brand tokens",
+  "motion": "React Native Reanimated is installed",
+  "preserve": [
+    "Existing typography",
+    "Existing orange, paper, stone, and slate drawer palette",
+    "Existing spacing and rounded-corner language"
+  ]
+}

@@ -1,34 +1,17 @@
 import type { Metadata } from "next";
-import type React from "react";
-import {
-  ArrowRight,
-  BadgeCheck,
-  Check,
-  Clock,
-  Github,
-  Globe,
-  Landmark,
-  MessageSquare,
-  Newspaper,
-  ShieldCheck,
-  Smartphone,
-  Store,
-  Users,
-  Vote,
-  Wallet,
-  Zap,
-} from "lucide-react";
+import { Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Suspense } from "react";
-
-import { BusinessSignupForm } from "@/components/business-signup-form";
 import { BlogCard } from "@/components/blog/blog-card";
+import { BusinessSignupForm } from "@/components/business-signup-form";
 import { MemberApplicationFlow } from "@/components/member-application-flow";
 import { TreasuryContributionCalculator } from "@/components/treasury-contribution-calculator";
 import { WaitlistSignupForm } from "@/components/waitlist-signup-form";
 import { env } from "@/env";
 import { getFeaturedBlogPosts } from "@/lib/blog";
+import { ArrowDownRight, ArrowRight, Github, MoveUpRight } from "lucide-react";
+
+import "./landing.css";
 
 interface CoopOption {
   coopId: string;
@@ -41,12 +24,14 @@ interface CoopOption {
 
 async function getActiveCoops(): Promise<CoopOption[]> {
   try {
-    const apiUrl = env.NEXT_PUBLIC_API_URL;
-    const response = await fetch(`${apiUrl}/trpc/coopConfig.listActiveCoops`, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-    });
+    const response = await fetch(
+      `${env.NEXT_PUBLIC_API_URL}/trpc/coopConfig.listActiveCoops`,
+      {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+      },
+    );
     if (!response.ok) return [];
     const data = await response.json();
     return data.result.data as CoopOption[];
@@ -55,146 +40,59 @@ async function getActiveCoops(): Promise<CoopOption[]> {
   }
 }
 
-const CARD_GRADIENTS = [
-  "from-[#f0975b]/25 to-[#0f766e]/20",
-  "from-[#22c55e]/20 to-[#0ea5e9]/15",
-  "from-[#ef4444]/20 to-[#f0975b]/20",
-  "from-[#14b8a6]/20 to-[#64748b]/20",
-  "from-[#ffb36f]/20 to-[#dc2626]/20",
-];
-
 export const metadata: Metadata = {
-  title: "Cahootz | The App for Community-Owned Economies",
+  title: "Cahootz | A place for your commons to move together",
   description:
-    "Join a commons, support local businesses, earn participation rewards, vote on proposals, and fund the tools your community needs.",
-  alternates: {
-    canonical: "https://cahootz.coop",
-  },
+    "Cahootz brings members, local businesses, spaces, and community decisions into one commons. Find your place and help shape what comes next.",
+  alternates: { canonical: "https://cahootz.coop" },
 };
 
-const GITHUB_REPOSITORY_URL = "https://github.com/CahootzFederation/cahootz-coops-federation";
+const GITHUB_REPOSITORY_URL =
+  "https://github.com/CahootzFederation/cahootz-coops-federation";
 
-const proofPoints = [
+const pathways = [
   {
-    icon: <Store className="h-5 w-5" />,
-    value: "Shop local",
-    label: "Find businesses in your commons network and keep spending close to home.",
+    index: "01",
+    label: "Find your people",
+    title: "A home for the conversation and the work.",
+    body: "Join a commons, find member spaces and circles, and follow the activity that matters to you. The network has a place to gather between meetings and purchases.",
+    details: ["Member spaces", "Group activity", "Community updates"],
+    className: "pathway-community",
   },
   {
-    icon: <Vote className="h-5 w-5" />,
-    value: "Vote on proposals",
-    label: "Help decide which projects, businesses, and community needs get funded.",
+    index: "02",
+    label: "Keep it local",
+    title: "Make the local economy visible.",
+    body: "Discover businesses in your network, explore what they offer, and make purchases through the member app. Participation connects the people doing business to the people building the commons.",
+    details: ["Stores and products", "Payments", "Member rewards"],
+    className: "pathway-commerce",
   },
   {
-    icon: <Landmark className="h-5 w-5" />,
-    value: "Fund new tools",
-    label: "Use proposals to back vendors, features, and projects members actually need.",
+    index: "03",
+    label: "Decide together",
+    title: "Turn a shared need into a shared decision.",
+    body: "Members can bring forward proposals, discuss tradeoffs, and vote. The commons can see what was proposed, what was decided, and where support should go next.",
+    details: ["Proposals", "Discussion", "Voting"],
+    className: "pathway-governance",
   },
-];
-
-interface Feature {
-  icon: React.ReactNode;
-  label: string;
-  title: string;
-  description: string;
-  status: "live" | "coming-soon";
-}
-
-const features: Feature[] = [
-  {
-    icon: <Smartphone className="h-6 w-6" />,
-    label: "Member App",
-    title: "Your commons in your pocket",
-    description:
-      "Join a network, see activity, manage your profile, and stay connected to the people and businesses building with you.",
-    status: "live",
-  },
-  {
-    icon: <Store className="h-6 w-6" />,
-    label: "Local Commerce",
-    title: "Spend where it comes back",
-    description:
-      "Discover community businesses, buy from the network, and turn everyday transactions into shared momentum.",
-    status: "live",
-  },
-  {
-    icon: <Vote className="h-6 w-6" />,
-    label: "Governance",
-    title: "Real decisions, not suggestion boxes",
-    description:
-      "Submit proposals, discuss tradeoffs, vote, and see why decisions were approved or rejected.",
-    status: "live",
-  },
-  {
-    icon: <Wallet className="h-6 w-6" />,
-    label: "SoulCoin & Rewards",
-    title: "Membership people can verify",
-    description:
-      "SoulCoin represents commons membership, reputation, and governance rights without tying the page to one specific commons token.",
-    status: "live",
-  },
-  {
-    icon: <Globe className="h-6 w-6" />,
-    label: "Public Commons Pages",
-    title: "A front door people can share",
-    description:
-      "Each commons can publish its mission, stores, products, and join path so neighbors know where to plug in.",
-    status: "live",
-  },
-  {
-    icon: <Zap className="h-6 w-6" />,
-    label: "Vendor Roadmap",
-    title: "Fund features like a startup",
-    description:
-      "Members can approve budgets for vendors to build new tools, integrations, pages, and workflows the commons needs next.",
-    status: "coming-soon",
-  },
-];
-
-const memberBenefits = [
-  "Find commons businesses and community activity in one place",
-  "Earn rewards for spending and participating in the network",
-  "Vote on proposals that can fund real local projects and new features",
-  "Follow decisions, treasury activity, and member updates",
-  "Help grow a system built for ownership instead of extraction",
-];
-
-const businessBenefits = [
-  "Reach members already looking for local places to support",
-  "Accept community-powered payments and rewards",
-  "Show up on your commons' public page and marketplace",
-  "Build customer loyalty around ownership, not coupons",
-  "Request support or paid feature work through transparent member proposals",
 ];
 
 const faqs = [
   {
-    q: "What does Cahootz actually do?",
-    a: "Cahootz is the app layer for a commons economy. Members use it to join a commons, find local businesses, earn participation rewards, submit and vote on proposals, and help fund the tools, vendors, and shared resources the commons needs.",
+    q: "What is a commons?",
+    a: "A commons is a community that organizes people, businesses, and shared resources around a common purpose. Each commons sets its own membership and decision rules.",
   },
   {
-    q: "Is this just a loyalty app?",
-    a: "No. Rewards are only one part. The important difference is that the network also has membership, governance, a shared treasury, public commons pages, and a way for members to fund vendors who can build useful features for the commons.",
+    q: "Do I need to own a business to join?",
+    a: "No. Members can take part in community spaces, support local businesses, and participate in decisions. Businesses have a separate interest form below.",
   },
   {
-    q: "What is SoulCoin?",
-    a: "SoulCoin is the membership and governance token model for a commons. Each commons can use its own SoulCoin to represent membership, reputation, and voting rights.",
+    q: "Does AI make decisions for members?",
+    a: "No. Cahootz can help review proposals against a commons' rules. Members set those rules and make the governing decisions.",
   },
   {
-    q: "Can a commons fund new software or services?",
-    a: "Yes. A commons can use proposals to define what it needs, vote on the budget, and hire vendors to build features, integrations, public pages, internal tools, events, or services that help the commons grow like a member-owned startup.",
-  },
-  {
-    q: "Does AI control the money?",
-    a: "No. The AI helps evaluate proposals against rules the commons sets. Members still define the rules, change the rules, and make the governing decisions.",
-  },
-  {
-    q: "Why would a business join?",
-    a: "A business gets discovered by people who want to buy local, can build loyalty around a larger mission, and can request community support through proposals instead of relying only on banks or ads.",
-  },
-  {
-    q: "How do I start?",
-    a: "Join the waitlist as a member or add your business. If your commons is already live, you can visit its public page and start there.",
+    q: "What if my commons is not listed?",
+    a: "Join the interest list and tell us which commons you want to join or start. We will use that to understand where a new network could grow.",
   },
 ];
 
@@ -203,475 +101,256 @@ export default async function HomePage() {
   const featuredPosts = getFeaturedBlogPosts(3);
 
   return (
-    <div className="min-h-screen bg-[#111111] text-white">
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#111111]/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-3">
+    <div className="landing">
+      <header className="landing-header">
+        <div className="landing-shell header-inner">
+          <Link href="/" className="brand" aria-label="Cahootz home">
             <Image
-              src="/cahootz-coops-eggs.svg"
+              src="/cahootz-coops-mark.svg"
               alt=""
-              width={48}
+              width={46}
               height={40}
-              className="h-10 w-12 object-contain"
               priority
             />
-            <div className="flex flex-col">
-              <span className="text-xl font-bold leading-tight tracking-tight">Cahootz</span>
-              <span className="text-xs leading-tight text-slate-400">Commons network</span>
-            </div>
+            <span>Cahootz</span>
           </Link>
-
-          <nav className="hidden items-center gap-8 text-sm md:flex">
-            <Link href="#how-it-works" className="text-slate-400 transition hover:text-white">
-              How it works
-            </Link>
-            <Link href="#features" className="text-slate-400 transition hover:text-white">
-              Features
-            </Link>
-            <Link href="/blog" className="text-slate-400 transition hover:text-white">
-              Blog
-            </Link>
-            <Link href="/contact" className="text-slate-400 transition hover:text-white">
-              Contact
-            </Link>
-            <Link href="#join" className="text-slate-400 transition hover:text-white">
-              Join
-            </Link>
+          <nav aria-label="Main navigation" className="header-nav">
+            <a href="#how-it-works">How it works</a>
+            <a href="#find-a-commons">Find a commons</a>
+            <Link href="/blog">Journal</Link>
           </nav>
-
-          <a
-            href="#join"
-            className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-[#111111] transition hover:bg-[#f0975b]"
-          >
-            Apply now
-            <ArrowRight className="h-4 w-4" />
+          <a className="header-action" href="#join">
+            Join a commons <ArrowRight size={16} />
           </a>
         </div>
       </header>
 
       <main>
-        <section
-          className="relative overflow-hidden border-b border-white/10 px-5 py-16 sm:px-6 md:py-24"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 18% 12%, rgba(245,158,11,0.16), transparent 34%), radial-gradient(circle at 88% 8%, rgba(20,184,166,0.12), transparent 30%), linear-gradient(135deg, #111111 0%, #161616 48%, #0f1413 100%)",
-          }}
-        >
-          <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-lg border border-[#f0975b]/30 bg-[#f0975b]/10 px-3 py-1.5 text-sm font-medium text-[#ffb36f]">
-                <Zap className="h-4 w-4" />
-                For communities ready to build more together
-              </div>
-              <h1 className="mt-6 max-w-4xl text-5xl font-semibold leading-[1.03] tracking-tight sm:text-6xl md:text-7xl">
-                Coordinate your community into shared economic power.
+        <section className="hero" aria-labelledby="hero-title">
+          <div className="landing-shell hero-inner">
+            <div className="hero-copy">
+              <p className="eyebrow">
+                A place for the people building what comes next
+              </p>
+              <h1 id="hero-title">
+                A community is more powerful when it can{" "}
+                <span>move together.</span>
               </h1>
-              <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-200 md:text-xl">
-                Bring members, businesses, and neighbors into one place to organize needs,
-                make decisions, pool support, and turn collective action into benefits
-                everyone can see.
+              <p className="hero-description">
+                Cahootz gives a commons one place to connect its members, local
+                businesses, shared spaces, and decisions. See what is happening.
+                Take part. Help shape what gets built.
               </p>
-              <div className="mt-9 flex flex-wrap gap-3">
-                <Link
-                  href="#join"
-                  className="inline-flex items-center gap-2 rounded-lg bg-[#f0975b] px-5 py-3 text-base font-semibold text-[#111111] transition hover:bg-[#ffb36f]"
-                >
-                  Join the community
-                  <ArrowRight className="h-5 w-5" />
-                </Link>
-                <Link
-                  href="#business-form"
-                  className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-5 py-3 text-base font-semibold transition hover:bg-white/10"
-                >
-                  Add your business
-                </Link>
+              <div className="hero-actions">
+                <a className="button button-primary" href="#join">
+                  Find your commons <ArrowRight size={18} />
+                </a>
+                <a className="text-link" href="#how-it-works">
+                  See how it works <ArrowDownRight size={18} />
+                </a>
               </div>
             </div>
-
-            <div className="mx-auto w-full max-w-md lg:ml-auto">
-              <div className="rounded-lg border border-white/15 bg-[#181818]/95 p-4 shadow-2xl shadow-black/40">
-                <div className="rounded-lg border border-[#f0975b]/25 bg-[#121212] p-4 text-white">
-                  <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-widest text-[#ffb36f]">Today in your commons</p>
-                      <h2 className="mt-1 text-xl font-black">Artist Commons</h2>
-                    </div>
-                    <div className="rounded-lg bg-[#f0975b] px-3 py-1 text-xs font-bold text-[#111111]">LIVE</div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-3 gap-2">
-                    {[
-                      ["12", "Projects"],
-                      ["7", "Studios"],
-                      ["420", "Members"],
-                    ].map(([value, label]) => (
-                      <div key={label} className="rounded-lg border border-white/10 bg-white/[0.04] p-3 text-center">
-                        <p className="text-2xl font-black">{value}</p>
-                        <p className="mt-1 text-[11px] font-medium text-slate-400">{label}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-4 space-y-3">
-                    {[
-                      {
-                        icon: <Store className="h-4 w-4" />,
-                        title: "Book a member studio day",
-                        detail: "Use shared space, tools, and production support.",
-                      },
-                      {
-                        icon: <MessageSquare className="h-4 w-4" />,
-                        title: "Vote on the equipment library",
-                        detail: "Members are choosing what tools get funded next.",
-                      },
-                      {
-                        icon: <ShieldCheck className="h-4 w-4" />,
-                        title: "Local distribution route approved",
-                        detail: "More member work can reach shops, events, and buyers.",
-                      },
-                    ].map((item) => (
-                      <div key={item.title} className="flex gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f0975b]/15 text-[#ffb36f]">
-                          {item.icon}
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold">{item.title}</p>
-                          <p className="mt-0.5 text-xs leading-5 text-slate-400">{item.detail}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+            <div
+              className="commons-map"
+              aria-label="Members, spaces, local businesses, and decisions connect through a commons"
+            >
+              <div className="map-caption">
+                ONE COMMONS, MANY WAYS TO PARTICIPATE
+              </div>
+              <div className="map-center">
+                <Image
+                  src="/cahootz-coops-mark.svg"
+                  alt=""
+                  width={54}
+                  height={48}
+                />
+                <strong>Your commons</strong>
+                <span>People working together</span>
+              </div>
+              <div className="map-node map-members">
+                <span className="node-kicker">PEOPLE</span>
+                <strong>Members</strong>
+                <small>Meet, share, organize</small>
+              </div>
+              <div className="map-node map-spaces">
+                <span className="node-kicker">PLACE</span>
+                <strong>Spaces & circles</strong>
+                <small>Find where you belong</small>
+              </div>
+              <div className="map-node map-business">
+                <span className="node-kicker">ECONOMY</span>
+                <strong>Local businesses</strong>
+                <small>Buy and build nearby</small>
+              </div>
+              <div className="map-node map-decisions">
+                <span className="node-kicker">DIRECTION</span>
+                <strong>Decisions</strong>
+                <small>Propose, discuss, vote</small>
               </div>
             </div>
           </div>
-        </section>
-
-        <section id="how-it-works" className="border-b border-white/10 bg-[#161616] px-5 py-14 text-white sm:px-6">
-          <div className="mx-auto max-w-7xl">
-            <div className="grid gap-4 md:grid-cols-3">
-              {proofPoints.map((point) => (
-                <div key={point.value} className="rounded-lg border border-white/10 bg-[#111111] p-6">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#f0975b]/15 text-[#ffb36f]">
-                    {point.icon}
-                  </div>
-                  <h2 className="mt-5 text-2xl font-black">{point.value}</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-400">{point.label}</p>
-                </div>
-              ))}
-            </div>
+          <div className="hero-footer landing-shell">
+            <span>Built for the work communities already do.</span>
+            <span>Scroll to explore ↓</span>
           </div>
         </section>
 
-        <section id="features" className="px-5 py-20 sm:px-6 md:py-24">
-          <div className="mx-auto max-w-7xl">
-            <div className="max-w-3xl">
-              <p className="text-sm font-bold uppercase tracking-widest text-[#ffb36f]">What people use it for</p>
-              <h2 className="mt-3 text-3xl font-black tracking-tight md:text-5xl">
-                One app for the work a commons already has to do.
-              </h2>
-              <p className="mt-4 text-lg leading-8 text-slate-400">
-                Cahootz is where members, businesses, proposals, purchases, and public
-                trust all meet, so people can move from interest to action quickly.
-              </p>
-            </div>
-
-            <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {features.map((feature) => (
-                <div key={feature.label} className="rounded-lg border border-white/10 bg-[#1b1b1b] p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#f0975b]/10 text-[#ffb36f]">
-                      {feature.icon}
-                    </div>
-                    {feature.status === "coming-soon" ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-2.5 py-1 text-xs font-medium text-slate-400">
-                        <Clock className="h-3 w-3" />
-                        Soon
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-xs font-medium text-emerald-300">
-                        <BadgeCheck className="h-3 w-3" />
-                        Live
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-5 text-xs font-bold uppercase tracking-widest text-slate-500">{feature.label}</p>
-                  <h3 className="mt-2 text-lg font-bold">{feature.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-400">{feature.description}</p>
-                </div>
-              ))}
-            </div>
+        <section className="intro-band" id="how-it-works">
+          <div className="landing-shell intro-inner">
+            <p className="eyebrow">THE IDEA</p>
+            <h2>
+              Belong somewhere.
+              <br />
+              Do something together.
+            </h2>
+            <p>
+              A commons becomes real through everyday participation. Cahootz
+              connects the conversations, commerce, and decisions that usually
+              happen in separate places.
+            </p>
           </div>
         </section>
 
-        <section className="border-y border-white/10 bg-[#1b1b1b] px-5 py-20 sm:px-6 md:py-24">
-          <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-widest text-[#ffb36f]">Why it matters</p>
-              <h2 className="mt-3 text-3xl font-black tracking-tight md:text-5xl">
-                The money loop is the message.
-              </h2>
-              <p className="mt-5 text-lg leading-8 text-slate-400">
-                Right now, you do the work, bring the customers, and someone else owns the system.
-                Cahootz is designed so the activity of the network strengthens the network:
-                members support businesses, businesses serve members, and the commons treasury
-                funds vendors, tools, and projects the community can see and govern.
-              </p>
-              <Link
-                href="#join"
-                className="mt-8 inline-flex items-center gap-2 rounded-lg bg-white px-5 py-3 font-semibold text-[#111111] transition hover:bg-[#f0975b]"
-              >
-                Submit an application
-                <ArrowRight className="h-5 w-5" />
-              </Link>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              {[
-                ["1", "Join", "Members join a commons and get a clear place to participate."],
-                ["2", "Spend", "Local purchases and business activity happen inside the network."],
-                ["3", "Decide", "Members propose, debate, and vote on what should be funded."],
-                ["4", "Build", "The treasury can pay vendors to ship features, services, and projects."],
-              ].map(([step, title, body]) => (
-                <div key={step} className="rounded-lg border border-white/10 bg-[#111111] p-6">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#f0975b] text-sm font-black text-[#111111]">
-                    {step}
-                  </div>
-                  <h3 className="mt-5 text-xl font-black">{title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-400">{body}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="governance" className="px-5 py-20 sm:px-6 md:py-24">
-          <div className="mx-auto max-w-7xl">
-            <div className="grid gap-10 lg:grid-cols-2 lg:items-start">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-lg border border-[#f0975b]/30 bg-[#f0975b]/10 px-3 py-1.5 text-sm font-medium text-[#ffb36f]">
-                  <Vote className="h-4 w-4" />
-                  Member-led governance
-                </div>
-                <h2 className="mt-5 text-3xl font-black tracking-tight md:text-5xl">
-                  You write the rules. The AI follows them.
-                </h2>
-                <p className="mt-5 text-lg leading-8 text-slate-400">
-                  AI helps screen proposals against the commons' charter, budget, and reserve
-                  rules. It does not replace members. It makes the reasoning visible so people
-                  can make better decisions faster.
-                </p>
+        <section
+          className="pathways landing-shell"
+          aria-label="Ways to participate"
+        >
+          {pathways.map((pathway) => (
+            <article
+              className={`pathway ${pathway.className}`}
+              key={pathway.index}
+            >
+              <div className="pathway-index">
+                <span>{pathway.index}</span>
+                <span>{pathway.label}</span>
               </div>
-
-              <div className="rounded-lg border border-white/10 bg-[#1b1b1b] p-6">
-                <h3 className="text-lg font-bold">What members can do</h3>
-                <ul className="mt-6 space-y-4">
-                  {[
-                    "Submit funding proposals with budget and impact details",
-                    "Comment before a vote so objections are visible early",
-                    "Hire vendors to build member-approved tools and services",
-                    "Vote according to the commons' membership rules",
-                    "Review AI scoring, charter alignment, and decision history",
-                  ].map((item) => (
-                    <li key={item} className="flex items-start gap-3">
-                      <Check className="mt-1 h-5 w-5 shrink-0 text-[#ffb36f]" />
-                      <span className="text-slate-300">{item}</span>
-                    </li>
+              <div className="pathway-main">
+                <h3>{pathway.title}</h3>
+                <p>{pathway.body}</p>
+                <div className="pathway-tags">
+                  {pathway.details.map((detail) => (
+                    <span key={detail}>{detail}</span>
                   ))}
-                </ul>
+                </div>
+                {pathway.index === "02" && (
+                  <a className="text-link pathway-link" href="#business-form">
+                    Bring your business into the commons{" "}
+                    <ArrowRight size={17} />
+                  </a>
+                )}
               </div>
-            </div>
-          </div>
+              <div className="pathway-symbol" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+            </article>
+          ))}
         </section>
 
-        <section className="border-y border-white/10 bg-[#161616] px-5 py-20 text-white sm:px-6 md:py-24">
-          <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-2">
-            <div className="rounded-lg border border-white/10 bg-[#111111] p-7">
-              <div className="inline-flex items-center gap-2 rounded-lg border border-[#f0975b]/20 bg-[#f0975b]/10 px-3 py-1.5 text-sm font-bold text-[#ffb36f]">
-                <Users className="h-4 w-4" />
-                For Members
-              </div>
-              <h2 className="mt-5 text-3xl font-black">Use the app to help build what you want to live in.</h2>
-              <ul className="mt-8 space-y-4">
-                {memberBenefits.map((benefit) => (
-                  <li key={benefit} className="flex items-start gap-3">
-                    <Check className="mt-1 h-5 w-5 shrink-0 text-[#ffb36f]" />
-                    <span className="text-slate-300">{benefit}</span>
-                  </li>
-                ))}
-              </ul>
-              <a
-                href="#join"
-                className="mt-8 inline-flex items-center gap-2 rounded-lg bg-[#f0975b] px-5 py-3 font-semibold text-[#111111] transition hover:bg-[#ffb36f]"
-              >
-                Submit an application
-                <ArrowRight className="h-5 w-5" />
+        <section className="decision-section">
+          <div className="landing-shell decision-inner">
+            <div>
+              <p className="eyebrow">MEMBER-LED BY DESIGN</p>
+              <h2>The community sets the direction.</h2>
+            </div>
+            <div>
+              <p>
+                Bring an idea forward. Make the case. Hear from the people it
+                affects. Then decide together what deserves support.
+              </p>
+              <p>
+                AI can help check proposals against a commons&apos; rules and
+                make its reasoning visible. Members remain responsible for the
+                rules and the vote.
+              </p>
+              <a className="text-link" href="#join">
+                Get involved <MoveUpRight size={18} />
               </a>
             </div>
-
-            <div className="rounded-lg border border-white/10 bg-[#111111] p-7">
-              <div className="inline-flex items-center gap-2 rounded-lg border border-[#f0975b]/20 bg-[#f0975b]/10 px-3 py-1.5 text-sm font-bold text-[#ffb36f]">
-                <Store className="h-4 w-4" />
-                For Businesses
-              </div>
-              <h2 className="mt-5 text-3xl font-black">Turn customers into a community that comes back.</h2>
-              <ul className="mt-8 space-y-4">
-                {businessBenefits.map((benefit) => (
-                  <li key={benefit} className="flex items-start gap-3">
-                    <Check className="mt-1 h-5 w-5 shrink-0 text-[#ffb36f]" />
-                    <span className="text-slate-300">{benefit}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href="#business-form"
-                className="mt-8 inline-flex items-center gap-2 rounded-lg border border-white/15 px-5 py-3 font-semibold transition hover:bg-white/10"
-              >
-                Apply as a business
-                <ArrowRight className="h-5 w-5" />
-              </Link>
-            </div>
           </div>
         </section>
 
-        {coops.length > 0 && (
-          <section className="border-b border-white/10 bg-[#1b1b1b] px-5 py-20 sm:px-6 md:py-24">
-            <div className="mx-auto max-w-7xl">
-              <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-                <div>
-                  <p className="text-sm font-bold uppercase tracking-widest text-[#ffb36f]">Active networks</p>
-                  <h2 className="mt-3 text-3xl font-black tracking-tight md:text-5xl">Visit a live commons.</h2>
-                </div>
-                <p className="max-w-xl text-slate-400">
-                  Apply to join any active commons. When a commons has published its public page,
-                  you can also read its community newsletter.
-                </p>
+        <section className="commons-section" id="find-a-commons">
+          <div className="landing-shell">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">OPEN DOORS</p>
+                <h2>Find a commons to join.</h2>
               </div>
-
-              <div className="mt-10 grid gap-4 md:grid-cols-3">
-                {coops.map((coop, i) => (
-                  <article
-                    key={coop.coopId}
-                    className="group overflow-hidden rounded-lg border border-white/10 bg-[#111111] transition hover:-translate-y-0.5 hover:border-[#f0975b]/50"
-                  >
-                    <div className={`h-36 bg-gradient-to-br ${CARD_GRADIENTS[i % CARD_GRADIENTS.length]}`} />
-                    <div className="p-5">
-                      <h3 className="text-lg font-bold group-hover:text-[#ffb36f]">{coop.name}</h3>
-                      {coop.tagline && <p className="mt-1 text-sm text-slate-400">{coop.tagline}</p>}
-                      {coop.description && (
-                        <p className="mt-3 line-clamp-4 text-xs leading-6 text-slate-500">{coop.description}</p>
-                      )}
-                      <div className="mt-5 flex flex-col gap-2 sm:flex-row md:flex-col xl:flex-row">
-                        <Link
-                          href={`/${coop.coopId}/application`}
-                          className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md bg-[#f0975b] px-4 py-2 text-sm font-bold text-[#111111] no-underline transition hover:bg-[#ffb36f] hover:no-underline"
-                        >
-                          Apply
-                          <ArrowRight className="h-4 w-4" />
+              <p>
+                Each commons has its own purpose and application. Start with the
+                one that feels like yours.
+              </p>
+            </div>
+            {coops.length > 0 ? (
+              <div className="commons-list">
+                {coops.map((coop) => (
+                  <article className="commons-row" key={coop.coopId}>
+                    <div className="commons-row-mark" aria-hidden="true">
+                      ✳
+                    </div>
+                    <div>
+                      <h3>{coop.name}</h3>
+                      <p>
+                        {coop.tagline ||
+                          coop.description ||
+                          "Explore this commons and its community."}
+                      </p>
+                    </div>
+                    <div className="commons-row-actions">
+                      <Link href={`/${coop.coopId}/application`}>
+                        Apply <ArrowRight size={17} />
+                      </Link>
+                      {coop.hasPublishedPublicPage && (
+                        <Link href={`/c/${coop.coopId}`}>
+                          Explore page <MoveUpRight size={17} />
                         </Link>
-                        {coop.hasPublishedPublicPage && (
-                          <Link
-                            href={`/c/${coop.coopId}`}
-                            className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white no-underline transition hover:border-[#f0975b]/60 hover:bg-white/10 hover:no-underline"
-                          >
-                            Newsletter
-                            <Newspaper className="h-4 w-4" />
-                          </Link>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </article>
                 ))}
               </div>
-            </div>
-          </section>
-        )}
-
-        {featuredPosts.length > 0 && (
-          <section id="blog" className="border-b border-white/10 bg-[#161616] px-5 py-20 sm:px-6 md:py-24">
-            <div className="mx-auto max-w-7xl">
-              <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
-                <div className="max-w-3xl">
-                  <div className="inline-flex items-center gap-2 rounded-lg border border-[#f0975b]/30 bg-[#f0975b]/10 px-3 py-1.5 text-sm font-medium text-[#ffb36f]">
-                    <Newspaper className="h-4 w-4" />
-                    Latest from the blog
-                  </div>
-                  <h2 className="mt-4 text-3xl font-black tracking-tight md:text-5xl">
-                    Notes from the work of building Cahootz.
-                  </h2>
-                  <p className="mt-4 text-lg leading-8 text-slate-400">
-                    Product updates, commons playbooks, and practical thinking about
-                    community-owned economies. Draft in Notion, publish on the site.
-                  </p>
-                </div>
-
-                <Link
-                  href="/blog"
-                  className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-5 py-3 font-semibold transition hover:border-[#f0975b]/60 hover:bg-white/10"
-                >
-                  View all posts
-                  <ArrowRight className="h-5 w-5" />
-                </Link>
+            ) : (
+              <div className="commons-empty">
+                Looking for a commons in your area?{" "}
+                <a href="#join">
+                  Tell us where you want to build <ArrowRight size={16} />
+                </a>
               </div>
+            )}
+          </div>
+        </section>
 
-              <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-                {featuredPosts.map((post, index) => (
-                  <BlogCard key={post.slug} post={post} priority={index === 0} />
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-
-        <TreasuryContributionCalculator />
-
-        <section id="join" className="border-t border-white/10 bg-[#f0975b] px-5 py-20 text-[#111111] sm:px-6 md:py-24">
-          <div className="mx-auto grid max-w-7xl gap-10 xl:grid-cols-[0.7fr_1.3fr]">
-            <div>
-              <p className="text-sm font-black uppercase tracking-widest text-[#111111]/70">Join Cahootz</p>
-              <h2 className="mt-3 text-4xl font-black tracking-tight md:text-5xl">
-                Apply to a commons from the website.
-              </h2>
-              <p className="mt-5 text-lg leading-8 text-[#111111]/75">
-                Pick a live commons, answer the questions that community configured,
-                and get a real application reference for your records. If your commons
-                is not live yet, the waitlist can capture the one you want to create.
+        <section className="join-section" id="join">
+          <div className="landing-shell join-inner">
+            <div className="join-intro">
+              <p className="eyebrow">YOUR NEXT STEP</p>
+              <h2>There is a place for you in this.</h2>
+              <p>
+                Choose a live commons and apply with the questions that
+                community has set. If yours is still taking shape, tell us where
+                you want to build.
               </p>
-              <div className="mt-8 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-                {[
-                  "Choose a commons",
-                  "Answer its questions",
-                  "Submit for review",
-                ].map((step) => (
-                  <div key={step} className="rounded-lg border border-[#111111]/10 bg-white/30 p-4">
-                    <p className="text-sm font-black uppercase tracking-widest text-[#111111]/60">
-                      {step}
-                    </p>
-                  </div>
-                ))}
+              <div className="join-aside">
+                <span>FOR MEMBERS</span>
+                <strong>Find your people and start participating.</strong>
               </div>
             </div>
-
-            <div className="space-y-6">
-              <Suspense fallback={<div className="h-[36rem] animate-pulse rounded-lg bg-white/40" />}>
+            <div className="join-forms">
+              <Suspense fallback={<div className="form-loading" />}>
                 <MemberApplicationFlow />
               </Suspense>
-
-              <div className="grid gap-6 lg:grid-cols-2">
-                <div className="rounded-lg border border-[#111111]/10 bg-white/35 p-6">
-                  <h3 className="text-2xl font-black">Not seeing your commons?</h3>
-                  <p className="mt-2 text-sm leading-6 text-[#111111]/70">
-                    Join the list and tell us the commons you want to join or create next.
-                  </p>
-                  <div className="mt-5">
-                    <Suspense fallback={<div className="h-80 animate-pulse rounded-lg bg-white/30" />}>
-                      <WaitlistSignupForm coops={coops} />
-                    </Suspense>
-                  </div>
+              <div className="join-secondary">
+                <div className="waitlist-panel">
+                  <h3>Don&apos;t see your commons?</h3>
+                  <p>Tell us what community you want to join or create.</p>
+                  <Suspense fallback={<div className="form-loading" />}>
+                    <WaitlistSignupForm coops={coops} />
+                  </Suspense>
                 </div>
-
                 <div id="business-form">
-                  <Suspense fallback={<div className="h-96 animate-pulse rounded-lg bg-white/30" />}>
+                  <Suspense fallback={<div className="form-loading" />}>
                     <BusinessSignupForm coops={coops} />
                   </Suspense>
                 </div>
@@ -680,70 +359,76 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <section className="px-5 py-20 sm:px-6 md:py-24">
-          <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.7fr_1fr]">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-widest text-[#ffb36f]">Real talk</p>
-              <h2 className="mt-3 text-3xl font-black tracking-tight md:text-5xl">Questions people ask before they join.</h2>
-            </div>
+        <TreasuryContributionCalculator />
 
-            <div className="space-y-4">
-              {faqs.map(({ q, a }) => (
-                <div key={q} className="rounded-lg border border-white/10 bg-[#1b1b1b] p-6">
-                  <h3 className="text-lg font-bold">{q}</h3>
-                  <p className="mt-3 leading-7 text-slate-400">{a}</p>
+        {featuredPosts.length > 0 && (
+          <section className="journal-section">
+            <div className="landing-shell">
+              <div className="section-heading">
+                <div>
+                  <p className="eyebrow">FROM THE JOURNAL</p>
+                  <h2>Notes from building Cahootz.</h2>
                 </div>
+                <Link className="text-link" href="/blog">
+                  Read the journal <ArrowRight size={18} />
+                </Link>
+              </div>
+              <div className="journal-grid">
+                {featuredPosts.map((post, index) => (
+                  <BlogCard
+                    key={post.slug}
+                    post={post}
+                    priority={index === 0}
+                  />
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        <section className="faq-section">
+          <div className="landing-shell faq-inner">
+            <div>
+              <p className="eyebrow">A FEW QUESTIONS</p>
+              <h2>Good to know before you join.</h2>
+            </div>
+            <div className="faq-list">
+              {faqs.map(({ q, a }) => (
+                <details key={q}>
+                  <summary>
+                    {q}
+                    <span aria-hidden="true">+</span>
+                  </summary>
+                  <p>{a}</p>
+                </details>
               ))}
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-white/10 bg-[#111111] px-5 py-10 sm:px-6">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-5 md:flex-row">
-          <div className="flex items-center gap-3">
-            <Image
-              src="/cahootz-coops-mark.svg"
-              alt=""
-              width={44}
-              height={36}
-              className="h-9 w-11 object-contain"
-            />
-            <span className="font-bold">Cahootz</span>
+      <footer className="landing-footer">
+        <div className="landing-shell footer-inner">
+          <div>
+            <Link className="brand" href="/">
+              <Image
+                src="/cahootz-coops-mark.svg"
+                alt=""
+                width={46}
+                height={40}
+              />
+              <span>Cahootz</span>
+            </Link>
+            <p>A place for communities to move together.</p>
           </div>
-          <div className="flex flex-col items-center gap-3 text-center md:items-end md:text-right">
-            <p className="text-sm text-slate-400">
-              The community platform for commons that want local spending, governance, and ownership in one loop.
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-4 md:justify-end">
-              <Link
-                href="/terms"
-                className="text-sm font-semibold text-slate-300 transition hover:text-white"
-              >
-                Terms
-              </Link>
-              <Link
-                href="/privacy"
-                className="text-sm font-semibold text-slate-300 transition hover:text-white"
-              >
-                Privacy Policy
-              </Link>
-              <Link
-                href="/contact"
-                className="text-sm font-semibold text-slate-300 transition hover:text-white"
-              >
-                Contact
-              </Link>
-              <a
-                href={GITHUB_REPOSITORY_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 text-sm font-semibold text-slate-300 transition hover:text-white"
-              >
-                <Github className="h-4 w-4" />
-                GitHub
-              </a>
-            </div>
+          <div className="footer-links">
+            <Link href="/blog">Journal</Link>
+            <Link href="/contact">Contact</Link>
+            <Link href="/terms">Terms</Link>
+            <Link href="/privacy">Privacy</Link>
+            <a href={GITHUB_REPOSITORY_URL} target="_blank" rel="noreferrer">
+              GitHub <Github size={15} />
+            </a>
           </div>
         </div>
       </footer>

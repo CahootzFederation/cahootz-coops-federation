@@ -1,10 +1,16 @@
-import type { NotificationCategory, NotificationCursor, NotificationPage, NotificationPreferences } from '@repo/validators/notification';
+import type {
+  NotificationCategory,
+  NotificationCursor,
+  NotificationPage,
+  NotificationPreferences,
+} from '@repo/validators/notification';
+
+import type { CommonsPostTag } from './post-types';
 // Expo-compatible API client for Cahootz co-op applications
 // Uses native fetch API - no additional dependencies required
 
 import { getApiUrl, getWebUrl, networkConfig } from './config';
 import { coopConfig } from './coop-config';
-import type { CommonsPostTag } from './post-types';
 
 /**
  * Resolve the coopId to use for public marketplace queries.
@@ -75,7 +81,8 @@ function installSessionExpiryInterceptor() {
   globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
     const response = await baseFetch(...args);
 
-    const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
+    const url =
+      typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
     if (response.status === 401 && url.startsWith(API_BASE_URL)) {
       void checkForSessionExpiry(response);
     }
@@ -92,7 +99,7 @@ installSessionExpiryInterceptor();
  */
 export function createApiHeaders(
   walletAddress?: string | null,
-  sessionToken?: string | null
+  sessionToken?: string | null,
 ): HeadersInit {
   const headers: Record<string, string> = {
     ...networkConfig.defaultHeaders,
@@ -114,7 +121,7 @@ export function createApiHeaders(
 export interface ApplicationData {
   // Coop identification
   coopId: string;
-  
+
   // Personal Information
   firstName: string;
   lastName: string;
@@ -134,7 +141,7 @@ export interface ApplicationData {
 
   // Co-op configured question answers
   dynamicAnswers?: Record<string, any>;
-  
+
   // Allow dynamic question answers
   [key: string]: any;
 }
@@ -242,6 +249,7 @@ export interface CommonsPostMedia {
 export interface CommonsPost {
   id: string;
   coopId?: string;
+  circleId?: string;
   authorId?: string;
   author: string;
   authorHandle?: string;
@@ -268,9 +276,10 @@ export interface PrivateGroupSummary {
   id: string;
   name: string;
   purpose: string | null;
-  privacy: 'private' | 'invite-only';
+  privacy: 'public' | 'private' | 'invite-only';
   memberCount: number;
   isLeader: boolean;
+  isMember?: boolean;
   createdAt: string;
 }
 
@@ -285,7 +294,7 @@ export interface PrivateGroupDetail {
   id: string;
   name: string;
   purpose: string | null;
-  privacy: 'private' | 'invite-only';
+  privacy: 'public' | 'private' | 'invite-only';
   inviteCode: string | null;
   isLeader: boolean;
   createdAt: string;
@@ -451,7 +460,10 @@ export interface DirectMember {
   role: string;
 }
 
-async function readTrpcResult<T>(response: Response, fallbackMessage: string): Promise<T> {
+async function readTrpcResult<T>(
+  response: Response,
+  fallbackMessage: string,
+): Promise<T> {
   const result = await response.json();
 
   if (result.error) {
@@ -471,13 +483,16 @@ export const api = {
    * Submit a new application to join a Cahootz co-op
    */
   async submitApplication(data: ApplicationData) {
-    const response = await fetch(`${API_BASE_URL}/trpc/application.submitApplication`, {
-      method: 'POST',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/application.submitApplication`,
+      {
+        method: 'POST',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
+        body: JSON.stringify(data),
       },
-      body: JSON.stringify(data)
-    });
+    );
 
     // Always parse the response body, even for error responses
     const result = await response.json();
@@ -492,7 +507,10 @@ export const api = {
 
     // Check if there's a tRPC error in the response
     if (result.error) {
-      const errorMessage = result.error.message || result.error.data?.message || 'Application submission failed';
+      const errorMessage =
+        result.error.message ||
+        result.error.data?.message ||
+        'Application submission failed';
       console.log('📥 Throwing error with message:', errorMessage);
       throw new Error(errorMessage);
     }
@@ -523,23 +541,33 @@ export const api = {
     const result = await response.json();
 
     if (!response.ok || !result.success) {
-      throw new Error(result.message || 'Could not join the waitlist. Please try again.');
+      throw new Error(
+        result.message || 'Could not join the waitlist. Please try again.',
+      );
     }
 
     return result as { success: boolean; message: string };
   },
 
-  async submitNewsletterSubmission(data: NewsletterSubmissionData, walletAddress?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/publicCoopInfo.submitNewsletterSubmission`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify(data),
-    });
+  async submitNewsletterSubmission(
+    data: NewsletterSubmissionData,
+    walletAddress?: string | null,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/publicCoopInfo.submitNewsletterSubmission`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify(data),
+      },
+    );
 
     const result = await response.json();
 
     if (result.error) {
-      throw new Error(result.error.message || 'Could not submit to the newsletter');
+      throw new Error(
+        result.error.message || 'Could not submit to the newsletter',
+      );
     }
 
     if (!response.ok) {
@@ -549,55 +577,102 @@ export const api = {
     return result.result?.data;
   },
 
-  async listCommonsFeed(coopId = 'cahootz', sessionToken?: string | null, cursor?: string | null) {
-    const input = encodeURIComponent(JSON.stringify({ coopId, limit: 30, ...(cursor ? { cursor } : {}) }));
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.listFeed?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(null, sessionToken),
-    });
-
-    return readTrpcResult<{ coop: CommonsProfile; posts: CommonsPost[]; nextCursor: string | null }>(
-      response,
-      'Failed to load Commons feed'
+  async listCommonsFeed(
+    coopId = 'cahootz',
+    sessionToken?: string | null,
+    cursor?: string | null,
+    circleId?: string,
+  ) {
+    const input = encodeURIComponent(
+      JSON.stringify({
+        coopId,
+        limit: 30,
+        ...(cursor ? { cursor } : {}),
+        ...(circleId ? { circleId } : {}),
+      }),
     );
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.listFeed?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
+
+    return readTrpcResult<{
+      coop: CommonsProfile;
+      circleName?: string | null;
+      circleIsMember?: boolean | null;
+      posts: CommonsPost[];
+      nextCursor: string | null;
+    }>(response, 'Failed to load Commons feed');
   },
 
   async searchCommons(
     data: { coopId?: string; query: string; limit?: number },
-    sessionToken?: string | null
+    sessionToken?: string | null,
   ) {
     const input = encodeURIComponent(
-      JSON.stringify({ coopId: data.coopId || 'cahootz', query: data.query, limit: data.limit ?? 10 })
+      JSON.stringify({
+        coopId: data.coopId || 'cahootz',
+        query: data.query,
+        limit: data.limit ?? 10,
+      }),
     );
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.search?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(null, sessionToken),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.search?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
 
-    return readTrpcResult<{ people: SearchPerson[]; posts: CommonsPost[] }>(response, 'Search failed');
-  },
-
-  async getCommonsPost(data: { coopId?: string; postId: string }, sessionToken?: string | null) {
-    const input = encodeURIComponent(JSON.stringify(data));
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.getPost?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(null, sessionToken),
-    });
-
-    return readTrpcResult<{ coop: CommonsProfile; post: CommonsPost }>(response, 'Failed to load post');
-  },
-
-  async getPersonalPage(handle: string, sessionToken?: string | null, cursor?: string | null) {
-    const input = encodeURIComponent(JSON.stringify({ handle, limit: 30, ...(cursor ? { cursor } : {}) }));
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.getPersonalPage?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(null, sessionToken),
-    });
-
-    return readTrpcResult<{ profile: PersonalPageProfile; posts: PersonalPageFeedPost[]; nextCursor: string | null }>(
+    return readTrpcResult<{ people: SearchPerson[]; posts: CommonsPost[] }>(
       response,
-      'Failed to load personal page'
+      'Search failed',
     );
+  },
+
+  async getCommonsPost(
+    data: { coopId?: string; postId: string },
+    sessionToken?: string | null,
+  ) {
+    const input = encodeURIComponent(JSON.stringify(data));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.getPost?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
+
+    return readTrpcResult<{ coop: CommonsProfile; post: CommonsPost; circleIsMember?: boolean | null }>(
+      response,
+      'Failed to load post',
+    );
+  },
+
+  async getPersonalPage(
+    handle: string,
+    sessionToken?: string | null,
+    cursor?: string | null,
+  ) {
+    const input = encodeURIComponent(
+      JSON.stringify({ handle, limit: 30, ...(cursor ? { cursor } : {}) }),
+    );
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.getPersonalPage?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
+
+    return readTrpcResult<{
+      profile: PersonalPageProfile;
+      posts: PersonalPageFeedPost[];
+      nextCursor: string | null;
+    }>(response, 'Failed to load personal page');
   },
 
   async listCommonsDirectory(sessionToken?: string | null) {
@@ -606,7 +681,10 @@ export const api = {
       headers: createApiHeaders(null, sessionToken),
     });
 
-    return readTrpcResult<{ coops: CommonsDirectoryItem[] }>(response, 'Failed to load commons');
+    return readTrpcResult<{ coops: CommonsDirectoryItem[] }>(
+      response,
+      'Failed to load commons',
+    );
   },
 
   async applyToCommons(
@@ -618,13 +696,20 @@ export const api = {
     },
     sessionToken?: string | null,
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.applyToCommons`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify(data),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.applyToCommons`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify(data),
+      },
+    );
 
-    return readTrpcResult<{ success: boolean; message: string; applicationId: string }>(response, 'Failed to apply to commons');
+    return readTrpcResult<{
+      success: boolean;
+      message: string;
+      applicationId: string;
+    }>(response, 'Failed to apply to commons');
   },
 
   async askCommonsAi(prompt: string, postId?: string) {
@@ -636,25 +721,34 @@ export const api = {
       body: JSON.stringify({ prompt, postId }),
     });
 
-    return readTrpcResult<{ answer: string }>(response, 'Failed to ask Cahootz AI');
+    return readTrpcResult<{ answer: string }>(
+      response,
+      'Failed to ask Cahootz AI',
+    );
   },
 
-  async suggestCommons(data: CommonsSuggestionData, sessionToken?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.suggestCommons`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({
-        coopId: data.coopId || 'cahootz',
-        name: data.name,
-        reason: data.reason,
-        email: data.email,
-        suggestedByName: data.suggestedByName,
-      }),
-    });
+  async suggestCommons(
+    data: CommonsSuggestionData,
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.suggestCommons`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify({
+          coopId: data.coopId || 'cahootz',
+          name: data.name,
+          reason: data.reason,
+          email: data.email,
+          suggestedByName: data.suggestedByName,
+        }),
+      },
+    );
 
     return readTrpcResult<{ success: boolean; suggestionId: string }>(
       response,
-      'Could not send the commons suggestion'
+      'Could not send the commons suggestion',
     );
   },
 
@@ -664,15 +758,17 @@ export const api = {
       title?: string;
       tag?: CommonsPost['tag'] | null;
       coopId?: string;
+      circleId?: string;
       media?: CommonsPostMedia[];
     },
-    sessionToken?: string | null
+    sessionToken?: string | null,
   ) {
     const response = await fetch(`${API_BASE_URL}/trpc/commons.createPost`, {
       method: 'POST',
       headers: createApiHeaders(null, sessionToken),
       body: JSON.stringify({
         coopId: data.coopId || 'cahootz',
+        ...(data.circleId ? { circleId: data.circleId } : {}),
         title: data.title,
         content: data.content,
         ...(data.tag ? { tag: data.tag } : {}),
@@ -680,7 +776,10 @@ export const api = {
       }),
     });
 
-    return readTrpcResult<{ post: CommonsPost }>(response, 'Create an account to post');
+    return readTrpcResult<{ post: CommonsPost }>(
+      response,
+      'Create an account to post',
+    );
   },
 
   async createPersonalPagePost(
@@ -689,19 +788,25 @@ export const api = {
       tag?: CommonsPost['tag'] | null;
       media?: CommonsPostMedia[];
     },
-    sessionToken?: string | null
+    sessionToken?: string | null,
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.createPersonalPagePost`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({
-        content: data.content,
-        ...(data.tag ? { tag: data.tag } : {}),
-        media: data.media || [],
-      }),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.createPersonalPagePost`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify({
+          content: data.content,
+          ...(data.tag ? { tag: data.tag } : {}),
+          media: data.media || [],
+        }),
+      },
+    );
 
-    return readTrpcResult<{ post: PersonalPageFeedPost }>(response, 'Create an account to post');
+    return readTrpcResult<{ post: PersonalPageFeedPost }>(
+      response,
+      'Create an account to post',
+    );
   },
 
   async deleteCommonsPost(postId: string, sessionToken?: string | null) {
@@ -711,68 +816,107 @@ export const api = {
       body: JSON.stringify({ postId }),
     });
 
-    return readTrpcResult<{ success: boolean }>(response, 'Failed to delete post');
+    return readTrpcResult<{ success: boolean }>(
+      response,
+      'Failed to delete post',
+    );
   },
 
   async deletePersonalPagePost(postId: string, sessionToken?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.deletePersonalPagePost`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({ postId }),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.deletePersonalPagePost`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify({ postId }),
+      },
+    );
 
-    return readTrpcResult<{ success: boolean }>(response, 'Failed to delete post');
+    return readTrpcResult<{ success: boolean }>(
+      response,
+      'Failed to delete post',
+    );
   },
 
   async createPersonalPageComment(
     data: { postId: string; content: string },
-    sessionToken?: string | null
+    sessionToken?: string | null,
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.createPersonalPagePostComment`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify(data),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.createPersonalPagePostComment`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify(data),
+      },
+    );
 
-    return readTrpcResult<{ comment: PersonalPageComment }>(response, 'Failed to add comment');
+    return readTrpcResult<{ comment: PersonalPageComment }>(
+      response,
+      'Failed to add comment',
+    );
   },
 
   async editPersonalPageComment(
     data: { commentId: string; content: string },
-    sessionToken?: string | null
+    sessionToken?: string | null,
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.editPersonalPagePostComment`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify(data),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.editPersonalPagePostComment`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify(data),
+      },
+    );
 
-    return readTrpcResult<{ comment: PersonalPageComment }>(response, 'Failed to edit comment');
+    return readTrpcResult<{ comment: PersonalPageComment }>(
+      response,
+      'Failed to edit comment',
+    );
   },
 
-  async deletePersonalPageComment(commentId: string, sessionToken?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.deletePersonalPagePostComment`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({ commentId }),
-    });
+  async deletePersonalPageComment(
+    commentId: string,
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.deletePersonalPagePostComment`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify({ commentId }),
+      },
+    );
 
-    return readTrpcResult<{ success: boolean }>(response, 'Failed to delete comment');
+    return readTrpcResult<{ success: boolean }>(
+      response,
+      'Failed to delete comment',
+    );
   },
 
-  async togglePersonalPageSupport(postId: string, sessionToken?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.togglePersonalPagePostSupport`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({ postId }),
-    });
+  async togglePersonalPageSupport(
+    postId: string,
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.togglePersonalPagePostSupport`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify({ postId }),
+      },
+    );
 
-    return readTrpcResult<{ supported: boolean }>(response, 'Failed to update like');
+    return readTrpcResult<{ supported: boolean }>(
+      response,
+      'Failed to update like',
+    );
   },
 
   async editComment(
     data: { commentId: string; content: string },
-    sessionToken?: string | null
+    sessionToken?: string | null,
   ) {
     const response = await fetch(`${API_BASE_URL}/trpc/commons.editComment`, {
       method: 'POST',
@@ -780,7 +924,10 @@ export const api = {
       body: JSON.stringify(data),
     });
 
-    return readTrpcResult<{ comment: CommonsComment }>(response, 'Failed to edit comment');
+    return readTrpcResult<{ comment: CommonsComment }>(
+      response,
+      'Failed to edit comment',
+    );
   },
 
   async deleteComment(commentId: string, sessionToken?: string | null) {
@@ -790,17 +937,26 @@ export const api = {
       body: JSON.stringify({ commentId }),
     });
 
-    return readTrpcResult<{ success: boolean }>(response, 'Failed to delete comment');
+    return readTrpcResult<{ success: boolean }>(
+      response,
+      'Failed to delete comment',
+    );
   },
 
   async toggleFollowUser(userId: string, sessionToken?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.toggleFollowUser`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({ userId }),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.toggleFollowUser`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify({ userId }),
+      },
+    );
 
-    return readTrpcResult<{ following: boolean }>(response, 'Failed to update follow');
+    return readTrpcResult<{ following: boolean }>(
+      response,
+      'Failed to update follow',
+    );
   },
 
   async listFollowing(sessionToken?: string | null) {
@@ -809,10 +965,9 @@ export const api = {
       headers: createApiHeaders(null, sessionToken),
     });
 
-    return readTrpcResult<{ members: { id: string; name: string; handle: string }[] }>(
-      response,
-      'Failed to load following'
-    );
+    return readTrpcResult<{
+      members: { id: string; name: string; handle: string }[];
+    }>(response, 'Failed to load following');
   },
 
   async listFollowers(sessionToken?: string | null) {
@@ -821,10 +976,9 @@ export const api = {
       headers: createApiHeaders(null, sessionToken),
     });
 
-    return readTrpcResult<{ members: { id: string; name: string; handle: string }[] }>(
-      response,
-      'Failed to load followers'
-    );
+    return readTrpcResult<{
+      members: { id: string; name: string; handle: string }[];
+    }>(response, 'Failed to load followers');
   },
 
   async uploadCommonsPostMedia(data: {
@@ -911,7 +1065,9 @@ export const api = {
     const fileName =
       data.fileName ||
       data.uri.split('/').pop() ||
-      (data.mimeType === 'image/gif' ? 'comment-image.gif' : 'comment-image.jpg');
+      (data.mimeType === 'image/gif'
+        ? 'comment-image.gif'
+        : 'comment-image.jpg');
 
     const tokenResponse = await fetch(`${API_BASE_URL}/api/upload/presigned`, {
       method: 'POST',
@@ -973,7 +1129,7 @@ export const api = {
       content: string;
       media?: CommonsPostMedia[];
     },
-    sessionToken?: string | null
+    sessionToken?: string | null,
   ) {
     const response = await fetch(`${API_BASE_URL}/trpc/commons.createComment`, {
       method: 'POST',
@@ -981,7 +1137,10 @@ export const api = {
       body: JSON.stringify(data),
     });
 
-    return readTrpcResult<{ comment: CommonsComment }>(response, 'Create an account to comment');
+    return readTrpcResult<{ comment: CommonsComment }>(
+      response,
+      'Create an account to comment',
+    );
   },
 
   async toggleCommonsSupport(postId: string, sessionToken?: string | null) {
@@ -991,22 +1150,48 @@ export const api = {
       body: JSON.stringify({ postId }),
     });
 
-    return readTrpcResult<{ supported: boolean }>(response, 'Create an account to support posts');
+    return readTrpcResult<{ supported: boolean }>(
+      response,
+      'Create an account to support posts',
+    );
   },
 
   async listMyGroups(sessionToken?: string | null, coopId?: string) {
     const input = encodeURIComponent(JSON.stringify(coopId ? { coopId } : {}));
-    const response = await fetch(`${API_BASE_URL}/trpc/groups.listMine?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(null, sessionToken),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/groups.listMine?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
 
-    return readTrpcResult<{ groups: PrivateGroupSummary[] }>(response, 'Failed to load groups');
+    return readTrpcResult<{ groups: PrivateGroupSummary[] }>(
+      response,
+      'Failed to load groups',
+    );
+  },
+
+  async listVisibleCircles(sessionToken: string, coopId: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/groups.listVisible?input=${input}`,
+      { method: 'GET', headers: createApiHeaders(null, sessionToken) },
+    );
+    return readTrpcResult<{ groups: PrivateGroupSummary[] }>(
+      response,
+      'Failed to load visible circles',
+    );
   },
 
   async createGroup(
-    data: { name: string; purpose?: string; privacy: 'private' | 'invite-only'; coopId?: string },
-    sessionToken?: string | null
+    data: {
+      name: string;
+      purpose?: string;
+      privacy: 'public' | 'private' | 'invite-only';
+      coopId?: string;
+    },
+    sessionToken?: string | null,
   ) {
     const response = await fetch(`${API_BASE_URL}/trpc/groups.create`, {
       method: 'POST',
@@ -1014,67 +1199,129 @@ export const api = {
       body: JSON.stringify(data),
     });
 
-    return readTrpcResult<{ group: PrivateGroupSummary & { inviteCode: string } }>(
-      response,
-      'Failed to create group'
-    );
+    return readTrpcResult<{
+      group: PrivateGroupSummary & { inviteCode: string };
+    }>(response, 'Failed to create group');
   },
 
-  async getGroupCreateRequirements(sessionToken?: string | null, coopId?: string) {
+  async getGroupCreateRequirements(
+    sessionToken?: string | null,
+    coopId?: string,
+  ) {
     const input = encodeURIComponent(JSON.stringify(coopId ? { coopId } : {}));
-    const response = await fetch(`${API_BASE_URL}/trpc/groups.getCreateRequirements?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(null, sessionToken),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/groups.getCreateRequirements?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
 
-    return readTrpcResult<GroupCreateRequirements>(response, 'Failed to check space creation requirements');
+    return readTrpcResult<GroupCreateRequirements>(
+      response,
+      'Failed to check space creation requirements',
+    );
   },
 
   async getGroupDetail(groupId: string, sessionToken?: string | null) {
     const input = encodeURIComponent(JSON.stringify({ groupId }));
-    const response = await fetch(`${API_BASE_URL}/trpc/groups.getDetail?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(null, sessionToken),
-    });
-
-    return readTrpcResult<{ group: PrivateGroupDetail; members: PrivateGroupMember[] }>(
-      response,
-      'Failed to load group'
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/groups.getDetail?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
     );
+
+    return readTrpcResult<{
+      group: PrivateGroupDetail;
+      members: PrivateGroupMember[];
+    }>(response, 'Failed to load group');
   },
 
-  async joinGroupByCode(inviteCode: string, sessionToken?: string | null, coopId?: string) {
+  async joinGroupByCode(
+    inviteCode: string,
+    sessionToken?: string | null,
+    coopId?: string,
+  ) {
     const response = await fetch(`${API_BASE_URL}/trpc/groups.joinByCode`, {
       method: 'POST',
       headers: createApiHeaders(null, sessionToken),
       body: JSON.stringify({ inviteCode, coopId }),
     });
 
-    return readTrpcResult<{ groupId: string; name: string }>(response, 'Invalid invite code');
+    return readTrpcResult<{ groupId: string; name: string }>(
+      response,
+      'Invalid invite code',
+    );
   },
 
-  async regenerateGroupInviteCode(groupId: string, sessionToken?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/groups.regenerateInviteCode`, {
+  async joinPublicCircle(groupId: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.joinPublic`, {
       method: 'POST',
       headers: createApiHeaders(null, sessionToken),
       body: JSON.stringify({ groupId }),
     });
+    return readTrpcResult<{ groupId: string; name: string; joined: boolean }>(
+      response,
+      'Could not join circle',
+    );
+  },
 
-    return readTrpcResult<{ inviteCode: string }>(response, 'Failed to regenerate invite code');
+  async updateCirclePrivacy(
+    groupId: string,
+    privacy: 'public' | 'private',
+    confirmExposeHistory: boolean,
+    sessionToken: string,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.updatePrivacy`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ groupId, privacy, confirmExposeHistory }),
+    });
+    return readTrpcResult<{ privacy: 'public' | 'private' }>(
+      response,
+      'Could not update circle privacy',
+    );
+  },
+
+  async regenerateGroupInviteCode(
+    groupId: string,
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/groups.regenerateInviteCode`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify({ groupId }),
+      },
+    );
+
+    return readTrpcResult<{ inviteCode: string }>(
+      response,
+      'Failed to regenerate invite code',
+    );
   },
 
   async transferGroupLeadership(
     groupId: string,
     newLeaderUserId: string,
-    sessionToken?: string | null
+    sessionToken?: string | null,
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/groups.transferLeadership`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({ groupId, newLeaderUserId }),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/groups.transferLeadership`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify({ groupId, newLeaderUserId }),
+      },
+    );
 
-    return readTrpcResult<{ success: boolean }>(response, 'Failed to transfer leadership');
+    return readTrpcResult<{ success: boolean }>(
+      response,
+      'Failed to transfer leadership',
+    );
   },
 
   async leaveGroup(groupId: string, sessionToken?: string | null) {
@@ -1084,50 +1331,78 @@ export const api = {
       body: JSON.stringify({ groupId }),
     });
 
-    return readTrpcResult<{ success: boolean; groupDeleted: boolean }>(response, 'Failed to leave group');
-  },
-
-  async listGroupComments(groupId: string, sessionToken?: string | null, cursor?: string | null) {
-    const input = encodeURIComponent(JSON.stringify({ groupId, ...(cursor ? { cursor } : {}) }));
-    const response = await fetch(`${API_BASE_URL}/trpc/groups.listComments?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(null, sessionToken),
-    });
-
-    return readTrpcResult<{ comments: PrivateGroupComment[]; nextCursor: string | null }>(
+    return readTrpcResult<{ success: boolean; groupDeleted: boolean }>(
       response,
-      'Failed to load comments'
+      'Failed to leave group',
     );
   },
 
-  async addGroupComment(groupId: string, content: string, sessionToken?: string | null) {
+  async listGroupComments(
+    groupId: string,
+    sessionToken?: string | null,
+    cursor?: string | null,
+  ) {
+    const input = encodeURIComponent(
+      JSON.stringify({ groupId, ...(cursor ? { cursor } : {}) }),
+    );
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/groups.listComments?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
+
+    return readTrpcResult<{
+      comments: PrivateGroupComment[];
+      nextCursor: string | null;
+    }>(response, 'Failed to load comments');
+  },
+
+  async addGroupComment(
+    groupId: string,
+    content: string,
+    sessionToken?: string | null,
+  ) {
     const response = await fetch(`${API_BASE_URL}/trpc/groups.addComment`, {
       method: 'POST',
       headers: createApiHeaders(null, sessionToken),
       body: JSON.stringify({ groupId, content }),
     });
 
-    return readTrpcResult<{ comment: PrivateGroupComment }>(response, 'Failed to add comment');
+    return readTrpcResult<{ comment: PrivateGroupComment }>(
+      response,
+      'Failed to add comment',
+    );
   },
 
   async listDirectThreads(sessionToken?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.listDirectThreads`, {
-      method: 'GET',
-      headers: createApiHeaders(null, sessionToken),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.listDirectThreads`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
 
-    return readTrpcResult<{ threads: DirectThread[] }>(response, 'Create an account to view DMs');
+    return readTrpcResult<{ threads: DirectThread[] }>(
+      response,
+      'Create an account to view DMs',
+    );
   },
 
   async listDirectMembers(sessionToken?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.listDirectMembers`, {
-      method: 'GET',
-      headers: createApiHeaders(null, sessionToken),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.listDirectMembers`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
 
     return readTrpcResult<{ members: DirectMember[] }>(
       response,
-      'Create an account to view Commons members'
+      'Create an account to view Commons members',
     );
   },
 
@@ -1137,18 +1412,20 @@ export const api = {
       content: string;
       coopId?: string;
     },
-    sessionToken?: string | null
+    sessionToken?: string | null,
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.sendDirectMessage`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({ ...data, coopId: data.coopId || 'cahootz' }),
-    });
-
-    return readTrpcResult<{ message: { id: string; body: string; createdAt: string } }>(
-      response,
-      'Create an account to send DMs'
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.sendDirectMessage`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify({ ...data, coopId: data.coopId || 'cahootz' }),
+      },
     );
+
+    return readTrpcResult<{
+      message: { id: string; body: string; createdAt: string };
+    }>(response, 'Create an account to send DMs');
   },
 
   async requestLoginCode(email: string, coopId?: string) {
@@ -1165,11 +1442,16 @@ export const api = {
 
     return readTrpcResult<{ success: boolean; message: string }>(
       response,
-      'Failed to send login code'
+      'Failed to send login code',
     );
   },
 
-  async verifyLoginCode(email: string, code: string, coopId?: string, anonymousId?: string | null) {
+  async verifyLoginCode(
+    email: string,
+    code: string,
+    coopId?: string,
+    anonymousId?: string | null,
+  ) {
     const response = await fetch(`${API_BASE_URL}/trpc/auth.verifyLoginCode`, {
       method: 'POST',
       headers: {
@@ -1183,7 +1465,10 @@ export const api = {
       }),
     });
 
-    return readTrpcResult<EmailCodeAuthResult>(response, 'Failed to verify login code');
+    return readTrpcResult<EmailCodeAuthResult>(
+      response,
+      'Failed to verify login code',
+    );
   },
 
   async saveAnonymousProfile(data: {
@@ -1196,15 +1481,21 @@ export const api = {
     businessSummary?: string;
     locationSummary?: string;
   }) {
-    const response = await fetch(`${API_BASE_URL}/trpc/anonymousProfile.upsert`, {
-      method: 'POST',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/anonymousProfile.upsert`,
+      {
+        method: 'POST',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
+        body: JSON.stringify(data),
       },
-      body: JSON.stringify(data),
-    });
+    );
 
-    return readTrpcResult<{ success: boolean }>(response, 'Could not save your answers');
+    return readTrpcResult<{ success: boolean }>(
+      response,
+      'Could not save your answers',
+    );
   },
 
   async completeProfileOnboarding(
@@ -1220,17 +1511,23 @@ export const api = {
       businessSummary?: string;
       locationSummary?: string;
     },
-    sessionToken?: string | null
+    sessionToken?: string | null,
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/user.completeProfileOnboarding`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify(data),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/user.completeProfileOnboarding`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify(data),
+      },
+    );
 
     return readTrpcResult<{
       success: boolean;
-      user: Omit<NonNullable<EmailCodeAuthResult['user']>, 'sessionToken' | 'coop'>;
+      user: Omit<
+        NonNullable<EmailCodeAuthResult['user']>,
+        'sessionToken' | 'coop'
+      >;
     }>(response, 'Could not save your profile');
   },
 
@@ -1242,16 +1539,25 @@ export const api = {
       deviceName?: string | null;
       appVersion?: string | null;
     },
-    sessionToken?: string | null
+    sessionToken?: string | null,
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/notification.registerPushDevice`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify(data),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/notification.registerPushDevice`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify(data),
+      },
+    );
 
-    console.info('[push] Device registration API response', { status: response.status, ok: response.ok });
-    return readTrpcResult<{ success: boolean }>(response, 'Could not register notifications');
+    console.info('[push] Device registration API response', {
+      status: response.status,
+      ok: response.ok,
+    });
+    return readTrpcResult<{ success: boolean }>(
+      response,
+      'Could not register notifications',
+    );
   },
 
   /**
@@ -1263,12 +1569,12 @@ export const api = {
       headers: {
         ...networkConfig.defaultHeaders,
       },
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
 
     // Always parse the response body, even for error responses
     const result = await response.json();
-    
+
     // Check if there's a tRPC error in the response
     if (result.error) {
       throw new Error(result.error.message || 'Login failed');
@@ -1292,12 +1598,12 @@ export const api = {
       headers: {
         ...networkConfig.defaultHeaders,
       },
-      body: JSON.stringify({ email })
+      body: JSON.stringify({ email }),
     });
 
     // Always parse the response body, even for error responses
     const result = await response.json();
-    
+
     // Check if there's a tRPC error in the response
     if (result.error) {
       throw new Error(result.error.message || 'Status check failed');
@@ -1316,17 +1622,20 @@ export const api = {
    * Get application status
    */
   async getApplicationStatus(userId: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/application.getApplicationStatus`, {
-      method: 'POST',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/application.getApplicationStatus`,
+      {
+        method: 'POST',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
+        body: JSON.stringify({ userId }),
       },
-      body: JSON.stringify({ userId })
-    });
+    );
 
     // Always parse the response body, even for error responses
     const result = await response.json();
-    
+
     // Check if there's a tRPC error in the response
     if (result.error) {
       throw new Error(result.error.message || 'Status check failed');
@@ -1345,13 +1654,16 @@ export const api = {
    * Get full application data (for admin/review purposes)
    */
   async getApplicationData(userId: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/application.getApplicationData`, {
-      method: 'POST',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/application.getApplicationData`,
+      {
+        method: 'POST',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
+        body: JSON.stringify({ userId }),
       },
-      body: JSON.stringify({ userId })
-    });
+    );
 
     // Always parse the response body, even for error responses
     const result = await response.json();
@@ -1376,10 +1688,13 @@ export const api = {
    */
   async refreshUser(userId: string, walletAddress?: string | null) {
     const input = encodeURIComponent(JSON.stringify({ userId }));
-    const response = await fetch(`${API_BASE_URL}/trpc/user.getMe?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/user.getMe?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -1402,13 +1717,16 @@ export const api = {
   async getWalletInfo(
     userId: string,
     walletAddress?: string | null,
-    sessionToken?: string | null
+    sessionToken?: string | null,
   ): Promise<WalletInfo> {
     const input = encodeURIComponent(JSON.stringify({ userId }));
-    const response = await fetch(`${API_BASE_URL}/trpc/user.getWalletInfo?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress, sessionToken),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/user.getWalletInfo?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress, sessionToken),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -1421,11 +1739,15 @@ export const api = {
     return result.result?.data;
   },
 
-  async exportWallet(userId: string, password: string, walletAddress?: string | null) {
+  async exportWallet(
+    userId: string,
+    password: string,
+    walletAddress?: string | null,
+  ) {
     const response = await fetch(`${API_BASE_URL}/trpc/user.exportWallet`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ userId, password })
+      body: JSON.stringify({ userId, password }),
     });
 
     const result = await response.json();
@@ -1436,14 +1758,18 @@ export const api = {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    return result.result?.data as { address: string; privateKey: string; warning: string };
+    return result.result?.data as {
+      address: string;
+      privateKey: string;
+      warning: string;
+    };
   },
 
   async deleteAccount(userId: string, walletAddress?: string | null) {
     const response = await fetch(`${API_BASE_URL}/trpc/user.deleteAccount`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ userId })
+      body: JSON.stringify({ userId }),
     });
 
     const result = await response.json();
@@ -1468,23 +1794,32 @@ export const api = {
     coopId?: string;
     purpose: string;
   }) {
-    const response = await fetch(`${API_BASE_URL}/trpc/walletAuth.requestChallenge`, {
-      method: 'POST',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/walletAuth.requestChallenge`,
+      {
+        method: 'POST',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
+        body: JSON.stringify(data),
       },
-      body: JSON.stringify(data)
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to request wallet challenge');
+      throw new Error(
+        result.error.message || 'Failed to request wallet challenge',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    return result.result?.data as { challengeId: string; message: string; expiresAt: string };
+    return result.result?.data as {
+      challengeId: string;
+      message: string;
+      expiresAt: string;
+    };
   },
 
   async verifyWalletSignature(data: {
@@ -1492,17 +1827,22 @@ export const api = {
     walletAddress: string;
     signature: string;
   }) {
-    const response = await fetch(`${API_BASE_URL}/trpc/walletAuth.verifySignature`, {
-      method: 'POST',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/walletAuth.verifySignature`,
+      {
+        method: 'POST',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
+        body: JSON.stringify(data),
       },
-      body: JSON.stringify(data)
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to verify wallet signature');
+      throw new Error(
+        result.error.message || 'Failed to verify wallet signature',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -1522,12 +1862,12 @@ export const api = {
   async createWallet(
     userId: string,
     sessionToken?: string | null,
-    walletAddress?: string | null
+    walletAddress?: string | null,
   ) {
     const response = await fetch(`${API_BASE_URL}/trpc/user.createWallet`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress, sessionToken),
-      body: JSON.stringify({ userId })
+      body: JSON.stringify({ userId }),
     });
 
     const result = await response.json();
@@ -1550,7 +1890,7 @@ export const api = {
       headers: {
         ...networkConfig.defaultHeaders,
       },
-      body: JSON.stringify({ walletAddress })
+      body: JSON.stringify({ walletAddress }),
     });
 
     const result = await response.json();
@@ -1568,13 +1908,16 @@ export const api = {
    * Get transfer history for a wallet
    */
   async getTransferHistory(walletAddress: string, limit = 50) {
-    const response = await fetch(`${API_BASE_URL}/trpc/ucTransfer.getTransferHistory`, {
-      method: 'POST',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/ucTransfer.getTransferHistory`,
+      {
+        method: 'POST',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
+        body: JSON.stringify({ walletAddress, limit }),
       },
-      body: JSON.stringify({ walletAddress, limit })
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -1591,13 +1934,16 @@ export const api = {
    * Validate a recipient address for transfers
    */
   async validateRecipient(recipientAddress: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/ucTransfer.validateRecipient`, {
-      method: 'POST',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/ucTransfer.validateRecipient`,
+      {
+        method: 'POST',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
+        body: JSON.stringify({ recipientAddress }),
       },
-      body: JSON.stringify({ recipientAddress })
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -1614,13 +1960,16 @@ export const api = {
    * Find user by username for transfers
    */
   async getUserByUsername(username: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/ucTransfer.getUserByUsername`, {
-      method: 'POST',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/ucTransfer.getUserByUsername`,
+      {
+        method: 'POST',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
+        body: JSON.stringify({ username }),
       },
-      body: JSON.stringify({ username })
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -1636,14 +1985,21 @@ export const api = {
   /**
    * Execute a UC transfer
    */
-  async executeTransfer(userId: string, recipientAddress: string, amount: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/ucTransfer.executeTransfer`, {
-      method: 'POST',
-      headers: {
-        ...networkConfig.defaultHeaders,
+  async executeTransfer(
+    userId: string,
+    recipientAddress: string,
+    amount: string,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/ucTransfer.executeTransfer`,
+      {
+        method: 'POST',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
+        body: JSON.stringify({ userId, recipientAddress, amount }),
       },
-      body: JSON.stringify({ userId, recipientAddress, amount })
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -1661,11 +2017,14 @@ export const api = {
    * @param walletAddress - User's wallet address for authentication
    */
   async getAvailableProcessors(walletAddress?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/onramp.getAvailableProcessors`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({})
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/onramp.getAvailableProcessors`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify({}),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -1683,19 +2042,24 @@ export const api = {
    * @param walletAddress - User's wallet address for authentication
    */
   async createPaymentIntent(
-    amountUSD: number, 
+    amountUSD: number,
     walletAddress: string | null,
-    processor?: 'stripe' | 'paypal' | 'square'
+    processor?: 'stripe' | 'paypal' | 'square',
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/onramp.createPaymentIntent`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ amountUSD, processor })
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/onramp.createPaymentIntent`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify({ amountUSD, processor }),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to create payment intent');
+      throw new Error(
+        result.error.message || 'Failed to create payment intent',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -1709,11 +2073,14 @@ export const api = {
    * @param walletAddress - User's wallet address for authentication
    */
   async getOnrampHistory(walletAddress: string | null, limit = 50, offset = 0) {
-    const response = await fetch(`${API_BASE_URL}/trpc/onramp.getOnrampHistory`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ limit, offset })
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/onramp.getOnrampHistory`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify({ limit, offset }),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -1734,13 +2101,16 @@ export const api = {
   async fundWithSavedCard(
     amountUSD: number,
     walletAddress: string,
-    paymentMethodId?: string
+    paymentMethodId?: string,
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/onramp.fundWithSavedCard`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ amountUSD, paymentMethodId })
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/onramp.fundWithSavedCard`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify({ amountUSD, paymentMethodId }),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -1758,15 +2128,20 @@ export const api = {
    * @param walletAddress - User's wallet address for authentication
    */
   async getOnrampStatus(transactionId: string, walletAddress?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/onramp.getOnrampStatus`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ transactionId })
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/onramp.getOnrampStatus`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify({ transactionId }),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get transaction status');
+      throw new Error(
+        result.error.message || 'Failed to get transaction status',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -1784,10 +2159,13 @@ export const api = {
    */
   async getUSDBalance(userId: string, walletAddress?: string | null) {
     const input = encodeURIComponent(JSON.stringify({ userId }));
-    const response = await fetch(`${API_BASE_URL}/trpc/p2p.getBalance?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/p2p.getBalance?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -1805,12 +2183,15 @@ export const api = {
    */
   async getTokenBalances(walletAddress: string) {
     const input = encodeURIComponent(JSON.stringify({ walletAddress }));
-    const response = await fetch(`${API_BASE_URL}/trpc/user.getBalances?input=${input}`, {
-      method: 'GET',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/user.getBalances?input=${input}`,
+      {
+        method: 'GET',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
       },
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -1839,7 +2220,7 @@ export const api = {
       providerRole?: string;
       storeName?: string;
       personalNote?: string;
-    }
+    },
   ) {
     const response = await fetch(`${API_BASE_URL}/trpc/p2p.sendPayment`, {
       method: 'POST',
@@ -1851,8 +2232,8 @@ export const api = {
         amount,
         note,
         transferType,
-        transferMetadata
-      })
+        transferMetadata,
+      }),
     });
 
     const result = await response.json();
@@ -1872,13 +2253,16 @@ export const api = {
   async lookupRecipient(
     query: string,
     type: 'username' | 'phone',
-    walletAddress?: string | null
+    walletAddress?: string | null,
   ) {
     const input = encodeURIComponent(JSON.stringify({ query, type }));
-    const response = await fetch(`${API_BASE_URL}/trpc/p2p.lookupRecipient?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/p2p.lookupRecipient?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -1894,12 +2278,20 @@ export const api = {
   /**
    * Get P2P payment history
    */
-  async getP2PHistory(userId: string, limit = 50, offset = 0, walletAddress?: string | null) {
+  async getP2PHistory(
+    userId: string,
+    limit = 50,
+    offset = 0,
+    walletAddress?: string | null,
+  ) {
     const input = encodeURIComponent(JSON.stringify({ userId, limit, offset }));
-    const response = await fetch(`${API_BASE_URL}/trpc/p2p.getHistory?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/p2p.getHistory?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -1917,10 +2309,13 @@ export const api = {
    */
   async getPaymentMethods(userId: string, walletAddress?: string | null) {
     const input = encodeURIComponent(JSON.stringify({ userId }));
-    const response = await fetch(`${API_BASE_URL}/trpc/p2p.getPaymentMethods?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/p2p.getPaymentMethods?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -1940,7 +2335,7 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/trpc/p2p.createSetupIntent`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ userId })
+      body: JSON.stringify({ userId }),
     });
 
     const result = await response.json();
@@ -1957,11 +2352,15 @@ export const api = {
   /**
    * Save payment method after SetupIntent succeeds
    */
-  async savePaymentMethod(userId: string, paymentMethodId: string, walletAddress?: string | null) {
+  async savePaymentMethod(
+    userId: string,
+    paymentMethodId: string,
+    walletAddress?: string | null,
+  ) {
     const response = await fetch(`${API_BASE_URL}/trpc/p2p.savePaymentMethod`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ userId, paymentMethodId })
+      body: JSON.stringify({ userId, paymentMethodId }),
     });
 
     const result = await response.json();
@@ -1978,16 +2377,25 @@ export const api = {
   /**
    * Remove a payment method
    */
-  async removePaymentMethod(userId: string, paymentMethodId: string, walletAddress?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/p2p.removePaymentMethod`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ userId, paymentMethodId })
-    });
+  async removePaymentMethod(
+    userId: string,
+    paymentMethodId: string,
+    walletAddress?: string | null,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/p2p.removePaymentMethod`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify({ userId, paymentMethodId }),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to remove payment method');
+      throw new Error(
+        result.error.message || 'Failed to remove payment method',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -1999,16 +2407,25 @@ export const api = {
   /**
    * Set default payment method
    */
-  async setDefaultPaymentMethod(userId: string, paymentMethodId: string, walletAddress?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/p2p.setDefaultPaymentMethod`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ userId, paymentMethodId })
-    });
+  async setDefaultPaymentMethod(
+    userId: string,
+    paymentMethodId: string,
+    walletAddress?: string | null,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/p2p.setDefaultPaymentMethod`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify({ userId, paymentMethodId }),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to set default payment method');
+      throw new Error(
+        result.error.message || 'Failed to set default payment method',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -2020,12 +2437,22 @@ export const api = {
   /**
    * Get notifications
    */
-  async getP2PNotifications(userId: string, unreadOnly = false, limit = 20, sessionToken?: string | null) {
-    const input = encodeURIComponent(JSON.stringify({ userId, unreadOnly, limit }));
-    const response = await fetch(`${API_BASE_URL}/trpc/p2p.getNotifications?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(null, sessionToken),
-    });
+  async getP2PNotifications(
+    userId: string,
+    unreadOnly = false,
+    limit = 20,
+    sessionToken?: string | null,
+  ) {
+    const input = encodeURIComponent(
+      JSON.stringify({ userId, unreadOnly, limit }),
+    );
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/p2p.getNotifications?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2041,16 +2468,24 @@ export const api = {
   /**
    * Mark notification as read
    */
-  async markNotificationRead(notificationId: string, sessionToken?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/p2p.markNotificationRead`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({ notificationId })
-    });
+  async markNotificationRead(
+    notificationId: string,
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/p2p.markNotificationRead`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify({ notificationId }),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to mark notification as read');
+      throw new Error(
+        result.error.message || 'Failed to mark notification as read',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -2063,15 +2498,20 @@ export const api = {
    * Mark all notifications as read
    */
   async markAllNotificationsRead(userId: string, sessionToken?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/p2p.markAllNotificationsRead`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({ userId })
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/p2p.markAllNotificationsRead`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify({ userId }),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to mark notifications as read');
+      throw new Error(
+        result.error.message || 'Failed to mark notifications as read',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -2089,10 +2529,13 @@ export const api = {
    */
   async getBankAccounts(userId: string, walletAddress?: string | null) {
     const input = encodeURIComponent(JSON.stringify({ userId }));
-    const response = await fetch(`${API_BASE_URL}/trpc/p2p.getBankAccounts?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/p2p.getBankAccounts?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2114,12 +2557,18 @@ export const api = {
     routingNumber: string,
     accountNumber: string,
     bankName?: string,
-    walletAddress?: string | null
+    walletAddress?: string | null,
   ) {
     const response = await fetch(`${API_BASE_URL}/trpc/p2p.addBankAccount`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ userId, accountHolderName, routingNumber, accountNumber, bankName })
+      body: JSON.stringify({
+        userId,
+        accountHolderName,
+        routingNumber,
+        accountNumber,
+        bankName,
+      }),
     });
 
     const result = await response.json();
@@ -2136,11 +2585,15 @@ export const api = {
   /**
    * Remove a bank account
    */
-  async removeBankAccount(userId: string, bankAccountId: string, walletAddress?: string | null) {
+  async removeBankAccount(
+    userId: string,
+    bankAccountId: string,
+    walletAddress?: string | null,
+  ) {
     const response = await fetch(`${API_BASE_URL}/trpc/p2p.removeBankAccount`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ userId, bankAccountId })
+      body: JSON.stringify({ userId, bankAccountId }),
     });
 
     const result = await response.json();
@@ -2157,16 +2610,25 @@ export const api = {
   /**
    * Set default bank account
    */
-  async setDefaultBankAccount(userId: string, bankAccountId: string, walletAddress?: string | null) {
-    const response = await fetch(`${API_BASE_URL}/trpc/p2p.setDefaultBankAccount`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ userId, bankAccountId })
-    });
+  async setDefaultBankAccount(
+    userId: string,
+    bankAccountId: string,
+    walletAddress?: string | null,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/p2p.setDefaultBankAccount`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify({ userId, bankAccountId }),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to set default bank account');
+      throw new Error(
+        result.error.message || 'Failed to set default bank account',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -2182,11 +2644,16 @@ export const api = {
   /**
    * Withdraw funds to bank account
    */
-  async withdraw(userId: string, bankAccountId: string, amountUSD: number, walletAddress?: string | null) {
+  async withdraw(
+    userId: string,
+    bankAccountId: string,
+    amountUSD: number,
+    walletAddress?: string | null,
+  ) {
     const response = await fetch(`${API_BASE_URL}/trpc/p2p.withdraw`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ userId, bankAccountId, amountUSD })
+      body: JSON.stringify({ userId, bankAccountId, amountUSD }),
     });
 
     const result = await response.json();
@@ -2203,12 +2670,20 @@ export const api = {
   /**
    * Get withdrawal history
    */
-  async getWithdrawals(userId: string, limit = 20, offset = 0, walletAddress?: string | null) {
+  async getWithdrawals(
+    userId: string,
+    limit = 20,
+    offset = 0,
+    walletAddress?: string | null,
+  ) {
     const input = encodeURIComponent(JSON.stringify({ userId, limit, offset }));
-    const response = await fetch(`${API_BASE_URL}/trpc/p2p.getWithdrawals?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/p2p.getWithdrawals?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2236,13 +2711,18 @@ export const api = {
     limit?: number;
     cursor?: string;
   }) {
-    const input = encodeURIComponent(JSON.stringify({ coopId: resolveCoopId(), ...options }));
-    const response = await fetch(`${API_BASE_URL}/trpc/store.getStores?input=${input}`, {
-      method: 'GET',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const input = encodeURIComponent(
+      JSON.stringify({ coopId: resolveCoopId(), ...options }),
+    );
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/store.getStores?input=${input}`,
+      {
+        method: 'GET',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
       },
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2260,12 +2740,15 @@ export const api = {
    */
   async getStore(storeId: string) {
     const input = encodeURIComponent(JSON.stringify({ storeId }));
-    const response = await fetch(`${API_BASE_URL}/trpc/store.getStore?input=${input}`, {
-      method: 'GET',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/store.getStore?input=${input}`,
+      {
+        method: 'GET',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
       },
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2296,12 +2779,15 @@ export const api = {
       ? options
       : { coopId: options.coopId ?? resolveCoopId(), ...options };
     const input = encodeURIComponent(JSON.stringify(payload));
-    const response = await fetch(`${API_BASE_URL}/trpc/store.getProducts?input=${input}`, {
-      method: 'GET',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/store.getProducts?input=${input}`,
+      {
+        method: 'GET',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
       },
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2319,12 +2805,15 @@ export const api = {
    */
   async getProduct(productId: string) {
     const input = encodeURIComponent(JSON.stringify({ productId }));
-    const response = await fetch(`${API_BASE_URL}/trpc/store.getProduct?input=${input}`, {
-      method: 'GET',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/store.getProduct?input=${input}`,
+      {
+        method: 'GET',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
       },
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2372,17 +2861,22 @@ export const api = {
 
   async getCommerceTransaction(
     data: { userId: string; transactionId: string },
-    walletAddress: string
+    walletAddress: string,
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commerce.getTransaction`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify(data),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commerce.getTransaction`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify(data),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get commerce transaction');
+      throw new Error(
+        result.error.message || 'Failed to get commerce transaction',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -2400,16 +2894,21 @@ export const api = {
       limit?: number;
       offset?: number;
     },
-    walletAddress: string
+    walletAddress: string,
   ) {
     const input = encodeURIComponent(JSON.stringify(data));
-    const response = await fetch(`${API_BASE_URL}/trpc/commerce.listTransactions?input=${input}`, {
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commerce.listTransactions?input=${input}`,
+      {
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to list commerce transactions');
+      throw new Error(
+        result.error.message || 'Failed to list commerce transactions',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -2421,35 +2920,40 @@ export const api = {
   /**
    * Apply to become a store (authenticated)
    */
-  async applyForStore(data: {
-    storeName: string;
-    storeDescription: string;
-    category: string;
-    imageUrl?: string;
-    bannerUrl?: string;
-    businessName?: string;
-    businessAddress?: string;
-    businessCity?: string;
-    businessState?: string;
-    businessZip?: string;
-    ownerName: string;
-    ownerEmail: string;
-    ownerPhone: string;
-    communityBenefitStatement?: string;
-    estimatedMonthlyRevenue?: string;
-    websiteUrl?: string;
-    socialMediaUrls?: string[];
-    businessLicenseCID?: string;
-  }, walletAddress: string) {
+  async applyForStore(
+    data: {
+      storeName: string;
+      storeDescription: string;
+      category: string;
+      imageUrl?: string;
+      bannerUrl?: string;
+      businessName?: string;
+      businessAddress?: string;
+      businessCity?: string;
+      businessState?: string;
+      businessZip?: string;
+      ownerName: string;
+      ownerEmail: string;
+      ownerPhone: string;
+      communityBenefitStatement?: string;
+      estimatedMonthlyRevenue?: string;
+      websiteUrl?: string;
+      socialMediaUrls?: string[];
+      businessLicenseCID?: string;
+    },
+    walletAddress: string,
+  ) {
     const response = await fetch(`${API_BASE_URL}/trpc/store.applyForStore`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to submit store application');
+      throw new Error(
+        result.error.message || 'Failed to submit store application',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -2458,25 +2962,33 @@ export const api = {
     return result.result?.data;
   },
 
-  async createBusinessForStore(data: {
-    userId: string;
-    storeId: string;
-    email: string;
-    businessType?: 'individual' | 'company';
-    country?: string;
-  }, walletAddress: string) {
+  async createBusinessForStore(
+    data: {
+      userId: string;
+      storeId: string;
+      email: string;
+      businessType?: 'individual' | 'company';
+      country?: string;
+    },
+    walletAddress: string,
+  ) {
     console.log('🔗 [Stripe Connect] Creating business for store', data);
     console.log('🔗 [Stripe Connect] Wallet address', walletAddress);
     console.log('🔗 [Stripe Connect] API base URL', API_BASE_URL);
-    const response = await fetch(`${API_BASE_URL}/trpc/stripeConnect.createBusinessForStore`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify(data),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/stripeConnect.createBusinessForStore`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify(data),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to start Stripe onboarding');
+      throw new Error(
+        result.error.message || 'Failed to start Stripe onboarding',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -2485,19 +2997,27 @@ export const api = {
     return result.result?.data;
   },
 
-  async syncStripeBusinessStatus(data: {
-    userId: string;
-    businessId: string;
-  }, walletAddress: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/stripeConnect.syncStatus`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify(data),
-    });
+  async syncStripeBusinessStatus(
+    data: {
+      userId: string;
+      businessId: string;
+    },
+    walletAddress: string,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/stripeConnect.syncStatus`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify(data),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to sync Stripe onboarding status');
+      throw new Error(
+        result.error.message || 'Failed to sync Stripe onboarding status',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -2506,21 +3026,30 @@ export const api = {
     return result.result?.data;
   },
 
-  async submitScVerificationApplication(data: {
-    storeId: string;
-    whyScEligible: string;
-    expectedVolume?: string;
-  }, walletAddress: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/scVerification.submitApplication`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify(data),
-    });
+  async submitScVerificationApplication(
+    data: {
+      storeId: string;
+      whyScEligible: string;
+      expectedVolume?: string;
+    },
+    walletAddress: string,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/scVerification.submitApplication`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify(data),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
       // tRPC v11 wraps error details in a `json` envelope when no transformer is used
-      const message = result.error?.json?.message || result.error?.message || 'Failed to submit SC rewards application';
+      const message =
+        result.error?.json?.message ||
+        result.error?.message ||
+        'Failed to submit SC rewards application';
       throw new Error(message);
     }
     if (!response.ok) {
@@ -2532,14 +3061,20 @@ export const api = {
 
   async getMyScVerificationStatus(storeId: string, walletAddress: string) {
     const input = encodeURIComponent(JSON.stringify({ storeId }));
-    const response = await fetch(`${API_BASE_URL}/trpc/scVerification.getMyApplicationStatus?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/scVerification.getMyApplicationStatus?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      const message = result.error?.json?.message || result.error?.message || 'Failed to get SC rewards status';
+      const message =
+        result.error?.json?.message ||
+        result.error?.message ||
+        'Failed to get SC rewards status';
       throw new Error(message);
     }
     if (!response.ok) {
@@ -2552,12 +3087,21 @@ export const api = {
   /**
    * Get my products (authenticated - store owners)
    */
-  async getMyProducts(walletAddress: string, includeInactive = false, storeId?: string) {
-    const input = encodeURIComponent(JSON.stringify({ includeInactive, storeId }));
-    const response = await fetch(`${API_BASE_URL}/trpc/store.getMyProducts?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+  async getMyProducts(
+    walletAddress: string,
+    includeInactive = false,
+    storeId?: string,
+  ) {
+    const input = encodeURIComponent(
+      JSON.stringify({ includeInactive, storeId }),
+    );
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/store.getMyProducts?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2573,24 +3117,27 @@ export const api = {
   /**
    * Add a product (authenticated - store owners)
    */
-  async addProduct(data: {
-    storeId: string;
-    name: string;
-    description?: string;
-    category: string;
-    imageUrl?: string;
-    images?: string[];
-    priceUSD: number;
-    ucDiscountPrice?: number;
-    sku?: string;
-    quantity?: number;
-    trackInventory?: boolean;
-    allowBackorder?: boolean;
-  }, walletAddress: string) {
+  async addProduct(
+    data: {
+      storeId: string;
+      name: string;
+      description?: string;
+      category: string;
+      imageUrl?: string;
+      images?: string[];
+      priceUSD: number;
+      ucDiscountPrice?: number;
+      sku?: string;
+      quantity?: number;
+      trackInventory?: boolean;
+      allowBackorder?: boolean;
+    },
+    walletAddress: string,
+  ) {
     const response = await fetch(`${API_BASE_URL}/trpc/store.addProduct`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
 
     const result = await response.json();
@@ -2607,24 +3154,28 @@ export const api = {
   /**
    * Update a product (authenticated - store owners)
    */
-  async updateProduct(productId: string, data: {
-    name?: string;
-    description?: string;
-    category?: string;
-    imageUrl?: string | null;
-    images?: string[];
-    priceUSD?: number;
-    ucDiscountPrice?: number | null;
-    sku?: string | null;
-    quantity?: number;
-    trackInventory?: boolean;
-    allowBackorder?: boolean;
-    isActive?: boolean;
-  }, walletAddress: string) {
+  async updateProduct(
+    productId: string,
+    data: {
+      name?: string;
+      description?: string;
+      category?: string;
+      imageUrl?: string | null;
+      images?: string[];
+      priceUSD?: number;
+      ucDiscountPrice?: number | null;
+      sku?: string | null;
+      quantity?: number;
+      trackInventory?: boolean;
+      allowBackorder?: boolean;
+      isActive?: boolean;
+    },
+    walletAddress: string,
+  ) {
     const response = await fetch(`${API_BASE_URL}/trpc/store.updateProduct`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ productId, ...data })
+      body: JSON.stringify({ productId, ...data }),
     });
 
     const result = await response.json();
@@ -2645,7 +3196,7 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/trpc/store.deleteProduct`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ productId })
+      body: JSON.stringify({ productId }),
     });
 
     const result = await response.json();
@@ -2664,16 +3215,21 @@ export const api = {
    */
   async getFeaturedProducts(limit?: number) {
     const input = encodeURIComponent(JSON.stringify({ limit: limit || 8 }));
-    const response = await fetch(`${API_BASE_URL}/trpc/store.getFeaturedProducts?input=${input}`, {
-      method: 'GET',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/store.getFeaturedProducts?input=${input}`,
+      {
+        method: 'GET',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
       },
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get featured products');
+      throw new Error(
+        result.error.message || 'Failed to get featured products',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -2690,10 +3246,13 @@ export const api = {
    * Get store's quick pay info (for store owners)
    */
   async getQuickPayInfo(walletAddress: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/storePay.getQuickPayInfo`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/storePay.getQuickPayInfo`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2709,12 +3268,18 @@ export const api = {
   /**
    * Generate or set store's short code
    */
-  async generateShortCode(customCode: string | undefined, walletAddress: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/storePay.generateShortCode`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ customCode })
-    });
+  async generateShortCode(
+    customCode: string | undefined,
+    walletAddress: string,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/storePay.generateShortCode`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify({ customCode }),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2732,10 +3297,13 @@ export const api = {
    */
   async validateShortCode(code: string, walletAddress: string) {
     const input = encodeURIComponent(JSON.stringify({ code }));
-    const response = await fetch(`${API_BASE_URL}/trpc/storePay.validateShortCode?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/storePay.validateShortCode?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2758,17 +3326,22 @@ export const api = {
       referenceId?: string;
       expiresInMinutes?: number;
     },
-    walletAddress: string
+    walletAddress: string,
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/storePay.createPaymentRequest`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify(data)
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/storePay.createPaymentRequest`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify(data),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to create payment request');
+      throw new Error(
+        result.error.message || 'Failed to create payment request',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -2782,12 +3355,15 @@ export const api = {
    */
   async getPaymentRequest(token: string) {
     const input = encodeURIComponent(JSON.stringify({ token }));
-    const response = await fetch(`${API_BASE_URL}/trpc/storePay.getPaymentRequest?input=${input}`, {
-      method: 'GET',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/storePay.getPaymentRequest?input=${input}`,
+      {
+        method: 'GET',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
       },
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2807,7 +3383,7 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/trpc/storePay.payRequest`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ token, amount })
+      body: JSON.stringify({ token, amount }),
     });
 
     const result = await response.json();
@@ -2826,12 +3402,15 @@ export const api = {
    */
   async getStoreByCode(code: string) {
     const input = encodeURIComponent(JSON.stringify({ code }));
-    const response = await fetch(`${API_BASE_URL}/trpc/storePay.getStoreByCode?input=${input}`, {
-      method: 'GET',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/storePay.getStoreByCode?input=${input}`,
+      {
+        method: 'GET',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
       },
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2851,13 +3430,16 @@ export const api = {
     storeCode: string,
     amount: number,
     note: string | undefined,
-    walletAddress: string
+    walletAddress: string,
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/storePay.payByStoreCode`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ storeCode, amount, note })
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/storePay.payByStoreCode`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify({ storeCode, amount, note }),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2877,13 +3459,16 @@ export const api = {
     status: string | undefined,
     limit: number | undefined,
     cursor: string | undefined,
-    walletAddress: string
+    walletAddress: string,
   ) {
     const input = encodeURIComponent(JSON.stringify({ status, limit, cursor }));
-    const response = await fetch(`${API_BASE_URL}/trpc/storePay.getMyPaymentRequests?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/storePay.getMyPaymentRequests?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2900,15 +3485,20 @@ export const api = {
    * Cancel a payment request
    */
   async cancelPaymentRequest(requestId: string, walletAddress: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/storePay.cancelPaymentRequest`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ requestId })
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/storePay.cancelPaymentRequest`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify({ requestId }),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to cancel payment request');
+      throw new Error(
+        result.error.message || 'Failed to cancel payment request',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -2926,12 +3516,15 @@ export const api = {
    */
   async getStoreCategories(includeAdminOnly = false) {
     const input = encodeURIComponent(JSON.stringify({ includeAdminOnly }));
-    const response = await fetch(`${API_BASE_URL}/trpc/categories.getStoreCategories?input=${input}`, {
-      method: 'GET',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/categories.getStoreCategories?input=${input}`,
+      {
+        method: 'GET',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
       },
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -2958,12 +3551,12 @@ export const api = {
       shippingAddress?: string;
       note?: string;
     },
-    walletAddress: string
+    walletAddress: string,
   ) {
     const response = await fetch(`${API_BASE_URL}/trpc/store.createOrder`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
 
     const result = await response.json();
@@ -2982,10 +3575,13 @@ export const api = {
    */
   async getMyOrders(walletAddress: string, limit = 20, cursor?: string) {
     const input = encodeURIComponent(JSON.stringify({ limit, cursor }));
-    const response = await fetch(`${API_BASE_URL}/trpc/store.getMyOrders?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/store.getMyOrders?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -3003,10 +3599,13 @@ export const api = {
    */
   async getOrder(orderId: string, walletAddress: string) {
     const input = encodeURIComponent(JSON.stringify({ orderId }));
-    const response = await fetch(`${API_BASE_URL}/trpc/store.getOrder?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/store.getOrder?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -3024,13 +3623,21 @@ export const api = {
    */
   async getStoreOrders(
     walletAddress: string,
-    options?: { storeId?: string; status?: string; limit?: number; cursor?: string }
+    options?: {
+      storeId?: string;
+      status?: string;
+      limit?: number;
+      cursor?: string;
+    },
   ) {
     const input = encodeURIComponent(JSON.stringify(options || {}));
-    const response = await fetch(`${API_BASE_URL}/trpc/store.getStoreOrders?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/store.getStoreOrders?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -3050,13 +3657,16 @@ export const api = {
     orderId: string,
     status: 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED',
     trackingNumber: string | undefined,
-    walletAddress: string
+    walletAddress: string,
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/store.updateOrderStatus`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ orderId, status, trackingNumber })
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/store.updateOrderStatus`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify({ orderId, status, trackingNumber }),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -3074,16 +3684,21 @@ export const api = {
    */
   async getProductCategories(includeAdminOnly = false) {
     const input = encodeURIComponent(JSON.stringify({ includeAdminOnly }));
-    const response = await fetch(`${API_BASE_URL}/trpc/categories.getProductCategories?input=${input}`, {
-      method: 'GET',
-      headers: {
-        ...networkConfig.defaultHeaders,
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/categories.getProductCategories?input=${input}`,
+      {
+        method: 'GET',
+        headers: {
+          ...networkConfig.defaultHeaders,
+        },
       },
-    });
+    );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get product categories');
+      throw new Error(
+        result.error.message || 'Failed to get product categories',
+      );
     }
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -3099,17 +3714,26 @@ export const api = {
   /**
    * Get user's SC reward history
    */
-  async getUserSCRewards(userId: string, limit = 10, walletAddress?: string | null) {
-    const input = encodeURIComponent(JSON.stringify({ 
-      userId, 
-      status: 'COMPLETED', // Only show completed rewards
-      limit,
-      offset: 0 
-    }));
-    const response = await fetch(`${API_BASE_URL}/trpc/scRewards.getSCRewards?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+  async getUserSCRewards(
+    userId: string,
+    limit = 10,
+    walletAddress?: string | null,
+  ) {
+    const input = encodeURIComponent(
+      JSON.stringify({
+        userId,
+        status: 'COMPLETED', // Only show completed rewards
+        limit,
+        offset: 0,
+      }),
+    );
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/scRewards.getSCRewards?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -3129,36 +3753,78 @@ export const api = {
   /**
    * Get user's notifications
    */
-  async getNotifications(sessionToken: string, options?: { limit?: number; cursor?: NotificationCursor; unreadOnly?: boolean; category?: NotificationCategory }) {
+  async getNotifications(
+    sessionToken: string,
+    options?: {
+      limit?: number;
+      cursor?: NotificationCursor;
+      unreadOnly?: boolean;
+      category?: NotificationCategory;
+    },
+  ) {
     const input = encodeURIComponent(JSON.stringify(options || {}));
-    const response = await fetch(`${API_BASE_URL}/trpc/notification.getNotifications?input=${input}`, {
-      headers: createApiHeaders(null, sessionToken),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/notification.getNotifications?input=${input}`,
+      {
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
     return readTrpcResult<NotificationPage>(response, 'Could not load alerts');
   },
 
   async getUnreadNotificationCount(sessionToken: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/notification.getUnreadCount`, { headers: createApiHeaders(null, sessionToken) });
-    return readTrpcResult<{ count: number }>(response, 'Could not load unread count');
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/notification.getUnreadCount`,
+      { headers: createApiHeaders(null, sessionToken) },
+    );
+    return readTrpcResult<{ count: number }>(
+      response,
+      'Could not load unread count',
+    );
   },
 
   async markNotificationAsRead(notificationId: string, sessionToken: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/notification.markAsRead`, {
-      method: 'POST', headers: createApiHeaders(null, sessionToken), body: JSON.stringify({ notificationId }),
-    });
-    return readTrpcResult<{ success: boolean }>(response, 'Could not mark alert as read');
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/notification.markAsRead`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify({ notificationId }),
+      },
+    );
+    return readTrpcResult<{ success: boolean }>(
+      response,
+      'Could not mark alert as read',
+    );
   },
 
   async getNotificationPreferences(sessionToken: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/notification.getPreferences`, { headers: createApiHeaders(null, sessionToken) });
-    return readTrpcResult<NotificationPreferences>(response, 'Could not load notification settings');
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/notification.getPreferences`,
+      { headers: createApiHeaders(null, sessionToken) },
+    );
+    return readTrpcResult<NotificationPreferences>(
+      response,
+      'Could not load notification settings',
+    );
   },
 
-  async updateNotificationPreferences(sessionToken: string, preferences: Partial<NotificationPreferences>) {
-    const response = await fetch(`${API_BASE_URL}/trpc/notification.updatePreferences`, {
-      method: 'POST', headers: createApiHeaders(null, sessionToken), body: JSON.stringify(preferences),
-    });
-    return readTrpcResult<NotificationPreferences>(response, 'Could not save notification settings');
+  async updateNotificationPreferences(
+    sessionToken: string,
+    preferences: Partial<NotificationPreferences>,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/notification.updatePreferences`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify(preferences),
+      },
+    );
+    return readTrpcResult<NotificationPreferences>(
+      response,
+      'Could not save notification settings',
+    );
   },
 
   // ── Coop Config ────────────────────────────────────────────────────────────
@@ -3167,10 +3833,13 @@ export const api = {
    * Get list of available coops for onboarding
    */
   async listAvailableCoops() {
-    const response = await fetch(`${API_BASE_URL}/trpc/coopConfig.listAvailableCoops?input={}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/coopConfig.listAvailableCoops?input={}`,
+      {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
     const result = await response.json();
     if (result.error) {
       throw new Error(result.error.message || 'Failed to get available coops');
@@ -3196,10 +3865,13 @@ export const api = {
    */
   async getCoopConfig(coopId: string) {
     const input = encodeURIComponent(JSON.stringify({ coopId }));
-    const response = await fetch(`${API_BASE_URL}/trpc/coopConfig.getActive?input=${input}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/coopConfig.getActive?input=${input}`,
+      {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
     const result = await response.json();
     if (result.error) return null;
     return result.result?.data as CoopConfigDetail | null;
@@ -3211,7 +3883,12 @@ export const api = {
    * List proposals with optional status filter
    */
   async listProposals(
-    options: { coopId?: string; status?: string; limit?: number; offset?: number } = {},
+    options: {
+      coopId?: string;
+      status?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
     walletAddress?: string | null,
   ) {
     const input = encodeURIComponent(
@@ -3222,13 +3899,21 @@ export const api = {
         offset: options.offset ?? 0,
       }),
     );
-    const response = await fetch(`${API_BASE_URL}/trpc/proposal.list?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/proposal.list?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
     const result = await response.json();
-    if (result.error) throw new Error(result.error.message || 'Failed to load proposals');
-    return result.result?.data as { proposals: ProposalSummary[]; total: number; hasMore: boolean };
+    if (result.error)
+      throw new Error(result.error.message || 'Failed to load proposals');
+    return result.result?.data as {
+      proposals: ProposalSummary[];
+      total: number;
+      hasMore: boolean;
+    };
   },
 
   /**
@@ -3236,26 +3921,41 @@ export const api = {
    */
   async getProposal(id: string, walletAddress?: string | null) {
     const input = encodeURIComponent(JSON.stringify({ id }));
-    const response = await fetch(`${API_BASE_URL}/trpc/proposal.getById?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/proposal.getById?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
     const result = await response.json();
-    if (result.error) throw new Error(result.error.message || 'Failed to load proposal');
+    if (result.error)
+      throw new Error(result.error.message || 'Failed to load proposal');
     return result.result?.data;
   },
 
   /**
    * Get proposals submitted by a specific wallet address
    */
-  async getMyProposals(walletAddress: string, limit = 20, offset = 0, coopId?: string) {
-    const input = encodeURIComponent(JSON.stringify({ wallet: walletAddress, coopId, limit, offset }));
-    const response = await fetch(`${API_BASE_URL}/trpc/proposal.getByProposer?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+  async getMyProposals(
+    walletAddress: string,
+    limit = 20,
+    offset = 0,
+    coopId?: string,
+  ) {
+    const input = encodeURIComponent(
+      JSON.stringify({ wallet: walletAddress, coopId, limit, offset }),
+    );
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/proposal.getByProposer?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
     const result = await response.json();
-    if (result.error) throw new Error(result.error.message || 'Failed to load proposals');
+    if (result.error)
+      throw new Error(result.error.message || 'Failed to load proposals');
     return result.result?.data as { proposals: any[]; total: number };
   },
 
@@ -3269,35 +3969,53 @@ export const api = {
       body: JSON.stringify({ text, coopId: coopId || resolveCoopId() }),
     });
     const result = await response.json();
-    if (result.error) throw new Error(result.error.message || 'Failed to submit proposal');
+    if (result.error)
+      throw new Error(result.error.message || 'Failed to submit proposal');
     return result.result?.data;
   },
 
   /**
    * List comments for a proposal
    */
-  async listProposalComments(proposalId: string, walletAddress?: string | null) {
-    const input = encodeURIComponent(JSON.stringify({ proposalId, limit: 50, offset: 0 }));
-    const response = await fetch(`${API_BASE_URL}/trpc/proposalComment.listByProposal?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+  async listProposalComments(
+    proposalId: string,
+    walletAddress?: string | null,
+  ) {
+    const input = encodeURIComponent(
+      JSON.stringify({ proposalId, limit: 50, offset: 0 }),
+    );
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/proposalComment.listByProposal?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
     const result = await response.json();
-    if (result.error) throw new Error(result.error.message || 'Failed to load comments');
+    if (result.error)
+      throw new Error(result.error.message || 'Failed to load comments');
     return result.result?.data as { comments: any[]; total: number };
   },
 
   /**
    * Post a comment on a proposal (authenticated — requires wallet)
    */
-  async createProposalComment(proposalId: string, content: string, walletAddress: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/proposalComment.create`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ proposalId, content }),
-    });
+  async createProposalComment(
+    proposalId: string,
+    content: string,
+    walletAddress: string,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/proposalComment.create`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify({ proposalId, content }),
+      },
+    );
     const result = await response.json();
-    if (result.error) throw new Error(result.error.message || 'Failed to post comment');
+    if (result.error)
+      throw new Error(result.error.message || 'Failed to post comment');
     return result.result?.data;
   },
 
@@ -3305,29 +4023,51 @@ export const api = {
    * React to a proposal (toggle support/concern)
    * Authenticated — requires wallet address
    */
-  async reactToProposal(proposalId: string, reaction: 'SUPPORT' | 'CONCERN', walletAddress: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/proposalReaction.upsert`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ proposalId, reaction }),
-    });
+  async reactToProposal(
+    proposalId: string,
+    reaction: 'SUPPORT' | 'CONCERN',
+    walletAddress: string,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/proposalReaction.upsert`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(walletAddress),
+        body: JSON.stringify({ proposalId, reaction }),
+      },
+    );
     const result = await response.json();
-    if (result.error) throw new Error(result.error.message || 'Failed to react');
-    return result.result?.data as { support: number; concern: number; myReaction: 'SUPPORT' | 'CONCERN' | null };
+    if (result.error)
+      throw new Error(result.error.message || 'Failed to react');
+    return result.result?.data as {
+      support: number;
+      concern: number;
+      myReaction: 'SUPPORT' | 'CONCERN' | null;
+    };
   },
 
   /**
    * Get reaction counts for a proposal
    */
   async getReactionCounts(proposalId: string, walletAddress?: string | null) {
-    const input = encodeURIComponent(JSON.stringify({ proposalId, walletAddress: walletAddress ?? undefined }));
-    const response = await fetch(`${API_BASE_URL}/trpc/proposalReaction.getCounts?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const input = encodeURIComponent(
+      JSON.stringify({ proposalId, walletAddress: walletAddress ?? undefined }),
+    );
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/proposalReaction.getCounts?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
     const result = await response.json();
-    if (result.error) throw new Error(result.error.message || 'Failed to get reaction counts');
-    return result.result?.data as { support: number; concern: number; myReaction: 'SUPPORT' | 'CONCERN' | null };
+    if (result.error)
+      throw new Error(result.error.message || 'Failed to get reaction counts');
+    return result.result?.data as {
+      support: number;
+      concern: number;
+      myReaction: 'SUPPORT' | 'CONCERN' | null;
+    };
   },
 
   /**
@@ -3340,49 +4080,75 @@ export const api = {
       body: JSON.stringify({ id }),
     });
     const result = await response.json();
-    if (result.error) throw new Error(result.error.message || 'Failed to withdraw proposal');
+    if (result.error)
+      throw new Error(result.error.message || 'Failed to withdraw proposal');
     return result.result?.data;
   },
 
   /**
    * Cast a council vote on a proposal (admin only)
    */
-  async councilVote(proposalId: string, vote: 'FOR' | 'AGAINST' | 'ABSTAIN', walletAddress: string) {
+  async councilVote(
+    proposalId: string,
+    vote: 'FOR' | 'AGAINST' | 'ABSTAIN',
+    walletAddress: string,
+  ) {
     const response = await fetch(`${API_BASE_URL}/trpc/proposal.councilVote`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
       body: JSON.stringify({ proposalId, vote }),
     });
     const result = await response.json();
-    if (result.error) throw new Error(result.error.message || 'Failed to cast council vote');
-    return result.result?.data as { vote: string; forCount: number; againstCount: number; abstainCount: number; newStatus: string | null };
+    if (result.error)
+      throw new Error(result.error.message || 'Failed to cast council vote');
+    return result.result?.data as {
+      vote: string;
+      forCount: number;
+      againstCount: number;
+      abstainCount: number;
+      newStatus: string | null;
+    };
   },
 
   /**
    * Resubmit / edit a proposal (proposer only, status must be submitted or votable)
    */
-  async resubmitProposal(proposalId: string, text: string, walletAddress: string) {
+  async resubmitProposal(
+    proposalId: string,
+    text: string,
+    walletAddress: string,
+  ) {
     const response = await fetch(`${API_BASE_URL}/trpc/proposal.resubmit`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
       body: JSON.stringify({ proposalId, text }),
     });
     const result = await response.json();
-    if (result.error) throw new Error(result.error.message || 'Failed to resubmit proposal');
+    if (result.error)
+      throw new Error(result.error.message || 'Failed to resubmit proposal');
     return result.result?.data;
   },
 
   /**
    * Get the full submission audit trail for a proposal (all revisions)
    */
-  async getProposalRevisions(proposalId: string, walletAddress?: string | null) {
+  async getProposalRevisions(
+    proposalId: string,
+    walletAddress?: string | null,
+  ) {
     const input = encodeURIComponent(JSON.stringify({ proposalId }));
-    const response = await fetch(`${API_BASE_URL}/trpc/proposal.getRevisions?input=${input}`, {
-      method: 'GET',
-      headers: createApiHeaders(walletAddress),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/proposal.getRevisions?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
     const result = await response.json();
-    if (result.error) throw new Error(result.error.message || 'Failed to load revision history');
+    if (result.error)
+      throw new Error(
+        result.error.message || 'Failed to load revision history',
+      );
     return result.result?.data as {
       id: string;
       revisionNumber: number;
@@ -3401,10 +4167,18 @@ export const api = {
    * Mark all notifications as read
    */
   async markAllNotificationsAsRead(sessionToken: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/notification.markAllAsRead`, {
-      method: 'POST', headers: createApiHeaders(null, sessionToken), body: JSON.stringify({}),
-    });
-    return readTrpcResult<{ success: boolean }>(response, 'Could not mark alerts as read');
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/notification.markAllAsRead`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify({}),
+      },
+    );
+    return readTrpcResult<{ success: boolean }>(
+      response,
+      'Could not mark alerts as read',
+    );
   },
 
   async getActiveFeeConfig(walletAddress?: string | null): Promise<{
@@ -3413,33 +4187,47 @@ export const api = {
     merchantFeeBps: number;
     treasuryFeeBps: number;
   }> {
-    const response = await fetch(`${API_BASE_URL}/trpc/treasuryLedger.getActiveFeeConfig`, {
-      method: 'GET',
-      headers: walletAddress ? createApiHeaders(walletAddress) : { ...networkConfig.defaultHeaders },
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/treasuryLedger.getActiveFeeConfig`,
+      {
+        method: 'GET',
+        headers: walletAddress
+          ? createApiHeaders(walletAddress)
+          : { ...networkConfig.defaultHeaders },
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
-      const message = result.error?.json?.message || result.error?.message || 'Failed to load fee config';
+      const message =
+        result.error?.json?.message ||
+        result.error?.message ||
+        'Failed to load fee config';
       throw new Error(message);
     }
 
-    return result.result?.data ?? result.result?.data?.json ?? {
-      id: 'default',
-      platformMarkupBps: 400,
-      merchantFeeBps: 0,
-      treasuryFeeBps: 400,
-    };
+    return (
+      result.result?.data ??
+      result.result?.data?.json ?? {
+        id: 'default',
+        platformMarkupBps: 400,
+        merchantFeeBps: 0,
+        treasuryFeeBps: 400,
+      }
+    );
   },
 
   async getPlatformConfig(): Promise<{
     coin: { symbol: string; name: string; description: string };
     platformName: string;
   }> {
-    const response = await fetch(`${API_BASE_URL}/trpc/platformConfig.getConfig`, {
-      method: 'GET',
-      headers: { ...networkConfig.defaultHeaders },
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/platformConfig.getConfig`,
+      {
+        method: 'GET',
+        headers: { ...networkConfig.defaultHeaders },
+      },
+    );
 
     const result = await response.json();
     if (result.error) {
@@ -3449,29 +4237,36 @@ export const api = {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    return result.result?.data ?? {
-      coin: { symbol: 'SC', name: 'Cahootz Coin', description: '' },
-      platformName: 'Cahootz',
-    };
+    return (
+      result.result?.data ?? {
+        coin: { symbol: 'SC', name: 'Cahootz Coin', description: '' },
+        platformName: 'Cahootz',
+      }
+    );
   },
 
-    /**
+  /**
    * Get application questions for a specific coop
    */
-    async getApplicationQuestions(coopId: string) {
-      const response = await fetch(`${API_BASE_URL}/trpc/coopConfig.getApplicationQuestions?input=${encodeURIComponent(JSON.stringify({ coopId }))}`, {
+  async getApplicationQuestions(coopId: string) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/coopConfig.getApplicationQuestions?input=${encodeURIComponent(JSON.stringify({ coopId }))}`,
+      {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
-      });
-  
-      const result = await response.json();
-      if (result.error) {
-        throw new Error(result.error.message || 'Failed to get application questions');
-      }
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-  
-      return result.result?.data as { questions: ApplicationQuestion[] };
+      },
+    );
+
+    const result = await response.json();
+    if (result.error) {
+      throw new Error(
+        result.error.message || 'Failed to get application questions',
+      );
     }
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return result.result?.data as { questions: ApplicationQuestion[] };
+  },
 };

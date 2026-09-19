@@ -1,18 +1,28 @@
+import type { PrivateGroupDetail, PrivateGroupMember } from '@/lib/api';
 import React from 'react';
-import { ActivityIndicator, Alert, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import { ArrowLeft, Copy, Crown, LogOut, RefreshCw, Send, Users } from 'lucide-react-native';
-
+import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
+import { api } from '@/lib/api';
 import {
-  api,
-  type PrivateGroupComment,
-  type PrivateGroupDetail,
-  type PrivateGroupMember,
-} from '@/lib/api';
+  ArrowLeft,
+  Copy,
+  Crown,
+  LogOut,
+  MessageCircle,
+  RefreshCw,
+  Settings2,
+  Users,
+} from 'lucide-react-native';
 
 const THEME = {
   paper: '#F8FAFC',
@@ -22,29 +32,20 @@ const THEME = {
   muted: '#64748B',
 };
 
-function formatTime(value: string) {
-  return new Date(value).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
 export default function GroupDetailScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const { user, isLoading, isAuthenticated, sessionToken } = useAuth();
 
   const [group, setGroup] = React.useState<PrivateGroupDetail | null>(null);
   const [members, setMembers] = React.useState<PrivateGroupMember[]>([]);
-  const [comments, setComments] = React.useState<PrivateGroupComment[]>([]);
   const [isLoadingGroup, setIsLoadingGroup] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [draft, setDraft] = React.useState('');
-  const [isPosting, setIsPosting] = React.useState(false);
   const [isRegenerating, setIsRegenerating] = React.useState(false);
-  const [transferringUserId, setTransferringUserId] = React.useState<string | null>(null);
+  const [transferringUserId, setTransferringUserId] = React.useState<
+    string | null
+  >(null);
   const [isLeaving, setIsLeaving] = React.useState(false);
+  const [isUpdatingPrivacy, setIsUpdatingPrivacy] = React.useState(false);
 
   React.useEffect(() => {
     if (isLoading || (isAuthenticated && sessionToken)) return;
@@ -57,16 +58,15 @@ export default function GroupDetailScreen() {
 
     setIsLoadingGroup(true);
     setError(null);
-    Promise.all([
-      api.getGroupDetail(groupId, sessionToken),
-      api.listGroupComments(groupId, sessionToken),
-    ])
-      .then(([detail, commentsResult]) => {
+    api
+      .getGroupDetail(groupId, sessionToken)
+      .then((detail) => {
         setGroup(detail.group);
         setMembers(detail.members);
-        setComments(commentsResult.comments);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load group.'))
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : 'Failed to load group.'),
+      )
       .finally(() => setIsLoadingGroup(false));
   }, [groupId, sessionToken]);
 
@@ -85,10 +85,16 @@ export default function GroupDetailScreen() {
 
     setIsRegenerating(true);
     try {
-      const { inviteCode } = await api.regenerateGroupInviteCode(groupId, sessionToken);
+      const { inviteCode } = await api.regenerateGroupInviteCode(
+        groupId,
+        sessionToken,
+      );
       setGroup((current) => (current ? { ...current, inviteCode } : current));
     } catch (err) {
-      Alert.alert('Could not regenerate code', err instanceof Error ? err.message : 'Try again.');
+      Alert.alert(
+        'Could not regenerate code',
+        err instanceof Error ? err.message : 'Try again.',
+      );
     } finally {
       setIsRegenerating(false);
     }
@@ -97,30 +103,41 @@ export default function GroupDetailScreen() {
   const makeLeader = (newLeaderUserId: string, name: string) => {
     if (!sessionToken || !groupId) return;
 
-    Alert.alert('Transfer leadership', `Make ${name} the leader of this space?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Transfer',
-        style: 'destructive',
-        onPress: async () => {
-          setTransferringUserId(newLeaderUserId);
-          try {
-            await api.transferGroupLeadership(groupId, newLeaderUserId, sessionToken);
-            load();
-          } catch (err) {
-            Alert.alert('Could not transfer leadership', err instanceof Error ? err.message : 'Try again.');
-          } finally {
-            setTransferringUserId(null);
-          }
+    Alert.alert(
+      'Transfer leadership',
+      `Make ${name} the leader of this circle?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Transfer',
+          style: 'destructive',
+          onPress: async () => {
+            setTransferringUserId(newLeaderUserId);
+            try {
+              await api.transferGroupLeadership(
+                groupId,
+                newLeaderUserId,
+                sessionToken,
+              );
+              load();
+            } catch (err) {
+              Alert.alert(
+                'Could not transfer leadership',
+                err instanceof Error ? err.message : 'Try again.',
+              );
+            } finally {
+              setTransferringUserId(null);
+            }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const leaveGroup = () => {
     if (!sessionToken || !groupId) return;
 
-    Alert.alert('Leave space', 'Are you sure you want to leave this space?', [
+    Alert.alert('Leave circle', 'Are you sure you want to leave this circle?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Leave',
@@ -131,7 +148,10 @@ export default function GroupDetailScreen() {
             await api.leaveGroup(groupId, sessionToken);
             router.back();
           } catch (err) {
-            Alert.alert('Could not leave space', err instanceof Error ? err.message : 'Try again.');
+            Alert.alert(
+              'Could not leave circle',
+              err instanceof Error ? err.message : 'Try again.',
+            );
             setIsLeaving(false);
           }
         },
@@ -139,20 +159,38 @@ export default function GroupDetailScreen() {
     ]);
   };
 
-  const postComment = async () => {
-    const content = draft.trim();
-    if (!content || !sessionToken || !groupId || isPosting) return;
-
-    setIsPosting(true);
-    try {
-      const { comment } = await api.addGroupComment(groupId, content, sessionToken);
-      setComments((current) => [...current, comment]);
-      setDraft('');
-    } catch (err) {
-      Alert.alert('Could not post', err instanceof Error ? err.message : 'Try again.');
-    } finally {
-      setIsPosting(false);
-    }
+  const changePrivacy = (privacy: 'public' | 'private') => {
+    if (!group || !sessionToken || !group.isLeader || isUpdatingPrivacy) return;
+    if (group.privacy === privacy) return;
+    const makePublic = privacy === 'public';
+    Alert.alert(
+      makePublic ? 'Make this circle public?' : 'Make this circle private?',
+      makePublic
+        ? 'All existing posts and replies will become visible to members of this common. Only circle members can post or reply.'
+        : 'Only current circle members will be able to see existing and future posts. Current members will stay in the circle.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: makePublic ? 'Make public' : 'Make private',
+          onPress: async () => {
+            setIsUpdatingPrivacy(true);
+            try {
+              const result = await api.updateCirclePrivacy(
+                group.id,
+                privacy,
+                makePublic,
+                sessionToken,
+              );
+              setGroup((current) => current ? { ...current, privacy: result.privacy } : current);
+            } catch (err) {
+              Alert.alert('Could not update privacy', err instanceof Error ? err.message : 'Try again.');
+            } finally {
+              setIsUpdatingPrivacy(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   if (isLoading || !isAuthenticated || !sessionToken || isLoadingGroup) {
@@ -166,12 +204,17 @@ export default function GroupDetailScreen() {
   if (error || !group) {
     return (
       <SafeAreaView className="flex-1 bg-white px-6">
-        <TouchableOpacity onPress={() => router.back()} className="mt-4 flex-row items-center gap-2">
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="mt-4 flex-row items-center gap-2"
+        >
           <ArrowLeft size={18} color="#1F2937" />
           <Text className="text-sm font-bold text-gray-700">Back</Text>
         </TouchableOpacity>
         <View className="flex-1 items-center justify-center">
-          <Text className="text-base font-black text-gray-900">{error || 'Group not found'}</Text>
+          <Text className="text-base font-black text-gray-900">
+            {error || 'Group not found'}
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -179,8 +222,14 @@ export default function GroupDetailScreen() {
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
-        <View className="border-b bg-white px-3 pt-3 pb-2" style={{ borderColor: THEME.border }}>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 32 }}
+      >
+        <View
+          className="border-b bg-white px-3 pb-2 pt-3"
+          style={{ borderColor: THEME.border }}
+        >
           <View className="flex-row items-center gap-2">
             <TouchableOpacity
               onPress={() => router.back()}
@@ -195,11 +244,18 @@ export default function GroupDetailScreen() {
                 onPress={() => router.push(`/commons/${group.coopId}` as any)}
                 activeOpacity={0.7}
               >
-                <Text className="text-[10px] font-black uppercase" style={{ color: THEME.primary }} numberOfLines={1}>
+                <Text
+                  className="text-[10px] font-black uppercase"
+                  style={{ color: THEME.primary }}
+                  numberOfLines={1}
+                >
                   {group.coopName} · {group.privacy.replace('-', ' ')}
                 </Text>
               </TouchableOpacity>
-              <Text className="text-base font-black text-gray-950" numberOfLines={1}>
+              <Text
+                className="text-base font-black text-gray-950"
+                numberOfLines={1}
+              >
                 {group.name}
               </Text>
             </View>
@@ -210,24 +266,84 @@ export default function GroupDetailScreen() {
               style={{ borderColor: THEME.border }}
               accessibilityLabel="Leave group"
             >
-              {isLeaving ? <ActivityIndicator size="small" color="#DC2626" /> : <LogOut size={16} color="#DC2626" />}
+              {isLeaving ? (
+                <ActivityIndicator size="small" color="#DC2626" />
+              ) : (
+                <LogOut size={16} color="#DC2626" />
+              )}
             </TouchableOpacity>
           </View>
         </View>
 
         <View className="px-5 py-4">
           {group.purpose ? (
-            <View className="rounded-2xl border bg-white p-4" style={{ borderColor: THEME.border }}>
-              <Text className="text-sm leading-5 text-gray-700">{group.purpose}</Text>
+            <View
+              className="rounded-2xl border bg-white p-4"
+              style={{ borderColor: THEME.border }}
+            >
+              <Text className="text-sm leading-5 text-gray-700">
+                {group.purpose}
+              </Text>
             </View>
           ) : null}
 
-          {group.isLeader && group.inviteCode ? (
-            <View className="mt-4 rounded-2xl border bg-white p-4" style={{ borderColor: THEME.border }}>
-              <Text className="text-xs font-black uppercase text-gray-500">Invite Code</Text>
+          <View className="mt-4 rounded-2xl border bg-white p-4" style={{ borderColor: THEME.border }}>
+            <View className="flex-row items-center gap-2">
+              <Settings2 size={16} color={THEME.muted} />
+              <Text className="text-xs font-black uppercase text-gray-500">Circle settings</Text>
+            </View>
+            <Text className="mt-3 text-sm font-black text-gray-950">Privacy</Text>
+            <Text className="mt-1 text-xs leading-5 text-gray-600">
+              {group.privacy === 'public'
+                ? 'Members of this common can discover and read this circle. They must join before posting.'
+                : 'Only circle members can find, read, and post here.'}
+            </Text>
+            {group.isLeader ? (
+              <View className="mt-3 flex-row gap-2">
+                <TouchableOpacity
+                  onPress={() => changePrivacy('public')}
+                  disabled={isUpdatingPrivacy}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: group.privacy === 'public' }}
+                  className="flex-1 items-center rounded-xl border px-3 py-3"
+                  style={{ borderColor: group.privacy === 'public' ? THEME.primary : THEME.border, backgroundColor: group.privacy === 'public' ? THEME.primarySoft : '#FFFFFF' }}
+                >
+                  <Text className="text-xs font-black text-gray-900">Public</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => changePrivacy('private')}
+                  disabled={isUpdatingPrivacy}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: group.privacy !== 'public' }}
+                  className="flex-1 items-center rounded-xl border px-3 py-3"
+                  style={{ borderColor: group.privacy !== 'public' ? THEME.primary : THEME.border, backgroundColor: group.privacy !== 'public' ? THEME.primarySoft : '#FFFFFF' }}
+                >
+                  <Text className="text-xs font-black text-gray-900">Private</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text className="mt-3 text-xs font-semibold text-gray-500">Only the circle leader can change this setting.</Text>
+            )}
+            {isUpdatingPrivacy ? <ActivityIndicator className="mt-3" size="small" color={THEME.primary} /> : null}
+          </View>
+
+          {group.isLeader && group.inviteCode && group.privacy !== 'public' ? (
+            <View
+              className="mt-4 rounded-2xl border bg-white p-4"
+              style={{ borderColor: THEME.border }}
+            >
+              <Text className="text-xs font-black uppercase text-gray-500">
+                Invite Code
+              </Text>
               <View className="mt-2 flex-row items-center gap-2">
-                <View className="flex-1 rounded-xl px-3 py-2" style={{ backgroundColor: THEME.primarySoft }}>
-                  <Text className="text-lg font-black tracking-widest" style={{ color: THEME.primary }}>
+                <View
+                  className="flex-1 rounded-xl px-3 py-2"
+                  style={{ backgroundColor: THEME.primarySoft }}
+                >
+                  <Text
+                    className="text-lg font-black tracking-widest"
+                    style={{ color: THEME.primary }}
+                  >
                     {group.inviteCode}
                   </Text>
                 </View>
@@ -252,12 +368,16 @@ export default function GroupDetailScreen() {
                 </TouchableOpacity>
               </View>
               <Text className="mt-2 text-xs leading-4 text-gray-500">
-                Share this code so people can join. Regenerating invalidates the old code.
+                Share this code so people can join. Regenerating invalidates the
+                old code.
               </Text>
             </View>
           ) : null}
 
-          <View className="mt-4 rounded-2xl border bg-white p-4" style={{ borderColor: THEME.border }}>
+          <View
+            className="mt-4 rounded-2xl border bg-white p-4"
+            style={{ borderColor: THEME.border }}
+          >
             <View className="flex-row items-center gap-2">
               <Users size={16} color={THEME.muted} />
               <Text className="text-xs font-black uppercase text-gray-500">
@@ -266,10 +386,18 @@ export default function GroupDetailScreen() {
             </View>
             <View className="mt-3 gap-2">
               {members.map((member) => (
-                <View key={member.userId} className="flex-row items-center justify-between gap-2">
+                <View
+                  key={member.userId}
+                  className="flex-row items-center justify-between gap-2"
+                >
                   <View className="min-w-0 flex-1 flex-row items-center gap-2">
-                    {member.isLeader ? <Crown size={14} color={THEME.primary} /> : null}
-                    <Text className="flex-1 text-sm font-semibold text-gray-900" numberOfLines={1}>
+                    {member.isLeader ? (
+                      <Crown size={14} color={THEME.primary} />
+                    ) : null}
+                    <Text
+                      className="flex-1 text-sm font-semibold text-gray-900"
+                      numberOfLines={1}
+                    >
                       {member.name}
                       {member.userId === user?.id ? ' (you)' : ''}
                     </Text>
@@ -284,7 +412,10 @@ export default function GroupDetailScreen() {
                       {transferringUserId === member.userId ? (
                         <ActivityIndicator size="small" color={THEME.primary} />
                       ) : (
-                        <Text className="text-xs font-black" style={{ color: THEME.primary }}>
+                        <Text
+                          className="text-xs font-black"
+                          style={{ color: THEME.primary }}
+                        >
                           Make leader
                         </Text>
                       )}
@@ -295,45 +426,22 @@ export default function GroupDetailScreen() {
             </View>
           </View>
 
-          <View className="mt-4 rounded-2xl border bg-white p-4" style={{ borderColor: THEME.border }}>
-            <Text className="text-xs font-black uppercase text-gray-500">Discussion</Text>
-            <View className="mt-3 gap-3">
-              {comments.length === 0 ? (
-                <Text className="text-sm leading-5 text-gray-500">No messages yet. Say hello.</Text>
-              ) : (
-                comments.map((comment) => (
-                  <View key={comment.id} className="rounded-xl bg-gray-50 px-3 py-2">
-                    <View className="flex-row items-center justify-between gap-2">
-                      <Text className="text-xs font-black text-gray-900">{comment.author}</Text>
-                      <Text className="text-xs text-gray-400">{formatTime(comment.createdAt)}</Text>
-                    </View>
-                    <Text className="mt-1 text-sm leading-5 text-gray-700">{comment.content}</Text>
-                  </View>
-                ))
-              )}
-            </View>
-
-            <View className="mt-3 flex-row items-end gap-2">
-              <TextInput
-                value={draft}
-                onChangeText={setDraft}
-                placeholder="Write something..."
-                placeholderTextColor={THEME.muted}
-                multiline
-                className="min-h-11 flex-1 rounded-xl border bg-gray-50 px-3 py-2 text-sm text-gray-900"
-                style={{ borderColor: THEME.border, maxHeight: 96, textAlignVertical: 'top' }}
-              />
-              <TouchableOpacity
-                onPress={() => void postComment()}
-                disabled={isPosting || !draft.trim()}
-                className="h-11 w-11 items-center justify-center rounded-xl"
-                style={{ backgroundColor: THEME.primary, opacity: isPosting || !draft.trim() ? 0.6 : 1 }}
-                activeOpacity={0.82}
-              >
-                {isPosting ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Send size={16} color="#FFFFFF" />}
-              </TouchableOpacity>
-            </View>
-          </View>
+          <TouchableOpacity
+            onPress={() =>
+              router.replace({
+                pathname: '/[coopId]/posts',
+                params: { coopId: group.coopId, circleId: group.id },
+              } as any)
+            }
+            className="mt-4 flex-row items-center justify-center gap-2 rounded-2xl py-3"
+            style={{ backgroundColor: THEME.primary }}
+            activeOpacity={0.82}
+          >
+            <MessageCircle size={17} color="#FFFFFF" />
+            <Text className="text-sm font-black text-white">
+              Open circle feed
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>

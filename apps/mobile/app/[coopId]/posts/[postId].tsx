@@ -51,10 +51,11 @@ export default function CommonsPostDetailScreen() {
   const params = useLocalSearchParams<{ coopId?: string; postId?: string }>();
   const coopId = params.coopId || 'cahootz';
   const postId = params.postId || '';
-  const { user } = useAuth();
-  const sessionToken = user?.sessionToken || null;
+  const { user, sessionToken } = useAuth();
 
   const [post, setPost] = useState<CommonsPost | null>(null);
+  const [circleIsMember, setCircleIsMember] = useState<boolean | null>(null);
+  const [isJoiningCircle, setIsJoiningCircle] = useState(false);
   const [coop, setCoop] = useState<CommonsProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -86,6 +87,7 @@ export default function CommonsPostDetailScreen() {
         if (!mounted) return;
         setPost(result.post);
         setCoop(result.coop);
+        setCircleIsMember(result.circleIsMember ?? null);
       })
       .catch((caughtError) => {
         console.error('Failed to load commons post:', caughtError);
@@ -102,6 +104,10 @@ export default function CommonsPostDetailScreen() {
 
   const supportPost = async () => {
     if (!post) return;
+    if (circleIsMember === false) {
+      setError('Join this circle before liking posts.');
+      return;
+    }
     if (!sessionToken) {
       setError('Sign in to like posts.');
       return;
@@ -126,6 +132,10 @@ export default function CommonsPostDetailScreen() {
   const submitComment = async () => {
     const content = commentDraft.trim();
     if (!post || isCommenting) return;
+    if (circleIsMember === false) {
+      setError('Join this circle before replying.');
+      return;
+    }
     if (!content && commentMedia.length === 0) return;
     if (!sessionToken) {
       setError('Sign in to comment.');
@@ -169,6 +179,24 @@ export default function CommonsPostDetailScreen() {
       setError(caughtError instanceof Error ? caughtError.message : 'Could not add comment.');
     } finally {
       setIsCommenting(false);
+    }
+  };
+
+  const joinCurrentCircle = async () => {
+    if (!post?.circleId || isJoiningCircle) return;
+    if (!sessionToken) {
+      router.push({ pathname: '/', params: { entry: 'sign-in' } } as any);
+      return;
+    }
+    setIsJoiningCircle(true);
+    setError('');
+    try {
+      await api.joinPublicCircle(post.circleId, sessionToken);
+      setCircleIsMember(true);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Could not join circle.');
+    } finally {
+      setIsJoiningCircle(false);
     }
   };
 
@@ -441,7 +469,7 @@ export default function CommonsPostDetailScreen() {
             </View>
 
             <View className="mt-4 flex-row border-y border-stone-100 py-2">
-              <TouchableOpacity onPress={supportPost} className="flex-1 flex-row items-center justify-center gap-2 py-2">
+              <TouchableOpacity onPress={supportPost} disabled={circleIsMember === false} className="flex-1 flex-row items-center justify-center gap-2 py-2" style={{ opacity: circleIsMember === false ? 0.4 : 1 }}>
                 <CheckCircle2 size={16} color={THEME.primary} />
                 <Text className="text-sm font-bold text-stone-700">Like</Text>
               </TouchableOpacity>
@@ -532,7 +560,15 @@ export default function CommonsPostDetailScreen() {
         ) : null}
       </ScrollView>
 
-      {post ? (
+      {post && circleIsMember === false ? (
+        <View className="border-t border-gray-200 bg-white px-4 py-4">
+          <Text className="text-sm font-black text-gray-950">Join this circle to participate</Text>
+          <Text className="mt-1 text-xs text-gray-600">You can read its posts now. Join to reply, post, and like.</Text>
+          <TouchableOpacity onPress={() => void joinCurrentCircle()} disabled={isJoiningCircle} className="mt-3 self-start rounded-full px-4 py-2" style={{ backgroundColor: THEME.primary, opacity: isJoiningCircle ? 0.6 : 1 }}>
+            <Text className="text-xs font-black text-white">{isJoiningCircle ? 'Joining…' : 'Join circle'}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : post ? (
         <View className="border-t border-gray-200 bg-white px-4 py-3">
           {commentMedia.length ? (
             <View className="mb-3 flex-row flex-wrap gap-2">

@@ -12,7 +12,19 @@ interface ActionRow {
   id: string; type: string; status: string; summary: string; evidence: string | null;
   draftText: string | null; confidence: number; sourceType: string; sourceId: string;
   publishedCommentId: string | null; createdAt: string;
+  generatedDraftText: string | null;
+  feedback: { rating: "GOOD" | "NEEDS_WORK"; reasons: string[]; notes: string | null; correctedText: string | null } | null;
   source: SourceContent | null; parentPost: SourceContent | null;
+}
+type FeedbackEdit = { rating: "GOOD" | "NEEDS_WORK" | ""; reasons: string[]; notes: string; correctedText: string };
+const FEEDBACK_REASONS = [
+  ["WRONG_ACTION", "Wrong action"], ["INCORRECT_CHARTER_USE", "Charter or goal misused"],
+  ["INACCURATE", "Inaccurate"], ["MISSED_CONTEXT", "Missed context"],
+  ["TONE", "Tone"], ["UNCLEAR", "Unclear"], ["OTHER", "Other"],
+] as const;
+function feedbackValue(action: ActionRow): FeedbackEdit {
+  return { rating: action.feedback?.rating ?? "", reasons: action.feedback?.reasons ?? [],
+    notes: action.feedback?.notes ?? "", correctedText: action.feedback?.correctedText ?? "" };
 }
 interface ResourceRow { id: string; title: string; kind: string; status: string; candidateUserId: string | null; }
 interface Dashboard {
@@ -30,6 +42,7 @@ export default function CommonsAIClient({ apiUrl, token }: { apiUrl: string; tok
   const { coopId } = useParams<{ coopId: string }>();
   const [data, setData] = useState<Dashboard | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [feedbackEdits, setFeedbackEdits] = useState<Record<string, FeedbackEdit>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const endpoint = `${apiUrl}/commonsActionsAdmin`;
@@ -102,9 +115,24 @@ export default function CommonsAIClient({ apiUrl, token }: { apiUrl: string; tok
             </div> : <p className="text-slate-400">Original {action.sourceType === "commons_comment" ? "comment" : "post"} is no longer available.</p>}
           </div>
           <p>{action.summary}</p>{action.evidence && <p className="border-l-2 border-orange-300/60 pl-3 text-slate-300">Evidence: {action.evidence}</p>}
+          {action.draftText && action.status !== "PENDING" && <div className="rounded-md border border-white/10 bg-slate-950/60 p-3"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{action.type === "MAKE_PROPOSAL" ? "Proposal starter" : "Agent reply"}</p><p className="mt-1 whitespace-pre-wrap break-words">{action.draftText}</p></div>}
           {action.draftText && action.status === "PENDING" && <textarea aria-label={`Draft for ${action.type}`} value={drafts[action.id] ?? action.draftText} onChange={(event) => setDrafts((current) => ({ ...current, [action.id]: event.target.value }))} className="min-h-20 w-full rounded border border-white/20 bg-slate-900 p-2 text-white" />}
+          {action.generatedDraftText && action.generatedDraftText !== action.draftText && <details className="text-slate-300"><summary className="cursor-pointer text-xs text-orange-200">Original AI draft</summary><p className="mt-2 whitespace-pre-wrap break-words">{action.generatedDraftText}</p></details>}
           {action.status === "PENDING" && <div className="flex flex-wrap gap-2"><button disabled={busy} onClick={() => void command({ command: "approve", actionId: action.id })} className="rounded bg-orange-300 px-3 py-1 font-semibold text-slate-950">Approve</button><button disabled={busy || !action.draftText} onClick={() => void command({ command: "edit-draft", actionId: action.id, draftText: drafts[action.id] ?? action.draftText })} className="rounded bg-white/10 px-3 py-1">Save draft</button><button disabled={busy} onClick={() => void command({ command: "dismiss", actionId: action.id })} className="rounded bg-white/10 px-3 py-1">Dismiss</button></div>}
           {action.publishedCommentId && <button disabled={busy} onClick={() => void command({ command: "remove-reply", actionId: action.id })} className="rounded border border-red-400/40 px-3 py-1 text-red-200">Remove bot reply</button>}
+          {(action.type === "MAKE_PROPOSAL" || ["RESPOND_CHARTER_CORRECTION", "RESPOND_MISSION_ALIGNMENT", "RESPOND_RESOURCE_FOLLOWUP", "ANSWER_QUESTION", "CLARIFY_NEED", "CONNECT_MEMBERS"].includes(action.type)) && (() => {
+            const edit = feedbackEdits[action.id] ?? feedbackValue(action);
+            const update = (patch: Partial<FeedbackEdit>) => setFeedbackEdits((current) => ({ ...current, [action.id]: { ...edit, ...patch } }));
+            return <div className="space-y-3 rounded-md border border-white/10 p-3">
+              <p className="font-semibold">Response feedback {action.feedback && <span className="font-normal text-slate-400">· Saved: {action.feedback.rating === "GOOD" ? "Good" : "Needs work"}</span>}</p>
+              <div className="flex gap-4"><label className="flex items-center gap-2"><input type="radio" name={`rating-${action.id}`} checked={edit.rating === "GOOD"} onChange={() => update({ rating: "GOOD", reasons: [] })} />Good</label><label className="flex items-center gap-2"><input type="radio" name={`rating-${action.id}`} checked={edit.rating === "NEEDS_WORK"} onChange={() => update({ rating: "NEEDS_WORK" })} />Needs work</label></div>
+              {edit.rating === "NEEDS_WORK" && <div><p className="mb-2 text-xs text-slate-400">Why does it need work?</p><div className="flex flex-wrap gap-x-4 gap-y-2">{FEEDBACK_REASONS.map(([value, label]) => <label key={value} className="flex items-center gap-2"><input type="checkbox" checked={edit.reasons.includes(value)} onChange={(event) => update({ reasons: event.target.checked ? [...edit.reasons, value] : edit.reasons.filter((reason) => reason !== value) })} />{label}</label>)}</div></div>}
+              <textarea aria-label="Feedback notes" placeholder="Why was this good or what should change?" value={edit.notes} onChange={(event) => update({ notes: event.target.value })} maxLength={2000} className="min-h-16 w-full rounded border border-white/20 bg-slate-900 p-2 text-white" />
+              <textarea aria-label="Corrected response" placeholder={action.type === "MAKE_PROPOSAL" ? "Better proposal starter (optional)" : "Better reply (optional)"} value={edit.correctedText} onChange={(event) => update({ correctedText: event.target.value })} maxLength={10000} className="min-h-24 w-full rounded border border-white/20 bg-slate-900 p-2 text-white" />
+              <p className="text-xs text-slate-400">Feedback is saved for evaluation and future training. It does not change a published reply or the author’s proposal draft.</p>
+              <button disabled={busy || !edit.rating || (edit.rating === "NEEDS_WORK" && edit.reasons.length === 0)} onClick={() => void command({ command: "rate-response", actionId: action.id, ...edit })} className="rounded bg-orange-300 px-3 py-1 font-semibold text-slate-950 disabled:opacity-40">Save feedback</button>
+            </div>;
+          })()}
         </div>)}
       </section>
     </>}

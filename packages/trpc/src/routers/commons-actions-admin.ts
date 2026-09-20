@@ -7,6 +7,7 @@ import { createNotificationAndPush } from "../services/push-notification-service
 import { router } from "../trpc.js";
 
 const Scoped = z.object({ coopId: z.string().min(1) });
+const FeedbackReasons = z.enum(["WRONG_ACTION", "INCORRECT_CHARTER_USE", "INACCURATE", "MISSED_CONTEXT", "TONE", "UNCLEAR", "OTHER"]);
 const Command = z.discriminatedUnion("command", [
   Scoped.extend({ command: z.literal("auto-reply"), enabled: z.boolean() }),
   Scoped.extend({ command: z.literal("scan") }),
@@ -15,6 +16,9 @@ const Command = z.discriminatedUnion("command", [
   Scoped.extend({ command: z.literal("approve"), actionId: z.string().min(1) }),
   Scoped.extend({ command: z.literal("remove-reply"), actionId: z.string().min(1) }),
   Scoped.extend({ command: z.literal("publish-resource"), resourceId: z.string().min(1) }),
+  Scoped.extend({ command: z.literal("rate-response"), actionId: z.string().min(1),
+    rating: z.enum(["GOOD", "NEEDS_WORK"]), reasons: z.array(FeedbackReasons).max(7),
+    notes: z.string().trim().max(2000), correctedText: z.string().trim().max(10000) }),
 ]);
 
 function conflict(message: string): never {
@@ -39,6 +43,7 @@ export const commonsActionsAdminRouter = router({
         WHERE "coopId" = ${input.coopId} AND "createdAt" >= NOW() - INTERVAL '12 months'
         GROUP BY 1 ORDER BY 1 DESC`,
     ]);
+    const feedback = await ctx.db.commonsActionFeedback.findMany({ where: { coopId: input.coopId, actionId: { in: actions.map((action) => action.id) } } });
     const postIds = [...new Set(actions.map((action) => action.sourcePostId))];
     const commentIds = [...new Set(actions.filter((action) => action.sourceType === "commons_comment").map((action) => action.sourceId))];
     const [posts, comments] = await Promise.all([
@@ -53,6 +58,7 @@ export const commonsActionsAdminRouter = router({
     ]);
     const postsById = new Map(posts.map((post) => [post.id, post]));
     const commentsById = new Map(comments.map((comment) => [comment.id, comment]));
+    const feedbackByActionId = new Map(feedback.map((entry) => [entry.actionId, entry]));
     const byFeature = new Map<string, { feature: string; model: string; calls: number; estimatedUsd: number; unknown: number }>();
     const byDay = new Map<string, { day: string; estimatedUsd: number; unknown: number }>();
     for (const event of costEvents) {
@@ -73,6 +79,7 @@ export const commonsActionsAdminRouter = router({
         backfillCommentsDone: setting?.backfillCommentsDone ?? false },
       actions: actions.map((action) => ({
         ...action,
+        feedback: feedbackByActionId.get(action.id) ?? null,
         source: action.sourceType === "commons_comment"
           ? commentsById.get(action.sourceId) ?? null
           : postsById.get(action.sourceId) ?? null,
@@ -119,6 +126,15 @@ export const commonsActionsAdminRouter = router({
     }
     const action = await ctx.db.commonsAction.findFirst({ where: { id: input.actionId, coopId } });
     if (!action) throw new TRPCError({ code: "NOT_FOUND", message: "Action not found" });
+    if (input.command === "rate-response") {
+      if (action.type !== "MAKE_PROPOSAL" && !REPLY_ACTIONS.has(action.type)) conflict("Only replies and proposal drafts can be rated");
+      if (input.rating === "NEEDS_WORK" && input.reasons.length === 0) conflict("Choose why this response needs work");
+      const data = { rating: input.rating, reasons: input.rating === "GOOD" ? [] : input.reasons,
+        notes: input.notes || null, correctedText: input.correctedText || null, reviewedBy: actor };
+      await ctx.db.commonsActionFeedback.upsert({ where: { actionId: action.id },
+        create: { actionId: action.id, coopId, ...data }, update: data });
+      return { success: true };
+    }
     if (input.command === "dismiss") {
       if (action.status !== "PENDING") conflict("Only pending actions can be dismissed");
       await ctx.db.commonsAction.update({ where: { id: action.id }, data: { status: "DISMISSED", reviewedBy: actor, reviewedAt: new Date() } });

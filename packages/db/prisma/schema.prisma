@@ -999,6 +999,25 @@ enum CommonsActionStatus {
   @@schema("public")
 }
 
+enum CommonsActionFeedbackRating {
+  GOOD
+  NEEDS_WORK
+
+  @@schema("public")
+}
+
+enum CommonsActionFeedbackReason {
+  WRONG_ACTION
+  INCORRECT_CHARTER_USE
+  INACCURATE
+  MISSED_CONTEXT
+  TONE
+  UNCLEAR
+  OTHER
+
+  @@schema("public")
+}
+
 model CommonsAgentSetting {
   coopId       String   @id
   autoReply    Boolean  @default(true)
@@ -1047,6 +1066,11 @@ model CommonsAction {
   evidence           String?             @db.Text
   confidence         Float
   draftText          String?             @db.Text
+  generatedDraftText String?             @db.Text
+  sourceTextSnapshot String?             @db.Text
+  contextSnapshot    String?             @db.Text
+  charterSnapshot    String?             @db.Text
+  goalsSnapshot      Json?
   charterConfigId    String
   publishedCommentId String?
   replySourceKey     String?             @unique
@@ -1054,10 +1078,28 @@ model CommonsAction {
   reviewedAt         DateTime?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
+  feedback           CommonsActionFeedback?
 
   @@unique([sourceType, sourceId, contentHash, charterConfigId, position])
   @@index([coopId, status, createdAt])
   @@index([sourceType, sourceId])
+  @@schema("public")
+}
+
+model CommonsActionFeedback {
+  id               String                      @id @default(cuid())
+  actionId         String                      @unique
+  action           CommonsAction               @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  coopId           String
+  rating           CommonsActionFeedbackRating
+  reasons          CommonsActionFeedbackReason[]
+  notes            String?                     @db.Text
+  correctedText    String?                     @db.Text
+  reviewedBy       String
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+
+  @@index([coopId, rating, createdAt])
   @@schema("public")
 }
 

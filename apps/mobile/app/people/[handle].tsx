@@ -271,9 +271,6 @@ export default function PublicPersonPageScreen() {
                     )}
                     <Text className="text-xs font-semibold text-gray-400">{post.time}</Text>
                   </View>
-                  {post.title && post.title !== post.body ? (
-                    <Text className="mt-3 text-base font-black leading-5 text-gray-950">{post.title}</Text>
-                  ) : null}
                   {post.body ? <Text className="mt-2 text-sm leading-5 text-gray-700">{post.body}</Text> : null}
                   <Text className="mt-3 text-xs font-black text-gray-400">{post.group}</Text>
                 </View>

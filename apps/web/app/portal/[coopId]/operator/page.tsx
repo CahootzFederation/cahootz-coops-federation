@@ -135,7 +135,7 @@ export default function CahootzOperatorPage() {
                 <div key={post.id} className="py-3 first:pt-0 last:pb-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate font-semibold text-zinc-100">{post.title}</p>
+                      <p className="line-clamp-2 whitespace-pre-wrap break-words text-zinc-100">{post.content || "Media post"}</p>
                       <p className="mt-1 text-xs text-zinc-500">
                         {post.author} • {post.commentCount} comments • {post.supportCount} likes • {post.mediaCount} media
                       </p>

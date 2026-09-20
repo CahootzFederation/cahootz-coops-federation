@@ -696,6 +696,15 @@ export default function CommonsDetailScreen() {
                 </Text>
               </View>
 
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={() => router.push({ pathname: '/(authenticated)/commons-resources', params: { coopId } })}
+                className="mb-3 rounded-2xl border border-gray-200 bg-white p-4"
+              >
+                <Text className="text-lg font-black text-gray-950">Browse verified resources →</Text>
+                <Text className="mt-1 text-sm text-gray-600">People, skills, spaces, tools, and useful information shared with this Commons.</Text>
+              </TouchableOpacity>
+
               <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
                 <View className="mb-3 flex-row items-center gap-2">
                   <Target size={19} color={THEME.primary} />

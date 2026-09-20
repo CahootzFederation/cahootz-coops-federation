@@ -1,4 +1,5 @@
-import { Agent, run, webSearchTool } from "@openai/agents";
+import { Agent, run as sdkRun, webSearchTool } from "@openai/agents";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
 import type { ProposalInput, ProposalOutput, Alternative, MissingData, Decision, Evaluation, MissionImpactScore, MissionGoalBreakdownItem, StructuralBreakdownItem, ScorerAgent ,
   ProposalStatusZ} from "./proposal.js";
@@ -14,6 +15,23 @@ import {
 import type { KPIz } from "./proposal.js";
 import fs from "node:fs/promises";
 import path from "node:path";
+
+type ProposalUsageHandler = (result: Awaited<ReturnType<typeof sdkRun>>, model: string) => Promise<void>;
+const proposalUsageContext = new AsyncLocalStorage<ProposalUsageHandler>();
+
+export function withProposalAIUsage<T>(handler: ProposalUsageHandler, operation: () => Promise<T>): Promise<T> {
+  return proposalUsageContext.run(handler, operation);
+}
+
+const run: typeof sdkRun = (async (...args: Parameters<typeof sdkRun>) => {
+  const result = await sdkRun(...args);
+  const handler = proposalUsageContext.getStore();
+  if (handler) {
+    const model = args[0].model;
+    await handler(result, typeof model === "string" ? model : "custom");
+  }
+  return result;
+}) as typeof sdkRun;
 
 /**
  * Config data from CoopConfig DB record, passed to engine methods.

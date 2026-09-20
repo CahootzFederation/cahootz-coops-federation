@@ -4,6 +4,7 @@ import { authenticatedProcedure, publicProcedure } from "../procedures/index.js"
 import { CommentInputZ, CommentOutputZ, proposalEngine } from "@repo/validators";
 import type { AuthenticatedContext } from "../context.js";
 import { withAIEvaluationLogging } from "../services/ai-evaluation-log.js";
+import { withCostedProposalRun } from "../services/ai-cost.js";
 
 type CommentAIEvaluationOutput = {
   alignment: "ALIGNED" | "NEUTRAL" | "MISALIGNED";
@@ -96,7 +97,7 @@ export const proposalCommentRouter = router({
             entityId: comment.id,
             input: { commentText: input.content, proposalId: input.proposalId },
           },
-          () =>
+          () => withCostedProposalRun(proposal.coopId, "proposal-comment-evaluation", () =>
             proposalEngine.evaluateComment(
               input.content,
               {
@@ -105,7 +106,7 @@ export const proposalCommentRouter = router({
                 category: proposal.category.toLowerCase(),
               },
               configData,
-            ),
+            )),
         );
       } catch (err) {
         // AI evaluation failure should not block comment creation

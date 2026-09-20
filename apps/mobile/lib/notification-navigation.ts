@@ -8,6 +8,10 @@ export function notificationDestination(
   const data = notification.data;
   const id = (key: string) =>
     typeof data?.[key] === "string" && data[key] ? (data[key] as string) : null;
+  if (notification.type === "RESOURCE_INVITATION")
+    return "/(authenticated)/resource-invitations";
+  if (notification.type === "PROPOSAL_DRAFT_READY")
+    return "/(authenticated)/commons-proposal-drafts";
   if (notification.type.startsWith("PERSONAL_PAGE_"))
     return "/(authenticated)/personal-page";
   if (id("postId"))

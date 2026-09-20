@@ -1786,18 +1786,6 @@ export default function CommonsAiEntry({
                       )}
                     </View>
 
-                    {post.title && post.title !== post.body ? (
-                      <MentionText
-                        content={post.title}
-                        className="mt-3"
-                        style={{
-                          fontSize: 14,
-                          lineHeight: 20,
-                          fontWeight: '900',
-                          color: '#030712',
-                        }}
-                      />
-                    ) : null}
                     {post.body ? (
                       <MentionText
                         content={post.body}
@@ -2788,13 +2776,6 @@ export default function CommonsAiEntry({
                       <Text className="text-xs font-semibold text-gray-500">
                         {post.author} · {post.time}
                       </Text>
-                      {post.title && post.title !== post.body ? (
-                        <MentionText
-                          content={post.title}
-                          className="mt-1 text-sm font-black text-gray-950"
-                          numberOfLines={1}
-                        />
-                      ) : null}
                       {post.body ? (
                         <MentionText
                           content={post.body}

@@ -5,6 +5,7 @@ import { CoopConfigInputZ, CoopConfigOutputZ, type CoopConfigOutput, type CoopCo
 import type { CoopConfig, Prisma } from "@repo/db";
 import type { AuthenticatedContext } from "../context.js";
 import { linkExternalWalletToUser } from "../services/wallet-service.js";
+import { isPlaceholderCharter, starterCharter } from "../services/starter-charter.js";
 
 type MissionGoalConfig = {
   key: string;
@@ -163,6 +164,11 @@ export async function createCommonsConfig(
     { key: "export_expansion",  label: "Export Expansion",  priorityWeight: 0.20 },
   ];
 
+  const initialGoals = fields.missionGoals ? withGeneratedMissionGoalKeys(fields.missionGoals) : defaultMissionGoals;
+  const initialCharter = fields.charterText && !isPlaceholderCharter(fields.charterText, coopId)
+    ? fields.charterText
+    : starterCharter(fields.name || coopId, initialGoals, fields.displayMission);
+
   const newConfig = await db.$transaction(async (tx: any) => {
     const config = await tx.coopConfig.create({
       data: {
@@ -182,8 +188,8 @@ export async function createCommonsConfig(
         displayOrder: fields.displayOrder ?? 999,
         applicationQuestions: fields.applicationQuestions as Prisma.InputJsonValue,
         // Governance fields
-        charterText: fields.charterText ?? `${coopId} Co-op Charter`,
-        missionGoals: fields.missionGoals ? withGeneratedMissionGoalKeys(fields.missionGoals) : defaultMissionGoals,
+        charterText: initialCharter,
+        missionGoals: initialGoals,
         structuralWeights: fields.structuralWeights ?? { feasibility: 0.40, risk: 0.35, accountability: 0.25 },
         scoreMix: fields.scoreMix ?? { missionWeight: 0.60, structuralWeight: 0.40 },
         screeningPassThreshold: fields.screeningPassThreshold ?? 0.6,

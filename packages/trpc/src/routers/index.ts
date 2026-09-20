@@ -35,6 +35,8 @@ import { waitlistRouter } from "./waitlist.js";
 import { commonsRouter } from "./commons.js";
 import { groupsRouter } from "./groups.js";
 import { knowledgeBaseRouter } from "./knowledge-base.js";
+import { commonsActionsRouter } from "./commons-actions.js";
+import { commonsActionsAdminRouter } from "./commons-actions-admin.js";
 
 export const appRouter = router({
   user: userRouter,
@@ -72,6 +74,8 @@ export const appRouter = router({
   commons: commonsRouter,
   groups: groupsRouter,
   knowledgeBase: knowledgeBaseRouter,
+  commonsActions: commonsActionsRouter,
+  commonsActionsAdmin: commonsActionsAdminRouter,
 });
 
 export type AppRouter = typeof appRouter;

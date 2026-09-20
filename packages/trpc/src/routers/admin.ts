@@ -143,6 +143,7 @@ export const adminRouter = router({
         recentPosts: recentPosts.map((post) => ({
           id: post.id,
           title: post.title,
+          content: post.content,
           author: post.author.name || post.author.email.split("@")[0],
           classification: post.classification,
           createdAt: post.createdAt,

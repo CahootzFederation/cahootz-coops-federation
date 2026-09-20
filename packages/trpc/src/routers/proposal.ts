@@ -7,6 +7,7 @@ import type { CoopConfigData } from "@repo/validators";
 import { ProposalCategory, ProposalStatus, ProposerRole, Currency, VoteType } from "@repo/db";
 import type { AuthenticatedContext } from "../context.js";
 import { recordAIEvaluation } from "../services/ai-evaluation-log.js";
+import { withCostedProposalRun } from "../services/ai-cost.js";
 
 const COMMONS_COOP_ID = "cahootz";
 
@@ -128,7 +129,7 @@ export const proposalRouter = router({
       let aiError: unknown = null;
       const engineStart = Date.now();
       try {
-        processedProposal = await proposalEngine.processProposal(input, configData);
+        processedProposal = await withCostedProposalRun(coopId, "proposal-engine", () => proposalEngine.processProposal(input, configData));
         await recordAIEvaluation({
           agentKey: "proposal-engine",
           agentName: "Proposal Engine",
@@ -649,7 +650,7 @@ export const proposalRouter = router({
         coopId,
       };
 
-      const processedProposal = await proposalEngine.processProposal(proposalInput, configData);
+      const processedProposal = await withCostedProposalRun(coopId, "proposal-engine", () => proposalEngine.processProposal(proposalInput, configData));
       const budget = processedProposal.budget.amountRequested;
       let finalStatus: ProposalStatus;
       let councilRequired = false;
@@ -749,11 +750,11 @@ export const proposalRouter = router({
       if (!originalText) throw new TRPCError({ code: "BAD_REQUEST", message: "No original text available for rewriting." });
 
       // Ask the AI to rewrite the proposal to incorporate the alternative's changes
-      const rewrittenText = await proposalEngine.rewriteWithAlternative(originalText, {
+      const rewrittenText = await withCostedProposalRun(existing.coopId, "proposal-rewrite", () => proposalEngine.rewriteWithAlternative(originalText, {
         label: alternative.label ?? "",
         rationale: alternative.rationale ?? "",
         changes: alternative.changes ?? [],
-      });
+      }));
 
       // Now resubmit through the full engine pipeline with the rewritten text
       if (!existing.coopId) {
@@ -806,7 +807,7 @@ export const proposalRouter = router({
         coopId,
       };
 
-      const processedProposal = await proposalEngine.processProposal(proposalInput, configData);
+      const processedProposal = await withCostedProposalRun(coopId, "proposal-engine", () => proposalEngine.processProposal(proposalInput, configData));
       const budget = processedProposal.budget.amountRequested;
       let finalStatus: ProposalStatus;
       let councilRequired = false;
@@ -907,7 +908,7 @@ export const proposalRouter = router({
         region: { code: "VA-HAMPTON", name: "Hampton Roads, VA" },
       };
 
-      return proposalEngine.processProposal(testInput);
+      return withCostedProposalRun(null, "proposal-engine-test", () => proposalEngine.processProposal(testInput));
     })
 });
 

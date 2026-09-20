@@ -19,6 +19,8 @@ import {
   publicProcedure,
 } from '../procedures/index.js';
 import { recordObservation } from '../services/ai-memory.js';
+import { recordAgentResultCost } from '../services/ai-cost.js';
+import { enqueueCommonsActionContent } from '../services/commons-action-dispatch.js';
 import { createNotificationAndPush } from '../services/push-notification-service.js';
 import {
   sendApplicationSubmittedNotification,
@@ -442,6 +444,7 @@ async function recordPostClassificationObservation(params: {
     if (!agent) return;
 
     const output = await agent.run({
+      coopId: params.coopId,
       task: 'Classify this single community post into exactly one of the allowed types.',
       content: [
         params.title ? `Title: ${params.title}` : '',
@@ -459,7 +462,7 @@ async function recordPostClassificationObservation(params: {
       scopeId: params.coopId,
       confidence: output.confidence,
       summary: output.summary,
-      details: { classification: output.type, ...output.details },
+      details: { classification: output.type },
       sources: [{ type: 'commons_post', id: params.postId }],
       visibility: 'COMMONS_MEMBERS',
       generatedByAgentKey: 'community-observer',
@@ -659,7 +662,7 @@ function fallbackAiResponse(prompt: string) {
   ].join('\n');
 }
 
-async function runCommonsAi(prompt: string) {
+async function runCommonsAi(prompt: string, coopId?: string) {
   if (!process.env.OPENAI_API_KEY) {
     return fallbackAiResponse(prompt);
   }
@@ -675,7 +678,9 @@ async function runCommonsAi(prompt: string) {
         'Do not pretend an anonymous visitor is a logged-in member.',
       ].join('\n'),
     });
-    const result = (await run(agent, prompt)) as unknown as {
+    const runResult = await run(agent, prompt);
+    await recordAgentResultCost({ coopId, feature: 'commons-assistant', model: process.env.COMMONS_AI_MODEL || 'gpt-5.2', result: runResult }).catch(console.error);
+    const result = runResult as unknown as {
       finalOutput?: string;
       output?: string;
     };
@@ -1350,6 +1355,7 @@ export const commonsRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       let context = '';
+      let contextCoopId: string | undefined;
 
       if (input.postId) {
         const post = await ctx.db.commonsPost.findUnique({
@@ -1377,6 +1383,7 @@ export const commonsRouter = router({
                 post.coopId,
               ))))
         ) {
+          contextCoopId = post.coopId;
           context = [
             `Thread title: ${post.title}`,
             `Thread body: ${post.content}`,
@@ -1390,6 +1397,7 @@ export const commonsRouter = router({
 
       const answer = await runCommonsAi(
         [input.prompt, context ? `\nContext:\n${context}` : ''].join(''),
+        contextCoopId,
       );
 
       return { answer };
@@ -1810,6 +1818,11 @@ export const commonsRouter = router({
           _count: { select: { comments: true, supports: true } },
         },
       });
+      if (circleId === generalCircleId(input.coopId)) {
+        await enqueueCommonsActionContent('commons_post', post.id).catch((error) =>
+          console.error('Could not enqueue Commons action scan for post', { postId: post.id, error }),
+        );
+      }
       const coop = await loadCoopSummary(ctx.db, input.coopId);
 
       if (circleId === generalCircleId(input.coopId)) {
@@ -1962,6 +1975,11 @@ export const commonsRouter = router({
           media: { orderBy: { order: 'asc' } },
         },
       });
+      if (!post.circleId || post.circleId === generalCircleId(post.coopId)) {
+        await enqueueCommonsActionContent('commons_comment', comment.id).catch((error) =>
+          console.error('Could not enqueue Commons action scan for comment', { commentId: comment.id, error }),
+        );
+      }
 
       if (
         post.authorId &&

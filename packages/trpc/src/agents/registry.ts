@@ -5,6 +5,7 @@ import { proposalEngine, ProposalInputZ, ProposalOutputZ } from "@repo/validator
 
 import type { AgentToolContext } from "./tools/index.js";
 import { buildDbTools, buildQueryObservationsTool, buildSearchKnowledgeBaseTool } from "./tools/index.js";
+import { recordAgentResultCost, withCostedProposalRun } from "../services/ai-cost.js";
 
 export interface AgentDefinition {
   key: string;
@@ -51,7 +52,9 @@ async function runCommonsAssistant(
     ].join("\n"),
   });
 
-  const result = (await run(agent, input.prompt)) as unknown as {
+  const runResult = await run(agent, input.prompt);
+  await recordAgentResultCost({ feature: "commons-assistant", model: process.env.COMMONS_AI_MODEL || "gpt-5.2", result: runResult }).catch(console.error);
+  const result = runResult as unknown as {
     finalOutput?: string;
     output?: string;
   };
@@ -80,11 +83,11 @@ const CommentEvaluationOutputZ = z.object({
 async function runCommentEvaluation(
   input: z.infer<typeof CommentEvaluationInputZ>
 ): Promise<z.infer<typeof CommentEvaluationOutputZ>> {
-  return proposalEngine.evaluateComment(input.commentText, {
+  return withCostedProposalRun(null, "proposal-comment-playground", () => proposalEngine.evaluateComment(input.commentText, {
     title: input.proposalTitle,
     summary: input.proposalSummary,
     category: input.category,
-  });
+  }));
 }
 
 // ── 3. Proposal Engine ─────────────────────────────────────────────────────
@@ -99,7 +102,7 @@ async function runCommentEvaluation(
 async function runProposalEngine(
   input: z.infer<typeof ProposalInputZ>
 ): Promise<z.infer<typeof ProposalOutputZ>> {
-  return proposalEngine.processProposal(input);
+  return withCostedProposalRun(input.coopId ?? null, "proposal-engine-playground", () => proposalEngine.processProposal(input));
 }
 
 // ── 4. Proposal Rewrite Agent ─────────────────────────────────────────────
@@ -123,11 +126,11 @@ const ProposalRewriteOutputZ = z.object({
 async function runProposalRewrite(
   input: z.infer<typeof ProposalRewriteInputZ>
 ): Promise<z.infer<typeof ProposalRewriteOutputZ>> {
-  const rewrittenText = await proposalEngine.rewriteWithAlternative(input.originalText, {
+  const rewrittenText = await withCostedProposalRun(null, "proposal-rewrite-playground", () => proposalEngine.rewriteWithAlternative(input.originalText, {
     label: input.label,
     rationale: input.rationale,
     changes: input.changes,
-  });
+  }));
   return { rewrittenText };
 }
 
@@ -147,8 +150,8 @@ const CommonsRecommenderOutputZ = z.object({
     confidence: z.number().min(0).max(1),
     reasoning: z.string(),
   })),
-  question: z.string().optional().describe(
-    "A follow-up question worth asking the user, populated when confidence is low or the agent has something it would want clarified. Recommendations are still always returned regardless."
+  question: z.string().nullable().describe(
+    "A follow-up question worth asking the user when confidence is low; otherwise null. Recommendations are always returned regardless."
   ),
 });
 
@@ -255,7 +258,7 @@ async function runCommonsRecommender(
       "You help match a prospective or existing member to the right commons (cooperative) to join, based on their onboarding profile, each commons' description, and who is already in each commons.",
       "The list below already excludes commons the user is currently an active member of - only recommend from this list.",
       "Always return 1-3 ranked commons with a short reasoning for each, grounded in specific overlaps with the commons' mission or membership. Make your best recommendation even if the profile is thin - never leave recommendations empty, unless the list below is empty, in which case return no recommendations.",
-      "If your top confidence is low, or there's something specific about the user you'd want to know to recommend more precisely, also fill in the question field with ONE concise question. Leave question empty if you're already confident.",
+      "If your top confidence is low, or there's something specific about the user you'd want to know to recommend more precisely, fill in the question field with ONE concise question. Otherwise set question to null.",
       "",
       "Available commons:",
       commonsContext,
@@ -265,18 +268,20 @@ async function runCommonsRecommender(
 
   const prompt = `User profile:\n${userContext}`;
 
-  const result = await run(agent, prompt) as unknown as {
+  const runResult = await run(agent, prompt);
+  await recordAgentResultCost({ feature: "commons-recommender", model: "gpt-5.2", result: runResult }).catch(console.error);
+  const result = runResult as unknown as {
     finalOutput?: z.infer<typeof CommonsRecommenderOutputZ>;
     output?: z.infer<typeof CommonsRecommenderOutputZ>;
   };
 
-  return result.finalOutput ?? result.output ?? { recommendations: [] };
+  return result.finalOutput ?? result.output ?? { recommendations: [], question: null };
 }
 
 // ── 6. Community Observer ──────────────────────────────────────────────────
 // A single, scope-agnostic agent used everywhere the platform wants an LLM
 // to look at some content-in-context and produce ONE structured observation
-// (type, confidence, summary, optional details) matching the AIObservation
+// (type, confidence, summary) matching the AIObservation
 // shape (packages/db/prisma/schema.prisma) - rather than a bespoke agent per
 // feature. Two production call sites share this exact Agent instance/
 // instructions: commons post classification (routers/commons.ts createPost)
@@ -304,6 +309,7 @@ export const COMMUNITY_OBSERVER_POST_TYPES = [
 ] as const;
 
 const CommunityObserverInputZ = z.object({
+  coopId: z.string().optional(),
   task: z.string().min(1).describe(
     "What to look at and what kind of observation to produce, e.g. 'Classify this single community post' or 'Summarize recent circle activity since the last digest'"
   ),
@@ -317,18 +323,18 @@ const CommunityObserverOutputZ = z.object({
   type: z.string().describe("A short machine-readable label for this observation, e.g. a category or 'circle_digest_summary'"),
   confidence: z.number().min(0).max(1),
   summary: z.string().describe("A plain-language summary of the observation"),
-  details: z.record(z.string(), z.unknown()).optional().describe("Optional structured extras beyond the summary"),
 });
 
 async function runCommunityObserver(
   input: z.infer<typeof CommunityObserverInputZ>,
   toolCtx?: AgentToolContext,
 ): Promise<z.infer<typeof CommunityObserverOutputZ>> {
+  const observerModel = input.task.startsWith("Classify this single community post") ? "gpt-5-nano" : "gpt-5.2";
   const agent = new Agent({
     name: "Community Observer",
-    model: "gpt-5.2",
+    model: observerModel,
     instructions: [
-      "You look at content from a cooperative/mutual-aid community platform and produce ONE structured observation: a short `type` label, a confidence (0-1), a plain-language summary, and optional structured details.",
+      "You look at content from a cooperative/mutual-aid community platform and produce ONE structured observation: a short `type` label, a confidence (0-1), and a plain-language summary.",
       "Treat your output as a suggestion for humans to review, not a final decision - don't overstate confidence.",
       "If the task specifies allowed types, the `type` field MUST be one of those values.",
       "If you have tools available, use them to look up additional context (user profiles, group history, past observations, knowledge base documents) rather than guessing - but don't fabricate specifics you can't verify.",
@@ -347,7 +353,9 @@ async function runCommunityObserver(
     `Content:\n${input.content}`,
   ].filter(Boolean).join("\n\n");
 
-  const result = await run(agent, prompt) as unknown as {
+  const runResult = await run(agent, prompt);
+  await recordAgentResultCost({ coopId: input.coopId ?? toolCtx?.coopId, feature: "community-observer", model: observerModel, result: runResult }).catch(console.error);
+  const result = runResult as unknown as {
     finalOutput?: z.infer<typeof CommunityObserverOutputZ>;
     output?: z.infer<typeof CommunityObserverOutputZ>;
   };
@@ -421,7 +429,9 @@ async function runSageCommonsReply(
     `Message to reply to: ${input.message}`,
   ].filter(Boolean).join("\n\n");
 
-  const result = (await run(agent, prompt)) as unknown as {
+  const runResult = await run(agent, prompt);
+  await recordAgentResultCost({ coopId: input.coopId, feature: "sage-reply", model: process.env.COMMONS_AI_MODEL || "gpt-5.2", result: runResult }).catch(console.error);
+  const result = runResult as unknown as {
     finalOutput?: string;
     output?: string;
   };

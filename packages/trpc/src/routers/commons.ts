@@ -462,7 +462,7 @@ async function recordPostClassificationObservation(params: {
       scopeId: params.coopId,
       confidence: output.confidence,
       summary: output.summary,
-      details: { classification: output.type, ...output.details },
+      details: { classification: output.type },
       sources: [{ type: 'commons_post', id: params.postId }],
       visibility: 'COMMONS_MEMBERS',
       generatedByAgentKey: 'community-observer',

@@ -118,6 +118,11 @@
       "import": "./dist/lib/admin-config.js",
       "require": "./dist/lib/admin-config.js"
     },
+    "./lib/commons-admin-token": {
+      "types": "./dist/lib/commons-admin-token.d.ts",
+      "import": "./dist/lib/commons-admin-token.js",
+      "require": "./dist/lib/commons-admin-token.js"
+    },
     "./agents/registry": {
       "types": "./dist/agents/registry.d.ts",
       "import": "./dist/agents/registry.js",

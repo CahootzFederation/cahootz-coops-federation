@@ -308,8 +308,7 @@ export default function CommonsPostDetailScreen() {
 
     try {
       await Share.share({
-        title: post.title,
-        message: `${post.title}\n\n${post.body}\n\n${post.group}`,
+        message: `${post.body}\n\n${post.group}`,
       });
     } catch (caughtError) {
       console.error('Failed to share post:', caughtError);
@@ -426,11 +425,6 @@ export default function CommonsPostDetailScreen() {
               </TouchableOpacity>
               <UserCircle size={20} color={THEME.primary} />
             </View>
-            <MentionText
-              content={post.title}
-              className="mt-3"
-              style={{ fontSize: 24, lineHeight: 32, fontWeight: '900', color: '#030712' }}
-            />
             {post.body ? (
               <MentionText
                 content={post.body}

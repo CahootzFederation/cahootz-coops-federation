@@ -790,7 +790,7 @@ export const groupsRouter = router({
         scopeId: group.id,
         confidence: output.confidence,
         summary: output.summary,
-        details: output.details,
+        details: {},
         sources: [
           ...recentEvents.map((e) => ({ type: 'audit_log', id: e.id })),
           ...recentComments.map((c) => ({ type: 'group_comment', id: c.id })),

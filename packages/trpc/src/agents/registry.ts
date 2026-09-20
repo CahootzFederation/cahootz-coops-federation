@@ -150,8 +150,8 @@ const CommonsRecommenderOutputZ = z.object({
     confidence: z.number().min(0).max(1),
     reasoning: z.string(),
   })),
-  question: z.string().optional().describe(
-    "A follow-up question worth asking the user, populated when confidence is low or the agent has something it would want clarified. Recommendations are still always returned regardless."
+  question: z.string().nullable().describe(
+    "A follow-up question worth asking the user when confidence is low; otherwise null. Recommendations are always returned regardless."
   ),
 });
 
@@ -258,7 +258,7 @@ async function runCommonsRecommender(
       "You help match a prospective or existing member to the right commons (cooperative) to join, based on their onboarding profile, each commons' description, and who is already in each commons.",
       "The list below already excludes commons the user is currently an active member of - only recommend from this list.",
       "Always return 1-3 ranked commons with a short reasoning for each, grounded in specific overlaps with the commons' mission or membership. Make your best recommendation even if the profile is thin - never leave recommendations empty, unless the list below is empty, in which case return no recommendations.",
-      "If your top confidence is low, or there's something specific about the user you'd want to know to recommend more precisely, also fill in the question field with ONE concise question. Leave question empty if you're already confident.",
+      "If your top confidence is low, or there's something specific about the user you'd want to know to recommend more precisely, fill in the question field with ONE concise question. Otherwise set question to null.",
       "",
       "Available commons:",
       commonsContext,
@@ -275,13 +275,13 @@ async function runCommonsRecommender(
     output?: z.infer<typeof CommonsRecommenderOutputZ>;
   };
 
-  return result.finalOutput ?? result.output ?? { recommendations: [] };
+  return result.finalOutput ?? result.output ?? { recommendations: [], question: null };
 }
 
 // ── 6. Community Observer ──────────────────────────────────────────────────
 // A single, scope-agnostic agent used everywhere the platform wants an LLM
 // to look at some content-in-context and produce ONE structured observation
-// (type, confidence, summary, optional details) matching the AIObservation
+// (type, confidence, summary) matching the AIObservation
 // shape (packages/db/prisma/schema.prisma) - rather than a bespoke agent per
 // feature. Two production call sites share this exact Agent instance/
 // instructions: commons post classification (routers/commons.ts createPost)
@@ -323,7 +323,6 @@ const CommunityObserverOutputZ = z.object({
   type: z.string().describe("A short machine-readable label for this observation, e.g. a category or 'circle_digest_summary'"),
   confidence: z.number().min(0).max(1),
   summary: z.string().describe("A plain-language summary of the observation"),
-  details: z.record(z.string(), z.unknown()).optional().describe("Optional structured extras beyond the summary"),
 });
 
 async function runCommunityObserver(
@@ -335,7 +334,7 @@ async function runCommunityObserver(
     name: "Community Observer",
     model: observerModel,
     instructions: [
-      "You look at content from a cooperative/mutual-aid community platform and produce ONE structured observation: a short `type` label, a confidence (0-1), a plain-language summary, and optional structured details.",
+      "You look at content from a cooperative/mutual-aid community platform and produce ONE structured observation: a short `type` label, a confidence (0-1), and a plain-language summary.",
       "Treat your output as a suggestion for humans to review, not a final decision - don't overstate confidence.",
       "If the task specifies allowed types, the `type` field MUST be one of those values.",
       "If you have tools available, use them to look up additional context (user profiles, group history, past observations, knowledge base documents) rather than guessing - but don't fabricate specifics you can't verify.",

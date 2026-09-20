@@ -17,7 +17,7 @@ vi.mock("@openai/agents", () => {
   return {
     Agent: MockAgent,
     run: vi.fn().mockResolvedValue({
-      finalOutput: { type: "test_type", confidence: 0.5, summary: "ok", details: {} },
+      finalOutput: { type: "test_type", confidence: 0.5, summary: "ok" },
     }),
     webSearchTool: vi.fn().mockReturnValue({}),
     tool: vi.fn().mockImplementation((opts: any) => ({ __toolName: opts.name })),
@@ -26,6 +26,7 @@ vi.mock("@openai/agents", () => {
 
 import { agentRegistry, getAgent, listAgentMetadata } from "../agents/registry.js";
 import { run } from "@openai/agents";
+import { zodResponseFormat } from "openai/helpers/zod";
 import type { AgentToolContext } from "../agents/tools/index.js";
 
 describe("agent registry", () => {
@@ -58,6 +59,16 @@ describe("agent registry", () => {
     }
   });
 
+  it("requires every structured output field for the observer and recommender", () => {
+    for (const key of ["community-observer", "commons-recommender"]) {
+      const outputSchema = getAgent(key)!.outputSchema;
+      const schema = zodResponseFormat(outputSchema, key).json_schema.schema as {
+        properties: Record<string, unknown>; required: string[];
+      };
+      expect(schema.required).toEqual(Object.keys(schema.properties));
+    }
+  });
+
   describe("community-observer run()", () => {
     it("builds an Agent with no tools when called without a toolCtx", async () => {
       const agent = getAgent("community-observer")!;
@@ -68,7 +79,7 @@ describe("agent registry", () => {
         allowedTypes: ["need", "social"],
       });
 
-      expect(output).toEqual({ type: "test_type", confidence: 0.5, summary: "ok", details: {} });
+      expect(output).toEqual({ type: "test_type", confidence: 0.5, summary: "ok" });
       expect(agentConstructorCalls).toHaveLength(1);
       expect(agentConstructorCalls[0].tools).toEqual([]);
       expect(agentConstructorCalls[0].modelSettings).toBeUndefined();

@@ -43,6 +43,18 @@ jobs:
       - name: Lint
         run: pnpm lint && pnpm lint:ws
 
+  trigger-build:
+    runs-on: ubuntu-latest
+    needs: lockfile-check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup
+        uses: ./tooling/github/setup
+
+      - name: Check Trigger.dev task bundle
+        run: pnpm check:trigger-build
+
   format:
     runs-on: ubuntu-latest
     needs: lockfile-check

@@ -26,6 +26,9 @@ jobs:
       - name: Setup
         uses: ./tooling/github/setup
 
+      - name: Check Trigger.dev task bundle
+        run: pnpm check:trigger-build
+
       - name: Check Trigger.dev environment
         shell: bash
         run: |
@@ -41,6 +44,9 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm -F @repo/db db:generate
+
+      - name: Verify Trigger.dev deployment build
+        run: pnpm exec trigger deploy --dry-run --skip-update-check
 
       - name: Deploy Trigger.dev tasks
         run: pnpm deploy:trigger

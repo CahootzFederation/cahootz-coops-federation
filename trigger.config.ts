@@ -1,8 +1,16 @@
 import { PrismaInstrumentation } from "@prisma/instrumentation";
 import { OpenAIInstrumentation } from "@traceloop/instrumentation-openai";
 import { additionalPackages } from "@trigger.dev/build/extensions/core";
+import { esbuildPlugin } from "@trigger.dev/build/extensions";
 import { prismaExtension } from "@trigger.dev/build/extensions/prisma";
 import { defineConfig } from "@trigger.dev/sdk";
+import { resolve } from "node:path";
+
+const workspaceEntries: Record<string, string> = {
+  "@repo/db": "packages/db/index.ts",
+  "@repo/validators": "packages/validators/src/index.ts",
+  "@repo/validators/notification": "packages/validators/src/notification.ts",
+};
 
 //@ts-ignore
 const project = process.env.TRIGGER_PROJECT_REF ?? 'proj_ftqkgqaijkmjsgrqgegp';
@@ -21,6 +29,15 @@ export default defineConfig({
   maxDuration: 3600,
   build: {
     extensions: [
+      esbuildPlugin({
+        name: "workspace-package-sources",
+        setup(build) {
+          build.onResolve({ filter: /^@repo\/(?:db|validators)(?:\/notification)?$/ }, ({ path }) => {
+            const entry = workspaceEntries[path];
+            return entry ? { path: resolve(process.cwd(), entry) } : undefined;
+          });
+        },
+      }, { placement: "first" }),
       additionalPackages({
         packages: ["zod@3.25.76"],
       }),

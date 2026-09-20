@@ -16,7 +16,7 @@ interface ActionRow {
   feedback: { rating: "GOOD" | "NEEDS_WORK"; reasons: string[]; notes: string | null; correctedText: string | null } | null;
   source: SourceContent | null; parentPost: SourceContent | null;
 }
-type FeedbackEdit = { rating: "GOOD" | "NEEDS_WORK" | ""; reasons: string[]; notes: string; correctedText: string };
+interface FeedbackEdit { rating: "GOOD" | "NEEDS_WORK" | ""; reasons: string[]; notes: string; correctedText: string }
 const FEEDBACK_REASONS = [
   ["WRONG_ACTION", "Wrong action"], ["INCORRECT_CHARTER_USE", "Charter or goal misused"],
   ["INACCURATE", "Inaccurate"], ["MISSED_CONTEXT", "Missed context"],

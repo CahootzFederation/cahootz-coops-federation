@@ -26,7 +26,10 @@ export function withProposalAIUsage<T>(handler: ProposalUsageHandler, operation:
 const run: typeof sdkRun = (async (...args: Parameters<typeof sdkRun>) => {
   const result = await sdkRun(...args);
   const handler = proposalUsageContext.getStore();
-  if (handler) await handler(result, String(args[0].model));
+  if (handler) {
+    const model = args[0].model;
+    await handler(result, typeof model === "string" ? model : "custom");
+  }
   return result;
 }) as typeof sdkRun;
 

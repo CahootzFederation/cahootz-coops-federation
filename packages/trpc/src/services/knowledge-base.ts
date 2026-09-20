@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { db, Prisma } from "@repo/db";
 import type { KnowledgeDocumentType, KnowledgeVisibility } from "@repo/db";
+import { recordAICost } from "./ai-cost.js";
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMENSIONS = 1536;
@@ -44,6 +45,7 @@ function toVectorLiteral(embedding: number[]): string {
 }
 
 export interface IngestDocumentParams {
+  documentId?: string;
   coopId?: string;
   scopeType: string;
   scopeId: string;
@@ -57,8 +59,7 @@ export interface IngestDocumentParams {
 }
 
 export async function ingestDocument(params: IngestDocumentParams) {
-  const document = await db.knowledgeDocument.create({
-    data: {
+  const documentData = {
       coopId: params.coopId ?? "cahootz",
       scopeType: params.scopeType,
       scopeId: params.scopeId,
@@ -69,8 +70,10 @@ export async function ingestDocument(params: IngestDocumentParams) {
       uploadedById: params.uploadedById,
       content: params.content,
       metadata: (params.metadata ?? {}) as Prisma.InputJsonValue,
-    },
-  });
+  };
+  const document = params.documentId
+    ? await db.knowledgeDocument.upsert({ where: { id: params.documentId }, create: { id: params.documentId, ...documentData }, update: documentData })
+    : await db.knowledgeDocument.create({ data: documentData });
 
   const chunks = chunkText(params.content);
   if (chunks.length === 0) {
@@ -82,15 +85,22 @@ export async function ingestDocument(params: IngestDocumentParams) {
     model: EMBEDDING_MODEL,
     input: chunks,
   });
+  await recordAICost({ coopId: params.coopId, feature: "knowledge-ingest", model: EMBEDDING_MODEL,
+    status: "SUCCESS", usage: { inputTokens: response.usage?.prompt_tokens, outputTokens: 0 } }).catch(console.error);
 
   for (let i = 0; i < chunks.length; i++) {
-    const chunk = await db.knowledgeChunk.create({
-      data: {
+    const chunkData = {
         documentId: document.id,
         chunkIndex: i,
         content: chunks[i],
-      },
-    });
+    };
+    const chunk = params.documentId
+      ? await db.knowledgeChunk.upsert({
+          where: { documentId_chunkIndex: { documentId: document.id, chunkIndex: i } },
+          create: chunkData,
+          update: { content: chunks[i] },
+        })
+      : await db.knowledgeChunk.create({ data: chunkData });
 
     // `embedding` is an Unsupported("vector(1536)") column — Prisma Client
     // has no typed way to read/write it, so it's set via a follow-up raw
@@ -126,6 +136,8 @@ export async function searchKnowledgeBase(
     model: EMBEDDING_MODEL,
     input: params.query,
   });
+  await recordAICost({ coopId: params.coopId, feature: "knowledge-search", model: EMBEDDING_MODEL,
+    status: "SUCCESS", usage: { inputTokens: response.usage?.prompt_tokens, outputTokens: 0 } }).catch(console.error);
   const vectorLiteral = toVectorLiteral(response.data[0].embedding);
   const coopId = params.coopId ?? "cahootz";
   const limit = params.limit ?? 5;

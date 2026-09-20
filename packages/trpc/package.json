@@ -122,6 +122,26 @@
       "types": "./dist/agents/registry.d.ts",
       "import": "./dist/agents/registry.js",
       "require": "./dist/agents/registry.js"
+    },
+    "./services/commons-action-agent": {
+      "types": "./dist/services/commons-action-agent.d.ts",
+      "import": "./dist/services/commons-action-agent.js",
+      "require": "./dist/services/commons-action-agent.js"
+    },
+    "./services/knowledge-base": {
+      "types": "./dist/services/knowledge-base.d.ts",
+      "import": "./dist/services/knowledge-base.js",
+      "require": "./dist/services/knowledge-base.js"
+    },
+    "./services/ai-memory": {
+      "types": "./dist/services/ai-memory.d.ts",
+      "import": "./dist/services/ai-memory.js",
+      "require": "./dist/services/ai-memory.js"
+    },
+    "./services/push-notification-service": {
+      "types": "./dist/services/push-notification-service.d.ts",
+      "import": "./dist/services/push-notification-service.js",
+      "require": "./dist/services/push-notification-service.js"
     }
   },
   "keywords": [],
@@ -136,6 +156,7 @@
     "@repo/validators": "workspace:*",
     "@sentry/node": "5.30.0",
     "@t3-oss/env-core": "^0.9.2",
+    "@trigger.dev/sdk": "4.5.4",
     "@trpc/server": "catalog:",
     "@vercel/blob": "^0.27.0",
     "bcryptjs": "^3.0.2",
@@ -148,8 +169,8 @@
     "superjson": "^2.2.2",
     "twilio": "^5.11.2",
     "viem": "catalog:",
-    "zod-to-json-schema": "^3.25.2",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",

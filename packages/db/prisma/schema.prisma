@@ -973,6 +973,154 @@ model CommonsComment {
   @@schema("public")
 }
 
+enum CommonsActionType {
+  MAKE_PROPOSAL
+  RESPOND_CHARTER_CORRECTION
+  RESPOND_MISSION_ALIGNMENT
+  RESPOND_RESOURCE_FOLLOWUP
+  VERIFY_RESOURCE
+  LOG_RESOURCE
+  ANSWER_QUESTION
+  CLARIFY_NEED
+  CONNECT_MEMBERS
+  ESCALATE_TO_ADMIN
+  NO_ACTION
+
+  @@schema("public")
+}
+
+enum CommonsActionStatus {
+  PENDING
+  PUBLISHED
+  APPROVED
+  DISMISSED
+  FAILED
+
+  @@schema("public")
+}
+
+model CommonsAgentSetting {
+  coopId       String   @id
+  autoReply    Boolean  @default(true)
+  lastScanAt   DateTime?
+  newPostOffset Int @default(0)
+  newCommentOffset Int @default(0)
+  backfillPostCursor String?
+  backfillCommentCursor String?
+  backfillPostsDone Boolean @default(false)
+  backfillCommentsDone Boolean @default(false)
+  lastCharterKey String?
+  updatedBy    String?
+  updatedAt    DateTime @updatedAt
+
+  @@schema("public")
+}
+
+model CommonsContentScan {
+  id              String   @id @default(cuid())
+  coopId          String
+  sourceType      String
+  sourceId        String
+  contentHash     String
+  charterConfigId String
+  status          String   @default("PROCESSING")
+  error           String?  @db.Text
+  scannedAt       DateTime @default(now())
+
+  @@unique([sourceType, sourceId, contentHash, charterConfigId])
+  @@index([coopId, scannedAt])
+  @@schema("public")
+}
+
+model CommonsAction {
+  id                 String              @id @default(cuid())
+  coopId             String
+  sourceType         String
+  sourceId           String
+  sourcePostId       String
+  sourceAuthorId     String
+  contentHash        String
+  position           Int
+  type               CommonsActionType
+  status             CommonsActionStatus @default(PENDING)
+  summary            String              @db.Text
+  evidence           String?             @db.Text
+  confidence         Float
+  draftText          String?             @db.Text
+  charterConfigId    String
+  publishedCommentId String?
+  replySourceKey     String?             @unique
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@unique([sourceType, sourceId, contentHash, charterConfigId, position])
+  @@index([coopId, status, createdAt])
+  @@index([sourceType, sourceId])
+  @@schema("public")
+}
+
+model CommonsResource {
+  id               String   @id @default(cuid())
+  coopId           String
+  actionId         String   @unique
+  kind             String
+  title            String
+  description      String   @db.Text
+  sourceType       String
+  sourceId         String
+  candidateUserId  String?
+  status           String   @default("CANDIDATE") // CANDIDATE | INVITED | ACCEPTED | DECLINED | VERIFIED | PUBLISHED
+  invitedAt        DateTime?
+  respondedAt      DateTime?
+  verifiedBy       String?
+  verifiedAt       DateTime?
+  publishedAt      DateTime?
+  knowledgeDocId   String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([coopId, status])
+  @@index([candidateUserId, status])
+  @@schema("public")
+}
+
+model CommonsProposalDraft {
+  id        String   @id @default(cuid())
+  actionId  String   @unique
+  coopId    String
+  authorId  String
+  title     String
+  body      String   @db.Text
+  submittedAt DateTime?
+  submittedProposalId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([authorId, coopId])
+  @@schema("public")
+}
+
+model AICostEvent {
+  id                 String   @id @default(cuid())
+  coopId             String?
+  feature            String
+  model              String
+  status             String
+  requestId          String?  @unique
+  inputTokens        Int?
+  cachedInputTokens  Int?
+  outputTokens       Int?
+  costUsd            Decimal? @db.Decimal(18, 9)
+  pricingVersion     String?
+  createdAt          DateTime @default(now())
+
+  @@index([coopId, createdAt])
+  @@index([feature, createdAt])
+  @@schema("public")
+}
+
 model CommonsCommentMedia {
   id              String         @id @default(cuid())
   commentId       String

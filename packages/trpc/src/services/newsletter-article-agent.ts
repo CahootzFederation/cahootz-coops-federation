@@ -1,4 +1,5 @@
 import { Agent, run, webSearchTool } from "@openai/agents";
+import { recordAgentResultCost } from "./ai-cost.js";
 import { z } from "zod";
 
 export interface ArticleResearchResult {
@@ -159,7 +160,9 @@ async function runArticleAgentStep<T>(params: {
   });
 
   try {
-    const result = (await run(params.agent, params.input)) as unknown as {
+    const runResult = await run(params.agent, params.input);
+    await recordAgentResultCost({ feature: `newsletter-article-${params.step}`, model: String(params.props?.model || "unknown"), result: runResult }).catch(console.error);
+    const result = runResult as unknown as {
       finalOutput?: T;
       output?: T;
     };

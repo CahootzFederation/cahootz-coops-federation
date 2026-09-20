@@ -17,6 +17,7 @@ import {
   hasSubjectOverlap,
 } from "../services/newsletter-article-agent";
 import { router } from "../trpc";
+import { recordAgentResultCost, withAICommonsContext } from "../services/ai-cost.js";
 
 type NewsletterSubmissionType = "article" | "event";
 type NewsletterSubmissionStatus = "pending" | "published" | "dismissed";
@@ -830,7 +831,9 @@ async function runNewsletterAgentStep<T>(params: {
   });
 
   try {
-    const result = (await run(params.agent, params.input)) as unknown as {
+    const runResult = await run(params.agent, params.input);
+    await recordAgentResultCost({ feature: `newsletter-${params.step}`, model: String(params.props?.model || "unknown"), result: runResult }).catch(console.error);
+    const result = runResult as unknown as {
       finalOutput?: T;
       output?: T;
     };
@@ -1543,6 +1546,7 @@ export async function runNewsletterAgentForCoop(params: {
   agentId: NewsletterAgentId;
   updatedBy?: string;
 }) {
+  return withAICommonsContext(params.coopId, async () => {
   const [publicInfo, coopConfig, researchCacheRecord] = await Promise.all([
     params.db.publicCoopInfo.findUnique({
       where: { coopId: params.coopId },
@@ -1725,6 +1729,7 @@ export async function runNewsletterAgentForCoop(params: {
     submissions: generatedSubmissions,
     message: runMessage,
   };
+  });
 }
 
 export const publicCoopInfoRouter = router({

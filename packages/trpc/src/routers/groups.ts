@@ -774,6 +774,7 @@ export const groupsRouter = router({
 
       const output = await agent.run(
         {
+          coopId: group.coopId,
           task: priorDigest
             ? "Summarize what's changed in this circle since the previous digest - reference it explicitly rather than restating everything."
             : 'Summarize recent activity in this circle for a first digest.',

@@ -3750,6 +3750,58 @@ export const api = {
   // NOTIFICATIONS
   // ═══════════════════════════════════════════════════════════════════════════
 
+  async getResourceInvitations(sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.myResourceInvitations`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<Array<{ id: string; coopId: string; kind: string; title: string; description: string; invitedAt: string | null }>>(
+      response, 'Could not load resource invitations',
+    );
+  },
+
+  async getCommonsResources(coopId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.listResources?input=${input}`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<Array<{ id: string; kind: string; title: string; description: string; publishedAt: string | null }>>(
+      response, 'Could not load Commons resources',
+    );
+  },
+
+  async respondToResourceInvitation(resourceId: string, accept: boolean, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.respondToResourceInvitation`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ resourceId, accept }),
+    });
+    return readTrpcResult<{ accepted: boolean }>(response, 'Could not respond to invitation');
+  },
+
+  async getCommonsProposalDrafts(sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.myProposalDrafts`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<Array<{ id: string; coopId: string; title: string; body: string }>>(
+      response, 'Could not load proposal drafts',
+    );
+  },
+
+  async saveCommonsProposalDraft(draftId: string, title: string, body: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.updateMyProposalDraft`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ draftId, title, body }),
+    });
+    return readTrpcResult<{ saved: boolean }>(response, 'Could not save proposal draft');
+  },
+
+  async markCommonsProposalDraftSubmitted(draftId: string, proposalId: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.markProposalDraftSubmitted`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ draftId, proposalId }),
+    });
+    return readTrpcResult<{ submitted: boolean }>(response, 'Could not mark proposal draft submitted');
+  },
+
   /**
    * Get user's notifications
    */

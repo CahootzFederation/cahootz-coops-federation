@@ -1,0 +1,156 @@
+name: Mobile E2E
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/mobile-e2e.yml"
+      - "apps/api/**"
+      - "apps/mobile/**"
+      - "packages/db/**"
+      - "packages/trpc/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/mobile-e2e.yml"
+      - "apps/api/**"
+      - "apps/mobile/**"
+      - "packages/db/**"
+      - "packages/trpc/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-e2e-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  mobile-e2e:
+    name: Two-user mobile UI journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cahootz_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cahootz_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      CI: "true"
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cahootz_e2e
+      SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      PORT: "3001"
+      EXPO_PUBLIC_API_BASE_URL: http://localhost:3001
+      EXPO_PUBLIC_WEB_URL: http://localhost:8081
+      EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
+      WALLET_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      STRIPE_SECRET_KEY: sk_test_ci_placeholder
+      STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
+      STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
+      SLACK_WEBHOOK_URL: https://example.com/ci-placeholder
+      RESEND_API_KEY: re_ci_placeholder
+      RESEND_FROM_EMAIL: support@mail.cahootzcoops.com
+      SENTRY_DSN: https://public@example.com/1
+      E2E_BASE_URL: http://localhost:8081
+      E2E_API_BASE_URL: http://localhost:3001
+      E2E_USER_A_EMAIL: releaseclick1@test.cahootz.local
+      E2E_USER_B_EMAIL: releaseclick2@test.cahootz.local
+      E2E_LOGIN_CODE: "000000"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10.11.1"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm -F @cahootz/mobile exec playwright install --with-deps chromium
+
+      - name: Prepare database
+        run: |
+          pnpm -F @repo/db db:generate
+          pnpm -F @repo/db exec prisma migrate deploy --schema prisma/schema.prisma
+          pnpm -F @repo/db exec ts-node --transpile-only scripts/seed-test-users.ts -- --coopId=cahootz --count=2 --prefix=releaseclick
+
+      - name: Start API and mobile web app
+        run: |
+          nohup pnpm dev:api > /tmp/cahootz-api.log 2>&1 &
+          echo $! > /tmp/cahootz-api.pid
+          nohup pnpm -F @cahootz/mobile dev > /tmp/cahootz-mobile.log 2>&1 &
+          echo $! > /tmp/cahootz-mobile.pid
+
+      - name: Wait for services
+        shell: bash
+        run: |
+          for attempt in {1..60}; do
+            if curl --fail --silent http://localhost:3001/health/db >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              cat /tmp/cahootz-api.log
+              exit 1
+            fi
+            sleep 2
+          done
+
+          for attempt in {1..60}; do
+            if curl --fail --silent http://localhost:8081 >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              cat /tmp/cahootz-mobile.log
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Run two-user UI tests
+        run: pnpm test:e2e:mobile
+
+      - name: Collect server logs
+        if: ${{ always() }}
+        run: |
+          mkdir -p output/playwright/server-logs
+          if [ -f /tmp/cahootz-api.log ]; then
+            cp /tmp/cahootz-api.log output/playwright/server-logs/api.log
+          fi
+          if [ -f /tmp/cahootz-mobile.log ]; then
+            cp /tmp/cahootz-mobile.log output/playwright/server-logs/mobile.log
+          fi
+
+      - name: Upload E2E artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-e2e-artifacts
+          path: output/playwright/
+          if-no-files-found: ignore
+          retention-days: 14

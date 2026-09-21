@@ -126,7 +126,7 @@ async function loadFeedPosts(
             { coopId: id, circleId: null },
           ]),
         },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     include: {
@@ -475,6 +475,7 @@ async function recordPostClassificationObservation(params: {
 function mapPostWithGroup(record: any, groupName: string) {
   return {
     id: record.id,
+    createdAt: record.createdAt.toISOString(),
     coopId: record.coopId,
     circleId: record.circleId || generalCircleId(record.coopId),
     authorId: record.authorId,

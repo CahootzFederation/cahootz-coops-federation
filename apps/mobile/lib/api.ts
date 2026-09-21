@@ -248,6 +248,7 @@ export interface CommonsPostMedia {
 
 export interface CommonsPost {
   id: string;
+  createdAt?: string;
   coopId?: string;
   circleId?: string;
   authorId?: string;

@@ -23,7 +23,11 @@
     "ios": "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 expo run:ios"
   },
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/e2e/"
+    ]
   },
   "expo": {
     "autolinking": {

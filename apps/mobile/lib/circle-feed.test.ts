@@ -23,6 +23,15 @@ describe('postsForCircle', () => {
 });
 
 describe('mergeFeedPosts', () => {
+  it('keeps posts newest first when feed pages arrive out of order', () => {
+    const oldest = { ...post('oldest', 'artists'), createdAt: '2026-09-20T10:00:00.000Z' };
+    const newest = { ...post('newest', 'artists'), createdAt: '2026-09-20T12:00:00.000Z' };
+    const middle = { ...post('middle', 'artists'), createdAt: '2026-09-20T11:00:00.000Z' };
+
+    expect(mergeFeedPosts([oldest, newest], [middle]).map((item) => item.id))
+      .toEqual(['newest', 'middle', 'oldest']);
+  });
+
   it('keeps a newly posted item first when an older request completes', () => {
     expect(mergeFeedPosts(
       [post('new', 'artists', 'general:artists')],

@@ -190,6 +190,9 @@ export default function CommonsAiEntry({
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ welcome?: string }>();
   const scrollRef = useRef<ScrollView>(null);
+  const feedListOffsetYRef = useRef<number | null>(null);
+  const scrollToPostIdRef = useRef<string | null>(null);
+  const postedItemLayoutRef = useRef<{ id: string; y: number } | null>(null);
   const pendingActionRef = useRef<PendingAction | null>(null);
   const activeFeedKeyRef = useRef('');
   activeFeedKeyRef.current = `${feedCoopId}:${feedCircleId || 'general'}`;
@@ -389,6 +392,9 @@ export default function CommonsAiEntry({
 
   useEffect(() => {
     let mounted = true;
+    scrollToPostIdRef.current = null;
+    postedItemLayoutRef.current = null;
+    feedListOffsetYRef.current = null;
     setFeedPosts([]);
     setNextFeedCursor(null);
     setCircleName(null);
@@ -611,6 +617,22 @@ export default function CommonsAiEntry({
       : postsForCircle(feedPosts, feedCoopId, feedCircleId);
     return scopedPosts;
   }, [feedPosts, feedCoopId, feedCircleId]);
+
+  const scrollToPostedItem = () => {
+    const item = postedItemLayoutRef.current;
+    const listY = feedListOffsetYRef.current;
+    if (!item || listY === null || scrollToPostIdRef.current !== item.id) return;
+    scrollToPostIdRef.current = null;
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: 12 + listY + item.y, animated: true });
+    });
+  };
+
+  const recordPostedItemLayout = (id: string, y: number) => {
+    if (scrollToPostIdRef.current !== id) return;
+    postedItemLayoutRef.current = { id, y };
+    scrollToPostedItem();
+  };
   const hasCurrentUserPost = visiblePosts.some(
     (post) => post.authorId === user?.id,
   );
@@ -662,6 +684,34 @@ export default function CommonsAiEntry({
       try {
         const isPersonalPageDestination =
           selectedComposerCommons.id === PERSONAL_PAGE_DESTINATION_ID;
+        const postingFeedKey = activeFeedKeyRef.current;
+        if (!isPersonalPageDestination) {
+          const targetCircleId = feedCircleId || `general:${selectedComposerCommons.id}`;
+          pendingPostId = `pending:${Date.now()}:${Math.random()}`;
+          const pendingPost: CommonsPost = {
+            id: pendingPostId,
+            createdAt: new Date().toISOString(),
+            coopId: selectedComposerCommons.id,
+            circleId: targetCircleId,
+            authorId: user?.id,
+            author: accountName,
+            authorHandle: accountHandle,
+            group: feedCircleId ? circleName || 'Circle' : selectedComposerCommons.name,
+            time: 'Posting…',
+            title: trimmed.slice(0, 120),
+            body: trimmed,
+            tag: selectedPostType || 'Social',
+            replies: 0,
+            support: 0,
+            media: [],
+            comments: [],
+          };
+          if (feedCoopId === 'all' || postsForCircle([pendingPost], feedCoopId, feedCircleId).length > 0) {
+            scrollToPostIdRef.current = pendingPostId;
+            postedItemLayoutRef.current = null;
+            setFeedPosts((current) => mergeFeedPosts([pendingPost], current));
+          }
+        }
         const uploadResourceId = isPersonalPageDestination
           ? 'personal-page'
           : selectedComposerCommons.id;
@@ -710,31 +760,6 @@ export default function CommonsAiEntry({
           return;
         }
 
-        const postingFeedKey = activeFeedKeyRef.current;
-        const targetCircleId = feedCircleId || `general:${selectedComposerCommons.id}`;
-        pendingPostId = `pending:${Date.now()}:${Math.random()}`;
-        const pendingPost: CommonsPost = {
-          id: pendingPostId,
-          coopId: selectedComposerCommons.id,
-          circleId: targetCircleId,
-          authorId: user?.id,
-          author: accountName,
-          authorHandle: accountHandle,
-          group: feedCircleId ? circleName || 'Circle' : selectedComposerCommons.name,
-          time: 'Posting…',
-          title: trimmed.slice(0, 120),
-          body: trimmed,
-          tag: selectedPostType || 'Social',
-          replies: 0,
-          support: 0,
-          media: uploadedMedia,
-          comments: [],
-        };
-        if (activeFeedKeyRef.current === postingFeedKey &&
-          (feedCoopId === 'all' || postsForCircle([pendingPost], feedCoopId, feedCircleId).length > 0)) {
-          setFeedPosts((current) => mergeFeedPosts([pendingPost], current));
-          scrollRef.current?.scrollTo({ y: 0, animated: true });
-        }
         const result = await api.createCommonsPost(
           {
             content: trimmed,
@@ -752,6 +777,10 @@ export default function CommonsAiEntry({
               result.post.circleId === `general:${result.post.coopId}`
             : postsForCircle([result.post], feedCoopId, feedCircleId).length > 0);
         if (activeFeedKeyRef.current === postingFeedKey) {
+          if (belongsInCurrentFeed && pendingPostId) {
+            scrollToPostIdRef.current = result.post.id;
+            postedItemLayoutRef.current = null;
+          }
           setFeedPosts((current) => {
             const withoutPending = current.filter((post) => post.id !== pendingPostId);
             return belongsInCurrentFeed
@@ -770,6 +799,7 @@ export default function CommonsAiEntry({
         );
       } catch (error) {
         if (pendingPostId) {
+          if (scrollToPostIdRef.current === pendingPostId) scrollToPostIdRef.current = null;
           setFeedPosts((current) => current.filter((post) => post.id !== pendingPostId));
         }
         console.error('Failed to publish post:', error);
@@ -1633,7 +1663,13 @@ export default function CommonsAiEntry({
             </View>
           ) : null}
 
-          <View className="gap-5">
+          <View
+            className="gap-5"
+            onLayout={(event) => {
+              feedListOffsetYRef.current = event.nativeEvent.layout.y;
+              scrollToPostedItem();
+            }}
+          >
             {visiblePosts.length === 0 ? (
               <View className="rounded-[28px] border border-dashed border-gray-300 bg-white p-5">
                 <Text className="text-base font-black text-gray-900">
@@ -1650,6 +1686,7 @@ export default function CommonsAiEntry({
                 return (
                   <View
                     key={post.id}
+                    onLayout={(event) => recordPostedItemLayout(post.id, event.nativeEvent.layout.y)}
                     className="rounded-[28px] border bg-white p-4"
                     style={{ borderColor: SOCIAL_THEME.border }}
                   >
@@ -1673,6 +1710,7 @@ export default function CommonsAiEntry({
               return (
                 <TouchableOpacity
                   key={post.id}
+                  onLayout={(event) => recordPostedItemLayout(post.id, event.nativeEvent.layout.y)}
                   onPress={() => openPostDetail(post)}
                   className="overflow-hidden rounded-[28px] border bg-white"
                   style={{ borderColor: SOCIAL_THEME.border }}

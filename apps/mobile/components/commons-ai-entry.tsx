@@ -59,6 +59,7 @@ import {
   personInitials,
 } from '@/lib/social-profile';
 import {
+  ArrowLeft,
   Bookmark,
   CheckCircle2,
   ChevronDown,
@@ -1545,6 +1546,15 @@ export default function CommonsAiEntry({
         style={{ paddingTop: insets.top + 12 }}
       >
         <View className="flex-row items-center gap-2">
+          {router.canGoBack() ? (
+            <TouchableOpacity
+              onPress={() => router.back()}
+              className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
+              accessibilityLabel="Back to Circle View"
+            >
+              <ArrowLeft size={18} color="#1F2937" strokeWidth={2.6} />
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             onPress={() => setDrawerOpen(true)}
             className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"

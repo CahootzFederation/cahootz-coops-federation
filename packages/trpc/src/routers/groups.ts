@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
@@ -6,22 +5,14 @@ import type { AgentToolContext } from '../agents/tools/index.js';
 import type { AccountAuthenticatedContext } from '../context.js';
 import { getAgent } from '../agents/registry.js';
 import { auditLogEntry } from '../lib/audit.js';
+import { hashToColorKey } from '../lib/circle-color.js';
+import { generateInviteCode } from '../lib/invite-code.js';
 import { accountAuthenticatedProcedure } from '../procedures/index.js';
 import { queryObservations, recordObservation } from '../services/ai-memory.js';
 import { validateSCBalance } from '../services/sc-validation-service.js';
+import { enterChat, getChattingCounts, leaveChat, refreshChatPresence } from '../services/circle-presence.js';
+import { assignWelcomeTable, getNewcomerCounts } from '../services/welcome-tables.js';
 import { router } from '../trpc.js';
-
-// Unambiguous alphabet (no 0/O/1/I) for invite codes people type in by hand.
-const INVITE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
-function generateInviteCode(length = 8) {
-  const bytes = randomBytes(length);
-  let code = '';
-  for (let i = 0; i < length; i++) {
-    code += INVITE_CODE_ALPHABET[bytes[i] % INVITE_CODE_ALPHABET.length];
-  }
-  return code;
-}
 
 function displayName(user: { name: string | null; email: string }) {
   return user.name || user.email.split('@')[0] || 'Member';
@@ -53,6 +44,46 @@ export async function requireMembership(
 }
 
 const privacySchema = z.enum(['public', 'private', 'invite-only']);
+
+type GroupWithMemberCount = {
+  id: string;
+  name: string;
+  purpose: string | null;
+  privacy: string;
+  leaderId: string;
+  createdAt: Date;
+  kind: string;
+  welcomeTableNumber: number | null;
+  welcomeTableStatus: string | null;
+  capacity: number | null;
+  _count: { members: number };
+};
+
+function mapCircleSummary(
+  group: GroupWithMemberCount,
+  userId: string,
+  isMember: boolean,
+  chattingCounts: Map<string, number>,
+  newcomerCounts: Map<string, number>,
+) {
+  return {
+    id: group.id,
+    name: group.name,
+    purpose: group.purpose,
+    privacy: group.privacy,
+    memberCount: group._count.members,
+    isLeader: group.leaderId === userId,
+    isMember,
+    createdAt: group.createdAt.toISOString(),
+    kind: group.kind,
+    colorKey: hashToColorKey(group.id),
+    chattingCount: chattingCounts.get(group.id) ?? 0,
+    welcomeTableNumber: group.welcomeTableNumber,
+    welcomeTableStatus: group.welcomeTableStatus,
+    capacity: group.capacity,
+    newcomerCount: group.kind === 'WELCOME_TABLE' ? newcomerCounts.get(group.id) ?? 0 : null,
+  };
+}
 
 export const groupsRouter = router({
   listVisible: accountAuthenticatedProcedure
@@ -91,17 +122,16 @@ export const groupsRouter = router({
         if (!visible.has(group.id)) visible.set(group.id, { group, isMember: false });
       }
 
+      const groupIds = [...visible.keys()];
+      const [chattingCounts, newcomerCounts] = await Promise.all([
+        getChattingCounts(context.db, groupIds),
+        getNewcomerCounts(context.db, groupIds),
+      ]);
+
       return {
-        groups: [...visible.values()].map(({ group, isMember }) => ({
-          id: group.id,
-          name: group.name,
-          purpose: group.purpose,
-          privacy: group.privacy,
-          memberCount: group._count.members,
-          isLeader: group.leaderId === userId,
-          isMember,
-          createdAt: group.createdAt.toISOString(),
-        })),
+        groups: [...visible.values()].map(({ group, isMember }) =>
+          mapCircleSummary(group, userId, isMember, chattingCounts, newcomerCounts),
+        ),
       };
     }),
 
@@ -124,16 +154,16 @@ export const groupsRouter = router({
         orderBy: { joinedAt: 'desc' },
       });
 
+      const groupIds = memberships.map((m) => m.group.id);
+      const [chattingCounts, newcomerCounts] = await Promise.all([
+        getChattingCounts(context.db, groupIds),
+        getNewcomerCounts(context.db, groupIds),
+      ]);
+
       return {
-        groups: memberships.map(({ group }) => ({
-          id: group.id,
-          name: group.name,
-          purpose: group.purpose,
-          privacy: group.privacy,
-          memberCount: group._count.members,
-          isLeader: group.leaderId === userId,
-          createdAt: group.createdAt.toISOString(),
-        })),
+        groups: memberships.map(({ group }) =>
+          mapCircleSummary(group, userId, true, chattingCounts, newcomerCounts),
+        ),
       };
     }),
 
@@ -312,6 +342,13 @@ export const groupsRouter = router({
         });
       }
 
+      if (group.kind === 'WELCOME_TABLE') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Welcome tables can only be joined through the welcome-table flow.',
+        });
+      }
+
       if (input.coopId && group.coopId !== input.coopId) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
@@ -391,6 +428,9 @@ export const groupsRouter = router({
       const context = ctx as AccountAuthenticatedContext;
       const userId = context.accountUser.id;
       const group = await requireMembership(context.db, input.groupId, userId);
+      if (group.kind === 'WELCOME_TABLE') {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Welcome tables are managed from admin controls.' });
+      }
       if (group.leaderId !== userId) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the circle leader can change privacy.' });
       }
@@ -426,6 +466,9 @@ export const groupsRouter = router({
       const userId = context.accountUser.id;
 
       const group = await requireMembership(context.db, input.groupId, userId);
+      if (group.kind === 'WELCOME_TABLE') {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Welcome tables are managed from admin controls.' });
+      }
       if (group.leaderId !== userId) {
         throw new TRPCError({
           code: 'FORBIDDEN',
@@ -472,6 +515,9 @@ export const groupsRouter = router({
       const userId = context.accountUser.id;
 
       const group = await requireMembership(context.db, input.groupId, userId);
+      if (group.kind === 'WELCOME_TABLE') {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Welcome tables are managed from admin controls.' });
+      }
       if (group.leaderId !== userId) {
         throw new TRPCError({
           code: 'FORBIDDEN',
@@ -522,6 +568,39 @@ export const groupsRouter = router({
 
       const group = await requireMembership(context.db, input.groupId, userId);
 
+      if (group.kind === 'WELCOME_TABLE') {
+        // leaderId isn't necessarily the guide here - when no guide is
+        // configured yet, the newcomer who triggered auto-creation holds
+        // that slot as a placeholder (see services/welcome-tables.ts) and
+        // must still be able to leave normally. Only an actual GUIDE-role
+        // member is blocked from self-service leaving.
+        const membership = await context.db.groupMember.findUnique({
+          where: { groupId_userId: { groupId: group.id, userId } },
+        });
+        if (membership?.role === 'GUIDE') {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Welcome tables are retired from admin controls, not by the guide leaving.',
+          });
+        }
+
+        await context.db.$transaction([
+          context.db.groupMember.delete({
+            where: { groupId_userId: { groupId: group.id, userId } },
+          }),
+          context.db.auditLog.create({
+            data: auditLogEntry({
+              actorId: userId,
+              action: 'GROUP_LEFT',
+              resource: 'GroupMember',
+              resourceId: group.id,
+            }),
+          }),
+        ]);
+
+        return { success: true, groupDeleted: false };
+      }
+
       if (group.leaderId === userId) {
         const memberCount = await context.db.groupMember.count({
           where: { groupId: group.id },
@@ -564,6 +643,55 @@ export const groupsRouter = router({
       ]);
 
       return { success: true, groupDeleted: false };
+    }),
+
+  assignWelcomeTable: accountAuthenticatedProcedure
+    .input(z.object({ coopId: z.string().min(1).default('cahootz') }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+
+      const group = await assignWelcomeTable(context.db, input.coopId, userId);
+
+      return {
+        groupId: group.id,
+        name: group.name,
+        welcomeTableNumber: group.welcomeTableNumber,
+      };
+    }),
+
+  enterChat: accountAuthenticatedProcedure
+    .input(z.object({ groupId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+
+      await requireMembership(context.db, input.groupId, userId);
+      await enterChat(context.db, input.groupId, userId);
+
+      return { success: true };
+    }),
+
+  refreshChatPresence: accountAuthenticatedProcedure
+    .input(z.object({ groupId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+
+      await refreshChatPresence(context.db, input.groupId, userId);
+
+      return { success: true };
+    }),
+
+  leaveChat: accountAuthenticatedProcedure
+    .input(z.object({ groupId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+
+      await leaveChat(context.db, input.groupId, userId);
+
+      return { success: true };
     }),
 
   listComments: accountAuthenticatedProcedure

@@ -3,8 +3,6 @@ import { Bell, LayoutGrid, Scale, UserCircle } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useAuth } from '@/contexts/auth-context';
-
 const destinations = [
   { label: 'Commons', href: '/(tabs)' as const, icon: LayoutGrid },
   { label: 'Alerts', href: '/(tabs)/notifications' as const, icon: Bell },
@@ -13,10 +11,8 @@ const destinations = [
 ];
 
 export function AppBottomNavigation() {
-  const { isAuthenticated } = useAuth();
   const segments = useSegments();
   const insets = useSafeAreaInsets();
-  if (!isAuthenticated) return null;
 
   const screen: string = segments[segments.length - 1] || '';
   const active = screen === 'notifications' || screen === 'notification-settings'
@@ -34,6 +30,17 @@ export function AppBottomNavigation() {
       {destinations.map(({ label, href, icon: Icon }) => {
         const selected = active === label;
         const color = selected ? '#FF6B00' : '#64748B';
+        const onPress = () => {
+          // The feed (app/[coopId]/posts.tsx) is only ever reached by
+          // pushing it on top of Circle View - tapping Commons from there
+          // should return to that same Circle View instance, not push a
+          // second one, so prefer popping the stack when that's available.
+          if (label === 'Commons' && screen === 'posts' && router.canGoBack()) {
+            router.back();
+            return;
+          }
+          router.navigate(href);
+        };
         return (
           <TouchableOpacity
             key={label}
@@ -41,7 +48,7 @@ export function AppBottomNavigation() {
             accessibilityLabel={label}
             accessibilityState={{ selected }}
             aria-selected={selected}
-            onPress={() => router.navigate(href)}
+            onPress={onPress}
             style={styles.item}
           >
             <Icon size={24} color={color} />

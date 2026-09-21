@@ -15,11 +15,12 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowRight, HandHeart, Lightbulb, MessageCircle, UserCircle, Users } from 'lucide-react-native';
+import { ArrowRight, Compass, HandHeart, Lightbulb, MessageCircle, UserCircle, Users } from 'lucide-react-native';
 
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { getOrCreateAnonymousId, markAnonymousProfileIntroSeen } from '@/lib/anonymous-id';
+import { secureStorage } from '@/lib/secure-storage';
 
 const MIN_SELF_DESCRIPTION = 40;
 const MIN_SIGNAL_ITEMS = 1;
@@ -56,7 +57,7 @@ const appIntroItems = [
   },
 ] as const;
 
-type WizardStep = 'intro' | 'profile';
+type WizardStep = 'intro' | 'profile' | 'circles';
 type ListFieldName = 'interests' | 'resourcesOffered' | 'resourcesNeeded';
 type OptionalFieldName = 'goals' | 'businessSummary' | 'locationSummary';
 
@@ -177,6 +178,10 @@ export default function ProfileOnboardingScreen() {
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
+  const [profileResult, setProfileResult] = useState<Awaited<
+    ReturnType<typeof api.completeProfileOnboarding>
+  > | null>(null);
+  const [isJoiningWelcomeTable, setIsJoiningWelcomeTable] = useState(false);
 
   const introComplete = selfDescription.trim().length >= introField.minChars;
 
@@ -213,18 +218,109 @@ export default function ProfileOnboardingScreen() {
     if (isSaving) return;
 
     if (!user) {
+      // Anonymous visitors still see the newcomer-home step - only the
+      // account-only actions on it (join a welcome table) require signing
+      // in, same as any other authenticated action in the app.
       void markAnonymousProfileIntroSeen();
-      router.replace('/' as any);
+      setWizardStep('circles');
       return;
     }
 
     try {
       await deferProfileOnboarding();
-      router.replace({ pathname: '/(tabs)', params: { welcome: '1' } } as any);
+      // Skipping the profile form only skips the form - still show the
+      // newcomer-home step so people get a real first action, matching
+      // "Skip" on the circles step itself for opting out of that too.
+      setWizardStep('circles');
     } catch (err) {
       console.error('Profile onboarding skip failed:', err);
       setError('Could not skip right now. Try again.');
     }
+  };
+
+  // Finishes the wizard and navigates on. If the profile form was actually
+  // submitted (profileResult set), this also marks profileOnboardingCompletedAt
+  // via login() - which is what lets AuthContext's own redirect-out effect
+  // send us to /(tabs); see the note on the 'circles' step below for why
+  // that only happens now, not right after the profile form saves. If the
+  // profile form was skipped instead, deferProfileOnboarding() (called in
+  // handleSkip) already lets us navigate freely, so there's nothing more to persist here.
+  const completeOnboarding = async (destination: { pathname: string; params?: Record<string, string> }) => {
+    if (!user || !sessionToken) {
+      void markAnonymousProfileIntroSeen();
+      router.replace('/' as any);
+      return;
+    }
+
+    if (profileResult) {
+      await login({
+        ...user,
+        ...profileResult.user,
+        createdAt: new Date(profileResult.user.createdAt),
+        profileOnboardingCompletedAt: profileResult.user.profileOnboardingCompletedAt
+          ? new Date(profileResult.user.profileOnboardingCompletedAt)
+          : new Date(),
+        sessionToken,
+        coop: user.coop,
+      });
+    }
+
+    router.replace(destination as any);
+  };
+
+  const handleJoinWelcomeTable = async () => {
+    if (isJoiningWelcomeTable) return;
+
+    if (!user || !sessionToken) {
+      // Joining a table is an account action - send anonymous visitors to
+      // sign in rather than silently failing the API call.
+      void markAnonymousProfileIntroSeen();
+      router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
+      return;
+    }
+
+    setIsJoiningWelcomeTable(true);
+    try {
+      const result = await api.assignWelcomeTable(sessionToken);
+      await completeOnboarding({
+        pathname: '/[coopId]/posts',
+        params: { coopId: 'cahootz', circleId: result.groupId },
+      });
+    } catch (err) {
+      console.error('Could not join a welcome table:', err);
+      setError('Could not join a welcome table right now. Try exploring on your own instead.');
+    } finally {
+      setIsJoiningWelcomeTable(false);
+    }
+  };
+
+  // Auto-join a welcome table once a brand-new account reaches this step, if
+  // they expressed that intent before creating the account (tapping "Join a
+  // welcome table" on Circle View while signed out - see circle-view.tsx).
+  // Consumed once and cleared immediately so it never fires again for this
+  // device (e.g. on a later, unrelated signup).
+  useEffect(() => {
+    if (wizardStep !== 'circles' || !user || !sessionToken) return;
+
+    let cancelled = false;
+    secureStorage.getItem(secureStorage.keys.WELCOME_TABLE_INTENT).then((intent) => {
+      if (!intent || cancelled) return;
+      void secureStorage.removeItem(secureStorage.keys.WELCOME_TABLE_INTENT);
+      void handleJoinWelcomeTable();
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizardStep, user, sessionToken]);
+
+  const handleExploreOnMyOwn = () => {
+    void completeOnboarding({ pathname: '/commons' });
+  };
+
+  const handleSkipCircles = () => {
+    void completeOnboarding({ pathname: '/(tabs)', params: { welcome: '1' } });
   };
 
   const handleSubmit = async () => {
@@ -259,7 +355,7 @@ export default function ProfileOnboardingScreen() {
         });
 
         void markAnonymousProfileIntroSeen();
-        router.replace('/' as any);
+        setWizardStep('circles');
         return;
       }
 
@@ -276,18 +372,13 @@ export default function ProfileOnboardingScreen() {
         sessionToken
       );
 
-      await login({
-        ...user,
-        ...result.user,
-        createdAt: new Date(result.user.createdAt),
-        profileOnboardingCompletedAt: result.user.profileOnboardingCompletedAt
-          ? new Date(result.user.profileOnboardingCompletedAt)
-          : new Date(),
-        sessionToken,
-        coop: user.coop,
-      });
-
-      router.replace({ pathname: '/(tabs)', params: { welcome: '1' } } as any);
+      // Hold the result and move to the newcomer-home step instead of
+      // logging in immediately - login() sets profileOnboardingCompletedAt,
+      // which AuthContext watches to redirect out of /profile-onboarding
+      // (contexts/auth-context.tsx). Calling it now would blow past this
+      // step the instant it renders.
+      setProfileResult(result);
+      setWizardStep('circles');
     } catch (err) {
       console.error('Profile onboarding save failed:', err);
       setError(err instanceof Error ? err.message : 'Could not save your profile. Try again.');
@@ -370,6 +461,77 @@ export default function ProfileOnboardingScreen() {
           >
             <Text style={introStyles.submitText}>Continue</Text>
             <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.6} />
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (wizardStep === 'circles') {
+    return (
+      <SafeAreaView style={circlesStyles.screen}>
+        <ScrollView contentContainerStyle={circlesStyles.content}>
+          <Text style={circlesStyles.eyebrow}>Almost there</Text>
+          <Text style={circlesStyles.title}>Find your way in</Text>
+          <Text style={circlesStyles.subtitle}>
+            Meet people, visit a commons, or look around first.
+          </Text>
+
+          {error ? <Text style={circlesStyles.error}>{error}</Text> : null}
+
+          <Pressable
+            accessibilityRole="button"
+            disabled={isJoiningWelcomeTable}
+            onPress={handleJoinWelcomeTable}
+            style={[circlesStyles.card, isJoiningWelcomeTable && circlesStyles.cardDisabled]}
+          >
+            <View style={[circlesStyles.cardIcon, { backgroundColor: '#FFF7ED' }]}>
+              <MessageCircle color="#FF6B00" size={22} strokeWidth={2.4} />
+            </View>
+            <View style={circlesStyles.cardBody}>
+              <Text style={circlesStyles.cardTitle}>Join a welcome table</Text>
+              <Text style={circlesStyles.cardText}>
+                Meet a small group of newcomers with a guide.
+              </Text>
+            </View>
+            {isJoiningWelcomeTable ? (
+              <ActivityIndicator color="#FF6B00" />
+            ) : (
+              <ArrowRight color="#FF6B00" size={20} strokeWidth={2.6} />
+            )}
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleExploreOnMyOwn}
+            style={circlesStyles.card}
+          >
+            <View style={[circlesStyles.cardIcon, { backgroundColor: '#EFF6FF' }]}>
+              <Compass color="#1D4ED8" size={22} strokeWidth={2.4} />
+            </View>
+            <View style={circlesStyles.cardBody}>
+              <Text style={circlesStyles.cardTitle}>Explore on my own</Text>
+              <Text style={circlesStyles.cardText}>
+                Browse public commons and circles.
+              </Text>
+            </View>
+            <ArrowRight color="#1D4ED8" size={20} strokeWidth={2.6} />
+          </Pressable>
+
+          <View style={[circlesStyles.card, circlesStyles.cardDisabled]}>
+            <View style={[circlesStyles.cardIcon, { backgroundColor: '#F0FDF4' }]}>
+              <Users color="#15803D" size={22} strokeWidth={2.4} />
+            </View>
+            <View style={circlesStyles.cardBody}>
+              <Text style={circlesStyles.cardTitle}>Meet someone</Text>
+              <Text style={circlesStyles.cardText}>Coming soon.</Text>
+            </View>
+          </View>
+        </ScrollView>
+
+        <View style={introStyles.footer}>
+          <Pressable accessibilityRole="button" onPress={handleSkipCircles} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Skip for now</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -655,6 +817,81 @@ const introStyles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 22,
     fontWeight: '900',
+  },
+});
+
+const circlesStyles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  content: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 12,
+    gap: 12,
+  },
+  eyebrow: {
+    color: '#FF6B00',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  title: {
+    color: '#0F172A',
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '900',
+    marginTop: 6,
+  },
+  subtitle: {
+    color: '#64748B',
+    fontSize: 15,
+    lineHeight: 21,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  error: {
+    color: '#DC2626',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#F0F2F5',
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+  },
+  cardDisabled: {
+    opacity: 0.55,
+  },
+  cardIcon: {
+    height: 48,
+    width: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardBody: {
+    flex: 1,
+  },
+  cardTitle: {
+    color: '#0F172A',
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '900',
+  },
+  cardText: {
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
   },
 });
 

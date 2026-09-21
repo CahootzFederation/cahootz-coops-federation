@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import CommonsAiEntry from '@/components/commons-ai-entry';
+import CircleView from '@/components/circle-view';
 import OnboardingFlow from '@/components/onboarding-flow';
 import { useAuth } from '@/contexts/auth-context';
 import { hasSeenAnonymousProfileIntro } from '@/lib/anonymous-id';
@@ -10,7 +10,7 @@ type EntryMode = 'commons' | 'sign-in';
 
 export default function OnboardingScreen() {
   const params = useLocalSearchParams<{ entry?: string; coopId?: string }>();
-  const { isAuthenticated, sessionToken, forceWelcomeIntro, dismissForcedWelcomeIntro } = useAuth();
+  const { forceWelcomeIntro, dismissForcedWelcomeIntro } = useAuth();
   const [entryMode, setEntryMode] = useState<EntryMode>('commons');
   // null while we haven't checked device storage yet, to avoid flashing the
   // feed for a first-time visitor before we know whether they've already
@@ -72,18 +72,9 @@ export default function OnboardingScreen() {
     return <OnboardingFlow initialStep="login" onBack={() => setEntryMode('commons')} />;
   }
 
-  return (
-    <CommonsAiEntry
-      feedCoopId={params.coopId || 'all'}
-      onMessagesPress={() => {
-        if (isAuthenticated && sessionToken) {
-          router.push('/(tabs)/messages' as any);
-          return;
-        }
-
-        setEntryMode('sign-in');
-      }}
-      onSignInPress={() => setEntryMode('sign-in')}
-    />
-  );
+  // Same Circle View as the Commons tab - the root route ("/") is reached
+  // via back-navigation, sign-out, and various redirects, not just cold
+  // launch, so it needs to look and behave like the rest of the app rather
+  // than dropping people onto a bare feed with no way back to Circle View.
+  return <CircleView coopId={params.coopId || 'cahootz'} />;
 }

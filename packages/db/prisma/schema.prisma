@@ -83,6 +83,8 @@ model User {
   groupComments          GroupComment[]
   uploadedKnowledgeDocuments KnowledgeDocument[]
   verifiedAIObservations AIObservation[]              @relation("AIObservationVerifier")
+  welcomeTableConfigsGuiding WelcomeTableConfig[]      @relation("WelcomeTableGuide")
+  circleChatPresence     CircleChatPresence[]
 
   @@index([deletedAt])
   @@schema("public")
@@ -1221,21 +1223,28 @@ model CommonsSuggestion {
 
 // ── Private Groups ("Spaces") ───────────────────────────
 model Group {
-  id             String   @id @default(cuid())
-  coopId         String   @default("cahootz")
-  name           String
-  purpose        String?  @db.Text
-  privacy        String   @default("invite-only") // "public" | "private" | "invite-only"
-  inviteCode     String   @unique
-  leaderId       String
-  leader         User     @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: Cascade)
-  lastActivityAt DateTime @default(now())
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  coopId             String   @default("cahootz")
+  name               String
+  purpose            String?  @db.Text
+  privacy            String   @default("invite-only") // "public" | "private" | "invite-only"
+  inviteCode         String   @unique
+  leaderId           String
+  leader             User     @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  lastActivityAt     DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  kind               String   @default("STANDARD") // "STANDARD" | "WELCOME_TABLE"
+  welcomeTableNumber Int?
+  welcomeTableStatus String? // "OPEN" | "FULL" | "CLOSED" (null for STANDARD groups)
+  capacity           Int?
 
-  members  GroupMember[]
-  comments GroupComment[]
+  members            GroupMember[]
+  comments           GroupComment[]
+  presence           CircleChatPresence[]
+  welcomeTableConfig WelcomeTableConfig?
 
+  @@unique([coopId, kind, welcomeTableNumber])
   @@index([coopId, createdAt])
   @@index([leaderId])
   @@index([coopId, lastActivityAt])
@@ -1249,9 +1258,41 @@ model GroupMember {
   userId   String
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   joinedAt DateTime @default(now())
+  role     String   @default("MEMBER") // "MEMBER" | "GUIDE" | "NEWCOMER"
 
   @@unique([groupId, userId])
   @@index([userId])
+  @@schema("public")
+}
+
+model WelcomeTableConfig {
+  id              String   @id @default(cuid())
+  coopId          String   @unique @default("cahootz")
+  enabled         Boolean  @default(true)
+  capacity        Int      @default(30)
+  guideUserId     String?
+  guide           User?    @relation("WelcomeTableGuide", fields: [guideUserId], references: [id], onDelete: SetNull)
+  lastTableNumber Int      @default(0)
+  activeTableId   String?  @unique
+  activeTable     Group?   @relation(fields: [activeTableId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@schema("public")
+}
+
+model CircleChatPresence {
+  id             String    @id @default(cuid())
+  groupId        String
+  group          Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enteredAt      DateTime  @default(now())
+  lastActivityAt DateTime  @default(now())
+  exitedAt       DateTime?
+
+  @@unique([groupId, userId])
+  @@index([groupId, exitedAt, lastActivityAt])
   @@schema("public")
 }
 

@@ -94,15 +94,17 @@ jobs:
       - name: Install Chromium
         run: pnpm -F @cahootz/mobile exec playwright install --with-deps chromium
 
+      - name: Build API workspace packages
+        run: pnpm --filter @repo/trpc... --fail-if-no-match build
+
       - name: Prepare database
         run: |
-          pnpm -F @repo/db db:generate
           pnpm -F @repo/db exec prisma migrate deploy --schema prisma/schema.prisma
           pnpm -F @repo/db exec ts-node --transpile-only scripts/seed-test-users.ts -- --coopId=cahootz --count=2 --prefix=releaseclick
 
       - name: Start API and mobile web app
         run: |
-          nohup pnpm dev:api > /tmp/cahootz-api.log 2>&1 &
+          nohup pnpm -F @cahootz/api dev > /tmp/cahootz-api.log 2>&1 &
           echo $! > /tmp/cahootz-api.pid
           nohup pnpm -F @cahootz/mobile dev > /tmp/cahootz-mobile.log 2>&1 &
           echo $! > /tmp/cahootz-mobile.pid

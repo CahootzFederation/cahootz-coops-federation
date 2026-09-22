@@ -141,6 +141,16 @@ async function loadFeedPosts(
       media: {
         orderBy: { order: 'asc' },
       },
+      event: {
+        include: {
+          hosts: {
+            include: {
+              user: { select: { id: true, name: true, email: true, handle: true } },
+            },
+          },
+          rsvps: { select: { userId: true, status: true } },
+        },
+      },
       _count: { select: { comments: true, supports: true } },
     },
   });
@@ -180,7 +190,7 @@ async function requireCircleAccess(
   return { ...publicCircle, isMember: false };
 }
 
-async function requireCircleMembership(
+export async function requireCircleMembership(
   db: any,
   userId: string,
   coopId: string,
@@ -196,6 +206,33 @@ async function requireCircleMembership(
       message: 'Join this circle to participate.',
     });
   }
+}
+
+async function requireCircleLeaderForPost(db: any, userId: string, postId: string) {
+  const post = await db.commonsPost.findUnique({
+    where: { id: postId },
+    select: { id: true, coopId: true, circleId: true },
+  });
+  if (!post) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Post not found.' });
+  }
+  if (!post.circleId || post.circleId === generalCircleId(post.coopId)) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Pinning is only available inside a circle.',
+    });
+  }
+  const group = await db.group.findUnique({
+    where: { id: post.circleId },
+    select: { leaderId: true },
+  });
+  if (!group || group.leaderId !== userId) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Only the circle leader can pin posts.',
+    });
+  }
+  return post as { id: string; coopId: string; circleId: string };
 }
 
 async function requirePostCircleMembership(
@@ -230,11 +267,11 @@ async function canReadPostCircle(
   return circle?.coopId === post.coopId && circle.privacy === 'public';
 }
 
-function displayName(user: { name: string | null; email: string }) {
+export function displayName(user: { name: string | null; email: string }) {
   return user.name || user.email.split('@')[0] || 'Commons member';
 }
 
-function personHandle(user: {
+export function personHandle(user: {
   handle?: string | null;
   name: string | null;
   email: string;
@@ -472,7 +509,43 @@ async function recordPostClassificationObservation(params: {
   }
 }
 
-function mapPostWithGroup(record: any, groupName: string) {
+export function mapEventSummary(record: any, viewerId?: string) {
+  const rsvps: { userId: string; status: string }[] = record.rsvps ?? [];
+  const countByStatus = (status: string) =>
+    rsvps.filter((rsvp) => rsvp.status === status).length;
+  const viewerRsvp = viewerId
+    ? rsvps.find((rsvp) => rsvp.userId === viewerId)
+    : undefined;
+
+  return {
+    id: record.id,
+    postId: record.postId,
+    coopId: record.coopId,
+    circleId: record.circleId,
+    startAt: record.startAt.toISOString(),
+    endAt: record.endAt.toISOString(),
+    isOnline: record.isOnline,
+    location: record.location ?? null,
+    meetingUrl: record.meetingUrl ?? null,
+    allowComments: record.allowComments,
+    seriesId: record.seriesId ?? null,
+    recurrenceFreq: (record.recurrenceFreq as 'DAILY' | 'WEEKLY' | 'MONTHLY' | null) ?? null,
+    recurrenceInterval: record.recurrenceInterval ?? 1,
+    recurrenceCount: record.recurrenceCount ?? null,
+    hosts:
+      record.hosts?.map((host: any) => ({
+        id: host.user.id,
+        name: displayName(host.user),
+        handle: personHandle(host.user),
+      })) ?? [],
+    goingCount: countByStatus('GOING'),
+    maybeCount: countByStatus('MAYBE'),
+    cantGoCount: countByStatus('CANT_GO'),
+    viewerRsvpStatus: (viewerRsvp?.status as 'GOING' | 'MAYBE' | 'CANT_GO' | undefined) ?? null,
+  };
+}
+
+function mapPostWithGroup(record: any, groupName: string, viewerId?: string) {
   return {
     id: record.id,
     createdAt: record.createdAt.toISOString(),
@@ -490,6 +563,8 @@ function mapPostWithGroup(record: any, groupName: string) {
     replies: record._count?.comments ?? record.comments?.length ?? 0,
     support: record._count?.supports ?? record.supports?.length ?? 0,
     pledges: undefined as string | undefined,
+    isPinned: record.isPinned ?? false,
+    event: record.event ? mapEventSummary(record.event, viewerId) : undefined,
     media:
       record.media?.map((item: any) => ({
         id: item.id,
@@ -561,7 +636,7 @@ async function loadCoopSummary(db: any, coopId: string) {
   return mapCoopSummaryRecord(coopConfig, coopId);
 }
 
-async function resolveOptionalAccountUser(context: Context) {
+export async function resolveOptionalAccountUser(context: Context) {
   const token = getHeaderValue(context.req.headers['x-session-token']);
   if (!token) return null;
 
@@ -769,8 +844,11 @@ export const commonsRouter = router({
             mapPostWithGroup(
               post,
               coopNameById.get(post.coopId) || post.coopId,
+              accountUser?.id,
             ),
           ),
+          pinnedPost: null,
+          upcomingEvents: [],
           nextCursor,
         };
       }
@@ -817,13 +895,70 @@ export const commonsRouter = router({
         requestedCircleId,
       );
 
+      const feedCircleWhere = requestedCircleId
+        ? { coopId: input.coopId, circleId: requestedCircleId }
+        : {
+            OR: [
+              { coopId: input.coopId, circleId: generalCircleId(input.coopId) },
+              { coopId: input.coopId, circleId: null },
+            ],
+          };
+
+      const eventInclude = {
+        hosts: {
+          include: {
+            user: { select: { id: true, name: true, email: true, handle: true } },
+          },
+        },
+        rsvps: { select: { userId: true, status: true } },
+      };
+
+      const [pinnedPostRecord, upcomingEventRecords] = await Promise.all([
+        ctx.db.commonsPost.findFirst({
+          where: { ...feedCircleWhere, isPinned: true },
+          include: {
+            author: { select: { name: true, email: true, handle: true } },
+            comments: {
+              orderBy: { createdAt: 'asc' },
+              take: 2,
+              include: { author: { select: { name: true, email: true, handle: true } } },
+            },
+            media: { orderBy: { order: 'asc' } },
+            event: { include: eventInclude },
+            _count: { select: { comments: true, supports: true } },
+          },
+        }),
+        ctx.db.event.findMany({
+          where: { ...feedCircleWhere, startAt: { gte: new Date() } },
+          orderBy: { startAt: 'asc' },
+          take: 2,
+          include: {
+            ...eventInclude,
+            post: { select: { id: true, title: true, content: true } },
+          },
+        }),
+      ]);
+
+      const pinnedPost = pinnedPostRecord
+        ? mapPostWithGroup(pinnedPostRecord, circle?.name || coop.name, accountUser?.id)
+        : null;
+      const posts = page
+        .filter((post: any) => post.id !== pinnedPostRecord?.id)
+        .map((post: any) =>
+          mapPostWithGroup(post, circle?.name || coop.name, accountUser?.id),
+        );
+      const upcomingEvents = upcomingEventRecords.map((event: any) => ({
+        ...mapEventSummary(event, accountUser?.id),
+        title: event.post.title,
+      }));
+
       return {
         coop,
         circleName: circle?.name || null,
         circleIsMember: circle?.isMember ?? null,
-        posts: page.map((post: any) =>
-          mapPostWithGroup(post, circle?.name || coop.name),
-        ),
+        posts,
+        pinnedPost,
+        upcomingEvents,
         nextCursor,
       };
     }),
@@ -1983,6 +2118,40 @@ export const commonsRouter = router({
       }
 
       await ctx.db.commonsPost.delete({ where: { id: input.postId } });
+
+      return { success: true };
+    }),
+
+  pinPost: accountAuthenticatedProcedure
+    .input(z.object({ postId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const post = await requireCircleLeaderForPost(ctx.db, accountUser.id, input.postId);
+
+      await ctx.db.$transaction([
+        ctx.db.commonsPost.updateMany({
+          where: { circleId: post.circleId, isPinned: true },
+          data: { isPinned: false, pinnedAt: null, pinnedById: null },
+        }),
+        ctx.db.commonsPost.update({
+          where: { id: post.id },
+          data: { isPinned: true, pinnedAt: new Date(), pinnedById: accountUser.id },
+        }),
+      ]);
+
+      return { success: true };
+    }),
+
+  unpinPost: accountAuthenticatedProcedure
+    .input(z.object({ postId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const post = await requireCircleLeaderForPost(ctx.db, accountUser.id, input.postId);
+
+      await ctx.db.commonsPost.update({
+        where: { id: post.id },
+        data: { isPinned: false, pinnedAt: null, pinnedById: null },
+      });
 
       return { success: true };
     }),

@@ -51,6 +51,11 @@ The current Playwright suite covers:
 8. A signed-in member can join a welcome lounge from Circle View's dashed "Join a welcome lounge" card and lands in that lounge's real feed.
 9. A signed-in member opens the commons info page from the drawer's info button (its only entry point) and switches between the Overview, Community, and Governance tabs, each showing real member-only data (mission priorities, this month's activity stats, people, circles, and governance thresholds/proposals).
 10. Two separately signed-in members can join a welcome lounge from Circle View, land in its real feed, and see the same Sage-authored welcome thread prompting introductions.
+11. A member creates an event from the feed composer's "+" affordance; it renders as an inline event card in the feed and in the "Upcoming" module, and opens a dedicated event detail screen (RSVP, add to calendar, discussion).
+12. User A creates an event; User B RSVPs "Going" from the event detail screen; User A sees the updated going count after reload.
+13. A circle leader (the circle's creator) pins a post from the feed; it renders above the "Upcoming" module with a "Pinned" badge for every member of that circle, including on reload.
+
+Journeys 11-13 require the `Event`/`EventHost`/`EventRSVP`/`EventReminder` tables and `CommonsPost.isPinned` columns from migration `20260922010000_add_circle_events` - run `pnpm --filter @repo/db exec prisma migrate deploy` (and regenerate the client with `pnpm --filter @repo/db run db:generate`) before running the suite locally.
 
 The post-signup wizard used by every sign-in helper now has three steps (intro, profile, and a "find your way in" step offering a welcome lounge) - `e2e/support/auth.ts` is the single place that clicks through all three, so a future wizard change only needs updating there.
 

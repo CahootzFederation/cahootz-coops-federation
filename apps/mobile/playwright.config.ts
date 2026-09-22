@@ -31,5 +31,9 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
+    // Without this, a bare .click()/.fill() on a locator that never
+    // resolves retries until the whole-test timeout (90s) instead of
+    // failing with a clear "element not found" error.
+    actionTimeout: 20_000,
   },
 });

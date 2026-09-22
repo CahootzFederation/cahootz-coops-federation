@@ -246,6 +246,52 @@ export interface CommonsPostMedia {
   sizeBytes?: number | null;
 }
 
+export type EventRsvpStatus = 'GOING' | 'MAYBE' | 'CANT_GO';
+export type EventRecurrenceFreq = 'DAILY' | 'WEEKLY' | 'MONTHLY';
+
+export interface EventHostSummary {
+  id: string;
+  name: string;
+  handle: string;
+}
+
+export interface EventSummary {
+  id: string;
+  postId?: string;
+  coopId?: string;
+  circleId?: string | null;
+  title?: string;
+  startAt: string;
+  endAt: string;
+  isOnline: boolean;
+  location: string | null;
+  meetingUrl: string | null;
+  allowComments: boolean;
+  seriesId?: string | null;
+  recurrenceFreq?: EventRecurrenceFreq | null;
+  recurrenceInterval?: number;
+  recurrenceCount?: number | null;
+  hosts: EventHostSummary[];
+  goingCount: number;
+  maybeCount: number;
+  cantGoCount: number;
+  viewerRsvpStatus: EventRsvpStatus | null;
+}
+
+export interface EventDetail extends EventSummary {
+  post: {
+    id: string;
+    title: string;
+    body: string;
+    author: string;
+    authorHandle?: string;
+    replies: number;
+    support: number;
+    media: CommonsPostMedia[];
+    comments: CommonsComment[];
+  };
+}
+
 export interface CommonsPost {
   id: string;
   createdAt?: string;
@@ -263,6 +309,8 @@ export interface CommonsPost {
   replies: number;
   support: number;
   pledges?: string;
+  isPinned?: boolean;
+  event?: EventSummary;
   media: CommonsPostMedia[];
   comments: CommonsComment[];
 }
@@ -620,6 +668,8 @@ export const api = {
       circleName?: string | null;
       circleIsMember?: boolean | null;
       posts: CommonsPost[];
+      pinnedPost: CommonsPost | null;
+      upcomingEvents: EventSummary[];
       nextCursor: string | null;
     }>(response, 'Failed to load Commons feed');
   },
@@ -872,6 +922,114 @@ export const api = {
     return readTrpcResult<{ success: boolean }>(
       response,
       'Failed to delete post',
+    );
+  },
+
+  async pinCommonsPost(postId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.pinPost`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ postId }),
+    });
+
+    return readTrpcResult<{ success: boolean }>(response, 'Failed to pin post');
+  },
+
+  async unpinCommonsPost(postId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.unpinPost`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ postId }),
+    });
+
+    return readTrpcResult<{ success: boolean }>(response, 'Failed to unpin post');
+  },
+
+  async createEvent(
+    data: {
+      coopId?: string;
+      circleId?: string;
+      title: string;
+      description?: string;
+      startAt: string;
+      endAt: string;
+      isOnline: boolean;
+      location?: string;
+      meetingUrl?: string;
+      allowComments?: boolean;
+      recurrence?: {
+        freq: EventRecurrenceFreq;
+        interval?: number;
+        count?: number;
+      };
+    },
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/events.create`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({
+        coopId: data.coopId || 'cahootz',
+        ...(data.circleId ? { circleId: data.circleId } : {}),
+        title: data.title,
+        description: data.description || '',
+        startAt: data.startAt,
+        endAt: data.endAt,
+        isOnline: data.isOnline,
+        ...(data.location ? { location: data.location } : {}),
+        ...(data.meetingUrl ? { meetingUrl: data.meetingUrl } : {}),
+        allowComments: data.allowComments ?? true,
+        ...(data.recurrence ? { recurrence: data.recurrence } : {}),
+      }),
+    });
+
+    return readTrpcResult<{ postId: string; event: EventSummary; seriesCount: number }>(
+      response,
+      'Failed to create event',
+    );
+  },
+
+  async fetchEventDetail(eventId: string, sessionToken?: string | null) {
+    const input = encodeURIComponent(JSON.stringify({ eventId }));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/events.get?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
+
+    return readTrpcResult<EventDetail>(response, 'Failed to load event');
+  },
+
+  async rsvpToEvent(
+    eventId: string,
+    status: EventRsvpStatus,
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/events.rsvp`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ eventId, status }),
+    });
+
+    return readTrpcResult<EventSummary>(response, 'Failed to RSVP');
+  },
+
+  async muteEventReminder(
+    eventId: string,
+    muted: boolean,
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/events.muteReminder`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ eventId, muted }),
+    });
+
+    return readTrpcResult<{ success: boolean }>(
+      response,
+      'Failed to update reminder',
     );
   },
 

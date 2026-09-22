@@ -27,6 +27,7 @@ export const notificationCategoryTypes: Record<
     "PERSONAL_PAGE_SUPPORT",
     "MENTION",
     "NEW_FOLLOWER",
+    "EVENT_REMINDER",
   ],
   governance: [
     "PROPOSAL_CREATED",

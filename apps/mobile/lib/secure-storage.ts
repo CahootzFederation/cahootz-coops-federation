@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
   LOGIN_TIME: 'cahootz.loginTime',
   SESSION_TOKEN: 'cahootz.sessionToken',
   PROFILE_ONBOARDING_DEFERRED_USER: 'cahootz.profileOnboardingDeferredUser',
+  WELCOME_TABLE_INTENT: 'cahootz.welcomeTableIntent',
 } as const;
 
 const LEGACY_STORAGE_KEYS = {
@@ -19,6 +20,7 @@ const LEGACY_STORAGE_KEYS = {
   LOGIN_TIME: 'soulaan.loginTime',
   SESSION_TOKEN: 'soulaan.sessionToken',
   PROFILE_ONBOARDING_DEFERRED_USER: 'soulaan.profileOnboardingDeferredUser',
+  WELCOME_TABLE_INTENT: 'soulaan.welcomeTableIntent',
 } as const;
 
 const WALLET_KEY_PREFIX = 'cahootz.wallet.privateKey';

@@ -34,6 +34,7 @@ import { walletAuthRouter } from "./wallet-auth.js";
 import { waitlistRouter } from "./waitlist.js";
 import { commonsRouter } from "./commons.js";
 import { groupsRouter } from "./groups.js";
+import { welcomeTablesRouter } from "./welcome-tables.js";
 import { knowledgeBaseRouter } from "./knowledge-base.js";
 import { commonsActionsRouter } from "./commons-actions.js";
 import { commonsActionsAdminRouter } from "./commons-actions-admin.js";
@@ -73,6 +74,7 @@ export const appRouter = router({
   waitlist: waitlistRouter,
   commons: commonsRouter,
   groups: groupsRouter,
+  welcomeTables: welcomeTablesRouter,
   knowledgeBase: knowledgeBaseRouter,
   commonsActions: commonsActionsRouter,
   commonsActionsAdmin: commonsActionsAdminRouter,

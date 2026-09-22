@@ -3,7 +3,6 @@ import type {
   CommonsAccessStatus,
   CommonsDirectoryItem,
   CoopConfigDetail,
-  PrivateGroupSummary,
   ProposalSummary,
 } from '@/lib/api';
 import { useEffect, useMemo, useState } from 'react';
@@ -31,10 +30,8 @@ import {
   Flag,
   Lock,
   MessageCircle,
-  Plus,
   Send,
   Target,
-  Users,
   Vote,
 } from 'lucide-react-native';
 
@@ -143,8 +140,6 @@ export default function CommonsDetailScreen() {
   const [directoryItem, setDirectoryItem] =
     useState<CommonsDirectoryItem | null>(null);
   const [proposals, setProposals] = useState<ProposalSummary[]>([]);
-  const [circles, setCircles] = useState<PrivateGroupSummary[]>([]);
-  const [circlesLoading, setCirclesLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [applyOpen, setApplyOpen] = useState(false);
@@ -202,40 +197,6 @@ export default function CommonsDetailScreen() {
     };
   }, [coopId, sessionToken, user?.walletAddress]);
 
-  // Loaded independently of the block above so the Circles section gets its
-  // own spinner instead of sharing a loading flag with config/proposals -
-  // otherwise it could flash the empty "Start a circle" state for a moment
-  // before the real list arrives.
-  useEffect(() => {
-    let mounted = true;
-    const hasMemberAccess = directoryItem?.accessStatus === 'ACTIVE';
-
-    if (!hasMemberAccess || !sessionToken) {
-      setCircles([]);
-      setCirclesLoading(false);
-      return;
-    }
-
-    setCirclesLoading(true);
-    api
-      .listVisibleCircles(sessionToken, coopId)
-      .then((result) => {
-        if (!mounted) return;
-        setCircles(result?.groups || []);
-      })
-      .catch((err) => {
-        console.error('Failed to load circles:', err);
-        if (!mounted) return;
-        setCircles([]);
-      })
-      .finally(() => {
-        if (mounted) setCirclesLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [coopId, sessionToken, directoryItem?.accessStatus]);
 
   useEffect(() => {
     setApplyName(user?.name || '');
@@ -889,103 +850,6 @@ export default function CommonsDetailScreen() {
                     No proposals are open yet. This is where formal requests,
                     budgets, votes, and funding decisions will live.
                   </Text>
-                )}
-              </View>
-
-              <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
-                <View className="mb-3 flex-row items-center justify-between gap-3">
-                  <View className="flex-row items-center gap-2">
-                    <Users size={19} color={THEME.primary} />
-                    <Text className="text-lg font-black text-gray-950">
-                      Circles
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    disabled={!isMember}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/(authenticated)/spaces',
-                        params: { coopId, coopName: name },
-                      } as any)
-                    }
-                  >
-                    <Text
-                      className="text-sm font-black"
-                      style={{ color: THEME.primary }}
-                    >
-                      {circlesLoading
-                        ? ' '
-                        : circles.length > 0
-                          ? 'View all'
-                          : 'Create'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                {!isMember ? (
-                  <View className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
-                    <Text className="text-base font-black text-gray-900">
-                      Circles locked
-                    </Text>
-                    <Text className="mt-1 text-sm leading-5 text-gray-600">
-                      Join this commons to see and start small, private circles
-                      inside it.
-                    </Text>
-                  </View>
-                ) : circlesLoading ? (
-                  <View className="items-center py-4">
-                    <ActivityIndicator size="small" color={THEME.primary} />
-                  </View>
-                ) : circles.length > 0 ? (
-                  <View className="gap-3">
-                    {circles.slice(0, 3).map((circle) => (
-                      <TouchableOpacity
-                        key={circle.id}
-                        onPress={() =>
-                          router.push({
-                            pathname: '/[coopId]/posts',
-                            params: { coopId, circleId: circle.id },
-                          } as any)
-                        }
-                        className="flex-row items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3"
-                        activeOpacity={0.75}
-                      >
-                        <View
-                          className="h-9 w-9 items-center justify-center rounded-xl"
-                          style={{ backgroundColor: THEME.primarySoft }}
-                        >
-                          <Lock size={16} color={THEME.primary} />
-                        </View>
-                        <View className="min-w-0 flex-1">
-                          <Text
-                            className="font-black leading-5 text-gray-900"
-                            numberOfLines={1}
-                          >
-                            {circle.name}
-                          </Text>
-                          <Text className="text-xs font-bold text-gray-500">
-                            {circle.memberCount}{' '}
-                            {circle.memberCount === 1 ? 'member' : 'members'}
-                            {circle.isLeader ? ' · leader' : ''}
-                          </Text>
-                        </View>
-                        <ChevronRight size={18} color={THEME.muted} />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                ) : (
-                  <View className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
-                    <View className="flex-row items-center gap-2">
-                      <Plus size={16} color={THEME.primary} />
-                      <Text className="text-base font-black text-gray-900">
-                        Start a circle
-                      </Text>
-                    </View>
-                    <Text className="mt-1 text-sm leading-5 text-gray-600">
-                      Circles are small, private or invite-only spaces inside{' '}
-                      {name} — good for a project team or a working group before
-                      it needs a full proposal.
-                    </Text>
-                  </View>
                 )}
               </View>
             </>

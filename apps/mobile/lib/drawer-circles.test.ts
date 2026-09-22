@@ -15,6 +15,13 @@ function circle(id: string): PrivateGroupSummary {
     isLeader: false,
     isMember: true,
     createdAt: "2026-09-18T00:00:00.000Z",
+    kind: "STANDARD",
+    colorKey: "gold",
+    chattingCount: 0,
+    welcomeTableNumber: null,
+    welcomeTableStatus: null,
+    capacity: null,
+    newcomerCount: null,
   };
 }
 

@@ -267,6 +267,13 @@ export default function AccountProfileScreen() {
               </View>
             </View>
 
+            {user?.email ? (
+              <View className="mt-4 rounded-xl border bg-gray-50 p-3" style={{ borderColor: PROFILE_THEME.border }}>
+                <Text className="text-xs font-black uppercase text-gray-500">Email</Text>
+                <Text className="mt-1 text-sm text-gray-800" numberOfLines={1}>{user.email}</Text>
+              </View>
+            ) : null}
+
             {user?.walletAddress ? (
               <TouchableOpacity
                 onPress={handleCopyAddress}

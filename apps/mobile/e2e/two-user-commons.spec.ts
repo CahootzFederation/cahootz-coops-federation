@@ -1,62 +1,11 @@
-import type { Browser, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
+import { newSignedInPage, openGeneralFeed } from "./support/auth";
 
-const TEST_CODE = process.env.E2E_LOGIN_CODE || "000000";
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 const USER_A_EMAIL =
   process.env.E2E_USER_A_EMAIL || "releaseclick1@test.cahootz.local";
 const USER_B_EMAIL =
   process.env.E2E_USER_B_EMAIL || "releaseclick2@test.cahootz.local";
-
-async function enterFeed(page: Page) {
-  await page.goto("/");
-
-  await expect(page).toHaveURL(/profile-onboarding/);
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Do this later" }).click();
-
-  await expect(page.getByLabel("Open menu")).toBeVisible();
-}
-
-async function signIn(page: Page, email: string) {
-  await enterFeed(page);
-  await page.getByLabel("Open menu").click();
-  await page.getByText("Sign In", { exact: true }).click();
-
-  await page.getByPlaceholder("name@email.com").fill(email);
-  await page.getByRole("button", { name: "Log in with code" }).click();
-  await page.getByPlaceholder("Enter 6-digit code").fill(TEST_CODE);
-  await page.getByRole("button", { name: "Verify & Sign In" }).click();
-
-  await expect(page).toHaveURL(/profile-onboarding/);
-  const profileContinue = page.getByRole("button", {
-    name: "Continue",
-    exact: true,
-  });
-  if (await profileContinue.isVisible().catch(() => false)) {
-    await profileContinue.click();
-  }
-  const deferProfile = page.getByRole("button", { name: "Do this later" });
-  if (await deferProfile.isVisible().catch(() => false)) {
-    await deferProfile.click();
-  }
-
-  await expect(page.getByLabel("Open menu")).toBeVisible();
-  await page.getByLabel("Open menu").click();
-  await expect(
-    page.getByText(new RegExp(`Sign Out \\(@${email.split("@")[0]}\\)`)),
-  ).toBeVisible();
-  await page.getByLabel("Close menu").click();
-}
-
-async function newSignedInPage(browser: Browser, email: string) {
-  const context = await browser.newContext({
-    viewport: { width: 430, height: 932 },
-  });
-  const page = await context.newPage();
-  await signIn(page, email);
-  return { context, page };
-}
 
 test("signing out one user does not sign out the other user", async ({
   browser,
@@ -100,6 +49,9 @@ test("two users can complete a post and comment workflow in separate sessions", 
   let createdPostId: string | undefined;
 
   try {
+    await openGeneralFeed(userA.page);
+    await openGeneralFeed(userB.page);
+
     const composer = userA.page.getByRole("textbox", {
       name: "Share what's happening...",
     });

@@ -282,6 +282,13 @@ export interface PrivateGroupSummary {
   isLeader: boolean;
   isMember?: boolean;
   createdAt: string;
+  kind: 'STANDARD' | 'WELCOME_TABLE';
+  colorKey: string;
+  chattingCount: number;
+  welcomeTableNumber: number | null;
+  welcomeTableStatus: 'OPEN' | 'FULL' | 'CLOSED' | null;
+  capacity: number | null;
+  newcomerCount: number | null;
 }
 
 export interface PrivateGroupMember {
@@ -1336,6 +1343,49 @@ export const api = {
       response,
       'Failed to leave group',
     );
+  },
+
+  async assignWelcomeTable(sessionToken?: string | null, coopId?: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.assignWelcomeTable`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(coopId ? { coopId } : {}),
+    });
+
+    return readTrpcResult<{ groupId: string; name: string; welcomeTableNumber: number | null }>(
+      response,
+      'Could not join a welcome lounge',
+    );
+  },
+
+  async enterCircleChat(groupId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.enterChat`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ groupId }),
+    });
+
+    return readTrpcResult<{ success: boolean }>(response, 'Could not enter circle chat');
+  },
+
+  async refreshCircleChatPresence(groupId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.refreshChatPresence`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ groupId }),
+    });
+
+    return readTrpcResult<{ success: boolean }>(response, 'Could not refresh circle chat presence');
+  },
+
+  async leaveCircleChat(groupId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.leaveChat`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ groupId }),
+    });
+
+    return readTrpcResult<{ success: boolean }>(response, 'Could not leave circle chat');
   },
 
   async listGroupComments(

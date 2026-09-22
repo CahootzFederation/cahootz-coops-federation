@@ -75,12 +75,27 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
       findUnique: vi
         .fn()
         .mockResolvedValue({ groupId: 'group_1', userId: ACTIVE_USER.id }),
+      findFirst: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
       upsert: vi.fn().mockResolvedValue({}),
       create: vi.fn().mockResolvedValue({}),
       delete: vi.fn().mockResolvedValue({}),
       count: vi.fn().mockResolvedValue(3),
+      groupBy: vi.fn().mockResolvedValue([]),
       ...overrides.groupMember,
+    },
+    circleChatPresence: {
+      upsert: vi.fn().mockResolvedValue({}),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      count: vi.fn().mockResolvedValue(0),
+      groupBy: vi.fn().mockResolvedValue([]),
+      ...overrides.circleChatPresence,
+    },
+    welcomeTableConfig: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
+      ...overrides.welcomeTableConfig,
     },
     userCoopMembership: {
       findUnique: vi.fn().mockResolvedValue({ status: 'ACTIVE' }),
@@ -822,6 +837,319 @@ describe('groupsRouter', () => {
       ).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
       });
+    });
+  });
+
+  describe('welcome-table guardrails on existing group procedures', () => {
+    const welcomeTableGroup = {
+      id: 'wt_1',
+      coopId: 'cahootz',
+      name: 'Welcome Lounge 1',
+      privacy: 'private',
+      leaderId: 'guide_1',
+      kind: 'WELCOME_TABLE',
+      welcomeTableNumber: 1,
+      welcomeTableStatus: 'OPEN',
+      capacity: 30,
+      inviteCode: 'ABCD1234',
+    };
+
+    it('joinByCode rejects a welcome table even with a valid code', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue(welcomeTableGroup) },
+      });
+
+      await expect(
+        callerFor(db).joinByCode({ inviteCode: 'ABCD1234' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect(db.groupMember.upsert).not.toHaveBeenCalled();
+    });
+
+    it('updatePrivacy rejects a welcome table', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue(welcomeTableGroup) },
+        groupMember: { findUnique: vi.fn().mockResolvedValue({ groupId: 'wt_1', userId: ACTIVE_USER.id }) },
+      });
+
+      await expect(
+        callerFor(db).updatePrivacy({ groupId: 'wt_1', privacy: 'public', confirmExposeHistory: true }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('regenerateInviteCode rejects a welcome table', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue(welcomeTableGroup) },
+        groupMember: { findUnique: vi.fn().mockResolvedValue({ groupId: 'wt_1', userId: ACTIVE_USER.id }) },
+      });
+
+      await expect(
+        callerFor(db).regenerateInviteCode({ groupId: 'wt_1' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('transferLeadership rejects a welcome table', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue(welcomeTableGroup) },
+        groupMember: { findUnique: vi.fn().mockResolvedValue({ groupId: 'wt_1', userId: ACTIVE_USER.id }) },
+      });
+
+      await expect(
+        callerFor(db).transferLeadership({ groupId: 'wt_1', newLeaderUserId: 'someone_else' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('leave rejects a welcome table guide leaving through self-service', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue({ ...welcomeTableGroup, leaderId: ACTIVE_USER.id }) },
+        groupMember: {
+          findUnique: vi.fn().mockResolvedValue({ groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'GUIDE' }),
+        },
+      });
+
+      await expect(callerFor(db).leave({ groupId: 'wt_1' })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      });
+      expect(db.group.delete).not.toHaveBeenCalled();
+    });
+
+    it('leave still lets a newcomer leave a welcome table without touching status', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue(welcomeTableGroup) },
+        groupMember: {
+          findUnique: vi.fn().mockResolvedValue({ groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' }),
+        },
+      });
+
+      const result = await callerFor(db).leave({ groupId: 'wt_1' });
+
+      expect(result).toEqual({ success: true, groupDeleted: false });
+      expect(db.groupMember.delete).toHaveBeenCalledWith({
+        where: { groupId_userId: { groupId: 'wt_1', userId: ACTIVE_USER.id } },
+      });
+      expect(db.group.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('assignWelcomeTable', () => {
+    const baseConfig = {
+      id: 'cfg_1',
+      coopId: 'cahootz',
+      enabled: true,
+      capacity: 30,
+      guideUserId: 'guide_1',
+      lastTableNumber: 0,
+      activeTableId: null as string | null,
+    };
+
+    it('returns the existing assignment idempotently without starting a transaction', async () => {
+      const existingTable = { id: 'wt_1', name: 'Welcome Lounge 1', welcomeTableNumber: 1 };
+      const db = makeDb({
+        groupMember: { findFirst: vi.fn().mockResolvedValue({ group: existingTable }) },
+      });
+
+      const result = await callerFor(db).assignWelcomeTable({});
+
+      expect(result).toEqual({ groupId: 'wt_1', name: 'Welcome Lounge 1', welcomeTableNumber: 1 });
+      expect(db.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('creates Welcome Lounge 1 when no active table exists yet', async () => {
+      const db = makeDb({
+        groupMember: { findFirst: vi.fn().mockResolvedValue(null) },
+        welcomeTableConfig: { upsert: vi.fn().mockResolvedValue(baseConfig) },
+        group: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockImplementation(({ data }: any) => ({ id: 'wt_1', ...data })),
+        },
+      });
+
+      const result = await callerFor(db).assignWelcomeTable({});
+
+      expect(db.group.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            kind: 'WELCOME_TABLE',
+            name: 'Welcome Lounge 1',
+            welcomeTableNumber: 1,
+            welcomeTableStatus: 'OPEN',
+            leaderId: 'guide_1',
+            privacy: 'private',
+          }),
+        }),
+      );
+      expect(db.groupMember.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { groupId: 'wt_1', userId: 'guide_1', role: 'GUIDE' } }),
+      );
+      expect(db.groupMember.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' } }),
+      );
+      expect(db.welcomeTableConfig.update).toHaveBeenCalledWith({
+        where: { id: 'cfg_1' },
+        data: { lastTableNumber: 1, activeTableId: 'wt_1' },
+      });
+      expect(result.welcomeTableNumber).toBe(1);
+    });
+
+    it('adds the newcomer to an open table below capacity without creating a new one', async () => {
+      const activeTable = { id: 'wt_1', welcomeTableStatus: 'OPEN' };
+      const db = makeDb({
+        groupMember: { findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(5) },
+        welcomeTableConfig: {
+          upsert: vi.fn().mockResolvedValue({ ...baseConfig, activeTableId: 'wt_1' }),
+        },
+        group: { findUnique: vi.fn().mockResolvedValue(activeTable) },
+      });
+
+      await callerFor(db).assignWelcomeTable({});
+
+      expect(db.groupMember.create).toHaveBeenCalledTimes(1);
+      expect(db.groupMember.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' } }),
+      );
+      expect(db.group.create).not.toHaveBeenCalled();
+      expect(db.group.update).not.toHaveBeenCalled();
+    });
+
+    it('marks the table FULL when the 30th newcomer joins', async () => {
+      const activeTable = { id: 'wt_1', welcomeTableStatus: 'OPEN' };
+      const db = makeDb({
+        groupMember: { findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(29) },
+        welcomeTableConfig: {
+          upsert: vi.fn().mockResolvedValue({ ...baseConfig, activeTableId: 'wt_1' }),
+        },
+        group: { findUnique: vi.fn().mockResolvedValue(activeTable) },
+      });
+
+      await callerFor(db).assignWelcomeTable({});
+
+      expect(db.group.update).toHaveBeenCalledWith({
+        where: { id: 'wt_1' },
+        data: { welcomeTableStatus: 'FULL' },
+      });
+    });
+
+    it('creates the next numbered table when the active one is full', async () => {
+      const fullTable = { id: 'wt_1', welcomeTableStatus: 'FULL' };
+      const db = makeDb({
+        groupMember: { findFirst: vi.fn().mockResolvedValue(null) },
+        welcomeTableConfig: {
+          upsert: vi.fn().mockResolvedValue({ ...baseConfig, lastTableNumber: 1, activeTableId: 'wt_1' }),
+        },
+        group: {
+          findUnique: vi.fn().mockResolvedValue(fullTable),
+          create: vi.fn().mockImplementation(({ data }: any) => ({ id: 'wt_2', ...data })),
+        },
+      });
+
+      const result = await callerFor(db).assignWelcomeTable({});
+
+      expect(db.group.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ welcomeTableNumber: 2, name: 'Welcome Lounge 2' }) }),
+      );
+      expect(result.welcomeTableNumber).toBe(2);
+    });
+
+    it('recovers when activeTableId points at a missing table without reusing a number', async () => {
+      const db = makeDb({
+        groupMember: { findFirst: vi.fn().mockResolvedValue(null) },
+        welcomeTableConfig: {
+          upsert: vi.fn().mockResolvedValue({ ...baseConfig, lastTableNumber: 3, activeTableId: 'gone' }),
+        },
+        group: {
+          findUnique: vi.fn().mockResolvedValue(null), // stale reference, table no longer exists
+          create: vi.fn().mockImplementation(({ data }: any) => ({ id: 'wt_4', ...data })),
+        },
+      });
+
+      const result = await callerFor(db).assignWelcomeTable({});
+
+      expect(result.welcomeTableNumber).toBe(4);
+    });
+
+    it('throws FORBIDDEN when welcome tables are disabled', async () => {
+      const db = makeDb({
+        groupMember: { findFirst: vi.fn().mockResolvedValue(null) },
+        welcomeTableConfig: { upsert: vi.fn().mockResolvedValue({ ...baseConfig, enabled: false }) },
+      });
+
+      await expect(callerFor(db).assignWelcomeTable({})).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('creates a table with no guide, using the newcomer as the placeholder leader', async () => {
+      const db = makeDb({
+        groupMember: { findFirst: vi.fn().mockResolvedValue(null) },
+        welcomeTableConfig: { upsert: vi.fn().mockResolvedValue({ ...baseConfig, guideUserId: null }) },
+        group: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockImplementation(({ data }: any) => ({ id: 'wt_1', ...data })),
+        },
+      });
+
+      const result = await callerFor(db).assignWelcomeTable({});
+
+      expect(db.group.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ leaderId: ACTIVE_USER.id }) }),
+      );
+      // Only the NEWCOMER row is created - no GUIDE membership when unguided.
+      expect(db.groupMember.create).toHaveBeenCalledTimes(1);
+      expect(db.groupMember.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' } }),
+      );
+      expect(result.welcomeTableNumber).toBe(1);
+    });
+  });
+
+  describe('chat presence procedures', () => {
+    const memberOfGroup1 = {
+      group: { findUnique: vi.fn().mockResolvedValue({ id: 'group_1', leaderId: 'someone_else' }) },
+    };
+
+    it('enterChat requires membership then upserts presence', async () => {
+      const db = makeDb(memberOfGroup1);
+
+      const result = await callerFor(db).enterChat({ groupId: 'group_1' });
+
+      expect(result).toEqual({ success: true });
+      expect(db.circleChatPresence.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { groupId_userId: { groupId: 'group_1', userId: ACTIVE_USER.id } },
+        }),
+      );
+    });
+
+    it('enterChat rejects a non-member', async () => {
+      const db = makeDb({
+        ...memberOfGroup1,
+        groupMember: { findUnique: vi.fn().mockResolvedValue(null) },
+      });
+
+      await expect(callerFor(db).enterChat({ groupId: 'group_1' })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      });
+      expect(db.circleChatPresence.upsert).not.toHaveBeenCalled();
+    });
+
+    it('refreshChatPresence bumps lastActivityAt', async () => {
+      const db = makeDb();
+
+      await callerFor(db).refreshChatPresence({ groupId: 'group_1' });
+
+      expect(db.circleChatPresence.updateMany).toHaveBeenCalledWith({
+        where: { groupId: 'group_1', userId: ACTIVE_USER.id },
+        data: { lastActivityAt: expect.any(Date) },
+      });
+    });
+
+    it('leaveChat sets exitedAt without touching GroupMember', async () => {
+      const db = makeDb();
+
+      await callerFor(db).leaveChat({ groupId: 'group_1' });
+
+      expect(db.circleChatPresence.updateMany).toHaveBeenCalledWith({
+        where: { groupId: 'group_1', userId: ACTIVE_USER.id },
+        data: { exitedAt: expect.any(Date) },
+      });
+      expect(db.groupMember.delete).not.toHaveBeenCalled();
     });
   });
 });

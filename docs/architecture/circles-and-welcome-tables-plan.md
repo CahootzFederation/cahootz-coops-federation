@@ -1,6 +1,6 @@
-# Circles and Welcome Tables: Single Product Plan
+# Circles and Welcome Lounges: Single Product Plan
 
-This is the source of truth for the Circles and Welcome Tables work. It replaces
+This is the source of truth for the Circles and Welcome Lounges work. It replaces
 earlier sketches and resolves their inconsistencies.
 
 ## Product model
@@ -27,7 +27,7 @@ It shows:
 - one Commons feed tile;
 - public circles in the selected Common; and
 - private or invite-only circles the member belongs to, including their
-  welcome table.
+  welcome lounge.
 
 Circle tiles use deterministic solid-color circular backgrounds rather than
 member photos. Each tile shows the circle name and aggregate activity beneath
@@ -35,7 +35,7 @@ it: `N chatting`, `No one chatting`, or `Public · Join`. It never exposes the
 names or faces of people currently chatting.
 
 Opening a public circle joins the member first. Opening a private circle is
-only possible for its members. Welcome tables are never discoverable or
+only possible for its members. Welcome lounges are never discoverable or
 joinable through the explorer, a public join, or an invite code.
 
 ## Membership and temporary chat presence
@@ -59,17 +59,17 @@ After the member completes or defers their profile, onboarding shows one final
 choice:
 
 1. **Explore on my own**: open the Cahootz circle explorer.
-2. **Join a welcome table**: securely assign the member to a private welcome
+2. **Join a welcome lounge**: securely assign the member to a private welcome
    table under `coopId = cahootz`, then open that circle's normal feed.
 
 The action is idempotent. A member who already has a welcome-table membership
 returns to that same table rather than receiving another one.
 
-## Welcome tables
+## Welcome lounges
 
-Welcome tables are system-managed private Circles in the Cahootz Common.
+Welcome lounges are system-managed private Circles in the Cahootz Common.
 
-- Names use the fixed convention `Welcome Table {number}`.
+- Names use the fixed convention `Welcome Lounge {number}`.
 - Numbers never recycle. `WelcomeTableConfig.lastTableNumber` is the
   authoritative stored counter.
 - The default capacity is 30 newcomers; the guide does not use a newcomer
@@ -81,7 +81,7 @@ Welcome tables are system-managed private Circles in the Cahootz Common.
   the backend checks the active table's age and capacity. If it is expired or
   full, it closes that table as appropriate and creates the next number before
   assigning the newcomer. No separate cron job is required.
-- An administrator can use **Start next welcome table** to close the current
+- An administrator can use **Start next welcome lounge** to close the current
   open table and immediately create the next number. Existing members remain
   in the earlier table.
 
@@ -119,7 +119,7 @@ configuration change, and manual increment is audited.
   Common.
 - Counts show only aggregate temporary chat activity, never identities.
 - Leaving chat does not remove membership; leaving a circle does.
-- Welcome tables are private Cahootz-only circles, assigned only through
+- Welcome lounges are private Cahootz-only circles, assigned only through
   onboarding.
 - Table numbering remains sequential across capacity-based, time-based, and
   manually started rotations.

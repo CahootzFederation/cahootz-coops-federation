@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Compass,
+  Info,
   LogOut,
   MessageCircle,
   RotateCcw,
@@ -191,6 +192,16 @@ export default function AppDrawer({
                         {item.accessStatus === 'ACTIVE' ? (isActive ? 'Active Member' : 'Member') : 'Pending'}
                       </Text>
                     </View>
+                    {item.id !== PERSONAL_PAGE_DESTINATION_ID ? (
+                      <TouchableOpacity
+                        onPress={() => goTo(`/commons/${item.id}`)}
+                        className="h-8 w-8 items-center justify-center rounded-full bg-stone-100"
+                        accessibilityLabel={`Open ${item.label} page`}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Info size={15} color="#57534E" />
+                      </TouchableOpacity>
+                    ) : null}
                     {isActive ? (
                       <CheckCircle2 size={17} color={THEME.primary} />
                     ) : (

@@ -56,7 +56,7 @@ export async function PATCH(
   const body = await request.json();
   const result = patchSchema.safeParse(body);
   if (!result.success) {
-    return NextResponse.json({ error: 'Invalid welcome table config update.' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid welcome lounge config update.' }, { status: 400 });
   }
 
   const { coopId } = await params;

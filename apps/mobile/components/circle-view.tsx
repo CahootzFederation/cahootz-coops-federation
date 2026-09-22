@@ -97,8 +97,8 @@ export default function CircleView({ coopId }: { coopId: string }) {
       const result = await api.assignWelcomeTable(sessionToken, coopId);
       openCircle(result.groupId);
     } catch (err) {
-      console.error('Failed to join welcome table:', err);
-      setWelcomeTableError(err instanceof Error ? err.message : 'Could not join a welcome table.');
+      console.error('Failed to join welcome lounge:', err);
+      setWelcomeTableError(err instanceof Error ? err.message : 'Could not join a welcome lounge.');
     } finally {
       setIsAssigning(false);
     }
@@ -204,7 +204,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
                   )}
                 </View>
                 <Text className="mt-3 text-center text-base font-black text-gray-900">
-                  Join a welcome table
+                  Join a welcome lounge
                 </Text>
                 <Text className="mt-0.5 text-center text-xs font-semibold text-gray-500">
                   Meet a small group of newcomers

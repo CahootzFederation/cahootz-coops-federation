@@ -109,7 +109,7 @@ describe('welcomeTablesRouter', () => {
         group: {
           findUnique: vi.fn().mockResolvedValue({
             id: 'wt_1',
-            name: 'Welcome Table 1',
+            name: 'Welcome Lounge 1',
             welcomeTableStatus: 'OPEN',
             welcomeTableNumber: 1,
             _count: { members: 5 },
@@ -121,7 +121,7 @@ describe('welcomeTablesRouter', () => {
 
       expect(result.activeTable).toEqual({
         id: 'wt_1',
-        name: 'Welcome Table 1',
+        name: 'Welcome Lounge 1',
         status: 'OPEN',
         tableNumber: 1,
         newcomerCount: 5,

@@ -1354,7 +1354,7 @@ export const api = {
 
     return readTrpcResult<{ groupId: string; name: string; welcomeTableNumber: number | null }>(
       response,
-      'Could not join a welcome table',
+      'Could not join a welcome lounge',
     );
   },
 

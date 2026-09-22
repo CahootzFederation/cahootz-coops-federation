@@ -42,7 +42,7 @@ export async function skipOnboardingWizard(
   }
 
   // "Do this later" only skips the profile form - it now lands on a third
-  // "find your way in" step (welcome table / explore / skip) before the
+  // "find your way in" step (welcome lounge / explore / skip) before the
   // feed, so skip that too to reach Circle View.
   const skipCircles = page.getByRole("button", { name: "Skip for now" });
   if (mode === "always") {

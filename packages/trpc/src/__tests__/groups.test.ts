@@ -844,7 +844,7 @@ describe('groupsRouter', () => {
     const welcomeTableGroup = {
       id: 'wt_1',
       coopId: 'cahootz',
-      name: 'Welcome Table 1',
+      name: 'Welcome Lounge 1',
       privacy: 'private',
       leaderId: 'guide_1',
       kind: 'WELCOME_TABLE',
@@ -942,18 +942,18 @@ describe('groupsRouter', () => {
     };
 
     it('returns the existing assignment idempotently without starting a transaction', async () => {
-      const existingTable = { id: 'wt_1', name: 'Welcome Table 1', welcomeTableNumber: 1 };
+      const existingTable = { id: 'wt_1', name: 'Welcome Lounge 1', welcomeTableNumber: 1 };
       const db = makeDb({
         groupMember: { findFirst: vi.fn().mockResolvedValue({ group: existingTable }) },
       });
 
       const result = await callerFor(db).assignWelcomeTable({});
 
-      expect(result).toEqual({ groupId: 'wt_1', name: 'Welcome Table 1', welcomeTableNumber: 1 });
+      expect(result).toEqual({ groupId: 'wt_1', name: 'Welcome Lounge 1', welcomeTableNumber: 1 });
       expect(db.$transaction).not.toHaveBeenCalled();
     });
 
-    it('creates Welcome Table 1 when no active table exists yet', async () => {
+    it('creates Welcome Lounge 1 when no active table exists yet', async () => {
       const db = makeDb({
         groupMember: { findFirst: vi.fn().mockResolvedValue(null) },
         welcomeTableConfig: { upsert: vi.fn().mockResolvedValue(baseConfig) },
@@ -969,7 +969,7 @@ describe('groupsRouter', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             kind: 'WELCOME_TABLE',
-            name: 'Welcome Table 1',
+            name: 'Welcome Lounge 1',
             welcomeTableNumber: 1,
             welcomeTableStatus: 'OPEN',
             leaderId: 'guide_1',
@@ -1044,7 +1044,7 @@ describe('groupsRouter', () => {
       const result = await callerFor(db).assignWelcomeTable({});
 
       expect(db.group.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ welcomeTableNumber: 2, name: 'Welcome Table 2' }) }),
+        expect.objectContaining({ data: expect.objectContaining({ welcomeTableNumber: 2, name: 'Welcome Lounge 2' }) }),
       );
       expect(result.welcomeTableNumber).toBe(2);
     });

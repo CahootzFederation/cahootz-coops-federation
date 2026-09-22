@@ -345,7 +345,7 @@ export const groupsRouter = router({
       if (group.kind === 'WELCOME_TABLE') {
         throw new TRPCError({
           code: 'FORBIDDEN',
-          message: 'Welcome tables can only be joined through the welcome-table flow.',
+          message: 'Welcome lounges can only be joined through the welcome-lounge flow.',
         });
       }
 
@@ -429,7 +429,7 @@ export const groupsRouter = router({
       const userId = context.accountUser.id;
       const group = await requireMembership(context.db, input.groupId, userId);
       if (group.kind === 'WELCOME_TABLE') {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Welcome tables are managed from admin controls.' });
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Welcome lounges are managed from admin controls.' });
       }
       if (group.leaderId !== userId) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the circle leader can change privacy.' });
@@ -467,7 +467,7 @@ export const groupsRouter = router({
 
       const group = await requireMembership(context.db, input.groupId, userId);
       if (group.kind === 'WELCOME_TABLE') {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Welcome tables are managed from admin controls.' });
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Welcome lounges are managed from admin controls.' });
       }
       if (group.leaderId !== userId) {
         throw new TRPCError({
@@ -516,7 +516,7 @@ export const groupsRouter = router({
 
       const group = await requireMembership(context.db, input.groupId, userId);
       if (group.kind === 'WELCOME_TABLE') {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Welcome tables are managed from admin controls.' });
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Welcome lounges are managed from admin controls.' });
       }
       if (group.leaderId !== userId) {
         throw new TRPCError({
@@ -580,7 +580,7 @@ export const groupsRouter = router({
         if (membership?.role === 'GUIDE') {
           throw new TRPCError({
             code: 'FORBIDDEN',
-            message: 'Welcome tables are retired from admin controls, not by the guide leaving.',
+            message: 'Welcome lounges are retired from admin controls, not by the guide leaving.',
           });
         }
 

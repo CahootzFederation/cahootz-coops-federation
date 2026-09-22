@@ -19,7 +19,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
-import CircleView from '@/components/circle-view';
 import {
   ArrowLeft,
   Banknote,
@@ -33,7 +32,6 @@ import {
   MessageCircle,
   Send,
   Target,
-  Users,
   Vote,
 } from 'lucide-react-native';
 
@@ -852,30 +850,6 @@ export default function CommonsDetailScreen() {
                     No proposals are open yet. This is where formal requests,
                     budgets, votes, and funding decisions will live.
                   </Text>
-                )}
-              </View>
-
-              <View className="mb-3 overflow-hidden rounded-2xl border border-gray-200 bg-white">
-                <View className="flex-row items-center justify-between gap-3 border-b border-gray-100 p-4 pb-0">
-                  <View className="flex-row items-center gap-2">
-                    <Users size={19} color={THEME.primary} />
-                    <Text className="text-lg font-black text-gray-950">
-                      Circles
-                    </Text>
-                  </View>
-                </View>
-                {!isMember ? (
-                  <View className="m-4 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
-                    <Text className="text-base font-black text-gray-900">
-                      Circles locked
-                    </Text>
-                    <Text className="mt-1 text-sm leading-5 text-gray-600">
-                      Join this commons to see and start small, private circles
-                      inside it.
-                    </Text>
-                  </View>
-                ) : (
-                  <CircleView coopId={coopId} />
                 )}
               </View>
             </>

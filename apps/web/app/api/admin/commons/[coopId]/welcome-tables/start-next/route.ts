@@ -24,7 +24,7 @@ export async function POST(
       welcomeTableNumber: group.welcomeTableNumber,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Could not start the next welcome table.';
+    const message = err instanceof Error ? err.message : 'Could not start the next welcome lounge.';
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

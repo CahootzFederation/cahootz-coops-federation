@@ -150,14 +150,14 @@ export default function WelcomeTablesAdminPage() {
     fetch(`/api/admin/commons/${coopId}/welcome-tables`)
       .then(async (res) => {
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to load welcome tables.');
+        if (!res.ok) throw new Error(data.error || 'Failed to load welcome lounges.');
         setConfig(
           data.config || { id: '', coopId, enabled: true, capacity: 30, guideUserId: null, lastTableNumber: 0, activeTableId: null },
         );
         setActiveTable(data.activeTable);
         setHistory(data.history || []);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load welcome tables.'))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load welcome lounges.'))
       .finally(() => setIsLoading(false));
   };
 
@@ -191,16 +191,16 @@ export default function WelcomeTablesAdminPage() {
   }
 
   async function startNext() {
-    if (!confirm('Close the current welcome table (even if under capacity) and start the next one?')) return;
+    if (!confirm('Close the current welcome lounge (even if under capacity) and start the next one?')) return;
     setIsStartingNext(true);
     setError(null);
     try {
       const response = await fetch(`/api/admin/commons/${coopId}/welcome-tables/start-next`, { method: 'POST' });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to start next welcome table.');
+      if (!response.ok) throw new Error(data.error || 'Failed to start next welcome lounge.');
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start next welcome table.');
+      setError(err instanceof Error ? err.message : 'Failed to start next welcome lounge.');
     } finally {
       setIsStartingNext(false);
     }
@@ -216,7 +216,7 @@ export default function WelcomeTablesAdminPage() {
         {coopId}
       </Link>
 
-      <h1 className="text-2xl font-bold text-white">Welcome Tables</h1>
+      <h1 className="text-2xl font-bold text-white">Welcome Lounges</h1>
 
       {error && (
         <div className="flex items-start gap-2 rounded-[8px] border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
@@ -289,7 +289,7 @@ export default function WelcomeTablesAdminPage() {
 
           <section className="space-y-3 rounded-[8px] border border-white/10 bg-white/5 p-4">
             <div className="flex items-center justify-between gap-4">
-              <h2 className="text-lg font-semibold text-white">Current table</h2>
+              <h2 className="text-lg font-semibold text-white">Current lounge</h2>
               <Button
                 variant="outline"
                 size="sm"
@@ -297,7 +297,7 @@ export default function WelcomeTablesAdminPage() {
                 onClick={startNext}
                 disabled={isStartingNext}
               >
-                {isStartingNext ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Start next welcome table'}
+                {isStartingNext ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Start next welcome lounge'}
               </Button>
             </div>
             {activeTable ? (
@@ -305,9 +305,9 @@ export default function WelcomeTablesAdminPage() {
                 {activeTable.name} — {activeTable.status} — {activeTable.newcomerCount}/{config.capacity} newcomers
               </p>
             ) : (
-              <p className="text-sm text-slate-500">No active welcome table yet.</p>
+              <p className="text-sm text-slate-500">No active welcome lounge yet.</p>
             )}
-            <p className="text-xs text-slate-500">Last table number: {config.lastTableNumber}</p>
+            <p className="text-xs text-slate-500">Last lounge number: {config.lastTableNumber}</p>
           </section>
 
           <section className="space-y-3">
@@ -316,7 +316,7 @@ export default function WelcomeTablesAdminPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-white/5 text-slate-400">
                   <tr>
-                    <th className="px-4 py-2 font-medium">Table</th>
+                    <th className="px-4 py-2 font-medium">Lounge</th>
                     <th className="px-4 py-2 font-medium">Status</th>
                     <th className="px-4 py-2 font-medium">Occupancy</th>
                     <th className="px-4 py-2 font-medium">Guide</th>
@@ -327,7 +327,7 @@ export default function WelcomeTablesAdminPage() {
                 <tbody className="divide-y divide-white/10">
                   {history.map((row) => (
                     <tr key={row.id}>
-                      <td className="px-4 py-2 text-white">Welcome Table {row.tableNumber}</td>
+                      <td className="px-4 py-2 text-white">Welcome Lounge {row.tableNumber}</td>
                       <td className="px-4 py-2 text-slate-300">{row.status}</td>
                       <td className="px-4 py-2 text-slate-400">
                         {row.newcomerCount}/{row.capacity ?? '—'}
@@ -340,7 +340,7 @@ export default function WelcomeTablesAdminPage() {
                   {history.length === 0 && (
                     <tr>
                       <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
-                        No welcome tables created yet.
+                        No welcome lounges created yet.
                       </td>
                     </tr>
                   )}

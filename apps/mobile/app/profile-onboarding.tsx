@@ -287,16 +287,16 @@ export default function ProfileOnboardingScreen() {
         params: { coopId: 'cahootz', circleId: result.groupId },
       });
     } catch (err) {
-      console.error('Could not join a welcome table:', err);
-      setError('Could not join a welcome table right now. Try exploring on your own instead.');
+      console.error('Could not join a welcome lounge:', err);
+      setError('Could not join a welcome lounge right now. Try exploring on your own instead.');
     } finally {
       setIsJoiningWelcomeTable(false);
     }
   };
 
-  // Auto-join a welcome table once a brand-new account reaches this step, if
+  // Auto-join a welcome lounge once a brand-new account reaches this step, if
   // they expressed that intent before creating the account (tapping "Join a
-  // welcome table" on Circle View while signed out - see circle-view.tsx).
+  // welcome lounge" on Circle View while signed out - see circle-view.tsx).
   // Consumed once and cleared immediately so it never fires again for this
   // device (e.g. on a later, unrelated signup).
   useEffect(() => {
@@ -489,7 +489,7 @@ export default function ProfileOnboardingScreen() {
               <MessageCircle color="#FF6B00" size={22} strokeWidth={2.4} />
             </View>
             <View style={circlesStyles.cardBody}>
-              <Text style={circlesStyles.cardTitle}>Join a welcome table</Text>
+              <Text style={circlesStyles.cardTitle}>Join a welcome lounge</Text>
               <Text style={circlesStyles.cardText}>
                 Meet a small group of newcomers with a guide.
               </Text>

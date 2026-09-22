@@ -418,7 +418,7 @@ export default function AdminCommonsDetailPage() {
               AI actions and costs →
             </Link>
             <Link href={`/portal/admin/commons/${commons.coopId}/welcome-tables`} className="inline-flex rounded-md border border-orange-300/30 bg-orange-300/10 px-4 py-2 text-sm font-semibold text-orange-100 hover:bg-orange-300/20">
-              Welcome tables →
+              Welcome lounges →
             </Link>
           </div>
 

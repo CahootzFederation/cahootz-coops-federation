@@ -38,7 +38,7 @@ async function assignOrAdvance(db: Db, coopId: string, mode: AssignMode) {
             update: {},
           });
           if (!config.enabled) {
-            throw new TRPCError({ code: "FORBIDDEN", message: "Welcome tables are not enabled." });
+            throw new TRPCError({ code: "FORBIDDEN", message: "Welcome lounges are not enabled." });
           }
           // A guide is optional - a table can exist unguided and have one
           // assigned later via welcomeTables.updateConfig. Something still
@@ -63,7 +63,7 @@ async function assignOrAdvance(db: Db, coopId: string, mode: AssignMode) {
               if (!admin) {
                 throw new TRPCError({
                   code: "PRECONDITION_FAILED",
-                  message: "Configure a guide, or use a wallet-linked admin account, before starting a table.",
+                  message: "Configure a guide, or use a wallet-linked admin account, before starting a lounge.",
                 });
               }
               fallbackLeaderId = admin.id;
@@ -102,7 +102,7 @@ async function assignOrAdvance(db: Db, coopId: string, mode: AssignMode) {
             data: {
               coopId,
               kind: "WELCOME_TABLE",
-              name: `Welcome Table ${nextNumber}`,
+              name: `Welcome Lounge ${nextNumber}`,
               privacy: "private",
               inviteCode: generateInviteCode(),
               leaderId: config.guideUserId ?? fallbackLeaderId!,
@@ -146,7 +146,7 @@ async function assignOrAdvance(db: Db, coopId: string, mode: AssignMode) {
     }
   }
   // Unreachable - the loop above always returns or throws - but keeps TS happy.
-  throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not assign a welcome table." });
+  throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not assign a welcome lounge." });
 }
 
 export async function assignWelcomeTable(db: Db, coopId: string, userId: string) {

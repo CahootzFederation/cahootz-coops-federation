@@ -13,6 +13,10 @@ vi.mock('../services/platform-admin.js', () => ({
   listCommonsMembers: vi.fn(),
 }));
 
+vi.mock('../lib/bot.js', () => ({
+  ensureSageBotUser: vi.fn().mockResolvedValue({ id: 'sage_1' }),
+}));
+
 import { welcomeTablesRouter } from '../routers/welcome-tables.js';
 import { listCommonsMembers } from '../services/platform-admin.js';
 
@@ -56,6 +60,10 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
     auditLog: {
       create: vi.fn().mockResolvedValue({}),
       ...overrides.auditLog,
+    },
+    commonsPost: {
+      create: vi.fn().mockResolvedValue({}),
+      ...overrides.commonsPost,
     },
     user: {
       findFirst: vi.fn().mockResolvedValue(null),
@@ -198,6 +206,14 @@ describe('welcomeTablesRouter', () => {
       expect(db.groupMember.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: { groupId: 'wt_2', userId: 'guide_1', role: 'GUIDE' } }),
       );
+      expect(db.commonsPost.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          circleId: 'wt_2',
+          authorId: 'sage_1',
+          title: 'Welcome to Welcome Lounge 2',
+          content: expect.stringContaining('Introduce yourself in the comments'),
+        }),
+      });
       expect(result.welcomeTableNumber).toBe(2);
     });
 

@@ -7,24 +7,24 @@ earlier sketches and resolves their inconsistencies.
 
 - A **Common** is the community container.
 - A **Circle** is a room inside one Common. Circles do not replace Commons.
-- The **Commons** tab remains named Commons. For signed-in members, tapping it
-  opens the selected Common's circle explorer first, not the Common feed.
-- The original Common feed remains available from a **Commons feed** tile in
-  that explorer.
+- The **Commons** tab remains named Commons and opens the selected Common's
+  home/feed, as it does today.
+- The **Circle Explorer** is an in-Common destination reached from the
+  selected Common's **Circles** entry. It never replaces the Common itself or
+  its feed.
 - A circle's existing feed design stays intact. The only circle-feed additions
   are temporary presence handling and a **Leave chat** control.
 
 ## Circle explorer
 
-The explorer is the first screen reached from:
+The Circle Explorer is reached from:
 
-- the signed-in Commons tab;
-- selecting a Common in the drawer; and
-- the onboarding **Explore on my own** choice.
+- the selected Common's **Circles** entry;
+- the Common header or drawer while that Common is selected; and
+- a welcome-lounge assignment, which opens that Circle directly.
 
-It shows:
+It shows rooms inside the selected Common:
 
-- one Commons feed tile;
 - public circles in the selected Common; and
 - private or invite-only circles the member belongs to, including their
   welcome lounge.
@@ -58,7 +58,9 @@ private-circle access; presence only powers the aggregate `chatting` count.
 After the member completes or defers their profile, onboarding shows one final
 choice:
 
-1. **Explore on my own**: open the Cahootz circle explorer.
+1. **Explore on my own**: open the Commons Explorer/directory, where a member
+   can select Cahootz or another available Common. Selecting a Common opens
+   that Common's home; its Circles entry opens the Circle Explorer.
 2. **Join a welcome lounge**: securely assign the member to a private welcome
    table under `coopId = cahootz`, then open that circle's normal feed.
 
@@ -113,8 +115,9 @@ configuration change, and manual increment is audited.
 
 ## Acceptance criteria
 
-- Tapping **Commons** as a signed-in member opens the circle explorer.
-- The existing feed can still be reached through the Commons feed tile.
+- Tapping **Commons** as a signed-in member opens the selected Common's home
+  and feed.
+- The selected Common's **Circles** entry opens its Circle Explorer.
 - Public and member-private circles are correctly scoped to the selected
   Common.
 - Counts show only aggregate temporary chat activity, never identities.

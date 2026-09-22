@@ -33,6 +33,7 @@ import { publicCoopInfoRouter } from "./public-coop-info.js";
 import { walletAuthRouter } from "./wallet-auth.js";
 import { waitlistRouter } from "./waitlist.js";
 import { commonsRouter } from "./commons.js";
+import { eventsRouter } from "./events.js";
 import { groupsRouter } from "./groups.js";
 import { welcomeTablesRouter } from "./welcome-tables.js";
 import { knowledgeBaseRouter } from "./knowledge-base.js";
@@ -73,6 +74,7 @@ export const appRouter = router({
   walletAuth: walletAuthRouter,
   waitlist: waitlistRouter,
   commons: commonsRouter,
+  events: eventsRouter,
   groups: groupsRouter,
   welcomeTables: welcomeTablesRouter,
   knowledgeBase: knowledgeBaseRouter,

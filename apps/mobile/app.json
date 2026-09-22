@@ -57,6 +57,7 @@
     },
     "plugins": [
       "expo-router",
+      "@react-native-community/datetimepicker",
       "./expo-plugins/with-excluded-archs.js",
       "./expo-plugins/with-modify-gradle.js",
       [

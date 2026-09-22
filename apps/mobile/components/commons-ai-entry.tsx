@@ -3,6 +3,7 @@ import type {
   CommonsPost,
   CommonsPostMedia,
   CommonsProfile,
+  EventSummary,
   PrivateGroupSummary,
   SearchPerson,
 } from '@/lib/api';
@@ -28,6 +29,7 @@ import {
   COMPOSER_MEDIA_TILE_SIZE,
   FEED_MEDIA_TILE_SIZE,
 } from '@/components/commons-media-viewer';
+import { EventCard, UpcomingEventsModule } from '@/components/event-card';
 import { MentionComposerInput } from '@/components/mention-composer-input';
 import { MentionText } from '@/components/mention-text';
 import { PostTypeSelector } from '@/components/post-type-selector';
@@ -73,6 +75,7 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  Pin,
   Plus,
   Repeat2,
   RotateCcw,
@@ -207,6 +210,8 @@ export default function CommonsAiEntry({
   } = useAuth();
   const [draft, setDraft] = useState('');
   const [feedPosts, setFeedPosts] = useState<CommonsPost[]>([]);
+  const [pinnedPost, setPinnedPost] = useState<CommonsPost | null>(null);
+  const [upcomingEvents, setUpcomingEvents] = useState<EventSummary[]>([]);
   const [nextFeedCursor, setNextFeedCursor] = useState<string | null>(null);
   const [isLoadingMoreFeed, setIsLoadingMoreFeed] = useState(false);
   const [commonsProfile, setCommonsProfile] = useState<CommonsProfile>(
@@ -240,6 +245,8 @@ export default function CommonsAiEntry({
     useState<SelectedPostType>(DEFAULT_POST_TYPE);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [pinningPostId, setPinningPostId] = useState<string | null>(null);
+  const [rsvpPendingEventId, setRsvpPendingEventId] = useState<string | null>(null);
   const [composerNotice, setComposerNotice] = useState<ComposerNotice>(null);
   const [accountPromptOpen, setAccountPromptOpen] = useState(false);
   const [accountEmail, setAccountEmail] = useState('');
@@ -397,6 +404,8 @@ export default function CommonsAiEntry({
     postedItemLayoutRef.current = null;
     feedListOffsetYRef.current = null;
     setFeedPosts([]);
+    setPinnedPost(null);
+    setUpcomingEvents([]);
     setNextFeedCursor(null);
     setCircleName(null);
     setCircleIsMember(null);
@@ -420,6 +429,8 @@ export default function CommonsAiEntry({
         setCircleIsMember(result.circleIsMember ?? null);
         setCircleFeedAuthorized(true);
         setFeedPosts((current) => mergeFeedPosts(current, result.posts));
+        setPinnedPost(result.pinnedPost ?? null);
+        setUpcomingEvents(result.upcomingEvents ?? []);
         setNextFeedCursor(result.nextCursor);
         setFeedError('');
       })
@@ -637,6 +648,16 @@ export default function CommonsAiEntry({
   const hasCurrentUserPost = visiblePosts.some(
     (post) => post.authorId === user?.id,
   );
+  const isCircleLeader = useMemo(
+    () => drawerCircles.find((circle) => circle.id === feedCircleId)?.isLeader ?? false,
+    [drawerCircles, feedCircleId],
+  );
+  const feedItems = useMemo(() => {
+    const items: { pinned: boolean; post: CommonsPost }[] = [];
+    if (pinnedPost) items.push({ pinned: true, post: pinnedPost });
+    visiblePosts.forEach((post) => items.push({ pinned: false, post }));
+    return items;
+  }, [pinnedPost, visiblePosts]);
   const isWelcomeHandoff = params.welcome === '1';
   const shouldShowNextStep =
     hasAccountSession &&
@@ -1064,6 +1085,10 @@ export default function CommonsAiEntry({
   };
 
   const openPostDetail = (post: CommonsPost) => {
+    if (post.event) {
+      openEventDetail(post.event.id);
+      return;
+    }
     router.push({
       pathname: '/[coopId]/posts/[postId]',
       params: {
@@ -1071,6 +1096,85 @@ export default function CommonsAiEntry({
         postId: post.id,
       },
     } as any);
+  };
+
+  const openEventDetail = (eventId: string) => {
+    router.push({
+      pathname: '/[coopId]/events/[eventId]',
+      params: { coopId: feedCoopId || 'cahootz', eventId },
+    } as any);
+  };
+
+  const pinPost = (post: CommonsPost) => {
+    if (pinningPostId) return;
+    void requireAccount(async (token) => {
+      setPinningPostId(post.id);
+      try {
+        await api.pinCommonsPost(post.id, token);
+        setPinnedPost({ ...post, isPinned: true });
+        setFeedPosts((current) => current.filter((item) => item.id !== post.id));
+      } catch (error) {
+        Alert.alert(
+          'Could not pin post',
+          error instanceof Error ? error.message : 'Please try again.',
+        );
+      } finally {
+        setPinningPostId(null);
+      }
+    });
+  };
+
+  const unpinPost = (post: CommonsPost) => {
+    if (pinningPostId) return;
+    void requireAccount(async (token) => {
+      setPinningPostId(post.id);
+      try {
+        await api.unpinCommonsPost(post.id, token);
+        setPinnedPost(null);
+        setFeedPosts((current) => mergeFeedPosts([{ ...post, isPinned: false }], current));
+      } catch (error) {
+        Alert.alert(
+          'Could not unpin post',
+          error instanceof Error ? error.message : 'Please try again.',
+        );
+      } finally {
+        setPinningPostId(null);
+      }
+    });
+  };
+
+  const rsvpToUpcomingEvent = (eventId: string, status: 'GOING' | 'MAYBE' | 'CANT_GO') => {
+    if (rsvpPendingEventId) return;
+    void requireAccount(async (token) => {
+      setRsvpPendingEventId(eventId);
+      try {
+        const updated = await api.rsvpToEvent(eventId, status, token);
+        setUpcomingEvents((current) =>
+          current.map((event) =>
+            event.id === eventId ? { ...event, ...updated, title: event.title } : event,
+          ),
+        );
+        setFeedPosts((current) =>
+          current.map((post) =>
+            post.event?.id === eventId
+              ? { ...post, event: { ...post.event, ...updated } }
+              : post,
+          ),
+        );
+        setPinnedPost((current) =>
+          current?.event?.id === eventId
+            ? { ...current, event: { ...current.event, ...updated } }
+            : current,
+        );
+      } catch (error) {
+        Alert.alert(
+          'Could not RSVP',
+          error instanceof Error ? error.message : 'Please try again.',
+        );
+      } finally {
+        setRsvpPendingEventId(null);
+      }
+    });
   };
 
   const openPersonPage = (author: string, handle?: string) => {
@@ -1408,7 +1512,10 @@ export default function CommonsAiEntry({
     if (scopedFeedLocked || (feedCircleId && feedCircleId !== `general:${feedCoopId}` && !circleIsMember)) return null;
 
     return (
-      <View className="border-t border-gray-200 bg-white px-4 pb-3 pt-3">
+      <View
+        className="rounded-[24px] border bg-white px-4 pb-3 pt-3"
+        style={{ borderColor: SOCIAL_THEME.border }}
+      >
         {selectedMediaItems.length > 0 ? (
           <ScrollView
             horizontal
@@ -1490,6 +1597,22 @@ export default function CommonsAiEntry({
             value={selectedPostType}
             onChange={setSelectedPostType}
           />
+          <TouchableOpacity
+            onPress={() =>
+              router.push({
+                pathname: '/[coopId]/events/create',
+                params: {
+                  coopId: feedCoopId || 'cahootz',
+                  ...(feedCircleId ? { circleId: feedCircleId } : {}),
+                },
+              } as any)
+            }
+            className="h-8 w-8 items-center justify-center rounded-full"
+            style={{ backgroundColor: SOCIAL_THEME.primarySoft }}
+            accessibilityLabel="Create event"
+          >
+            <Plus size={16} color={SOCIAL_THEME.primary} />
+          </TouchableOpacity>
         </View>
 
         <View className="flex-row items-center gap-2">
@@ -1608,10 +1731,12 @@ export default function CommonsAiEntry({
         </View>
       </View>
 
+      <View className="bg-white px-4 py-3">{renderComposer()}</View>
+
       <ScrollView
         ref={scrollRef}
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: scopedFeedLocked ? 28 : 148 }}
+        contentContainerStyle={{ paddingBottom: 28 }}
         keyboardShouldPersistTaps="handled"
         onScroll={handleFeedScroll}
         scrollEventThrottle={200}
@@ -1691,7 +1816,9 @@ export default function CommonsAiEntry({
               </View>
             ) : null}
 
-            {visiblePosts.map((post) => {
+            <UpcomingEventsModule events={upcomingEvents} onPressEvent={openEventDetail} />
+
+            {feedItems.map(({ pinned, post }) => {
               if (post.id.startsWith('pending:')) {
                 return (
                   <View
@@ -1766,6 +1893,20 @@ export default function CommonsAiEntry({
                           </View>
                         </TouchableOpacity>
                         <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5">
+                          {pinned ? (
+                            <View
+                              className="flex-row items-center gap-1 self-start rounded-md px-2 py-0.5"
+                              style={{ backgroundColor: SOCIAL_THEME.primarySoft }}
+                            >
+                              <Pin size={10} color={SOCIAL_THEME.primary} />
+                              <Text
+                                className="text-[10px] font-black"
+                                style={{ color: SOCIAL_THEME.primary }}
+                              >
+                                Pinned
+                              </Text>
+                            </View>
+                          ) : null}
                           {shouldShowPostType(post.tag) ? (
                             <View
                               className="self-start rounded-md px-2 py-0.5"
@@ -1788,19 +1929,64 @@ export default function CommonsAiEntry({
                         </View>
                       </View>
                       {post.authorId && post.authorId === user?.id ? (
+                        <View className="flex-row items-center gap-1">
+                          {isCircleLeader ? (
+                            <TouchableOpacity
+                              onPress={(event) => {
+                                event.stopPropagation();
+                                if (pinned) unpinPost(post);
+                                else pinPost(post);
+                              }}
+                              disabled={pinningPostId === post.id}
+                              className="h-8 w-8 items-center justify-center rounded-full"
+                              accessibilityLabel={pinned ? 'Unpin post' : 'Pin post'}
+                            >
+                              {pinningPostId === post.id ? (
+                                <ActivityIndicator size="small" color={SOCIAL_THEME.primary} />
+                              ) : (
+                                <Pin
+                                  size={16}
+                                  color={SOCIAL_THEME.primary}
+                                  fill={pinned ? SOCIAL_THEME.primary : 'transparent'}
+                                />
+                              )}
+                            </TouchableOpacity>
+                          ) : null}
+                          <TouchableOpacity
+                            onPress={(event) => {
+                              event.stopPropagation();
+                              deletePost(post);
+                            }}
+                            disabled={deletingPostId === post.id}
+                            className="h-8 w-8 items-center justify-center rounded-full"
+                            accessibilityLabel="Delete post"
+                          >
+                            {deletingPostId === post.id ? (
+                              <ActivityIndicator size="small" color="#DC2626" />
+                            ) : (
+                              <Trash2 size={16} color="#DC2626" />
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      ) : isCircleLeader ? (
                         <TouchableOpacity
                           onPress={(event) => {
                             event.stopPropagation();
-                            deletePost(post);
+                            if (pinned) unpinPost(post);
+                            else pinPost(post);
                           }}
-                          disabled={deletingPostId === post.id}
+                          disabled={pinningPostId === post.id}
                           className="h-8 w-8 items-center justify-center rounded-full"
-                          accessibilityLabel="Delete post"
+                          accessibilityLabel={pinned ? 'Unpin post' : 'Pin post'}
                         >
-                          {deletingPostId === post.id ? (
-                            <ActivityIndicator size="small" color="#DC2626" />
+                          {pinningPostId === post.id ? (
+                            <ActivityIndicator size="small" color={SOCIAL_THEME.primary} />
                           ) : (
-                            <Trash2 size={16} color="#DC2626" />
+                            <Pin
+                              size={16}
+                              color={SOCIAL_THEME.primary}
+                              fill={pinned ? SOCIAL_THEME.primary : 'transparent'}
+                            />
                           )}
                         </TouchableOpacity>
                       ) : (
@@ -1845,6 +2031,17 @@ export default function CommonsAiEntry({
                         }}
                       />
                     ) : null}
+
+                    {post.event ? (
+                      <View className="mt-3">
+                        <EventCard
+                          event={post.event}
+                          title={post.title}
+                          rsvpPending={rsvpPendingEventId === post.event.id}
+                          onRsvp={(status) => rsvpToUpcomingEvent(post.event!.id, status)}
+                        />
+                      </View>
+                    ) : null}
                   </View>
 
                   {post.media.length > 0 ? (
@@ -1882,62 +2079,71 @@ export default function CommonsAiEntry({
                     </View>
                   ) : null}
 
-                  <View className="p-4 pt-3">
-                    <View className="flex-row items-center justify-between gap-2">
-                      <TouchableOpacity
-                        onPress={(event) => {
-                          event.stopPropagation();
-                          supportPost(post);
-                        }}
-                        disabled={Boolean(feedCircleId && circleIsMember === false)}
-                        className="flex-row items-center gap-1.5"
-                        style={{ opacity: feedCircleId && circleIsMember === false ? 0.4 : 1 }}
-                      >
-                        <Heart
-                          size={19}
-                          color={SOCIAL_THEME.primary}
-                          fill={SOCIAL_THEME.primary}
-                        />
-                        <Text className="text-sm font-black text-slate-800">
-                          {post.support}
-                        </Text>
-                      </TouchableOpacity>
-                      <View className="flex-row items-center gap-1.5">
-                        <MessageCircle size={19} color="#334155" />
-                        <Text className="text-sm font-semibold text-slate-700">
-                          {post.replies}
-                        </Text>
-                      </View>
-                      <View className="flex-row items-center gap-1.5">
-                        <Repeat2 size={18} color="#334155" />
-                        <Text className="text-sm font-semibold text-slate-700">
-                          {Math.max(0, Math.round(post.replies / 2))}
-                        </Text>
-                      </View>
-                      <Bookmark size={19} color="#334155" />
-                    </View>
-
-                    {firstComment ? (
-                      <View className="mt-3 rounded-full bg-gray-50 px-3 py-2">
-                        <Text
-                          className="text-xs text-slate-700"
-                          numberOfLines={2}
+                  {!post.event ? (
+                    <View className="p-4 pt-3">
+                      <View className="flex-row items-center justify-between gap-2">
+                        <TouchableOpacity
+                          onPress={(event) => {
+                            event.stopPropagation();
+                            supportPost(post);
+                          }}
+                          disabled={Boolean(feedCircleId && circleIsMember === false)}
+                          className="flex-row items-center gap-1.5"
+                          style={{ opacity: feedCircleId && circleIsMember === false ? 0.4 : 1 }}
                         >
-                          <Text className="font-black text-gray-950">
-                            @
-                            {firstComment.author
-                              .toLowerCase()
-                              .replace(/[^a-z0-9]+/g, '')}
-                            :{' '}
-                          </Text>
-                          <MentionText
-                            content={firstComment.body}
-                            numberOfLines={2}
+                          <Heart
+                            size={19}
+                            color={SOCIAL_THEME.primary}
+                            fill={SOCIAL_THEME.primary}
                           />
-                        </Text>
+                          <Text className="text-sm font-black text-slate-800">
+                            {post.support}
+                          </Text>
+                        </TouchableOpacity>
+                        <View className="flex-row items-center gap-1.5">
+                          <MessageCircle size={19} color="#334155" />
+                          <Text className="text-sm font-semibold text-slate-700">
+                            {post.replies}
+                          </Text>
+                        </View>
+                        <View className="flex-row items-center gap-1.5">
+                          <Repeat2 size={18} color="#334155" />
+                          <Text className="text-sm font-semibold text-slate-700">
+                            {Math.max(0, Math.round(post.replies / 2))}
+                          </Text>
+                        </View>
+                        <Bookmark size={19} color="#334155" />
                       </View>
-                    ) : null}
-                  </View>
+
+                      {firstComment ? (
+                        <View className="mt-3 rounded-full bg-gray-50 px-3 py-2">
+                          <Text
+                            className="text-xs text-slate-700"
+                            numberOfLines={2}
+                          >
+                            <Text className="font-black text-gray-950">
+                              @
+                              {firstComment.author
+                                .toLowerCase()
+                                .replace(/[^a-z0-9]+/g, '')}
+                              :{' '}
+                            </Text>
+                            <MentionText
+                              content={firstComment.body}
+                              numberOfLines={2}
+                            />
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : (
+                    <View className="flex-row items-center gap-1.5 px-4 pb-4 pt-3">
+                      <MessageCircle size={15} color="#334155" />
+                      <Text className="text-xs font-semibold text-slate-600">
+                        {post.replies === 1 ? '1 comment' : `${post.replies} comments`} · View event
+                      </Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               );
             })}
@@ -1949,8 +2155,6 @@ export default function CommonsAiEntry({
           </View>
         </View>
       </ScrollView>
-
-      {renderComposer()}
 
       <Modal
         visible={composerPickerOpen}

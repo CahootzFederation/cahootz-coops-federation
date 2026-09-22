@@ -171,6 +171,8 @@ export default function CircleView({ coopId }: { coopId: string }) {
                   key={card.id}
                   name={card.name}
                   colorKey={card.colorKey}
+                  iconEmoji={card.iconEmoji}
+                  iconColor={card.iconColor}
                   chattingCount={card.chattingCount}
                   joinLabel={!card.isMember}
                   onPress={() => (card.isMember ? openCircle(card.id) : joinPublicCircle(card.id))}
@@ -225,6 +227,8 @@ export default function CircleView({ coopId }: { coopId: string }) {
 function CircleCardView({
   name,
   colorKey,
+  iconEmoji,
+  iconColor,
   chattingCount,
   joinLabel,
   hideStatus,
@@ -232,12 +236,15 @@ function CircleCardView({
 }: {
   name: string;
   colorKey: string;
+  iconEmoji?: string | null;
+  iconColor?: string | null;
   chattingCount: number;
   joinLabel?: boolean;
   hideStatus?: boolean;
   onPress: () => void;
 }) {
   const palette = circleColorFromKey(colorKey);
+  const background = iconColor || palette.background;
 
   return (
     <TouchableOpacity
@@ -250,7 +257,7 @@ function CircleCardView({
       <View
         className="h-28 w-28 items-center justify-center rounded-full"
         style={{
-          backgroundColor: palette.background,
+          backgroundColor: background,
           shadowColor: '#0F172A',
           shadowOpacity: 0.08,
           shadowRadius: 10,
@@ -258,9 +265,16 @@ function CircleCardView({
           elevation: 2,
         }}
       >
-        <Text className="text-3xl font-black" style={{ color: palette.foreground }}>
-          {name.slice(0, 1).toUpperCase()}
-        </Text>
+        {iconEmoji ? (
+          <Text style={{ fontSize: 40 }}>{iconEmoji}</Text>
+        ) : (
+          <Text
+            className="text-3xl font-black"
+            style={{ color: iconColor ? '#FFFFFF' : palette.foreground }}
+          >
+            {name.slice(0, 1).toUpperCase()}
+          </Text>
+        )}
       </View>
       <Text className="mt-3 text-center text-base font-black text-gray-900" numberOfLines={1}>
         {name}

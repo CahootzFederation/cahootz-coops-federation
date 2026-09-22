@@ -13,12 +13,15 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { IconAvatar } from '@/components/icon-avatar';
+import { EmojiColorPicker } from '@/components/emoji-color-picker';
 import {
   ArrowLeft,
   Copy,
   Crown,
   LogOut,
   MessageCircle,
+  Pencil,
   RefreshCw,
   Settings2,
   Users,
@@ -46,6 +49,8 @@ export default function GroupDetailScreen() {
   >(null);
   const [isLeaving, setIsLeaving] = React.useState(false);
   const [isUpdatingPrivacy, setIsUpdatingPrivacy] = React.useState(false);
+  const [iconPickerOpen, setIconPickerOpen] = React.useState(false);
+  const [isSavingIcon, setIsSavingIcon] = React.useState(false);
 
   React.useEffect(() => {
     if (isLoading || (isAuthenticated && sessionToken)) return;
@@ -157,6 +162,29 @@ export default function GroupDetailScreen() {
         },
       },
     ]);
+  };
+
+  const saveIcon = async (emoji: string | null, color: string | null) => {
+    if (!group || !sessionToken) return;
+    setIsSavingIcon(true);
+    try {
+      const result = await api.updateGroupIcon(
+        { groupId: group.id, iconEmoji: emoji, iconColor: color },
+        sessionToken,
+      );
+      setGroup((current) =>
+        current
+          ? { ...current, iconEmoji: result.iconEmoji, iconColor: result.iconColor }
+          : current,
+      );
+    } catch (err) {
+      Alert.alert(
+        'Could not update icon',
+        err instanceof Error ? err.message : 'Try again.',
+      );
+    } finally {
+      setIsSavingIcon(false);
+    }
   };
 
   const changePrivacy = (privacy: 'public' | 'private') => {
@@ -292,7 +320,42 @@ export default function GroupDetailScreen() {
               <Settings2 size={16} color={THEME.muted} />
               <Text className="text-xs font-black uppercase text-gray-500">Circle settings</Text>
             </View>
-            <Text className="mt-3 text-sm font-black text-gray-950">Privacy</Text>
+
+            <Text className="mt-3 text-sm font-black text-gray-950">Icon</Text>
+            {group.isLeader ? (
+              <TouchableOpacity
+                onPress={() => setIconPickerOpen(true)}
+                disabled={isSavingIcon}
+                className="mt-2 flex-row items-center gap-3"
+              >
+                <IconAvatar
+                  emoji={group.iconEmoji}
+                  color={group.iconColor}
+                  fallbackText={group.name}
+                  size={44}
+                />
+                <View className="flex-row items-center gap-1.5 rounded-full border bg-gray-50 px-3 py-1.5" style={{ borderColor: THEME.border }}>
+                  {isSavingIcon ? (
+                    <ActivityIndicator size="small" color={THEME.primary} />
+                  ) : (
+                    <Pencil size={13} color={THEME.muted} />
+                  )}
+                  <Text className="text-xs font-bold text-gray-700">Change icon</Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <View className="mt-2 flex-row items-center gap-3">
+                <IconAvatar
+                  emoji={group.iconEmoji}
+                  color={group.iconColor}
+                  fallbackText={group.name}
+                  size={44}
+                />
+                <Text className="text-xs font-semibold text-gray-500">Only the circle leader can change this.</Text>
+              </View>
+            )}
+
+            <Text className="mt-4 text-sm font-black text-gray-950">Privacy</Text>
             <Text className="mt-1 text-xs leading-5 text-gray-600">
               {group.privacy === 'public'
                 ? 'Members of this common can discover and read this circle. They must join before posting.'
@@ -444,6 +507,16 @@ export default function GroupDetailScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <EmojiColorPicker
+        visible={iconPickerOpen}
+        title="Circle icon"
+        fallbackText={group.name}
+        initialEmoji={group.iconEmoji}
+        initialColor={group.iconColor}
+        onClose={() => setIconPickerOpen(false)}
+        onSave={saveIcon}
+      />
     </SafeAreaView>
   );
 }

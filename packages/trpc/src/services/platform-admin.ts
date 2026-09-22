@@ -9,6 +9,8 @@ export type CommonsSummary = {
   chainName: string | null;
   isDemo: boolean;
   isPrivate: boolean;
+  iconEmoji: string | null;
+  iconColor: string | null;
   createdAt: string;
   memberCount: number;
   applicationCount: number;
@@ -72,6 +74,8 @@ export async function listCommonsWithStats(): Promise<CommonsSummary[]> {
     chainName: c.chainName,
     isDemo: c.isDemo,
     isPrivate: c.isPrivate,
+    iconEmoji: c.iconEmoji,
+    iconColor: c.iconColor,
     createdAt: c.createdAt.toISOString(),
     memberCount: counts.members.get(c.coopId) ?? 0,
     applicationCount: counts.applications.get(c.coopId) ?? 0,
@@ -98,6 +102,8 @@ export async function getCommonsDetail(coopId: string): Promise<CommonsDetail | 
     chainName: config.chainName,
     isDemo: config.isDemo,
     isPrivate: config.isPrivate,
+    iconEmoji: config.iconEmoji,
+    iconColor: config.iconColor,
     createdAt: config.createdAt.toISOString(),
     memberCount: counts.members.get(config.coopId) ?? 0,
     applicationCount: counts.applications.get(config.coopId) ?? 0,
@@ -131,6 +137,26 @@ export async function setCommonsPrivate(coopId: string, isPrivate: boolean): Pro
   const result = await db.coopConfig.updateMany({
     where: { coopId, isActive: true },
     data: { isPrivate },
+  });
+
+  return result.count > 0;
+}
+
+/**
+ * Same rationale as setCommonsPrivate: the icon is cosmetic display detail,
+ * not a governance change, so it's a direct field update rather than going
+ * through the versioned coop-config amendment flow.
+ */
+export async function setCommonsIcon(
+  coopId: string,
+  iconEmoji: string | null,
+  iconColor: string | null,
+): Promise<boolean> {
+  const { db } = await import("@repo/db");
+
+  const result = await db.coopConfig.updateMany({
+    where: { coopId, isActive: true },
+    data: { iconEmoji, iconColor },
   });
 
   return result.count > 0;

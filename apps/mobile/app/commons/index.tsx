@@ -7,6 +7,7 @@ import { ArrowLeft, ChevronRight, Lock, Search, Users } from 'lucide-react-nativ
 import { Text } from '@/components/ui/text';
 import { api, type CommonsDirectoryItem } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import { IconAvatar } from '@/components/icon-avatar';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -42,16 +43,21 @@ function CommonsCard({ commons }: { commons: CommonsDirectoryItem }) {
       activeOpacity={0.76}
     >
       <View className="flex-row items-start gap-3">
-        <View
-          className="h-12 w-12 items-center justify-center rounded-2xl"
-          style={{ backgroundColor: commons.isMember ? THEME.primary : '#111827' }}
-        >
-          {commons.isLocked ? (
+        {commons.isLocked ? (
+          <View
+            className="h-12 w-12 items-center justify-center rounded-2xl"
+            style={{ backgroundColor: '#111827' }}
+          >
             <Lock size={20} color="#FFFFFF" />
-          ) : (
-            <Text className="text-xl font-black text-white">{commons.name.slice(0, 1).toUpperCase()}</Text>
-          )}
-        </View>
+          </View>
+        ) : (
+          <IconAvatar
+            emoji={commons.iconEmoji}
+            color={commons.iconColor || THEME.primary}
+            fallbackText={commons.name}
+            size={48}
+          />
+        )}
         <View className="min-w-0 flex-1">
           <View className="mb-1 flex-row items-start justify-between gap-2">
             <Text className="min-w-0 flex-1 text-lg font-black text-gray-950">{commons.name}</Text>

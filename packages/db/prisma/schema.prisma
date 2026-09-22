@@ -291,6 +291,8 @@ model CoopConfig {
   eligibility     String? @db.Text
   bgColor         String  @default("bg-red-700")
   accentColor     String  @default("bg-gold-600")
+  iconEmoji       String? // Notion-style emoji avatar, e.g. "🏠". Falls back to initials when unset.
+  iconColor       String? // Hex color for the icon background, e.g. "#FF6B00". Falls back to primary theme color when unset.
   displayOrder    Int     @default(0)
   isDemo          Boolean @default(false)
   isPrivate       Boolean @default(false) // Hidden from public listing/onboarding, still reachable by direct coopId
@@ -1238,6 +1240,8 @@ model Group {
   welcomeTableNumber Int?
   welcomeTableStatus String? // "OPEN" | "FULL" | "CLOSED" (null for STANDARD groups)
   capacity           Int?
+  iconEmoji          String? // Notion-style emoji avatar, e.g. "🎨". Falls back to color-hash initial when unset.
+  iconColor          String? // Hex color for the icon background. Falls back to colorKey hash palette when unset.
 
   members            GroupMember[]
   comments           GroupComment[]

@@ -5,6 +5,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsDirectoryItem } from '@/lib/api';
 import { PERSONAL_PAGE_DESTINATION_ID } from '@/lib/composer-destination';
+import { IconAvatar } from '@/components/icon-avatar';
 import {
   CheckCircle2,
   ChevronRight,
@@ -83,6 +84,8 @@ export default function AppDrawer({
     label: commons.name,
     accessStatus: commons.accessStatus,
     icon: commons.name.slice(0, 1).toUpperCase(),
+    iconEmoji: 'iconEmoji' in commons ? commons.iconEmoji : null,
+    iconColor: 'iconColor' in commons ? commons.iconColor : null,
     action: `/${commons.id}/posts`,
   }));
 
@@ -173,14 +176,25 @@ export default function AppDrawer({
                     style={isActive ? { backgroundColor: THEME.primarySoft } : undefined}
                     activeOpacity={0.75}
                   >
-                    <View
-                      className="h-9 w-9 items-center justify-center rounded-xl"
-                      style={{ backgroundColor: isActive ? THEME.primary : '#F5F5F4' }}
-                    >
-                      <Text className="text-sm font-black" style={{ color: isActive ? '#FFFFFF' : '#57534E' }}>
-                        {item.icon}
-                      </Text>
-                    </View>
+                    {'iconEmoji' in item ? (
+                      <IconAvatar
+                        emoji={item.iconEmoji}
+                        color={item.iconColor || (isActive ? THEME.primary : '#F5F5F4')}
+                        foregroundColor={item.iconColor ? undefined : isActive ? '#FFFFFF' : '#57534E'}
+                        fallbackText={item.icon}
+                        size={36}
+                        radius={12}
+                      />
+                    ) : (
+                      <View
+                        className="h-9 w-9 items-center justify-center rounded-xl"
+                        style={{ backgroundColor: isActive ? THEME.primary : '#F5F5F4' }}
+                      >
+                        <Text className="text-sm font-black" style={{ color: isActive ? '#FFFFFF' : '#57534E' }}>
+                          {item.icon}
+                        </Text>
+                      </View>
+                    )}
                     <View className="min-w-0 flex-1">
                       <Text className="text-sm font-black text-gray-900" numberOfLines={1}>
                         {item.label}

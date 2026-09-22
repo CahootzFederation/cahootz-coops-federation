@@ -284,6 +284,8 @@ export interface PrivateGroupSummary {
   createdAt: string;
   kind: 'STANDARD' | 'WELCOME_TABLE';
   colorKey: string;
+  iconEmoji?: string | null;
+  iconColor?: string | null;
   chattingCount: number;
   welcomeTableNumber: number | null;
   welcomeTableStatus: 'OPEN' | 'FULL' | 'CLOSED' | null;
@@ -308,6 +310,8 @@ export interface PrivateGroupDetail {
   createdAt: string;
   coopId: string;
   coopName: string;
+  iconEmoji?: string | null;
+  iconColor?: string | null;
 }
 
 export interface PrivateGroupComment {
@@ -372,6 +376,8 @@ export interface CommonsDirectoryItem extends CommonsProfile {
   tagline?: string | null;
   mission?: string | null;
   eligibility?: string | null;
+  iconEmoji?: string | null;
+  iconColor?: string | null;
   accessStatus: CommonsAccessStatus;
   isMember: boolean;
   isLocked: boolean;
@@ -414,6 +420,8 @@ export interface CoopConfigDetail {
   description?: string;
   eligibility?: string;
   displayMission?: string;
+  iconEmoji?: string | null;
+  iconColor?: string | null;
   charterText: string;
   missionGoals: CommonsMissionGoal[];
   proposalCategories: CommonsProposalCategory[];
@@ -718,6 +726,43 @@ export const api = {
       message: string;
       applicationId: string;
     }>(response, 'Failed to apply to commons');
+  },
+
+  async getCommonsActivityStats(coopId: string, sessionToken?: string | null) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.getActivityStats?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
+
+    return readTrpcResult<{
+      activeMembers: number;
+      discussionsThisMonth: number;
+      openVotes: number;
+    }>(response, 'Failed to load commons activity stats');
+  },
+
+  async listCommonsMembers(
+    coopId: string,
+    sessionToken?: string | null,
+    limit = 8,
+  ) {
+    const input = encodeURIComponent(JSON.stringify({ coopId, limit }));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.listMembers?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
+
+    return readTrpcResult<{
+      totalCount: number;
+      members: { id: string; name: string; handle: string }[];
+    }>(response, 'Failed to load commons members');
   },
 
   async askCommonsAi(prompt: string, postId?: string) {
@@ -1198,6 +1243,8 @@ export const api = {
       purpose?: string;
       privacy: 'public' | 'private' | 'invite-only';
       coopId?: string;
+      iconEmoji?: string;
+      iconColor?: string;
     },
     sessionToken?: string | null,
   ) {
@@ -1210,6 +1257,22 @@ export const api = {
     return readTrpcResult<{
       group: PrivateGroupSummary & { inviteCode: string };
     }>(response, 'Failed to create group');
+  },
+
+  async updateGroupIcon(
+    data: { groupId: string; iconEmoji: string | null; iconColor: string | null },
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.updateIcon`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{
+      iconEmoji: string | null;
+      iconColor: string | null;
+    }>(response, 'Failed to update circle icon');
   },
 
   async getGroupCreateRequirements(

@@ -270,7 +270,7 @@ export default function AppDrawer({
             <Text className="mt-4 text-center text-[11px] font-semibold text-stone-300">Cahootz v1.1</Text>
           </ScrollView>
         </View>
-        <TouchableOpacity className="flex-1" onPress={onClose} accessibilityLabel="Close menu" />
+        <TouchableOpacity className="flex-1" onPress={onClose} />
       </View>
       </Modal>
 

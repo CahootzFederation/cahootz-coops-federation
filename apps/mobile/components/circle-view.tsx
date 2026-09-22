@@ -120,6 +120,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
       <View className="flex-row items-center justify-between px-5 pt-4">
         <TouchableOpacity
           accessibilityRole="button"
+          accessibilityLabel="Open menu"
           onPress={() => setDrawerOpen(true)}
           className="h-11 w-11 items-center justify-center rounded-full"
           style={{ backgroundColor: THEME.primarySoft }}

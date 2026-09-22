@@ -51,9 +51,15 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
     commonsPost: {
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn(),
+      findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn(),
       upsert: vi.fn().mockResolvedValue({}),
       ...overrides.commonsPost,
+    },
+    event: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findUnique: vi.fn(),
+      ...overrides.event,
     },
     commonsComment: {
       findMany: vi.fn().mockResolvedValue([]),

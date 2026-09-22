@@ -38,7 +38,6 @@ export function EventDateField({
   return (
     <View>
       <Text className="mb-1 text-xs font-black uppercase text-gray-500">{label}</Text>
-      {/* eslint-disable-next-line react/no-unknown-property -- web-only file; renders a real DOM <input> via react-native-web */}
       <input
         type={mode}
         aria-label={label}

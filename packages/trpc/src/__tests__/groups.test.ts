@@ -11,6 +11,10 @@ vi.mock('../services/sc-validation-service.js', () => ({
   validateSCBalance: vi.fn().mockResolvedValue(0),
 }));
 
+vi.mock('../lib/bot.js', () => ({
+  ensureSageBotUser: vi.fn().mockResolvedValue({ id: 'sage_1' }),
+}));
+
 // Real class for Agent (per project convention), real-enough run() for the
 // shared Community Observer agent used by getAiDigest.
 vi.mock('@openai/agents', () => {
@@ -983,6 +987,16 @@ describe('groupsRouter', () => {
       expect(db.groupMember.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' } }),
       );
+      expect(db.commonsPost.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          coopId: 'cahootz',
+          circleId: 'wt_1',
+          authorId: 'sage_1',
+          title: 'Welcome to Welcome Lounge 1',
+          content: expect.stringContaining('Introduce yourself in the comments'),
+          tag: 'Social',
+        }),
+      });
       expect(db.welcomeTableConfig.update).toHaveBeenCalledWith({
         where: { id: 'cfg_1' },
         data: { lastTableNumber: 1, activeTableId: 'wt_1' },
@@ -1007,6 +1021,7 @@ describe('groupsRouter', () => {
         expect.objectContaining({ data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' } }),
       );
       expect(db.group.create).not.toHaveBeenCalled();
+      expect(db.commonsPost.create).not.toHaveBeenCalled();
       expect(db.group.update).not.toHaveBeenCalled();
     });
 

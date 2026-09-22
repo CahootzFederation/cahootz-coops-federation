@@ -2,11 +2,15 @@ import { TRPCError } from "@trpc/server";
 
 import type { Context } from "../context.js";
 import { auditLogEntry } from "../lib/audit.js";
+import { ensureSageBotUser } from "../lib/bot.js";
 import { generateInviteCode } from "../lib/invite-code.js";
 
 type Db = Context["db"];
 
 const MAX_SERIALIZATION_RETRIES = 5;
+
+export const WELCOME_POST_INTRO_PROMPT =
+  "Introduce yourself in the comments: what should we call you, what brought you here, and what would you like to offer or find in the community?";
 
 type AssignMode =
   | { type: "auto"; newcomerId: string }
@@ -121,6 +125,19 @@ async function assignOrAdvance(db: Db, coopId: string, mode: AssignMode) {
               data: { groupId: created.id, userId: mode.newcomerId, role: "NEWCOMER" },
             });
           }
+          const sage = await ensureSageBotUser(tx);
+          await tx.commonsPost.create({
+            data: {
+              coopId,
+              circleId: created.id,
+              authorId: sage.id,
+              title: `Welcome to ${created.name}`,
+              content: `Hi everyone - I'm Sage, your Cahootz guide. ${WELCOME_POST_INTRO_PROMPT}`,
+              tag: "Social",
+              classification: "social",
+              classificationSignals: { source: "welcome_lounge" },
+            },
+          });
           await tx.welcomeTableConfig.update({
             where: { id: config.id },
             data: { lastTableNumber: nextNumber, activeTableId: created.id },

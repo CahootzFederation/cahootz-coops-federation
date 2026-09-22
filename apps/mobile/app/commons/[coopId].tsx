@@ -966,7 +966,7 @@ function OverviewTab({
           <View className="flex-row items-center gap-2">
             <Target size={19} color={THEME.primary} />
             <Text className="text-lg font-black text-gray-950">
-              What we're building toward
+              What we&apos;re building toward
             </Text>
           </View>
           <Text className="text-xs font-black uppercase text-gray-400">

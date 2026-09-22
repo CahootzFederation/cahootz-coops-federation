@@ -529,7 +529,7 @@ export default function SpacesScreen() {
             >
               <Text className="text-sm font-black text-gray-950">Icon</Text>
               <Text className="mt-1 text-xs leading-5 text-gray-500">
-                Pick an emoji and color, or leave it to use the circle's
+                Pick an emoji and color, or leave it to use the circle&apos;s
                 initial.
               </Text>
               <TouchableOpacity

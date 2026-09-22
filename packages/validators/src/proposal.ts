@@ -315,6 +315,8 @@ export const CoopConfigInputZ = z.object({
   eligibility: z.string().optional(),
   bgColor: z.string().optional(),
   accentColor: z.string().optional(),
+  iconEmoji: z.string().max(16).optional(),
+  iconColor: z.string().optional(),
   displayOrder: z.number().int().optional(),
   applicationQuestions: z.array(z.any()).optional(),
   // Chain configuration fields
@@ -372,6 +374,8 @@ export const CoopConfigOutputZ = z.object({
   eligibility: z.string().optional(),
   bgColor: z.string().optional(),
   accentColor: z.string().optional(),
+  iconEmoji: z.string().nullable().optional(),
+  iconColor: z.string().nullable().optional(),
   displayOrder: z.number().optional(),
   applicationQuestions: z.array(z.any()).nullable().optional(),
   chainId: z.number().int().optional(),

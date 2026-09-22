@@ -42,6 +42,8 @@ interface CommonsDetail {
   storePaymentRouterAddress: string | null;
   rewardEngineAddress: string | null;
   rpcUrl: string | null;
+  iconEmoji: string | null;
+  iconColor: string | null;
 }
 
 interface CommonsMemberRow {
@@ -298,6 +300,122 @@ function ApplicationsSection({ coopId }: { coopId: string }) {
   );
 }
 
+const ICON_COLOR_SWATCHES = [
+  '#FF6B00', '#C2410C', '#B45309', '#15803D',
+  '#1D4ED8', '#6D28D9', '#BE123C', '#0F766E',
+];
+
+function IdentitySection({
+  coopId,
+  name,
+  iconEmoji,
+  iconColor,
+  onSaved,
+}: {
+  coopId: string;
+  name: string;
+  iconEmoji: string | null;
+  iconColor: string | null;
+  onSaved: (commons: CommonsDetail) => void;
+}) {
+  const [emoji, setEmoji] = useState(iconEmoji ?? '');
+  const [color, setColor] = useState(iconColor ?? ICON_COLOR_SWATCHES[0]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const dirty = emoji !== (iconEmoji ?? '') || color !== (iconColor ?? ICON_COLOR_SWATCHES[0]);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/admin/commons/${coopId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          iconEmoji: emoji.trim() || null,
+          iconColor: color || null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to update icon.');
+      onSaved(data.commons);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update icon.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold text-white">Identity</h2>
+      <div className="rounded-[8px] border border-white/10 bg-white/5 p-4">
+        <div className="flex items-center gap-4">
+          <div
+            className="flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-black text-white"
+            style={{ backgroundColor: color || '#FF6B00' }}
+          >
+            {emoji ? emoji : (name || coopId).slice(0, 1).toUpperCase()}
+          </div>
+          <div className="flex-1 space-y-2">
+            <label className="block text-xs uppercase tracking-wide text-slate-400">
+              Emoji (leave blank to use the initial)
+            </label>
+            <Input
+              value={emoji}
+              onChange={(e) => setEmoji(e.target.value)}
+              placeholder="e.g. 🏠"
+              maxLength={16}
+              className="w-40 bg-white text-slate-900"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Color</p>
+          <div className="flex flex-wrap gap-2">
+            {ICON_COLOR_SWATCHES.map((swatch) => (
+              <button
+                key={swatch}
+                type="button"
+                onClick={() => setColor(swatch)}
+                className="h-8 w-8 rounded-full"
+                style={{
+                  backgroundColor: swatch,
+                  outline: color === swatch ? '2px solid white' : 'none',
+                  outlineOffset: 2,
+                }}
+                aria-label={`Use color ${swatch}`}
+              />
+            ))}
+            <input
+              type="color"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              className="h-8 w-8 cursor-pointer rounded-full border-0 bg-transparent p-0"
+              aria-label="Custom color"
+            />
+          </div>
+        </div>
+
+        {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
+
+        <div className="mt-4">
+          <Button
+            size="sm"
+            onClick={save}
+            disabled={saving || !dirty}
+            className="bg-orange-500 text-white hover:bg-orange-600"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save icon'}
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-[8px] border border-white/10 bg-white/5 p-4">
@@ -421,6 +539,14 @@ export default function AdminCommonsDetailPage() {
               Welcome lounges →
             </Link>
           </div>
+
+          <IdentitySection
+            coopId={commons.coopId}
+            name={commons.name || commons.coopId}
+            iconEmoji={commons.iconEmoji}
+            iconColor={commons.iconColor}
+            onSaved={setCommons}
+          />
 
           <MembersSection coopId={commons.coopId} />
 

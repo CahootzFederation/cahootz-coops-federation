@@ -13,6 +13,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { IconAvatar } from '@/components/icon-avatar';
+import { EmojiColorPicker } from '@/components/emoji-color-picker';
 import {
   ArrowLeft,
   Check,
@@ -20,6 +22,7 @@ import {
   KeyRound,
   Lock,
   MessageCircle,
+  Pencil,
   Plus,
   Users,
 } from 'lucide-react-native';
@@ -58,6 +61,9 @@ export default function SpacesScreen() {
   const [name, setName] = React.useState('');
   const [purpose, setPurpose] = React.useState('');
   const [privacy, setPrivacy] = React.useState<'public' | 'private'>('public');
+  const [iconEmoji, setIconEmoji] = React.useState<string | null>(null);
+  const [iconColor, setIconColor] = React.useState<string | null>(null);
+  const [iconPickerOpen, setIconPickerOpen] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [joinCode, setJoinCode] = React.useState('');
   const [isJoining, setIsJoining] = React.useState(false);
@@ -134,12 +140,16 @@ export default function SpacesScreen() {
           purpose: purpose.trim() || undefined,
           privacy,
           coopId,
+          iconEmoji: iconEmoji || undefined,
+          iconColor: iconColor || undefined,
         },
         sessionToken,
       );
       setName('');
       setPurpose('');
       setPrivacy('public');
+      setIconEmoji(null);
+      setIconColor(null);
       loadGroups();
       router.replace({
         pathname: '/[coopId]/posts',
@@ -517,6 +527,34 @@ export default function SpacesScreen() {
               className="mt-6 rounded-3xl border bg-white p-5"
               style={{ borderColor: SPACES_THEME.border }}
             >
+              <Text className="text-sm font-black text-gray-950">Icon</Text>
+              <Text className="mt-1 text-xs leading-5 text-gray-500">
+                Pick an emoji and color, or leave it to use the circle&apos;s
+                initial.
+              </Text>
+              <TouchableOpacity
+                onPress={() => setIconPickerOpen(true)}
+                className="mt-3 flex-row items-center gap-3"
+              >
+                <IconAvatar
+                  emoji={iconEmoji}
+                  color={iconColor}
+                  fallbackText={name || 'C'}
+                  size={48}
+                />
+                <View className="flex-row items-center gap-1.5 rounded-full border bg-gray-50 px-3 py-1.5" style={{ borderColor: SPACES_THEME.border }}>
+                  <Pencil size={13} color={SPACES_THEME.muted} />
+                  <Text className="text-xs font-bold text-gray-700">
+                    Choose icon
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <View
+              className="mt-4 rounded-3xl border bg-white p-5"
+              style={{ borderColor: SPACES_THEME.border }}
+            >
               <Text className="text-sm font-black text-gray-950">
                 Circle name
               </Text>
@@ -662,6 +700,19 @@ export default function SpacesScreen() {
           </>
         )}
       </ScrollView>
+
+      <EmojiColorPicker
+        visible={iconPickerOpen}
+        title="Circle icon"
+        fallbackText={name || 'C'}
+        initialEmoji={iconEmoji}
+        initialColor={iconColor}
+        onClose={() => setIconPickerOpen(false)}
+        onSave={(emoji, color) => {
+          setIconEmoji(emoji);
+          setIconColor(color);
+        }}
+      />
     </SafeAreaView>
   );
 }

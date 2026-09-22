@@ -48,7 +48,9 @@ The current Playwright suite covers:
 5. User A reloads, opens the post, and sees User B's comment.
 6. The generated post is removed after the assertions so repeat runs do not fill the feed.
 7. Signing in lands on Circle View (the Commons tab's landing screen), not the post feed directly; opening a circle and using its back button returns to Circle View without duplicating the bottom tab bar.
-8. Two separately signed-in members can join a welcome lounge from Circle View, land in its real feed, and see the same Sage-authored welcome thread prompting introductions.
+8. A signed-in member can join a welcome lounge from Circle View's dashed "Join a welcome lounge" card and lands in that lounge's real feed.
+9. A signed-in member opens the commons info page from the drawer's info button (its only entry point) and switches between the Overview, Community, and Governance tabs, each showing real member-only data (mission priorities, this month's activity stats, people, circles, and governance thresholds/proposals).
+10. Two separately signed-in members can join a welcome lounge from Circle View, land in its real feed, and see the same Sage-authored welcome thread prompting introductions.
 
 The post-signup wizard used by every sign-in helper now has three steps (intro, profile, and a "find your way in" step offering a welcome lounge) - `e2e/support/auth.ts` is the single place that clicks through all three, so a future wizard change only needs updating there.
 

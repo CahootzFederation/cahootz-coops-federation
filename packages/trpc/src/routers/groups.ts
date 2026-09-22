@@ -56,6 +56,8 @@ type GroupWithMemberCount = {
   welcomeTableNumber: number | null;
   welcomeTableStatus: string | null;
   capacity: number | null;
+  iconEmoji: string | null;
+  iconColor: string | null;
   _count: { members: number };
 };
 
@@ -77,6 +79,8 @@ function mapCircleSummary(
     createdAt: group.createdAt.toISOString(),
     kind: group.kind,
     colorKey: hashToColorKey(group.id),
+    iconEmoji: group.iconEmoji,
+    iconColor: group.iconColor,
     chattingCount: chattingCounts.get(group.id) ?? 0,
     welcomeTableNumber: group.welcomeTableNumber,
     welcomeTableStatus: group.welcomeTableStatus,
@@ -174,6 +178,8 @@ export const groupsRouter = router({
         purpose: z.string().trim().max(2000).optional(),
         privacy: privacySchema.default('invite-only'),
         coopId: z.string().min(1).optional(),
+        iconEmoji: z.string().trim().max(16).optional(),
+        iconColor: z.string().trim().max(16).optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -216,6 +222,8 @@ export const groupsRouter = router({
             privacy: input.privacy,
             inviteCode,
             leaderId: userId,
+            iconEmoji: input.iconEmoji || null,
+            iconColor: input.iconColor || null,
           },
         });
 
@@ -246,8 +254,41 @@ export const groupsRouter = router({
           memberCount: 1,
           isLeader: true,
           createdAt: group.createdAt.toISOString(),
+          iconEmoji: group.iconEmoji,
+          iconColor: group.iconColor,
         },
       };
+    }),
+
+  updateIcon: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        groupId: z.string().min(1),
+        iconEmoji: z.string().trim().max(16).nullable(),
+        iconColor: z.string().trim().max(16).nullable(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+      const group = await requireMembership(context.db, input.groupId, userId);
+
+      if (group.leaderId !== userId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Only the circle leader can change its icon.',
+        });
+      }
+
+      const updated = await context.db.group.update({
+        where: { id: input.groupId },
+        data: {
+          iconEmoji: input.iconEmoji || null,
+          iconColor: input.iconColor || null,
+        },
+      });
+
+      return { iconEmoji: updated.iconEmoji, iconColor: updated.iconColor };
     }),
 
   getCreateRequirements: accountAuthenticatedProcedure
@@ -307,6 +348,8 @@ export const groupsRouter = router({
           createdAt: group.createdAt.toISOString(),
           coopId: group.coopId,
           coopName: coopConfig?.name || coopConfig?.slug || group.coopId,
+          iconEmoji: group.iconEmoji,
+          iconColor: group.iconColor,
         },
         members: members.map((member) => ({
           userId: member.userId,

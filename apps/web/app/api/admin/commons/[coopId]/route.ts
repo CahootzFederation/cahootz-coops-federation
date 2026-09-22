@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSession } from '@/lib/signature-verification';
 import { isPlatformAdminWallet, isPlatformAdminEmail } from '@repo/trpc/lib/admin-config';
-import { getCommonsDetail, setCommonsPrivate } from '@repo/trpc/services/platform-admin';
+import { getCommonsDetail, setCommonsIcon, setCommonsPrivate } from '@repo/trpc/services/platform-admin';
 
 async function requireAdmin() {
   const session = await getSession();
@@ -29,8 +29,13 @@ export async function GET(
 }
 
 const patchSchema = z.object({
-  isPrivate: z.boolean(),
-});
+  isPrivate: z.boolean().optional(),
+  iconEmoji: z.string().max(16).nullable().optional(),
+  iconColor: z.string().max(16).nullable().optional(),
+}).refine(
+  (data) => data.isPrivate !== undefined || data.iconEmoji !== undefined || data.iconColor !== undefined,
+  { message: 'At least one field is required.' },
+);
 
 export async function PATCH(
   request: Request,
@@ -44,14 +49,29 @@ export async function PATCH(
   const result = patchSchema.safeParse(body);
 
   if (!result.success) {
-    return NextResponse.json({ error: 'isPrivate (boolean) is required.' }, { status: 400 });
+    return NextResponse.json({ error: 'isPrivate (boolean), iconEmoji, and/or iconColor are required.' }, { status: 400 });
   }
 
   const { coopId } = await params;
-  const updated = await setCommonsPrivate(coopId, result.data.isPrivate);
+  const { isPrivate, iconEmoji, iconColor } = result.data;
 
-  if (!updated) {
-    return NextResponse.json({ error: 'Commons not found' }, { status: 404 });
+  if (isPrivate !== undefined) {
+    const updated = await setCommonsPrivate(coopId, isPrivate);
+    if (!updated) {
+      return NextResponse.json({ error: 'Commons not found' }, { status: 404 });
+    }
+  }
+
+  if (iconEmoji !== undefined || iconColor !== undefined) {
+    const current = await getCommonsDetail(coopId);
+    if (!current) {
+      return NextResponse.json({ error: 'Commons not found' }, { status: 404 });
+    }
+    await setCommonsIcon(
+      coopId,
+      iconEmoji !== undefined ? iconEmoji : current.iconEmoji,
+      iconColor !== undefined ? iconColor : current.iconColor,
+    );
   }
 
   const commons = await getCommonsDetail(coopId);

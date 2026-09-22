@@ -93,6 +93,8 @@ function mapDbToConfigOutput(record: CoopConfig): CoopConfigOutput {
     eligibility: record.eligibility ?? undefined,
     bgColor: record.bgColor ?? undefined,
     accentColor: record.accentColor ?? undefined,
+    iconEmoji: record.iconEmoji ?? undefined,
+    iconColor: record.iconColor ?? undefined,
     displayOrder: record.displayOrder ?? undefined,
     applicationQuestions: (record.applicationQuestions as any[] | null) ?? undefined,
     chainId: record.chainId ?? undefined,
@@ -185,6 +187,8 @@ export async function createCommonsConfig(
         eligibility: fields.eligibility,
         bgColor: fields.bgColor ?? "bg-blue-700",
         accentColor: fields.accentColor ?? "bg-amber-600",
+        iconEmoji: fields.iconEmoji,
+        iconColor: fields.iconColor,
         displayOrder: fields.displayOrder ?? 999,
         applicationQuestions: fields.applicationQuestions as Prisma.InputJsonValue,
         // Governance fields
@@ -610,6 +614,8 @@ export const coopConfigRouter = router({
       if (updates.displayMission !== undefined) newFields.displayMission = updates.displayMission;
       if (updates.displayFeatures !== undefined) newFields.displayFeatures = updates.displayFeatures;
       if (updates.eligibility !== undefined) newFields.eligibility = updates.eligibility;
+      if (updates.iconEmoji !== undefined) newFields.iconEmoji = updates.iconEmoji;
+      if (updates.iconColor !== undefined) newFields.iconColor = updates.iconColor;
       if (updates.scTokenSymbol !== undefined) newFields.scTokenSymbol = updates.scTokenSymbol;
       if (updates.scTokenName !== undefined) newFields.scTokenName = updates.scTokenName;
 

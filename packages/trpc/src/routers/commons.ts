@@ -931,6 +931,8 @@ export const commonsRouter = router({
         description: true,
         displayMission: true,
         eligibility: true,
+        iconEmoji: true,
+        iconColor: true,
       },
     });
     const coopIds = coops.map((coop: any) => coop.coopId);
@@ -1023,6 +1025,8 @@ export const commonsRouter = router({
             'A commons for shared conversation, resources, and coordinated action.',
           mission: coop.displayMission,
           eligibility: coop.eligibility,
+          iconEmoji: coop.iconEmoji || null,
+          iconColor: coop.iconColor || null,
           accessStatus,
           isMember: accessStatus === 'ACTIVE',
           isLocked: accessStatus !== 'ACTIVE',
@@ -1034,6 +1038,75 @@ export const commonsRouter = router({
       }),
     };
   }),
+
+  /**
+   * Real, live-computed stats for the commons info page's "This month" row.
+   * Requires active membership - these counts are member-only detail.
+   */
+  getActivityStats: accountAuthenticatedProcedure
+    .input(z.object({ coopId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      await requireActiveCommonsMembership(
+        context.db,
+        context.accountUser.id,
+        input.coopId,
+      );
+
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      const [activeMembers, discussionsThisMonth, openVotes] =
+        await Promise.all([
+          context.db.userCoopMembership.count({
+            where: { coopId: input.coopId, status: 'ACTIVE' },
+          }),
+          context.db.groupComment.count({
+            where: {
+              createdAt: { gte: monthStart },
+              group: { coopId: input.coopId },
+            },
+          }),
+          context.db.proposal.count({
+            where: { coopId: input.coopId, status: 'VOTABLE' },
+          }),
+        ]);
+
+      return { activeMembers, discussionsThisMonth, openVotes };
+    }),
+
+  /** A preview slice of active members for the info page's People row. */
+  listMembers: accountAuthenticatedProcedure
+    .input(z.object({ coopId: z.string().min(1), limit: z.number().min(1).max(50).default(8) }))
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      await requireActiveCommonsMembership(
+        context.db,
+        context.accountUser.id,
+        input.coopId,
+      );
+
+      const [memberships, totalCount] = await Promise.all([
+        context.db.userCoopMembership.findMany({
+          where: { coopId: input.coopId, status: 'ACTIVE' },
+          orderBy: { joinedAt: 'desc' },
+          take: input.limit,
+          select: { user: { select: { id: true, name: true, email: true, handle: true } } },
+        }),
+        context.db.userCoopMembership.count({
+          where: { coopId: input.coopId, status: 'ACTIVE' },
+        }),
+      ]);
+
+      return {
+        totalCount,
+        members: memberships.map(({ user }: any) => ({
+          id: user.id,
+          name: displayName(user),
+          handle: personHandle(user),
+        })),
+      };
+    }),
 
   applyToCommons: accountAuthenticatedProcedure
     .input(

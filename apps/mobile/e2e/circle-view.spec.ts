@@ -3,6 +3,8 @@ import { newSignedInPage } from "./support/auth";
 
 const USER_A_EMAIL =
   process.env.E2E_USER_A_EMAIL || "releaseclick1@test.cahootz.local";
+const USER_B_EMAIL =
+  process.env.E2E_USER_B_EMAIL || "releaseclick2@test.cahootz.local";
 
 // Circle View is the Commons tab's landing screen (and "/" for a signed-in
 // session) - it replaced the old direct-to-feed landing. These journeys
@@ -35,29 +37,55 @@ test("Commons tab lands on Circle View, and the feed's back button returns to it
   }
 });
 
-test("a signed-in member can join a welcome lounge from Circle View", async ({
+test("two signed-in members see Sage's introduction thread in their welcome lounge", async ({
   browser,
 }) => {
-  const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
+  const [{ context: contextA, page: pageA }, { context: contextB, page: pageB }] =
+    await Promise.all([
+      newSignedInPage(browser, USER_A_EMAIL),
+      newSignedInPage(browser, USER_B_EMAIL),
+    ]);
 
   try {
-    await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
+    for (const page of [pageA, pageB]) {
+      await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
 
-    const alreadyMember = page.getByText(/^Welcome Lounge \d+$/);
-    if (await alreadyMember.isVisible().catch(() => false)) {
-      await alreadyMember.click();
-    } else {
-      await page.getByText("Join a welcome lounge", { exact: true }).click();
+      const loungeMatches = page.getByText(/^Welcome Lounge \d+$/);
+      let alreadyMember = loungeMatches.first();
+      let hadExistingAssignment = false;
+      for (let index = 0; index < (await loungeMatches.count()); index += 1) {
+        const candidate = loungeMatches.nth(index);
+        if (await candidate.isVisible()) {
+          alreadyMember = candidate;
+          hadExistingAssignment = true;
+          break;
+        }
+      }
+      if (hadExistingAssignment) {
+        await alreadyMember.click();
+      } else {
+        await page.getByText("Join a welcome lounge", { exact: true }).click();
+      }
+
+      await expect(
+        page.getByRole("textbox", { name: "Share what's happening..." }),
+      ).toBeVisible();
+
+      // Reused local fixture accounts can already belong to a lounge created
+      // before this feature existed. Fresh CI fixtures take the join path and
+      // must see the new Sage thread; old local assignments still exercise
+      // navigation without making historical test data part of the contract.
+      if (!hadExistingAssignment) {
+        await expect(page.getByText("Sage", { exact: true }).first()).toBeVisible();
+        await expect(
+          page.getByText(/Introduce yourself in the comments/).first(),
+        ).toBeVisible();
+      }
     }
 
-    await expect(
-      page.getByRole("textbox", { name: "Share what's happening..." }),
-    ).toBeVisible();
-    await expect(page.getByText(/Welcome Lounge \d+/).first()).toBeVisible();
-
-    await page.getByLabel("Back to Circle View").click();
-    await expect(page.getByText(/^Welcome Lounge \d+$/)).toBeVisible();
+    await pageA.getByLabel("Back to Circle View").click();
+    await expect(pageA.getByText(/^Welcome Lounge \d+$/)).toBeVisible();
   } finally {
-    await context.close();
+    await Promise.all([contextA.close(), contextB.close()]);
   }
 });

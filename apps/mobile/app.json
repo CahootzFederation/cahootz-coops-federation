@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cahootz Commons",
     "slug": "cahootz-coop",
-    "version": "1.1.4",
+    "version": "1.1.5",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "newArchEnabled": true,
@@ -98,6 +98,6 @@
       ]
     ],
     "owner": "cahootz-coop",
-    "runtimeVersion": "1.1.4"
+    "runtimeVersion": "1.1.5"
   }
 }

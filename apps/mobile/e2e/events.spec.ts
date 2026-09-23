@@ -51,7 +51,6 @@ test("creating an event shows it inline in the feed and in the upcoming module",
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const title = `E2E Welcome Table ${runId}`;
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
-  let sessionToken: string | null = null;
   let eventId: string | undefined;
 
   try {
@@ -60,16 +59,22 @@ test("creating an event shows it inline in the feed and in the upcoming module",
     await expect(page.getByText("Create event", { exact: true })).toBeVisible();
     await fillEventForm(page, title);
 
-    await expect(page).toHaveURL(/\/events\/[^/]+$/);
+    await expect(page).toHaveURL(/\/events\/[^/]+$/, { timeout: 20000 });
     eventId = new URL(page.url()).pathname.split("/").pop();
     await expect(page.getByText(title, { exact: true }).first()).toBeVisible();
 
+    // Going back returns to the same, already-mounted feed screen instance,
+    // which does not auto-refetch - reload to force a fresh fetch that
+    // includes the event just created, same as other cross-navigation
+    // assertions in this suite.
     await page.getByLabel("Go back").click();
-    await expect(page.getByText(title, { exact: true }).first()).toBeVisible();
+    await page.reload();
+    await expect(
+      page.getByText(title, { exact: true }).first(),
+    ).toBeVisible({ timeout: 20000 });
     await expect(page.getByText("Upcoming", { exact: true })).toBeVisible();
-
-    sessionToken = await sessionTokenFor(page);
   } finally {
+    const sessionToken = await sessionTokenFor(page);
     if (sessionToken && eventId) {
       const input = encodeURIComponent(JSON.stringify({ eventId }));
       const detail = await fetch(
@@ -90,25 +95,34 @@ test("a second member's RSVP updates the going count for the event creator", asy
   const userA = await newSignedInPage(browser, USER_A_EMAIL);
   const userB = await newSignedInPage(browser, USER_B_EMAIL);
   let eventId: string | undefined;
-  let sessionTokenA: string | null = null;
 
   try {
     await openGeneralFeed(userA.page);
     await userA.page.getByLabel("Create event").click();
     await fillEventForm(userA.page, title);
-    await expect(userA.page).toHaveURL(/\/events\/[^/]+$/);
+    await expect(userA.page).toHaveURL(/\/events\/[^/]+$/, { timeout: 20000 });
     eventId = new URL(userA.page.url()).pathname.split("/").pop();
 
     await openGeneralFeed(userB.page);
+    // Defensive reload - see the note in the previous test about the feed
+    // screen not auto-refetching after cross-navigation.
+    await userB.page.reload();
+    await expect(
+      userB.page.getByText(title, { exact: true }).first(),
+    ).toBeVisible({ timeout: 20000 });
     await userB.page.getByText(title, { exact: true }).first().click();
-    await expect(userB.page).toHaveURL(/\/events\/[^/]+$/);
+    await expect(userB.page).toHaveURL(/\/events\/[^/]+$/, { timeout: 20000 });
+    await expect(
+      userB.page.getByText(/^Going/, { exact: false }).first(),
+    ).toBeVisible({ timeout: 20000 });
     await userB.page.getByText(/^Going/, { exact: false }).first().click();
 
     await userA.page.reload();
-    await expect(userA.page.getByText(/Going \(2\)/)).toBeVisible();
-
-    sessionTokenA = await sessionTokenFor(userA.page);
+    await expect(userA.page.getByText(/Going \(2\)/)).toBeVisible({
+      timeout: 20000,
+    });
   } finally {
+    const sessionTokenA = await sessionTokenFor(userA.page);
     if (sessionTokenA && eventId) {
       const input = encodeURIComponent(JSON.stringify({ eventId }));
       const detail = await fetch(

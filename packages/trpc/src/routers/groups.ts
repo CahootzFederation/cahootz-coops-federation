@@ -9,6 +9,7 @@ import { hashToColorKey } from '../lib/circle-color.js';
 import { generateInviteCode } from '../lib/invite-code.js';
 import { accountAuthenticatedProcedure } from '../procedures/index.js';
 import { queryObservations, recordObservation } from '../services/ai-memory.js';
+import { touchCircleWindow } from '../services/circle-window.js';
 import { validateSCBalance } from '../services/sc-validation-service.js';
 import { enterChat, getChattingCounts, leaveChat, refreshChatPresence } from '../services/circle-presence.js';
 import { assignWelcomeTable, getNewcomerCounts } from '../services/welcome-tables.js';
@@ -829,6 +830,8 @@ export const groupsRouter = router({
 
         return created;
       });
+
+      touchCircleWindow(input.groupId, group.coopId).catch((error) => console.error("Could not update Sage circle window", error));
 
       return {
         comment: {

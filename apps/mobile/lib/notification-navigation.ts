@@ -14,6 +14,11 @@ export function notificationDestination(
     return "/(authenticated)/commons-proposal-drafts";
   if (notification.type.startsWith("PERSONAL_PAGE_"))
     return "/(authenticated)/personal-page";
+  if (notification.type.startsWith("SAGE_SUGGESTION_") && id("actionId"))
+    return {
+      pathname: "/(authenticated)/sage/[id]",
+      params: { id: id("actionId")! },
+    };
   if (id("postId"))
     return {
       pathname: "/[coopId]/posts/[postId]",

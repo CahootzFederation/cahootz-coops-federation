@@ -4,6 +4,8 @@ import { commonsPlatformAdminProcedure } from "../procedures/commons-platform-ad
 import { charterSnapshotKey, hasExactGrounding, REPLY_ACTIONS, scanCommons } from "../services/commons-action-agent.js";
 import { ingestDocument } from "../services/knowledge-base.js";
 import { createNotificationAndPush } from "../services/push-notification-service.js";
+import { FINAL_REVIEW_TYPE_BY_ACTION_TYPE } from "../services/commons-action-tools.js";
+import { enqueueSageActionExecute } from "../services/sage-dispatch.js";
 import { router } from "../trpc.js";
 
 const Scoped = z.object({ coopId: z.string().min(1) });
@@ -44,6 +46,23 @@ export const commonsActionsAdminRouter = router({
         GROUP BY 1 ORDER BY 1 DESC`,
     ]);
     const feedback = await ctx.db.commonsActionFeedback.findMany({ where: { coopId: input.coopId, actionId: { in: actions.map((action) => action.id) } } });
+    const [missingToolEvents, escalatedActions] = await Promise.all([
+      ctx.db.commonsActionAudit.findMany({ where: { eventType: "MISSING_TOOL", action: { coopId: input.coopId } }, select: { actionId: true, metadata: true } }),
+      ctx.db.commonsAction.findMany({
+        where: { coopId: input.coopId, reviews: { some: { status: "ESCALATED" } } },
+        include: { reviews: { where: { status: "ESCALATED" } } },
+        orderBy: { createdAt: "desc" }, take: 100,
+      }),
+    ]);
+    const neededToolsByCapability = new Map<string, { capability: string; count: number; sampleActionIds: string[] }>();
+    for (const event of missingToolEvents) {
+      const capability = (event.metadata as { toolKey?: unknown } | null)?.toolKey;
+      const key = typeof capability === "string" ? capability : "unknown";
+      const entry = neededToolsByCapability.get(key) ?? { capability: key, count: 0, sampleActionIds: [] };
+      entry.count++;
+      if (entry.sampleActionIds.length < 5) entry.sampleActionIds.push(event.actionId);
+      neededToolsByCapability.set(key, entry);
+    }
     const postIds = [...new Set(actions.map((action) => action.sourcePostId))];
     const commentIds = [...new Set(actions.filter((action) => action.sourceType === "commons_comment").map((action) => action.sourceId))];
     const [posts, comments] = await Promise.all([
@@ -88,6 +107,11 @@ export const commonsActionsAdminRouter = router({
       resources,
       costs: { byFeature: [...byFeature.values()], byDay: [...byDay.values()].sort((a, b) => b.day.localeCompare(a.day)),
         byMonth: monthlyCosts.map((row) => ({ ...row, estimatedUsd: Number(row.estimatedUsd) })) },
+      neededTools: [...neededToolsByCapability.values()].sort((a, b) => b.count - a.count),
+      escalations: escalatedActions.map((action) => ({
+        id: action.id, summary: action.summary, type: action.type, circleId: action.circleId,
+        reviews: action.reviews.map((review) => ({ id: review.id, reviewType: review.reviewType, userId: review.userId })),
+      })),
     };
   }),
 
@@ -188,6 +212,18 @@ export const commonsActionsAdminRouter = router({
         title: "A proposal draft is ready", body: "Review and edit this Commons suggestion before you submit it.",
         data: { draftId: draft.id, coopId },
       }).catch((error) => console.error("Could not notify proposal author", error));
+    } else if (FINAL_REVIEW_TYPE_BY_ACTION_TYPE[action.type]) {
+      // Tool-backed action (e.g. an escalated Sage suggestion): authorize the gating review on the
+      // admin's behalf, matching the action's current revision, then execute the same as a member approval would.
+      const finalReviewType = FINAL_REVIEW_TYPE_BY_ACTION_TYPE[action.type]!;
+      const review = await ctx.db.commonsActionReview.findFirst({
+        where: { actionId: action.id, reviewType: finalReviewType, payloadHash: action.payloadHash ?? undefined },
+        orderBy: { createdAt: "desc" },
+      });
+      if (!review) conflict("No matching review to authorize for this action's current revision");
+      await ctx.db.commonsActionReview.update({ where: { id: review.id }, data: { status: "APPROVED", respondedAt: new Date() } });
+      await ctx.db.commonsAction.update({ where: { id: action.id }, data: { reviewedBy: actor, reviewedAt: new Date() } });
+      await enqueueSageActionExecute(action.id, action.revision);
     } else {
       await ctx.db.commonsAction.update({ where: { id: action.id }, data: { status: "APPROVED", reviewedBy: actor, reviewedAt: new Date() } });
     }

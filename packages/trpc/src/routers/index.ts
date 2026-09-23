@@ -39,6 +39,7 @@ import { welcomeTablesRouter } from "./welcome-tables.js";
 import { knowledgeBaseRouter } from "./knowledge-base.js";
 import { commonsActionsRouter } from "./commons-actions.js";
 import { commonsActionsAdminRouter } from "./commons-actions-admin.js";
+import { sageRouter } from "./sage.js";
 
 export const appRouter = router({
   user: userRouter,
@@ -80,6 +81,7 @@ export const appRouter = router({
   knowledgeBase: knowledgeBaseRouter,
   commonsActions: commonsActionsRouter,
   commonsActionsAdmin: commonsActionsAdminRouter,
+  sage: sageRouter,
 });
 
 export type AppRouter = typeof appRouter;

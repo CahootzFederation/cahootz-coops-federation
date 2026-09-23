@@ -17,9 +17,10 @@ import { useIsFocused } from "@react-navigation/native";
 import {
   useInfiniteQuery,
   useMutation,
+  useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { ArrowLeft, Bell, Settings } from "lucide-react-native";
+import { ArrowLeft, Bell, ChevronRight, Settings, Sparkles } from "lucide-react-native";
 
 import type {
   AccountNotification,
@@ -78,6 +79,17 @@ export const alertStyles = StyleSheet.create({
   },
   row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
   error: { color: "#B91C1C", fontSize: 14, lineHeight: 22 },
+  sageBanner: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    borderRadius: 16, padding: 18, backgroundColor: "#C2410C",
+    shadowColor: "#C2410C", shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3,
+  },
+  sageBannerIcon: {
+    width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+  sageBannerHeading: { fontSize: 17, fontWeight: "800", color: "#FFFFFF" },
+  sageBannerText: { fontSize: 14, lineHeight: 20, color: "#FFEDD5", marginTop: 2 },
 });
 const s = alertStyles;
 
@@ -151,6 +163,14 @@ export default function NotificationScreen({
       if (sessionToken) void refetch();
     }, [sessionToken, refetch]),
   );
+  const sageQuery = useQuery({
+    queryKey: ["sage-suggestions", sessionToken, "NEEDS_YOU"],
+    queryFn: () => api.listSageSuggestions("NEEDS_YOU", sessionToken!),
+    enabled: !!sessionToken && focused,
+    retry: false,
+    refetchInterval: focused ? 30000 : false,
+  });
+  const sageNeedsYouCount = sageQuery.data?.suggestions.length ?? 0;
   const markRead = useMutation({
     mutationFn: async (notification: AccountNotification | null) => {
       if (notification) {
@@ -241,6 +261,26 @@ export default function NotificationScreen({
         </View>
       ) : (
         <>
+          {sageNeedsYouCount > 0 ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={`Sage suggestions, ${sageNeedsYouCount} suggestion${sageNeedsYouCount === 1 ? "" : "s"}`}
+              style={s.sageBanner}
+              onPress={() => router.push("/(authenticated)/sage")}
+              activeOpacity={0.9}
+            >
+              <View style={s.sageBannerIcon}>
+                <Sparkles size={22} color="#FFFFFF" />
+              </View>
+              <View style={s.grow}>
+                <Text style={s.sageBannerHeading}>Sage suggestions</Text>
+                <Text style={s.sageBannerText}>
+                  {sageNeedsYouCount} suggestion{sageNeedsYouCount === 1 ? "" : "s"} for you
+                </Text>
+              </View>
+              <ChevronRight size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+          ) : null}
           <View style={s.card}>
             <View style={[s.row, { justifyContent: "space-between" }]}>
               <Text style={s.heading}>

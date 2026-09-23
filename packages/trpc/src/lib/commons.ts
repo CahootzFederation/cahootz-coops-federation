@@ -9,6 +9,8 @@ type CommonsMembershipDb = Pick<Context["db"], "userCoopMembership">;
 export async function ensureCommonsMembership(
   db: CommonsMembershipDb,
   userId: string,
+  coopId: string = COMMONS_COOP_ID,
+  roles: string[] = ["member"],
 ) {
   const now = new Date();
 
@@ -16,14 +18,14 @@ export async function ensureCommonsMembership(
     where: {
       userId_coopId: {
         userId,
-        coopId: COMMONS_COOP_ID,
+        coopId,
       },
     },
     create: {
       userId,
-      coopId: COMMONS_COOP_ID,
+      coopId,
       status: "ACTIVE",
-      roles: ["member"],
+      roles,
       joinedAt: now,
       lastActiveAt: now,
     },

@@ -163,7 +163,7 @@ async function invitePerson(resourceId: string, item: SourceItem, action: Action
 }
 
 async function saveActions(item: SourceItem, actions: ActionOutput[], config: CoopConfig, autoReply: boolean, contentHash: string, charterKey: string) {
-  const sage = await ensureSageBotUser(db);
+  const sage = await ensureSageBotUser(db, item.coopId);
   for (const [position, action] of actions.entries()) {
     if (action.type === "NO_ACTION") continue;
     const evidenceValid = hasExactGrounding(action.evidence, config);

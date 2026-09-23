@@ -18,7 +18,7 @@ model User {
   email               String     @unique
   handle              String?    @unique
   name                String?
-  roles               String[]   @default(["member"]) // member, business, admin, governor
+  roles               String[]   @default(["member"]) // member, business, admin, governor, sage (platform bot)
   status              UserStatus @default(PENDING)
   isBot               Boolean    @default(false) // true for platform bot accounts (e.g. Sage)
   password            String?
@@ -232,7 +232,7 @@ model UserCoopMembership {
 
   // Membership state
   status MembershipStatus @default(PENDING)
-  roles  String[]         @default(["member"]) // member, business, admin, governor (per-coop)
+  roles  String[]         @default(["member"]) // member, business, admin, governor, sage (per-coop)
 
   // Coop-specific data
   username         String? // Username for transfer recipient lookup (coop-scoped)

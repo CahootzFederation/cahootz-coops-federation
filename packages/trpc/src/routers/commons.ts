@@ -6,7 +6,7 @@ import type { Prisma } from '@repo/db';
 
 import type { AccountAuthenticatedContext, Context } from '../context.js';
 import { COMMUNITY_OBSERVER_POST_TYPES, getAgent } from '../agents/registry.js';
-import { ensureSageBotUser, SAGE_HANDLE } from '../lib/bot.js';
+import { ensureSageBotUser, isSageUser } from '../lib/bot.js';
 import {
   COMMONS_COOP_ID,
   ensureCommonsMembership,
@@ -1971,10 +1971,11 @@ export const commonsRouter = router({
         );
       }
       await ensureUserHandle(ctx.db, accountUser);
-      await ensureSageBotUser(ctx.db);
+      await ensureSageBotUser(ctx.db, input.coopId);
       const { content: encodedContent, mentionedUsers } = await encodeMentions(
         ctx.db,
         input.content,
+        { coopId: input.coopId },
       );
       const classification = classifyPost({
         title: input.title,
@@ -2044,12 +2045,10 @@ export const commonsRouter = router({
         });
       }
 
-      const sageMention = mentionedUsers.find(
-        (u) => u.isBot && u.handle === SAGE_HANDLE,
-      );
+      const sageMention = mentionedUsers.find(isSageUser);
       if (sageMention && circleId === generalCircleId(input.coopId)) {
         try {
-          const sage = await ensureSageBotUser(ctx.db);
+          const sage = await ensureSageBotUser(ctx.db, input.coopId);
           const agent = getAgent('sage-commons-reply');
           if (agent) {
             const { reply } = await agent.run({
@@ -2184,10 +2183,11 @@ export const commonsRouter = router({
       }
       await requireActiveCommonsMembership(ctx.db, accountUser.id, post.coopId);
       await requirePostCircleMembership(ctx.db, accountUser.id, post);
-      await ensureSageBotUser(ctx.db);
+      await ensureSageBotUser(ctx.db, post.coopId);
       const { content: encodedContent, mentionedUsers } = await encodeMentions(
         ctx.db,
         input.content,
+        { coopId: post.coopId },
       );
 
       const comment = await ctx.db.commonsComment.create({
@@ -2242,15 +2242,13 @@ export const commonsRouter = router({
         });
       }
 
-      const sageMention = mentionedUsers.find(
-        (u) => u.isBot && u.handle === SAGE_HANDLE,
-      );
+      const sageMention = mentionedUsers.find(isSageUser);
       if (
         sageMention &&
         (!post.circleId || post.circleId === generalCircleId(post.coopId))
       ) {
         try {
-          const sage = await ensureSageBotUser(ctx.db);
+          const sage = await ensureSageBotUser(ctx.db, post.coopId);
           const agent = getAgent('sage-commons-reply');
           if (agent) {
             const priorComments = await ctx.db.commonsComment.findMany({
@@ -2329,7 +2327,7 @@ export const commonsRouter = router({
       const { accountUser } = ctx as AccountAuthenticatedContext;
       const comment = await ctx.db.commonsComment.findUnique({
         where: { id: input.commentId },
-        select: { authorId: true },
+        select: { authorId: true, post: { select: { coopId: true } } },
       });
 
       if (!comment) {
@@ -2345,10 +2343,11 @@ export const commonsRouter = router({
         });
       }
 
-      await ensureSageBotUser(ctx.db);
+      await ensureSageBotUser(ctx.db, comment.post.coopId);
       const { content: encodedContent } = await encodeMentions(
         ctx.db,
         input.content,
+        { coopId: comment.post.coopId },
       );
       const updated = await ctx.db.commonsComment.update({
         where: { id: input.commentId },
@@ -2479,7 +2478,7 @@ export const commonsRouter = router({
 
       const receiver = await ctx.db.user.findUnique({
         where: { id: input.receiverId },
-        select: { id: true, deletedAt: true, isBot: true, handle: true },
+        select: { id: true, deletedAt: true, isBot: true, handle: true, roles: true },
       });
       if (!receiver || receiver.deletedAt) {
         throw new TRPCError({
@@ -2488,7 +2487,7 @@ export const commonsRouter = router({
         });
       }
 
-      const isSage = receiver.isBot && receiver.handle === SAGE_HANDLE;
+      const isSage = isSageUser(receiver);
       if (isSage) {
         await requireActiveCommonsMembership(
           ctx.db,
@@ -2500,6 +2499,7 @@ export const commonsRouter = router({
       const { content: encodedContent } = await encodeMentions(
         ctx.db,
         input.content,
+        { coopId: input.coopId },
       );
 
       const message = await ctx.db.directMessage.create({

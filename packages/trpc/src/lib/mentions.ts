@@ -1,4 +1,5 @@
 import type { Context } from "../context.js";
+import { sageHandleForCoop } from "./bot.js";
 
 const RAW_MENTION_RE = /(?<![\w[])@([a-zA-Z0-9_-]{1,30})\b/g;
 const ENCODED_MENTION_RE = /\[@([a-zA-Z0-9_-]+)\]/g;
@@ -9,11 +10,19 @@ export interface MentionedUser {
   id: string;
   handle: string;
   isBot: boolean;
+  roles: string[];
 }
 
 export interface EncodeMentionsResult {
   content: string;
   mentionedUsers: MentionedUser[];
+}
+
+export interface EncodeMentionsOptions {
+  /** When given, a bare "@sage" token resolves to THIS coop's own Sage
+   * account (each coop has its own Sage `User` with a distinct handle)
+   * instead of requiring the coop-specific handle to be typed out. */
+  coopId?: string;
 }
 
 /**
@@ -27,6 +36,7 @@ export interface EncodeMentionsResult {
 export async function encodeMentions(
   db: MentionDb,
   content: string,
+  options: EncodeMentionsOptions = {},
 ): Promise<EncodeMentionsResult> {
   const candidates = new Set<string>();
   for (const match of content.matchAll(RAW_MENTION_RE)) {
@@ -37,12 +47,17 @@ export async function encodeMentions(
     return { content, mentionedUsers: [] };
   }
 
+  const sageAlias = options.coopId ? sageHandleForCoop(options.coopId) : undefined;
+  const hasSageToken = [...candidates].some((c) => c.toLowerCase() === "sage");
+  const lookupHandles = new Set(candidates);
+  if (hasSageToken && sageAlias) lookupHandles.add(sageAlias);
+
   const users = await db.user.findMany({
     where: {
-      handle: { in: [...candidates], mode: "insensitive" },
+      handle: { in: [...lookupHandles], mode: "insensitive" },
       deletedAt: null,
     },
-    select: { id: true, handle: true, isBot: true },
+    select: { id: true, handle: true, isBot: true, roles: true },
   });
 
   if (users.length === 0) {
@@ -52,6 +67,12 @@ export async function encodeMentions(
   const byLowerHandle = new Map(
     users.filter((u) => u.handle).map((u) => [u.handle!.toLowerCase(), u]),
   );
+  if (hasSageToken && sageAlias) {
+    const sageUser = users.find(
+      (u) => u.handle?.toLowerCase() === sageAlias.toLowerCase(),
+    );
+    if (sageUser) byLowerHandle.set("sage", sageUser);
+  }
 
   const rewritten = content.replace(RAW_MENTION_RE, (full, token: string) => {
     const user = byLowerHandle.get(token.toLowerCase());
@@ -62,7 +83,7 @@ export async function encodeMentions(
     content: rewritten,
     mentionedUsers: users
       .filter((u): u is typeof u & { handle: string } => !!u.handle)
-      .map((u) => ({ id: u.id, handle: u.handle, isBot: u.isBot })),
+      .map((u) => ({ id: u.id, handle: u.handle, isBot: u.isBot, roles: u.roles })),
   };
 }
 

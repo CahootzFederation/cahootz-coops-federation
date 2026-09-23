@@ -125,7 +125,7 @@ async function assignOrAdvance(db: Db, coopId: string, mode: AssignMode) {
               data: { groupId: created.id, userId: mode.newcomerId, role: "NEWCOMER" },
             });
           }
-          const sage = await ensureSageBotUser(tx);
+          const sage = await ensureSageBotUser(tx, coopId);
           await tx.commonsPost.create({
             data: {
               coopId,

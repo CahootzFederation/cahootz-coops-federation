@@ -112,10 +112,15 @@ test("a second member's RSVP updates the going count for the event creator", asy
     ).toBeVisible({ timeout: 20000 });
     await userB.page.getByText(title, { exact: true }).first().click();
     await expect(userB.page).toHaveURL(/\/events\/[^/]+$/, { timeout: 20000 });
-    await expect(
-      userB.page.getByText(/^Going/, { exact: false }).first(),
-    ).toBeVisible({ timeout: 20000 });
-    await userB.page.getByText(/^Going/, { exact: false }).first().click();
+    // Match the event detail screen's "Going (N)" label specifically - the
+    // feed card behind it (still mounted under the pushed route) also has a
+    // plain "Going" RSVP button, which a bare /^Going/ match can pick up
+    // while it's hidden, causing a flaky toBeVisible() failure.
+    const detailGoingButton = userB.page.getByText(/^Going \(/, {
+      exact: false,
+    });
+    await expect(detailGoingButton.first()).toBeVisible({ timeout: 20000 });
+    await detailGoingButton.first().click();
 
     await userA.page.reload();
     await expect(userA.page.getByText(/Going \(2\)/)).toBeVisible({

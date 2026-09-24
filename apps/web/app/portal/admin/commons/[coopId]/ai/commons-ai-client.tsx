@@ -28,7 +28,7 @@ function feedbackValue(action: ActionRow): FeedbackEdit {
 }
 interface ResourceRow { id: string; title: string; kind: string; status: string; candidateUserId: string | null; }
 interface NeededToolRow { capability: string; count: number; sampleActionIds: string[] }
-interface EscalationRow { id: string; summary: string; type: string; circleId: string | null; reviews: Array<{ id: string; reviewType: string; userId: string }> }
+interface EscalationRow { id: string; summary: string; type: string; circleId: string | null; reviews: { id: string; reviewType: string; userId: string }[] }
 interface Dashboard {
   setting: { autoReply: boolean; backfillPostsDone: boolean; backfillCommentsDone: boolean };
   actions: ActionRow[];

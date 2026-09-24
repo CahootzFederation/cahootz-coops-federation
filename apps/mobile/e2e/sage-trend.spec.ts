@@ -16,9 +16,9 @@ async function trpcPost(path: string, sessionToken: string, body: unknown) {
     headers: { "content-type": "application/json", "x-session-token": sessionToken },
     body: JSON.stringify(body),
   });
-  expect(response.ok, `${path} failed: ${await response.text().catch(() => "")}`).toBe(true);
-  const json = await response.json();
-  return json.result.data as any;
+  const text = await response.text();
+  expect(response.ok, `${path} failed: ${text}`).toBe(true);
+  return JSON.parse(text).result.data as any;
 }
 
 async function trpcGet(path: string, sessionToken: string, input: unknown) {
@@ -26,15 +26,16 @@ async function trpcGet(path: string, sessionToken: string, input: unknown) {
   const response = await fetch(`${API_BASE_URL}/trpc/${path}?input=${encoded}`, {
     headers: { "x-session-token": sessionToken },
   });
-  expect(response.ok, `${path} failed: ${await response.text().catch(() => "")}`).toBe(true);
-  const json = await response.json();
-  return json.result.data as any;
+  const text = await response.text();
+  expect(response.ok, `${path} failed: ${text}`).toBe(true);
+  return JSON.parse(text).result.data as any;
 }
 
 // A circle leader receives a Sage trend suggestion (an event, a post to the circle, or a post to the
 // whole Commons - whichever the model judges fits) after a window of conversation about a recurring
 // topic closes, and approving it through the real UI actually publishes something.
 test("a circle leader receives and approves a Sage trend suggestion", async ({ browser }) => {
+  test.setTimeout(240_000); // seeds 40 messages sequentially and polls a live model call, not a fixed UI wait
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   const leader = await newSignedInPage(browser, USER_A_EMAIL);

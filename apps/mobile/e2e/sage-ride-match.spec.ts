@@ -16,9 +16,9 @@ async function trpcPost(path: string, sessionToken: string, body: unknown) {
     headers: { "content-type": "application/json", "x-session-token": sessionToken },
     body: JSON.stringify(body),
   });
-  expect(response.ok, `${path} failed: ${await response.text().catch(() => "")}`).toBe(true);
-  const json = await response.json();
-  return json.result.data as any;
+  const text = await response.text();
+  expect(response.ok, `${path} failed: ${text}`).toBe(true);
+  return JSON.parse(text).result.data as any;
 }
 
 async function trpcGet(path: string, sessionToken: string, input: unknown) {
@@ -26,15 +26,16 @@ async function trpcGet(path: string, sessionToken: string, input: unknown) {
   const response = await fetch(`${API_BASE_URL}/trpc/${path}?input=${encoded}`, {
     headers: { "x-session-token": sessionToken },
   });
-  expect(response.ok, `${path} failed: ${await response.text().catch(() => "")}`).toBe(true);
-  const json = await response.json();
-  return json.result.data as any;
+  const text = await response.text();
+  expect(response.ok, `${path} failed: ${text}`).toBe(true);
+  return JSON.parse(text).result.data as any;
 }
 
 // Two isolated accounts complete Sage's ride-match example end to end: Sage notices a ride
 // need in a shared circle, Maya provides context and consents to a limited match, Jordan
 // accepts, and a new private circle with exactly the two of them is created.
 test("two members complete a Sage ride-match suggestion and get a private circle", async ({ browser }) => {
+  test.setTimeout(240_000); // seeds 40 messages sequentially and polls a live model call, not a fixed UI wait
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const rideNeedText = `E2E ${runId}: I really need a ride to the Saturday farmers market, my car is in the shop.`;
   const rideOfferText = `E2E ${runId}: I can give a ride Saturday morning if anyone needs one, I have room in my car.`;
@@ -92,26 +93,36 @@ test("two members complete a Sage ride-match suggestion and get a private circle
     await expect(maya.page.getByText(/Confirm what to share/i)).toBeVisible({ timeout: 15000 });
     await maya.page.getByRole("button", { name: "Approve" }).click();
 
-    // Jordan gets the match invitation with only what Maya approved sharing.
-    const { suggestions: jordanNeedsYou } = await trpcGet("sage.list", jordanToken, { tab: "NEEDS_YOU" });
-    const jordanSuggestion = jordanNeedsYou.find((s: { circleId: string | null }) => s.circleId === circleId);
+    // Jordan gets the match invitation with only what Maya approved sharing. The approve click above
+    // only waits for the click to register, not for its mutation to finish server-side, so poll.
+    let jordanSuggestion: { id: string } | undefined;
+    for (let attempt = 0; attempt < 6 && !jordanSuggestion; attempt++) {
+      const { suggestions: jordanNeedsYou } = await trpcGet("sage.list", jordanToken, { tab: "NEEDS_YOU" });
+      jordanSuggestion = jordanNeedsYou.find((s: { circleId: string | null }) => s.circleId === circleId);
+      if (!jordanSuggestion) await jordan.page.waitForTimeout(2000);
+    }
     expect(jordanSuggestion, "Jordan should have a pending Sage review after Maya consents").toBeTruthy();
-    await jordan.page.goto(`/sage/${jordanSuggestion.id}`);
+    await jordan.page.goto(`/sage/${jordanSuggestion!.id}`);
     await expect(jordan.page.getByText(/could use your help/i)).toBeVisible();
     await jordan.page.getByRole("button", { name: "Approve" }).click();
 
-    // Both land in Done, and a private circle with exactly Maya + Jordan was created.
+    // Both land in Done, and a private circle with exactly Maya + Jordan was created. Again, the
+    // click above only waits for the click itself, not for execution to finish server-side, so poll.
+    let matchCircle: { id: string; name: string } | undefined;
+    for (let attempt = 0; attempt < 8 && !matchCircle; attempt++) {
+      const { groups: mayaCircles } = await trpcGet("groups.listVisible", mayaToken, { coopId: "cahootz" });
+      matchCircle = mayaCircles.find((c: { name: string }) => c.name === "Ride match");
+      if (!matchCircle) await jordan.page.waitForTimeout(2000);
+    }
+    expect(matchCircle, "A new 'Ride match' private circle should exist").toBeTruthy();
+    matchCircleId = matchCircle!.id;
+
     const [{ suggestions: jordanDone }, { suggestions: mayaDone }] = await Promise.all([
       trpcGet("sage.list", jordanToken, { tab: "DONE" }),
       trpcGet("sage.list", mayaToken, { tab: "DONE" }),
     ]);
-    expect(jordanDone.some((s: { id: string }) => s.id === jordanSuggestion.id)).toBe(true);
+    expect(jordanDone.some((s: { id: string }) => s.id === jordanSuggestion!.id)).toBe(true);
     expect(mayaDone.some((s: { id: string }) => s.id === suggestionId)).toBe(true);
-
-    const { groups: mayaCircles } = await trpcGet("groups.listVisible", mayaToken, { coopId: "cahootz" });
-    const matchCircle = mayaCircles.find((c: { name: string }) => c.name === "Ride match");
-    expect(matchCircle, "A new 'Ride match' private circle should exist").toBeTruthy();
-    matchCircleId = matchCircle.id;
     const { members } = await trpcGet("groups.getDetail", mayaToken, { groupId: matchCircleId });
     expect((members as Array<{ userId: string }>).map((m) => m.userId).sort()).toEqual([mayaUserId, jordanUserId].sort());
   } finally {

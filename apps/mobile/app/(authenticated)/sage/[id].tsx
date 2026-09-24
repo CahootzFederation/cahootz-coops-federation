@@ -101,7 +101,7 @@ export default function SageSuggestionDetailScreen() {
               <Text style={{ fontSize: 12, fontWeight: '700', color: THEME.muted }}>Sage suggestion</Text>
               <Text style={{ color: THEME.ink }}>{detail.suggestion.title}</Text>
               {detail.suggestion.evidence ? (
-                <Text style={{ color: THEME.muted, fontStyle: 'italic', marginTop: 6 }}>"{detail.suggestion.evidence}"</Text>
+                <Text style={{ color: THEME.muted, fontStyle: 'italic', marginTop: 6 }}>&ldquo;{detail.suggestion.evidence}&rdquo;</Text>
               ) : null}
               {(() => {
                 const status = sageStatusMeta(detail.suggestion.status);

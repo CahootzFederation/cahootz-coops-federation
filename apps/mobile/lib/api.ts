@@ -229,6 +229,8 @@ export interface CommonsComment {
   id: string;
   authorId?: string;
   author: string;
+  authorRoles?: string[];
+  authorIsBot?: boolean;
   body: string;
   media?: CommonsPostMedia[];
 }
@@ -300,6 +302,8 @@ export interface CommonsPost {
   authorId?: string;
   author: string;
   authorHandle?: string;
+  authorRoles?: string[];
+  authorIsBot?: boolean;
   group: string;
   time: string;
   title: string;
@@ -346,6 +350,9 @@ export interface PrivateGroupMember {
   name: string;
   isLeader: boolean;
   joinedAt: string;
+  role?: string;
+  roles?: string[];
+  isBot?: boolean;
 }
 
 export interface PrivateGroupDetail {
@@ -382,6 +389,8 @@ export interface PersonalPageProfile {
   handle: string;
   bio?: string | null;
   createdAt: string;
+  roles?: string[];
+  isBot?: boolean;
   followerCount: number;
   followingCount: number;
   isOwnPage: boolean;

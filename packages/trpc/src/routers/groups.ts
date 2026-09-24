@@ -328,7 +328,7 @@ export const groupsRouter = router({
       const [members, coopConfig] = await Promise.all([
         context.db.groupMember.findMany({
           where: { groupId: group.id },
-          include: { user: { select: { name: true, email: true } } },
+          include: { user: { select: { name: true, email: true, roles: true, isBot: true } } },
           orderBy: { joinedAt: 'asc' },
         }),
         context.db.coopConfig.findFirst({
@@ -357,6 +357,9 @@ export const groupsRouter = router({
           name: displayName(member.user),
           isLeader: member.userId === group.leaderId,
           joinedAt: member.joinedAt.toISOString(),
+          role: member.role,
+          roles: member.user.roles,
+          isBot: member.user.isBot,
         })),
       };
     }),
@@ -755,7 +758,7 @@ export const groupsRouter = router({
       const comments = await context.db.groupComment.findMany({
         where: { groupId: input.groupId },
         orderBy: { createdAt: 'asc' },
-        include: { author: { select: { name: true, email: true } } },
+        include: { author: { select: { name: true, email: true, roles: true, isBot: true } } },
         ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
         take: input.limit,
       });
@@ -794,7 +797,7 @@ export const groupsRouter = router({
             authorId: userId,
             content: input.content,
           },
-          include: { author: { select: { name: true, email: true } } },
+          include: { author: { select: { name: true, email: true, roles: true, isBot: true } } },
         });
 
         // Older app versions still write circle messages here. Mirror them into
@@ -916,7 +919,7 @@ export const groupsRouter = router({
           where: { groupId: group.id },
           orderBy: { createdAt: 'desc' },
           take: 20,
-          include: { author: { select: { name: true, email: true } } },
+          include: { author: { select: { name: true, email: true, roles: true, isBot: true } } },
         }),
         context.db.auditLog.findMany({
           where: { resourceId: group.id },

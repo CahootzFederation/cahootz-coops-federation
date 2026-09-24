@@ -13,6 +13,7 @@ import {
 } from '@/components/commons-media-viewer';
 import { PersonalPagePostCard } from '@/components/personal-page-post-card';
 import { PostTypeSelector } from '@/components/post-type-selector';
+import { RoleBadge } from '@/components/role-badge';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type PersonalPageFeedPost, type PersonalPageProfile } from '@/lib/api';
@@ -250,7 +251,10 @@ export default function PersonalPageScreen() {
                 <Text className="text-lg font-black text-slate-700">{personInitials(displayName)}</Text>
               </View>
               <View className="min-w-0 flex-1">
-                <Text className="text-xl font-black text-gray-950" numberOfLines={1}>{displayName}</Text>
+                <View className="flex-row flex-wrap items-center gap-1.5">
+                  <Text className="text-xl font-black text-gray-950" numberOfLines={1}>{displayName}</Text>
+                  <RoleBadge roles={profile?.roles} />
+                </View>
                 <Text className="mt-0.5 text-sm font-semibold text-gray-500">{personDisplayHandle(publicHandle)}</Text>
               </View>
               <View className="rounded-full bg-gray-100 px-3 py-1.5">

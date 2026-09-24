@@ -14,6 +14,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { IconAvatar } from '@/components/icon-avatar';
+import { RoleBadge } from '@/components/role-badge';
 import { EmojiColorPicker } from '@/components/emoji-color-picker';
 import {
   ArrowLeft,
@@ -458,12 +459,13 @@ export default function GroupDetailScreen() {
                       <Crown size={14} color={THEME.primary} />
                     ) : null}
                     <Text
-                      className="flex-1 text-sm font-semibold text-gray-900"
+                      className="shrink text-sm font-semibold text-gray-900"
                       numberOfLines={1}
                     >
                       {member.name}
                       {member.userId === user?.id ? ' (you)' : ''}
                     </Text>
+                    <RoleBadge roles={member.roles} circleRole={member.role} />
                   </View>
                   {group.isLeader && !member.isLeader ? (
                     <TouchableOpacity

@@ -33,6 +33,7 @@ import {
 import { Text } from '@/components/ui/text';
 import { MentionText } from '@/components/mention-text';
 import { MentionComposerInput } from '@/components/mention-composer-input';
+import { RoleBadge } from '@/components/role-badge';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsPost, type CommonsProfile } from '@/lib/api';
 import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
@@ -484,7 +485,10 @@ export default function CommonsPostDetailScreen() {
                 {post.comments.map((comment) => (
                   <View key={comment.id || `${comment.author}-${comment.body}`} className="rounded-xl bg-stone-50 p-3">
                     <View className="flex-row items-start justify-between gap-2">
-                      <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
+                      <View className="flex-row flex-wrap items-center gap-1.5">
+                        <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
+                        <RoleBadge roles={comment.authorRoles} />
+                      </View>
                       {comment.authorId && comment.authorId === user?.id ? (
                         <View className="flex-row items-center gap-3">
                           <TouchableOpacity

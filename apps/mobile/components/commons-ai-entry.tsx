@@ -31,6 +31,7 @@ import {
 } from '@/components/commons-media-viewer';
 import { EventCard, UpcomingEventsModule } from '@/components/event-card';
 import { MentionComposerInput } from '@/components/mention-composer-input';
+import { RoleBadge } from '@/components/role-badge';
 import { MentionText } from '@/components/mention-text';
 import { PostTypeSelector } from '@/components/post-type-selector';
 import { Button } from '@/components/ui/button';
@@ -1881,6 +1882,7 @@ export default function CommonsAiEntry({
                             <Text className="text-sm font-black text-gray-950">
                               {post.author}
                             </Text>
+                            <RoleBadge roles={post.authorRoles} />
                             <Text className="text-xs font-semibold text-slate-500">
                               {authorHandle}
                             </Text>

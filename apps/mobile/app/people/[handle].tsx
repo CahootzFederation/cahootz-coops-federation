@@ -21,6 +21,7 @@ import {
   FEED_MEDIA_TILE_SIZE,
 } from '@/components/commons-media-viewer';
 import { PersonalPagePostCard } from '@/components/personal-page-post-card';
+import { RoleBadge } from '@/components/role-badge';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsPost, type PersonalPageFeedPost, type PersonalPageProfile } from '@/lib/api';
@@ -166,9 +167,12 @@ export default function PublicPersonPageScreen() {
                 <Text className="text-xl font-black text-slate-700">{personInitials(profileName)}</Text>
               </View>
               <View className="min-w-0 flex-1">
-                <Text className="text-2xl font-black text-gray-950" numberOfLines={1}>
-                  {profileName}
-                </Text>
+                <View className="flex-row flex-wrap items-center gap-1.5">
+                  <Text className="text-2xl font-black text-gray-950" numberOfLines={1}>
+                    {profileName}
+                  </Text>
+                  <RoleBadge roles={profile?.roles} />
+                </View>
                 <Text className="mt-1 text-sm font-semibold text-gray-500">{personDisplayHandle(routeHandle)}</Text>
                 <View className="mt-3 flex-row flex-wrap gap-2">
                   <Metric label="Posts" value={String(totalPostCount)} />

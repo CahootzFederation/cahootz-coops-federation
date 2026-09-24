@@ -69,7 +69,7 @@ The `Mobile E2E` workflow runs for pull requests that change the mobile app, API
 
 Each job creates an isolated PostgreSQL database service, applies migrations, seeds the `cahootz` `CoopConfig` (`scripts/seed-coop-config.ts` + `scripts/seed-coop-display-info.ts` - required for `commons.listDirectory` to recognize any membership, which gates every real circle feed, not just General), seeds the two users above, starts the API and Expo web app, installs Chromium, and runs `pnpm test:e2e:mobile`. It uploads the Playwright report, failure traces, screenshots, videos, and server logs as the `mobile-e2e-artifacts` artifact.
 
-No repository secrets are required for the current journeys. Payment, email, or external-service journeys must use provider test modes and dedicated CI secrets.
+No repository secrets are required for journeys 1-13. Journeys 14-15 (Sage) exercise real detection models rather than a mock, so they need an `OPENAI_API_KEY` repository secret (Settings > Secrets and variables > Actions) - without it, those two journeys fail in CI with "Sage never surfaced a suggestion for this window" even though the rest of the suite passes. Payment, email, or other external-service journeys must use provider test modes and dedicated CI secrets.
 
 After the workflow has run once on GitHub, add **Two-user mobile UI journeys** as a required status check in the `main` branch protection rules so a failing E2E suite blocks merging.
 

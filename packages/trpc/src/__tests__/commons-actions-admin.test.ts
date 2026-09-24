@@ -59,9 +59,10 @@ describe("Commons admin API authentication", () => {
       coopConfig: { findFirst: vi.fn().mockResolvedValue({ id: "config-1" }) },
       commonsAgentSetting: { findUnique: vi.fn().mockResolvedValue(null) },
       commonsAction: { findMany: vi.fn().mockResolvedValue([
-        { id: "action-1", sourceType: "commons_comment", sourceId: "comment-1", sourcePostId: "post-1" },
+        { id: "action-1", sourceType: "commons_comment", sourceId: "comment-1", sourcePostId: "post-1", reviews: [] },
       ]) },
       commonsActionFeedback: { findMany: vi.fn().mockResolvedValue([]) },
+      commonsActionAudit: { findMany: vi.fn().mockResolvedValue([]) },
       commonsResource: { findMany: vi.fn().mockResolvedValue([]) },
       aICostEvent: { findMany: vi.fn().mockResolvedValue([]) },
       $queryRaw: vi.fn().mockResolvedValue([]),

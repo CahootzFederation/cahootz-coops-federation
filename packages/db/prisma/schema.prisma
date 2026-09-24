@@ -1001,6 +1001,8 @@ enum CommonsActionType {
   CONNECT_MEMBERS
   ESCALATE_TO_ADMIN
   NO_ACTION
+  RIDE_MATCH_PROPOSAL
+  SUGGEST_ACTION
 
   @@schema("public")
 }
@@ -1092,13 +1094,78 @@ model CommonsAction {
   replySourceKey     String?             @unique
   reviewedBy         String?
   reviewedAt         DateTime?
+  circleId           String?
+  payload            Json?
+  payloadHash        String?
+  revision           Int                 @default(1)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   feedback           CommonsActionFeedback?
+  participants       CommonsActionParticipant[]
+  reviews            CommonsActionReview[]
+  auditEvents        CommonsActionAudit[]
 
   @@unique([sourceType, sourceId, contentHash, charterConfigId, position])
   @@index([coopId, status, createdAt])
   @@index([sourceType, sourceId])
+  @@index([circleId, status])
+  @@schema("public")
+}
+
+model CommonsActionParticipant {
+  id        String        @id @default(cuid())
+  actionId  String
+  action    CommonsAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  userId    String
+  role      String // SUBJECT | HELPER | AUTHORIZER | VIEWER
+  createdAt DateTime      @default(now())
+
+  @@unique([actionId, userId])
+  @@schema("public")
+}
+
+model CommonsActionReview {
+  id               String        @id @default(cuid())
+  actionId         String
+  action           CommonsAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  userId           String
+  reviewType       String // CONFIRM_DETAILS | PROVIDE_CONTEXT | CONSENT_TO_SHARE | ACCEPT_MATCH
+  payloadHash      String
+  presentationData Json?
+  status           String        @default("PENDING") // PENDING | APPROVED | DECLINED | EXPIRED | SUPERSEDED
+  respondedAt      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([userId, status])
+  @@index([actionId])
+  @@schema("public")
+}
+
+model CommonsActionAudit {
+  id        String        @id @default(cuid())
+  actionId  String
+  action    CommonsAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  actorId   String?
+  eventType String
+  metadata  Json?
+  createdAt DateTime      @default(now())
+
+  @@index([actionId, createdAt])
+  @@schema("public")
+}
+
+model CircleAgentWindow {
+  id            String    @id @default(cuid())
+  groupId       String
+  coopId        String
+  openedAt      DateTime  @default(now())
+  lastMessageAt DateTime  @default(now())
+  messageCount  Int       @default(0)
+  closedAt      DateTime?
+  status        String    @default("OPEN") // OPEN | CLOSED
+
+  @@index([groupId, status])
   @@schema("public")
 }
 

@@ -2,6 +2,9 @@ import { router, useSegments } from 'expo-router';
 import { Bell, LayoutGrid, Scale, UserCircle } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/auth-context';
+import { api } from '@/lib/api';
 
 const destinations = [
   { label: 'Commons', href: '/(tabs)' as const, icon: LayoutGrid },
@@ -13,6 +16,15 @@ const destinations = [
 export function AppBottomNavigation() {
   const segments = useSegments();
   const insets = useSafeAreaInsets();
+  const { sessionToken, isAuthenticated } = useAuth();
+  const unreadQuery = useQuery({
+    queryKey: ['unread-notifications-badge', sessionToken],
+    queryFn: () => api.getUnreadNotificationCount(sessionToken!),
+    enabled: isAuthenticated && !!sessionToken,
+    retry: false,
+    refetchInterval: 30000,
+  });
+  const hasUnread = (unreadQuery.data?.count ?? 0) > 0;
 
   const screen: string = segments[segments.length - 1] || '';
   const active = screen === 'notifications' || screen === 'notification-settings'
@@ -51,7 +63,10 @@ export function AppBottomNavigation() {
             onPress={onPress}
             style={styles.item}
           >
-            <Icon size={24} color={color} />
+            <View>
+              <Icon size={24} color={color} />
+              {label === 'Alerts' && hasUnread ? <View accessibilityLabel="Unread alerts" style={styles.dot} /> : null}
+            </View>
             <Text style={[styles.label, { color }]}>{label}</Text>
           </TouchableOpacity>
         );
@@ -64,4 +79,5 @@ const styles = StyleSheet.create({
   bar: { flexDirection: 'row', flexShrink: 0, backgroundColor: '#FFFFFF', borderTopColor: '#F0F2F5', borderTopWidth: 1, paddingTop: 7 },
   item: { flex: 1, minWidth: 0, minHeight: 56, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2, paddingVertical: 4, gap: 3 },
   label: { fontSize: 10, lineHeight: 14, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
+  dot: { position: 'absolute', top: -2, right: -4, width: 8, height: 8, borderRadius: 4, backgroundColor: '#DC2626' },
 });

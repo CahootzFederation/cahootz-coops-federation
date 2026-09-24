@@ -54,8 +54,10 @@ The current Playwright suite covers:
 11. A member creates an event from the feed composer's "+" affordance; it renders as an inline event card in the feed and in the "Upcoming" module, and opens a dedicated event detail screen (RSVP, add to calendar, discussion).
 12. User A creates an event; User B RSVPs "Going" from the event detail screen; User A sees the updated going count after reload.
 13. A circle leader (the circle's creator) pins a post from the feed; it renders above the "Upcoming" module with a "Pinned" badge for every member of that circle, including on reload.
+14. Two members complete a Sage ride-match suggestion end to end (`sage-ride-match.spec.ts`): a circle window closes after 40 seeded messages, Sage detects a ride need, the subject provides context and consents to a limited match, the matched member accepts, and a new private circle with exactly those two members is created. Both land in Sage Suggestions' Done tab.
+15. A circle leader receives and approves a Sage trend suggestion (`sage-trend.spec.ts`): after a circle window closes, Sage may propose an event, a circle post, or a Commons post based on the conversation; approving it publishes the corresponding `CommonsPost` in the right feed (circle vs Commons general), and it appears in Done. Declining or escalating ("Ask an admin") are also covered.
 
-Journeys 11-13 require the `Event`/`EventHost`/`EventRSVP`/`EventReminder` tables and `CommonsPost.isPinned` columns from migration `20260922010000_add_circle_events` - run `pnpm --filter @repo/db exec prisma migrate deploy` (and regenerate the client with `pnpm --filter @repo/db run db:generate`) before running the suite locally.
+Journeys 11-13 require the `Event`/`EventHost`/`EventRSVP`/`EventReminder` tables and `CommonsPost.isPinned` columns from migration `20260922010000_add_circle_events` - run `pnpm --filter @repo/db exec prisma migrate deploy` (and regenerate the client with `pnpm --filter @repo/db run db:generate`) before running the suite locally. Journeys 14-15 additionally require the Sage tables from migrations `20260923010000_sage_ride_match` and `20260923020000_sage_suggest_action`, and a working `OPENAI_API_KEY` - both exercise Sage's real (unmocked) detection models, so they're slower and only as deterministic as the model's classification of clearly-worded seeded messages.
 
 The post-signup wizard used by every sign-in helper now has three steps (intro, profile, and a "find your way in" step offering a welcome lounge) - `e2e/support/auth.ts` is the single place that clicks through all three, so a future wizard change only needs updating there.
 
@@ -67,7 +69,7 @@ The `Mobile E2E` workflow runs for pull requests that change the mobile app, API
 
 Each job creates an isolated PostgreSQL database service, applies migrations, seeds the `cahootz` `CoopConfig` (`scripts/seed-coop-config.ts` + `scripts/seed-coop-display-info.ts` - required for `commons.listDirectory` to recognize any membership, which gates every real circle feed, not just General), seeds the two users above, starts the API and Expo web app, installs Chromium, and runs `pnpm test:e2e:mobile`. It uploads the Playwright report, failure traces, screenshots, videos, and server logs as the `mobile-e2e-artifacts` artifact.
 
-No repository secrets are required for the current journeys. Payment, email, or external-service journeys must use provider test modes and dedicated CI secrets.
+No repository secrets are required for journeys 1-13. Journeys 14-15 (Sage) exercise real detection models rather than a mock, so they need an `OPENAI_API_KEY` repository secret (Settings > Secrets and variables > Actions) - without it, those two journeys fail in CI with "Sage never surfaced a suggestion for this window" even though the rest of the suite passes. Payment, email, or other external-service journeys must use provider test modes and dedicated CI secrets.
 
 After the workflow has run once on GitHub, add **Two-user mobile UI journeys** as a required status check in the `main` branch protection rules so a failing E2E suite blocks merging.
 

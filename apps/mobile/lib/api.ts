@@ -4151,6 +4151,60 @@ export const api = {
     );
   },
 
+  // ── Sage Suggestions ────────────────────────────────────────────────────────
+
+  async listSageSuggestions(
+    tab: 'NEEDS_YOU' | 'WAITING' | 'DONE',
+    sessionToken: string,
+    cursor?: string,
+    coopId = 'cahootz',
+  ) {
+    const input = encodeURIComponent(JSON.stringify({ coopId, tab, ...(cursor ? { cursor } : {}) }));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/sage.list?input=${input}`,
+      { headers: createApiHeaders(null, sessionToken) },
+    );
+    return readTrpcResult<{
+      suggestions: Array<{ id: string; title: string; circleId: string | null; status: string; createdAt: string }>;
+      nextCursor: string | null;
+    }>(response, 'Could not load Sage suggestions');
+  },
+
+  async getSageSuggestion(actionId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ actionId }));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/sage.getDetail?input=${input}`,
+      { headers: createApiHeaders(null, sessionToken) },
+    );
+    return readTrpcResult<{
+      suggestion: { id: string; title: string; status: string; circleId: string | null; evidence: string | null; role: string };
+      reviews: Array<{ id: string; reviewType: string; status: string; presentationData: Record<string, unknown> | null; payloadHash: string }>;
+      auditEvents: Array<{ description: string; createdAt: string }>;
+    }>(response, 'Could not load this Sage suggestion');
+  },
+
+  async respondToSageReview(
+    reviewId: string,
+    response_: 'APPROVE' | 'DECLINE' | 'ESCALATE',
+    sessionToken: string,
+    payload?: Record<string, unknown>,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.respondToReview`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ reviewId, response: response_, ...(payload ? { payload } : {}) }),
+    });
+    return readTrpcResult<{ success: boolean }>(response, 'Could not send your response');
+  },
+
+  async markSageSuggestionsSeen(sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.markSeen`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<{ success: boolean; count: number }>(response, 'Could not update Sage alerts');
+  },
+
   // ── Coop Config ────────────────────────────────────────────────────────────
 
   /**

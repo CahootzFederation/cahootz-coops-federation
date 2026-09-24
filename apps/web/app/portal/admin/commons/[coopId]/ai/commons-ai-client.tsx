@@ -27,6 +27,8 @@ function feedbackValue(action: ActionRow): FeedbackEdit {
     notes: action.feedback?.notes ?? "", correctedText: action.feedback?.correctedText ?? "" };
 }
 interface ResourceRow { id: string; title: string; kind: string; status: string; candidateUserId: string | null; }
+interface NeededToolRow { capability: string; count: number; sampleActionIds: string[] }
+interface EscalationRow { id: string; summary: string; type: string; circleId: string | null; reviews: { id: string; reviewType: string; userId: string }[] }
 interface Dashboard {
   setting: { autoReply: boolean; backfillPostsDone: boolean; backfillCommentsDone: boolean };
   actions: ActionRow[];
@@ -36,6 +38,8 @@ interface Dashboard {
     byDay: Array<{ day: string; estimatedUsd: number; unknown: number }>;
     byMonth: Array<{ month: string; estimatedUsd: number; unknown: number; calls: number }>;
   };
+  neededTools: NeededToolRow[];
+  escalations: EscalationRow[];
 }
 
 export default function CommonsAIClient({ apiUrl, token }: { apiUrl: string; token: string }) {
@@ -95,6 +99,23 @@ export default function CommonsAIClient({ apiUrl, token }: { apiUrl: string; tok
         <details><summary className="cursor-pointer text-sm text-orange-200">Daily totals</summary><ul className="mt-2 space-y-1 text-sm text-slate-300">{data.costs.byDay.map((day) => <li key={day.day}>{day.day}: ${day.estimatedUsd.toFixed(4)} · {day.unknown} unknown</li>)}</ul></details>
         <details><summary className="cursor-pointer text-sm text-orange-200">Monthly totals</summary><ul className="mt-2 space-y-1 text-sm text-slate-300">{data.costs.byMonth.map((month) => <li key={month.month}>{month.month}: ${month.estimatedUsd.toFixed(4)} · {month.calls} calls · {month.unknown} unknown</li>)}</ul></details>
         <p className="text-xs text-slate-500">Estimates include recorded token charges. Provider tool fees and calls without usage are excluded.</p>
+      </section>
+      <section className="space-y-3"><h2 className="text-lg font-semibold">Needed tools</h2>
+        <p className="text-sm text-slate-400">Capabilities Sage tried to use but hasn't been built yet. A count going up is a signal worth building it.</p>
+        {data.neededTools.length === 0 && <p className="text-sm text-slate-400">Nothing missing right now.</p>}
+        {data.neededTools.length > 0 && <div className="overflow-x-auto rounded-lg border border-white/10"><table className="w-full text-left text-sm"><thead className="bg-white/5 text-slate-400"><tr><th className="p-3">Capability</th><th className="p-3">Times requested</th><th className="p-3">Sample actions</th></tr></thead><tbody>{data.neededTools.map((row) => <tr key={row.capability} className="border-t border-white/10"><td className="p-3 font-mono">{row.capability}</td><td className="p-3">{row.count}</td><td className="p-3 text-xs text-slate-400">{row.sampleActionIds.join(", ")}</td></tr>)}</tbody></table></div>}
+      </section>
+      <section className="space-y-3"><h2 className="text-lg font-semibold">Escalated</h2>
+        <p className="text-sm text-slate-400">A member asked an admin to look at these before deciding.</p>
+        {data.escalations.length === 0 && <p className="text-sm text-slate-400">Nothing escalated right now.</p>}
+        {data.escalations.map((action) => <div key={action.id} className="rounded-lg border border-white/10 bg-white/5 p-4 space-y-2">
+          <p className="text-sm text-slate-400">{action.type}{action.circleId ? ` · circle ${action.circleId}` : ""}</p>
+          <p>{action.summary}</p>
+          <div className="flex gap-2">
+            <button disabled={busy} onClick={() => void command({ command: "approve", actionId: action.id })} className="rounded-md bg-orange-300 px-3 py-1.5 text-sm font-semibold text-slate-950 disabled:opacity-50">Approve</button>
+            <button disabled={busy} onClick={() => void command({ command: "dismiss", actionId: action.id })} className="rounded-md border border-white/20 px-3 py-1.5 text-sm disabled:opacity-50">Dismiss</button>
+          </div>
+        </div>)}
       </section>
       <section className="space-y-3"><h2 className="text-lg font-semibold">Resource candidates</h2>
         {data.resources.length === 0 && <p className="text-sm text-slate-400">No resources found yet.</p>}

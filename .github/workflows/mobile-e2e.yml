@@ -67,6 +67,10 @@ jobs:
       RESEND_API_KEY: re_ci_placeholder
       RESEND_FROM_EMAIL: support@mail.cahootzcoops.com
       SENTRY_DSN: https://public@example.com/1
+      # Required for journeys 14-15 (sage-ride-match.spec.ts, sage-trend.spec.ts), which exercise
+      # Sage's real detection models rather than a mock. Add this as a repo secret in GitHub -
+      # Settings > Secrets and variables > Actions - or those two journeys will fail in CI.
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       E2E_BASE_URL: http://localhost:8081
       E2E_API_BASE_URL: http://localhost:3001
       E2E_USER_A_EMAIL: releaseclick1@test.cahootz.local

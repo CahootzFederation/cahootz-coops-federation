@@ -121,7 +121,10 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
   const { user } = useAuth();
   const coin = useCoin();
   const config = coopConfig();
-  const coopId = resolveCoopId();
+  // A store belongs to exactly one commons and checkout is rejected if the
+  // coopId doesn't match it, so prefer the store's own commons once loaded.
+  const [storeCoopId, setStoreCoopId] = useState<string | null>(null);
+  const coopId = storeCoopId ?? resolveCoopId();
   const primaryColor = resolveBrandColor(user?.coop?.primaryColor || config.primaryColor, '#FF6B00');
   const accentColor = resolveBrandColor(user?.coop?.accentColor || config.accentColor, '#16A34A');
   const { getStoreItems, clearStoreItems } = useCart();
@@ -168,6 +171,8 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
     try {
       const storeResult = await api.getStore(storeId);
       const businessId = storeResult?.businessId || storeId;
+      const checkoutCoopId: string = storeResult?.coopId || resolveCoopId();
+      setStoreCoopId(storeResult?.coopId ?? null);
       const readinessResult = await fetch(`${API_BASE_URL}/trpc/stripeConnect.getBusinessReadiness?input=${encodeURIComponent(JSON.stringify({ businessId }))}`)
         .then(res => res.json())
         .catch(() => null);
@@ -179,7 +184,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
         const checkoutUserResult = await fetch(
           `${API_BASE_URL}/trpc/user.getUserByWallet?input=${encodeURIComponent(JSON.stringify({
             walletAddress: user.walletAddress,
-            coopId,
+            coopId: checkoutCoopId,
           }))}`,
           {
             headers: createApiHeaders(user.walletAddress),
@@ -195,10 +200,11 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
       if (subtotal > 0) {
         const previewResult = await fetch(
           `${API_BASE_URL}/trpc/commerce.previewCheckout?input=${encodeURIComponent(JSON.stringify({
-            userId: user.id,
-            coopId,
-            businessId,
-            listedAmountCents: Math.round(subtotal * 100),
+            coopId: checkoutCoopId,
+            items: cartItems.map(item => ({
+              productId: item.productId,
+              quantity: item.quantity,
+            })),
             currency: 'USD',
           }))}`,
           {
@@ -214,7 +220,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
     } finally {
       setLoading(false);
     }
-  }, [user, storeId, subtotal, coopId]);
+  }, [user, storeId, subtotal]);
 
   useEffect(() => {
     loadData();
@@ -258,16 +264,17 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
     }
 
     const normalizedShippingAddress = normalizeShippingAddress(shippingAddress);
-    if (
+    const requiresShipping = cartItems.some((item) => item.requiresShipping !== false);
+    if (requiresShipping && (
       !normalizedShippingAddress.line1 ||
       !normalizedShippingAddress.city ||
       !normalizedShippingAddress.state ||
       !normalizedShippingAddress.postalCode
-    ) {
+    )) {
       Alert.alert('Shipping Address Required', 'Enter the street address, city, state, and ZIP code so the store owner knows where to send the order.');
       return;
     }
-    const formattedShippingAddress = formatShippingAddress(normalizedShippingAddress);
+    const formattedShippingAddress = requiresShipping ? formatShippingAddress(normalizedShippingAddress) : undefined;
 
     setProcessing(true);
 
@@ -284,8 +291,10 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
         },
         body: JSON.stringify({
           coopId,
-          businessId: checkoutBusinessId,
-          listedAmountCents: Math.round(subtotal * 100),
+          items: cartItems.map(item => ({
+            productId: item.productId,
+            quantity: item.quantity,
+          })),
           currency: 'USD',
           paymentUi: useHostedCheckout ? 'hosted_checkout' : 'payment_intent',
           successUrl,
@@ -529,8 +538,25 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
             <Text className="text-gray-500 text-sm mt-1">
               {coin.name} earned from this purchase
             </Text>
+            {preview.customerReward.nominalAmount > preview.customerReward.estimatedAmount ? (
+              <Text className="text-gray-600 text-xs leading-5 mt-2">
+                The normal reward is {formatScAmount(preview.customerReward.nominalAmount)} {coin.symbol}. Your current balance, diminishing returns, and the 2% voting-power cap reduce this estimate.
+              </Text>
+            ) : null}
           </View>
         )}
+
+        {preview?.customerReward && !preview.customerReward.eligible && preview.customerReward.nominalAmount > 0 ? (
+          <View className="mx-6 mt-4 p-4 border border-amber-200 rounded-xl bg-amber-50">
+            <View className="flex-row items-center gap-2 mb-2">
+              <BadgeCheck size={20} color="#B45309" />
+              <Text className="font-semibold text-amber-800">{coin.symbol} reward capped</Text>
+            </View>
+            <Text className="text-amber-900 text-sm leading-5">
+              This purchase normally requests {formatScAmount(preview.customerReward.nominalAmount)} {coin.symbol}, but your current balance and the 2% voting-power cap make the estimated reward zero.
+            </Text>
+          </View>
+        ) : null}
 
         {/* Cardholder Name */}
         <View className="px-6 pt-4 pb-2">

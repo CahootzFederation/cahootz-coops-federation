@@ -62,6 +62,7 @@ import {
 } from '@/lib/social-profile';
 import {
   ArrowLeft,
+  Award,
   Bookmark,
   CheckCircle2,
   ChevronDown,
@@ -1881,6 +1882,12 @@ export default function CommonsAiEntry({
                             <Text className="text-sm font-black text-gray-950">
                               {post.author}
                             </Text>
+                            {post.supporterBadge ? (
+                              <View className="flex-row items-center rounded-full px-2 py-0.5" style={{ backgroundColor: `${post.supporterBadge.color}18` }}>
+                                <Award size={10} color={post.supporterBadge.color} />
+                                <Text className="ml-1 text-[9px] font-black" style={{ color: post.supporterBadge.color }}>{post.supporterBadge.shortName}</Text>
+                              </View>
+                            ) : null}
                             <Text className="text-xs font-semibold text-slate-500">
                               {authorHandle}
                             </Text>

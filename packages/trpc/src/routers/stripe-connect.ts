@@ -3,6 +3,7 @@ import { router } from '../trpc.js';
 import { authenticatedProcedure, privateProcedure } from '../procedures/index.js';
 import { db } from '@repo/db';
 import { TRPCError } from '@trpc/server';
+import type { AuthenticatedContext } from '../context.js';
 import {
   createConnectAccount,
   generateOnboardingLink,
@@ -26,8 +27,21 @@ export const stripeConnectRouter = router({
       businessType: z.enum(['individual', 'company']).default('company'),
       country: z.string().default('US'),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const { userId, storeId, email, businessType, country } = input;
+      const walletAddress = (ctx as AuthenticatedContext).walletAddress;
+      const authenticatedUser = await db.user.findFirst({
+        where: {
+          OR: [
+            { walletAddress: { equals: walletAddress, mode: 'insensitive' } },
+            { wallets: { some: { address: { equals: walletAddress, mode: 'insensitive' } } } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (!authenticatedUser || authenticatedUser.id !== userId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Authenticated user does not match the shop owner' });
+      }
 
       const store = await db.store.findUnique({
         where: { id: storeId },

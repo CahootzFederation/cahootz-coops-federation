@@ -1,4 +1,9 @@
 import type { ApplicationStatus } from "@repo/db";
+import { FUNDING_BADGE_BY_TIER } from "./funding-badge-service.js";
+import {
+  getDefaultFundingSettlementAccount,
+  getStoreFundingSettlementOverride,
+} from "./funding-settlement-service.js";
 
 export type CommonsSummary = {
   coopId: string;
@@ -123,6 +128,130 @@ export async function getCommonsDetail(coopId: string): Promise<CommonsDetail | 
     storePaymentRouterAddress: config.storePaymentRouterAddress,
     rewardEngineAddress: config.rewardEngineAddress,
     rpcUrl: config.rpcUrl,
+  };
+}
+
+export async function listCommonsStores(coopId: string) {
+  const { db } = await import("@repo/db");
+  const [stores, sharedDefault] = await Promise.all([
+    db.store.findMany({
+      where: { coopId, deletedAt: null },
+      include: {
+        business: { include: { stripeAccount: true } },
+        _count: { select: { products: true } },
+      },
+      orderBy: [{ kind: "desc" }, { createdAt: "asc" }],
+    }),
+    getDefaultFundingSettlementAccount(db),
+  ]);
+
+  return Promise.all(stores.map(async (store) => {
+    const override = store.kind === "OFFICIAL_COMMONS"
+      ? await getStoreFundingSettlementOverride(store.id, db)
+      : null;
+    const settlement = store.kind === "OFFICIAL_COMMONS"
+      ? override ?? sharedDefault
+      : store.business?.stripeAccount ?? null;
+    return {
+      id: store.id,
+      coopId: store.coopId,
+      name: store.name,
+      description: store.description,
+      kind: store.kind,
+      status: store.status,
+      category: store.category,
+      imageUrl: store.imageUrl,
+      city: store.city,
+      state: store.state,
+      productCount: store._count.products,
+      totalOrders: store.totalOrders,
+      totalSales: store.totalSales,
+      paymentReady: settlement?.chargesEnabled === true,
+      publicReady: store.status === "APPROVED" && settlement?.chargesEnabled === true,
+      settlementSource: store.kind === "OFFICIAL_COMMONS"
+        ? override ? "STORE_OVERRIDE" as const : "SHARED_DEFAULT" as const
+        : "STORE_ACCOUNT" as const,
+    };
+  }));
+}
+
+export async function getCommonsStoreDetail(coopId: string, storeId: string) {
+  const { db } = await import("@repo/db");
+  const store = await db.store.findFirst({
+    where: { id: storeId, coopId, deletedAt: null },
+    include: {
+      business: { include: { stripeAccount: true } },
+      products: {
+        orderBy: [{ isActive: "desc" }, { priceUSD: "asc" }],
+        include: {
+          _count: {
+            select: {
+              fundingBadgeEntitlements: { where: { status: "ACTIVE" } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!store) return null;
+
+  const override = store.kind === "OFFICIAL_COMMONS"
+    ? await getStoreFundingSettlementOverride(store.id, db)
+    : null;
+  const settlement = store.kind === "OFFICIAL_COMMONS"
+    ? override ?? await getDefaultFundingSettlementAccount(db)
+    : store.business?.stripeAccount ?? null;
+
+  return {
+    id: store.id,
+    coopId: store.coopId,
+    name: store.name,
+    description: store.description,
+    kind: store.kind,
+    category: store.category,
+    imageUrl: store.imageUrl,
+    city: store.city,
+    state: store.state,
+    status: store.status,
+    isFeatured: store.isFeatured,
+    totalSales: store.totalSales,
+    totalOrders: store.totalOrders,
+    createdAt: store.createdAt.toISOString(),
+    publicReady: store.status === "APPROVED" && settlement?.chargesEnabled === true,
+    settlement: settlement ? {
+      source: store.kind === "OFFICIAL_COMMONS"
+        ? override ? "STORE_OVERRIDE" as const : "SHARED_DEFAULT" as const
+        : "STORE_ACCOUNT" as const,
+      stripeAccountId: settlement.stripeAccountId,
+      businessName: store.kind === "OFFICIAL_COMMONS"
+        ? settlement.business.name
+        : store.business?.name ?? store.name,
+      chargesEnabled: settlement.chargesEnabled,
+      payoutsEnabled: settlement.payoutsEnabled,
+    } : null,
+    products: store.products.map((product) => {
+      const badge = product.fundingBadgeTier
+        ? FUNDING_BADGE_BY_TIER.get(product.fundingBadgeTier)
+        : null;
+      return {
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        category: product.category,
+        kind: product.kind,
+        tier: product.fundingBadgeTier,
+        rank: badge?.rank ?? 0,
+        color: badge?.color ?? "#64748B",
+        priceUSD: product.priceUSD,
+        nominalReward: badge?.nominalReward ?? 0,
+        quantity: product.quantity,
+        trackInventory: product.trackInventory,
+        isActive: product.isActive,
+        isFeatured: product.isFeatured,
+        totalSold: product.totalSold,
+        activeOwners: product._count.fundingBadgeEntitlements,
+      };
+    }),
   };
 }
 

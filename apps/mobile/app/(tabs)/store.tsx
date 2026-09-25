@@ -1,13 +1,12 @@
 import React from 'react';
 import { ActivityIndicator, Image, RefreshControl, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
-import { Award, BadgeCheck, Check, ChevronRight, CircleDollarSign, Plus, Search, ShoppingBag, ShoppingCart, Store } from 'lucide-react-native';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { BadgeCheck, Check, ChevronRight, Minus, Plus, Search, ShoppingBag, ShoppingCart, Store } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { useCart } from '@/contexts/cart-context';
-import { useCoin } from '@/contexts/platform-config-context';
 import { api, resolveCoopId } from '@/lib/api';
 
 type ShopCommons = { id: string; name: string };
@@ -17,14 +16,13 @@ type StoreItem = { id: string; name: string; description?: string | null; catego
 type BadgeDefinition = { tier: string; rank: number; name: string; shortName: string; priceUSD: number; nominalReward: number; color: string };
 type ProductItem = { id: string; name: string; description?: string | null; category?: string | null; imageUrl?: string | null; priceUSD: number; kind?: 'STANDARD' | 'FUNDING_BADGE'; fundingBadgeTier?: string | null; fundingBadge?: BadgeDefinition | null; store: { id: string; name: string; kind?: 'MEMBER' | 'OFFICIAL_COMMONS'; isScVerified: boolean } };
 
-const colors = { paper: '#FFF9ED', ink: '#241A10', muted: '#75685A', line: '#E9DDCB', orange: '#E85D04', orangeSoft: '#FFF0E2', forest: '#245B45', hero: '#3A2416' };
+const colors = { paper: '#FFF9ED', ink: '#241A10', muted: '#75685A', line: '#E9DDCB', orange: '#E85D04', orangeSoft: '#FFF0E2', forest: '#245B45' };
 const money = (value: number) => `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 
 export default function StoreScreen() {
   const params = useLocalSearchParams<{ coopId?: string }>();
-  const { user, sessionToken } = useAuth();
-  const coin = useCoin();
-  const { addItem, totalItems } = useCart();
+  const { user, sessionToken, isLoading: authLoading } = useAuth();
+  const { addItem, items: cartItems, updateQuantity, totalItems } = useCart();
   // Members can belong to several commons, and each commons has its own
   // funding shop and member stores. The session's coop is only a default.
   const sessionCoopId = resolveCoopId() === 'error-no-coop-id' ? FALLBACK_COMMONS_ID : resolveCoopId();
@@ -34,7 +32,6 @@ export default function StoreScreen() {
   const [products, setProducts] = React.useState<ProductItem[]>([]);
   const [myStore, setMyStore] = React.useState<any>(null);
   const [ownedTiers, setOwnedTiers] = React.useState<Set<string>>(new Set());
-  const [highestBadge, setHighestBadge] = React.useState<any>(null);
   const [mode, setMode] = React.useState<'products' | 'stores'>('products');
   const [query, setQuery] = React.useState('');
   const [loading, setLoading] = React.useState(true);
@@ -72,24 +69,24 @@ export default function StoreScreen() {
     setStores(storeResult?.stores ?? []);
     setProducts(productResult?.products ?? []);
     setMyStore(ownerResult);
-    setHighestBadge(badgeResult?.highest ?? null);
     setOwnedTiers(new Set((badgeResult?.badges ?? []).filter((badge: any) => badge.status === 'ACTIVE').map((badge: any) => badge.tier)));
   }, [coopId, user?.walletAddress]);
 
   React.useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [load]);
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
-  const officialStore = stores.find((store) => store.kind === 'OFFICIAL_COMMONS');
-  const badgeProducts = products.filter((product) => product.kind === 'FUNDING_BADGE').sort((a, b) => (a.fundingBadge?.rank ?? 0) - (b.fundingBadge?.rank ?? 0));
-  const ordinaryProducts = products.filter((product) => product.kind !== 'FUNDING_BADGE');
   const normalizedQuery = query.trim().toLowerCase();
-  const filteredProducts = ordinaryProducts.filter((product) => !normalizedQuery || `${product.name} ${product.description ?? ''} ${product.store.name}`.toLowerCase().includes(normalizedQuery));
+  const filteredProducts = products.filter((product) => !normalizedQuery || `${product.name} ${product.description ?? ''} ${product.store.name}`.toLowerCase().includes(normalizedQuery));
   const filteredStores = stores.filter((store) => !normalizedQuery || `${store.name} ${store.description ?? ''} ${store.category ?? ''}`.toLowerCase().includes(normalizedQuery));
 
   const addProduct = (product: ProductItem) => addItem(
     { id: product.id, name: product.name, imageUrl: product.imageUrl ?? null, priceUSD: product.priceUSD, maxQuantity: product.kind === 'FUNDING_BADGE' ? 1 : undefined, requiresShipping: product.kind !== 'FUNDING_BADGE', exclusiveGroup: product.kind === 'FUNDING_BADGE' ? 'funding-badge' : undefined },
     { id: product.store.id, name: product.store.name, isScVerified: product.store.isScVerified },
   );
+
+  // The marketplace is members-only (its tab is hidden when signed out);
+  // a deep link here from a signed-out session goes to sign-in.
+  if (!authLoading && !user) return <Redirect href={{ pathname: '/', params: { entry: 'sign-in' } } as any} />;
 
   if (loading) return (
     <SafeAreaView className="flex-1 items-center justify-center" style={{ backgroundColor: colors.paper }}>
@@ -103,9 +100,9 @@ export default function StoreScreen() {
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.orange} />} contentContainerStyle={{ paddingBottom: 112 }}>
         <View className="px-4 pb-3 pt-2">
           <View className="flex-row items-center justify-between">
-            <View>
+            <View className="flex-1 pr-2">
               <Text className="text-[11px] font-black uppercase tracking-widest" style={{ color: colors.orange }}>Commons market</Text>
-              <Text className="mt-0.5 text-3xl font-black" style={{ color: colors.ink }}>Shop together</Text>
+              <Text className="mt-0.5 text-3xl font-black" style={{ color: colors.ink }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>Shop together</Text>
             </View>
             <View className="flex-row gap-2">
               <TouchableOpacity accessibilityLabel="Shopping cart" onPress={() => router.push('/(authenticated)/cart' as any)} className="relative h-11 w-11 items-center justify-center rounded-2xl border bg-white" style={{ borderColor: colors.line }}>
@@ -133,42 +130,20 @@ export default function StoreScreen() {
           </ScrollView> : null}
         </View>
 
-        <View className="mx-4 overflow-hidden rounded-[28px] p-5" style={{ backgroundColor: colors.hero }}>
-          <View className="flex-row items-start">
-            <View className="h-12 w-12 items-center justify-center rounded-2xl" style={{ backgroundColor: '#F5C46B' }}><Award size={25} color={colors.hero} strokeWidth={2.6} /></View>
-            <View className="ml-3 flex-1"><Text className="text-xl font-black text-white">Fund your commons</Text><Text className="mt-1 text-sm leading-5" style={{ color: '#EADBC7' }}>Carry a supporter badge and earn {coin.symbol} through the same capped contribution policy used across the commons.</Text></View>
-          </View>
-          <View className="mt-4 flex-row items-center rounded-2xl px-3 py-2.5" style={{ backgroundColor: '#503522' }}><CircleDollarSign size={18} color="#F5C46B" /><Text className="ml-2 flex-1 text-xs font-bold" style={{ color: '#F7E7D0' }}>Badges are paid credentials. {coin.symbol} cannot be purchased and actual rewards may be reduced by the 2% cap.</Text></View>
-          {highestBadge ? <View className="mt-3 self-start flex-row items-center rounded-full px-3 py-1.5" style={{ backgroundColor: '#F5C46B' }}><Check size={14} color={colors.hero} /><Text className="ml-1 text-xs font-black" style={{ color: colors.hero }}>Highest badge: {highestBadge.definition.name}</Text></View> : null}
-        </View>
-
-        <View className="mt-5">
-          <View className="mb-3 flex-row items-end justify-between px-4"><View><Text className="text-lg font-black" style={{ color: colors.ink }}>Funding badges</Text><Text className="mt-0.5 text-xs font-semibold" style={{ color: colors.muted }}>One of each tier per member</Text></View>{officialStore ? <TouchableOpacity onPress={() => router.push(`/store-detail?id=${officialStore.id}` as any)}><Text className="text-xs font-black" style={{ color: colors.orange }}>Official shop</Text></TouchableOpacity> : null}</View>
-          {badgeProducts.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}>
-            {badgeProducts.map((product) => {
-              const badge = product.fundingBadge;
-              const owned = !!product.fundingBadgeTier && ownedTiers.has(product.fundingBadgeTier);
-              return <View key={product.id} className="w-56 rounded-3xl border bg-white p-4" style={{ borderColor: owned ? colors.forest : colors.line }}>
-                <View className="h-12 w-12 items-center justify-center rounded-full border-4" style={{ backgroundColor: `${badge?.color ?? colors.orange}18`, borderColor: badge?.color ?? colors.orange }}><Award size={22} color={badge?.color ?? colors.orange} /></View>
-                <Text className="mt-3 text-base font-black" style={{ color: colors.ink }}>{badge?.name ?? product.name}</Text>
-                <Text className="mt-1 text-2xl font-black" style={{ color: badge?.color ?? colors.orange }}>{money(product.priceUSD)}</Text>
-                <Text className="mt-1 text-xs font-semibold" style={{ color: colors.muted }}>Up to {badge?.nominalReward.toLocaleString() ?? 0} {coin.symbol}, before balance caps</Text>
-                <TouchableOpacity accessibilityLabel={owned ? `${product.name} owned` : `Add ${product.name} to cart`} disabled={owned} onPress={() => addProduct(product)} className="mt-4 flex-row items-center justify-center rounded-xl py-2.5" style={{ backgroundColor: owned ? '#E7F3ED' : colors.orange }}>
-                  {owned ? <Check size={16} color={colors.forest} /> : <ShoppingBag size={16} color="#FFFFFF" />}<Text className="ml-1.5 text-xs font-black" style={{ color: owned ? colors.forest : '#FFFFFF' }}>{owned ? 'Owned' : 'Choose badge'}</Text>
-                </TouchableOpacity>
-              </View>;
-            })}
-          </ScrollView> : <View className="mx-4 rounded-2xl border border-dashed bg-white p-4" style={{ borderColor: colors.line }}><Text className="font-black" style={{ color: colors.ink }}>Funding shop is getting ready</Text><Text className="mt-1 text-xs leading-5" style={{ color: colors.muted }}>A commons admin must finish Stripe verification before badges can be purchased.</Text></View>}
-        </View>
-
-        <View className="mx-4 mt-6 flex-row items-center rounded-2xl border bg-white px-3" style={{ borderColor: colors.line }}><Search size={19} color={colors.muted} /><TextInput accessibilityLabel="Search marketplace" value={query} onChangeText={setQuery} placeholder="Search products and member shops" placeholderTextColor="#A6998A" className="h-12 flex-1 px-3 text-sm" style={{ color: colors.ink }} /></View>
+        <View className="mx-4 mt-2 flex-row items-center rounded-2xl border bg-white px-3" style={{ borderColor: colors.line }}><Search size={19} color={colors.muted} /><TextInput accessibilityLabel="Search marketplace" value={query} onChangeText={setQuery} placeholder="Search products and commons shops" placeholderTextColor="#A6998A" className="h-12 flex-1 px-3 text-sm" style={{ color: colors.ink }} /></View>
         <View className="mx-4 mt-3 flex-row rounded-2xl p-1" style={{ backgroundColor: '#EEE3D3' }}>{(['products', 'stores'] as const).map((item) => <TouchableOpacity key={item} accessibilityRole="tab" accessibilityState={{ selected: mode === item }} onPress={() => setMode(item)} className="flex-1 items-center rounded-xl py-2.5" style={{ backgroundColor: mode === item ? '#FFFFFF' : 'transparent' }}><Text className="text-xs font-black capitalize" style={{ color: mode === item ? colors.ink : colors.muted }}>{item}</Text></TouchableOpacity>)}</View>
 
         <View className="mt-5 px-4">
-          <Text className="mb-3 text-lg font-black" style={{ color: colors.ink }}>{mode === 'products' ? 'From member shops' : 'All shops'}</Text>
+          <Text className="mb-3 text-lg font-black" style={{ color: colors.ink }}>{mode === 'products' ? 'Commons shops' : 'All shops'}</Text>
           {mode === 'products' ? filteredProducts.map((product) => <TouchableOpacity key={product.id} onPress={() => router.push(`/store-detail?id=${product.store.id}` as any)} className="mb-3 flex-row rounded-2xl border bg-white p-3" style={{ borderColor: colors.line }}>
             <View className="h-20 w-20 overflow-hidden rounded-xl" style={{ backgroundColor: colors.orangeSoft }}>{product.imageUrl ? <Image source={{ uri: product.imageUrl }} className="h-full w-full" /> : <View className="h-full w-full items-center justify-center"><ShoppingBag size={26} color={colors.orange} /></View>}</View>
-            <View className="ml-3 flex-1"><Text className="font-black" style={{ color: colors.ink }} numberOfLines={1}>{product.name}</Text><Text className="mt-0.5 text-xs font-semibold" style={{ color: colors.muted }} numberOfLines={1}>{product.store.name}</Text><View className="mt-3 flex-row items-center justify-between"><Text className="text-base font-black" style={{ color: colors.orange }}>{money(product.priceUSD)}</Text><TouchableOpacity accessibilityLabel={`Add ${product.name} to cart`} onPress={() => addProduct(product)} className="h-9 w-9 items-center justify-center rounded-xl" style={{ backgroundColor: colors.ink }}><Plus size={18} color="#FFFFFF" /></TouchableOpacity></View></View>
+            <View className="ml-3 flex-1"><Text className="font-black" style={{ color: colors.ink }} numberOfLines={1}>{product.name}</Text><Text className="mt-0.5 text-xs font-semibold" style={{ color: colors.muted }} numberOfLines={1}>{product.store.name}</Text><View className="mt-3 flex-row items-center justify-between"><Text className="text-base font-black" style={{ color: colors.orange }}>{money(product.priceUSD)}</Text><CartControl
+                product={product}
+                owned={!!product.fundingBadgeTier && ownedTiers.has(product.fundingBadgeTier)}
+                quantityInCart={cartItems.find((item) => item.productId === product.id)?.quantity ?? 0}
+                onAdd={() => addProduct(product)}
+                onSetQuantity={(quantity) => updateQuantity(product.id, quantity)}
+              /></View></View>
           </TouchableOpacity>) : filteredStores.map((store) => <TouchableOpacity key={store.id} accessibilityLabel={`Open ${store.name}`} onPress={() => router.push(`/store-detail?id=${store.id}` as any)} className="mb-3 flex-row items-center rounded-2xl border bg-white p-4" style={{ borderColor: colors.line }}>
             <View className="h-14 w-14 items-center justify-center overflow-hidden rounded-2xl" style={{ backgroundColor: colors.orangeSoft }}>{store.imageUrl ? <Image source={{ uri: store.imageUrl }} className="h-full w-full" /> : <Store size={24} color={colors.orange} />}</View>
             <View className="ml-3 flex-1"><View className="flex-row items-center"><Text className="font-black" style={{ color: colors.ink }} numberOfLines={1}>{store.name}</Text>{store.isScVerified ? <BadgeCheck size={15} color={colors.forest} style={{ marginLeft: 5 }} /> : null}</View><Text className="mt-1 text-xs font-semibold" style={{ color: colors.muted }}>{store.productCount} products{store.city ? ` · ${store.city}` : ''}</Text></View><ChevronRight size={18} color={colors.muted} />
@@ -178,4 +153,33 @@ export default function StoreScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+// Shows what's already in the cart right on the product row: a stepper for
+// ordinary items, and an "In cart" tag (with a remove button) for
+// one-per-member funding badges.
+function CartControl({ product, owned, quantityInCart, onAdd, onSetQuantity }: {
+  product: ProductItem;
+  owned: boolean;
+  quantityInCart: number;
+  onAdd: () => void;
+  onSetQuantity: (quantity: number) => void;
+}) {
+  if (owned) {
+    return <View accessibilityLabel={`${product.name} owned`} className="h-9 flex-row items-center rounded-xl px-3" style={{ backgroundColor: '#E7F3ED' }}><Check size={16} color={colors.forest} /><Text className="ml-1 text-xs font-black" style={{ color: colors.forest }}>Owned</Text></View>;
+  }
+  if (quantityInCart === 0) {
+    return <TouchableOpacity accessibilityLabel={`Add ${product.name} to cart`} onPress={onAdd} className="h-9 w-9 items-center justify-center rounded-xl" style={{ backgroundColor: colors.ink }}><Plus size={18} color="#FFFFFF" /></TouchableOpacity>;
+  }
+  if (product.kind === 'FUNDING_BADGE') {
+    return <View className="flex-row items-center gap-2">
+      <TouchableOpacity accessibilityLabel={`Remove ${product.name} from cart`} onPress={() => onSetQuantity(0)} className="h-9 w-9 items-center justify-center rounded-xl border" style={{ borderColor: colors.line, backgroundColor: '#FFFFFF' }}><Minus size={16} color={colors.ink} /></TouchableOpacity>
+      <TouchableOpacity accessibilityLabel={`${product.name} is in your cart`} onPress={() => router.push('/(authenticated)/cart' as any)} className="h-9 flex-row items-center rounded-xl px-3" style={{ backgroundColor: colors.orangeSoft }}><ShoppingCart size={15} color={colors.orange} /><Text className="ml-1.5 text-xs font-black" style={{ color: colors.orange }}>In cart</Text></TouchableOpacity>
+    </View>;
+  }
+  return <View className="h-9 flex-row items-center rounded-xl" style={{ backgroundColor: colors.ink }}>
+    <TouchableOpacity accessibilityLabel={`Remove one ${product.name}`} onPress={() => onSetQuantity(quantityInCart - 1)} className="h-9 w-9 items-center justify-center"><Minus size={16} color="#FFFFFF" /></TouchableOpacity>
+    <Text accessibilityLabel={`${quantityInCart} ${product.name} in cart`} className="min-w-[20px] text-center text-sm font-black text-white">{quantityInCart}</Text>
+    <TouchableOpacity accessibilityLabel={`Add another ${product.name}`} onPress={() => onSetQuantity(quantityInCart + 1)} className="h-9 w-9 items-center justify-center"><Plus size={16} color="#FFFFFF" /></TouchableOpacity>
+  </View>;
 }

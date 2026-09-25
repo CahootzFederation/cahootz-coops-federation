@@ -42,7 +42,10 @@ export function AppBottomNavigation() {
 
   return (
     <View accessibilityRole="tablist" accessibilityLabel="Main navigation" style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-      {destinations.map(({ label, href, icon: Icon }) => {
+      {destinations
+        // The marketplace (cart, checkout, shops) is members-only.
+        .filter(({ label }) => isAuthenticated || label !== 'Shop')
+        .map(({ label, href, icon: Icon }) => {
         const selected = active === label;
         const color = selected ? '#FF6B00' : '#64748B';
         const onPress = () => {

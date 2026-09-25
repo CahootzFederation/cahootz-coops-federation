@@ -173,7 +173,9 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
       const businessId = storeResult?.businessId || storeId;
       const checkoutCoopId: string = storeResult?.coopId || resolveCoopId();
       setStoreCoopId(storeResult?.coopId ?? null);
-      const readinessResult = await fetch(`${API_BASE_URL}/trpc/stripeConnect.getBusinessReadiness?input=${encodeURIComponent(JSON.stringify({ businessId }))}`)
+      const readinessResult = await fetch(`${API_BASE_URL}/trpc/stripeConnect.getBusinessReadiness?input=${encodeURIComponent(JSON.stringify({ businessId }))}`, {
+        headers: createApiHeaders(user.walletAddress),
+      })
         .then(res => res.json())
         .catch(() => null);
 

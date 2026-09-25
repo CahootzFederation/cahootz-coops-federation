@@ -164,7 +164,7 @@ const DRAWER_SECTIONS = [
   // No global "Private Spaces" entry here on purpose — Circles now live
   // under a commons (see the Circles section on /commons/[coopId]), and a
   // standalone drawer link made it look like they existed outside one.
-  { label: 'Commons Stores & Shops', icon: Store, action: '/(tabs)/store' },
+  { label: 'Commons Stores & Shops', icon: Store, action: '/(tabs)/store', requiresAuth: true },
   {
     label: 'Messages & Direct Chat',
     icon: MessageCircle,

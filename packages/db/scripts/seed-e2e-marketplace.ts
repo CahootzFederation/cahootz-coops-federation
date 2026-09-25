@@ -30,12 +30,12 @@ async function main() {
       select: { id: true, businessId: true },
     });
     const badges = [
-      ['SEED_SUPPORTER', 'Seed Supporter', 500],
-      ['GROWTH_SUPPORTER', 'Growth Supporter', 1_000],
-      ['COMMUNITY_BUILDER', 'Community Builder', 5_000],
-      ['COMMONS_PILLAR', 'Commons Pillar', 25_000],
-      ['CORNERSTONE_PARTNER', 'Cornerstone Partner', 100_000],
-      ['LEGACY_FOUNDER', 'Legacy Founder', 500_000],
+      ['SEED_SUPPORTER', 'Seed Supporter', 50],
+      ['GROWTH_SUPPORTER', 'Growth Supporter', 100],
+      ['COMMUNITY_BUILDER', 'Community Builder', 500],
+      ['COMMONS_PILLAR', 'Commons Pillar', 2_500],
+      ['CORNERSTONE_PARTNER', 'Cornerstone Partner', 10_000],
+      ['LEGACY_FOUNDER', 'Legacy Founder', 50_000],
     ] as const;
     await prisma.product.createMany({ data: badges.map(([tier, name, priceUSD]) => ({ storeId: store!.id, name, description: `${name} funding badge`, category: 'FOUNDER_BADGES', kind: 'FUNDING_BADGE', fundingBadgeTier: tier, priceUSD, images: [], trackInventory: false, isActive: true, isFeatured: true })) });
   }

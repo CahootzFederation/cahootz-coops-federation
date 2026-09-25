@@ -11,12 +11,12 @@ export type FundingBadgeDefinition = {
 };
 
 export const FUNDING_BADGES: readonly FundingBadgeDefinition[] = [
-  { tier: 'SEED_SUPPORTER', rank: 1, name: 'Seed Supporter', shortName: 'Seed', priceUSD: 500, nominalReward: 50, color: '#B7791F' },
-  { tier: 'GROWTH_SUPPORTER', rank: 2, name: 'Growth Supporter', shortName: 'Growth', priceUSD: 1_000, nominalReward: 100, color: '#2F855A' },
-  { tier: 'COMMUNITY_BUILDER', rank: 3, name: 'Community Builder', shortName: 'Builder', priceUSD: 5_000, nominalReward: 500, color: '#2B6CB0' },
-  { tier: 'COMMONS_PILLAR', rank: 4, name: 'Commons Pillar', shortName: 'Pillar', priceUSD: 25_000, nominalReward: 2_500, color: '#6B46C1' },
-  { tier: 'CORNERSTONE_PARTNER', rank: 5, name: 'Cornerstone Partner', shortName: 'Cornerstone', priceUSD: 100_000, nominalReward: 10_000, color: '#C05621' },
-  { tier: 'LEGACY_FOUNDER', rank: 6, name: 'Legacy Founder', shortName: 'Legacy', priceUSD: 500_000, nominalReward: 50_000, color: '#975A16' },
+  { tier: 'SEED_SUPPORTER', rank: 1, name: 'Seed Supporter', shortName: 'Seed', priceUSD: 50, nominalReward: 5, color: '#B7791F' },
+  { tier: 'GROWTH_SUPPORTER', rank: 2, name: 'Growth Supporter', shortName: 'Growth', priceUSD: 100, nominalReward: 10, color: '#2F855A' },
+  { tier: 'COMMUNITY_BUILDER', rank: 3, name: 'Community Builder', shortName: 'Builder', priceUSD: 500, nominalReward: 50, color: '#2B6CB0' },
+  { tier: 'COMMONS_PILLAR', rank: 4, name: 'Commons Pillar', shortName: 'Pillar', priceUSD: 2_500, nominalReward: 250, color: '#6B46C1' },
+  { tier: 'CORNERSTONE_PARTNER', rank: 5, name: 'Cornerstone Partner', shortName: 'Cornerstone', priceUSD: 10_000, nominalReward: 1_000, color: '#C05621' },
+  { tier: 'LEGACY_FOUNDER', rank: 6, name: 'Legacy Founder', shortName: 'Legacy', priceUSD: 50_000, nominalReward: 5_000, color: '#975A16' },
 ] as const;
 
 export const FUNDING_BADGE_BY_TIER = new Map(
@@ -43,6 +43,16 @@ export async function ensureCommonsFundingStore(
     update: { label: 'Funding Badges', isAdminOnly: true, isActive: true, sortOrder: 100 },
     create: { key: 'FOUNDER_BADGES', label: 'Funding Badges', isAdminOnly: true, isActive: true, sortOrder: 100 },
   });
+
+  // Each commons names its own coin; "FakeCoin" is the schema default, i.e. unset.
+  const config = await db.coopConfig.findFirst({
+    where: { coopId: input.coopId, isActive: true },
+    orderBy: { version: 'desc' },
+    select: { scTokenName: true },
+  });
+  const coinName = config?.scTokenName && config.scTokenName !== 'FakeCoin'
+    ? config.scTokenName
+    : 'your commons Soul Coin';
 
   let store = await db.store.findFirst({
     where: { coopId: input.coopId, kind: 'OFFICIAL_COMMONS', deletedAt: null },
@@ -87,7 +97,7 @@ export async function ensureCommonsFundingStore(
     });
     const data = {
       name: badge.name,
-      description: `Fund ${input.coopName} with a $${badge.priceUSD.toLocaleString('en-US')} contribution and receive the ${badge.name} badge. SoulCoin rewards follow the commons' normal capped contribution policy.`,
+      description: `Fund ${input.coopName} with a $${badge.priceUSD.toLocaleString('en-US')} contribution and receive the ${badge.name} badge. Rewards in ${coinName} follow the commons' normal capped contribution policy.`,
       category: 'FOUNDER_BADGES',
       kind: 'FUNDING_BADGE',
       fundingBadgeTier: badge.tier,

@@ -45,6 +45,7 @@ async function main() {
   const stripeAccountId = process.env.E2E_STRIPE_CONNECTED_ACCOUNT_ID;
   if (!stripeAccountId) {
     console.log('E2E Stripe Connect account not configured; payment journey will be skipped.');
+    await ensurePlaceholderFundingSettlement(store?.businessId, owner.id);
     return;
   }
   if (!stripeAccountId.startsWith('acct_')) {
@@ -88,6 +89,38 @@ async function main() {
     },
     update: { value: settlementAccount.id, updatedBy: owner.id },
   });
+}
+
+/**
+ * Funding shops are only listed once the shared funding settlement account can
+ * accept charges. Without a real Stripe test account (CI), point that setting at
+ * a placeholder so the Shop still lists the badges; listing only reads the
+ * cached capability flags. Never replaces a settlement account that's already
+ * configured, such as a developer's real one.
+ */
+async function ensurePlaceholderFundingSettlement(businessId: string | undefined, ownerId: string) {
+  const key = 'marketplace.fundingSettlementStripeAccountId';
+  if (await prisma.platformConfig.findUnique({ where: { key } })) return;
+  if (!businessId) throw new Error('Official Cahootz funding shop was not provisioned');
+
+  const placeholder = await prisma.stripeAccount.upsert({
+    where: { businessId },
+    update: {},
+    create: {
+      businessId,
+      stripeAccountId: 'acct_e2e_funding_placeholder',
+      accountType: 'express',
+      chargesEnabled: true,
+      payoutsEnabled: true,
+      detailsSubmitted: true,
+      verificationStatus: 'VERIFIED',
+      onboardingStatus: 'PAYOUTS_ENABLED',
+      requirementsCurrentlyDue: [],
+      requirementsEventuallyDue: [],
+      requirementsPastDue: [],
+    },
+  });
+  await prisma.platformConfig.create({ data: { key, value: placeholder.id, updatedBy: ownerId } });
 }
 
 /**

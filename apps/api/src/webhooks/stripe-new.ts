@@ -20,8 +20,10 @@ import {
   processSuccessfulPayment,
   processFailedPayment,
 } from '@repo/trpc/services/payment-orchestration-service';
-import { recordFeeCollection } from '@repo/trpc/services/treasury-ledger-service';
+import { recordFeeCollection, recordRefund } from '@repo/trpc/services/treasury-ledger-service';
 import { evaluateAndMintCommerceReward } from '@repo/trpc/services/reward-policy-service';
+import { burnSC } from '@repo/trpc/services/sc-token-service';
+import { grantFundingBadgesForTransaction } from '@repo/trpc/services/funding-badge-service';
 import { sendOrderCompletedNotification } from '@repo/trpc/services/slack-notification-service';
 import { sendOrderEmails } from '@repo/trpc/services/email-service';
 import { db } from '@repo/db';
@@ -169,6 +171,8 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
     console.error(`❌ [Stripe Webhook] Transaction not found: ${paymentResult.transactionId}`);
     return;
   }
+
+  await grantFundingBadgesForTransaction(db, transaction.id);
 
   const transactionMeta = transaction.metadata as Record<string, unknown> | null;
   const store = transaction.business.store;
@@ -358,6 +362,10 @@ async function handleChargeRefunded(event: Stripe.Event) {
   // Find transaction by charge ID
   const transaction = await db.commerceTransaction.findFirst({
     where: { stripeChargeId: charge.id },
+    include: {
+      scMintEvents: { where: { status: 'COMPLETED' } },
+      fundingBadgeEntitlements: true,
+    },
   });
 
   if (!transaction) {
@@ -365,16 +373,58 @@ async function handleChargeRefunded(event: Stripe.Event) {
     return;
   }
 
-  // Update transaction status
-  await db.commerceTransaction.update({
-    where: { id: transaction.id },
-    data: {
-      status: charge.amount_refunded === charge.amount ? 'REFUNDED' : 'PARTIALLY_REFUNDED',
-    },
-  });
+  const refundedAmount = charge.amount_refunded / 100;
+  const incrementalRefund = Math.max(0, refundedAmount - transaction.refundedAmount);
+  if (incrementalRefund === 0) return;
+  const isFullRefund = charge.amount_refunded === charge.amount;
+  const incrementalRatio = incrementalRefund / (charge.amount / 100);
 
-  // TODO: Record treasury ledger reversal
-  // TODO: Consider SC burn for refunded rewards (future enhancement)
+  await db.$transaction([
+    db.commerceTransaction.update({
+      where: { id: transaction.id },
+      data: {
+        refundedAmount,
+        status: isFullRefund ? 'REFUNDED' : 'PARTIALLY_REFUNDED',
+      },
+    }),
+    db.fundingBadgeEntitlement.updateMany({
+      where: { commerceTransactionId: transaction.id },
+      data: isFullRefund
+        ? { status: 'REVOKED', revokedAt: new Date(), suspendedAt: null }
+        : { status: 'SUSPENDED', suspendedAt: new Date(), revokedAt: null },
+    }),
+  ]);
+
+  const treasuryReversal = transaction.treasuryFeeAmount * incrementalRatio;
+  if (treasuryReversal > 0) {
+    await recordRefund({
+      sourceTransactionId: transaction.id,
+      amount: treasuryReversal,
+      currency: transaction.currency,
+      reason: isFullRefund ? 'Stripe payment fully refunded' : 'Stripe payment partially refunded',
+      idempotencyKey: `${charge.id}:${charge.amount_refunded}`,
+      metadata: { stripeChargeId: charge.id, refundedAmount, incrementalRefund },
+    });
+  }
+
+  const burnResults = await Promise.allSettled(transaction.scMintEvents.flatMap((mintEvent) => {
+    if (!mintEvent.actualAmount || mintEvent.actualAmount <= 0) return [];
+    return [burnSC({
+      idempotencyKey: `refund-${charge.id}-${charge.amount_refunded}-${mintEvent.id}`,
+      userId: mintEvent.userId,
+      walletAddress: mintEvent.walletAddress,
+      amount: mintEvent.actualAmount * incrementalRatio,
+      coopId: transaction.coopId,
+      reason: 'REFUND_REVERSAL',
+      authorizedBy: 'stripe-webhook',
+      metadata: { commerceTransactionId: transaction.id, stripeChargeId: charge.id },
+    })];
+  }));
+  burnResults.forEach((result) => {
+    if (result.status === 'rejected') {
+      console.error('⚠️ [MISMATCH] Refund recorded but SoulCoin reversal needs reconciliation:', result.reason);
+    }
+  });
 
   console.log(`✅ [Stripe Webhook] Refund recorded for transaction: ${transaction.id}`);
 }
@@ -423,6 +473,18 @@ async function handleAccountUpdated(event: Stripe.Event) {
       },
     },
   });
+
+  const store = await db.store.findUnique({
+    where: { businessId: stripeAccount.businessId },
+    include: { application: true },
+  });
+  if (store) {
+    const reviewApproved = store.kind === 'OFFICIAL_COMMONS' || store.application?.status === 'APPROVED';
+    await db.store.update({
+      where: { id: store.id },
+      data: { status: account.charges_enabled && reviewApproved ? 'APPROVED' : 'PENDING' },
+    });
+  }
 
   console.log(`✅ [Stripe Webhook] Account status updated: ${account.id}`);
 }

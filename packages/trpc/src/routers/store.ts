@@ -13,6 +13,8 @@ import { mirrorProductImages, parseDelimitedProductRows } from "../services/prod
 import { sendOrderEmails } from "../services/email-service.js";
 import { sendOrderCompletedNotification } from "../services/slack-notification-service.js";
 import { env } from "../env.js";
+import { FUNDING_BADGE_BY_TIER, FUNDING_BADGES, highestFundingBadge } from "../services/funding-badge-service.js";
+import { resolveStoreSettlementAccount } from "../services/funding-settlement-service.js";
 
 // Category validation - now accepts any string since categories are dynamic
 const StoreCategoryEnum = z.string().min(1).max(100);
@@ -124,9 +126,13 @@ export const storeRouter = router({
       // accept charges. Stores still onboarding are hidden so customers don't
       // hit a "this store can't accept payments yet" wall at checkout.
       // SC verification is never a visibility filter; it's just a badge.
-      const filteredStores = stores.filter((store) => {
-        return store.business?.stripeAccount?.chargesEnabled === true;
-      });
+      const storesWithSettlement = await Promise.all(stores.map(async (store) => ({
+        store,
+        settlementAccount: await resolveStoreSettlementAccount(store, context.db) as any,
+      })));
+      const filteredStores = storesWithSettlement
+        .filter(({ settlementAccount }) => settlementAccount?.chargesEnabled === true)
+        .map(({ store }) => store);
 
       let nextCursor: string | undefined;
       if (filteredStores.length > limit) {
@@ -145,6 +151,9 @@ export const storeRouter = router({
           acceptsUC: store.acceptsUC,
           ucDiscountPercent: store.ucDiscountPercent,
           isFeatured: store.isFeatured,
+          kind: store.kind,
+          paymentReady: true,
+          usesSharedFundingAccount: store.kind === 'OFFICIAL_COMMONS',
           rating: store.rating,
           reviewCount: store.reviewCount,
           productCount: store._count.products,
@@ -194,13 +203,15 @@ export const storeRouter = router({
         });
       }
 
+      const settlementAccount = await resolveStoreSettlementAccount(store, context.db) as any;
+
       // Only show approved stores whose Stripe account is fully ready to
       // accept charges. Stores still onboarding are hidden from the public
       // surface so customers don't land on a store they can't buy from.
       if (
         store.status !== "APPROVED" ||
         store.deletedAt ||
-        !store.business?.stripeAccount?.chargesEnabled
+        !settlementAccount?.chargesEnabled
       ) {
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -210,7 +221,9 @@ export const storeRouter = router({
 
       return {
         id: store.id,
+        coopId: store.coopId,
         name: store.name,
+        kind: store.kind,
         description: store.description,
         category: store.category,
         imageUrl: store.imageUrl,
@@ -232,6 +245,8 @@ export const storeRouter = router({
         productCount: store._count.products,
         owner: store.owner,
         businessId: store.businessId,
+        paymentReady: true,
+        usesSharedFundingAccount: store.kind === 'OFFICIAL_COMMONS',
       };
     }),
 
@@ -258,11 +273,6 @@ export const storeRouter = router({
           status: "APPROVED",
           deletedAt: null,
           ...(coopId && { coopId }),
-          business: {
-            stripeAccount: {
-              chargesEnabled: true,
-            },
-          },
         },
       };
 
@@ -292,19 +302,33 @@ export const storeRouter = router({
               isScVerified: true,
               acceptsUC: true,
               ucDiscountPercent: true,
+              kind: true,
+              business: {
+                select: {
+                  stripeAccount: { select: { id: true, chargesEnabled: true } },
+                },
+              },
             },
           },
         },
       });
 
+      const productsWithSettlement = await Promise.all(products.map(async (product) => ({
+        product,
+        settlementAccount: await resolveStoreSettlementAccount(product.store, context.db) as any,
+      })));
+      const readyProducts = productsWithSettlement
+        .filter(({ settlementAccount }) => settlementAccount?.chargesEnabled === true)
+        .map(({ product }) => product);
+
       let nextCursor: string | undefined;
-      if (products.length > limit) {
-        const nextItem = products.pop();
+      if (readyProducts.length > limit) {
+        const nextItem = readyProducts.pop();
         nextCursor = nextItem?.id;
       }
 
       return {
-        products: products.map((product) => ({
+        products: readyProducts.map((product) => ({
           id: product.id,
           name: product.name,
           description: product.description,
@@ -315,7 +339,19 @@ export const storeRouter = router({
           ucDiscountPrice: product.ucDiscountPrice,
           quantity: product.trackInventory ? product.quantity : null,
           isFeatured: product.isFeatured,
-          store: product.store,
+          kind: product.kind,
+          fundingBadgeTier: product.fundingBadgeTier,
+          fundingBadge: product.fundingBadgeTier ? FUNDING_BADGE_BY_TIER.get(product.fundingBadgeTier) : null,
+          store: {
+            id: product.store.id,
+            name: product.store.name,
+            isScVerified: product.store.isScVerified,
+            acceptsUC: product.store.acceptsUC,
+            ucDiscountPercent: product.store.ucDiscountPercent,
+            kind: product.store.kind,
+            paymentReady: true,
+            usesSharedFundingAccount: product.store.kind === 'OFFICIAL_COMMONS',
+          },
         })),
         nextCursor,
       };
@@ -341,6 +377,7 @@ export const storeRouter = router({
               isScVerified: true,
               acceptsUC: true,
               ucDiscountPercent: true,
+              kind: true,
               status: true,
               deletedAt: true,
               business: {
@@ -357,13 +394,17 @@ export const storeRouter = router({
         !product ||
         !product.isActive ||
         product.store.status !== "APPROVED" ||
-        product.store.deletedAt ||
-        !product.store.business?.stripeAccount?.chargesEnabled
+        product.store.deletedAt
       ) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Product not found",
         });
+      }
+
+      const settlementAccount = await resolveStoreSettlementAccount(product.store, context.db) as any;
+      if (!settlementAccount?.chargesEnabled) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Product not found' });
       }
 
       return {
@@ -379,11 +420,15 @@ export const storeRouter = router({
         trackInventory: product.trackInventory,
         allowBackorder: product.allowBackorder,
         isFeatured: product.isFeatured,
+        kind: product.kind,
+        fundingBadgeTier: product.fundingBadgeTier,
+        fundingBadge: product.fundingBadgeTier ? FUNDING_BADGE_BY_TIER.get(product.fundingBadgeTier) : null,
         sourceUrl: product.sourceUrl,
         totalSold: product.totalSold,
         store: {
           id: product.store.id,
           name: product.store.name,
+          kind: product.store.kind,
           isScVerified: product.store.isScVerified,
           acceptsUC: product.store.acceptsUC,
           ucDiscountPercent: product.store.ucDiscountPercent,
@@ -417,7 +462,7 @@ export const storeRouter = router({
       }
 
       const store = await context.db.store.findFirst({
-        where: { ownerId: user.id },
+        where: { ownerId: user.id, coopId: requireCoopId(ctx), kind: 'MEMBER', deletedAt: null },
         include: {
           application: true,
           business: {
@@ -507,7 +552,7 @@ export const storeRouter = router({
       }
 
       const stores = await context.db.store.findMany({
-        where: { ownerId: user.id },
+        where: { ownerId: user.id, coopId: requireCoopId(ctx), kind: 'MEMBER', deletedAt: null },
         include: {
           application: true,
           business: {
@@ -571,6 +616,89 @@ export const storeRouter = router({
       }));
     }),
 
+  /** Funding badges owned by the signed-in member in the selected commons. */
+  getMyFundingBadges: authenticatedProcedure
+    .query(async ({ ctx }) => {
+      const context = ctx as Context;
+      const { walletAddress } = ctx as AuthenticatedContext;
+      const coopId = requireCoopId(ctx);
+      const user = await context.db.user.findFirst({
+        where: {
+          OR: [
+            { walletAddress: { equals: walletAddress, mode: 'insensitive' } },
+            { wallets: { some: { address: { equals: walletAddress, mode: 'insensitive' } } } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+
+      const entitlements = await context.db.fundingBadgeEntitlement.findMany({
+        where: { userId: user.id, coopId },
+        orderBy: { awardedAt: 'desc' },
+      });
+      const active = entitlements.filter((badge) => badge.status === 'ACTIVE');
+      const highest = highestFundingBadge(active);
+      return {
+        catalog: FUNDING_BADGES,
+        badges: entitlements.map((badge) => ({
+          id: badge.id,
+          coopId: badge.coopId,
+          tier: badge.tier,
+          status: badge.status,
+          awardedAt: badge.awardedAt,
+          suspendedAt: badge.suspendedAt,
+          revokedAt: badge.revokedAt,
+          definition: FUNDING_BADGE_BY_TIER.get(badge.tier)!,
+        })),
+        highest: highest ? {
+          id: highest.id,
+          coopId: highest.coopId,
+          tier: highest.tier,
+          status: highest.status,
+          awardedAt: highest.awardedAt,
+          definition: FUNDING_BADGE_BY_TIER.get(highest.tier)!,
+        } : null,
+      };
+    }),
+
+  /** Complete badge history for the signed-in member, grouped by commons. */
+  getMyFundingBadgeHistory: authenticatedProcedure
+    .query(async ({ ctx }) => {
+      const context = ctx as Context;
+      const { walletAddress } = ctx as AuthenticatedContext;
+      const user = await context.db.user.findFirst({
+        where: {
+          OR: [
+            { walletAddress: { equals: walletAddress, mode: 'insensitive' } },
+            { wallets: { some: { address: { equals: walletAddress, mode: 'insensitive' } } } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
+      const badges = await context.db.fundingBadgeEntitlement.findMany({
+        where: { userId: user.id },
+        orderBy: [{ coopId: 'asc' }, { awardedAt: 'desc' }],
+      });
+      const configs = await context.db.coopConfig.findMany({
+        where: { coopId: { in: [...new Set(badges.map((badge) => badge.coopId))] }, isActive: true },
+        select: { coopId: true, name: true },
+      });
+      const names = new Map(configs.map((config) => [config.coopId, config.name ?? config.coopId]));
+      return badges.map((badge) => ({
+        id: badge.id,
+        coopId: badge.coopId,
+        tier: badge.tier,
+        status: badge.status,
+        awardedAt: badge.awardedAt,
+        suspendedAt: badge.suspendedAt,
+        revokedAt: badge.revokedAt,
+        commonsName: names.get(badge.coopId) ?? badge.coopId,
+        definition: FUNDING_BADGE_BY_TIER.get(badge.tier)!,
+      }));
+    }),
+
   /**
    * Apply to become a store
    */
@@ -622,7 +750,11 @@ export const storeRouter = router({
       // Find user by wallet address
       const user = await context.db.user.findUnique({
         where: { walletAddress },
-        select: { id: true, status: true },
+        select: {
+          id: true,
+          status: true,
+          memberships: { where: { coopId }, select: { status: true } },
+        },
       });
 
       if (!user) {
@@ -639,7 +771,23 @@ export const storeRouter = router({
         });
       }
 
-      // Allow users to have multiple stores - no restriction
+      if (user.memberships[0]?.status !== 'ACTIVE') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You must be an active member of this commons to open a shop',
+        });
+      }
+
+      const existingStore = await context.db.store.findFirst({
+        where: { ownerId: user.id, coopId, kind: 'MEMBER', deletedAt: null },
+        select: { id: true },
+      });
+      if (existingStore) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: 'You already have a shop in this commons',
+        });
+      }
 
       // Create store and application in a transaction
       const store = await context.db.$transaction(async (tx) => {
@@ -648,6 +796,7 @@ export const storeRouter = router({
           data: {
             ownerId: user.id,
             coopId,
+            kind: 'MEMBER',
             name: input.storeName,
             description: input.storeDescription,
             category: input.category,
@@ -850,6 +999,13 @@ export const storeRouter = router({
         });
       }
 
+      if (store.kind === 'OFFICIAL_COMMONS') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'The official funding catalog is managed by the commons',
+        });
+      }
+
       if (store.status !== "APPROVED" || store.deletedAt) {
         throw new TRPCError({
           code: "FORBIDDEN",
@@ -937,7 +1093,7 @@ export const storeRouter = router({
         where: { id: input.productId },
         include: {
           store: {
-            select: { ownerId: true },
+            select: { ownerId: true, kind: true },
           },
         },
       });
@@ -946,6 +1102,14 @@ export const storeRouter = router({
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Product not found or you don't own this product",
+        });
+      }
+
+
+      if (product.store.kind === 'OFFICIAL_COMMONS' || product.kind === 'FUNDING_BADGE') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Funding badge products cannot be edited here',
         });
       }
 
@@ -997,7 +1161,7 @@ export const storeRouter = router({
         where: { id: input.productId },
         include: {
           store: {
-            select: { ownerId: true },
+            select: { ownerId: true, kind: true },
           },
         },
       });
@@ -1006,6 +1170,14 @@ export const storeRouter = router({
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Product not found or you don't own this product",
+        });
+      }
+
+
+      if (product.store.kind === 'OFFICIAL_COMMONS' || product.kind === 'FUNDING_BADGE') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Funding badge products cannot be deleted here',
         });
       }
 
@@ -1045,7 +1217,11 @@ export const storeRouter = router({
       }
 
       const stores = await context.db.store.findMany({
-        where: status ? { application: { status } } : {},
+        where: {
+          coopId: requireCoopId(ctx),
+          kind: 'MEMBER',
+          ...(status ? { application: { status } } : {}),
+        },
         take: limit + 1,
         cursor: cursor ? { id: cursor } : undefined,
         orderBy: { createdAt: "desc" },
@@ -1102,7 +1278,7 @@ export const storeRouter = router({
 
       const store = await db.store.findUnique({
         where: { id: input.storeId },
-        include: { application: true },
+        include: { application: true, business: { include: { stripeAccount: true } } },
       });
 
       if (!store || !store.application) {
@@ -1112,11 +1288,17 @@ export const storeRouter = router({
         });
       }
 
+      if (store.coopId !== requireCoopId(ctx)) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Store belongs to another commons' });
+      }
+
+      const stripeReady = store.business?.stripeAccount?.chargesEnabled === true;
+
       await db.$transaction([
         db.store.update({
           where: { id: input.storeId },
           data: {
-            status: "APPROVED",
+            status: stripeReady ? "APPROVED" : "PENDING",
             deletedAt: null,
             deletedBy: null,
             isScVerified: input.grantScVerification,
@@ -1160,6 +1342,10 @@ export const storeRouter = router({
           code: "NOT_FOUND",
           message: "Store application not found",
         });
+      }
+
+      if (store.coopId !== requireCoopId(ctx)) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Store belongs to another commons' });
       }
 
       await context.db.$transaction([

@@ -12,6 +12,98 @@ import { calculateCheckoutPricing } from '../services/checkout-pricing-service.j
 import { validateRewardEligibility } from '../services/reward-policy-service.js';
 import { getUserWalletInfo } from '../services/wallet-service.js';
 import { AuthenticatedContext, CoopScopedContext } from '../context.js';
+import { TRPCError } from '@trpc/server';
+import { calculateSCReward } from '../services/reward-policy-service.js';
+import { resolveStoreSettlementAccount } from '../services/funding-settlement-service.js';
+
+const checkoutItemsSchema = z.array(z.object({
+  productId: z.string().min(1),
+  quantity: z.number().int().min(1).max(100),
+})).min(1).max(50);
+
+async function resolveCheckoutItems(input: {
+  coopId: string;
+  items: Array<{ productId: string; quantity: number }>;
+  customerId?: string;
+}) {
+  const uniqueIds = [...new Set(input.items.map((item) => item.productId))];
+  if (uniqueIds.length !== input.items.length) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Each product may appear only once' });
+  }
+  const products = await db.product.findMany({
+    where: { id: { in: uniqueIds }, isActive: true },
+    include: {
+      store: { include: { business: { include: { stripeAccount: true } }, application: true } },
+    },
+  });
+  if (products.length !== uniqueIds.length) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'One or more products are unavailable' });
+  }
+  const store = products[0]!.store;
+  const settlementAccount = await resolveStoreSettlementAccount(store, db) as any;
+  if (
+    products.some((product) => product.storeId !== store.id) ||
+    store.coopId !== input.coopId ||
+    store.status !== 'APPROVED' ||
+    store.deletedAt ||
+    !store.business ||
+    !settlementAccount?.chargesEnabled
+  ) {
+    throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'This shop is not ready for checkout' });
+  }
+
+  const normalizedItems = input.items.map((item) => {
+    const product = products.find((candidate) => candidate.id === item.productId)!;
+    if (product.trackInventory && product.quantity < item.quantity && !product.allowBackorder) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: `${product.name} does not have enough inventory` });
+    }
+    if (product.kind === 'FUNDING_BADGE' && (item.quantity !== 1 || store.kind !== 'OFFICIAL_COMMONS')) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Funding badges must be purchased one at a time from the official shop' });
+    }
+    return {
+      productId: product.id,
+      name: product.name,
+      quantity: item.quantity,
+      priceUSD: product.priceUSD,
+      kind: product.kind,
+      fundingBadgeTier: product.fundingBadgeTier,
+    };
+  });
+
+  const badgeTiers = normalizedItems.flatMap((item) => item.fundingBadgeTier ? [item.fundingBadgeTier] : []);
+  if (badgeTiers.length && normalizedItems.length !== 1) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Funding badges must be checked out one tier at a time',
+    });
+  }
+  if (input.customerId && badgeTiers.length) {
+    const membership = await db.userCoopMembership.findUnique({
+      where: { userId_coopId: { userId: input.customerId, coopId: input.coopId } },
+      select: { status: true },
+    });
+    if (membership?.status !== 'ACTIVE') {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Funding badges are available to active commons members' });
+    }
+    const owned = await db.fundingBadgeEntitlement.findFirst({
+      where: { userId: input.customerId, coopId: input.coopId, tier: { in: badgeTiers } },
+      select: { tier: true },
+    });
+    if (owned) {
+      throw new TRPCError({ code: 'CONFLICT', message: `You already own the ${owned.tier.toLowerCase().replaceAll('_', ' ')} badge` });
+    }
+  }
+
+  return {
+    businessId: store.business!.id,
+    settlementStripeAccountRecordId: settlementAccount.id as string,
+    listedAmountCents: normalizedItems.reduce(
+      (sum, item) => sum + Math.round(item.priceUSD * 100) * item.quantity,
+      0,
+    ),
+    items: normalizedItems,
+  };
+}
 
 async function getUserForWallet(walletAddress: string) {
   const user = await db.user.findFirst({
@@ -74,20 +166,22 @@ export const commerceTransactionsRouter = router({
    */
   previewCheckout: authenticatedProcedure
     .input(z.object({
-      userId: z.string(),
-      businessId: z.string(),
-      listedAmountCents: z.number().int().positive(),
+      items: checkoutItemsSchema,
       currency: z.string().default('USD'),
-      coopId: z.string().default('???'),
+      coopId: z.string().min(1),
     }))
     .query(async ({ input, ctx }) => {
       const context = ctx as AuthenticatedContext;
-      const { userId, businessId, listedAmountCents, currency, coopId } = input;
+      const { currency, coopId } = input;
       const authenticatedUser = await getUserForWallet(context.walletAddress);
 
-      if (!authenticatedUser || authenticatedUser.id !== userId) {
-        throw new Error('Authenticated wallet does not match checkout user');
+      if (!authenticatedUser) {
+        throw new Error('Authenticated checkout user not found');
       }
+
+      const userId = authenticatedUser.id;
+      const resolved = await resolveCheckoutItems({ coopId, items: input.items, customerId: userId });
+      const { businessId, listedAmountCents, settlementStripeAccountRecordId } = resolved;
 
       // Get business and check eligibility
       const business = await db.business.findUnique({
@@ -151,6 +245,7 @@ export const commerceTransactionsRouter = router({
         customerReward: {
           eligible: eligibility.customerEligible,
           estimatedAmount: eligibility.customerEstimatedReward,
+          nominalAmount: calculateSCReward(listedAmountCents / 100),
           reason: eligibility.customerReason,
         },
         merchantReward: {
@@ -158,7 +253,8 @@ export const commerceTransactionsRouter = router({
           estimatedAmount: eligibility.merchantEstimatedReward,
           reason: eligibility.merchantReason,
         },
-        businessEligible: !!business.stripeAccount?.chargesEnabled,
+        businessEligible: true,
+        settlementReady: true,
       };
     }),
 
@@ -172,13 +268,12 @@ export const commerceTransactionsRouter = router({
       guestEmail: z.string().email().optional(),
       guestName: z.string().optional(),
       coopId: z.string(),
-      businessId: z.string(),
-      listedAmountCents: z.number().int().positive(),
+      items: checkoutItemsSchema,
       currency: z.string().default('USD'),
       metadata: z.record(z.unknown()).optional(),
     }))
     .mutation(async ({ input }) => {
-      const { userId, guestEmail, guestName, coopId, businessId, listedAmountCents, currency, metadata } = input;
+      const { userId, guestEmail, guestName, coopId, currency, metadata } = input;
       if (userId) {
         throw new Error('Public checkout does not support logged-in purchases yet');
       }
@@ -210,15 +305,19 @@ export const commerceTransactionsRouter = router({
         throw new Error('Either userId or guestEmail must be provided');
       }
 
+      const resolved = await resolveCheckoutItems({ coopId, items: input.items, customerId });
+
       const result = await createCommerceTransaction({
         customerId,
-        businessId,
-        listedAmountCents,
+        businessId: resolved.businessId,
+        settlementStripeAccountRecordId: resolved.settlementStripeAccountRecordId,
+        listedAmountCents: resolved.listedAmountCents,
         coopId,
         applyTreasuryFee: isLoggedInCheckout,
         currency,
         metadata: {
           ...metadata,
+          items: resolved.items,
           isGuestCheckout: !isLoggedInCheckout,
           guestEmail,
           guestName,
@@ -241,8 +340,7 @@ export const commerceTransactionsRouter = router({
   createMemberCheckout: authenticatedProcedure
     .input(z.object({
       coopId: z.string(),
-      businessId: z.string(),
-      listedAmountCents: z.number().int().positive(),
+      items: checkoutItemsSchema,
       currency: z.string().default('USD'),
       paymentUi: z.enum(['payment_intent', 'hosted_checkout']).default('payment_intent'),
       successUrl: z.string().optional(),
@@ -251,16 +349,19 @@ export const commerceTransactionsRouter = router({
     }))
     .mutation(async ({ input, ctx }) => {
       const context = ctx as AuthenticatedContext;
-      const { coopId, businessId, listedAmountCents, currency, metadata, paymentUi, successUrl, cancelUrl } = input;
+      const { coopId, currency, metadata, paymentUi, successUrl, cancelUrl } = input;
 
       const user = await getUserForWallet(context.walletAddress);
       if (!user) {
         throw new Error('Signed-in checkout user not found');
       }
+      const resolved = await resolveCheckoutItems({ coopId, items: input.items, customerId: user.id });
+      const { businessId, listedAmountCents, settlementStripeAccountRecordId } = resolved;
       const membershipStatus = await getCoopMembershipStatus(user.id, coopId);
       const applyTreasuryFee = membershipStatus === 'ACTIVE';
       const checkoutMetadata = {
         ...metadata,
+        items: resolved.items,
         isGuestCheckout: false,
         checkoutMode: applyTreasuryFee ? 'COOP_MEMBER' : 'SIGNED_IN_NON_MEMBER',
       };
@@ -273,6 +374,7 @@ export const commerceTransactionsRouter = router({
         const result = await createHostedCommerceCheckoutSession({
           customerId: user.id,
           businessId,
+          settlementStripeAccountRecordId,
           listedAmountCents,
           coopId,
           applyTreasuryFee,
@@ -299,6 +401,7 @@ export const commerceTransactionsRouter = router({
       const result = await createCommerceTransaction({
         customerId: user.id,
         businessId,
+        settlementStripeAccountRecordId,
         listedAmountCents,
         coopId,
         applyTreasuryFee,
@@ -328,7 +431,11 @@ export const commerceTransactionsRouter = router({
       userId: z.string(),
       transactionId: z.string(),
     }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
+      const authenticatedUser = await getUserForWallet((ctx as AuthenticatedContext).walletAddress);
+      if (!authenticatedUser || authenticatedUser.id !== input.userId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Unauthorized' });
+      }
       const transaction = await db.commerceTransaction.findUnique({
         where: { id: input.transactionId },
         include: {
@@ -404,10 +511,31 @@ export const commerceTransactionsRouter = router({
       limit: z.number().default(50),
       offset: z.number().default(0),
     }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const { status, businessId, customerId, limit, offset } = input;
+      const authenticatedUser = await getUserForWallet((ctx as AuthenticatedContext).walletAddress);
+      if (!authenticatedUser || authenticatedUser.id !== input.userId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Unauthorized' });
+      }
+      const ownedBusinesses = await db.business.findMany({
+        where: { ownerId: authenticatedUser.id },
+        select: { id: true },
+      });
+      const ownedBusinessIds = ownedBusinesses.map((business) => business.id);
 
-      const where: any = {};
+      if (businessId && !ownedBusinessIds.includes(businessId)) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Unauthorized business' });
+      }
+      if (customerId && customerId !== authenticatedUser.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Unauthorized customer' });
+      }
+
+      const where: any = {
+        OR: [
+          { customerId: authenticatedUser.id },
+          ...(ownedBusinessIds.length ? [{ businessId: { in: ownedBusinessIds } }] : []),
+        ],
+      };
       
       if (status) {
         where.status = status;

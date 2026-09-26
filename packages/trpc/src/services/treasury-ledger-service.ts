@@ -88,6 +88,7 @@ export async function recordRefund(params: {
   amount: number;
   currency: string;
   reason: string;
+  idempotencyKey?: string;
   metadata?: Record<string, unknown>;
 }): Promise<{
   id: string;
@@ -95,17 +96,22 @@ export async function recordRefund(params: {
   amount: number;
   occurredAt: Date;
 }> {
-  const { sourceTransactionId, amount, currency, reason, metadata } = params;
+  const { sourceTransactionId, amount, currency, reason, idempotencyKey, metadata } = params;
 
   console.log(`💸 [Treasury Ledger] Recording refund: $${amount} for transaction ${sourceTransactionId}`);
 
   // Check if already recorded (idempotency)
-  const existing = await db.treasuryLedgerEntry.findFirst({
-    where: {
-      sourceTransactionId,
-      sourceTransactionType: 'REFUND',
-    },
-  });
+  const existing = idempotencyKey
+    ? await db.treasuryLedgerEntry.findFirst({
+        where: {
+          sourceTransactionId,
+          sourceTransactionType: 'REFUND',
+          metadata: { path: ['idempotencyKey'], equals: idempotencyKey },
+        },
+      })
+    : await db.treasuryLedgerEntry.findFirst({
+        where: { sourceTransactionId, sourceTransactionType: 'REFUND' },
+      });
 
   if (existing) {
     console.log(`⚠️ [Treasury Ledger] Refund already recorded: ${existing.id}`);
@@ -129,6 +135,7 @@ export async function recordRefund(params: {
       direction: 'DEBIT', // Decreases treasury balance
       description: `Refund: ${reason}`,
       metadata: metadata as any,
+      ...(idempotencyKey ? { metadata: { ...metadata, idempotencyKey } as any } : {}),
     },
   });
 

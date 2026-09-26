@@ -18,6 +18,7 @@
     "seed:demo-coop": "pnpm run db:generate && pnpm with-env ts-node --transpile-only scripts/seed-demo-coop.ts",
     "seed:demo-data": "pnpm run db:generate && pnpm with-env ts-node --transpile-only scripts/seed-demo-data.ts",
     "seed:test-users": "pnpm with-env ts-node --transpile-only scripts/seed-test-users.ts",
+    "seed:e2e-marketplace": "pnpm with-env ts-node --transpile-only scripts/seed-e2e-marketplace.ts",
     "clean": "rm -rf .turbo node_modules",
     "db:generate": "prisma generate",
     "db:migrate-prod": "pnpm with-env prisma migrate deploy",

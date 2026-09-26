@@ -22,6 +22,7 @@
     "db:seed-coops": "pnpm -F @repo/db seed:coop-display",
     "db:seed-demo-coop": "pnpm -F @repo/db seed:demo-coop",
     "db:seed-demo-data": "pnpm db:seed-demo-coop && pnpm -F @repo/db seed:demo-data",
+    "db:backfill-funding-stores": "dotenv -e packages/db/.env -- tsx scripts/backfill-commons-funding-stores.ts",
     "db:deploy-setup": "pnpm db:migrate-prod && pnpm db:seed-coops && pnpm db:seed-demo-coop",
     "update-env": "bash scripts/update-all-env-files.sh",
     "update-contract-artifacts": "bash scripts/update-contract-artifacts.sh",

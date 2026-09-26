@@ -12,6 +12,9 @@ export interface CartItem {
   imageUrl: string | null;
   priceUSD: number;
   quantity: number;
+  maxQuantity?: number;
+  requiresShipping?: boolean;
+  exclusiveGroup?: string;
 }
 
 interface CartContextValue {
@@ -22,6 +25,9 @@ interface CartContextValue {
     name: string;
     imageUrl: string | null;
     priceUSD: number;
+    maxQuantity?: number;
+    requiresShipping?: boolean;
+    exclusiveGroup?: string;
   }, store: {
     id: string;
     name: string;
@@ -83,6 +89,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       name: string;
       imageUrl: string | null;
       priceUSD: number;
+      maxQuantity?: number;
+      requiresShipping?: boolean;
+      exclusiveGroup?: string;
     },
     store: {
       id: string;
@@ -99,13 +108,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const updated = [...prev];
         updated[existingIndex] = {
           ...updated[existingIndex],
-          quantity: updated[existingIndex].quantity + quantity,
+          quantity: Math.min(
+            updated[existingIndex].quantity + quantity,
+            updated[existingIndex].maxQuantity ?? Number.MAX_SAFE_INTEGER,
+          ),
         };
         return updated;
       }
 
       // Add new item
-      return [...prev, {
+      const remaining = product.exclusiveGroup
+        ? prev.filter((item) => item.exclusiveGroup !== product.exclusiveGroup)
+        : prev;
+      return [...remaining, {
         productId: product.id,
         storeId: store.id,
         storeName: store.name,
@@ -114,6 +129,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         imageUrl: product.imageUrl,
         priceUSD: product.priceUSD,
         quantity,
+        maxQuantity: product.maxQuantity,
+        requiresShipping: product.requiresShipping,
+        exclusiveGroup: product.exclusiveGroup,
       }];
     });
   }, []);
@@ -130,7 +148,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
     setItems((prev) =>
       prev.map((item) =>
-        item.productId === productId ? { ...item, quantity } : item
+        item.productId === productId
+          ? { ...item, quantity: Math.min(quantity, item.maxQuantity ?? Number.MAX_SAFE_INTEGER) }
+          : item
       )
     );
   }, [removeItem]);

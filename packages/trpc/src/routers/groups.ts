@@ -1,5 +1,9 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import {
+  circleNotificationLevelSchema,
+  parseCircleNotificationLevel,
+} from '@repo/validators/notification';
 
 import type { AgentToolContext } from '../agents/tools/index.js';
 import type { AccountAuthenticatedContext } from '../context.js';
@@ -351,6 +355,10 @@ export const groupsRouter = router({
           coopName: coopConfig?.name || coopConfig?.slug || group.coopId,
           iconEmoji: group.iconEmoji,
           iconColor: group.iconColor,
+          myNotificationLevel: parseCircleNotificationLevel(
+            members.find((member) => member.userId === userId)
+              ?.notificationLevel,
+          ),
         },
         members: members.map((member) => ({
           userId: member.userId,
@@ -460,6 +468,22 @@ export const groupsRouter = router({
         ]);
       }
       return { groupId: group.id, name: group.name, joined: true };
+    }),
+
+  updateNotificationLevel: accountAuthenticatedProcedure
+    .input(z.object({
+      groupId: z.string().min(1),
+      level: circleNotificationLevelSchema,
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+      const group = await requireMembership(context.db, input.groupId, userId);
+      await context.db.groupMember.update({
+        where: { groupId_userId: { groupId: group.id, userId } },
+        data: { notificationLevel: input.level },
+      });
+      return { level: input.level };
     }),
 
   updatePrivacy: accountAuthenticatedProcedure

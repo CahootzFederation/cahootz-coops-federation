@@ -1,4 +1,8 @@
-import type { PrivateGroupDetail, PrivateGroupMember } from '@/lib/api';
+import type {
+  CircleNotificationLevel,
+  PrivateGroupDetail,
+  PrivateGroupMember,
+} from '@/lib/api';
 import React from 'react';
 import {
   ActivityIndicator,
@@ -17,6 +21,7 @@ import { IconAvatar } from '@/components/icon-avatar';
 import { EmojiColorPicker } from '@/components/emoji-color-picker';
 import {
   ArrowLeft,
+  Bell,
   Copy,
   Crown,
   LogOut,
@@ -26,6 +31,28 @@ import {
   Settings2,
   Users,
 } from 'lucide-react-native';
+
+const NOTIFICATION_LEVEL_OPTIONS: Array<{
+  level: CircleNotificationLevel;
+  label: string;
+  description: string;
+}> = [
+  {
+    level: 'ALL',
+    label: 'All activity',
+    description: 'Every new post and reply in this circle.',
+  },
+  {
+    level: 'MENTIONS',
+    label: 'Only @mentions',
+    description: 'When someone mentions you or replies to your post.',
+  },
+  {
+    level: 'NONE',
+    label: 'Nothing',
+    description: 'No phone notifications. Mentions still show in Alerts.',
+  },
+];
 
 const THEME = {
   paper: '#F8FAFC',
@@ -51,6 +78,8 @@ export default function GroupDetailScreen() {
   const [isUpdatingPrivacy, setIsUpdatingPrivacy] = React.useState(false);
   const [iconPickerOpen, setIconPickerOpen] = React.useState(false);
   const [isSavingIcon, setIsSavingIcon] = React.useState(false);
+  const [savingNotificationLevel, setSavingNotificationLevel] =
+    React.useState<CircleNotificationLevel | null>(null);
 
   React.useEffect(() => {
     if (isLoading || (isAuthenticated && sessionToken)) return;
@@ -184,6 +213,29 @@ export default function GroupDetailScreen() {
       );
     } finally {
       setIsSavingIcon(false);
+    }
+  };
+
+  const changeNotificationLevel = async (level: CircleNotificationLevel) => {
+    if (!group || !sessionToken || savingNotificationLevel) return;
+    if (group.myNotificationLevel === level) return;
+    const previous = group.myNotificationLevel;
+    setSavingNotificationLevel(level);
+    setGroup((current) =>
+      current ? { ...current, myNotificationLevel: level } : current,
+    );
+    try {
+      await api.updateCircleNotificationLevel(group.id, level, sessionToken);
+    } catch (err) {
+      setGroup((current) =>
+        current ? { ...current, myNotificationLevel: previous } : current,
+      );
+      Alert.alert(
+        'Could not update notifications',
+        err instanceof Error ? err.message : 'Try again.',
+      );
+    } finally {
+      setSavingNotificationLevel(null);
     }
   };
 
@@ -388,6 +440,70 @@ export default function GroupDetailScreen() {
               <Text className="mt-3 text-xs font-semibold text-gray-500">Only the circle leader can change this setting.</Text>
             )}
             {isUpdatingPrivacy ? <ActivityIndicator className="mt-3" size="small" color={THEME.primary} /> : null}
+          </View>
+
+          <View
+            className="mt-4 rounded-2xl border bg-white p-4"
+            style={{ borderColor: THEME.border }}
+            accessibilityRole="radiogroup"
+            accessibilityLabel="Circle notifications"
+          >
+            <View className="flex-row items-center gap-2">
+              <Bell size={16} color={THEME.muted} />
+              <Text className="text-xs font-black uppercase text-gray-500">
+                Notifications
+              </Text>
+            </View>
+            <Text className="mt-1 text-xs leading-5 text-gray-600">
+              Choose what sends a notification to your phone from this circle.
+            </Text>
+            <View className="mt-3 gap-2">
+              {NOTIFICATION_LEVEL_OPTIONS.map((option) => {
+                const selected = group.myNotificationLevel === option.level;
+                return (
+                  <TouchableOpacity
+                    key={option.level}
+                    onPress={() => changeNotificationLevel(option.level)}
+                    disabled={savingNotificationLevel !== null}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected, checked: selected }}
+                    aria-checked={selected}
+                    accessibilityLabel={option.label}
+                    accessibilityHint={option.description}
+                    className="flex-row items-center gap-3 rounded-xl border px-3 py-3"
+                    style={{
+                      borderColor: selected ? THEME.primary : THEME.border,
+                      backgroundColor: selected ? THEME.primarySoft : '#FFFFFF',
+                    }}
+                  >
+                    <View
+                      className="h-4 w-4 items-center justify-center rounded-full border-2"
+                      style={{
+                        borderColor: selected ? THEME.primary : '#CBD5E1',
+                      }}
+                    >
+                      {selected ? (
+                        <View
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: THEME.primary }}
+                        />
+                      ) : null}
+                    </View>
+                    <View className="min-w-0 flex-1">
+                      <Text className="text-sm font-black text-gray-900">
+                        {option.label}
+                      </Text>
+                      <Text className="mt-0.5 text-xs leading-4 text-gray-600">
+                        {option.description}
+                      </Text>
+                    </View>
+                    {savingNotificationLevel === option.level ? (
+                      <ActivityIndicator size="small" color={THEME.primary} />
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
 
           {group.isLeader && group.inviteCode && group.privacy !== 'public' ? (

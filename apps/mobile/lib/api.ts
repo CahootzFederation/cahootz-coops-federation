@@ -360,7 +360,10 @@ export interface PrivateGroupDetail {
   coopName: string;
   iconEmoji?: string | null;
   iconColor?: string | null;
+  myNotificationLevel: CircleNotificationLevel;
 }
+
+export type CircleNotificationLevel = 'ALL' | 'MENTIONS' | 'NONE';
 
 export interface PrivateGroupComment {
   id: string;
@@ -1511,6 +1514,25 @@ export const api = {
     return readTrpcResult<{ privacy: 'public' | 'private' }>(
       response,
       'Could not update circle privacy',
+    );
+  },
+
+  async updateCircleNotificationLevel(
+    groupId: string,
+    level: CircleNotificationLevel,
+    sessionToken: string,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/groups.updateNotificationLevel`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify({ groupId, level }),
+      },
+    );
+    return readTrpcResult<{ level: CircleNotificationLevel }>(
+      response,
+      'Could not update circle notifications',
     );
   },
 

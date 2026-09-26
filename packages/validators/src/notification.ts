@@ -26,6 +26,8 @@ export const notificationCategoryTypes: Record<
     "PERSONAL_PAGE_COMMENT",
     "PERSONAL_PAGE_SUPPORT",
     "MENTION",
+    "CIRCLE_POST",
+    "CIRCLE_COMMENT",
     "NEW_FOLLOWER",
     "EVENT_REMINDER",
   ],
@@ -93,6 +95,19 @@ export const defaultNotificationPreferences: NotificationPreferences = {
   orders: true,
   other: true,
 };
+export const circleNotificationLevels = ["ALL", "MENTIONS", "NONE"] as const;
+export const circleNotificationLevelSchema = z.enum(circleNotificationLevels);
+export type CircleNotificationLevel = z.infer<
+  typeof circleNotificationLevelSchema
+>;
+export const defaultCircleNotificationLevel: CircleNotificationLevel =
+  "MENTIONS";
+export function parseCircleNotificationLevel(
+  value: string | null | undefined,
+): CircleNotificationLevel {
+  const parsed = circleNotificationLevelSchema.safeParse(value);
+  return parsed.success ? parsed.data : defaultCircleNotificationLevel;
+}
 export const notificationCursorSchema = z.object({
   createdAt: z.string().datetime(),
   id: z.string().min(1),

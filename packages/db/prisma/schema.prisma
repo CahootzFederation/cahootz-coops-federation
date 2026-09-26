@@ -1342,6 +1342,7 @@ model GroupMember {
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   joinedAt DateTime @default(now())
   role     String   @default("MEMBER") // "MEMBER" | "GUIDE" | "NEWCOMER"
+  notificationLevel String @default("MENTIONS") // "ALL" | "MENTIONS" | "NONE"
 
   @@unique([groupId, userId])
   @@index([userId])

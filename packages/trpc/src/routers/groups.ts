@@ -9,6 +9,16 @@ import { hashToColorKey } from '../lib/circle-color.js';
 import { generateInviteCode } from '../lib/invite-code.js';
 import { accountAuthenticatedProcedure } from '../procedures/index.js';
 import { queryObservations, recordObservation } from '../services/ai-memory.js';
+import {
+  isDirectCircle,
+  listDirectCircleMessages,
+  listDirectCircles,
+  markDirectCircleRead,
+  openDirectCircle,
+  rejectDirectCircle,
+  requireDirectMembership,
+  sendDirectCircleMessage,
+} from '../services/direct-circles.js';
 import { createNotificationAndPush } from '../services/push-notification-service.js';
 import { touchCircleWindow } from '../services/circle-window.js';
 import { validateSCBalance } from '../services/sc-validation-service.js';
@@ -70,6 +80,7 @@ async function requireInvitingLeader(
   if (group.kind === 'WELCOME_TABLE') {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Welcome lounges are managed from admin controls.' });
   }
+  rejectDirectCircle(group, 'Direct messages stay between two people.');
   if (group.leaderId !== userId) {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the circle leader can invite people.' });
   }
@@ -140,7 +151,7 @@ export const groupsRouter = router({
 
       const [memberships, publicGroups] = await Promise.all([
         context.db.groupMember.findMany({
-          where: { userId, group: { coopId: input.coopId } },
+          where: { userId, group: { coopId: input.coopId, kind: { not: 'DIRECT' } } },
           include: { group: { include: { _count: { select: { members: true } } } } },
           orderBy: { joinedAt: 'desc' },
         }),
@@ -184,7 +195,7 @@ export const groupsRouter = router({
       const coopId = input?.coopId;
 
       const memberships = await context.db.groupMember.findMany({
-        where: { userId, ...(coopId ? { group: { coopId } } : {}) },
+        where: { userId, group: { kind: { not: 'DIRECT' }, ...(coopId ? { coopId } : {}) } },
         include: {
           group: { include: { _count: { select: { members: true } } } },
         },
@@ -305,6 +316,7 @@ export const groupsRouter = router({
       const context = ctx as AccountAuthenticatedContext;
       const userId = context.accountUser.id;
       const group = await requireMembership(context.db, input.groupId, userId);
+      rejectDirectCircle(group, 'Direct messages do not have an icon.');
 
       if (group.leaderId !== userId) {
         throw new TRPCError({
@@ -697,6 +709,9 @@ export const groupsRouter = router({
           message: 'Welcome lounges can only be joined through the welcome-lounge flow.',
         });
       }
+      if (isDirectCircle(group)) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Invalid invite code.' });
+      }
 
       if (input.coopId && group.coopId !== input.coopId) {
         throw new TRPCError({
@@ -780,6 +795,7 @@ export const groupsRouter = router({
       if (group.kind === 'WELCOME_TABLE') {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Welcome lounges are managed from admin controls.' });
       }
+      rejectDirectCircle(group, 'Direct messages stay private between two people.');
       if (group.leaderId !== userId) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the circle leader can change privacy.' });
       }
@@ -818,6 +834,7 @@ export const groupsRouter = router({
       if (group.kind === 'WELCOME_TABLE') {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Welcome lounges are managed from admin controls.' });
       }
+      rejectDirectCircle(group, 'Direct messages stay private between two people.');
       if (group.leaderId !== userId) {
         throw new TRPCError({
           code: 'FORBIDDEN',
@@ -867,6 +884,7 @@ export const groupsRouter = router({
       if (group.kind === 'WELCOME_TABLE') {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Welcome lounges are managed from admin controls.' });
       }
+      rejectDirectCircle(group, 'Direct messages stay private between two people.');
       if (group.leaderId !== userId) {
         throw new TRPCError({
           code: 'FORBIDDEN',
@@ -916,6 +934,30 @@ export const groupsRouter = router({
       const userId = context.accountUser.id;
 
       const group = await requireMembership(context.db, input.groupId, userId);
+
+      if (isDirectCircle(group)) {
+        // Leaving a DM just hides it; a new message from either person
+        // re-adds both. The circle is deleted once nobody is left in it.
+        await context.db.$transaction([
+          context.db.groupMember.delete({
+            where: { groupId_userId: { groupId: group.id, userId } },
+          }),
+          context.db.auditLog.create({
+            data: auditLogEntry({
+              actorId: userId,
+              action: 'GROUP_LEFT',
+              resource: 'GroupMember',
+              resourceId: group.id,
+            }),
+          }),
+        ]);
+        const remaining = await context.db.groupMember.count({ where: { groupId: group.id } });
+        if (remaining === 0) {
+          await context.db.group.delete({ where: { id: group.id } });
+          return { success: true, groupDeleted: true };
+        }
+        return { success: true, groupDeleted: false };
+      }
 
       if (group.kind === 'WELCOME_TABLE') {
         // leaderId isn't necessarily the guide here - when no guide is
@@ -992,6 +1034,71 @@ export const groupsRouter = router({
       ]);
 
       return { success: true, groupDeleted: false };
+    }),
+
+  // ── Direct messages: private two-person circles ─────────────────────────
+  listDirect: accountAuthenticatedProcedure
+    .input(z.object({ coopId: z.string().min(1).optional() }).optional())
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const threads = await listDirectCircles(context.db, context.accountUser.id, input?.coopId);
+      return { threads };
+    }),
+
+  openDirect: accountAuthenticatedProcedure
+    .input(z.object({ userId: z.string().min(1), coopId: z.string().min(1).default('cahootz') }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const { group, other } = await openDirectCircle(context.db, {
+        coopId: input.coopId,
+        userId: context.accountUser.id,
+        otherUserId: input.userId,
+      });
+      return { groupId: group.id, coopId: group.coopId, person: other };
+    }),
+
+  listDirectMessages: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        groupId: z.string().min(1),
+        before: z.string().optional(),
+        limit: z.number().int().min(1).max(100).default(50),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      return listDirectCircleMessages(context.db, {
+        groupId: input.groupId,
+        userId: context.accountUser.id,
+        limit: input.limit,
+        before: input.before,
+      });
+    }),
+
+  sendDirect: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        groupId: z.string().min(1),
+        content: z.string().trim().min(1).max(4000),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const group = await requireDirectMembership(context.db, input.groupId, context.accountUser.id);
+      const message = await sendDirectCircleMessage(context.db, {
+        group,
+        sender: context.accountUser,
+        content: input.content,
+      });
+      return { message };
+    }),
+
+  markDirectRead: accountAuthenticatedProcedure
+    .input(z.object({ groupId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      await markDirectCircleRead(context.db, input.groupId, context.accountUser.id);
+      return { success: true };
     }),
 
   assignWelcomeTable: accountAuthenticatedProcedure
@@ -1091,6 +1198,24 @@ export const groupsRouter = router({
       const userId = context.accountUser.id;
 
       const group = await requireMembership(context.db, input.groupId, userId);
+
+      if (isDirectCircle(group)) {
+        // DMs are never mirrored into the commons feed or the AI circle window.
+        const message = await sendDirectCircleMessage(context.db, {
+          group,
+          sender: context.accountUser,
+          content: input.content,
+        });
+        return {
+          comment: {
+            id: message.id,
+            authorId: message.authorId,
+            author: displayName(context.accountUser),
+            content: message.body,
+            createdAt: message.createdAt,
+          },
+        };
+      }
 
       const comment = await context.db.$transaction(async (tx) => {
         const created = await tx.groupComment.create({
@@ -1197,6 +1322,7 @@ export const groupsRouter = router({
       const userId = context.accountUser.id;
 
       const group = await requireMembership(context.db, input.groupId, userId);
+      rejectDirectCircle(group, 'AI digests are not available for direct messages.');
 
       const agent = getAgent('community-observer');
       if (!agent || !process.env.OPENAI_API_KEY) {

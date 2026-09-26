@@ -230,7 +230,15 @@ export interface CommonsComment {
   authorId?: string;
   author: string;
   body: string;
+  supporterBadge?: SupporterBadge | null;
   media?: CommonsPostMedia[];
+}
+
+export interface SupporterBadge {
+  tier: string;
+  name: string;
+  shortName: string;
+  color: string;
 }
 
 export interface CommonsPostMedia {
@@ -300,6 +308,7 @@ export interface CommonsPost {
   authorId?: string;
   author: string;
   authorHandle?: string;
+  supporterBadge?: SupporterBadge | null;
   group: string;
   time: string;
   title: string;
@@ -2976,6 +2985,7 @@ export const api = {
    * Get all stores (public)
    */
   async getStores(options?: {
+    coopId?: string;
     category?: string;
     scVerifiedOnly?: boolean;
     featured?: boolean;
@@ -2984,7 +2994,7 @@ export const api = {
     cursor?: string;
   }) {
     const input = encodeURIComponent(
-      JSON.stringify({ coopId: resolveCoopId(), ...options }),
+      JSON.stringify({ ...options, coopId: options?.coopId ?? resolveCoopId() }),
     );
     const response = await fetch(
       `${API_BASE_URL}/trpc/store.getStores?input=${input}`,
@@ -3049,7 +3059,7 @@ export const api = {
     // browsing surfaces don't accidentally mix products across coops.
     const payload = options.storeId
       ? options
-      : { coopId: options.coopId ?? resolveCoopId(), ...options };
+      : { ...options, coopId: options.coopId ?? resolveCoopId() };
     const input = encodeURIComponent(JSON.stringify(payload));
     const response = await fetch(
       `${API_BASE_URL}/trpc/store.getProducts?input=${input}`,
@@ -3129,6 +3139,30 @@ export const api = {
     }
 
     return result.result?.data;
+  },
+
+  async getMyFundingBadges(walletAddress: string, coopId: string = resolveCoopId()) {
+    const response = await fetch(`${API_BASE_URL}/trpc/store.getMyFundingBadges`, {
+      method: 'GET',
+      headers: { ...createApiHeaders(walletAddress), 'X-Coop-Id': coopId },
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      throw new Error(result.error?.message || 'Failed to load funding badges');
+    }
+    return result.result?.data;
+  },
+
+  async getMyFundingBadgeHistory(walletAddress: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/store.getMyFundingBadgeHistory`, {
+      method: 'GET',
+      headers: createApiHeaders(walletAddress),
+    });
+    const result = await response.json();
+    if (!response.ok || result.error) {
+      throw new Error(result.error?.message || 'Failed to load badge history');
+    }
+    return result.result?.data ?? [];
   },
 
   async getCommerceTransaction(

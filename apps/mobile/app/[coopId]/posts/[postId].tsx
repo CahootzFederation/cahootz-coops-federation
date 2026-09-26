@@ -13,6 +13,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import {
   ArrowLeft,
+  Award,
   CheckCircle2,
   ImagePlus,
   Pencil,
@@ -418,7 +419,10 @@ export default function CommonsPostDetailScreen() {
                 activeOpacity={0.75}
                 accessibilityLabel={`Open ${post.author}'s personal page`}
               >
-                <Text className="text-sm font-black text-gray-950" numberOfLines={1}>{post.author}</Text>
+                <View className="flex-row items-center gap-1.5">
+                  <Text className="text-sm font-black text-gray-950" numberOfLines={1}>{post.author}</Text>
+                  {post.supporterBadge ? <View className="flex-row items-center rounded-full px-2 py-0.5" style={{ backgroundColor: `${post.supporterBadge.color}18` }}><Award size={10} color={post.supporterBadge.color} /><Text className="ml-1 text-[9px] font-black" style={{ color: post.supporterBadge.color }}>{post.supporterBadge.shortName}</Text></View> : null}
+                </View>
                 <Text className="text-xs font-semibold text-stone-500" numberOfLines={1}>
                   {personDisplayHandle(post.author)} · {post.group} · {post.time}
                 </Text>
@@ -484,7 +488,10 @@ export default function CommonsPostDetailScreen() {
                 {post.comments.map((comment) => (
                   <View key={comment.id || `${comment.author}-${comment.body}`} className="rounded-xl bg-stone-50 p-3">
                     <View className="flex-row items-start justify-between gap-2">
-                      <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
+                      <View className="flex-row items-center gap-1.5">
+                        <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
+                        {comment.supporterBadge ? <View className="flex-row items-center rounded-full px-2 py-0.5" style={{ backgroundColor: `${comment.supporterBadge.color}18` }}><Award size={9} color={comment.supporterBadge.color} /><Text className="ml-1 text-[8px] font-black" style={{ color: comment.supporterBadge.color }}>{comment.supporterBadge.shortName}</Text></View> : null}
+                      </View>
                       {comment.authorId && comment.authorId === user?.id ? (
                         <View className="flex-row items-center gap-3">
                           <TouchableOpacity

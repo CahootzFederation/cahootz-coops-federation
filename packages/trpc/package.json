@@ -88,6 +88,16 @@
       "import": "./dist/services/sc-token-service.js",
       "require": "./dist/services/sc-token-service.js"
     },
+    "./services/funding-badge-service": {
+      "types": "./dist/services/funding-badge-service.d.ts",
+      "import": "./dist/services/funding-badge-service.js",
+      "require": "./dist/services/funding-badge-service.js"
+    },
+    "./services/funding-settlement-service": {
+      "types": "./dist/services/funding-settlement-service.d.ts",
+      "import": "./dist/services/funding-settlement-service.js",
+      "require": "./dist/services/funding-settlement-service.js"
+    },
     "./services/stripe-connect-service": {
       "types": "./dist/services/stripe-connect-service.d.ts",
       "import": "./dist/services/stripe-connect-service.js",

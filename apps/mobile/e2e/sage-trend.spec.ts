@@ -70,7 +70,9 @@ test("a circle leader receives and approves a Sage trend suggestion", async ({ b
     let suggestionId: string | undefined;
     for (let attempt = 0; attempt < 12 && !suggestionId; attempt++) {
       const { suggestions } = await trpcGet("sage.list", leaderToken, { tab: "NEEDS_YOU" });
-      suggestionId = suggestions.find((s: { circleId: string | null }) => s.circleId === circleId)?.id;
+      // Ride-match detection runs on the same closed window; pick the trend suggestion.
+      suggestionId = suggestions.find((s: { circleId: string | null; type: string }) =>
+        s.circleId === circleId && s.type === "SUGGEST_ACTION")?.id;
       if (!suggestionId) await leader.page.waitForTimeout(5000);
     }
     if (!suggestionId) throw new Error("Sage never surfaced a trend suggestion for this window");

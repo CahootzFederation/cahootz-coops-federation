@@ -38,6 +38,10 @@ model User {
   locationSummary     String?
   profileSignals      Json       @default("{}")
   profileOnboardingCompletedAt DateTime?
+  // Personal page avatar: a photo wins over an emoji, which wins over initials.
+  avatarUrl           String? // Uploaded profile photo URL (blob storage)
+  avatarEmoji         String? // Notion-style emoji avatar, e.g. "🌻"
+  avatarColor         String? // Hex background color behind avatarEmoji
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
   deletedAt           DateTime?

@@ -269,7 +269,9 @@ function CircleCardView({
         }}
       >
         {iconEmoji ? (
-          <Text style={{ fontSize: 40 }}>{iconEmoji}</Text>
+          // Text's base `text-base` class pins lineHeight to 24, which clips a
+          // 40px emoji - give it a line box tall enough for the glyph.
+          <Text style={{ fontSize: 40, lineHeight: 52, textAlign: 'center' }}>{iconEmoji}</Text>
         ) : (
           <Text
             className="text-3xl font-black"

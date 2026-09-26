@@ -364,7 +364,7 @@ export const groupsRouter = router({
       const [members, coopConfig, pendingInvites] = await Promise.all([
         context.db.groupMember.findMany({
           where: { groupId: group.id },
-          include: { user: { select: { name: true, email: true } } },
+          include: { user: { select: { name: true, email: true, handle: true } } },
           orderBy: { joinedAt: 'asc' },
         }),
         context.db.coopConfig.findFirst({
@@ -405,6 +405,7 @@ export const groupsRouter = router({
         members: members.map((member) => ({
           userId: member.userId,
           name: displayName(member.user),
+          handle: member.user.handle,
           isLeader: member.userId === group.leaderId,
           joinedAt: member.joinedAt.toISOString(),
         })),

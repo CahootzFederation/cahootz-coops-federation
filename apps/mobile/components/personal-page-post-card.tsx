@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, ScrollView, TextInput, TouchableOpacity, View
 import { Heart, MessageCircle, Pencil, Send, Trash2 } from 'lucide-react-native';
 
 import { CommonsMediaTile, FEED_MEDIA_TILE_SIZE } from '@/components/commons-media-viewer';
+import { PersonLink } from '@/components/person-link';
 import { Text } from '@/components/ui/text';
 import { api, type CommonsPostMedia, type PersonalPageFeedPost } from '@/lib/api';
 import { postTypeLabel, shouldShowPostType } from '@/lib/post-types';
@@ -223,7 +224,9 @@ export function PersonalPagePostCard({
                 ) : (
                   <>
                     <View className="flex-row items-start justify-between gap-2">
-                      <Text className="text-xs font-black text-gray-800">{comment.author}</Text>
+                      <PersonLink name={comment.author} handle={comment.authorHandle}>
+                        <Text className="text-xs font-black text-gray-800">{comment.author}</Text>
+                      </PersonLink>
                       {comment.authorId && comment.authorId === currentUserId ? (
                         <View className="flex-row items-center gap-2">
                           <TouchableOpacity onPress={() => startEdit(comment.id, comment.body)} accessibilityLabel="Edit comment">

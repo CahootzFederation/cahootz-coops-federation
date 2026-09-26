@@ -774,6 +774,103 @@ describe('commonsRouter', () => {
       }),
     );
   });
+
+  describe('getPersonalPage commons', () => {
+    const PROFILE_USER = {
+      id: 'user_2',
+      email: 'maya@example.com',
+      handle: 'maya',
+      name: 'Maya R.',
+      selfDescription: null,
+      avatarUrl: null,
+      avatarEmoji: null,
+      avatarColor: null,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    };
+    const COMMONS_CONFIGS = [
+      { coopId: 'public-a', name: 'Public A', slug: 'A', iconEmoji: '🌱', iconColor: '#2F855A', isPrivate: false, isDemo: false, displayOrder: 1 },
+      { coopId: 'private-shared', name: 'Private Shared', slug: 'Shared', iconEmoji: null, iconColor: null, isPrivate: true, isDemo: false, displayOrder: 2 },
+      { coopId: 'private-solo', name: 'Private Solo', slug: 'Solo', iconEmoji: null, iconColor: null, isPrivate: true, isDemo: false, displayOrder: 3 },
+      { coopId: 'demo', name: 'Demo', slug: 'Demo', iconEmoji: null, iconColor: null, isPrivate: false, isDemo: true, displayOrder: 4 },
+    ];
+
+    function profileDb(viewerCoopIds: string[]) {
+      const db = makeDb({
+        user: { findFirst: vi.fn().mockResolvedValue(PROFILE_USER) },
+        coopConfig: { findMany: vi.fn().mockResolvedValue(COMMONS_CONFIGS) },
+        userCoopMembership: {
+          findMany: vi.fn(async ({ where }: any) =>
+            where.userId === PROFILE_USER.id
+              ? [
+                  { coopId: 'public-a', roles: ['member'] },
+                  { coopId: 'private-shared', roles: ['member', 'governor'] },
+                  { coopId: 'private-solo', roles: ['member', 'admin'] },
+                  { coopId: 'demo', roles: ['member'] },
+                  { coopId: 'unconfigured', roles: ['member'] },
+                ]
+              : viewerCoopIds.map((coopId) => ({ coopId })),
+          ),
+        },
+      });
+      db.personalPagePost = { findMany: vi.fn().mockResolvedValue([]) };
+      db.follow = { count: vi.fn().mockResolvedValue(0), findUnique: vi.fn().mockResolvedValue(null) };
+      db.fundingBadgeEntitlement = {
+        findMany: vi.fn().mockResolvedValue([
+          { coopId: 'public-a', tier: 'SEED_SUPPORTER' },
+          { coopId: 'public-a', tier: 'COMMUNITY_BUILDER' },
+          { coopId: 'private-solo', tier: 'LEGACY_FOUNDER' },
+        ]),
+      };
+      return db;
+    }
+
+    it('shows public commons, and private ones only when the viewer is also a member', async () => {
+      const db = profileDb(['private-shared']);
+
+      const { profile } = await callerFor(db, { 'x-session-token': 'token_1' }).getPersonalPage({ handle: 'maya' });
+
+      expect(profile.commons.map((item: any) => item.coopId)).toEqual(['public-a', 'private-shared']);
+      expect(profile.commons[0]).toMatchObject({
+        name: 'Public A',
+        isPrivate: false,
+        roles: ['member'],
+        badges: [
+          expect.objectContaining({ tier: 'COMMUNITY_BUILDER', name: 'Community Builder' }),
+          expect.objectContaining({ tier: 'SEED_SUPPORTER' }),
+        ],
+      });
+      expect(profile.commons[1]).toMatchObject({ isPrivate: true, roles: ['member', 'governor'], badges: [] });
+      expect(db.userCoopMembership.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ userId: ACTIVE_USER.id, status: 'ACTIVE' }) }),
+      );
+    });
+
+    it('hides every private commons from signed-out visitors', async () => {
+      const db = profileDb([]);
+
+      const { profile } = await callerFor(db).getPersonalPage({ handle: 'maya' });
+
+      expect(profile.commons.map((item: any) => item.coopId)).toEqual(['public-a']);
+    });
+
+    it('shows the owner all of their own commons', async () => {
+      const db = profileDb([]);
+      db.session.findUnique.mockResolvedValue({
+        id: 'session_2',
+        userId: PROFILE_USER.id,
+        token: 'token_2',
+        isRevoked: false,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      });
+      db.user.findUnique.mockResolvedValue({ ...PROFILE_USER, phone: null, deletedAt: null });
+
+      const { profile } = await callerFor(db, { 'x-session-token': 'token_2' }).getPersonalPage({ handle: 'maya' });
+
+      expect(profile.commons.map((item: any) => item.coopId)).toEqual(['public-a', 'private-shared', 'private-solo']);
+      expect(profile.commons[2].badges).toEqual([expect.objectContaining({ tier: 'LEGACY_FOUNDER' })]);
+    });
+  });
+
   describe('getAISpending', () => {
     it("sums this month's AI spend by member-readable category", async () => {
       const groupBy = vi.fn().mockResolvedValue([

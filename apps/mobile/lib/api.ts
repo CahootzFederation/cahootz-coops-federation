@@ -230,6 +230,9 @@ export interface CommonsComment {
   authorId?: string;
   author: string;
   authorHandle?: string;
+  reactionCount?: number;
+  /** Whether the signed-in viewer has reacted to this comment. */
+  viewerReacted?: boolean;
   body: string;
   supporterBadge?: SupporterBadge | null;
   media?: CommonsPostMedia[];
@@ -1453,6 +1456,19 @@ export const api = {
     return readTrpcResult<{ comment: CommonsComment }>(
       response,
       'Create an account to comment',
+    );
+  },
+
+  async toggleCommentReaction(commentId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.toggleCommentReaction`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ commentId }),
+    });
+
+    return readTrpcResult<{ reacted: boolean; reactionCount: number }>(
+      response,
+      'Could not update your reaction',
     );
   },
 

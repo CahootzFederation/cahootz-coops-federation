@@ -157,55 +157,124 @@ export async function recordWelcomeIntroActivity(
       newcomerId: { not: input.author.id },
       createdAt: { lte: input.comment.createdAt },
     },
-    select: { id: true, commentId: true, newcomerId: true, coopId: true, groupId: true },
+    select: { id: true, commentId: true, newcomerId: true, coopId: true, groupId: true, postId: true },
   });
   const mentioned = new Set(input.mentionedUserIds);
   const answered = openIntros.filter(
     (intro) => intro.commentId === input.replyToCommentId || mentioned.has(intro.newcomerId),
   );
 
-  const actorName = displayName(input.author);
   for (const intro of answered) {
-    const claimed = await db.welcomeIntro.updateMany({
-      where: { id: intro.id, respondedAt: null },
-      data: {
-        respondedAt: new Date(),
-        responderId: input.author.id,
-        responseCommentId: input.comment.id,
-      },
+    const notified = await claimIntroResponse(db, intro, {
+      responder: input.author,
+      responseCommentId: input.comment.id,
+      title: `💬 ${displayName(input.author)} replied to your intro`,
+      body:
+        commentPreview(input.comment.content) ||
+        `${displayName(input.author)} said hi in ${lounge.group.name}.`,
+      data: { replyCommentId: input.comment.id },
     });
-    if (claimed.count !== 1) continue;
-
-    // A newcomer who muted the lounge (level NONE) still gets the inbox row,
-    // just no phone push - same rule as other circle alerts.
-    const newcomerMembership = await db.groupMember.findUnique({
-      where: { groupId_userId: { groupId, userId: intro.newcomerId } },
-      select: { notificationLevel: true },
-    });
-    const push = parseCircleNotificationLevel(newcomerMembership?.notificationLevel) !== "NONE";
-
-    result.notifiedNewcomerIds.push(intro.newcomerId);
-    void createNotificationAndPush(db, {
-      userId: intro.newcomerId,
-      coopId: intro.coopId,
-      push,
-      type: WELCOME_INTRO_REPLY_NOTIFICATION,
-      title: `💬 ${actorName} replied to your intro`,
-      body: commentPreview(input.comment.content) || `${actorName} said hi in ${lounge.group.name}.`,
-      data: {
-        postId: input.post.id,
-        commentId: intro.commentId,
-        replyCommentId: input.comment.id,
-        groupId: intro.groupId,
-        coopId: intro.coopId,
-      },
-    }).catch((error) =>
-      console.error("[push] Welcome intro reply notification failed", { introId: intro.id, error }),
-    );
+    if (notified) result.notifiedNewcomerIds.push(intro.newcomerId);
   }
 
   return result;
 }
+
+type OpenIntro = {
+  id: string;
+  commentId: string;
+  newcomerId: string;
+  coopId: string;
+  groupId: string;
+  postId: string;
+};
+
+/**
+ * Marks an intro answered and alerts its newcomer - but only if this is the
+ * intro's first response. The claim is a conditional update on
+ * `respondedAt: null`, so a reply and a reaction (or two of either) racing
+ * each other alert the newcomer exactly once. Answering also stops the
+ * unanswered-intro escalations, which only look at `respondedAt: null`.
+ */
+async function claimIntroResponse(
+  db: Db,
+  intro: OpenIntro,
+  response: {
+    responder: { id: string };
+    responseCommentId: string | null;
+    title: string;
+    body: string;
+    data: Record<string, unknown>;
+  },
+): Promise<boolean> {
+  const claimed = await db.welcomeIntro.updateMany({
+    where: { id: intro.id, respondedAt: null },
+    data: {
+      respondedAt: new Date(),
+      responderId: response.responder.id,
+      responseCommentId: response.responseCommentId,
+    },
+  });
+  if (claimed.count !== 1) return false;
+
+  // A newcomer who muted the lounge (level NONE) still gets the inbox row,
+  // just no phone push - same rule as other circle alerts.
+  const newcomerMembership = await db.groupMember.findUnique({
+    where: { groupId_userId: { groupId: intro.groupId, userId: intro.newcomerId } },
+    select: { notificationLevel: true },
+  });
+  const push = parseCircleNotificationLevel(newcomerMembership?.notificationLevel) !== "NONE";
+
+  void createNotificationAndPush(db, {
+    userId: intro.newcomerId,
+    coopId: intro.coopId,
+    push,
+    type: WELCOME_INTRO_REPLY_NOTIFICATION,
+    title: response.title,
+    body: response.body,
+    data: {
+      postId: intro.postId,
+      commentId: intro.commentId,
+      groupId: intro.groupId,
+      coopId: intro.coopId,
+      ...response.data,
+    },
+  }).catch((error) =>
+    console.error("[push] Welcome intro response notification failed", { introId: intro.id, error }),
+  );
+  return true;
+}
+
+/**
+ * Hook for a new comment reaction. A reaction on an unanswered intro from
+ * anyone but its newcomer (and not a bot) counts as the intro's first
+ * response: the newcomer gets the one-time alert and escalation stops.
+ * Returns whether this reaction triggered that alert.
+ */
+export async function recordWelcomeIntroReaction(
+  db: Db,
+  input: { commentId: string; reactor: { id: string; name: string | null; email: string; isBot?: boolean } },
+): Promise<boolean> {
+  if (input.reactor.isBot) return false;
+  const intro = await db.welcomeIntro.findUnique({
+    where: { commentId: input.commentId },
+    select: {
+      id: true, commentId: true, newcomerId: true, coopId: true, groupId: true, postId: true, respondedAt: true,
+      group: { select: { name: true } },
+    },
+  });
+  if (!intro || intro.respondedAt || intro.newcomerId === input.reactor.id) return false;
+
+  const name = displayName(input.reactor);
+  return claimIntroResponse(db, intro, {
+    responder: input.reactor,
+    responseCommentId: null,
+    title: `💬 ${name} reacted to your intro`,
+    body: `${name} liked your intro in ${intro.group.name}.`,
+    data: {},
+  });
+}
+
 
 export interface IntroEscalationResult {
   guideNotified: number;
@@ -312,16 +381,19 @@ export async function escalateUnansweredIntros(db: Db, now: Date = new Date()): 
     for (const adminId of admins) {
       if (adminId === intro.newcomerId) continue;
       try {
-        // Welcome lounges are private, so an admin who isn't seated there
-        // can't open the thread - this alert carries no post link.
+        // Lounges rely on guides: admins get no read access to the private
+        // thread, so this alert carries no post link. It's a nudge to get a
+        // guide seated. Guides are assigned on the platform admin portal's
+        // Welcome lounges page, which commons admins can't open, so there's
+        // no in-app link to offer here.
         await createNotificationAndPush(db, {
           userId: adminId,
           coopId: intro.coopId,
           type: WELCOME_INTRO_UNANSWERED_ADMIN_NOTIFICATION,
-          title: `${intro.group.name}: a newcomer's intro is unanswered`,
+          title: `${intro.group.name} needs a guide`,
           body: `${displayName(intro.newcomer)} introduced themselves ${Math.round(
             INTRO_ADMIN_ESCALATION_AFTER_MS / 3_600_000,
-          )}+ hours ago and no one has replied. Consider seating a lounge guide.`,
+          )}+ hours ago and no one has responded. Ask a platform admin to assign a guide to ${intro.group.name}.`,
           data: { groupId: intro.groupId, coopId: intro.coopId, introId: intro.id },
         });
         result.adminNotified += 1;

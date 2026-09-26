@@ -23,7 +23,10 @@ import { recordAgentResultCost } from '../services/ai-cost.js';
 import { enqueueCommonsActionContent } from '../services/commons-action-dispatch.js';
 import { createNotificationAndPush } from '../services/push-notification-service.js';
 import { notifyCircleActivity } from '../services/circle-notifications.js';
-import { recordWelcomeIntroActivity } from '../services/welcome-intros.js';
+import {
+  recordWelcomeIntroActivity,
+  recordWelcomeIntroReaction,
+} from '../services/welcome-intros.js';
 import { FUNDING_BADGE_BY_TIER } from '../services/funding-badge-service.js';
 import {
   sendApplicationSubmittedNotification,
@@ -641,6 +644,8 @@ function mapPostWithGroup(record: any, groupName: string, viewerId?: string) {
         authorId: comment.authorId,
         author: displayName(comment.author),
         authorHandle: personHandle(comment.author),
+        reactionCount: comment._count?.reactions ?? 0,
+        viewerReacted: (comment.reactions?.length ?? 0) > 0,
         supporterBadge: comment.supporterBadge ?? null,
         body: comment.content,
         media:
@@ -1645,6 +1650,7 @@ export const commonsRouter = router({
     )
     .query(async ({ input, ctx }) => {
       const context = ctx as Context;
+      const accountUser = await resolveOptionalAccountUser(context);
       const post = await context.db.commonsPost.findUnique({
         where: { id: input.postId },
         include: {
@@ -1660,6 +1666,13 @@ export const commonsRouter = router({
             include: {
               author: { select: { name: true, email: true, handle: true } },
               media: { orderBy: { order: 'asc' } },
+              _count: { select: { reactions: true } },
+              // Only the viewer's own reaction, to show whether they reacted.
+              reactions: {
+                where: { userId: accountUser?.id ?? '' },
+                select: { id: true },
+                take: 1,
+              },
             },
           },
           _count: { select: { comments: true, supports: true } },
@@ -1673,7 +1686,6 @@ export const commonsRouter = router({
         });
       }
 
-      const accountUser = await resolveOptionalAccountUser(context);
       const canRead =
         (post.coopId === COMMONS_COOP_ID ||
           (!!accountUser &&
@@ -2586,6 +2598,8 @@ export const commonsRouter = router({
           authorId: comment.authorId,
           author: displayName(comment.author),
           authorHandle: personHandle(comment.author),
+          reactionCount: 0,
+          viewerReacted: false,
           body: comment.content,
           media:
             comment.media?.map((item: any) => ({
@@ -2694,6 +2708,54 @@ export const commonsRouter = router({
       await ctx.db.commonsComment.delete({ where: { id: input.commentId } });
 
       return { success: true };
+    }),
+
+  // A member's "like" on a comment - the comment-level counterpart of
+  // toggleSupport. A first reaction on a welcome lounge intro counts as a
+  // response to it (see services/welcome-intros.ts).
+  toggleCommentReaction: accountAuthenticatedProcedure
+    .input(z.object({ commentId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const comment = await ctx.db.commonsComment.findUnique({
+        where: { id: input.commentId },
+        select: { id: true, post: true },
+      });
+      if (!comment) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Comment not found.' });
+      }
+      await requireActiveCommonsMembership(ctx.db, accountUser.id, comment.post.coopId);
+      await requirePostCircleMembership(ctx.db, accountUser.id, comment.post);
+
+      const existing = await ctx.db.commonsCommentReaction.findUnique({
+        where: { commentId_userId: { commentId: comment.id, userId: accountUser.id } },
+      });
+      let reacted: boolean;
+      if (existing) {
+        await ctx.db.commonsCommentReaction.delete({ where: { id: existing.id } });
+        reacted = false;
+      } else {
+        try {
+          await ctx.db.commonsCommentReaction.create({
+            data: { commentId: comment.id, userId: accountUser.id },
+          });
+        } catch (error) {
+          // A double tap raced us - the reaction exists either way.
+          if ((error as { code?: string } | undefined)?.code !== 'P2002') throw error;
+        }
+        reacted = true;
+        await recordWelcomeIntroReaction(ctx.db, {
+          commentId: comment.id,
+          reactor: accountUser,
+        }).catch((error) =>
+          console.error('Welcome intro reaction tracking failed', { commentId: comment.id, error }),
+        );
+      }
+
+      const reactionCount = await ctx.db.commonsCommentReaction.count({
+        where: { commentId: comment.id },
+      });
+      return { reacted, reactionCount };
     }),
 
   toggleSupport: accountAuthenticatedProcedure

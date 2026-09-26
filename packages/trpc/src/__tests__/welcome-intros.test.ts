@@ -15,6 +15,7 @@ import {
   escalateUnansweredIntros,
   getWelcomeIntroStatus,
   recordWelcomeIntroActivity,
+  recordWelcomeIntroReaction,
 } from "../services/welcome-intros.js";
 
 const push = vi.mocked(createNotificationAndPush);
@@ -88,6 +89,10 @@ function makeDb(options: {
     },
     welcomeIntro: {
       findUnique: vi.fn().mockImplementation(({ where }: any) => {
+        if (where.commentId) {
+          const row = intros.find((i) => i.commentId === where.commentId);
+          return row ? { ...row, group: { name: "Welcome Lounge 1" } } : null;
+        }
         const key = where.groupId_newcomerId;
         return intros.find((i) => i.groupId === key.groupId && i.newcomerId === key.newcomerId) ?? null;
       }),
@@ -308,6 +313,84 @@ describe("recordWelcomeIntroActivity", () => {
       replyToCommentId: "c_intro",
     });
     expect(push).toHaveBeenCalledWith(db, expect.objectContaining({ userId: "newcomer_1", push: false }));
+  });
+});
+
+describe("recordWelcomeIntroReaction", () => {
+  async function seedIntro() {
+    const seeded = makeDb({ roles: { newcomer_1: "NEWCOMER", member_1: "NEWCOMER", guide_1: "GUIDE" } });
+    await recordWelcomeIntroActivity(seeded.db, {
+      post,
+      comment: comment("c_intro", "Hi all"),
+      author: newcomer,
+      mentionedUserIds: [],
+    });
+    return seeded;
+  }
+
+  it("counts a first reaction from someone else as the intro's response", async () => {
+    const { db, intros } = await seedIntro();
+    expect(await recordWelcomeIntroReaction(db, { commentId: "c_intro", reactor: member })).toBe(true);
+    expect(intros[0]).toMatchObject({ responderId: "member_1", responseCommentId: null });
+    expect(intros[0].respondedAt).toBeInstanceOf(Date);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        userId: "newcomer_1",
+        type: WELCOME_INTRO_REPLY_NOTIFICATION,
+        title: "💬 Member Max reacted to your intro",
+        data: expect.objectContaining({ postId: "welcome_post", commentId: "c_intro" }),
+      }),
+    );
+    // Answered intros are no longer escalated.
+    expect(await escalateUnansweredIntros(db, new Date("2026-09-27T12:00:00Z"))).toEqual({
+      guideNotified: 0,
+      adminNotified: 0,
+    });
+  });
+
+  it("ignores the newcomer's own reaction, bots, and comments that aren't intros", async () => {
+    const { db, intros } = await seedIntro();
+    expect(await recordWelcomeIntroReaction(db, { commentId: "c_intro", reactor: newcomer })).toBe(false);
+    expect(
+      await recordWelcomeIntroReaction(db, {
+        commentId: "c_intro",
+        reactor: { id: "sage", name: "Sage", email: "sage@bot.test", isBot: true },
+      }),
+    ).toBe(false);
+    expect(await recordWelcomeIntroReaction(db, { commentId: "not_an_intro", reactor: member })).toBe(false);
+    expect(intros[0].respondedAt).toBeNull();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("alerts once across reactions and replies, whichever comes first", async () => {
+    const reactFirst = await seedIntro();
+    expect(await recordWelcomeIntroReaction(reactFirst.db, { commentId: "c_intro", reactor: member })).toBe(true);
+    const guide = { id: "guide_1", name: "Guide Gil", email: "gil@example.test" };
+    expect(await recordWelcomeIntroReaction(reactFirst.db, { commentId: "c_intro", reactor: guide })).toBe(false);
+    const reply = await recordWelcomeIntroActivity(reactFirst.db, {
+      post,
+      comment: comment("c_reply", "Welcome!", new Date("2026-09-26T10:05:00Z")),
+      author: guide,
+      mentionedUserIds: [],
+      replyToCommentId: "c_intro",
+    });
+    expect(reply.notifiedNewcomerIds).toEqual([]);
+    expect(push).toHaveBeenCalledTimes(1);
+
+    push.mockClear();
+    const replyFirst = await seedIntro();
+    await recordWelcomeIntroActivity(replyFirst.db, {
+      post,
+      comment: comment("c_reply", "Welcome!", new Date("2026-09-26T10:05:00Z")),
+      author: guide,
+      mentionedUserIds: [],
+      replyToCommentId: "c_intro",
+    });
+    expect(await recordWelcomeIntroReaction(replyFirst.db, { commentId: "c_intro", reactor: member })).toBe(false);
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push.mock.calls[0][1].title).toBe("💬 Guide Gil replied to your intro");
   });
 });
 

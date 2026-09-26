@@ -92,6 +92,7 @@ model User {
   verifiedAIObservations     AIObservation[]           @relation("AIObservationVerifier")
   welcomeTableConfigsGuiding WelcomeTableConfig[]      @relation("WelcomeTableGuide")
   welcomeIntros              WelcomeIntro[]
+  commonsCommentReactions    CommonsCommentReaction[]
   circleChatPresence         CircleChatPresence[]
   eventsCreated              Event[]                   @relation("EventCreatedBy")
   eventHosting               EventHost[]
@@ -989,6 +990,7 @@ model CommonsComment {
   content  String                @db.Text
   media    CommonsCommentMedia[]
   welcomeIntro WelcomeIntro?
+  reactions    CommonsCommentReaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1287,6 +1289,22 @@ model CommonsPostSupport {
 
   @@unique([postId, userId])
   @@index([postId])
+  @@index([userId, createdAt])
+  @@schema("public")
+}
+
+// A member's "like" on a commons comment - the comment-level counterpart of
+// CommonsPostSupport (one per member per comment, toggled).
+model CommonsCommentReaction {
+  id        String         @id @default(cuid())
+  commentId String
+  comment   CommonsComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+
+  @@unique([commentId, userId])
+  @@index([commentId])
   @@index([userId, createdAt])
   @@schema("public")
 }

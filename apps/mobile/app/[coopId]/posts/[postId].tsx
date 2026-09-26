@@ -16,6 +16,7 @@ import {
   Award,
   CheckCircle2,
   CornerDownRight,
+  Heart,
   ImagePlus,
   Pencil,
   Send,
@@ -71,6 +72,7 @@ export default function CommonsPostDetailScreen() {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [busyCommentId, setBusyCommentId] = useState<string | null>(null);
+  const [reactingCommentId, setReactingCommentId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<{ id: string; author: string } | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const commentsOffsetY = useRef(0);
@@ -211,6 +213,30 @@ export default function CommonsPostDetailScreen() {
       setError(caughtError instanceof Error ? caughtError.message : 'Could not join circle.');
     } finally {
       setIsJoiningCircle(false);
+    }
+  };
+
+  const toggleCommentReaction = async (commentId: string) => {
+    if (!sessionToken || reactingCommentId) return;
+    setReactingCommentId(commentId);
+    try {
+      const result = await api.toggleCommentReaction(commentId, sessionToken);
+      setPost((current) =>
+        current
+          ? {
+              ...current,
+              comments: current.comments.map((comment) =>
+                comment.id === commentId
+                  ? { ...comment, viewerReacted: result.reacted, reactionCount: result.reactionCount }
+                  : comment
+              ),
+            }
+          : current
+      );
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Could not update your reaction.');
+    } finally {
+      setReactingCommentId(null);
     }
   };
 
@@ -602,6 +628,34 @@ export default function CommonsPostDetailScreen() {
                             <CommonsMediaTile media={media} size={COMPOSER_MEDIA_TILE_SIZE} />
                           </TouchableOpacity>
                         ))}
+                      </View>
+                    ) : null}
+                    {comment.id ? (
+                      <View className="mt-2 flex-row items-center">
+                        <TouchableOpacity
+                          onPress={() => void toggleCommentReaction(comment.id)}
+                          disabled={!sessionToken || circleIsMember === false || reactingCommentId === comment.id}
+                          className="flex-row items-center gap-1 rounded-full px-2 py-1"
+                          style={{
+                            backgroundColor: comment.viewerReacted ? THEME.primarySoft : 'transparent',
+                            opacity: !sessionToken || circleIsMember === false ? 0.5 : 1,
+                          }}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: !!comment.viewerReacted }}
+                          accessibilityLabel={`${comment.viewerReacted ? 'Remove your like from' : 'Like'} ${comment.author}'s comment, ${comment.reactionCount ?? 0} ${(comment.reactionCount ?? 0) === 1 ? 'like' : 'likes'}`}
+                        >
+                          <Heart
+                            size={13}
+                            color={comment.viewerReacted ? THEME.primary : THEME.muted}
+                            fill={comment.viewerReacted ? THEME.primary : 'transparent'}
+                          />
+                          <Text
+                            className="text-[11px] font-bold"
+                            style={{ color: comment.viewerReacted ? THEME.primary : '#78716C' }}
+                          >
+                            {comment.reactionCount ?? 0}
+                          </Text>
+                        </TouchableOpacity>
                       </View>
                     ) : null}
                   </View>

@@ -56,7 +56,7 @@ The current Playwright suite covers:
 6. The generated post is removed after the assertions so repeat runs do not fill the feed.
 7. Signing in lands on Circle View (the Commons tab's landing screen), not the post feed directly; opening a circle and using its back button returns to Circle View without duplicating the bottom tab bar.
 8. A signed-in member can join a welcome lounge from Circle View's dashed "Join a welcome lounge" card and lands in that lounge's real feed.
-9. A signed-in member opens the commons info page from the drawer's info button (its only entry point) and switches between the Overview, Community, and Governance tabs, each showing real member-only data (mission priorities, this month's activity stats, people, circles, and governance thresholds/proposals).
+9. A signed-in member opens the commons info page from the drawer's info button (its only entry point) and switches between the Overview, Community, and Governance tabs, each showing real member-only data (mission priorities, this month's activity stats, estimated AI spending, people, circles, and governance thresholds/proposals).
 10. Two separately signed-in members can join a welcome lounge from Circle View, land in its real feed, and see the same Sage-authored welcome thread prompting introductions.
 11. A member creates an event from the feed composer's "+" affordance; it renders as an inline event card in the feed and in the "Upcoming" module, and opens a dedicated event detail screen (RSVP, add to calendar, discussion).
 12. User A creates an event; User B RSVPs "Going" from the event detail screen; User A sees the updated going count after reload.

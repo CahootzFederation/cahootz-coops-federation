@@ -421,6 +421,9 @@ export interface PersonalPageProfile {
   name: string;
   handle: string;
   bio?: string | null;
+  avatarUrl?: string | null;
+  avatarEmoji?: string | null;
+  avatarColor?: string | null;
   createdAt: string;
   followerCount: number;
   followingCount: number;
@@ -952,6 +955,32 @@ export const api = {
     );
   },
 
+  async updatePersonalPageProfile(
+    data: {
+      bio: string;
+      avatarUrl: string | null;
+      avatarEmoji: string | null;
+      avatarColor: string | null;
+    },
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.updatePersonalPageProfile`,
+      {
+        method: 'POST',
+        headers: createApiHeaders(null, sessionToken),
+        body: JSON.stringify(data),
+      },
+    );
+
+    return readTrpcResult<{
+      bio: string | null;
+      avatarUrl: string | null;
+      avatarEmoji: string | null;
+      avatarColor: string | null;
+    }>(response, 'Could not save your profile');
+  },
+
   async deleteCommonsPost(postId: string, sessionToken?: string | null) {
     const response = await fetch(`${API_BASE_URL}/trpc/commons.deletePost`, {
       method: 'POST',
@@ -1234,6 +1263,8 @@ export const api = {
 
   async uploadCommonsPostMedia(data: {
     coopId: string;
+    /** Blob folder; profile photos use 'profile'. */
+    uploadType?: 'post' | 'profile';
     uri: string;
     fileName?: string | null;
     mimeType: string;
@@ -1257,7 +1288,7 @@ export const api = {
       body: JSON.stringify({
         filename: fileName,
         contentType: data.mimeType,
-        uploadType: 'post',
+        uploadType: data.uploadType || 'post',
         resourceId: data.coopId,
       }),
     });

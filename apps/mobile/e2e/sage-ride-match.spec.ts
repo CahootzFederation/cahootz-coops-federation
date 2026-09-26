@@ -76,7 +76,10 @@ test("two members complete a Sage ride-match suggestion and get a private circle
     let suggestionId: string | undefined;
     for (let attempt = 0; attempt < 12 && !suggestionId; attempt++) {
       const { suggestions } = await trpcGet("sage.list", mayaToken, { tab: "NEEDS_YOU" });
-      suggestionId = suggestions.find((s: { circleId: string | null }) => s.circleId === circleId)?.id;
+      // Trend detection runs on the same closed window and can also land a
+      // suggestion for this circle in Maya's queue - pick the ride match.
+      suggestionId = suggestions.find((s: { circleId: string | null; type: string }) =>
+        s.circleId === circleId && s.type === "RIDE_MATCH_PROPOSAL")?.id;
       if (!suggestionId) await maya.page.waitForTimeout(5000);
     }
     if (!suggestionId) throw new Error("Sage never surfaced a ride-match suggestion for this window");
@@ -98,7 +101,8 @@ test("two members complete a Sage ride-match suggestion and get a private circle
     let jordanSuggestion: { id: string } | undefined;
     for (let attempt = 0; attempt < 6 && !jordanSuggestion; attempt++) {
       const { suggestions: jordanNeedsYou } = await trpcGet("sage.list", jordanToken, { tab: "NEEDS_YOU" });
-      jordanSuggestion = jordanNeedsYou.find((s: { circleId: string | null }) => s.circleId === circleId);
+      jordanSuggestion = jordanNeedsYou.find((s: { circleId: string | null; type: string }) =>
+        s.circleId === circleId && s.type === "RIDE_MATCH_PROPOSAL");
       if (!jordanSuggestion) await jordan.page.waitForTimeout(2000);
     }
     expect(jordanSuggestion, "Jordan should have a pending Sage review after Maya consents").toBeTruthy();

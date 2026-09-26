@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { newSignedInPage } from "./support/auth";
+import { enterFeed, newSignedInPage } from "./support/auth";
 
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 const USER_A_EMAIL =
@@ -142,5 +142,20 @@ test("two signed-in members see Sage's introduction thread in their welcome loun
     await expect(pageA.getByText(/^Welcome Lounge \d+$/)).toBeVisible();
   } finally {
     await Promise.all([contextA.close(), contextB.close()]);
+  }
+});
+
+test("signed-out visitors see a sign-in card in place of the welcome lounge", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 430, height: 932 } });
+  const page = await context.newPage();
+  try {
+    await enterFeed(page);
+    await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
+    await expect(page.getByText("Join a welcome lounge", { exact: true })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page.getByPlaceholder("name@email.com")).toBeVisible();
+  } finally {
+    await context.close();
   }
 });

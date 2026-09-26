@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '@repo/db';
 
 import { groupsRouter } from '../routers/groups.js';
+import { createNotificationAndPush } from '../services/push-notification-service.js';
 import { validateSCBalance } from '../services/sc-validation-service.js';
 
 const mockDb = db as any;
@@ -13,6 +14,10 @@ vi.mock('../services/sc-validation-service.js', () => ({
 
 vi.mock('../lib/bot.js', () => ({
   ensureSageBotUser: vi.fn().mockResolvedValue({ id: 'sage_1' }),
+}));
+
+vi.mock('../services/push-notification-service.js', () => ({
+  createNotificationAndPush: vi.fn().mockResolvedValue({}),
 }));
 
 // Real class for Agent (per project convention), real-enough run() for the
@@ -119,7 +124,12 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
     },
     commonsPost: {
       create: vi.fn().mockResolvedValue({}),
+      findFirst: vi.fn().mockResolvedValue(null),
       ...overrides.commonsPost,
+    },
+    commonsComment: {
+      create: vi.fn().mockResolvedValue({ id: 'comment_sage_1' }),
+      ...overrides.commonsComment,
     },
     auditLog: {
       create: vi.fn().mockResolvedValue({}),
@@ -138,6 +148,7 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
     },
     user: {
       findUnique: vi.fn().mockResolvedValue(ACTIVE_USER),
+      update: vi.fn().mockResolvedValue({}),
       ...overrides.user,
     },
     // Supports both the callback form (`$transaction(async (tx) => ...)`) and
@@ -1079,6 +1090,95 @@ describe('groupsRouter', () => {
       const result = await callerFor(db).assignWelcomeTable({});
 
       expect(result.welcomeTableNumber).toBe(4);
+    });
+
+    describe('newcomer announcement', () => {
+      const activeTable = { id: 'wt_1', name: 'Welcome Lounge 1', welcomeTableStatus: 'OPEN' };
+      const joiningDb = (overrides: Record<string, Partial<Record<string, any>>> = {}) =>
+        makeDb({
+          groupMember: {
+            findFirst: vi.fn().mockResolvedValue(null),
+            count: vi.fn().mockResolvedValue(5),
+            findMany: vi.fn().mockResolvedValue([{ userId: 'guide_1' }, { userId: 'user_2' }]),
+          },
+          welcomeTableConfig: {
+            upsert: vi.fn().mockResolvedValue({ ...baseConfig, activeTableId: 'wt_1' }),
+          },
+          group: { findUnique: vi.fn().mockResolvedValue(activeTable) },
+          commonsPost: { findFirst: vi.fn().mockResolvedValue({ id: 'post_welcome' }) },
+          user: { findUnique: vi.fn().mockResolvedValue({ ...ACTIVE_USER, handle: 'alice' }) },
+          ...overrides,
+        });
+
+      it("has Sage @everyone the lounge on its welcome post, highlighting the newcomer", async () => {
+        const db = joiningDb();
+
+        await callerFor(db).assignWelcomeTable({});
+
+        expect(db.commonsPost.findFirst).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { coopId: 'cahootz', circleId: 'wt_1', authorId: 'sage_1' } }),
+        );
+        expect(db.commonsComment.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: {
+              postId: 'post_welcome',
+              authorId: 'sage_1',
+              content: expect.stringMatching(/\[@everyone\] please welcome \[@alice\] to Welcome Lounge 1/),
+            },
+          }),
+        );
+      });
+
+      it('pushes a notification to every other human in the lounge', async () => {
+        const db = joiningDb();
+
+        await callerFor(db).assignWelcomeTable({});
+
+        expect(db.groupMember.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: {
+              groupId: 'wt_1',
+              userId: { not: ACTIVE_USER.id },
+              user: { isBot: false, deletedAt: null },
+            },
+          }),
+        );
+        expect(createNotificationAndPush).toHaveBeenCalledTimes(2);
+        for (const userId of ['guide_1', 'user_2']) {
+          expect(createNotificationAndPush).toHaveBeenCalledWith(db, {
+            userId,
+            coopId: 'cahootz',
+            type: 'WELCOME_LOUNGE_JOIN',
+            title: expect.stringContaining('Welcome Lounge 1'),
+            body: expect.stringContaining('Alice'),
+            data: { postId: 'post_welcome', commentId: 'comment_sage_1', groupId: 'wt_1', coopId: 'cahootz' },
+          });
+        }
+      });
+
+      it('still seats the newcomer when the announcement fails', async () => {
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const db = joiningDb({
+          commonsComment: { create: vi.fn().mockRejectedValue(new Error('db down')) },
+        });
+
+        const result = await callerFor(db).assignWelcomeTable({});
+
+        expect(result.groupId).toBe('wt_1');
+        expect(createNotificationAndPush).not.toHaveBeenCalled();
+        errorSpy.mockRestore();
+      });
+
+      it('does not re-announce a newcomer who is already seated', async () => {
+        const db = joiningDb({
+          groupMember: { findFirst: vi.fn().mockResolvedValue({ group: activeTable }) },
+        });
+
+        await callerFor(db).assignWelcomeTable({});
+
+        expect(db.commonsComment.create).not.toHaveBeenCalled();
+        expect(createNotificationAndPush).not.toHaveBeenCalled();
+      });
     });
 
     it('throws FORBIDDEN when welcome tables are disabled', async () => {

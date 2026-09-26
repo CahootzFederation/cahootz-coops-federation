@@ -3,7 +3,9 @@ import { TRPCError } from "@trpc/server";
 import type { Context } from "../context.js";
 import { auditLogEntry } from "../lib/audit.js";
 import { ensureSageBotUser } from "../lib/bot.js";
+import { EVERYONE_MENTION_HANDLE, ensureUserHandle } from "../lib/commons.js";
 import { generateInviteCode } from "../lib/invite-code.js";
+import { createNotificationAndPush } from "./push-notification-service.js";
 
 type Db = Context["db"];
 
@@ -173,7 +175,81 @@ export async function assignWelcomeTable(db: Db, coopId: string, userId: string)
   });
   if (existing) return existing.group;
 
-  return assignOrAdvance(db, coopId, { type: "auto", newcomerId: userId });
+  const lounge = await assignOrAdvance(db, coopId, { type: "auto", newcomerId: userId });
+  // Best-effort: the newcomer is already seated, so a failed announcement
+  // must not fail (and get retried into) the join itself.
+  await announceNewcomer(db, coopId, lounge, userId).catch((error) =>
+    console.error("Could not announce welcome lounge newcomer", { groupId: lounge.id, userId, error }),
+  );
+  return lounge;
+}
+
+export const WELCOME_LOUNGE_JOIN_NOTIFICATION = "WELCOME_LOUNGE_JOIN";
+
+/**
+ * Sage replies on the lounge's welcome post with an `@everyone` shout-out
+ * highlighting the newcomer, and pushes a notification to every other human
+ * in the lounge so they can come say hi. Runs after the seating transaction
+ * commits - Expo pushes are slow and must not hold a Serializable lock.
+ */
+async function announceNewcomer(
+  db: Db,
+  coopId: string,
+  lounge: { id: string; name: string },
+  newcomerId: string,
+) {
+  const sage = await ensureSageBotUser(db, coopId);
+  const welcomePost = await db.commonsPost.findFirst({
+    where: { coopId, circleId: lounge.id, authorId: sage.id },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  if (!welcomePost) return;
+
+  const newcomer = await db.user.findUnique({
+    where: { id: newcomerId },
+    select: { id: true, handle: true, name: true, email: true },
+  });
+  if (!newcomer) return;
+  const handle = await ensureUserHandle(db, newcomer);
+  const name = newcomer.name || newcomer.email.split("@")[0] || "a new member";
+
+  const comment = await db.commonsComment.create({
+    data: {
+      postId: welcomePost.id,
+      authorId: sage.id,
+      content:
+        `📣 [@${EVERYONE_MENTION_HANDLE}] please welcome [@${handle}] to ${lounge.name}! 🎉 ` +
+        `Drop a hello below and help them feel at home. [@${handle}], introduce yourself whenever you're ready.`,
+    },
+    select: { id: true },
+  });
+
+  const recipients = await db.groupMember.findMany({
+    where: {
+      groupId: lounge.id,
+      userId: { not: newcomerId },
+      user: { isBot: false, deletedAt: null },
+    },
+    select: { userId: true },
+  });
+  // Fire-and-forget like the other comment notifications: a lounge holds
+  // dozens of members, and the newcomer shouldn't wait on their pushes.
+  void Promise.allSettled(
+    recipients.map(({ userId }) =>
+      createNotificationAndPush(db, {
+        userId,
+        coopId,
+        type: WELCOME_LOUNGE_JOIN_NOTIFICATION,
+        title: `👋 New member in ${lounge.name}`,
+        body: `Sage: Everyone, please welcome ${name}! Come say hi.`,
+        data: { postId: welcomePost.id, commentId: comment.id, groupId: lounge.id, coopId },
+      }),
+    ),
+  ).then((results) => {
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed) console.error("Some welcome lounge join notifications failed", { groupId: lounge.id, failed });
+  });
 }
 
 export async function startNextWelcomeTable(db: Db, coopId: string, actorWalletAddress: string) {

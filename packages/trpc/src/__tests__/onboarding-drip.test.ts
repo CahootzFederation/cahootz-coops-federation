@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../services/push-notification-service.js", () => ({
   createNotificationAndPush: vi.fn().mockResolvedValue({ id: "notif_1" }),
@@ -8,6 +8,7 @@ vi.mock("../lib/email.js", () => ({
   sendOnboardingDripEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
+import { resetCoopConfigCache } from "../config/coop.js";
 import { sendOnboardingDripEmail } from "../lib/email.js";
 import { ACTIVITY_TOUCH_INTERVAL_MS, shouldTouchActivity, touchMemberActivity } from "../lib/member-activity.js";
 import { dripTargetUrl, planDripStep, runOnboardingDrip } from "../services/onboarding-drip.js";
@@ -199,6 +200,9 @@ const pushed = () => vi.mocked(createNotificationAndPush).mock.calls.map((call) 
 
 describe("runOnboardingDrip", () => {
   beforeEach(() => {
+    // Assert against the coop config's default app host.
+    delete process.env.APP_URL;
+    resetCoopConfigCache();
     vi.mocked(createNotificationAndPush).mockClear();
     vi.mocked(sendOnboardingDripEmail).mockClear();
   });
@@ -300,7 +304,7 @@ describe("runOnboardingDrip", () => {
         expect.objectContaining({
           to: "ada@example.com",
           commonsName: "Riverside Commons",
-          ctaUrl: expect.stringMatching(/\/riverside\/posts\/p1$/),
+          ctaUrl: "https://app.cahootz.coop/riverside/posts/p1",
         }),
       );
       expect(state.sends[0]).toMatchObject({ status: "SENT", channel: "EMAIL" });
@@ -415,12 +419,34 @@ describe("runOnboardingDrip", () => {
     });
   });
 
-  it("builds web links for the email fallback", () => {
-    expect(dripTargetUrl({ type: "EVENT", id: "e 1", coopId: "riverside", postId: "p" }, "https://app.test")).toBe(
-      "https://app.test/riverside/events/e%201",
-    );
-    expect(dripTargetUrl({ type: "CIRCLE", id: "c1", coopId: "riverside" }, "https://app.test")).toBe(
-      "https://app.test/riverside/posts?circleId=c1",
-    );
+  describe("email links", () => {
+    afterEach(() => {
+      delete process.env.APP_URL;
+      delete process.env.WEB_BASE_URL;
+      resetCoopConfigCache();
+    });
+
+    it("open the member app's routes, not the marketing site", () => {
+      process.env.WEB_BASE_URL = "https://cahootz.coop";
+      resetCoopConfigCache();
+      expect(dripTargetUrl({ type: "POST", id: "p1", coopId: "riverside", circleId: "c1" })).toBe(
+        "https://app.cahootz.coop/riverside/posts/p1",
+      );
+      expect(dripTargetUrl({ type: "EVENT", id: "e 1", coopId: "riverside", postId: "p" })).toBe(
+        "https://app.cahootz.coop/riverside/events/e%201",
+      );
+      // A circle feed, which is also how a welcome lounge opens.
+      expect(dripTargetUrl({ type: "CIRCLE", id: "wl4", coopId: "riverside" })).toBe(
+        "https://app.cahootz.coop/riverside/posts?circleId=wl4",
+      );
+    });
+
+    it("follow APP_URL from the coop config", () => {
+      process.env.APP_URL = "https://members.example.test/";
+      resetCoopConfigCache();
+      expect(dripTargetUrl({ type: "CIRCLE", id: "c1", coopId: "riverside" })).toBe(
+        "https://members.example.test/riverside/posts?circleId=c1",
+      );
+    });
   });
 });

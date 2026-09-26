@@ -7,6 +7,8 @@
  * CoopConfig) and never a specific coin or co-op.
  */
 
+import { coopConfig } from "../config/coop.js";
+
 export const ONBOARDING_DRIP_NOTIFICATION_TYPE = "ONBOARDING_DRIP";
 
 export type DripStepDay = 1 | 3 | 7;
@@ -60,13 +62,12 @@ export function isDeliverableEmail(email: string | null | undefined): email is s
   return !domain.endsWith(".internal") && !domain.endsWith(".local");
 }
 
-/** Base URL the email fallback's links open (the app's web build). */
+/**
+ * Email links open the member app's web build (the Expo app, `APP_URL`),
+ * not the Next.js marketing/portal site, which has no post/event/circle routes.
+ */
 export function dripLinkBaseUrl(): string {
-  return (
-    process.env.WEB_BASE_URL ||
-    process.env.NEXT_PUBLIC_WEB_URL ||
-    "https://cahootz.coop"
-  ).replace(/\/+$/, "");
+  return coopConfig().appUrl.replace(/\/+$/, "");
 }
 
 const SNIPPET_LENGTH = 70;

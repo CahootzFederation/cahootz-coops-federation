@@ -92,6 +92,10 @@ export function dripNotificationData(target: DripTarget, day: DripStepDay): Reco
 }
 
 /** The same destination as a web link, for the email fallback. */
+// Paths are the member app's expo-router URLs (route groups aren't part of
+// the URL): app/[coopId]/posts/[postId].tsx, app/[coopId]/events/[eventId].tsx,
+// and app/[coopId]/posts.tsx?circleId= for a circle feed or welcome lounge -
+// the same screens notificationDestination() opens for these ids.
 export function dripTargetUrl(target: DripTarget, baseUrl = dripLinkBaseUrl()): string {
   const coop = encodeURIComponent(target.coopId);
   if (target.type === "POST") return `${baseUrl}/${coop}/posts/${encodeURIComponent(target.id)}`;

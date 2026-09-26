@@ -1,7 +1,15 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { Browser, Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
 const TEST_CODE = process.env.E2E_LOGIN_CODE || "000000";
+const AUTH_DIR = path.join(__dirname, "..", ".auth");
+
+export const USER_A_EMAIL =
+  process.env.E2E_USER_A_EMAIL || "releaseclick1@test.cahootz.local";
+export const USER_B_EMAIL =
+  process.env.E2E_USER_B_EMAIL || "releaseclick2@test.cahootz.local";
 
 /**
  * Clicks past the post-signup wizard's three steps (intro carousel, profile
@@ -83,12 +91,37 @@ export async function signIn(page: Page, email: string) {
   await page.getByLabel("Close menu").click();
 }
 
+/**
+ * Where `auth.setup.ts` saves each account's signed-in browser storage.
+ * Sessions live in localStorage on web, so restoring this file into a new
+ * context is equivalent to having just signed in through the UI.
+ */
+export function storageStatePath(email: string) {
+  return path.join(AUTH_DIR, `${email.split("@")[0]}.json`);
+}
+
+/**
+ * Opens an isolated, signed-in browser context for `email`.
+ *
+ * Reuses the session saved by the `setup` project (which signs in through
+ * the real UI once per run) instead of repeating the whole sign-in journey
+ * in every test. Falls back to a UI sign-in when no saved session exists -
+ * e.g. an account the setup project doesn't cover, or `--no-deps`.
+ */
 export async function newSignedInPage(browser: Browser, email: string) {
+  const statePath = storageStatePath(email);
+  const hasSavedSession = fs.existsSync(statePath);
   const context = await browser.newContext({
     viewport: { width: 430, height: 932 },
+    storageState: hasSavedSession ? statePath : undefined,
   });
   const page = await context.newPage();
-  await signIn(page, email);
+  if (hasSavedSession) {
+    await page.goto("/");
+    await expect(page.getByLabel("Open menu")).toBeVisible();
+  } else {
+    await signIn(page, email);
+  }
   return { context, page };
 }
 

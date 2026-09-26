@@ -5,6 +5,10 @@ const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 const USER_A_EMAIL = process.env.E2E_USER_A_EMAIL || "releaseclick1@test.cahootz.local"; // circle leader
 const USER_B_EMAIL = process.env.E2E_USER_B_EMAIL || "releaseclick2@test.cahootz.local";
 const CIRCLE_WINDOW_MESSAGE_LIMIT = 40;
+// Check often so the test moves on as soon as the result lands, instead of
+// sleeping a fixed 3-5s between checks.
+const SAGE_POLL = { timeout: 90_000, intervals: [1_000, 2_000, 3_000] }; // live model call
+const SERVER_POLL = { timeout: 30_000, intervals: [250, 500, 1_000] }; // async server work
 
 async function sessionTokenFor(page: import("@playwright/test").Page) {
   return page.evaluate(() => window.localStorage.getItem("cahootz.sessionToken"));
@@ -34,7 +38,7 @@ async function trpcGet(path: string, sessionToken: string, input: unknown) {
 // A circle leader receives a Sage trend suggestion (an event, a post to the circle, or a post to the
 // whole Commons - whichever the model judges fits) after a window of conversation about a recurring
 // topic closes, and approving it through the real UI actually publishes something.
-test("a circle leader receives and approves a Sage trend suggestion", async ({ browser }) => {
+test("a circle leader receives and approves a Sage trend suggestion", { tag: "@sage" }, async ({ browser }) => {
   test.setTimeout(240_000); // seeds 40 messages sequentially and polls a live model call, not a fixed UI wait
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -68,14 +72,13 @@ test("a circle leader receives and approves a Sage trend suggestion", async ({ b
     await trpcPost("groups.addComment", leaderToken, { groupId: circleId, content: `E2E ${runId}: ok last thought - a cleanup day, who's with me?` });
 
     let suggestionId: string | undefined;
-    for (let attempt = 0; attempt < 12 && !suggestionId; attempt++) {
+    await expect.poll(async () => {
       const { suggestions } = await trpcGet("sage.list", leaderToken, { tab: "NEEDS_YOU" });
       // Ride-match detection runs on the same closed window; pick the trend suggestion.
       suggestionId = suggestions.find((s: { circleId: string | null; type: string }) =>
         s.circleId === circleId && s.type === "SUGGEST_ACTION")?.id;
-      if (!suggestionId) await leader.page.waitForTimeout(5000);
-    }
-    if (!suggestionId) throw new Error("Sage never surfaced a trend suggestion for this window");
+      return suggestionId;
+    }, { message: "Sage never surfaced a trend suggestion for this window", ...SAGE_POLL }).toBeTruthy();
 
     await leader.page.goto(`/sage/${suggestionId}`);
     await expect(leader.page.getByText(/Sage has an idea/i)).toBeVisible();
@@ -83,13 +86,10 @@ test("a circle leader receives and approves a Sage trend suggestion", async ({ b
     await leader.page.getByRole("button", { name: "Approve" }).click();
 
     // Approving is async (Trigger execution) - poll Done instead of asserting immediately.
-    let done = false;
-    for (let attempt = 0; attempt < 8 && !done; attempt++) {
+    await expect.poll(async () => {
       const { suggestions } = await trpcGet("sage.list", leaderToken, { tab: "DONE" });
-      done = suggestions.some((s: { id: string }) => s.id === suggestionId);
-      if (!done) await leader.page.waitForTimeout(3000);
-    }
-    expect(done, "Suggestion should reach Done after approval").toBe(true);
+      return suggestions.some((s: { id: string }) => s.id === suggestionId);
+    }, { message: "Suggestion should reach Done after approval", ...SERVER_POLL }).toBe(true);
 
     const detail = await trpcGet("sage.getDetail", leaderToken, { actionId: suggestionId });
     expect(detail.suggestion.status).toBe("APPROVED");

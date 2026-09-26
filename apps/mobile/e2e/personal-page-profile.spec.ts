@@ -64,7 +64,11 @@ test("a member adds a bio and emoji avatar to their page and another member sees
       mimeType: "image/png",
       buffer: TINY_PNG,
     });
-    await expect(userA.page.getByLabel(/profile photo$/).last()).toBeVisible();
+    // expo-image renders the label as the <img>'s alt text on web, which
+    // getByLabel doesn't match - query it as an image by accessible name.
+    await expect(
+      userA.page.getByRole("img", { name: /profile photo$/ }).last(),
+    ).toBeVisible();
 
     // Switch to an emoji avatar instead, then write the bio and save.
     await userA.page.getByRole("button", { name: "Use emoji" }).click();

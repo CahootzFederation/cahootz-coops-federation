@@ -370,6 +370,9 @@ async function findUserByPersonalHandle(db: any, handle: string) {
       handle: true,
       name: true,
       selfDescription: true,
+      avatarUrl: true,
+      avatarEmoji: true,
+      avatarColor: true,
       createdAt: true,
     },
   });
@@ -1733,6 +1736,9 @@ export const commonsRouter = router({
           name: displayName(user),
           handle: personHandle(user),
           bio: user.selfDescription,
+          avatarUrl: user.avatarUrl,
+          avatarEmoji: user.avatarEmoji,
+          avatarColor: user.avatarColor,
           createdAt: user.createdAt.toISOString(),
           followerCount,
           followingCount,
@@ -1807,6 +1813,50 @@ export const commonsRouter = router({
       await ctx.db.personalPagePost.delete({ where: { id: input.postId } });
 
       return { success: true };
+    }),
+
+  updatePersonalPageProfile: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        bio: z.string().trim().max(5000),
+        avatarUrl: z
+          .string()
+          .url()
+          .max(2048)
+          .refine((url) => url.startsWith('https://'), 'Photo must be an https URL.')
+          .nullable(),
+        avatarEmoji: z.string().trim().max(16).nullable(),
+        avatarColor: z
+          .string()
+          .regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be a hex value like #FF6B00.')
+          .nullable(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const updated = await ctx.db.user.update({
+        where: { id: accountUser.id },
+        data: {
+          selfDescription: input.bio || null,
+          avatarUrl: input.avatarUrl,
+          // A photo replaces the emoji so the two never disagree.
+          avatarEmoji: input.avatarUrl ? null : input.avatarEmoji || null,
+          avatarColor: input.avatarUrl ? null : input.avatarColor,
+        },
+        select: {
+          selfDescription: true,
+          avatarUrl: true,
+          avatarEmoji: true,
+          avatarColor: true,
+        },
+      });
+
+      return {
+        bio: updated.selfDescription,
+        avatarUrl: updated.avatarUrl,
+        avatarEmoji: updated.avatarEmoji,
+        avatarColor: updated.avatarColor,
+      };
     }),
 
   createPersonalPagePostComment: accountAuthenticatedProcedure

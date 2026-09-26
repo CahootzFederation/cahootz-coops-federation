@@ -14,6 +14,7 @@ import {
 import { EditPersonalProfileSheet } from '@/components/edit-personal-profile-sheet';
 import { PersonAvatar } from '@/components/person-avatar';
 import { PersonalPagePostCard } from '@/components/personal-page-post-card';
+import { ProfileCommonsSection } from '@/components/profile-commons-section';
 import { PostTypeSelector } from '@/components/post-type-selector';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
@@ -300,6 +301,12 @@ export default function PersonalPageScreen() {
               </TouchableOpacity>
             ) : null}
           </View>
+
+          {profile?.commons ? (
+            <View className="mt-3">
+              <ProfileCommonsSection commons={profile.commons} isOwnPage />
+            </View>
+          ) : null}
 
           <View className="mt-3 rounded-[28px] border bg-white p-4" style={{ borderColor: PAGE_THEME.border }}>
             {selectedMedia.length > 0 ? (

@@ -355,10 +355,106 @@ function mapPersonalPagePost(record: any) {
         id: comment.id,
         authorId: comment.authorId,
         author: displayName(comment.author),
+        authorHandle: personHandle(comment.author),
         body: comment.content,
         createdAt: comment.createdAt.toISOString(),
       })) ?? [],
   };
+}
+
+/**
+ * The commons a person's page lists, with the roles and funding badges they
+ * hold in each. A public commons is always listed; a private commons is listed
+ * only when the viewer is an active member of it too, so a page never reveals
+ * a private commons (or what someone holds there) to an outsider.
+ */
+async function loadVisibleProfileCommons(
+  db: any,
+  profileUserId: string,
+  viewerId: string | null,
+) {
+  const memberships = await db.userCoopMembership.findMany({
+    where: { userId: profileUserId, status: 'ACTIVE' },
+    select: { coopId: true, roles: true, joinedAt: true, createdAt: true },
+  });
+  if (memberships.length === 0) return [];
+
+  const coopIds = memberships.map((membership: any) => membership.coopId);
+  const [configs, viewerMemberships, badges] = await Promise.all([
+    db.coopConfig.findMany({
+      where: { coopId: { in: coopIds }, isActive: true },
+      orderBy: { version: 'desc' },
+      select: {
+        coopId: true,
+        name: true,
+        slug: true,
+        iconEmoji: true,
+        iconColor: true,
+        isPrivate: true,
+        isDemo: true,
+        displayOrder: true,
+      },
+    }),
+    viewerId && viewerId !== profileUserId
+      ? db.userCoopMembership.findMany({
+          where: { userId: viewerId, coopId: { in: coopIds }, status: 'ACTIVE' },
+          select: { coopId: true },
+        })
+      : [],
+    db.fundingBadgeEntitlement.findMany({
+      where: { userId: profileUserId, coopId: { in: coopIds }, status: 'ACTIVE' },
+      select: { coopId: true, tier: true },
+    }),
+  ]);
+
+  const configByCoop = new Map<string, any>();
+  for (const config of configs) {
+    if (!configByCoop.has(config.coopId)) configByCoop.set(config.coopId, config);
+  }
+  const viewerCoopIds = new Set<string>(
+    viewerId === profileUserId
+      ? coopIds
+      : viewerMemberships.map((membership: any) => membership.coopId),
+  );
+
+  return memberships
+    .map((membership: any) => {
+      const config = configByCoop.get(membership.coopId);
+      // Unconfigured coop ids aren't real commons, except the platform commons.
+      if (!config && membership.coopId !== COMMONS_COOP_ID) return null;
+      if (config?.isDemo) return null;
+      const isPrivate = !!config?.isPrivate;
+      if (isPrivate && !viewerCoopIds.has(membership.coopId)) return null;
+
+      const summary = mapCoopSummaryRecord(config, membership.coopId);
+      return {
+        coopId: membership.coopId,
+        name: summary.name,
+        shortName: summary.shortName,
+        iconEmoji: config?.iconEmoji ?? null,
+        iconColor: config?.iconColor ?? null,
+        isPrivate,
+        roles: (membership.roles as string[]).filter((role) => role !== 'sage'),
+        badges: badges
+          .filter((badge: any) => badge.coopId === membership.coopId)
+          .map((badge: any) => FUNDING_BADGE_BY_TIER.get(badge.tier))
+          .filter(Boolean)
+          .sort((a: any, b: any) => b.rank - a.rank)
+          .map((definition: any) => ({
+            tier: definition.tier,
+            name: definition.name,
+            shortName: definition.shortName,
+            color: definition.color,
+          })),
+        displayOrder: config?.displayOrder ?? 0,
+      };
+    })
+    .filter(Boolean)
+    .sort(
+      (a: any, b: any) =>
+        a.displayOrder - b.displayOrder || a.name.localeCompare(b.name),
+    )
+    .map(({ displayOrder: _displayOrder, ...commons }: any) => commons);
 }
 
 async function findUserByPersonalHandle(db: any, handle: string) {
@@ -638,6 +734,7 @@ function mapPostWithGroup(record: any, groupName: string, viewerId?: string) {
         id: comment.id,
         authorId: comment.authorId,
         author: displayName(comment.author),
+        authorHandle: personHandle(comment.author),
         supporterBadge: comment.supporterBadge ?? null,
         body: comment.content,
         media:
@@ -1537,6 +1634,7 @@ export const commonsRouter = router({
           id: comment.id,
           authorId: comment.authorId,
           author: displayName(comment.author),
+          authorHandle: personHandle(comment.author),
           body: comment.content,
         })),
       };
@@ -1717,6 +1815,12 @@ export const commonsRouter = router({
       const posts = hasMore ? rawPosts.slice(0, input.limit) : rawPosts;
       const nextCursor = hasMore ? posts[posts.length - 1].id : null;
 
+      const commons = await loadVisibleProfileCommons(
+        context.db,
+        user.id,
+        viewerUser?.id ?? null,
+      );
+
       const viewerIsFollowing =
         viewerUser && viewerUser.id !== user.id
           ? (await context.db.follow.findUnique({
@@ -1744,6 +1848,7 @@ export const commonsRouter = router({
           followingCount,
           isOwnPage: viewerUser?.id === user.id,
           viewerIsFollowing,
+          commons,
         },
         posts: posts.map(mapPersonalPagePost),
         nextCursor,
@@ -1908,6 +2013,7 @@ export const commonsRouter = router({
           id: comment.id,
           authorId: comment.authorId,
           author: displayName(comment.author),
+          authorHandle: personHandle(comment.author),
           body: comment.content,
           createdAt: comment.createdAt.toISOString(),
         },
@@ -2402,6 +2508,7 @@ export const commonsRouter = router({
           id: comment.id,
           authorId: comment.authorId,
           author: displayName(comment.author),
+          authorHandle: personHandle(comment.author),
           body: comment.content,
           media:
             comment.media?.map((item: any) => ({

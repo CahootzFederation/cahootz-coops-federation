@@ -21,6 +21,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { IconAvatar } from '@/components/icon-avatar';
+import { PersonLink } from '@/components/person-link';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -1082,8 +1083,10 @@ function CommunityTab({
           <>
             <View className="flex-row">
               {membersPreview.members.map((member, index) => (
-                <View
+                <PersonLink
                   key={member.id}
+                  name={member.name}
+                  handle={member.handle}
                   style={{ marginLeft: index === 0 ? 0 : -10 }}
                 >
                   <IconAvatar
@@ -1091,7 +1094,7 @@ function CommunityTab({
                     size={40}
                     radius={20}
                   />
-                </View>
+                </PersonLink>
               ))}
             </View>
             <Text className="mt-3 text-sm font-bold text-gray-500">

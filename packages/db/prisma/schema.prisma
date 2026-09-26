@@ -1355,6 +1355,7 @@ model GroupMember {
   role     String   @default("MEMBER") // "MEMBER" | "GUIDE" | "NEWCOMER"
   // Last time this member read the circle's messages; drives DM unread counts.
   lastReadAt DateTime?
+  notificationLevel String @default("MENTIONS") // "ALL" | "MENTIONS" | "NONE"
 
   @@unique([groupId, userId])
   @@index([userId])

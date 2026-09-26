@@ -65,6 +65,15 @@ function slugifyHandle(base: string) {
   return base.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 30) || "member";
 }
 
+/**
+ * Group-ping tokens Sage uses in system comments (e.g. `[@everyone]` in a
+ * welcome-lounge join announcement). They must never belong to a real user,
+ * or a mention meant for a whole room would resolve to - and notify - one
+ * person.
+ */
+export const EVERYONE_MENTION_HANDLE = "everyone";
+export const RESERVED_MENTION_HANDLES: ReadonlySet<string> = new Set([EVERYONE_MENTION_HANDLE, "here"]);
+
 type HandleDb = Pick<Context["db"], "user">;
 
 /**
@@ -79,8 +88,8 @@ export async function ensureUserHandle(
   if (user.handle) return user.handle;
 
   const base = slugifyHandle(user.name || user.email.split("@")[0] || "member");
-  let candidate = base;
-  let suffix = 0;
+  let suffix = RESERVED_MENTION_HANDLES.has(base) ? 1 : 0;
+  let candidate = suffix ? `${base}${suffix}` : base;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {

@@ -245,10 +245,12 @@ function shortId(id: string): string {
 function EmailShell({
   brandName = DEFAULT_NETWORK_NAME,
   preview,
+  footer,
   children,
 }: {
   brandName?: string | null;
   preview: string;
+  footer?: string;
   children?: React.ReactNode;
 }) {
   const displayName = brandName || DEFAULT_NETWORK_NAME;
@@ -273,7 +275,8 @@ function EmailShell({
         h(
           Text,
           { style: styles.footer },
-          `${displayName} sends transactional emails for account access and marketplace orders.`,
+          footer ||
+            `${displayName} sends transactional emails for account access and marketplace orders.`,
         ),
       ),
     ),
@@ -757,6 +760,62 @@ export async function sendWaitlistWelcomeEmail(
     to: email,
     subject: "Thanks for signing up for the wait list",
     react: h(WaitlistWelcomeEmail, { coopId }),
+  });
+}
+
+function OnboardingDripEmail({
+  commonsName,
+  heading,
+  body,
+  ctaLabel,
+  ctaUrl,
+}: {
+  commonsName: string;
+  heading: string;
+  body: string;
+  ctaLabel: string;
+  ctaUrl: string;
+}) {
+  return h(
+    EmailShell,
+    {
+      brandName: commonsName,
+      preview: body,
+      footer: `You're getting this because you recently joined ${commonsName}. Turn off "Getting started tips" in the app's notification settings to stop these emails.`,
+    },
+    h(Heading, { style: styles.heading }, heading),
+    h(Text, { style: styles.text }, body),
+    h(
+      Section,
+      { style: { marginTop: "22px" } },
+      h(Button, { href: ctaUrl, style: styles.button }, ctaLabel),
+    ),
+  );
+}
+
+/** New-member drip email, used only when the member can't get the push. */
+export async function sendOnboardingDripEmail({
+  to,
+  commonsName,
+  subject,
+  heading,
+  body,
+  ctaLabel,
+  ctaUrl,
+}: {
+  to: string;
+  commonsName: string;
+  subject: string;
+  heading: string;
+  body: string;
+  ctaLabel: string;
+  ctaUrl: string;
+}): Promise<void> {
+  await sendEmail({
+    to,
+    subject,
+    react: h(OnboardingDripEmail, { commonsName, heading, body, ctaLabel, ctaUrl }),
+    sentryContext: { emailType: "onboarding_drip" },
   });
 }
 

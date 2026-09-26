@@ -5,6 +5,7 @@ export const notificationCategories = [
   "governance",
   "payments",
   "orders",
+  "onboarding",
   "other",
 ] as const;
 export type NotificationCategory = (typeof notificationCategories)[number];
@@ -14,6 +15,7 @@ export const notificationCategoryLabels: Record<NotificationCategory, string> =
     governance: "Governance",
     payments: "Payments & rewards",
     orders: "Orders & stores",
+    onboarding: "Getting started tips",
     other: "Other account updates",
   };
 export const notificationCategoryTypes: Record<
@@ -66,6 +68,8 @@ export const notificationCategoryTypes: Record<
     "ORDER_STATUS_UPDATE",
     "STORE_APPROVED",
   ],
+  // New-member drip (packages/trpc/src/services/onboarding-drip.ts).
+  onboarding: ["ONBOARDING_DRIP"],
 };
 export function notificationCategory(type: string): NotificationCategory {
   return (
@@ -84,6 +88,7 @@ export const notificationPreferencesSchema = z.object({
   governance: z.boolean(),
   payments: z.boolean(),
   orders: z.boolean(),
+  onboarding: z.boolean(),
   other: z.boolean(),
 });
 export type NotificationPreferences = z.infer<
@@ -95,6 +100,7 @@ export const defaultNotificationPreferences: NotificationPreferences = {
   governance: true,
   payments: true,
   orders: true,
+  onboarding: true,
   other: true,
 };
 export const circleNotificationLevels = ["ALL", "MENTIONS", "NONE"] as const;

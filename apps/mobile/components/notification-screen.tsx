@@ -319,6 +319,7 @@ export default function NotificationScreen({
                           {
                             payments: "Payments",
                             orders: "Orders",
+                            onboarding: "Getting started",
                             other: "Other",
                           } as Partial<Record<NotificationCategory, string>>
                         )[value] || notificationCategoryLabels[value]

@@ -21,6 +21,10 @@ test("a member reaches the commons info page from the drawer's info button and c
       page.getByText("What we're building toward"),
     ).toBeVisible();
     await expect(page.getByText("This month")).toBeVisible();
+    // Member-only AI spend card, backed by commons.getAISpending. It renders
+    // in both the empty and populated states, so assert its fixed labels.
+    await expect(page.getByText("AI spending", { exact: true })).toBeVisible();
+    await expect(page.getByText("last month", { exact: true })).toBeVisible();
 
     // Community tab
     await page.getByText("Community", { exact: true }).click();

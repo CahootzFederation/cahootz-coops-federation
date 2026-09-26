@@ -795,6 +795,25 @@ export const api = {
     }>(response, 'Failed to load commons activity stats');
   },
 
+  async getCommonsAISpending(coopId: string, sessionToken?: string | null) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.getAISpending?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
+
+    return readTrpcResult<{
+      thisMonthUsd: number;
+      lastMonthUsd: number;
+      callsThisMonth: number;
+      unpricedCallsThisMonth: number;
+      byCategory: { category: string; estimatedUsd: number; calls: number }[];
+    }>(response, 'Failed to load commons AI spending');
+  },
+
   async listCommonsMembers(
     coopId: string,
     sessionToken?: string | null,

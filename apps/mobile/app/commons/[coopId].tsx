@@ -32,6 +32,7 @@ import {
   Lock,
   MessageCircle,
   Send,
+  Sparkles,
   Target,
   Users,
   Vote,
@@ -78,6 +79,14 @@ type ActivityStats = {
   openVotes: number;
 };
 
+type AISpending = {
+  thisMonthUsd: number;
+  lastMonthUsd: number;
+  callsThisMonth: number;
+  unpricedCallsThisMonth: number;
+  byCategory: { category: string; estimatedUsd: number; calls: number }[];
+};
+
 type MembersPreview = {
   totalCount: number;
   members: { id: string; name: string; handle: string }[];
@@ -97,6 +106,16 @@ function formatMoney(value?: number, currency = 'USD') {
     style: 'currency',
     currency,
     maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatAICost(value: number) {
+  if (value > 0 && value < 0.01) return '< $0.01';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 
@@ -164,6 +183,7 @@ export default function CommonsDetailScreen() {
   const [activityStats, setActivityStats] = useState<ActivityStats | null>(
     null,
   );
+  const [aiSpending, setAISpending] = useState<AISpending | null>(null);
   const [membersPreview, setMembersPreview] = useState<MembersPreview | null>(
     null,
   );
@@ -204,8 +224,13 @@ export default function CommonsDetailScreen() {
         // able to knock the whole page (or membership status determined
         // above) back to the signed-out view if one of them fails -
         // Promise.allSettled + per-call logging keeps them independent.
-        const [proposalsResult, statsResult, membersResult, circlesResult] =
-          hasMemberAccess
+        const [
+          proposalsResult,
+          statsResult,
+          membersResult,
+          circlesResult,
+          aiSpendingResult,
+        ] = hasMemberAccess
             ? await Promise.allSettled([
                 api.listProposals(
                   { coopId, limit: 5, offset: 0 },
@@ -216,6 +241,7 @@ export default function CommonsDetailScreen() {
                 sessionToken
                   ? api.listVisibleCircles(sessionToken, coopId)
                   : Promise.resolve({ groups: [] }),
+                api.getCommonsAISpending(coopId, sessionToken),
               ])
             : [];
         if (!mounted) return;
@@ -229,6 +255,11 @@ export default function CommonsDetailScreen() {
           setActivityStats(statsResult.value);
         } else if (statsResult) {
           console.error('Failed to load activity stats:', statsResult.reason);
+        }
+        if (aiSpendingResult?.status === 'fulfilled') {
+          setAISpending(aiSpendingResult.value);
+        } else if (aiSpendingResult) {
+          console.error('Failed to load AI spending:', aiSpendingResult.reason);
         }
         if (membersResult?.status === 'fulfilled') {
           setMembersPreview(membersResult.value);
@@ -247,6 +278,7 @@ export default function CommonsDetailScreen() {
         setDirectoryItem(null);
         setProposals([]);
         setActivityStats(null);
+        setAISpending(null);
         setMembersPreview(null);
         setCircles([]);
         setError(
@@ -707,6 +739,7 @@ export default function CommonsDetailScreen() {
                 <OverviewTab
                   config={activeConfig}
                   stats={activityStats}
+                  aiSpending={aiSpending}
                   charterExpanded={charterExpanded}
                   onToggleCharter={() => setCharterExpanded((v) => !v)}
                   onBrowseResources={() =>
@@ -930,12 +963,14 @@ export default function CommonsDetailScreen() {
 function OverviewTab({
   config,
   stats,
+  aiSpending,
   charterExpanded,
   onToggleCharter,
   onBrowseResources,
 }: {
   config: CoopConfigDetail;
   stats: ActivityStats | null;
+  aiSpending: AISpending | null;
   charterExpanded: boolean;
   onToggleCharter: () => void;
   onBrowseResources: () => void;
@@ -1043,6 +1078,8 @@ function OverviewTab({
         )}
       </View>
 
+      {aiSpending ? <AISpendingCard spending={aiSpending} /> : null}
+
       <TouchableOpacity
         accessibilityRole="button"
         onPress={onBrowseResources}
@@ -1057,6 +1094,82 @@ function OverviewTab({
         </Text>
       </TouchableOpacity>
     </>
+  );
+}
+
+function AISpendingCard({ spending }: { spending: AISpending }) {
+  const topCategory = spending.byCategory[0]?.estimatedUsd || 0;
+  return (
+    <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
+      <View className="mb-1 flex-row items-center justify-between">
+        <View className="flex-row items-center gap-2">
+          <Sparkles size={19} color={THEME.primary} />
+          <Text className="text-lg font-black text-gray-950">AI spending</Text>
+        </View>
+        <Text className="text-xs font-black uppercase text-gray-400">
+          Estimated
+        </Text>
+      </View>
+      <View className="mt-2 flex-row">
+        <View className="flex-1">
+          <Text className="text-2xl font-black text-gray-950">
+            {formatAICost(spending.thisMonthUsd)}
+          </Text>
+          <Text className="mt-1 text-xs font-bold text-gray-500">
+            this month · {spending.callsThisMonth} AI{' '}
+            {spending.callsThisMonth === 1 ? 'task' : 'tasks'}
+          </Text>
+        </View>
+        <View className="flex-1 items-end">
+          <Text className="text-2xl font-black text-gray-400">
+            {formatAICost(spending.lastMonthUsd)}
+          </Text>
+          <Text className="mt-1 text-xs font-bold text-gray-500">
+            last month
+          </Text>
+        </View>
+      </View>
+      {spending.byCategory.length > 0 ? (
+        <View className="mt-4 gap-3">
+          {spending.byCategory.map((row) => {
+            const percent =
+              topCategory > 0
+                ? Math.max(4, Math.round((row.estimatedUsd / topCategory) * 100))
+                : 0;
+            return (
+              <View key={row.category}>
+                <View className="mb-1.5 flex-row items-center justify-between gap-3">
+                  <Text className="min-w-0 flex-1 font-bold text-gray-900">
+                    {row.category}
+                  </Text>
+                  <Text className="text-xs font-black text-gray-600">
+                    {formatAICost(row.estimatedUsd)}
+                  </Text>
+                </View>
+                <View className="h-2 overflow-hidden rounded-full bg-gray-100">
+                  <View
+                    className="h-2 rounded-full"
+                    style={{ width: `${percent}%`, backgroundColor: THEME.primary }}
+                  />
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      ) : (
+        <Text className="mt-3 text-sm leading-5 text-gray-600">
+          No AI has run for this commons yet this month.
+        </Text>
+      )}
+      {spending.unpricedCallsThisMonth > 0 ? (
+        <Text className="mt-3 text-xs leading-4 text-gray-500">
+          {spending.unpricedCallsThisMonth} task
+          {spending.unpricedCallsThisMonth === 1 ? '' : 's'} used a model
+          without a published price and {spending.unpricedCallsThisMonth === 1 ? 'is' : 'are'} not
+          included in the total.
+        </Text>
+      ) : null}
+    </View>
   );
 }
 

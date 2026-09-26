@@ -454,9 +454,6 @@ export default function GroupDetailScreen() {
                 Notifications
               </Text>
             </View>
-            <Text className="mt-1 text-xs leading-5 text-gray-600">
-              Choose what sends a notification to your phone from this circle.
-            </Text>
             <View className="mt-3 gap-2">
               {NOTIFICATION_LEVEL_OPTIONS.map((option) => {
                 const selected = group.myNotificationLevel === option.level;

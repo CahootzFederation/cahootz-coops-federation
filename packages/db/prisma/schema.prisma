@@ -81,6 +81,8 @@ model User {
   personalPagePostSupports   PersonalPagePostSupport[]
   groupsLed                  Group[]                   @relation("GroupLeader")
   groupMemberships           GroupMember[]
+  groupInvitesReceived       GroupInvite[]             @relation("GroupInvitee")
+  groupInvitesSent           GroupInvite[]             @relation("GroupInviter")
   groupComments              GroupComment[]
   uploadedKnowledgeDocuments KnowledgeDocument[]
   verifiedAIObservations     AIObservation[]           @relation("AIObservationVerifier")
@@ -1324,6 +1326,7 @@ model Group {
   iconColor          String? // Hex color for the icon background. Falls back to colorKey hash palette when unset.
 
   members            GroupMember[]
+  invites            GroupInvite[]
   comments           GroupComment[]
   presence           CircleChatPresence[]
   welcomeTableConfig WelcomeTableConfig?
@@ -1347,6 +1350,26 @@ model GroupMember {
 
   @@unique([groupId, userId])
   @@index([userId])
+  @@schema("public")
+}
+
+// Direct, consent-based circle invitation: a circle leader picks a member of
+// the circle's commons and the invitee accepts or declines. Replaces sharing
+// bearer invite codes in the app.
+model GroupInvite {
+  id          String    @id @default(cuid())
+  groupId     String
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  inviteeId   String
+  invitee     User      @relation("GroupInvitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+  inviterId   String
+  inviter     User      @relation("GroupInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  status      String    @default("PENDING") // "PENDING" | "ACCEPTED" | "DECLINED" | "REVOKED"
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+
+  @@unique([groupId, inviteeId])
+  @@index([inviteeId, status])
   @@schema("public")
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Loader2, Plus, AlertCircle } from 'lucide-react';
+import { Loader2, Plus, AlertCircle, Store } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface CommonsSummary {
@@ -42,6 +42,12 @@ export default function AdminCommonsListPage() {
           <p className="text-sm text-slate-400">Every cooperative running on this platform.</p>
         </div>
         <div className="flex gap-2">
+          <Link href="/portal/admin/marketplace">
+            <Button variant="outline" className="gap-2 border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white">
+              <Store className="h-4 w-4" />
+              Marketplace Settings
+            </Button>
+          </Link>
           <Link href="/portal/admin/agents">
             <Button variant="outline" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white">
               Agent Playground

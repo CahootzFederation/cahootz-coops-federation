@@ -56,11 +56,33 @@ The current Playwright suite covers:
 13. A circle leader (the circle's creator) pins a post from the feed; it renders above the "Upcoming" module with a "Pinned" badge for every member of that circle, including on reload.
 14. Two members complete a Sage ride-match suggestion end to end (`sage-ride-match.spec.ts`): a circle window closes after 40 seeded messages, Sage detects a ride need, the subject provides context and consents to a limited match, the matched member accepts, and a new private circle with exactly those two members is created. Both land in Sage Suggestions' Done tab.
 15. A circle leader receives and approves a Sage trend suggestion (`sage-trend.spec.ts`): after a circle window closes, Sage may propose an event, a circle post, or a Commons post based on the conversation; approving it publishes the corresponding `CommonsPost` in the right feed (circle vs Commons general), and it appears in Done. Declining or escalating ("Ask an admin") are also covered.
-16. A circle with an emoji icon renders on Circle View with the emoji's full glyph visible (its line box is at least as tall as its font size, so the top and bottom aren't clipped).
+16. A signed-in member opens the restored Shop tab, sees funding badges listed under Commons shops alongside other shops' products, starts the real shop-application route, returns to Shop, and exercises marketplace search (`store-marketplace.spec.ts`).
+17. Signed-out visitors don't see the Shop tab or the drawer's stores entry, a direct `/store` link opens sign-in, and Circle View shows a Sign in card in place of the welcome lounge (`store-marketplace.spec.ts`, `circle-view.spec.ts`).
+18. A signed-in member chooses a funding badge, opens the cart, and reaches checkout with the right item and total (`store-marketplace.spec.ts`).
+19. A member of more than one commons switches the Shop to a second commons and sees that commons' shops and products, then opens the shop's detail page (`store-marketplace.spec.ts`). `pnpm -F @repo/db seed:e2e-marketplace` provisions the fixture: an `E2E Market Commons` (`e2e-market`) that User A belongs to, with one payment-ready member shop. Run it after seeding the test users. Without `E2E_STRIPE_CONNECTED_ACCOUNT_ID` (as in CI) the same seed points the shared funding settlement at a placeholder account so the Cahootz funding shop and its badges are still listed; it never replaces a settlement account that's already configured.
+20. When Stripe test credentials and a payment-ready test Connect account are configured, the same journey buys the Seed Supporter badge through the real Stripe Payment Element and verifies payment confirmation. This journey is skipped when the dedicated Stripe secrets are absent; it must be enabled for staging release qualification.
+21. A circle with an emoji icon renders on Circle View with the emoji's full glyph visible (its line box is at least as tall as its font size, so the top and bottom aren't clipped).
 
 Journeys 11-13 require the `Event`/`EventHost`/`EventRSVP`/`EventReminder` tables and `CommonsPost.isPinned` columns from migration `20260922010000_add_circle_events` - run `pnpm --filter @repo/db exec prisma migrate deploy` (and regenerate the client with `pnpm --filter @repo/db run db:generate`) before running the suite locally. Journeys 14-15 additionally require the Sage tables from migrations `20260923010000_sage_ride_match` and `20260923020000_sage_suggest_action`, and a working `OPENAI_API_KEY` - both exercise Sage's real (unmocked) detection models, so they're slower and only as deterministic as the model's classification of clearly-worded seeded messages.
 
 The post-signup wizard used by every sign-in helper now has three steps (intro, profile, and a "find your way in" step offering a welcome lounge) - `e2e/support/auth.ts` is the single place that clicks through all three, so a future wizard change only needs updating there.
+
+### Stripe payment journey
+
+Journey 20 is temporarily disabled: it's skipped unless `E2E_ENABLE_STRIPE_JOURNEY=1` is set, and it also needs `E2E_STRIPE_CONNECTED_ACCOUNT_ID`. It needs, from the same Stripe **test-mode** platform account:
+
+- `STRIPE_SECRET_KEY` (`sk_test_...`) for the API.
+- `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` (`pk_test_...`) for the mobile web app.
+- `E2E_STRIPE_CONNECTED_ACCOUNT_ID` (`acct_...`), a Connect account on that platform with charges enabled. Re-run `pnpm -F @repo/db seed:e2e-marketplace` with it set so it becomes the shared funding settlement account.
+
+Locally:
+
+```bash
+E2E_STRIPE_CONNECTED_ACCOUNT_ID=acct_... pnpm -F @repo/db seed:e2e-marketplace
+E2E_ENABLE_STRIPE_JOURNEY=1 E2E_STRIPE_CONNECTED_ACCOUNT_ID=acct_... pnpm test:e2e:mobile
+```
+
+In GitHub Actions these come from the `E2E_STRIPE_SECRET_KEY`, `E2E_STRIPE_PUBLISHABLE_KEY`, and `E2E_STRIPE_CONNECTED_ACCOUNT_ID` repository secrets (`E2E_STRIPE_WEBHOOK_SECRET` is optional). The seed gives User A a fixed wallet address because checkout identifies buyers by wallet. The journey checks Stripe's client-side confirmation only. Orders stay `PROCESSING` until Stripe's webhook reaches the API, so completing them locally needs `stripe listen --forward-to localhost:3001/webhooks/stripe`.
 
 Failure artifacts are written under `output/playwright/`, including screenshots, video, and a Playwright trace.
 
@@ -70,7 +92,13 @@ The `Mobile E2E` workflow runs for pull requests that change the mobile app, API
 
 Each job creates an isolated PostgreSQL database service, applies migrations, seeds the `cahootz` `CoopConfig` (`scripts/seed-coop-config.ts` + `scripts/seed-coop-display-info.ts` - required for `commons.listDirectory` to recognize any membership, which gates every real circle feed, not just General), seeds the two users above, starts the API and Expo web app, installs Chromium, and runs `pnpm test:e2e:mobile`. It uploads the Playwright report, failure traces, screenshots, videos, and server logs as the `mobile-e2e-artifacts` artifact.
 
-No repository secrets are required for journeys 1-13. Journeys 14-15 (Sage) exercise real detection models rather than a mock, so they need an `OPENAI_API_KEY` repository secret (Settings > Secrets and variables > Actions) - without it, those two journeys fail in CI with "Sage never surfaced a suggestion for this window" even though the rest of the suite passes. Payment, email, or other external-service journeys must use provider test modes and dedicated CI secrets.
+No repository secrets are required for journeys 1-13 or journey 16. Journeys 14-15 (Sage) exercise real detection models rather than a mock, so they need an `OPENAI_API_KEY` repository secret (Settings > Secrets and variables > Actions) - without it, those two journeys fail in CI with "Sage never surfaced a suggestion for this window" even though the rest of the suite passes. Journey 17 uses `E2E_STRIPE_SECRET_KEY`, `E2E_STRIPE_PUBLISHABLE_KEY`, `E2E_STRIPE_WEBHOOK_SECRET`, and `E2E_STRIPE_CONNECTED_ACCOUNT_ID`. The connected account must be charges-enabled in Stripe test mode; never use a live account. Forward Stripe test webhooks to `/webhooks/stripe-new` when verifying badge issuance and refunds locally or in staging.
+
+The restored marketplace requires migration `20260924010000_restore_commons_marketplace`. Existing environments should run `pnpm db:migrate-prod` followed by `pnpm db:backfill-funding-stores`; official funding shops become public after the platform's shared funding account is configured and payment-ready.
+
+Official funding shops now inherit the platform's shared Stripe connected account. A platform administrator sets or replaces it from **Portal → Admin → Marketplace Settings** using an `acct_...` ID that belongs to this Connect platform. The **Individual badge-store accounts** section can assign a verified account to one official shop or return that shop to the shared default. Member-owned shops still complete their own Stripe onboarding. Changing either setting affects only future badge checkouts; each existing transaction retains its original Stripe destination for audit and refund reconciliation.
+
+Each commons detail page in the platform admin has a **View all stores** link. The store directory includes the official badge store and every member-owned store, including pending or payment-incomplete shops that are not public yet. Each store detail page reports public/payment readiness, the effective Stripe account, order and sales totals, and its complete product catalog. In the mobile marketplace, the official badge store also appears in the normal **All shops** list and opens through the same store-detail experience as a member shop.
 
 After the workflow has run once on GitHub, add **Two-user mobile UI journeys** as a required status check in the `main` branch protection rules so a failing E2E suite blocks merging.
 

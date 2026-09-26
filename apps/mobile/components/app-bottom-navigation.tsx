@@ -1,5 +1,5 @@
 import { router, useSegments } from 'expo-router';
-import { Bell, LayoutGrid, Scale, UserCircle } from 'lucide-react-native';
+import { Bell, LayoutGrid, Scale, Store, UserCircle } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 
 const destinations = [
   { label: 'Commons', href: '/(tabs)' as const, icon: LayoutGrid },
+  { label: 'Shop', href: '/(tabs)/store' as const, icon: Store },
   { label: 'Alerts', href: '/(tabs)/notifications' as const, icon: Bell },
   { label: 'Proposals', href: '/(tabs)/proposals' as const, icon: Scale },
   { label: 'You', href: '/(tabs)/wallet' as const, icon: UserCircle },
@@ -31,6 +32,8 @@ export function AppBottomNavigation() {
     ? 'Alerts'
     : screen === 'proposals' || screen === 'proposal-detail'
       ? 'Proposals'
+      : ['store', 'store-detail', 'cart', 'checkout'].includes(screen)
+        ? 'Shop'
       : ['wallet', 'profile', 'personal-page', 'profile-onboarding', 'export-wallet', 'withdraw'].includes(screen)
         ? 'You'
         : screen === '(tabs)' || screen === 'index' || screen === ''
@@ -39,7 +42,10 @@ export function AppBottomNavigation() {
 
   return (
     <View accessibilityRole="tablist" accessibilityLabel="Main navigation" style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-      {destinations.map(({ label, href, icon: Icon }) => {
+      {destinations
+        // The marketplace (cart, checkout, shops) is members-only.
+        .filter(({ label }) => isAuthenticated || label !== 'Shop')
+        .map(({ label, href, icon: Icon }) => {
         const selected = active === label;
         const color = selected ? '#FF6B00' : '#64748B';
         const onPress = () => {

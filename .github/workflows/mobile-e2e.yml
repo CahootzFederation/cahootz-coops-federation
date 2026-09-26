@@ -58,11 +58,12 @@ jobs:
       PORT: "3001"
       EXPO_PUBLIC_API_BASE_URL: http://localhost:3001
       EXPO_PUBLIC_WEB_URL: http://localhost:8081
-      EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
+      EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.E2E_STRIPE_PUBLISHABLE_KEY || 'pk_test_ci_placeholder' }}
       WALLET_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-      STRIPE_SECRET_KEY: sk_test_ci_placeholder
-      STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
-      STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
+      STRIPE_SECRET_KEY: ${{ secrets.E2E_STRIPE_SECRET_KEY || 'sk_test_ci_placeholder' }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.E2E_STRIPE_WEBHOOK_SECRET || 'whsec_ci_placeholder' }}
+      STRIPE_PUBLISHABLE_KEY: ${{ secrets.E2E_STRIPE_PUBLISHABLE_KEY || 'pk_test_ci_placeholder' }}
+      E2E_STRIPE_CONNECTED_ACCOUNT_ID: ${{ secrets.E2E_STRIPE_CONNECTED_ACCOUNT_ID }}
       SLACK_WEBHOOK_URL: https://example.com/ci-placeholder
       RESEND_API_KEY: re_ci_placeholder
       RESEND_FROM_EMAIL: support@mail.cahootzcoops.com
@@ -107,6 +108,7 @@ jobs:
           pnpm -F @repo/db exec tsx scripts/seed-coop-config.ts
           pnpm -F @repo/db exec tsx scripts/seed-coop-display-info.ts
           pnpm -F @repo/db exec ts-node --transpile-only scripts/seed-test-users.ts -- --coopId=cahootz --count=2 --prefix=releaseclick
+          pnpm -F @repo/db seed:e2e-marketplace
 
       - name: Start API and mobile web app
         run: |

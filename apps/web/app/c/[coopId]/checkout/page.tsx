@@ -248,14 +248,12 @@ export default function CheckoutPage() {
   const isSignedInCheckout = auth.isAuthenticated && !!checkoutUser?.id;
   const previewCheckout = api.commerce.previewCheckout.useQuery(
     {
-      userId: checkoutUser?.id || "",
       coopId,
-      businessId: storeInfo?.businessId || "",
-      listedAmountCents: subtotalCents,
+      items: cartItems.map((item) => ({ productId: item.productId, quantity: item.quantity })),
       currency: "USD",
     },
     {
-      enabled: isSignedInCheckout && !!storeInfo?.businessId && subtotal > 0,
+      enabled: isSignedInCheckout && cartItems.length > 0,
     }
   );
 
@@ -427,8 +425,7 @@ export default function CheckoutPage() {
     try {
       const checkoutInput = {
         coopId,
-        businessId: storeInfo.businessId,
-        listedAmountCents: subtotalCents,
+        items: cartItems.map((item) => ({ productId: item.productId, quantity: item.quantity })),
         currency: "USD",
         metadata: {
           items: orderItemsMetadata,

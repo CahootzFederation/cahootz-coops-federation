@@ -59,12 +59,29 @@ The current Playwright suite covers:
 16. A signed-in member opens the restored Shop tab, sees funding badges listed under Commons shops alongside other shops' products, starts the real shop-application route, returns to Shop, and exercises marketplace search (`store-marketplace.spec.ts`).
 17. Signed-out visitors don't see the Shop tab or the drawer's stores entry, a direct `/store` link opens sign-in, and Circle View shows a Sign in card in place of the welcome lounge (`store-marketplace.spec.ts`, `circle-view.spec.ts`).
 18. A signed-in member chooses a funding badge, opens the cart, and reaches checkout with the right item and total (`store-marketplace.spec.ts`).
-19. A member of more than one commons switches the Shop to a second commons and sees that commons' shops and products, then opens the shop's detail page (`store-marketplace.spec.ts`). `pnpm -F @repo/db seed:e2e-marketplace` provisions the fixture: an `E2E Market Commons` (`e2e-market`) that User A belongs to, with one payment-ready member shop. Run it after seeding the test users.
+19. A member of more than one commons switches the Shop to a second commons and sees that commons' shops and products, then opens the shop's detail page (`store-marketplace.spec.ts`). `pnpm -F @repo/db seed:e2e-marketplace` provisions the fixture: an `E2E Market Commons` (`e2e-market`) that User A belongs to, with one payment-ready member shop. Run it after seeding the test users. Without `E2E_STRIPE_CONNECTED_ACCOUNT_ID` (as in CI) the same seed points the shared funding settlement at a placeholder account so the Cahootz funding shop and its badges are still listed; it never replaces a settlement account that's already configured.
 20. When Stripe test credentials and a payment-ready test Connect account are configured, the same journey buys the Seed Supporter badge through the real Stripe Payment Element and verifies payment confirmation. This journey is skipped when the dedicated Stripe secrets are absent; it must be enabled for staging release qualification.
 
 Journeys 11-13 require the `Event`/`EventHost`/`EventRSVP`/`EventReminder` tables and `CommonsPost.isPinned` columns from migration `20260922010000_add_circle_events` - run `pnpm --filter @repo/db exec prisma migrate deploy` (and regenerate the client with `pnpm --filter @repo/db run db:generate`) before running the suite locally. Journeys 14-15 additionally require the Sage tables from migrations `20260923010000_sage_ride_match` and `20260923020000_sage_suggest_action`, and a working `OPENAI_API_KEY` - both exercise Sage's real (unmocked) detection models, so they're slower and only as deterministic as the model's classification of clearly-worded seeded messages.
 
 The post-signup wizard used by every sign-in helper now has three steps (intro, profile, and a "find your way in" step offering a welcome lounge) - `e2e/support/auth.ts` is the single place that clicks through all three, so a future wizard change only needs updating there.
+
+### Stripe payment journey
+
+Journey 20 is temporarily disabled: it's skipped unless `E2E_ENABLE_STRIPE_JOURNEY=1` is set, and it also needs `E2E_STRIPE_CONNECTED_ACCOUNT_ID`. It needs, from the same Stripe **test-mode** platform account:
+
+- `STRIPE_SECRET_KEY` (`sk_test_...`) for the API.
+- `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` (`pk_test_...`) for the mobile web app.
+- `E2E_STRIPE_CONNECTED_ACCOUNT_ID` (`acct_...`), a Connect account on that platform with charges enabled. Re-run `pnpm -F @repo/db seed:e2e-marketplace` with it set so it becomes the shared funding settlement account.
+
+Locally:
+
+```bash
+E2E_STRIPE_CONNECTED_ACCOUNT_ID=acct_... pnpm -F @repo/db seed:e2e-marketplace
+E2E_ENABLE_STRIPE_JOURNEY=1 E2E_STRIPE_CONNECTED_ACCOUNT_ID=acct_... pnpm test:e2e:mobile
+```
+
+In GitHub Actions these come from the `E2E_STRIPE_SECRET_KEY`, `E2E_STRIPE_PUBLISHABLE_KEY`, and `E2E_STRIPE_CONNECTED_ACCOUNT_ID` repository secrets (`E2E_STRIPE_WEBHOOK_SECRET` is optional). The seed gives User A a fixed wallet address because checkout identifies buyers by wallet. The journey checks Stripe's client-side confirmation only. Orders stay `PROCESSING` until Stripe's webhook reaches the API, so completing them locally needs `stripe listen --forward-to localhost:3001/webhooks/stripe`.
 
 Failure artifacts are written under `output/playwright/`, including screenshots, video, and a Playwright trace.
 

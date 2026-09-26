@@ -245,6 +245,14 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
       successMsg += `\n\nThis merchant is not yet eligible for ${coin.name} rewards, so no rewards for this purchase.`;
     }
 
+    // Alert.alert is a no-op on react-native-web, so web buyers would get no
+    // confirmation at all - use the browser's dialog and open the order.
+    if (Platform.OS === 'web') {
+      window.alert(`Payment Confirmed\n\n${successMsg}`);
+      router.replace(`/(authenticated)/order-detail?id=${paymentSession.transactionId}` as any);
+      return;
+    }
+
     Alert.alert('Payment Confirmed', successMsg, [
       {
         text: 'My Orders',

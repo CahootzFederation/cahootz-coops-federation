@@ -53,7 +53,11 @@ async function main() {
   }
   if (!store?.businessId) throw new Error('Official Cahootz funding shop was not provisioned');
 
-  const settlementAccount = await prisma.stripeAccount.upsert({
+  // The same Connect account may already be linked to another business (e.g. a
+  // developer's existing funding account); reuse that row rather than trying to
+  // create a second one with the same unique stripeAccountId.
+  const existingAccount = await prisma.stripeAccount.findUnique({ where: { stripeAccountId } });
+  const settlementAccount = existingAccount ?? await prisma.stripeAccount.upsert({
     where: { businessId: store.businessId },
     update: {
       stripeAccountId,
@@ -152,10 +156,15 @@ async function seedSecondCommonsShop(ownerId: string) {
     });
   }
 
-  const member = await prisma.user.findUnique({ where: { email: memberEmail }, select: { id: true } });
+  const member = await prisma.user.findUnique({ where: { email: memberEmail }, select: { id: true, walletAddress: true } });
   if (!member) {
     console.warn(`${memberEmail} not found; seed test users before the marketplace fixtures.`);
   } else {
+    // Checkout identifies the buyer by wallet address, and email-only test
+    // accounts never get one, so give User A a fixed address to buy with.
+    if (!member.walletAddress) {
+      await prisma.user.update({ where: { id: member.id }, data: { walletAddress: '0x0000000000000000000000000000000000e2e0a1' } });
+    }
     await prisma.userCoopMembership.upsert({
       where: { userId_coopId: { userId: member.id, coopId } },
       update: { status: 'ACTIVE' },

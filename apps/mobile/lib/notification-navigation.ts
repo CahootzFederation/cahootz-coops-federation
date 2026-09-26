@@ -10,6 +10,11 @@ export function notificationDestination(
     typeof data?.[key] === "string" && data[key] ? (data[key] as string) : null;
   if (notification.type === "RESOURCE_INVITATION")
     return "/(authenticated)/resource-invitations";
+  if (notification.type === "CIRCLE_INVITATION")
+    return {
+      pathname: "/(authenticated)/spaces",
+      params: { coopId: id("coopId") || notification.coopId },
+    };
   if (notification.type === "PROPOSAL_DRAFT_READY")
     return "/(authenticated)/commons-proposal-drafts";
   if (notification.type.startsWith("PERSONAL_PAGE_"))

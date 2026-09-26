@@ -362,13 +362,41 @@ export interface PrivateGroupDetail {
   name: string;
   purpose: string | null;
   privacy: 'public' | 'private' | 'invite-only';
-  inviteCode: string | null;
   isLeader: boolean;
   createdAt: string;
   coopId: string;
   coopName: string;
+  kind?: 'STANDARD' | 'WELCOME_TABLE';
   iconEmoji?: string | null;
   iconColor?: string | null;
+}
+
+export interface PrivateGroupPendingInvite {
+  inviteId: string;
+  userId: string;
+  name: string;
+  invitedAt: string;
+}
+
+export interface CircleInviteCandidate {
+  userId: string;
+  name: string;
+  handle: string | null;
+  invited: boolean;
+}
+
+export interface CircleInvitation {
+  inviteId: string;
+  groupId: string;
+  coopId: string;
+  name: string;
+  purpose: string | null;
+  privacy: 'public' | 'private' | 'invite-only';
+  iconEmoji: string | null;
+  iconColor: string | null;
+  memberCount: number;
+  invitedBy: string;
+  invitedAt: string;
 }
 
 export interface PrivateGroupComment {
@@ -1474,24 +1502,88 @@ export const api = {
     return readTrpcResult<{
       group: PrivateGroupDetail;
       members: PrivateGroupMember[];
+      pendingInvites: PrivateGroupPendingInvite[];
     }>(response, 'Failed to load group');
   },
 
-  async joinGroupByCode(
-    inviteCode: string,
-    sessionToken?: string | null,
-    coopId?: string,
+  async searchCircleInvitees(
+    groupId: string,
+    query: string,
+    sessionToken: string,
   ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/groups.joinByCode`, {
+    const input = encodeURIComponent(JSON.stringify({ groupId, query }));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/groups.searchInvitees?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
+
+    return readTrpcResult<{ people: CircleInviteCandidate[] }>(
+      response,
+      'Could not search people',
+    );
+  },
+
+  async inviteToCircle(groupId: string, userId: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.invite`, {
       method: 'POST',
       headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({ inviteCode, coopId }),
+      body: JSON.stringify({ groupId, userId }),
     });
 
-    return readTrpcResult<{ groupId: string; name: string }>(
+    return readTrpcResult<{ inviteId: string; alreadyInvited: boolean }>(
       response,
-      'Invalid invite code',
+      'Could not send invitation',
     );
+  },
+
+  async revokeCircleInvite(inviteId: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.revokeInvite`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ inviteId }),
+    });
+
+    return readTrpcResult<{ success: boolean }>(
+      response,
+      'Could not cancel invitation',
+    );
+  },
+
+  async listMyCircleInvites(sessionToken: string, coopId?: string) {
+    const input = encodeURIComponent(JSON.stringify(coopId ? { coopId } : {}));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/groups.listMyInvites?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
+
+    return readTrpcResult<{ invites: CircleInvitation[] }>(
+      response,
+      'Could not load circle invitations',
+    );
+  },
+
+  async respondToCircleInvite(
+    inviteId: string,
+    accept: boolean,
+    sessionToken: string,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.respondToInvite`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ inviteId, accept }),
+    });
+
+    return readTrpcResult<{
+      groupId: string;
+      coopId: string;
+      accepted: boolean;
+    }>(response, 'Could not respond to invitation');
   },
 
   async joinPublicCircle(groupId: string, sessionToken: string) {
@@ -1520,25 +1612,6 @@ export const api = {
     return readTrpcResult<{ privacy: 'public' | 'private' }>(
       response,
       'Could not update circle privacy',
-    );
-  },
-
-  async regenerateGroupInviteCode(
-    groupId: string,
-    sessionToken?: string | null,
-  ) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/groups.regenerateInviteCode`,
-      {
-        method: 'POST',
-        headers: createApiHeaders(null, sessionToken),
-        body: JSON.stringify({ groupId }),
-      },
-    );
-
-    return readTrpcResult<{ inviteCode: string }>(
-      response,
-      'Failed to regenerate invite code',
     );
   },
 

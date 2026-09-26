@@ -101,20 +101,31 @@ test("a newcomer joining a welcome lounge triggers Sage's @everyone alert for th
     ).toBeVisible();
     await alert.click();
 
+    // The post detail screen doesn't render post titles, so identify the
+    // welcome post by Sage's intro prompt in its body.
     await expect(
-      member.page.getByText(`Welcome to ${memberLounge.name}`).first(),
+      member.page.getByText(/Introduce yourself in the comments/).first(),
     ).toBeVisible();
-    await expect(member.page.getByText("@everyone").last()).toBeVisible();
+    // The shared accounts rejoin on every run, so the thread can hold earlier
+    // shout-outs too - match the one for this newcomer in this lounge.
+    const shoutOut = member.page
+      .getByText(
+        new RegExp(
+          `@everyone please welcome @${USER_B_HANDLE} to ${memberLounge.name}!`,
+        ),
+      )
+      .last();
+    await expect(shoutOut).toBeVisible();
     await expect(
-      member.page.getByText(`@${USER_B_HANDLE}`).last(),
+      shoutOut.getByText("@everyone", { exact: true }),
     ).toBeVisible();
     await expect(
-      member.page.getByText(/please welcome/).last(),
+      shoutOut.getByText(`@${USER_B_HANDLE}`, { exact: true }).first(),
     ).toBeVisible();
 
     // The shout-out persists for a reload.
     await member.page.reload();
-    await expect(member.page.getByText("@everyone").last()).toBeVisible();
+    await expect(shoutOut).toBeVisible();
   } finally {
     await Promise.all([member.context.close(), newcomer.context.close()]);
   }

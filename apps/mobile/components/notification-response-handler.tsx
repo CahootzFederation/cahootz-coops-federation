@@ -4,6 +4,7 @@ import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
 import { useAuth } from "@/contexts/auth-context";
 import { useQueryClient } from "@tanstack/react-query";
+import { track } from "@/lib/analytics";
 
 /** Refresh the inbox on delivery and open it when a native notification is tapped. */
 export function NotificationResponseHandler() {
@@ -26,6 +27,11 @@ export function NotificationResponseHandler() {
       )
         return;
       handled.current = response.notification.request.identifier;
+      const notificationType = response.notification.request.content.data?.notificationType;
+      track("notification_opened", {
+        channel: "push",
+        notification_type: typeof notificationType === "string" ? notificationType : "unknown",
+      });
       refresh();
       router.push("/(tabs)/notifications");
       void Notifications.clearLastNotificationResponseAsync().catch(() => {});

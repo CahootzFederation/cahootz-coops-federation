@@ -14,6 +14,7 @@ import Toast from 'react-native-toast-message';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { NotificationResponseHandler } from '@/components/notification-response-handler';
+import { AnalyticsTracker } from '@/components/analytics-tracker';
 import { AuthProvider } from '@/contexts/auth-context';
 import { CartProvider } from '@/contexts/cart-context';
 import { PlatformConfigProvider } from '@/contexts/platform-config-context';
@@ -133,6 +134,7 @@ export default Sentry.wrap(function RootLayout() {
         <StripeWrapper>
           <PlatformConfigProvider>
           <AuthProvider>
+            <AnalyticsTracker />
             <NotificationResponseHandler />
             <CartProvider>
               <PaymentConfirmationProvider>

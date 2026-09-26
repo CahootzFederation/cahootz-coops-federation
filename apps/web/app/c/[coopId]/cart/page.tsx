@@ -273,6 +273,7 @@ export default function CartPage() {
             {storeIds.map((storeId) => {
               const storeItems = getStoreItems(storeId);
               const firstItem = storeItems[0];
+              if (!firstItem) return null;
               return (
                 <StoreSection
                   key={storeId}

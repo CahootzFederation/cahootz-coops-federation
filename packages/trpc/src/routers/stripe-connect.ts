@@ -3,6 +3,8 @@ import { router } from '../trpc.js';
 import { authenticatedProcedure, privateProcedure } from '../procedures/index.js';
 import { db } from '@repo/db';
 import { TRPCError } from '@trpc/server';
+import type { AuthenticatedContext } from '../context.js';
+import { resolveStoreSettlementAccount } from '../services/funding-settlement-service.js';
 import {
   createConnectAccount,
   generateOnboardingLink,
@@ -26,8 +28,21 @@ export const stripeConnectRouter = router({
       businessType: z.enum(['individual', 'company']).default('company'),
       country: z.string().default('US'),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const { userId, storeId, email, businessType, country } = input;
+      const walletAddress = (ctx as AuthenticatedContext).walletAddress;
+      const authenticatedUser = await db.user.findFirst({
+        where: {
+          OR: [
+            { walletAddress: { equals: walletAddress, mode: 'insensitive' } },
+            { wallets: { some: { address: { equals: walletAddress, mode: 'insensitive' } } } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (!authenticatedUser || authenticatedUser.id !== userId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Authenticated user does not match the shop owner' });
+      }
 
       const store = await db.store.findUnique({
         where: { id: storeId },
@@ -470,12 +485,21 @@ export const stripeConnectRouter = router({
         include: {
           stripeAccount: true,
           owner: true,
+          store: { select: { id: true, kind: true, isScVerified: true } },
         },
       });
 
       if (!business) {
         throw new Error('Business not found');
       }
+
+      // Official commons (funding badge) shops settle through the shared
+      // funding account rather than their own Stripe account, and always earn
+      // SC - resolve settlement the same way checkout does.
+      const isOfficialCommons = business.store?.kind === 'OFFICIAL_COMMONS';
+      const settlementAccount = business.store
+        ? await resolveStoreSettlementAccount({ ...business.store, business }, db) as any
+        : business.stripeAccount;
 
       // Get owner's wallets
       const merchantWallets = await db.wallet.findMany({
@@ -489,22 +513,28 @@ export const stripeConnectRouter = router({
         take: 1,
       });
 
-      const canAccept = await canAcceptPayments(input.businessId);
-      const canPayout = await canReceivePayouts(input.businessId);
+      const canAccept = isOfficialCommons
+        ? settlementAccount?.chargesEnabled === true
+        : await canAcceptPayments(input.businessId);
+      const canPayout = isOfficialCommons
+        ? settlementAccount?.payoutsEnabled === true
+        : await canReceivePayouts(input.businessId);
 
       // Determine SC reward eligibility
       const merchantWallet = merchantWallets[0];
-      const scEligible = !!merchantWallet && !!business.stripeAccount?.chargesEnabled;
+      const scEligible = isOfficialCommons || (!!merchantWallet && !!settlementAccount?.chargesEnabled);
 
       // Determine non-eligible reasons
       const nonEligibleReasons = [];
-      if (!business.stripeAccount) {
-        nonEligibleReasons.push('NO_STRIPE_ACCOUNT');
-      } else if (!business.stripeAccount.chargesEnabled) {
-        nonEligibleReasons.push('CHARGES_NOT_ENABLED');
-      }
-      if (!merchantWallet) {
-        nonEligibleReasons.push('NO_WALLET');
+      if (!isOfficialCommons) {
+        if (!settlementAccount) {
+          nonEligibleReasons.push('NO_STRIPE_ACCOUNT');
+        } else if (!settlementAccount.chargesEnabled) {
+          nonEligibleReasons.push('CHARGES_NOT_ENABLED');
+        }
+        if (!merchantWallet) {
+          nonEligibleReasons.push('NO_WALLET');
+        }
       }
 
       return {
@@ -514,8 +544,8 @@ export const stripeConnectRouter = router({
         canReceivePayouts: canPayout,
         scRewardEligible: scEligible,
         nonEligibleReasons,
-        stripeAccountStatus: business.stripeAccount?.onboardingStatus || null,
-        verificationStatus: business.stripeAccount?.verificationStatus || null,
+        stripeAccountStatus: settlementAccount?.onboardingStatus || null,
+        verificationStatus: settlementAccount?.verificationStatus || null,
       };
     }),
 });

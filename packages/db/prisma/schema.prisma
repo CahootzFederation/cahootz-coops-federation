@@ -13,30 +13,30 @@ datasource db {
 }
 
 model User {
-  notificationPreference NotificationPreference?
-  id                  String     @id @default(cuid())
-  email               String     @unique
-  handle              String?    @unique
-  name                String?
-  roles               String[]   @default(["member"]) // member, business, admin, governor, sage (platform bot)
-  status              UserStatus @default(PENDING)
-  isBot               Boolean    @default(false) // true for platform bot accounts (e.g. Sage)
-  password            String?
-  phone               String?    @unique // E.164 format: +1XXXXXXXXXX
-  walletAddress       String?    @unique // DEPRECATED: Use Wallet model instead
-  encryptedPrivateKey String? // DEPRECATED: Use Wallet model instead
-  walletCreatedAt     DateTime? // DEPRECATED: Use Wallet model instead
-  profileCompleted    Boolean    @default(false)
-  selfDescription     String?
-  shortTermGoals      String?
-  longTermGoals       String?
-  skills              String[]   @default([])
-  interests           String[]   @default([])
-  resourcesOffered    String[]   @default([])
-  resourcesNeeded     String[]   @default([])
-  businessSummary     String?
-  locationSummary     String?
-  profileSignals      Json       @default("{}")
+  notificationPreference       NotificationPreference?
+  id                           String                  @id @default(cuid())
+  email                        String                  @unique
+  handle                       String?                 @unique
+  name                         String?
+  roles                        String[]                @default(["member"]) // member, business, admin, governor, sage (platform bot)
+  status                       UserStatus              @default(PENDING)
+  isBot                        Boolean                 @default(false) // true for platform bot accounts (e.g. Sage)
+  password                     String?
+  phone                        String?                 @unique // E.164 format: +1XXXXXXXXXX
+  walletAddress                String?                 @unique // DEPRECATED: Use Wallet model instead
+  encryptedPrivateKey          String? // DEPRECATED: Use Wallet model instead
+  walletCreatedAt              DateTime? // DEPRECATED: Use Wallet model instead
+  profileCompleted             Boolean                 @default(false)
+  selfDescription              String?
+  shortTermGoals               String?
+  longTermGoals                String?
+  skills                       String[]                @default([])
+  interests                    String[]                @default([])
+  resourcesOffered             String[]                @default([])
+  resourcesNeeded              String[]                @default([])
+  businessSummary              String?
+  locationSummary              String?
+  profileSignals               Json                    @default("{}")
   profileOnboardingCompletedAt DateTime?
   // Personal page avatar: a photo wins over an emoji, which wins over initials.
   avatarUrl           String? // Uploaded profile photo URL (blob storage)
@@ -52,48 +52,49 @@ model User {
   defaultPaymentMethodId String?
 
   // Relations
-  applications         Application[]
-  memberships          UserCoopMembership[]
-  wallets              Wallet[]
-  walletChallenges     WalletChallenge[]
-  businesses           Business[]
-  onrampTransactions   OnrampTransaction[] // UC-era: preserved for future reactivation
-  paymentMethods       PaymentMethod[]
-  sentTransfers        P2PTransfer[]         @relation("sender") // UC-era: preserved
-  receivedTransfers    P2PTransfer[]         @relation("recipient") // UC-era: preserved
-  pendingTransfersSent PendingTransfer[]     @relation("sender") // UC-era: preserved
-  bankAccounts         BankAccount[]
-  withdrawals          Withdrawal[] // UC-era: preserved
-  notifications        Notification[]
-  pushDevices          PushDevice[]
-  stores               Store[]
-  scRewards            SCRewardTransaction[] // UC-era: preserved
-  commerceTransactions CommerceTransaction[]
-  scMintEvents         SCMintEvent[]
-  scBurnEvents         SCBurnEvent[]
-  commonsPosts         CommonsPost[]
-  personalPagePosts    PersonalPagePost[]
-  commonsComments      CommonsComment[]
-  commonsPostSupports  CommonsPostSupport[]
-  commonsSuggestions   CommonsSuggestion[]
-  sentDirectMessages   DirectMessage[]       @relation("DirectMessageSender")
-  receivedDirectMessages DirectMessage[]     @relation("DirectMessageReceiver")
-  following              Follow[]                    @relation("Follower")
-  followers              Follow[]                    @relation("Following")
-  personalPagePostComments PersonalPagePostComment[]
-  personalPagePostSupports PersonalPagePostSupport[]
-  groupsLed              Group[]                     @relation("GroupLeader")
-  groupMemberships       GroupMember[]
-  groupComments          GroupComment[]
+  applications               Application[]
+  memberships                UserCoopMembership[]
+  wallets                    Wallet[]
+  walletChallenges           WalletChallenge[]
+  businesses                 Business[]
+  onrampTransactions         OnrampTransaction[] // UC-era: preserved for future reactivation
+  paymentMethods             PaymentMethod[]
+  sentTransfers              P2PTransfer[]             @relation("sender") // UC-era: preserved
+  receivedTransfers          P2PTransfer[]             @relation("recipient") // UC-era: preserved
+  pendingTransfersSent       PendingTransfer[]         @relation("sender") // UC-era: preserved
+  bankAccounts               BankAccount[]
+  withdrawals                Withdrawal[] // UC-era: preserved
+  notifications              Notification[]
+  pushDevices                PushDevice[]
+  stores                     Store[]
+  scRewards                  SCRewardTransaction[] // UC-era: preserved
+  commerceTransactions       CommerceTransaction[]
+  scMintEvents               SCMintEvent[]
+  scBurnEvents               SCBurnEvent[]
+  fundingBadges              FundingBadgeEntitlement[]
+  commonsPosts               CommonsPost[]
+  personalPagePosts          PersonalPagePost[]
+  commonsComments            CommonsComment[]
+  commonsPostSupports        CommonsPostSupport[]
+  commonsSuggestions         CommonsSuggestion[]
+  sentDirectMessages         DirectMessage[]           @relation("DirectMessageSender")
+  receivedDirectMessages     DirectMessage[]           @relation("DirectMessageReceiver")
+  following                  Follow[]                  @relation("Follower")
+  followers                  Follow[]                  @relation("Following")
+  personalPagePostComments   PersonalPagePostComment[]
+  personalPagePostSupports   PersonalPagePostSupport[]
+  groupsLed                  Group[]                   @relation("GroupLeader")
+  groupMemberships           GroupMember[]
+  groupComments              GroupComment[]
   uploadedKnowledgeDocuments KnowledgeDocument[]
-  verifiedAIObservations AIObservation[]              @relation("AIObservationVerifier")
+  verifiedAIObservations     AIObservation[]           @relation("AIObservationVerifier")
   welcomeTableConfigsGuiding WelcomeTableConfig[]      @relation("WelcomeTableGuide")
-  circleChatPresence     CircleChatPresence[]
-  eventsCreated          Event[]                     @relation("EventCreatedBy")
-  eventHosting           EventHost[]
-  eventRSVPs             EventRSVP[]
-  eventReminders         EventReminder[]
-  pinnedPosts            CommonsPost[]               @relation("CommonsPostPinnedBy")
+  circleChatPresence         CircleChatPresence[]
+  eventsCreated              Event[]                   @relation("EventCreatedBy")
+  eventHosting               EventHost[]
+  eventRSVPs                 EventRSVP[]
+  eventReminders             EventReminder[]
+  pinnedPosts                CommonsPost[]             @relation("CommonsPostPinnedBy")
 
   @@index([deletedAt])
   @@schema("public")
@@ -239,9 +240,9 @@ model UserCoopMembership {
   roles  String[]         @default(["member"]) // member, business, admin, governor, sage (per-coop)
 
   // Coop-specific data
-  username         String? // Username for transfer recipient lookup (coop-scoped)
-  permissions      String[]  @default([])
-  
+  username    String? // Username for transfer recipient lookup (coop-scoped)
+  permissions String[] @default([])
+
   // Session tracking
   lastLogin        DateTime?
   sessionToken     String?
@@ -559,13 +560,13 @@ model KnowledgeDocument {
 }
 
 model KnowledgeChunk {
-  id         String            @id @default(cuid())
+  id         String                       @id @default(cuid())
   documentId String
-  document   KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document   KnowledgeDocument            @relation(fields: [documentId], references: [id], onDelete: Cascade)
   chunkIndex Int
-  content    String            @db.Text
+  content    String                       @db.Text
   embedding  Unsupported("vector(1536)")?
-  createdAt  DateTime          @default(now())
+  createdAt  DateTime                     @default(now())
 
   @@unique([documentId, chunkIndex])
   @@schema("public")
@@ -871,15 +872,15 @@ model AIObservationSource {
 
 // ── Cahootz Commons Social Models ─────────────────────
 model CommonsPost {
-  id       String @id @default(cuid())
-  coopId   String @default("cahootz")
+  id       String  @id @default(cuid())
+  coopId   String  @default("cahootz")
   circleId String?
   authorId String
-  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author   User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
-  title   String
-  content String @db.Text
-  tag     String @default("Need")
+  title                    String
+  content                  String @db.Text
+  tag                      String @default("Need")
   classification           String @default("social")
   classificationConfidence Float?
   classificationSignals    Json   @default("{}")
@@ -977,12 +978,12 @@ model CommonsPostMedia {
 }
 
 model CommonsComment {
-  id       String      @id @default(cuid())
+  id       String                @id @default(cuid())
   postId   String
-  post     CommonsPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  post     CommonsPost           @relation(fields: [postId], references: [id], onDelete: Cascade)
   authorId String
-  author   User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  content  String      @db.Text
+  author   User                  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content  String                @db.Text
   media    CommonsCommentMedia[]
 
   createdAt DateTime @default(now())
@@ -1041,18 +1042,18 @@ enum CommonsActionFeedbackReason {
 }
 
 model CommonsAgentSetting {
-  coopId       String   @id
-  autoReply    Boolean  @default(true)
-  lastScanAt   DateTime?
-  newPostOffset Int @default(0)
-  newCommentOffset Int @default(0)
-  backfillPostCursor String?
+  coopId                String    @id
+  autoReply             Boolean   @default(true)
+  lastScanAt            DateTime?
+  newPostOffset         Int       @default(0)
+  newCommentOffset      Int       @default(0)
+  backfillPostCursor    String?
   backfillCommentCursor String?
-  backfillPostsDone Boolean @default(false)
-  backfillCommentsDone Boolean @default(false)
-  lastCharterKey String?
-  updatedBy    String?
-  updatedAt    DateTime @updatedAt
+  backfillPostsDone     Boolean   @default(false)
+  backfillCommentsDone  Boolean   @default(false)
+  lastCharterKey        String?
+  updatedBy             String?
+  updatedAt             DateTime  @updatedAt
 
   @@schema("public")
 }
@@ -1074,7 +1075,7 @@ model CommonsContentScan {
 }
 
 model CommonsAction {
-  id                 String              @id @default(cuid())
+  id                 String                     @id @default(cuid())
   coopId             String
   sourceType         String
   sourceId           String
@@ -1083,27 +1084,27 @@ model CommonsAction {
   contentHash        String
   position           Int
   type               CommonsActionType
-  status             CommonsActionStatus @default(PENDING)
-  summary            String              @db.Text
-  evidence           String?             @db.Text
+  status             CommonsActionStatus        @default(PENDING)
+  summary            String                     @db.Text
+  evidence           String?                    @db.Text
   confidence         Float
-  draftText          String?             @db.Text
-  generatedDraftText String?             @db.Text
-  sourceTextSnapshot String?             @db.Text
-  contextSnapshot    String?             @db.Text
-  charterSnapshot    String?             @db.Text
+  draftText          String?                    @db.Text
+  generatedDraftText String?                    @db.Text
+  sourceTextSnapshot String?                    @db.Text
+  contextSnapshot    String?                    @db.Text
+  charterSnapshot    String?                    @db.Text
   goalsSnapshot      Json?
   charterConfigId    String
   publishedCommentId String?
-  replySourceKey     String?             @unique
+  replySourceKey     String?                    @unique
   reviewedBy         String?
   reviewedAt         DateTime?
   circleId           String?
   payload            Json?
   payloadHash        String?
-  revision           Int                 @default(1)
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  revision           Int                        @default(1)
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
   feedback           CommonsActionFeedback?
   participants       CommonsActionParticipant[]
   reviews            CommonsActionReview[]
@@ -1174,41 +1175,41 @@ model CircleAgentWindow {
 }
 
 model CommonsActionFeedback {
-  id               String                      @id @default(cuid())
-  actionId         String                      @unique
-  action           CommonsAction               @relation(fields: [actionId], references: [id], onDelete: Cascade)
-  coopId           String
-  rating           CommonsActionFeedbackRating
-  reasons          CommonsActionFeedbackReason[]
-  notes            String?                     @db.Text
-  correctedText    String?                     @db.Text
-  reviewedBy       String
-  createdAt        DateTime                    @default(now())
-  updatedAt        DateTime                    @updatedAt
+  id            String                        @id @default(cuid())
+  actionId      String                        @unique
+  action        CommonsAction                 @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  coopId        String
+  rating        CommonsActionFeedbackRating
+  reasons       CommonsActionFeedbackReason[]
+  notes         String?                       @db.Text
+  correctedText String?                       @db.Text
+  reviewedBy    String
+  createdAt     DateTime                      @default(now())
+  updatedAt     DateTime                      @updatedAt
 
   @@index([coopId, rating, createdAt])
   @@schema("public")
 }
 
 model CommonsResource {
-  id               String   @id @default(cuid())
-  coopId           String
-  actionId         String   @unique
-  kind             String
-  title            String
-  description      String   @db.Text
-  sourceType       String
-  sourceId         String
-  candidateUserId  String?
-  status           String   @default("CANDIDATE") // CANDIDATE | INVITED | ACCEPTED | DECLINED | VERIFIED | PUBLISHED
-  invitedAt        DateTime?
-  respondedAt      DateTime?
-  verifiedBy       String?
-  verifiedAt       DateTime?
-  publishedAt      DateTime?
-  knowledgeDocId   String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              String    @id @default(cuid())
+  coopId          String
+  actionId        String    @unique
+  kind            String
+  title           String
+  description     String    @db.Text
+  sourceType      String
+  sourceId        String
+  candidateUserId String?
+  status          String    @default("CANDIDATE") // CANDIDATE | INVITED | ACCEPTED | DECLINED | VERIFIED | PUBLISHED
+  invitedAt       DateTime?
+  respondedAt     DateTime?
+  verifiedBy      String?
+  verifiedAt      DateTime?
+  publishedAt     DateTime?
+  knowledgeDocId  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([coopId, status])
   @@index([candidateUserId, status])
@@ -1216,34 +1217,34 @@ model CommonsResource {
 }
 
 model CommonsProposalDraft {
-  id        String   @id @default(cuid())
-  actionId  String   @unique
-  coopId    String
-  authorId  String
-  title     String
-  body      String   @db.Text
-  submittedAt DateTime?
+  id                  String    @id @default(cuid())
+  actionId            String    @unique
+  coopId              String
+  authorId            String
+  title               String
+  body                String    @db.Text
+  submittedAt         DateTime?
   submittedProposalId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([authorId, coopId])
   @@schema("public")
 }
 
 model AICostEvent {
-  id                 String   @id @default(cuid())
-  coopId             String?
-  feature            String
-  model              String
-  status             String
-  requestId          String?  @unique
-  inputTokens        Int?
-  cachedInputTokens  Int?
-  outputTokens       Int?
-  costUsd            Decimal? @db.Decimal(18, 9)
-  pricingVersion     String?
-  createdAt          DateTime @default(now())
+  id                String   @id @default(cuid())
+  coopId            String?
+  feature           String
+  model             String
+  status            String
+  requestId         String?  @unique
+  inputTokens       Int?
+  cachedInputTokens Int?
+  outputTokens      Int?
+  costUsd           Decimal? @db.Decimal(18, 9)
+  pricingVersion    String?
+  createdAt         DateTime @default(now())
 
   @@index([coopId, createdAt])
   @@index([feature, createdAt])
@@ -1287,15 +1288,15 @@ model CommonsPostSupport {
 }
 
 model CommonsSuggestion {
-  id               String   @id @default(cuid())
-  coopId           String   @default("cahootz")
+  id               String  @id @default(cuid())
+  coopId           String  @default("cahootz")
   name             String
-  reason           String?  @db.Text
+  reason           String? @db.Text
   suggestedByEmail String
   suggestedByName  String?
   userId           String?
-  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  status           String   @default("NEW")
+  user             User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status           String  @default("NEW")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1386,9 +1387,9 @@ model Event {
   allowComments Boolean @default(true)
 
   seriesId           String?
-  recurrenceFreq      String? // "DAILY" | "WEEKLY" | "MONTHLY"
-  recurrenceInterval  Int     @default(1)
-  recurrenceCount     Int?
+  recurrenceFreq     String? // "DAILY" | "WEEKLY" | "MONTHLY"
+  recurrenceInterval Int     @default(1)
+  recurrenceCount    Int?
 
   createdById String
   createdBy   User   @relation("EventCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
@@ -1946,24 +1947,24 @@ model Notification {
 }
 
 model NotificationPreference {
-  userId String @id
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  pushEnabled Boolean @default(true)
-  community Boolean @default(true)
-  governance Boolean @default(true)
-  payments Boolean @default(true)
-  orders Boolean @default(true)
-  other Boolean @default(true)
-  updatedAt DateTime @updatedAt
+  userId      String   @id
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pushEnabled Boolean  @default(true)
+  community   Boolean  @default(true)
+  governance  Boolean  @default(true)
+  payments    Boolean  @default(true)
+  orders      Boolean  @default(true)
+  other       Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
 
   @@schema("public")
 }
 
 model PushDevice {
-  id        String @id @default(cuid())
-  userId    String
-  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  coopId    String @default("cahootz")
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coopId String @default("cahootz")
 
   expoPushToken String  @unique
   platform      String
@@ -1972,8 +1973,8 @@ model PushDevice {
   enabled       Boolean @default(true)
 
   lastRegisteredAt DateTime @default(now())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([userId, enabled])
   @@index([coopId, enabled])
@@ -2042,6 +2043,7 @@ model Store {
   coopId     String
   businessId String?   @unique
   business   Business? @relation(fields: [businessId], references: [id], onDelete: SetNull)
+  kind       StoreKind @default(MEMBER)
 
   name        String
   description String?
@@ -2081,8 +2083,8 @@ model Store {
   rating      Float?
   reviewCount Int    @default(0)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   deletedAt DateTime?
   deletedBy String?
 
@@ -2103,9 +2105,11 @@ model Store {
 }
 
 model Product {
-  id      String @id @default(cuid())
-  storeId String
-  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id               String            @id @default(cuid())
+  storeId          String
+  store            Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  kind             ProductKind       @default(STANDARD)
+  fundingBadgeTier FundingBadgeTier?
 
   name        String
   description String?
@@ -2138,11 +2142,69 @@ model Product {
   updatedAt DateTime @updatedAt
 
   // Relations
-  orderItems StoreOrderItem[]
+  orderItems               StoreOrderItem[]
+  fundingBadgeEntitlements FundingBadgeEntitlement[]
 
   @@index([storeId])
   @@index([category])
   @@index([isActive])
+  @@schema("public")
+}
+
+enum StoreKind {
+  MEMBER
+  OFFICIAL_COMMONS
+
+  @@schema("public")
+}
+
+enum ProductKind {
+  STANDARD
+  FUNDING_BADGE
+
+  @@schema("public")
+}
+
+enum FundingBadgeTier {
+  SEED_SUPPORTER
+  GROWTH_SUPPORTER
+  COMMUNITY_BUILDER
+  COMMONS_PILLAR
+  CORNERSTONE_PARTNER
+  LEGACY_FOUNDER
+
+  @@schema("public")
+}
+
+enum FundingBadgeEntitlementStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+
+  @@schema("public")
+}
+
+model FundingBadgeEntitlement {
+  id                    String                        @id @default(cuid())
+  userId                String
+  user                  User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coopId                String
+  tier                  FundingBadgeTier
+  productId             String
+  product               Product                       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  commerceTransactionId String
+  commerceTransaction   CommerceTransaction           @relation(fields: [commerceTransactionId], references: [id], onDelete: Restrict)
+  status                FundingBadgeEntitlementStatus @default(ACTIVE)
+  awardedAt             DateTime                      @default(now())
+  suspendedAt           DateTime?
+  revokedAt             DateTime?
+  createdAt             DateTime                      @default(now())
+  updatedAt             DateTime                      @updatedAt
+
+  @@unique([userId, coopId, tier])
+  @@unique([commerceTransactionId, productId])
+  @@index([userId, coopId, status])
+  @@index([coopId, tier, status])
   @@schema("public")
 }
 
@@ -2209,8 +2271,8 @@ model StoreOrder {
   trackingNumber    String?
 
   note      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   deletedAt DateTime?
   deletedBy String?
 
@@ -2726,6 +2788,7 @@ model CommerceTransaction {
   chargedAmount            Float // Total charged to customer (includes platform markup)
   merchantSettlementAmount Float // Amount routed to merchant
   treasuryFeeAmount        Float // Platform/treasury fee retained
+  refundedAmount           Float  @default(0) // Cumulative Stripe refund amount in dollars
   currency                 String @default("USD")
 
   // Fee snapshot (captured at purchase time)
@@ -2753,8 +2816,9 @@ model CommerceTransaction {
   deletedBy     String?
 
   // Relations
-  treasuryLedgerEntries TreasuryLedgerEntry[]
-  scMintEvents          SCMintEvent[]
+  treasuryLedgerEntries    TreasuryLedgerEntry[]
+  scMintEvents             SCMintEvent[]
+  fundingBadgeEntitlements FundingBadgeEntitlement[]
 
   @@index([customerId, createdAt(sort: Desc)])
   @@index([businessId, createdAt(sort: Desc)])

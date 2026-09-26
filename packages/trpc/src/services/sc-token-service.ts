@@ -12,6 +12,9 @@
 
 import { db } from '@repo/db';
 import { TRPCError } from '@trpc/server';
+import { createPublicClient, createWalletClient, formatUnits, http, keccak256, parseUnits, toBytes, type Address } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { baseSepolia } from 'viem/chains';
 import { 
   mintSCToUser as mintSCToUserLegacy,
 } from './wallet-service.js';
@@ -186,6 +189,7 @@ export async function burnSC(params: {
   userId: string;
   walletAddress: string;
   amount: number;
+  coopId: string;
   reason: string;
   authorizedBy: string;
   metadata?: Record<string, unknown>;
@@ -200,6 +204,7 @@ export async function burnSC(params: {
     userId,
     walletAddress,
     amount,
+    coopId,
     reason,
     authorizedBy,
     metadata,
@@ -260,16 +265,50 @@ export async function burnSC(params: {
       });
 
   try {
-    // TODO: Implement burn operation
-    // For now, SC is non-transferable and burns are not implemented in the contract
-    // This is a placeholder for future burn functionality
-    throw new Error('SC burn operation not yet implemented in contract');
+    const config = await db.coopConfig.findFirst({
+      where: { coopId, isActive: true },
+      orderBy: { version: 'desc' },
+      select: { scTokenAddress: true, rpcUrl: true },
+    });
+    const privateKey = process.env.BACKEND_WALLET_PRIVATE_KEY;
+    if (!config?.scTokenAddress || !privateKey) {
+      throw new Error('SoulCoin contract or backend signer is not configured');
+    }
 
-    // When implemented, it would look like:
-    // const { txHash, actualAmount } = await burnSCFromUser(userId, amount, reason);
-    // await db.sCBurnEvent.update({ where: { id: command.id }, data: { status: 'COMPLETED', ... } });
-    // await refreshBalanceCache(walletAddress);
-    // return { commandId: command.id, txHash, actualAmount, status: 'COMPLETED' };
+    const account = privateKeyToAccount(privateKey as `0x${string}`);
+    const publicClient = createPublicClient({ chain: baseSepolia, transport: http(config.rpcUrl ?? undefined) });
+    const walletClient = createWalletClient({ account, chain: baseSepolia, transport: http(config.rpcUrl ?? undefined) });
+    const balance = await publicClient.readContract({
+      address: config.scTokenAddress as Address,
+      abi: [{ inputs: [{ name: 'account', type: 'address' }], name: 'balanceOf', outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view', type: 'function' }],
+      functionName: 'balanceOf',
+      args: [walletAddress as Address],
+    });
+    const requested = parseUnits(amount.toString(), 18);
+    if (balance < requested) {
+      throw new Error(`Wallet balance ${formatUnits(balance, 18)} SC is below the required refund reversal ${amount} SC`);
+    }
+    const txHash = await walletClient.writeContract({
+      address: config.scTokenAddress as Address,
+      abi: [{ inputs: [{ name: 'account', type: 'address' }, { name: 'amount', type: 'uint256' }, { name: 'reason', type: 'bytes32' }], name: 'slash', outputs: [], stateMutability: 'nonpayable', type: 'function' }],
+      functionName: 'slash',
+      args: [walletAddress as Address, requested, keccak256(toBytes(reason))],
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    if (receipt.status === 'reverted') throw new Error(`SoulCoin reversal reverted: ${txHash}`);
+
+    await db.sCBurnEvent.update({
+      where: { id: command.id },
+      data: {
+        status: 'COMPLETED',
+        contractTxHash: txHash,
+        actualAmount: amount,
+        blockNumber: Number(receipt.blockNumber),
+        completedAt: new Date(),
+      },
+    });
+    await refreshBalanceCache(walletAddress, coopId);
+    return { commandId: command.id, txHash, actualAmount: amount, status: 'COMPLETED' };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`❌ [SC Token Service] Burn failed:`, errorMessage);

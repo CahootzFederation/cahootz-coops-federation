@@ -3,7 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { ActivityIndicator, Alert, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ArrowLeft, Image as ImageIcon, Send, Trash2, UserCircle } from 'lucide-react-native';
+import { ArrowLeft, Image as ImageIcon, Pencil, Send, Trash2, UserCircle } from 'lucide-react-native';
 
 import {
   COMPOSER_MEDIA_TILE_SIZE,
@@ -11,13 +11,15 @@ import {
   CommonsMediaViewer,
   type CommonsMediaPreview,
 } from '@/components/commons-media-viewer';
+import { EditPersonalProfileSheet } from '@/components/edit-personal-profile-sheet';
+import { PersonAvatar } from '@/components/person-avatar';
 import { PersonalPagePostCard } from '@/components/personal-page-post-card';
 import { PostTypeSelector } from '@/components/post-type-selector';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type PersonalPageFeedPost, type PersonalPageProfile } from '@/lib/api';
 import { DEFAULT_POST_TYPE, postTypePlaceholder, type SelectedPostType } from '@/lib/post-types';
-import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
+import { personDisplayHandle, personHandleFromName } from '@/lib/social-profile';
 
 const PAGE_THEME = {
   paper: '#F6F7F8',
@@ -47,6 +49,7 @@ export default function PersonalPageScreen() {
   const [deletingPostId, setDeletingPostId] = React.useState<string | null>(null);
   const [nextPostsCursor, setNextPostsCursor] = React.useState<string | null>(null);
   const [isLoadingMorePosts, setIsLoadingMorePosts] = React.useState(false);
+  const [isEditingProfile, setIsEditingProfile] = React.useState(false);
 
   React.useEffect(() => {
     if (isLoading || (isAuthenticated && sessionToken)) return;
@@ -246,9 +249,20 @@ export default function PersonalPageScreen() {
         <View className="px-4 py-3">
           <View className="rounded-[28px] border bg-white p-4" style={{ borderColor: PAGE_THEME.border }}>
             <View className="flex-row items-center gap-3">
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-slate-200">
-                <Text className="text-lg font-black text-slate-700">{personInitials(displayName)}</Text>
-              </View>
+              <TouchableOpacity
+                onPress={() => setIsEditingProfile(true)}
+                disabled={!profile}
+                accessibilityLabel="Change profile picture"
+              >
+                <PersonAvatar
+                  name={displayName}
+                  avatarUrl={profile?.avatarUrl}
+                  avatarEmoji={profile?.avatarEmoji}
+                  avatarColor={profile?.avatarColor}
+                  size={56}
+                  radius={16}
+                />
+              </TouchableOpacity>
               <View className="min-w-0 flex-1">
                 <Text className="text-xl font-black text-gray-950" numberOfLines={1}>{displayName}</Text>
                 <Text className="mt-0.5 text-sm font-semibold text-gray-500">{personDisplayHandle(publicHandle)}</Text>
@@ -257,6 +271,9 @@ export default function PersonalPageScreen() {
                 <Text className="text-xs font-black text-gray-700">{posts.length} posts</Text>
               </View>
             </View>
+            {profile?.bio ? (
+              <Text className="mt-3 text-sm leading-5 text-gray-700">{profile.bio}</Text>
+            ) : null}
             {profile ? (
               <View className="mt-3 flex-row gap-4">
                 <Text className="text-xs font-bold text-gray-600">
@@ -266,6 +283,21 @@ export default function PersonalPageScreen() {
                   <Text className="font-black text-gray-950">{profile.followingCount}</Text> following
                 </Text>
               </View>
+            ) : null}
+            {profile ? (
+              <TouchableOpacity
+                onPress={() => setIsEditingProfile(true)}
+                className="mt-3 flex-row items-center justify-center gap-1.5 rounded-2xl py-2.5"
+                style={{ backgroundColor: PAGE_THEME.primarySoft }}
+                activeOpacity={0.82}
+                accessibilityRole="button"
+                accessibilityLabel={profile.bio ? 'Edit profile' : 'Add a bio'}
+              >
+                <Pencil size={14} color={PAGE_THEME.primary} />
+                <Text className="text-sm font-black" style={{ color: PAGE_THEME.primary }}>
+                  {profile.bio ? 'Edit profile' : 'Add a bio'}
+                </Text>
+              </TouchableOpacity>
             ) : null}
           </View>
 
@@ -295,9 +327,14 @@ export default function PersonalPageScreen() {
 
             <View className="mb-2 flex-row items-center justify-between">
               <View className="min-w-0 flex-1 flex-row items-center gap-2">
-                <View className="h-8 w-8 items-center justify-center rounded-full bg-slate-200">
-                  <Text className="text-xs font-black text-slate-700">{personInitials(displayName)}</Text>
-                </View>
+                <PersonAvatar
+                  name={displayName}
+                  avatarUrl={profile?.avatarUrl}
+                  avatarEmoji={profile?.avatarEmoji}
+                  avatarColor={profile?.avatarColor}
+                  size={32}
+                  radius={16}
+                />
                 <Text className="min-w-0 text-xs font-black text-slate-600" numberOfLines={1}>
                   Posting to My Personal Page
                 </Text>
@@ -367,9 +404,14 @@ export default function PersonalPageScreen() {
                 onMediaPress={setViewerMedia}
                 header={
                   <View className="mb-3 flex-row items-center gap-2.5">
-                    <View className="h-9 w-9 items-center justify-center rounded-full bg-slate-200">
-                      <Text className="text-sm font-black text-slate-600">{personInitials(displayName)}</Text>
-                    </View>
+                    <PersonAvatar
+                      name={displayName}
+                      avatarUrl={profile?.avatarUrl}
+                      avatarEmoji={profile?.avatarEmoji}
+                      avatarColor={profile?.avatarColor}
+                      size={36}
+                      radius={18}
+                    />
                     <View className="min-w-0 flex-1">
                       <Text className="text-sm font-black text-gray-950">{displayName}</Text>
                       <Text className="text-xs font-semibold text-slate-500">
@@ -409,6 +451,14 @@ export default function PersonalPageScreen() {
       </ScrollView>
 
       <CommonsMediaViewer media={viewerMedia} onClose={() => setViewerMedia(null)} />
+      <EditPersonalProfileSheet
+        visible={isEditingProfile}
+        name={displayName}
+        profile={profile}
+        sessionToken={sessionToken}
+        onClose={() => setIsEditingProfile(false)}
+        onSaved={(fields) => setProfile((current) => (current ? { ...current, ...fields } : current))}
+      />
     </SafeAreaView>
   );
 }

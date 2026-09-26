@@ -40,3 +40,6 @@ yarn-error.*
 expo-env.d.ts
 # @end expo-cli
 .env.local
+
+# Playwright saved sign-in sessions
+e2e/.auth/

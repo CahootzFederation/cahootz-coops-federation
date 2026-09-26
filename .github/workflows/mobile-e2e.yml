@@ -142,6 +142,18 @@ jobs:
             sleep 2
           done
 
+      # Metro compiles the web bundle on its first request. Do that here so the
+      # compile isn't charged against the first test's timeout.
+      - name: Warm up the web bundle
+        shell: bash
+        run: |
+          bundle_path=$(curl --fail --silent http://localhost:8081 | grep -o 'src="/[^"]*\.bundle[^"]*"' | head -1 | sed 's/^src="//; s/"$//')
+          if [ -z "$bundle_path" ]; then
+            echo "No bundle script found in the web app's HTML; skipping warm-up"
+            exit 0
+          fi
+          time curl --fail --silent --output /dev/null --max-time 300 "http://localhost:8081${bundle_path}"
+
       - name: Run two-user UI tests
         run: pnpm test:e2e:mobile
 

@@ -20,12 +20,13 @@ import {
   CommonsMediaTile,
   FEED_MEDIA_TILE_SIZE,
 } from '@/components/commons-media-viewer';
+import { PersonAvatar } from '@/components/person-avatar';
 import { PersonalPagePostCard } from '@/components/personal-page-post-card';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsPost, type PersonalPageFeedPost, type PersonalPageProfile } from '@/lib/api';
 import { postTypeLabel, shouldShowPostType } from '@/lib/post-types';
-import { personDisplayHandle, personHandleFromName, personInitials, postBelongsToHandle } from '@/lib/social-profile';
+import { personDisplayHandle, personHandleFromName, postBelongsToHandle } from '@/lib/social-profile';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -162,9 +163,14 @@ export default function PublicPersonPageScreen() {
         <View className="px-5 py-4">
           <View className="rounded-2xl border bg-white p-5" style={{ borderColor: THEME.border }}>
             <View className="flex-row items-start gap-4">
-              <View className="h-16 w-16 items-center justify-center rounded-2xl bg-slate-200">
-                <Text className="text-xl font-black text-slate-700">{personInitials(profileName)}</Text>
-              </View>
+              <PersonAvatar
+                name={profileName}
+                avatarUrl={profile?.avatarUrl}
+                avatarEmoji={profile?.avatarEmoji}
+                avatarColor={profile?.avatarColor}
+                size={64}
+                radius={16}
+              />
               <View className="min-w-0 flex-1">
                 <Text className="text-2xl font-black text-gray-950" numberOfLines={1}>
                   {profileName}
@@ -179,6 +185,10 @@ export default function PublicPersonPageScreen() {
                 </View>
               </View>
             </View>
+
+            {profile?.bio ? (
+              <Text className="mt-4 text-sm leading-5 text-gray-700">{profile.bio}</Text>
+            ) : null}
 
             {isOwnPage ? (
               <TouchableOpacity

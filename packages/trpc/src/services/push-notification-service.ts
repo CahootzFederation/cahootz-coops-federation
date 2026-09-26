@@ -11,6 +11,8 @@ type PushPayload = {
   title: string;
   body: string;
   data?: Record<string, unknown>;
+  /** Set false to write the inbox row without a phone push (e.g. a muted circle). */
+  push?: boolean;
 };
 
 type DbClient = {
@@ -52,6 +54,10 @@ export async function createNotificationAndPush(
 
   const logContext = { notificationId: notification.id, type: payload.type };
   console.info('[push] Inbox notification created', logContext);
+  if (payload.push === false) {
+    console.info("[push] Skipped: muted by circle notification level", logContext);
+    return;
+  }
   const preferences =
     (await db.notificationPreference.findUnique({
       where: { userId: payload.userId },

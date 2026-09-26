@@ -148,6 +148,11 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
       findMany: vi.fn().mockResolvedValue([]),
       ...overrides.userCoopMembership,
     },
+    aICostEvent: {
+      groupBy: vi.fn().mockResolvedValue([]),
+      aggregate: vi.fn().mockResolvedValue({ _sum: { costUsd: null } }),
+      ...overrides.aICostEvent,
+    },
     $transaction: vi.fn(async (callback: any) => callback(db)),
   };
 
@@ -768,5 +773,49 @@ describe('commonsRouter', () => {
         }),
       }),
     );
+  });
+  describe('getAISpending', () => {
+    it("sums this month's AI spend by member-readable category", async () => {
+      const groupBy = vi.fn().mockResolvedValue([
+        { feature: 'sage-reply', _sum: { costUsd: '1.25' }, _count: { _all: 10, costUsd: 10 } },
+        { feature: 'sage-trend-detect', _sum: { costUsd: '0.75' }, _count: { _all: 4, costUsd: 3 } },
+        { feature: 'proposal-engine', _sum: { costUsd: '3.5' }, _count: { _all: 2, costUsd: 2 } },
+      ]);
+      const aggregate = vi.fn().mockResolvedValue({ _sum: { costUsd: '4.2' } });
+      const db = makeDb({ aICostEvent: { groupBy, aggregate } });
+
+      const result = await callerFor(db, { 'x-session-token': 'token_1' }).getAISpending({
+        coopId: 'artists',
+      });
+
+      expect(result).toEqual({
+        thisMonthUsd: 5.5,
+        lastMonthUsd: 4.2,
+        callsThisMonth: 16,
+        unpricedCallsThisMonth: 1,
+        byCategory: [
+          { category: 'Proposal reviews', estimatedUsd: 3.5, calls: 2 },
+          { category: 'Sage', estimatedUsd: 2, calls: 14 },
+        ],
+      });
+      expect(groupBy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ coopId: 'artists' }),
+        }),
+      );
+    });
+
+    it('hides AI spend from people who are not members of the commons', async () => {
+      const groupBy = vi.fn();
+      const db = makeDb({
+        userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null) },
+        aICostEvent: { groupBy, aggregate: vi.fn() },
+      });
+
+      await expect(
+        callerFor(db, { 'x-session-token': 'token_1' }).getAISpending({ coopId: 'artists' }),
+      ).rejects.toThrow('Join this commons');
+      expect(groupBy).not.toHaveBeenCalled();
+    });
   });
 });

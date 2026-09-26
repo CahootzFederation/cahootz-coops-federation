@@ -18,6 +18,7 @@ import { touchCircleWindow } from '../services/circle-window.js';
 import { validateSCBalance } from '../services/sc-validation-service.js';
 import { enterChat, getChattingCounts, leaveChat, refreshChatPresence } from '../services/circle-presence.js';
 import { assignWelcomeTable, getNewcomerCounts } from '../services/welcome-tables.js';
+import { getWelcomeIntroStatus } from '../services/welcome-intros.js';
 import { router } from '../trpc.js';
 
 function displayName(user: { name: string | null; email: string }) {
@@ -961,6 +962,12 @@ export const groupsRouter = router({
           context.db.groupMember.delete({
             where: { groupId_userId: { groupId: group.id, userId } },
           }),
+          // Leaving ends their intro's lifecycle: no reply alert or
+          // unanswered-intro escalation for someone no longer seated. The
+          // intro comment itself stays in the thread.
+          context.db.welcomeIntro.deleteMany({
+            where: { groupId: group.id, newcomerId: userId },
+          }),
           context.db.auditLog.create({
             data: auditLogEntry({
               actorId: userId,
@@ -1031,6 +1038,18 @@ export const groupsRouter = router({
         name: group.name,
         welcomeTableNumber: group.welcomeTableNumber,
       };
+    }),
+
+  // Whether the lounge feed should prompt this member for a one-line intro
+  // (posted as a comment on the lounge's Sage welcome post), and their intro
+  // once posted. Not a welcome lounge -> eligible: false.
+  getWelcomeIntroStatus: accountAuthenticatedProcedure
+    .input(z.object({ groupId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+      await requireMembership(context.db, input.groupId, userId);
+      return getWelcomeIntroStatus(context.db, input.groupId, userId);
     }),
 
   enterChat: accountAuthenticatedProcedure

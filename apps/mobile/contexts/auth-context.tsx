@@ -96,8 +96,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (pushRegistrationAttempt.current === registrationKey) return;
     pushRegistrationAttempt.current = registrationKey;
 
+    // Silently (re)register a device that already allowed notifications.
+    // Asking for permission waits for a moment that explains why - the
+    // primer shown after a newcomer posts their welcome lounge intro.
     registerForNativePushNotifications(sessionToken, user?.coop?.id || 'cahootz', {
-      onlyAskIfUndetermined: true,
+      neverAsk: true,
     }).catch((error) => {
       console.warn('Native push registration skipped:', error);
     });

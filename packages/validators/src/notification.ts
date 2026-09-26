@@ -31,6 +31,9 @@ export const notificationCategoryTypes: Record<
     "NEW_FOLLOWER",
     "EVENT_REMINDER",
     "WELCOME_LOUNGE_JOIN",
+    "WELCOME_INTRO_REPLY",
+    "WELCOME_INTRO_UNANSWERED",
+    "WELCOME_INTRO_UNANSWERED_ADMIN",
     "CIRCLE_INVITATION",
   ],
   governance: [

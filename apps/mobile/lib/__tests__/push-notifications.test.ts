@@ -4,6 +4,7 @@ import * as Notifications from "expo-notifications";
 
 import { api } from "../api";
 import {
+  getPushPermissionState,
   getPushPermissionStatus,
   registerForNativePushNotifications,
 } from "../push-notifications";
@@ -88,7 +89,29 @@ describe("native push permissions", () => {
     expect(await getPushPermissionStatus()).toContain("blocked");
     expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
   });
-  it("asks an undecided user automatically after sign-in", async () => {
+  it("never prompts on sign-in, but still registers an already-granted device", async () => {
+    jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ granted: false, status: 'undetermined', canAskAgain: true } as never);
+    await expect(registerForNativePushNotifications('session', 'cahootz', { neverAsk: true })).resolves.toEqual({ registered: false });
+    expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    expect(api.registerPushDevice).not.toHaveBeenCalled();
+
+    jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ granted: true, status: 'granted', canAskAgain: true } as never);
+    await expect(registerForNativePushNotifications('session', 'cahootz', { neverAsk: true })).resolves.toEqual({ registered: true });
+    expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    expect(api.registerPushDevice).toHaveBeenCalledTimes(1);
+  });
+  it("reports the device permission state without prompting", async () => {
+    jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ granted: false, status: 'undetermined', canAskAgain: true } as never);
+    expect(await getPushPermissionState()).toBe('undetermined');
+    jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ granted: false, status: 'denied', canAskAgain: false } as never);
+    expect(await getPushPermissionState()).toBe('blocked');
+    jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ granted: true, status: 'granted' } as never);
+    expect(await getPushPermissionState()).toBe('granted');
+    Platform.OS = "web";
+    expect(await getPushPermissionState()).toBe('unsupported');
+    expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+  });
+  it("asks an undecided user when explicitly allowed (the in-app primer's Yes)", async () => {
     jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ granted: false, status: 'undetermined', canAskAgain: true } as never);
     jest.mocked(Notifications.requestPermissionsAsync).mockResolvedValue({ granted: true, status: 'granted' } as never);
     await expect(registerForNativePushNotifications('session', 'cahootz', { onlyAskIfUndetermined: true })).resolves.toEqual({ registered: true });

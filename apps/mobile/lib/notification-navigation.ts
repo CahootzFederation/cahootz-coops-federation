@@ -30,6 +30,11 @@ export function notificationDestination(
       params: {
         coopId: id("coopId") || notification.coopId,
         postId: id("postId")!,
+        // Intro alerts point at the intro comment itself, which the post
+        // screen scrolls to and highlights.
+        ...(notification.type.startsWith("WELCOME_INTRO_") && id("commentId")
+          ? { commentId: id("commentId")! }
+          : {}),
       },
     };
   if (id("orderId"))

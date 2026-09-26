@@ -114,6 +114,11 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
       findUnique: vi.fn().mockResolvedValue({ status: 'ACTIVE' }),
       ...overrides.userCoopMembership,
     },
+    welcomeIntro: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      ...overrides.welcomeIntro,
+    },
     groupComment: {
       create: vi.fn().mockImplementation(({ data }: any) => ({
         id: 'comment_1',
@@ -1224,6 +1229,10 @@ describe('groupsRouter', () => {
       expect(result).toEqual({ success: true, groupDeleted: false });
       expect(db.groupMember.delete).toHaveBeenCalledWith({
         where: { groupId_userId: { groupId: 'wt_1', userId: ACTIVE_USER.id } },
+      });
+      // Their intro stops being tracked for reply alerts and escalations.
+      expect(db.welcomeIntro.deleteMany).toHaveBeenCalledWith({
+        where: { groupId: 'wt_1', newcomerId: ACTIVE_USER.id },
       });
       expect(db.group.update).not.toHaveBeenCalled();
     });

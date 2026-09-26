@@ -229,9 +229,19 @@ export interface CommonsComment {
   id: string;
   authorId?: string;
   author: string;
+  authorHandle?: string;
   body: string;
   supporterBadge?: SupporterBadge | null;
   media?: CommonsPostMedia[];
+}
+
+export interface WelcomeIntroStatus {
+  /** True when the lounge feed should prompt this member for an intro. */
+  eligible: boolean;
+  /** The lounge's Sage welcome post, where intros are posted as comments. */
+  welcomePostId: string | null;
+  prompt: string;
+  intro: { id: string; commentId: string; respondedAt: string | null } | null;
 }
 
 export interface SupporterBadge {
@@ -1429,6 +1439,8 @@ export const api = {
       postId: string;
       content: string;
       media?: CommonsPostMedia[];
+      /** The comment being answered, when the author tapped "Reply". */
+      replyToCommentId?: string;
     },
     sessionToken?: string | null,
   ) {
@@ -1731,6 +1743,16 @@ export const api = {
       response,
       'Could not join a welcome lounge',
     );
+  },
+
+  async getWelcomeIntroStatus(groupId: string, sessionToken?: string | null) {
+    const input = encodeURIComponent(JSON.stringify({ groupId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.getWelcomeIntroStatus?input=${input}`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<WelcomeIntroStatus>(response, 'Could not load your welcome lounge intro');
   },
 
   async enterCircleChat(groupId: string, sessionToken?: string | null) {

@@ -30,6 +30,7 @@ import {
   FEED_MEDIA_TILE_SIZE,
 } from '@/components/commons-media-viewer';
 import { EventCard, UpcomingEventsModule } from '@/components/event-card';
+import { WelcomeIntroPrompt } from '@/components/welcome-intro-prompt';
 import { MentionComposerInput } from '@/components/mention-composer-input';
 import { MentionText } from '@/components/mention-text';
 import { PostTypeSelector } from '@/components/post-type-selector';
@@ -1745,6 +1746,9 @@ export default function CommonsAiEntry({
         <View className="px-4 py-3">
           {finishProfileBanner}
           {!feedCircleId ? renderNextStepPanel() : null}
+          {feedCircleId && circleIsMember && sessionToken ? (
+            <WelcomeIntroPrompt groupId={feedCircleId} coopId={feedCoopId} sessionToken={sessionToken} />
+          ) : null}
 
           {feedError ? (
             <View className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4">

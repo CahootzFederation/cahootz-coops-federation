@@ -23,6 +23,7 @@ import { recordAgentResultCost } from '../services/ai-cost.js';
 import { enqueueCommonsActionContent } from '../services/commons-action-dispatch.js';
 import { createNotificationAndPush } from '../services/push-notification-service.js';
 import { notifyCircleActivity } from '../services/circle-notifications.js';
+import { recordWelcomeIntroActivity } from '../services/welcome-intros.js';
 import { FUNDING_BADGE_BY_TIER } from '../services/funding-badge-service.js';
 import {
   sendApplicationSubmittedNotification,
@@ -639,6 +640,7 @@ function mapPostWithGroup(record: any, groupName: string, viewerId?: string) {
         id: comment.id,
         authorId: comment.authorId,
         author: displayName(comment.author),
+        authorHandle: personHandle(comment.author),
         supporterBadge: comment.supporterBadge ?? null,
         body: comment.content,
         media:
@@ -1650,8 +1652,10 @@ export const commonsRouter = router({
           media: {
             orderBy: { order: 'asc' },
           },
+          // The newest 100, so a long thread (like a welcome lounge's
+          // intro thread) still shows recent replies; reversed below.
           comments: {
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: 'desc' },
             take: 100,
             include: {
               author: { select: { name: true, email: true, handle: true } },
@@ -1687,6 +1691,7 @@ export const commonsRouter = router({
         });
       }
 
+      post.comments.reverse();
       const coop = await loadCoopSummary(context.db, post.coopId);
       await decorateSupporterBadges(context.db, [post]);
       const isCirclePost = !!post.circleId && post.circleId !== generalCircleId(post.coopId);
@@ -2382,6 +2387,10 @@ export const commonsRouter = router({
           postId: z.string().min(1),
           content: z.string().trim().max(2000).default(''),
           media: z.array(uploadedPostMediaSchema).max(4).default([]),
+          // The comment this one answers, when the author tapped "Reply".
+          // Comments stay flat; this only feeds reply detection (e.g. a
+          // welcome lounge intro's first-reply alert).
+          replyToCommentId: z.string().min(1).optional(),
         })
         .refine((input) => input.content.length > 0 || input.media.length > 0, {
           message: 'Write something or attach an image before commenting.',
@@ -2403,6 +2412,18 @@ export const commonsRouter = router({
       }
       await requireActiveCommonsMembership(ctx.db, accountUser.id, post.coopId);
       await requirePostCircleMembership(ctx.db, accountUser.id, post);
+      if (input.replyToCommentId) {
+        const target = await ctx.db.commonsComment.findUnique({
+          where: { id: input.replyToCommentId },
+          select: { postId: true },
+        });
+        if (target?.postId !== post.id) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'You can only reply to a comment on this post.',
+          });
+        }
+      }
       await ensureSageBotUser(ctx.db, post.coopId);
       const { content: encodedContent, mentionedUsers } = await encodeMentions(
         ctx.db,
@@ -2446,6 +2467,26 @@ export const commonsRouter = router({
 
       const isCirclePost =
         !!post.circleId && post.circleId !== generalCircleId(post.coopId);
+      // Welcome lounge intros: record a newcomer's intro, or alert a
+      // newcomer the first time someone answers theirs. Best-effort - the
+      // comment is already saved.
+      let introReplyNotified = new Set<string>();
+      if (isCirclePost) {
+        try {
+          const introActivity = await recordWelcomeIntroActivity(ctx.db, {
+            post,
+            comment: { id: comment.id, content: comment.content, createdAt: comment.createdAt },
+            author: accountUser,
+            mentionedUserIds: mentionedUsers
+              .filter((mentioned) => !mentioned.isBot)
+              .map((mentioned) => mentioned.id),
+            replyToCommentId: input.replyToCommentId,
+          });
+          introReplyNotified = new Set(introActivity.notifiedNewcomerIds);
+        } catch (error) {
+          console.error('Welcome intro tracking failed', { commentId: comment.id, error });
+        }
+      }
       if (isCirclePost) {
         const mentionedUserIds: string[] = [];
         for (const mentioned of mentionedUsers) {
@@ -2468,6 +2509,8 @@ export const commonsRouter = router({
           kind: 'comment',
           mentionedUserIds,
           postAuthorId,
+          // Already told "X replied to your intro" for this same comment.
+          alreadyNotifiedUserIds: [...introReplyNotified],
         }).catch(() =>
           console.error('[push] createComment circle notifications failed', {
             postId: post.id,
@@ -2542,6 +2585,7 @@ export const commonsRouter = router({
           id: comment.id,
           authorId: comment.authorId,
           author: displayName(comment.author),
+          authorHandle: personHandle(comment.author),
           body: comment.content,
           media:
             comment.media?.map((item: any) => ({

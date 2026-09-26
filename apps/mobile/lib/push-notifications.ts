@@ -44,7 +44,15 @@ function getExpoProjectId() {
 export async function registerForNativePushNotifications(
   sessionToken: string | null | undefined,
   coopId = 'cahootz',
-  options: { onlyAskIfUndetermined?: boolean } = {}
+  options: {
+    onlyAskIfUndetermined?: boolean;
+    /**
+     * Register only when permission is already granted; never show the OS
+     * prompt. Used on sign-in - the prompt itself waits for an in-app primer
+     * (see components/push-permission-primer.tsx).
+     */
+    neverAsk?: boolean;
+  } = {}
 ) {
   const secrets = [sessionToken || ''];
   const step = async <T,>(name: string, action: () => Promise<T>): Promise<T> => {
@@ -81,7 +89,7 @@ export async function registerForNativePushNotifications(
   };
   let granted = existingPermissionState.granted || existingPermissionState.status === 'granted' || existingPermission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
 
-  const mayAsk = existingPermission.canAskAgain !== false &&
+  const mayAsk = !options.neverAsk && existingPermission.canAskAgain !== false &&
     (!options.onlyAskIfUndetermined || existingPermission.status === 'undetermined');
   if (!granted && mayAsk) {
     const requestedPermission = await step('Request notification permission', () => Notifications.requestPermissionsAsync());
@@ -125,6 +133,16 @@ export async function registerForNativePushNotifications(
 
   console.info('[push] Device registered successfully');
   return { registered: true };
+}
+
+export type PushPermissionState = 'granted' | 'undetermined' | 'blocked' | 'unsupported';
+
+/** This device's OS notification permission, without prompting. */
+export async function getPushPermissionState(): Promise<PushPermissionState> {
+  if (Platform.OS === 'web') return 'unsupported';
+  const permission = await Notifications.getPermissionsAsync();
+  if (permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL) return 'granted';
+  return permission.canAskAgain === false ? 'blocked' : 'undetermined';
 }
 
 export async function getPushPermissionStatus(): Promise<string> {

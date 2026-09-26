@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import {
   ActivityIndicator,
@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   Award,
   CheckCircle2,
+  CornerDownRight,
   ImagePlus,
   Pencil,
   Send,
@@ -49,9 +50,11 @@ const THEME = {
 };
 
 export default function CommonsPostDetailScreen() {
-  const params = useLocalSearchParams<{ coopId?: string; postId?: string }>();
+  const params = useLocalSearchParams<{ coopId?: string; postId?: string; commentId?: string }>();
   const coopId = params.coopId || 'cahootz';
   const postId = params.postId || '';
+  // Set by alerts that point at one comment (e.g. "replied to your intro").
+  const focusCommentId = params.commentId || '';
   const { user, sessionToken } = useAuth();
 
   const [post, setPost] = useState<CommonsPost | null>(null);
@@ -68,6 +71,10 @@ export default function CommonsPostDetailScreen() {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [busyCommentId, setBusyCommentId] = useState<string | null>(null);
+  const [replyTo, setReplyTo] = useState<{ id: string; author: string } | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const commentsOffsetY = useRef(0);
+  const scrolledToFocus = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -161,7 +168,12 @@ export default function CommonsPostDetailScreen() {
         )
       );
       const result = await api.createCommonsComment(
-        { postId: post.id, content, media: uploadedMedia },
+        {
+          postId: post.id,
+          content,
+          media: uploadedMedia,
+          ...(replyTo ? { replyToCommentId: replyTo.id } : {}),
+        },
         sessionToken
       );
       setPost((current) =>
@@ -175,6 +187,7 @@ export default function CommonsPostDetailScreen() {
       );
       setCommentDraft('');
       setCommentMedia([]);
+      setReplyTo(null);
     } catch (caughtError) {
       console.error('Failed to comment:', caughtError);
       setError(caughtError instanceof Error ? caughtError.message : 'Could not add comment.');
@@ -199,6 +212,13 @@ export default function CommonsPostDetailScreen() {
     } finally {
       setIsJoiningCircle(false);
     }
+  };
+
+  const startReply = (comment: { id: string; author: string; authorHandle?: string }) => {
+    setReplyTo({ id: comment.id, author: comment.author });
+    // Bracketed so the composer shows it as one atomic mention chip.
+    const mention = comment.authorHandle ? `[@${comment.authorHandle}] ` : '';
+    setCommentDraft((current) => (mention && !current.startsWith(mention) ? `${mention}${current}` : current));
   };
 
   const startEditComment = (commentId: string, body: string) => {
@@ -387,7 +407,7 @@ export default function CommonsPostDetailScreen() {
         </View>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 28 }} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 28 }} keyboardShouldPersistTaps="handled">
         {isLoading ? (
           <View className="mt-12 items-center gap-3">
             <ActivityIndicator color={THEME.primary} />
@@ -479,14 +499,35 @@ export default function CommonsPostDetailScreen() {
 
             {error ? <Text className="mt-3 text-sm font-semibold text-red-600">{error}</Text> : null}
 
-            <View className="mt-4">
+            <View className="mt-4" onLayout={(event) => { commentsOffsetY.current = event.nativeEvent.layout.y; }}>
               <Text className="text-base font-black text-gray-950">Comments</Text>
               <View className="mt-3 gap-3">
                 {post.comments.length === 0 ? (
                   <Text className="text-sm text-gray-500">No comments yet.</Text>
                 ) : null}
-                {post.comments.map((comment) => (
-                  <View key={comment.id || `${comment.author}-${comment.body}`} className="rounded-xl bg-stone-50 p-3">
+                {post.comments.map((comment) => {
+                  const isFocused = !!focusCommentId && comment.id === focusCommentId;
+                  return (
+                  <View
+                    key={comment.id || `${comment.author}-${comment.body}`}
+                    testID={comment.id ? `comment-${comment.id}` : undefined}
+                    className="rounded-xl bg-stone-50 p-3"
+                    style={isFocused ? { borderWidth: 2, borderColor: THEME.primary, backgroundColor: THEME.primarySoft } : undefined}
+                    accessibilityLabel={isFocused ? 'Highlighted comment' : undefined}
+                    onLayout={
+                      isFocused
+                        ? (event) => {
+                            if (scrolledToFocus.current) return;
+                            scrolledToFocus.current = true;
+                            const y = commentsOffsetY.current + event.nativeEvent.layout.y;
+                            scrollRef.current?.scrollTo({ y: Math.max(0, y - 24), animated: true });
+                          }
+                        : undefined
+                    }
+                  >
+                    {isFocused && comment.authorId === user?.id ? (
+                      <Text className="mb-1 text-[10px] font-black uppercase" style={{ color: THEME.primary }}>Your intro</Text>
+                    ) : null}
                     <View className="flex-row items-start justify-between gap-2">
                       <View className="flex-row items-center gap-1.5">
                         <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
@@ -508,6 +549,16 @@ export default function CommonsPostDetailScreen() {
                             )}
                           </TouchableOpacity>
                         </View>
+                      ) : comment.id && circleIsMember !== false && sessionToken ? (
+                        <TouchableOpacity
+                          onPress={() => startReply(comment)}
+                          className="flex-row items-center gap-1"
+                          accessibilityRole="button"
+                          accessibilityLabel={`Reply to ${comment.author}`}
+                        >
+                          <CornerDownRight size={13} color={THEME.muted} />
+                          <Text className="text-[11px] font-bold text-stone-500">Reply</Text>
+                        </TouchableOpacity>
                       ) : null}
                     </View>
                     {editingCommentId === comment.id ? (
@@ -554,7 +605,8 @@ export default function CommonsPostDetailScreen() {
                       </View>
                     ) : null}
                   </View>
-                ))}
+                  );
+                })}
               </View>
             </View>
           </View>
@@ -571,6 +623,16 @@ export default function CommonsPostDetailScreen() {
         </View>
       ) : post ? (
         <View className="border-t border-gray-200 bg-white px-4 py-3">
+          {replyTo ? (
+            <View className="mb-2 flex-row items-center justify-between rounded-lg bg-stone-50 px-3 py-2">
+              <Text className="text-xs font-semibold text-stone-600" numberOfLines={1}>
+                Replying to {replyTo.author}
+              </Text>
+              <TouchableOpacity onPress={() => setReplyTo(null)} accessibilityLabel="Cancel reply">
+                <X size={14} color={THEME.muted} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
           {commentMedia.length ? (
             <View className="mb-3 flex-row flex-wrap gap-2">
               {commentMedia.map((media, index) => (

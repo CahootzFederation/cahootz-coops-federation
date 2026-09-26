@@ -35,6 +35,29 @@ describe("notification destinations", () => {
       params: { coopId: "cahootz", postId: "post/with spaces" },
     });
   });
+  it("opens a welcome intro alert on the intro comment itself", () => {
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "WELCOME_INTRO_REPLY",
+        data: { postId: "welcome-post", commentId: "intro-comment", coopId: "cahootz" },
+      }),
+    ).toEqual({
+      pathname: "/[coopId]/posts/[postId]",
+      params: { coopId: "cahootz", postId: "welcome-post", commentId: "intro-comment" },
+    });
+    // Other post alerts keep opening the post without a comment focus.
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "WELCOME_LOUNGE_JOIN",
+        data: { postId: "welcome-post", commentId: "shout-out" },
+      }),
+    ).toEqual({
+      pathname: "/[coopId]/posts/[postId]",
+      params: { coopId: "cahootz", postId: "welcome-post" },
+    });
+  });
   it("opens personal-page activity on the personal page", () => {
     expect(
       notificationDestination({

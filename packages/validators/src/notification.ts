@@ -30,6 +30,7 @@ export const notificationCategoryTypes: Record<
     "CIRCLE_COMMENT",
     "NEW_FOLLOWER",
     "EVENT_REMINDER",
+    "WELCOME_LOUNGE_JOIN",
     "CIRCLE_INVITATION",
   ],
   governance: [

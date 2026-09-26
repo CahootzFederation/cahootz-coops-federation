@@ -424,7 +424,7 @@ export default function CommonsPostDetailScreen() {
                   {post.supporterBadge ? <View className="flex-row items-center rounded-full px-2 py-0.5" style={{ backgroundColor: `${post.supporterBadge.color}18` }}><Award size={10} color={post.supporterBadge.color} /><Text className="ml-1 text-[9px] font-black" style={{ color: post.supporterBadge.color }}>{post.supporterBadge.shortName}</Text></View> : null}
                 </View>
                 <Text className="text-xs font-semibold text-stone-500" numberOfLines={1}>
-                  {personDisplayHandle(post.author)} · {post.group} · {post.time}
+                  {personDisplayHandle(post.authorHandle || post.author)} · {post.group} · {post.time}
                 </Text>
               </TouchableOpacity>
               <UserCircle size={20} color={THEME.primary} />
@@ -489,7 +489,13 @@ export default function CommonsPostDetailScreen() {
                   <View key={comment.id || `${comment.author}-${comment.body}`} className="rounded-xl bg-stone-50 p-3">
                     <View className="flex-row items-start justify-between gap-2">
                       <View className="flex-row items-center gap-1.5">
-                        <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
+                        <TouchableOpacity
+                          onPress={() => openPersonPage(comment.author, comment.authorHandle)}
+                          accessibilityRole="link"
+                          accessibilityLabel={`Open ${comment.author}'s personal page`}
+                        >
+                          <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
+                        </TouchableOpacity>
                         {comment.supporterBadge ? <View className="flex-row items-center rounded-full px-2 py-0.5" style={{ backgroundColor: `${comment.supporterBadge.color}18` }}><Award size={9} color={comment.supporterBadge.color} /><Text className="ml-1 text-[8px] font-black" style={{ color: comment.supporterBadge.color }}>{comment.supporterBadge.shortName}</Text></View> : null}
                       </View>
                       {comment.authorId && comment.authorId === user?.id ? (

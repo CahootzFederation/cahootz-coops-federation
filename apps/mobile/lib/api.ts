@@ -229,6 +229,7 @@ export interface CommonsComment {
   id: string;
   authorId?: string;
   author: string;
+  authorHandle?: string;
   body: string;
   supporterBadge?: SupporterBadge | null;
   media?: CommonsPostMedia[];
@@ -353,6 +354,7 @@ export interface PrivateGroupSummary {
 export interface PrivateGroupMember {
   userId: string;
   name: string;
+  handle?: string | null;
   isLeader: boolean;
   joinedAt: string;
 }
@@ -429,12 +431,26 @@ export interface PersonalPageProfile {
   followingCount: number;
   isOwnPage: boolean;
   viewerIsFollowing: boolean;
+  /** Public commons, plus private ones the viewer also belongs to. */
+  commons?: PersonalPageCommons[];
+}
+
+export interface PersonalPageCommons {
+  coopId: string;
+  name: string;
+  shortName: string;
+  iconEmoji?: string | null;
+  iconColor?: string | null;
+  isPrivate: boolean;
+  roles: string[];
+  badges: SupporterBadge[];
 }
 
 export interface PersonalPageComment {
   id: string;
   authorId?: string;
   author: string;
+  authorHandle?: string;
   body: string;
   createdAt: string;
 }

@@ -41,6 +41,7 @@ async function main() {
   }
 
   await seedSecondCommonsShop(owner.id);
+  await seedProfileCommonsFixtures(owner.id);
 
   const stripeAccountId = process.env.E2E_STRIPE_CONNECTED_ACCOUNT_ID;
   if (!stripeAccountId) {
@@ -196,6 +197,108 @@ async function seedSecondCommonsShop(ownerId: string) {
     });
     await prisma.product.create({ data: { storeId: store.id, name: 'E2E Second Commons Tote', description: 'E2E fixture product', category: 'OTHER', priceUSD: 12, images: [], quantity: 100, isActive: true } });
   }
+}
+
+async function ensureFixtureCommons(coopId: string, name: string, isPrivate: boolean) {
+  const config = await prisma.coopConfig.findFirst({ where: { coopId, isActive: true } });
+  if (config) {
+    if (config.isPrivate !== isPrivate) {
+      await prisma.coopConfig.update({ where: { id: config.id }, data: { isPrivate } });
+    }
+    return;
+  }
+  await prisma.coopConfig.create({
+    data: {
+      coopId,
+      version: 1,
+      isActive: true,
+      name,
+      slug: name.replace(/ Commons$/, ''),
+      isPrivate,
+      displayOrder: 100,
+      charterText: `${name} fixture charter.`,
+      missionGoals: [],
+      proposalCategories: [],
+      sectorExclusions: [],
+      structuralWeights: { feasibility: 0.4, risk: 0.35, accountability: 0.25 },
+      scoreMix: { missionWeight: 0.6, structuralWeight: 0.4 },
+      createdBy: 'system',
+    },
+  });
+}
+
+async function ensureActiveMembership(userId: string, coopId: string, roles: string[]) {
+  await prisma.userCoopMembership.upsert({
+    where: { userId_coopId: { userId, coopId } },
+    update: { status: 'ACTIVE', roles },
+    create: { userId, coopId, status: 'ACTIVE', roles, joinedAt: new Date() },
+  });
+}
+
+/**
+ * Fixtures for the personal-page commons journey. User A holds a Community
+ * Builder badge in the public E2E Market Commons, is a governor of a private
+ * commons shared with User B, and is the only fixture member of a second
+ * private commons. User B should see the first two on User A's page, never the
+ * third. The badge's purchase record is an inactive, non-listed product and a
+ * zero-value completed transaction, so it never shows up in the Shop or totals.
+ */
+async function seedProfileCommonsFixtures(ownerId: string) {
+  const userAEmail = process.env.E2E_USER_A_EMAIL || 'releaseclick1@test.cahootz.local';
+  const userBEmail = process.env.E2E_USER_B_EMAIL || 'releaseclick2@test.cahootz.local';
+  const [userA, userB] = await Promise.all([
+    prisma.user.findUnique({ where: { email: userAEmail }, select: { id: true } }),
+    prisma.user.findUnique({ where: { email: userBEmail }, select: { id: true } }),
+  ]);
+  if (!userA || !userB) {
+    console.warn('Seed test users before the personal-page commons fixtures.');
+    return;
+  }
+
+  await ensureFixtureCommons('e2e-private-shared', 'E2E Shared Private Commons', true);
+  await ensureFixtureCommons('e2e-private-solo', 'E2E Solo Private Commons', true);
+  await ensureActiveMembership(userA.id, 'e2e-private-shared', ['member', 'governor']);
+  await ensureActiveMembership(userB.id, 'e2e-private-shared', ['member']);
+  await ensureActiveMembership(userA.id, 'e2e-private-solo', ['member', 'admin']);
+  await prisma.userCoopMembership.deleteMany({ where: { userId: userB.id, coopId: 'e2e-private-solo' } });
+
+  const coopId = 'e2e-market';
+  const existingBadge = await prisma.fundingBadgeEntitlement.findUnique({
+    where: { userId_coopId_tier: { userId: userA.id, coopId, tier: 'COMMUNITY_BUILDER' } },
+  });
+  if (existingBadge) {
+    if (existingBadge.status !== 'ACTIVE') {
+      await prisma.fundingBadgeEntitlement.update({ where: { id: existingBadge.id }, data: { status: 'ACTIVE' } });
+    }
+    return;
+  }
+
+  const store = await prisma.store.findFirst({
+    where: { coopId, name: 'E2E Second Commons Shop', deletedAt: null },
+    select: { id: true, businessId: true },
+  });
+  if (!store?.businessId) throw new Error('E2E second commons shop was not provisioned');
+  const product = await prisma.product.create({
+    data: { storeId: store.id, name: 'E2E Community Builder Badge', description: 'E2E profile badge fixture', category: 'FOUNDER_BADGES', kind: 'FUNDING_BADGE', fundingBadgeTier: 'COMMUNITY_BUILDER', priceUSD: 0, images: [], trackInventory: false, isActive: false },
+  });
+  const transaction = await prisma.commerceTransaction.create({
+    data: {
+      customerId: userA.id,
+      businessId: store.businessId,
+      coopId,
+      listedAmount: 0,
+      chargedAmount: 0,
+      merchantSettlementAmount: 0,
+      treasuryFeeAmount: 0,
+      status: 'COMPLETED',
+      sourceType: 'E2E_FIXTURE',
+      completedAt: new Date(),
+      metadata: { fixture: 'e2e-profile-commons', createdBy: ownerId },
+    },
+  });
+  await prisma.fundingBadgeEntitlement.create({
+    data: { userId: userA.id, coopId, tier: 'COMMUNITY_BUILDER', productId: product.id, commerceTransactionId: transaction.id },
+  });
 }
 
 main().finally(() => prisma.$disconnect());

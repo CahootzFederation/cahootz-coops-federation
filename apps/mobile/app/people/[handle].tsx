@@ -22,6 +22,7 @@ import {
 } from '@/components/commons-media-viewer';
 import { PersonAvatar } from '@/components/person-avatar';
 import { PersonalPagePostCard } from '@/components/personal-page-post-card';
+import { ProfileCommonsSection } from '@/components/profile-commons-section';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsPost, type PersonalPageFeedPost, type PersonalPageProfile } from '@/lib/api';
@@ -248,6 +249,12 @@ export default function PublicPersonPageScreen() {
               </View>
             )}
           </View>
+
+          {profile?.commons ? (
+            <View className="mt-4">
+              <ProfileCommonsSection commons={profile.commons} isOwnPage={isOwnPage} />
+            </View>
+          ) : null}
 
           {error ? (
             <View className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">

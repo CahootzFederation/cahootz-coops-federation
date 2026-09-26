@@ -28,6 +28,7 @@ export const notificationCategoryTypes: Record<
     "MENTION",
     "NEW_FOLLOWER",
     "EVENT_REMINDER",
+    "CIRCLE_INVITATION",
   ],
   governance: [
     "PROPOSAL_CREATED",

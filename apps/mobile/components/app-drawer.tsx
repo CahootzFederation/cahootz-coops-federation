@@ -34,7 +34,7 @@ const DEFAULT_COMMONS_PROFILE = {
 
 const DRAWER_SECTIONS = [
   { label: 'Personal Page', icon: UserCircle, action: '/(authenticated)/personal-page', requiresAuth: true },
-  { label: 'Commons Stores & Shops', icon: Store, action: '/(tabs)/store' },
+  { label: 'Commons Stores & Shops', icon: Store, action: '/(tabs)/store', requiresAuth: true },
   { label: 'Messages & Direct Chat', icon: MessageCircle, action: '/(tabs)/messages' },
 ];
 

@@ -69,7 +69,7 @@ export const sageRouter = router({
 
       return {
         suggestions: page.map((action) => ({
-          id: action.id, title: action.summary, circleId: action.circleId,
+          id: action.id, type: action.type, title: action.summary, circleId: action.circleId,
           status: action.status, createdAt: action.createdAt.toISOString(),
         })),
         nextCursor,

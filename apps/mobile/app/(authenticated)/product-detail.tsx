@@ -62,6 +62,9 @@ export default function ProductDetailScreen() {
         name: product.name,
         imageUrl: product.imageUrl,
         priceUSD: product.priceUSD,
+        maxQuantity: product.kind === 'FUNDING_BADGE' ? 1 : undefined,
+        requiresShipping: product.kind !== 'FUNDING_BADGE',
+        exclusiveGroup: product.kind === 'FUNDING_BADGE' ? 'funding-badge' : undefined,
       },
       {
         id: product.store.id,
@@ -93,6 +96,9 @@ export default function ProductDetailScreen() {
         name: product.name,
         imageUrl: product.imageUrl,
         priceUSD: product.priceUSD,
+        maxQuantity: product.kind === 'FUNDING_BADGE' ? 1 : undefined,
+        requiresShipping: product.kind !== 'FUNDING_BADGE',
+        exclusiveGroup: product.kind === 'FUNDING_BADGE' ? 'funding-badge' : undefined,
       },
       {
         id: product.store.id,

@@ -75,6 +75,7 @@ export async function getActiveFeeConfig(): Promise<{
 export async function createCommerceTransaction(params: {
   customerId: string;
   businessId: string;
+  settlementStripeAccountRecordId?: string;
   listedAmountCents: number;
   coopId: string;
   applyTreasuryFee?: boolean;
@@ -97,7 +98,7 @@ export async function createCommerceTransaction(params: {
   isDemoMode: boolean;
   storeOrderId?: string;
 }> {
-  const { customerId, businessId, listedAmountCents, applyTreasuryFee = true, currency = 'usd', metadata } = params;
+  const { customerId, businessId, settlementStripeAccountRecordId, listedAmountCents, applyTreasuryFee = true, currency = 'usd', metadata } = params;
 
   console.log(`💳 [Payment Orchestration] Creating commerce transaction: $${listedAmountCents / 100} for business ${businessId}`);
 
@@ -116,14 +117,18 @@ export async function createCommerceTransaction(params: {
     });
   }
 
-  if (!business.stripeAccount) {
+  const settlementAccount = settlementStripeAccountRecordId
+    ? await db.stripeAccount.findUnique({ where: { id: settlementStripeAccountRecordId } })
+    : business.stripeAccount;
+
+  if (!settlementAccount) {
     throw new TRPCError({
       code: 'PRECONDITION_FAILED',
       message: 'Business does not have a Stripe Connect account',
     });
   }
 
-  if (!business.stripeAccount.chargesEnabled) {
+  if (!settlementAccount.chargesEnabled) {
     throw new TRPCError({
       code: 'PRECONDITION_FAILED',
       message: 'Business is not yet enabled to accept charges',
@@ -183,7 +188,7 @@ export async function createCommerceTransaction(params: {
     },
     // Destination charge: route merchant share to connected account
     transfer_data: {
-      destination: business.stripeAccount.stripeAccountId,
+      destination: settlementAccount.stripeAccountId,
       amount: breakdown.merchantSettlementAmount, // Amount merchant receives
     },
     metadata: {
@@ -200,7 +205,7 @@ export async function createCommerceTransaction(params: {
     where: { id: transaction.id },
     data: {
       stripePaymentIntentId: paymentIntent.id,
-      stripeDestinationAccountId: business.stripeAccount.stripeAccountId,
+      stripeDestinationAccountId: settlementAccount.stripeAccountId,
       status: 'PROCESSING',
     },
   });
@@ -276,6 +281,7 @@ function buildCheckoutLineItems(params: {
 export async function createHostedCommerceCheckoutSession(params: {
   customerId: string;
   businessId: string;
+  settlementStripeAccountRecordId?: string;
   listedAmountCents: number;
   coopId: string;
   successUrl: string;
@@ -302,6 +308,7 @@ export async function createHostedCommerceCheckoutSession(params: {
   const {
     customerId,
     businessId,
+    settlementStripeAccountRecordId,
     listedAmountCents,
     applyTreasuryFee = true,
     currency = 'usd',
@@ -325,14 +332,18 @@ export async function createHostedCommerceCheckoutSession(params: {
     });
   }
 
-  if (!business.stripeAccount) {
+  const settlementAccount = settlementStripeAccountRecordId
+    ? await db.stripeAccount.findUnique({ where: { id: settlementStripeAccountRecordId } })
+    : business.stripeAccount;
+
+  if (!settlementAccount) {
     throw new TRPCError({
       code: 'PRECONDITION_FAILED',
       message: 'Business does not have a Stripe Connect account',
     });
   }
 
-  if (!business.stripeAccount.chargesEnabled) {
+  if (!settlementAccount.chargesEnabled) {
     throw new TRPCError({
       code: 'PRECONDITION_FAILED',
       message: 'Business is not yet enabled to accept charges',
@@ -387,7 +398,7 @@ export async function createHostedCommerceCheckoutSession(params: {
     },
     payment_intent_data: {
       transfer_data: {
-        destination: business.stripeAccount.stripeAccountId,
+        destination: settlementAccount.stripeAccountId,
         amount: breakdown.merchantSettlementAmount,
       },
       metadata: {
@@ -406,7 +417,7 @@ export async function createHostedCommerceCheckoutSession(params: {
     where: { id: transaction.id },
     data: {
       stripePaymentIntentId: paymentIntentId,
-      stripeDestinationAccountId: business.stripeAccount.stripeAccountId,
+      stripeDestinationAccountId: settlementAccount.stripeAccountId,
       status: 'PROCESSING',
       metadata: {
         ...(metadata ?? {}),

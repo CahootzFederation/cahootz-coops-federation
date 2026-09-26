@@ -1,5 +1,6 @@
 import type { Context } from "../context.js";
 import { sageHandleForCoop } from "./bot.js";
+import { RESERVED_MENTION_HANDLES } from "./commons.js";
 
 const RAW_MENTION_RE = /(?<![\w[])@([a-zA-Z0-9_-]{1,30})\b/g;
 const ENCODED_MENTION_RE = /\[@([a-zA-Z0-9_-]+)\]/g;
@@ -40,6 +41,10 @@ export async function encodeMentions(
 ): Promise<EncodeMentionsResult> {
   const candidates = new Set<string>();
   for (const match of content.matchAll(RAW_MENTION_RE)) {
+    // Group pings like @everyone are Sage-only; a member typing one should
+    // never resolve to (and notify) a legacy account that happens to own
+    // that handle.
+    if (RESERVED_MENTION_HANDLES.has(match[1].toLowerCase())) continue;
     candidates.add(match[1]);
   }
 

@@ -22,6 +22,7 @@ import { recordObservation } from '../services/ai-memory.js';
 import { recordAgentResultCost } from '../services/ai-cost.js';
 import { enqueueCommonsActionContent } from '../services/commons-action-dispatch.js';
 import { createNotificationAndPush } from '../services/push-notification-service.js';
+import { notifyCircleActivity } from '../services/circle-notifications.js';
 import { FUNDING_BADGE_BY_TIER } from '../services/funding-badge-service.js';
 import {
   sendApplicationSubmittedNotification,
@@ -852,6 +853,24 @@ export async function requireActiveCommonsMembership(
   }
 }
 
+/** Groups AICostEvent.feature keys into member-readable spending categories. */
+export function aiSpendCategory(feature: string) {
+  if (feature.startsWith('proposal-')) return 'Proposal reviews';
+  if (feature.startsWith('newsletter-')) return 'Newsletter';
+  if (feature.startsWith('knowledge-')) return 'Knowledge base';
+  if (feature === 'commons-assistant' || feature === 'commons-recommender') {
+    return 'Assistant';
+  }
+  if (
+    feature.startsWith('sage-') ||
+    feature === 'commons-action-agent' ||
+    feature === 'community-observer'
+  ) {
+    return 'Sage';
+  }
+  return 'Other';
+}
+
 function fallbackAiResponse(prompt: string) {
   const lower = prompt.toLowerCase();
 
@@ -1361,6 +1380,79 @@ export const commonsRouter = router({
         ]);
 
       return { activeMembers, discussionsThisMonth, openVotes };
+    }),
+
+  /**
+   * Estimated AI spend for the commons info page, so members can see what
+   * the tools working on their behalf cost. Totals come from AICostEvent;
+   * calls on models without a known price are counted but not priced.
+   */
+  getAISpending: accountAuthenticatedProcedure
+    .input(z.object({ coopId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      await requireActiveCommonsMembership(
+        context.db,
+        context.accountUser.id,
+        input.coopId,
+      );
+
+      const now = new Date();
+      const monthStart = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+      );
+      const lastMonthStart = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
+      );
+
+      const [thisMonthByFeature, lastMonth] = await Promise.all([
+        context.db.aICostEvent.groupBy({
+          by: ['feature'],
+          where: { coopId: input.coopId, createdAt: { gte: monthStart } },
+          _sum: { costUsd: true },
+          _count: { _all: true, costUsd: true },
+        }),
+        context.db.aICostEvent.aggregate({
+          where: {
+            coopId: input.coopId,
+            createdAt: { gte: lastMonthStart, lt: monthStart },
+          },
+          _sum: { costUsd: true },
+        }),
+      ]);
+
+      const byCategory = new Map<
+        string,
+        { category: string; estimatedUsd: number; calls: number }
+      >();
+      let thisMonthUsd = 0;
+      let callsThisMonth = 0;
+      let unpricedCallsThisMonth = 0;
+      for (const row of thisMonthByFeature) {
+        const estimatedUsd = Number(row._sum.costUsd ?? 0);
+        const category = aiSpendCategory(row.feature);
+        const entry = byCategory.get(category) ?? {
+          category,
+          estimatedUsd: 0,
+          calls: 0,
+        };
+        entry.estimatedUsd += estimatedUsd;
+        entry.calls += row._count._all;
+        byCategory.set(category, entry);
+        thisMonthUsd += estimatedUsd;
+        callsThisMonth += row._count._all;
+        unpricedCallsThisMonth += row._count._all - row._count.costUsd;
+      }
+
+      return {
+        thisMonthUsd,
+        lastMonthUsd: Number(lastMonth._sum.costUsd ?? 0),
+        callsThisMonth,
+        unpricedCallsThisMonth,
+        byCategory: [...byCategory.values()].sort(
+          (a, b) => b.estimatedUsd - a.estimatedUsd || b.calls - a.calls,
+        ),
+      };
     }),
 
   /** A preview slice of active members for the info page's People row. */
@@ -2274,31 +2366,55 @@ export const commonsRouter = router({
         }
       }
 
-      console.info('[push] createPost mention notifications', {
-        postId: post.id,
-        recipients: mentionedUsers.filter(
-          (mentioned) => !mentioned.isBot && mentioned.id !== accountUser.id,
-        ).length,
-      });
-      for (const mentioned of mentionedUsers) {
-        if (mentioned.isBot || mentioned.id === accountUser.id) continue;
-        if (
-          circleId !== generalCircleId(input.coopId) &&
-          !(await canReadPostCircle(ctx.db, mentioned.id, post))
-        )
-          continue;
-        void createNotificationAndPush(ctx.db, {
-          userId: mentioned.id,
+      if (circleId !== generalCircleId(input.coopId)) {
+        const mentionedUserIds: string[] = [];
+        for (const mentioned of mentionedUsers) {
+          if (mentioned.isBot || mentioned.id === accountUser.id) continue;
+          if (await canReadPostCircle(ctx.db, mentioned.id, post))
+            mentionedUserIds.push(mentioned.id);
+        }
+        await notifyCircleActivity(ctx.db, {
           coopId: input.coopId,
-          type: 'MENTION',
-          title: 'You were mentioned',
-          body: `${displayName(accountUser)} mentioned you in a post.`,
-          data: { postId: post.id, coopId: input.coopId },
-        }).catch(() => {
-          console.error('[push] createPost notification preparation failed', {
-            postId: post.id,
-          });
+          circleId,
+          postId: post.id,
+          actorId: accountUser.id,
+          actorName: displayName(accountUser),
+          kind: 'post',
+          mentionedUserIds,
+        })
+          .then(({ recipients }) =>
+            console.info('[push] createPost circle notifications', {
+              postId: post.id,
+              recipients,
+            }),
+          )
+          .catch(() =>
+            console.error('[push] createPost circle notifications failed', {
+              postId: post.id,
+            }),
+          );
+      } else {
+        console.info('[push] createPost mention notifications', {
+          postId: post.id,
+          recipients: mentionedUsers.filter(
+            (mentioned) => !mentioned.isBot && mentioned.id !== accountUser.id,
+          ).length,
         });
+        for (const mentioned of mentionedUsers) {
+          if (mentioned.isBot || mentioned.id === accountUser.id) continue;
+          void createNotificationAndPush(ctx.db, {
+            userId: mentioned.id,
+            coopId: input.coopId,
+            type: 'MENTION',
+            title: 'You were mentioned',
+            body: `${displayName(accountUser)} mentioned you in a post.`,
+            data: { postId: post.id, coopId: input.coopId },
+          }).catch(() => {
+            console.error('[push] createPost notification preparation failed', {
+              postId: post.id,
+            });
+          });
+        }
       }
 
       return { post: mapPostWithGroup(post, coop.name) };
@@ -2434,11 +2550,36 @@ export const commonsRouter = router({
         );
       }
 
-      if (
-        post.authorId &&
-        post.authorId !== accountUser.id &&
-        (await canReadPostCircle(ctx.db, post.authorId, post))
-      ) {
+      const isCirclePost =
+        !!post.circleId && post.circleId !== generalCircleId(post.coopId);
+      if (isCirclePost) {
+        const mentionedUserIds: string[] = [];
+        for (const mentioned of mentionedUsers) {
+          if (mentioned.isBot || mentioned.id === accountUser.id) continue;
+          if (await canReadPostCircle(ctx.db, mentioned.id, post))
+            mentionedUserIds.push(mentioned.id);
+        }
+        const postAuthorId =
+          post.authorId &&
+          post.authorId !== accountUser.id &&
+          (await canReadPostCircle(ctx.db, post.authorId, post))
+            ? post.authorId
+            : null;
+        await notifyCircleActivity(ctx.db, {
+          coopId: post.coopId,
+          circleId: post.circleId!,
+          postId: post.id,
+          actorId: accountUser.id,
+          actorName: displayName(comment.author),
+          kind: 'comment',
+          mentionedUserIds,
+          postAuthorId,
+        }).catch(() =>
+          console.error('[push] createComment circle notifications failed', {
+            postId: post.id,
+          }),
+        );
+      } else if (post.authorId && post.authorId !== accountUser.id) {
         void createNotificationAndPush(ctx.db, {
           userId: post.authorId,
           coopId: post.coopId,
@@ -2490,9 +2631,8 @@ export const commonsRouter = router({
         }
       }
 
-      for (const mentioned of mentionedUsers) {
+      for (const mentioned of isCirclePost ? [] : mentionedUsers) {
         if (mentioned.isBot || mentioned.id === accountUser.id) continue;
-        if (!(await canReadPostCircle(ctx.db, mentioned.id, post))) continue;
         void createNotificationAndPush(ctx.db, {
           userId: mentioned.id,
           coopId: post.coopId,

@@ -1,14 +1,19 @@
-import type { PrivateGroupDetail, PrivateGroupMember } from '@/lib/api';
+import type {
+  CircleInviteCandidate,
+  PrivateGroupDetail,
+  PrivateGroupMember,
+  PrivateGroupPendingInvite,
+} from '@/lib/api';
 import React from 'react';
 import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
@@ -17,13 +22,13 @@ import { IconAvatar } from '@/components/icon-avatar';
 import { EmojiColorPicker } from '@/components/emoji-color-picker';
 import {
   ArrowLeft,
-  Copy,
   Crown,
   LogOut,
   MessageCircle,
   Pencil,
-  RefreshCw,
+  Search,
   Settings2,
+  UserPlus,
   Users,
 } from 'lucide-react-native';
 
@@ -43,7 +48,20 @@ export default function GroupDetailScreen() {
   const [members, setMembers] = React.useState<PrivateGroupMember[]>([]);
   const [isLoadingGroup, setIsLoadingGroup] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [isRegenerating, setIsRegenerating] = React.useState(false);
+  const [pendingInvites, setPendingInvites] = React.useState<
+    PrivateGroupPendingInvite[]
+  >([]);
+  const [inviteQuery, setInviteQuery] = React.useState('');
+  const [inviteResults, setInviteResults] = React.useState<
+    CircleInviteCandidate[]
+  >([]);
+  const [isSearchingInvitees, setIsSearchingInvitees] = React.useState(false);
+  const [invitingUserId, setInvitingUserId] = React.useState<string | null>(
+    null,
+  );
+  const [revokingInviteId, setRevokingInviteId] = React.useState<
+    string | null
+  >(null);
   const [transferringUserId, setTransferringUserId] = React.useState<
     string | null
   >(null);
@@ -68,6 +86,7 @@ export default function GroupDetailScreen() {
       .then((detail) => {
         setGroup(detail.group);
         setMembers(detail.members);
+        setPendingInvites(detail.pendingInvites ?? []);
       })
       .catch((err) =>
         setError(err instanceof Error ? err.message : 'Failed to load group.'),
@@ -79,29 +98,99 @@ export default function GroupDetailScreen() {
     load();
   }, [load]);
 
-  const copyInviteCode = async () => {
-    if (!group?.inviteCode) return;
-    await Clipboard.setStringAsync(group.inviteCode);
-    Alert.alert('Copied', 'Invite code copied to clipboard.');
-  };
+  const canInvite = !!group?.isLeader && group?.kind !== 'WELCOME_TABLE';
 
-  const regenerateCode = async () => {
-    if (!sessionToken || !groupId || isRegenerating) return;
+  React.useEffect(() => {
+    const query = inviteQuery.trim();
+    if (!canInvite || !sessionToken || !groupId || !query) {
+      setInviteResults([]);
+      setIsSearchingInvitees(false);
+      return;
+    }
 
-    setIsRegenerating(true);
+    let cancelled = false;
+    setIsSearchingInvitees(true);
+    const timer = setTimeout(() => {
+      api
+        .searchCircleInvitees(groupId, query, sessionToken)
+        .then(({ people }) => {
+          if (!cancelled) setInviteResults(people);
+        })
+        .catch((err) => console.warn('Could not search people:', err))
+        .finally(() => {
+          if (!cancelled) setIsSearchingInvitees(false);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [canInvite, groupId, inviteQuery, sessionToken]);
+
+  const invitePerson = async (person: CircleInviteCandidate) => {
+    if (!sessionToken || !groupId || invitingUserId) return;
+
+    setInvitingUserId(person.userId);
     try {
-      const { inviteCode } = await api.regenerateGroupInviteCode(
+      const { inviteId } = await api.inviteToCircle(
         groupId,
+        person.userId,
         sessionToken,
       );
-      setGroup((current) => (current ? { ...current, inviteCode } : current));
+      setInviteResults((current) =>
+        current.map((candidate) =>
+          candidate.userId === person.userId
+            ? { ...candidate, invited: true }
+            : candidate,
+        ),
+      );
+      setPendingInvites((current) =>
+        current.some((invite) => invite.userId === person.userId)
+          ? current
+          : [
+              {
+                inviteId,
+                userId: person.userId,
+                name: person.name,
+                invitedAt: new Date().toISOString(),
+              },
+              ...current,
+            ],
+      );
     } catch (err) {
       Alert.alert(
-        'Could not regenerate code',
+        'Could not send invitation',
         err instanceof Error ? err.message : 'Try again.',
       );
     } finally {
-      setIsRegenerating(false);
+      setInvitingUserId(null);
+    }
+  };
+
+  const revokeInvite = async (invite: PrivateGroupPendingInvite) => {
+    if (!sessionToken || revokingInviteId) return;
+
+    setRevokingInviteId(invite.inviteId);
+    try {
+      await api.revokeCircleInvite(invite.inviteId, sessionToken);
+      setPendingInvites((current) =>
+        current.filter((item) => item.inviteId !== invite.inviteId),
+      );
+      setInviteResults((current) =>
+        current.map((candidate) =>
+          candidate.userId === invite.userId
+            ? { ...candidate, invited: false }
+            : candidate,
+        ),
+      );
+    } catch (err) {
+      Alert.alert(
+        'Could not cancel invitation',
+        err instanceof Error ? err.message : 'Try again.',
+      );
+    } finally {
+      setRevokingInviteId(null);
     }
   };
 
@@ -390,50 +479,141 @@ export default function GroupDetailScreen() {
             {isUpdatingPrivacy ? <ActivityIndicator className="mt-3" size="small" color={THEME.primary} /> : null}
           </View>
 
-          {group.isLeader && group.inviteCode && group.privacy !== 'public' ? (
+          {canInvite ? (
             <View
               className="mt-4 rounded-2xl border bg-white p-4"
               style={{ borderColor: THEME.border }}
             >
-              <Text className="text-xs font-black uppercase text-gray-500">
-                Invite Code
-              </Text>
-              <View className="mt-2 flex-row items-center gap-2">
-                <View
-                  className="flex-1 rounded-xl px-3 py-2"
-                  style={{ backgroundColor: THEME.primarySoft }}
-                >
-                  <Text
-                    className="text-lg font-black tracking-widest"
-                    style={{ color: THEME.primary }}
-                  >
-                    {group.inviteCode}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={copyInviteCode}
-                  className="h-10 w-10 items-center justify-center rounded-xl border bg-white"
-                  style={{ borderColor: THEME.border }}
-                >
-                  <Copy size={16} color="#1F2937" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={regenerateCode}
-                  disabled={isRegenerating}
-                  className="h-10 w-10 items-center justify-center rounded-xl border bg-white"
-                  style={{ borderColor: THEME.border }}
-                >
-                  {isRegenerating ? (
-                    <ActivityIndicator size="small" color="#1F2937" />
-                  ) : (
-                    <RefreshCw size={16} color="#1F2937" />
-                  )}
-                </TouchableOpacity>
+              <View className="flex-row items-center gap-2">
+                <UserPlus size={16} color={THEME.muted} />
+                <Text className="text-xs font-black uppercase text-gray-500">
+                  Invite people
+                </Text>
               </View>
-              <Text className="mt-2 text-xs leading-4 text-gray-500">
-                Share this code so people can join. Regenerating invalidates the
-                old code.
+              <Text className="mt-1 text-xs leading-4 text-gray-500">
+                Search members of {group.coopName}. They&apos;ll get an
+                invitation to accept or decline.
               </Text>
+              <View
+                className="mt-3 flex-row items-center gap-2 rounded-xl border bg-gray-50 px-3"
+                style={{ borderColor: THEME.border }}
+              >
+                <Search size={15} color={THEME.muted} />
+                <TextInput
+                  value={inviteQuery}
+                  onChangeText={setInviteQuery}
+                  placeholder="Search by name or handle"
+                  placeholderTextColor={THEME.muted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  accessibilityLabel="Search people to invite"
+                  className="min-h-11 flex-1 text-sm text-gray-900"
+                />
+                {isSearchingInvitees ? (
+                  <ActivityIndicator size="small" color={THEME.primary} />
+                ) : null}
+              </View>
+
+              {inviteQuery.trim() &&
+              !isSearchingInvitees &&
+              inviteResults.length === 0 ? (
+                <Text className="mt-3 text-xs font-semibold text-gray-500">
+                  No commons members match that search.
+                </Text>
+              ) : null}
+
+              {inviteResults.length > 0 ? (
+                <View className="mt-3 gap-2">
+                  {inviteResults.map((person) => (
+                    <View
+                      key={person.userId}
+                      className="flex-row items-center justify-between gap-2"
+                    >
+                      <View className="min-w-0 flex-1">
+                        <Text
+                          className="text-sm font-semibold text-gray-900"
+                          numberOfLines={1}
+                        >
+                          {person.name}
+                        </Text>
+                        {person.handle ? (
+                          <Text
+                            className="text-xs text-gray-500"
+                            numberOfLines={1}
+                          >
+                            @{person.handle}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {person.invited ? (
+                        <Text className="text-xs font-black text-gray-400">
+                          Invited
+                        </Text>
+                      ) : (
+                        <TouchableOpacity
+                          onPress={() => void invitePerson(person)}
+                          disabled={invitingUserId !== null}
+                          accessibilityLabel={`Invite ${person.name}`}
+                          className="rounded-lg px-3 py-1.5"
+                          style={{ backgroundColor: THEME.primary }}
+                        >
+                          {invitingUserId === person.userId ? (
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                          ) : (
+                            <Text className="text-xs font-black text-white">
+                              Invite
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              {pendingInvites.length > 0 ? (
+                <View
+                  className="mt-4 border-t pt-3"
+                  style={{ borderColor: THEME.border }}
+                >
+                  <Text className="text-xs font-black uppercase text-gray-500">
+                    Pending invitations ({pendingInvites.length})
+                  </Text>
+                  <View className="mt-2 gap-2">
+                    {pendingInvites.map((invite) => (
+                      <View
+                        key={invite.inviteId}
+                        className="flex-row items-center justify-between gap-2"
+                      >
+                        <Text
+                          className="flex-1 text-sm font-semibold text-gray-700"
+                          numberOfLines={1}
+                        >
+                          {invite.name}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => void revokeInvite(invite)}
+                          disabled={revokingInviteId !== null}
+                          accessibilityLabel={`Cancel invitation for ${invite.name}`}
+                          className="rounded-lg border px-2 py-1"
+                          style={{ borderColor: THEME.border }}
+                        >
+                          {revokingInviteId === invite.inviteId ? (
+                            <ActivityIndicator
+                              size="small"
+                              color={THEME.muted}
+                            />
+                          ) : (
+                            <Text className="text-xs font-black text-gray-600">
+                              Cancel
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
             </View>
           ) : null}
 

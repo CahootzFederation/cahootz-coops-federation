@@ -133,6 +133,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
         {sessionToken ? (
           <TouchableOpacity
             accessibilityRole="button"
+            accessibilityLabel="Manage circles"
             onPress={openManageCircles}
             className="h-11 w-11 items-center justify-center rounded-full"
             style={{ backgroundColor: THEME.primarySoft }}

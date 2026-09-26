@@ -6,6 +6,7 @@ import type { CoopConfig, Prisma } from "@repo/db";
 import type { AuthenticatedContext } from "../context.js";
 import { linkExternalWalletToUser } from "../services/wallet-service.js";
 import { isPlaceholderCharter, starterCharter } from "../services/starter-charter.js";
+import { ensureCommonsFundingStore } from "../services/funding-badge-service.js";
 
 type MissionGoalConfig = {
   key: string;
@@ -250,12 +251,18 @@ export async function createCommonsConfig(
       },
     });
 
-    await linkExternalWalletToUser({
+    const admin = await linkExternalWalletToUser({
       walletAddress,
       coopId,
       name: `${fields.name ?? coopId} Admin`,
       roles: ['member', 'admin'],
     }, tx);
+
+    await ensureCommonsFundingStore(tx, {
+      coopId,
+      ownerId: admin.userId,
+      coopName: fields.name ?? coopId,
+    });
 
     return config;
   });

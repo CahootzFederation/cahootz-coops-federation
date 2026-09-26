@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 import { circleColorFromKey } from '@/lib/circle-color';
 import { secureStorage } from '@/lib/secure-storage';
 import AppDrawer from '@/components/app-drawer';
-import { Menu, MessageCircle, Settings2 } from 'lucide-react-native';
+import { Menu, MessageCircle, Settings2, LogIn } from 'lucide-react-native';
 
 const THEME = {
   ink: '#111827',
@@ -133,6 +133,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
         {sessionToken ? (
           <TouchableOpacity
             accessibilityRole="button"
+            accessibilityLabel="Manage circles"
             onPress={openManageCircles}
             className="h-11 w-11 items-center justify-center rounded-full"
             style={{ backgroundColor: THEME.primarySoft }}
@@ -189,8 +190,9 @@ export default function CircleView({ coopId }: { coopId: string }) {
             ) : (
               <TouchableOpacity
                 accessibilityRole="button"
+                accessibilityLabel={sessionToken ? 'Join a welcome lounge' : 'Sign in'}
                 disabled={isAssigning}
-                onPress={joinWelcomeTable}
+                onPress={sessionToken ? joinWelcomeTable : () => router.push({ pathname: '/', params: { entry: 'sign-in' } } as any)}
                 className="items-center"
                 style={{ width: '47%' }}
                 activeOpacity={0.8}
@@ -201,15 +203,17 @@ export default function CircleView({ coopId }: { coopId: string }) {
                 >
                   {isAssigning ? (
                     <ActivityIndicator size="small" color={THEME.primary} />
-                  ) : (
+                  ) : sessionToken ? (
                     <MessageCircle size={30} color={THEME.primary} />
+                  ) : (
+                    <LogIn size={30} color={THEME.primary} />
                   )}
                 </View>
                 <Text className="mt-3 text-center text-base font-black text-gray-900">
-                  Join a welcome lounge
+                  {sessionToken ? 'Join a welcome lounge' : 'Sign in'}
                 </Text>
                 <Text className="mt-0.5 text-center text-xs font-semibold text-gray-500">
-                  Meet a small group of newcomers
+                  {sessionToken ? 'Meet a small group of newcomers' : 'Log in to join your commons'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -266,7 +270,9 @@ function CircleCardView({
         }}
       >
         {iconEmoji ? (
-          <Text style={{ fontSize: 40 }}>{iconEmoji}</Text>
+          // Text's base `text-base` class pins lineHeight to 24, which clips a
+          // 40px emoji - give it a line box tall enough for the glyph.
+          <Text style={{ fontSize: 40, lineHeight: 52, textAlign: 'center' }}>{iconEmoji}</Text>
         ) : (
           <Text
             className="text-3xl font-black"

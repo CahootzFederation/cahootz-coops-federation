@@ -5,6 +5,7 @@ import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import {
   ArrowLeft,
+  Award,
   Bell,
   Check,
   ChevronRight,
@@ -49,6 +50,14 @@ export default function AccountProfileScreen() {
   const { user, logout, resetProfileOnboarding } = useAuth();
   const [copiedAddress, setCopiedAddress] = React.useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = React.useState(false);
+  const [fundingBadges, setFundingBadges] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    if (!user?.walletAddress) return;
+    api.getMyFundingBadgeHistory(user.walletAddress)
+      .then(setFundingBadges)
+      .catch(() => setFundingBadges([]));
+  }, [user?.walletAddress]);
 
   const displayName = user?.name?.trim() || user?.email?.split('@')[0] || 'Member';
   const handle = user?.email?.split('@')[0]?.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() || 'member';
@@ -308,6 +317,36 @@ export default function AccountProfileScreen() {
               <Text className="mt-1 text-base font-black text-gray-950 capitalize">{statusLabel}</Text>
             </View>
           </View>
+
+          {fundingBadges.length > 0 ? (
+            <View className="mt-4 rounded-2xl border bg-white p-4" style={{ borderColor: PROFILE_THEME.border }}>
+              <View className="flex-row items-center">
+                <View className="h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: '#FFF7ED' }}>
+                  <Award size={20} color={PROFILE_THEME.primary} />
+                </View>
+                <View className="ml-3 flex-1">
+                  <Text className="font-black text-gray-950">Commons supporter badges</Text>
+                  <Text className="mt-0.5 text-xs font-semibold text-gray-500">Your verified funding history</Text>
+                </View>
+              </View>
+              <View className="mt-3 gap-2">
+                {fundingBadges.map((badge) => (
+                  <View key={badge.id} className="flex-row items-center rounded-xl border p-3" style={{ borderColor: PROFILE_THEME.border }}>
+                    <View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: `${badge.definition.color}18`, borderColor: badge.definition.color, borderWidth: 2 }}>
+                      <Award size={16} color={badge.definition.color} />
+                    </View>
+                    <View className="ml-3 flex-1">
+                      <Text className="text-sm font-black text-gray-950">{badge.definition.name}</Text>
+                      <Text className="mt-0.5 text-xs font-semibold text-gray-500">{badge.commonsName}</Text>
+                    </View>
+                    <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: badge.status === 'ACTIVE' ? '#DCFCE7' : '#F1F5F9' }}>
+                      <Text className="text-[10px] font-black uppercase" style={{ color: badge.status === 'ACTIVE' ? '#166534' : '#64748B' }}>{badge.status}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
 
           <View className="mt-4 overflow-hidden rounded-2xl border bg-white" style={{ borderColor: PROFILE_THEME.border }}>
             <Text className="px-4 pb-2 pt-4 text-xs font-black uppercase text-gray-500">Navigation</Text>

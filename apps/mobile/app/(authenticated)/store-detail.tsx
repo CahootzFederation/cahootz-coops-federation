@@ -40,6 +40,7 @@ interface ProductData {
   ucDiscountPrice: number | null;
   quantity: number | null;
   isFeatured: boolean;
+  kind?: 'STANDARD' | 'FUNDING_BADGE';
   store: {
     id: string;
     name: string;
@@ -72,6 +73,9 @@ export default function StoreDetailScreen() {
         name: product.name,
         imageUrl: product.imageUrl,
         priceUSD: product.priceUSD,
+        maxQuantity: product.kind === 'FUNDING_BADGE' ? 1 : undefined,
+        requiresShipping: product.kind !== 'FUNDING_BADGE',
+        exclusiveGroup: product.kind === 'FUNDING_BADGE' ? 'funding-badge' : undefined,
       },
       {
         id: store.id,

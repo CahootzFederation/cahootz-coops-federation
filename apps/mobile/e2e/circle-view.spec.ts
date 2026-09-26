@@ -104,6 +104,11 @@ test("two signed-in members see Sage's introduction thread in their welcome loun
   try {
     for (const page of [pageA, pageB]) {
       await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
+      // The heading renders before the circle list loads - wait for the grid
+      // (General is always its first card) or the lounge count below can
+      // read 0 for an account that already has one and wait for a join card
+      // that never appears.
+      await expect(page.getByText("General", { exact: true })).toBeVisible();
 
       const loungeMatches = page.getByText(/^Welcome Lounge \d+$/);
       let alreadyMember = loungeMatches.first();

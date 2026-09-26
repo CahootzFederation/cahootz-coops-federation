@@ -39,9 +39,16 @@ pnpm test:e2e:mobile
 
 Use `pnpm -F @cahootz/mobile test:e2e:headed` to watch Chrome perform the journey. Override the defaults with `E2E_BASE_URL`, `E2E_API_BASE_URL`, `E2E_USER_A_EMAIL`, `E2E_USER_B_EMAIL`, and `E2E_LOGIN_CODE`.
 
+How the suite stays fast:
+
+- **One sign-in per account per run.** A `setup` project (`e2e/auth.setup.ts`) signs both fixture accounts in through the real UI (journey 1) and saves each browser's storage to `apps/mobile/e2e/.auth/` (git-ignored). `newSignedInPage` starts every test's isolated context from that saved session instead of repeating the sign-in. Sign-out only clears the browser's own storage, so a test that signs out doesn't affect the saved session. If you run with `--no-deps`, delete `e2e/.auth/` first or the tests will reuse the last run's sessions.
+- **Files run in parallel.** Three workers by default (`E2E_WORKERS=1` to run serially, e.g. on a slow machine). Tests inside one file still run in order. New specs must create uniquely named `E2E` content and must not depend on state another file changes.
+- **`pnpm -F @cahootz/mobile test:e2e:fast`** skips the two `@sage` journeys (14-15), which call a live model and are the slowest journeys (40s to 90s each). CI always runs them.
+- Video is recorded only when CI retries a failed test; traces and screenshots are still kept for every failure.
+
 The current Playwright suite covers:
 
-1. Two independent users sign in through the real UI and the menu shows the correct identity in each session.
+1. Two independent users sign in through the real UI and the menu shows the correct identity in each session (`auth.setup.ts`, which every other spec depends on).
 2. User A signs out while User B remains signed in after a reload.
 3. User A creates a commons post.
 4. User B reloads, sees the post, opens it, and submits a comment.

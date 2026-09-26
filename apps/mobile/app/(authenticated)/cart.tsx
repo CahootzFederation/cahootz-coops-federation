@@ -81,9 +81,10 @@ function CartItemCard({
             </Text>
             <TouchableOpacity
               onPress={() => onUpdateQuantity(item.quantity + 1)}
+              disabled={item.maxQuantity !== undefined && item.quantity >= item.maxQuantity}
               className="p-2"
             >
-              <Plus size={16} color={accentColor} />
+              <Plus size={16} color={item.maxQuantity !== undefined && item.quantity >= item.maxQuantity ? '#CBD5E1' : accentColor} />
             </TouchableOpacity>
           </View>
 

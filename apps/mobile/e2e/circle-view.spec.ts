@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { newSignedInPage } from "./support/auth";
+import { enterFeed, newSignedInPage } from "./support/auth";
 
+const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 const USER_A_EMAIL =
   process.env.E2E_USER_A_EMAIL || "releaseclick1@test.cahootz.local";
 const USER_B_EMAIL =
@@ -33,6 +34,60 @@ test("Commons tab lands on Circle View, and the feed's back button returns to it
     await page.getByLabel("Commons", { exact: true }).click();
     await expect(page.getByLabel("Commons", { exact: true })).toHaveCount(1);
   } finally {
+    await context.close();
+  }
+});
+
+test("a circle's emoji icon on Circle View is not clipped by its line box", async ({
+  browser,
+}) => {
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const circleName = `E2E Emoji Circle ${runId}`;
+  const emoji = "🌻";
+  const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
+  let groupId: string | undefined;
+  let sessionToken: string | null = null;
+
+  try {
+    sessionToken = await page.evaluate(() =>
+      window.localStorage.getItem("cahootz.sessionToken"),
+    );
+    expect(sessionToken).toBeTruthy();
+
+    const created = await fetch(`${API_BASE_URL}/trpc/groups.create`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-session-token": sessionToken!,
+      },
+      body: JSON.stringify({ name: circleName, privacy: "public", iconEmoji: emoji }),
+    }).then((res) => res.json());
+    groupId = created?.result?.data?.group?.id;
+    expect(groupId).toBeTruthy();
+
+    await page.reload();
+    await expect(page.getByText(circleName, { exact: true })).toBeVisible();
+
+    // The emoji renders at 40px; its box must be at least that tall or the
+    // glyph's top and bottom get cut off (the regression this guards).
+    const icon = page
+      .getByRole("button")
+      .filter({ hasText: circleName })
+      .getByText(emoji, { exact: true });
+    await expect(icon).toBeVisible();
+    const box = await icon.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(40);
+  } finally {
+    if (groupId && sessionToken) {
+      await fetch(`${API_BASE_URL}/trpc/groups.leave`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-session-token": sessionToken,
+        },
+        body: JSON.stringify({ groupId }),
+      });
+    }
     await context.close();
   }
 });
@@ -87,5 +142,20 @@ test("two signed-in members see Sage's introduction thread in their welcome loun
     await expect(pageA.getByText(/^Welcome Lounge \d+$/)).toBeVisible();
   } finally {
     await Promise.all([contextA.close(), contextB.close()]);
+  }
+});
+
+test("signed-out visitors see a sign-in card in place of the welcome lounge", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 430, height: 932 } });
+  const page = await context.newPage();
+  try {
+    await enterFeed(page);
+    await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
+    await expect(page.getByText("Join a welcome lounge", { exact: true })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page.getByPlaceholder("name@email.com")).toBeVisible();
+  } finally {
+    await context.close();
   }
 });

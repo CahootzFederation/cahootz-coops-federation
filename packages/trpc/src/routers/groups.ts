@@ -9,6 +9,7 @@ import { hashToColorKey } from '../lib/circle-color.js';
 import { generateInviteCode } from '../lib/invite-code.js';
 import { accountAuthenticatedProcedure } from '../procedures/index.js';
 import { queryObservations, recordObservation } from '../services/ai-memory.js';
+import { createNotificationAndPush } from '../services/push-notification-service.js';
 import { touchCircleWindow } from '../services/circle-window.js';
 import { validateSCBalance } from '../services/sc-validation-service.js';
 import { enterChat, getChattingCounts, leaveChat, refreshChatPresence } from '../services/circle-presence.js';
@@ -41,6 +42,37 @@ export async function requireMembership(
     });
   }
 
+  return group;
+}
+
+// The platform-wide "cahootz" commons is open to every account (see
+// listVisible), so any active person is a commons member there. Every other
+// commons requires an ACTIVE membership.
+async function isCommonsMember(
+  db: AccountAuthenticatedContext['db'],
+  userId: string,
+  coopId: string,
+) {
+  if (coopId === 'cahootz') return true;
+  const membership = await db.userCoopMembership.findUnique({
+    where: { userId_coopId: { userId, coopId } },
+    select: { status: true },
+  });
+  return membership?.status === 'ACTIVE';
+}
+
+async function requireInvitingLeader(
+  db: AccountAuthenticatedContext['db'],
+  groupId: string,
+  userId: string,
+) {
+  const group = await requireMembership(db, groupId, userId);
+  if (group.kind === 'WELCOME_TABLE') {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Welcome lounges are managed from admin controls.' });
+  }
+  if (group.leaderId !== userId) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the circle leader can invite people.' });
+  }
   return group;
 }
 
@@ -325,7 +357,7 @@ export const groupsRouter = router({
       const group = await requireMembership(context.db, input.groupId, userId);
       const isLeader = group.leaderId === userId;
 
-      const [members, coopConfig] = await Promise.all([
+      const [members, coopConfig, pendingInvites] = await Promise.all([
         context.db.groupMember.findMany({
           where: { groupId: group.id },
           include: { user: { select: { name: true, email: true } } },
@@ -336,6 +368,13 @@ export const groupsRouter = router({
           orderBy: { version: 'desc' },
           select: { name: true, slug: true },
         }),
+        isLeader
+          ? context.db.groupInvite.findMany({
+              where: { groupId: group.id, status: 'PENDING' },
+              include: { invitee: { select: { name: true, email: true } } },
+              orderBy: { createdAt: 'desc' },
+            })
+          : Promise.resolve([]),
       ]);
 
       return {
@@ -344,11 +383,14 @@ export const groupsRouter = router({
           name: group.name,
           purpose: group.purpose,
           privacy: group.privacy,
-          inviteCode: isLeader ? group.inviteCode : null,
+          // Circles are joined by direct invitation now; codes are no longer
+          // surfaced in the app.
+          inviteCode: null,
           isLeader,
           createdAt: group.createdAt.toISOString(),
           coopId: group.coopId,
           coopName: coopConfig?.name || coopConfig?.slug || group.coopId,
+          kind: group.kind,
           iconEmoji: group.iconEmoji,
           iconColor: group.iconColor,
         },
@@ -358,7 +400,270 @@ export const groupsRouter = router({
           isLeader: member.userId === group.leaderId,
           joinedAt: member.joinedAt.toISOString(),
         })),
+        pendingInvites: pendingInvites.map((invite) => ({
+          inviteId: invite.id,
+          userId: invite.inviteeId,
+          name: displayName(invite.invitee),
+          invitedAt: invite.createdAt.toISOString(),
+        })),
       };
+    }),
+
+  searchInvitees: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        groupId: z.string().min(1),
+        query: z.string().trim().min(1).max(80),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+      const group = await requireInvitingLeader(context.db, input.groupId, userId);
+
+      const people = await context.db.user.findMany({
+        where: {
+          deletedAt: null,
+          isBot: false,
+          groupMemberships: { none: { groupId: group.id } },
+          ...(group.coopId === 'cahootz'
+            ? {}
+            : { memberships: { some: { coopId: group.coopId, status: 'ACTIVE' } } }),
+          OR: [
+            { name: { contains: input.query, mode: 'insensitive' } },
+            { handle: { contains: input.query, mode: 'insensitive' } },
+          ],
+        },
+        orderBy: { name: 'asc' },
+        take: 10,
+        select: { id: true, name: true, email: true, handle: true },
+      });
+
+      const pending = people.length
+        ? await context.db.groupInvite.findMany({
+            where: {
+              groupId: group.id,
+              status: 'PENDING',
+              inviteeId: { in: people.map((person) => person.id) },
+            },
+            select: { inviteeId: true },
+          })
+        : [];
+      const invited = new Set(pending.map((invite) => invite.inviteeId));
+
+      return {
+        people: people.map((person) => ({
+          userId: person.id,
+          name: displayName(person),
+          handle: person.handle,
+          invited: invited.has(person.id),
+        })),
+      };
+    }),
+
+  invite: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        groupId: z.string().min(1),
+        userId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+      const group = await requireInvitingLeader(context.db, input.groupId, userId);
+
+      if (input.userId === userId) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "You're already in this circle." });
+      }
+
+      const invitee = await context.db.user.findUnique({
+        where: { id: input.userId },
+        select: { id: true, deletedAt: true, isBot: true },
+      });
+      if (!invitee || invitee.deletedAt || invitee.isBot) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Person not found.' });
+      }
+      if (!(await isCommonsMember(context.db, invitee.id, group.coopId))) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Only members of this commons can be invited to its circles.',
+        });
+      }
+
+      const existingMember = await context.db.groupMember.findUnique({
+        where: { groupId_userId: { groupId: group.id, userId: invitee.id } },
+      });
+      if (existingMember) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'That person is already in this circle.' });
+      }
+
+      const existingInvite = await context.db.groupInvite.findUnique({
+        where: { groupId_inviteeId: { groupId: group.id, inviteeId: invitee.id } },
+      });
+      if (existingInvite?.status === 'PENDING') {
+        return { inviteId: existingInvite.id, alreadyInvited: true };
+      }
+
+      const [invite] = await context.db.$transaction([
+        context.db.groupInvite.upsert({
+          where: { groupId_inviteeId: { groupId: group.id, inviteeId: invitee.id } },
+          create: { groupId: group.id, inviteeId: invitee.id, inviterId: userId },
+          update: {
+            inviterId: userId,
+            status: 'PENDING',
+            createdAt: new Date(),
+            respondedAt: null,
+          },
+        }),
+        context.db.auditLog.create({
+          data: auditLogEntry({
+            actorId: userId,
+            action: 'GROUP_INVITE_SENT',
+            resource: 'Group',
+            resourceId: group.id,
+            metadata: { inviteeId: invitee.id },
+          }),
+        }),
+      ]);
+
+      void createNotificationAndPush(context.db, {
+        userId: invitee.id,
+        coopId: group.coopId,
+        type: 'CIRCLE_INVITATION',
+        title: 'Circle invitation',
+        body: `${displayName(context.accountUser)} invited you to join ${group.name}.`,
+        data: { groupId: group.id, inviteId: invite.id, coopId: group.coopId },
+      }).catch((error) => console.error('Could not send circle invitation notification', error));
+
+      return { inviteId: invite.id, alreadyInvited: false };
+    }),
+
+  revokeInvite: accountAuthenticatedProcedure
+    .input(z.object({ inviteId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+
+      const invite = await context.db.groupInvite.findUnique({ where: { id: input.inviteId } });
+      if (!invite || invite.status !== 'PENDING') {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Invitation not found.' });
+      }
+      await requireInvitingLeader(context.db, invite.groupId, userId);
+
+      await context.db.$transaction([
+        context.db.groupInvite.update({
+          where: { id: invite.id },
+          data: { status: 'REVOKED', respondedAt: new Date() },
+        }),
+        context.db.auditLog.create({
+          data: auditLogEntry({
+            actorId: userId,
+            action: 'GROUP_INVITE_REVOKED',
+            resource: 'Group',
+            resourceId: invite.groupId,
+            metadata: { inviteeId: invite.inviteeId },
+          }),
+        }),
+      ]);
+
+      return { success: true };
+    }),
+
+  listMyInvites: accountAuthenticatedProcedure
+    .input(z.object({ coopId: z.string().min(1).optional() }).optional())
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+
+      const invites = await context.db.groupInvite.findMany({
+        where: {
+          inviteeId: userId,
+          status: 'PENDING',
+          ...(input?.coopId ? { group: { coopId: input.coopId } } : {}),
+        },
+        include: {
+          group: { include: { _count: { select: { members: true } } } },
+          inviter: { select: { name: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return {
+        invites: invites.map((invite) => ({
+          inviteId: invite.id,
+          groupId: invite.groupId,
+          coopId: invite.group.coopId,
+          name: invite.group.name,
+          purpose: invite.group.purpose,
+          privacy: invite.group.privacy,
+          iconEmoji: invite.group.iconEmoji,
+          iconColor: invite.group.iconColor,
+          memberCount: invite.group._count.members,
+          invitedBy: displayName(invite.inviter),
+          invitedAt: invite.createdAt.toISOString(),
+        })),
+      };
+    }),
+
+  respondToInvite: accountAuthenticatedProcedure
+    .input(z.object({ inviteId: z.string().min(1), accept: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+
+      const invite = await context.db.groupInvite.findUnique({
+        where: { id: input.inviteId },
+        include: { group: true },
+      });
+      if (!invite || invite.inviteeId !== userId || invite.status !== 'PENDING') {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Invitation not found.' });
+      }
+
+      if (!input.accept) {
+        await context.db.$transaction([
+          context.db.groupInvite.update({
+            where: { id: invite.id },
+            data: { status: 'DECLINED', respondedAt: new Date() },
+          }),
+          context.db.auditLog.create({
+            data: auditLogEntry({
+              actorId: userId,
+              action: 'GROUP_INVITE_DECLINED',
+              resource: 'Group',
+              resourceId: invite.groupId,
+            }),
+          }),
+        ]);
+        return { groupId: invite.groupId, coopId: invite.group.coopId, accepted: false };
+      }
+
+      if (!(await isCommonsMember(context.db, userId, invite.group.coopId))) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this common first.' });
+      }
+
+      await context.db.$transaction([
+        context.db.groupInvite.update({
+          where: { id: invite.id },
+          data: { status: 'ACCEPTED', respondedAt: new Date() },
+        }),
+        context.db.groupMember.upsert({
+          where: { groupId_userId: { groupId: invite.groupId, userId } },
+          create: { groupId: invite.groupId, userId },
+          update: {},
+        }),
+        context.db.auditLog.create({
+          data: auditLogEntry({
+            actorId: userId,
+            action: 'GROUP_JOINED',
+            resource: 'GroupMember',
+            resourceId: invite.groupId,
+            metadata: { method: 'invite', inviteId: invite.id, inviterId: invite.inviterId },
+          }),
+        }),
+      ]);
+
+      return { groupId: invite.groupId, coopId: invite.group.coopId, accepted: true };
     }),
 
   joinByCode: accountAuthenticatedProcedure

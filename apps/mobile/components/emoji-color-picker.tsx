@@ -4,13 +4,13 @@ import { Text } from '@/components/ui/text';
 import { CheckCircle2, X } from 'lucide-react-native';
 import { IconAvatar } from '@/components/icon-avatar';
 
-const EMOJI_OPTIONS = [
+export const EMOJI_OPTIONS = [
   '🏠', '🤝', '🌱', '🎨', '📚', '💡', '🛠️', '💰',
   '🍲', '🎉', '📣', '🗳️', '🧭', '🌟', '🔥', '🌍',
   '🏗️', '🧑‍🤝‍🧑', '🛒', '🎯', '🚀', '🌻', '☕', '🎵',
 ];
 
-const COLOR_OPTIONS = [
+export const COLOR_OPTIONS = [
   '#FF6B00', '#C2410C', '#B45309', '#15803D',
   '#1D4ED8', '#6D28D9', '#BE123C', '#0F766E',
 ];

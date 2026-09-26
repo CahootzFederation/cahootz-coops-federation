@@ -22,6 +22,7 @@ import { recordObservation } from '../services/ai-memory.js';
 import { recordAgentResultCost } from '../services/ai-cost.js';
 import { enqueueCommonsActionContent } from '../services/commons-action-dispatch.js';
 import { createNotificationAndPush } from '../services/push-notification-service.js';
+import { FUNDING_BADGE_BY_TIER } from '../services/funding-badge-service.js';
 import {
   sendApplicationSubmittedNotification,
   sendCommonsSuggestionNotification,
@@ -109,6 +110,55 @@ function nameParts(name: string | null | undefined) {
   };
 }
 
+async function decorateSupporterBadges(db: any, records: any[]) {
+  const authorScopes = records.flatMap((post: any) => [
+    { userId: post.authorId, coopId: post.coopId },
+    ...(post.comments ?? []).map((comment: any) => ({
+      userId: comment.authorId,
+      coopId: post.coopId,
+    })),
+  ]);
+  const authorIds = [...new Set(authorScopes.map((scope) => scope.userId))];
+  const coopIds = [...new Set(authorScopes.map((scope) => scope.coopId))];
+  const badges = authorIds.length
+    ? await db.fundingBadgeEntitlement.findMany({
+        where: {
+          userId: { in: authorIds },
+          coopId: { in: coopIds },
+          status: 'ACTIVE',
+        },
+        select: { userId: true, coopId: true, tier: true },
+      })
+    : [];
+  const badgeByMember = new Map<string, any>();
+  for (const badge of badges) {
+    const key = `${badge.userId}:${badge.coopId}`;
+    const current = badgeByMember.get(key);
+    const rank = FUNDING_BADGE_BY_TIER.get(badge.tier)?.rank ?? 0;
+    const currentRank = current
+      ? FUNDING_BADGE_BY_TIER.get(current.tier)?.rank ?? 0
+      : 0;
+    if (!current || rank > currentRank) badgeByMember.set(key, badge);
+  }
+  const decorate = (userId: string, coopId: string) => {
+    const badge = badgeByMember.get(`${userId}:${coopId}`);
+    if (!badge) return null;
+    const definition = FUNDING_BADGE_BY_TIER.get(badge.tier)!;
+    return {
+      tier: badge.tier,
+      name: definition.name,
+      shortName: definition.shortName,
+      color: definition.color,
+    };
+  };
+  records.forEach((post: any) => {
+    post.supporterBadge = decorate(post.authorId, post.coopId);
+    post.comments?.forEach((comment: any) => {
+      comment.supporterBadge = decorate(comment.authorId, post.coopId);
+    });
+  });
+}
+
 async function loadFeedPosts(
   db: any,
   coopId: string | string[],
@@ -157,6 +207,7 @@ async function loadFeedPosts(
 
   const hasMore = posts.length > limit;
   const page = hasMore ? posts.slice(0, limit) : posts;
+  await decorateSupporterBadges(db, page);
   return { page, nextCursor: hasMore ? page[page.length - 1].id : null };
 }
 
@@ -319,6 +370,9 @@ async function findUserByPersonalHandle(db: any, handle: string) {
       handle: true,
       name: true,
       selfDescription: true,
+      avatarUrl: true,
+      avatarEmoji: true,
+      avatarColor: true,
       createdAt: true,
     },
   });
@@ -554,6 +608,7 @@ function mapPostWithGroup(record: any, groupName: string, viewerId?: string) {
     authorId: record.authorId,
     author: displayName(record.author),
     authorHandle: personHandle(record.author),
+    supporterBadge: record.supporterBadge ?? null,
     group: groupName,
     time: relativeTime(record.createdAt),
     title: record.title,
@@ -583,6 +638,7 @@ function mapPostWithGroup(record: any, groupName: string, viewerId?: string) {
         id: comment.id,
         authorId: comment.authorId,
         author: displayName(comment.author),
+        supporterBadge: comment.supporterBadge ?? null,
         body: comment.content,
         media:
           comment.media?.map((item: any) => ({
@@ -1540,6 +1596,7 @@ export const commonsRouter = router({
       }
 
       const coop = await loadCoopSummary(context.db, post.coopId);
+      await decorateSupporterBadges(context.db, [post]);
       const isCirclePost = !!post.circleId && post.circleId !== generalCircleId(post.coopId);
       const circleMembership = isCirclePost && accountUser
         ? await context.db.groupMember.findUnique({
@@ -1679,6 +1736,9 @@ export const commonsRouter = router({
           name: displayName(user),
           handle: personHandle(user),
           bio: user.selfDescription,
+          avatarUrl: user.avatarUrl,
+          avatarEmoji: user.avatarEmoji,
+          avatarColor: user.avatarColor,
           createdAt: user.createdAt.toISOString(),
           followerCount,
           followingCount,
@@ -1753,6 +1813,50 @@ export const commonsRouter = router({
       await ctx.db.personalPagePost.delete({ where: { id: input.postId } });
 
       return { success: true };
+    }),
+
+  updatePersonalPageProfile: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        bio: z.string().trim().max(5000),
+        avatarUrl: z
+          .string()
+          .url()
+          .max(2048)
+          .refine((url) => url.startsWith('https://'), 'Photo must be an https URL.')
+          .nullable(),
+        avatarEmoji: z.string().trim().max(16).nullable(),
+        avatarColor: z
+          .string()
+          .regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be a hex value like #FF6B00.')
+          .nullable(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const updated = await ctx.db.user.update({
+        where: { id: accountUser.id },
+        data: {
+          selfDescription: input.bio || null,
+          avatarUrl: input.avatarUrl,
+          // A photo replaces the emoji so the two never disagree.
+          avatarEmoji: input.avatarUrl ? null : input.avatarEmoji || null,
+          avatarColor: input.avatarUrl ? null : input.avatarColor,
+        },
+        select: {
+          selfDescription: true,
+          avatarUrl: true,
+          avatarEmoji: true,
+          avatarColor: true,
+        },
+      });
+
+      return {
+        bio: updated.selfDescription,
+        avatarUrl: updated.avatarUrl,
+        avatarEmoji: updated.avatarEmoji,
+        avatarColor: updated.avatarColor,
+      };
     }),
 
   createPersonalPagePostComment: accountAuthenticatedProcedure

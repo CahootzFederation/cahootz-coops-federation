@@ -1,4 +1,8 @@
-import type { GroupCreateRequirements, PrivateGroupSummary } from '@/lib/api';
+import type {
+  CircleInvitation,
+  GroupCreateRequirements,
+  PrivateGroupSummary,
+} from '@/lib/api';
 import React from 'react';
 import {
   ActivityIndicator,
@@ -19,8 +23,8 @@ import {
   ArrowLeft,
   Check,
   ChevronRight,
-  KeyRound,
   Lock,
+  Mail,
   MessageCircle,
   Pencil,
   Plus,
@@ -65,8 +69,10 @@ export default function SpacesScreen() {
   const [iconColor, setIconColor] = React.useState<string | null>(null);
   const [iconPickerOpen, setIconPickerOpen] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
-  const [joinCode, setJoinCode] = React.useState('');
-  const [isJoining, setIsJoining] = React.useState(false);
+  const [invites, setInvites] = React.useState<CircleInvitation[]>([]);
+  const [respondingInviteId, setRespondingInviteId] = React.useState<
+    string | null
+  >(null);
   const [requirements, setRequirements] =
     React.useState<GroupCreateRequirements | null>(null);
   const [activeView, setActiveView] = React.useState<'circles' | 'create'>(
@@ -100,6 +106,19 @@ export default function SpacesScreen() {
   React.useEffect(() => {
     loadGroups();
   }, [loadGroups]);
+
+  const loadInvites = React.useCallback(() => {
+    if (!sessionToken) return;
+
+    api
+      .listMyCircleInvites(sessionToken, coopId)
+      .then(({ invites: next }) => setInvites(next))
+      .catch((error) => console.warn('Could not load circle invitations:', error));
+  }, [sessionToken, coopId]);
+
+  React.useEffect(() => {
+    loadInvites();
+  }, [loadInvites]);
 
   React.useEffect(() => {
     if (!sessionToken) return;
@@ -165,32 +184,33 @@ export default function SpacesScreen() {
     }
   };
 
-  const joinSpace = async () => {
-    const trimmedCode = joinCode.trim();
-    if (!trimmedCode || isJoining || !sessionToken) return;
+  const respondToInvite = async (invite: CircleInvitation, accept: boolean) => {
+    if (!sessionToken || respondingInviteId) return;
 
-    setIsJoining(true);
+    setRespondingInviteId(invite.inviteId);
     try {
-      const { groupId } = await api.joinGroupByCode(
-        trimmedCode,
+      const result = await api.respondToCircleInvite(
+        invite.inviteId,
+        accept,
         sessionToken,
-        coopId,
       );
-      setJoinCode('');
-      loadGroups();
-      router.push({
-        pathname: '/[coopId]/posts',
-        params: { coopId: coopId || 'cahootz', circleId: groupId },
-      } as any);
+      setInvites((current) =>
+        current.filter((item) => item.inviteId !== invite.inviteId),
+      );
+      if (result.accepted) {
+        loadGroups();
+        router.push({
+          pathname: '/[coopId]/posts',
+          params: { coopId: result.coopId, circleId: result.groupId },
+        } as any);
+      }
     } catch (error) {
       Alert.alert(
-        'Could not join circle',
-        error instanceof Error
-          ? error.message
-          : 'Check the code and try again.',
+        accept ? 'Could not join circle' : 'Could not decline invitation',
+        error instanceof Error ? error.message : 'Try again.',
       );
     } finally {
-      setIsJoining(false);
+      setRespondingInviteId(null);
     }
   };
 
@@ -326,6 +346,89 @@ export default function SpacesScreen() {
               </View>
             </View>
 
+            {invites.length > 0 ? (
+              <View className="mt-6">
+                <View className="flex-row items-center gap-2">
+                  <Mail size={16} color={SPACES_THEME.primary} />
+                  <Text className="text-base font-black text-gray-950">
+                    Invitations
+                  </Text>
+                </View>
+                <View className="mt-3 gap-3">
+                  {invites.map((invite) => (
+                    <View
+                      key={invite.inviteId}
+                      className="rounded-3xl border bg-white p-4"
+                      style={{ borderColor: SPACES_THEME.primary }}
+                    >
+                      <View className="flex-row items-start gap-3">
+                        <IconAvatar
+                          emoji={invite.iconEmoji}
+                          color={invite.iconColor}
+                          fallbackText={invite.name}
+                          size={44}
+                        />
+                        <View className="min-w-0 flex-1">
+                          <Text
+                            className="text-base font-black text-gray-950"
+                            numberOfLines={1}
+                          >
+                            {invite.name}
+                          </Text>
+                          <Text className="mt-0.5 text-xs font-semibold text-gray-500">
+                            {invite.invitedBy} invited you ·{' '}
+                            {invite.memberCount}{' '}
+                            {invite.memberCount === 1 ? 'member' : 'members'}
+                          </Text>
+                          {invite.purpose ? (
+                            <Text
+                              className="mt-1 text-sm leading-5 text-gray-600"
+                              numberOfLines={2}
+                            >
+                              {invite.purpose}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
+                      <View className="mt-3 flex-row gap-2">
+                        <TouchableOpacity
+                          onPress={() => void respondToInvite(invite, false)}
+                          disabled={respondingInviteId !== null}
+                          accessibilityLabel={`Decline invitation to ${invite.name}`}
+                          className="min-h-11 flex-1 items-center justify-center rounded-2xl border"
+                          style={{ borderColor: SPACES_THEME.border }}
+                          activeOpacity={0.82}
+                        >
+                          <Text className="text-sm font-black text-gray-700">
+                            Decline
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => void respondToInvite(invite, true)}
+                          disabled={respondingInviteId !== null}
+                          accessibilityLabel={`Accept invitation to ${invite.name}`}
+                          className="min-h-11 flex-1 items-center justify-center rounded-2xl"
+                          style={{ backgroundColor: SPACES_THEME.primary }}
+                          activeOpacity={0.82}
+                        >
+                          {respondingInviteId === invite.inviteId ? (
+                            <ActivityIndicator
+                              size="small"
+                              color={SPACES_THEME.white}
+                            />
+                          ) : (
+                            <Text className="text-sm font-black text-white">
+                              Join circle
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
             <View className="mt-6 flex-row items-center justify-between">
               <View>
                 <Text className="text-base font-black text-gray-950">
@@ -458,50 +561,6 @@ export default function SpacesScreen() {
               )}
             </View>
 
-            <View
-              className="mt-6 rounded-3xl border bg-white p-4"
-              style={{ borderColor: SPACES_THEME.border }}
-            >
-              <View className="flex-row items-center gap-2">
-                <KeyRound size={16} color={SPACES_THEME.primary} />
-                <Text className="text-sm font-black text-gray-950">
-                  Join with an invite code
-                </Text>
-              </View>
-              <Text className="mt-1 text-xs leading-5 text-gray-500">
-                Enter a code shared by a circle member.
-              </Text>
-              <View className="mt-3 flex-row items-center gap-2">
-                <TextInput
-                  value={joinCode}
-                  onChangeText={(text) => setJoinCode(text.toUpperCase())}
-                  placeholder="Invite code"
-                  autoCapitalize="characters"
-                  placeholderTextColor={SPACES_THEME.muted}
-                  className="min-h-12 flex-1 rounded-2xl border bg-gray-50 px-3 text-sm text-gray-900"
-                  style={{ borderColor: SPACES_THEME.border }}
-                />
-                <TouchableOpacity
-                  onPress={() => void joinSpace()}
-                  disabled={isJoining || !joinCode.trim()}
-                  className="min-h-12 items-center justify-center rounded-2xl px-5"
-                  style={{
-                    backgroundColor: SPACES_THEME.primary,
-                    opacity: isJoining || !joinCode.trim() ? 0.55 : 1,
-                  }}
-                  activeOpacity={0.82}
-                >
-                  {isJoining ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={SPACES_THEME.white}
-                    />
-                  ) : (
-                    <Text className="text-sm font-black text-white">Join</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
           </>
         ) : (
           <>

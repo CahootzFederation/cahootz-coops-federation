@@ -12,6 +12,10 @@ vi.mock('../services/sc-validation-service.js', () => ({
   validateSCBalance: vi.fn().mockResolvedValue(0),
 }));
 
+vi.mock('../services/push-notification-service.js', () => ({
+  createNotificationAndPush: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../lib/bot.js', () => ({
   ensureSageBotUser: vi.fn().mockResolvedValue({ id: 'sage_1' }),
 }));
@@ -149,7 +153,15 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
     user: {
       findUnique: vi.fn().mockResolvedValue(ACTIVE_USER),
       update: vi.fn().mockResolvedValue({}),
+      findMany: vi.fn().mockResolvedValue([]),
       ...overrides.user,
+    },
+    groupInvite: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
+      upsert: vi.fn().mockResolvedValue({ id: 'invite_1' }),
+      update: vi.fn().mockResolvedValue({}),
+      ...overrides.groupInvite,
     },
     // Supports both the callback form (`$transaction(async (tx) => ...)`) and
     // the array form (`$transaction([promise, promise])`) used by the audit-log
@@ -441,6 +453,278 @@ describe('groupsRouter', () => {
       const result = await callerFor(db).getDetail({ groupId: 'group_1' });
 
       expect(result.group.coopName).toBe('artists');
+    });
+  });
+
+  describe('circle invitations', () => {
+    const LED_GROUP = {
+      id: 'group_1',
+      name: 'Block Club',
+      purpose: null,
+      privacy: 'private',
+      kind: 'STANDARD',
+      leaderId: ACTIVE_USER.id,
+      coopId: 'artists',
+      createdAt: new Date('2026-09-08T00:00:00.000Z'),
+    };
+    const INVITEE = { id: 'user_2', deletedAt: null, isBot: false };
+
+    // First groupMember.findUnique is the caller's membership check; the
+    // second is "is the invitee already a member?".
+    function memberLookup(inviteeIsMember = false) {
+      return vi
+        .fn()
+        .mockResolvedValueOnce({ groupId: 'group_1', userId: ACTIVE_USER.id })
+        .mockResolvedValueOnce(inviteeIsMember ? { groupId: 'group_1', userId: 'user_2' } : null);
+    }
+
+    function userLookup() {
+      return vi.fn().mockImplementation(({ where }: any) =>
+        where.id === INVITEE.id ? INVITEE : ACTIVE_USER,
+      );
+    }
+
+    it('searchInvitees only returns commons members outside the circle and flags pending invites', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue(LED_GROUP) },
+        user: {
+          findUnique: vi.fn().mockResolvedValue(ACTIVE_USER),
+          findMany: vi.fn().mockResolvedValue([
+            { id: 'user_2', name: 'Bob', email: 'bob@example.com', handle: 'bob' },
+            { id: 'user_3', name: null, email: 'carol@example.com', handle: 'carol' },
+          ]),
+        },
+        groupInvite: {
+          findMany: vi.fn().mockResolvedValue([{ inviteeId: 'user_2' }]),
+        },
+      });
+
+      const result = await callerFor(db).searchInvitees({ groupId: 'group_1', query: 'o' });
+
+      expect(db.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            deletedAt: null,
+            isBot: false,
+            groupMemberships: { none: { groupId: 'group_1' } },
+            memberships: { some: { coopId: 'artists', status: 'ACTIVE' } },
+          }),
+        }),
+      );
+      expect(result.people).toEqual([
+        { userId: 'user_2', name: 'Bob', handle: 'bob', invited: true },
+        { userId: 'user_3', name: 'carol', handle: 'carol', invited: false },
+      ]);
+    });
+
+    it('searchInvitees is limited to the circle leader', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue({ ...LED_GROUP, leaderId: 'someone_else' }) },
+      });
+
+      await expect(
+        callerFor(db).searchInvitees({ groupId: 'group_1', query: 'bob' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect(db.user.findMany).not.toHaveBeenCalled();
+    });
+
+    it('invite creates a pending invite, audits it, and notifies the invitee', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue(LED_GROUP) },
+        groupMember: { findUnique: memberLookup() },
+        user: { findUnique: userLookup() },
+      });
+
+      const result = await callerFor(db).invite({ groupId: 'group_1', userId: 'user_2' });
+
+      expect(result).toEqual({ inviteId: 'invite_1', alreadyInvited: false });
+      expect(db.groupInvite.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: { groupId: 'group_1', inviteeId: 'user_2', inviterId: ACTIVE_USER.id },
+        }),
+      );
+      expect(db.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ action: 'GROUP_INVITE_SENT', resourceId: 'group_1' }),
+      });
+      expect(createNotificationAndPush).toHaveBeenCalledWith(
+        db,
+        expect.objectContaining({
+          userId: 'user_2',
+          coopId: 'artists',
+          type: 'CIRCLE_INVITATION',
+          data: { groupId: 'group_1', inviteId: 'invite_1', coopId: 'artists' },
+        }),
+      );
+      expect(db.groupMember.upsert).not.toHaveBeenCalled();
+    });
+
+    it('invite rejects people who are not members of the commons', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue(LED_GROUP) },
+        groupMember: { findUnique: memberLookup() },
+        user: { findUnique: userLookup() },
+        userCoopMembership: {
+          findUnique: vi.fn().mockImplementation(({ where }: any) =>
+            where.userId_coopId.userId === 'user_2' ? null : { status: 'ACTIVE' },
+          ),
+        },
+      });
+
+      await expect(
+        callerFor(db).invite({ groupId: 'group_1', userId: 'user_2' }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      expect(db.groupInvite.upsert).not.toHaveBeenCalled();
+    });
+
+    it('invite rejects existing circle members', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue(LED_GROUP) },
+        groupMember: { findUnique: memberLookup(true) },
+        user: { findUnique: userLookup() },
+      });
+
+      await expect(
+        callerFor(db).invite({ groupId: 'group_1', userId: 'user_2' }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    });
+
+    it('invite is idempotent for an already-pending invite and does not re-notify', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue(LED_GROUP) },
+        groupMember: { findUnique: memberLookup() },
+        user: { findUnique: userLookup() },
+        groupInvite: {
+          findUnique: vi.fn().mockResolvedValue({ id: 'invite_9', status: 'PENDING' }),
+        },
+      });
+
+      const result = await callerFor(db).invite({ groupId: 'group_1', userId: 'user_2' });
+
+      expect(result).toEqual({ inviteId: 'invite_9', alreadyInvited: true });
+      expect(db.groupInvite.upsert).not.toHaveBeenCalled();
+      expect(createNotificationAndPush).not.toHaveBeenCalled();
+    });
+
+    it('invite is not available for welcome lounges', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue({ ...LED_GROUP, kind: 'WELCOME_TABLE' }) },
+      });
+
+      await expect(
+        callerFor(db).invite({ groupId: 'group_1', userId: 'user_2' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    });
+
+    it('respondToInvite accept adds the invitee as a member', async () => {
+      const db = makeDb({
+        groupInvite: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: 'invite_1',
+            groupId: 'group_1',
+            inviteeId: ACTIVE_USER.id,
+            inviterId: 'leader_1',
+            status: 'PENDING',
+            group: { coopId: 'artists' },
+          }),
+        },
+      });
+
+      const result = await callerFor(db).respondToInvite({ inviteId: 'invite_1', accept: true });
+
+      expect(result).toEqual({ groupId: 'group_1', coopId: 'artists', accepted: true });
+      expect(db.groupInvite.update).toHaveBeenCalledWith({
+        where: { id: 'invite_1' },
+        data: { status: 'ACCEPTED', respondedAt: expect.any(Date) },
+      });
+      expect(db.groupMember.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ create: { groupId: 'group_1', userId: ACTIVE_USER.id } }),
+      );
+    });
+
+    it('respondToInvite decline does not add a membership', async () => {
+      const db = makeDb({
+        groupInvite: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: 'invite_1',
+            groupId: 'group_1',
+            inviteeId: ACTIVE_USER.id,
+            status: 'PENDING',
+            group: { coopId: 'artists' },
+          }),
+        },
+      });
+
+      const result = await callerFor(db).respondToInvite({ inviteId: 'invite_1', accept: false });
+
+      expect(result.accepted).toBe(false);
+      expect(db.groupInvite.update).toHaveBeenCalledWith({
+        where: { id: 'invite_1' },
+        data: { status: 'DECLINED', respondedAt: expect.any(Date) },
+      });
+      expect(db.groupMember.upsert).not.toHaveBeenCalled();
+    });
+
+    it("respondToInvite rejects someone else's invite", async () => {
+      const db = makeDb({
+        groupInvite: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: 'invite_1',
+            groupId: 'group_1',
+            inviteeId: 'user_2',
+            status: 'PENDING',
+            group: { coopId: 'artists' },
+          }),
+        },
+      });
+
+      await expect(
+        callerFor(db).respondToInvite({ inviteId: 'invite_1', accept: true }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect(db.groupMember.upsert).not.toHaveBeenCalled();
+    });
+
+    it('revokeInvite marks a pending invite revoked for the leader', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue(LED_GROUP) },
+        groupInvite: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: 'invite_1',
+            groupId: 'group_1',
+            inviteeId: 'user_2',
+            status: 'PENDING',
+          }),
+        },
+      });
+
+      await callerFor(db).revokeInvite({ inviteId: 'invite_1' });
+
+      expect(db.groupInvite.update).toHaveBeenCalledWith({
+        where: { id: 'invite_1' },
+        data: { status: 'REVOKED', respondedAt: expect.any(Date) },
+      });
+    });
+
+    it('getDetail lists pending invites for the leader and no longer exposes the invite code', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue({ ...LED_GROUP, inviteCode: 'ABCD1234' }) },
+        groupInvite: {
+          findMany: vi.fn().mockResolvedValue([
+            {
+              id: 'invite_1',
+              inviteeId: 'user_2',
+              createdAt: new Date('2026-09-20T00:00:00.000Z'),
+              invitee: { name: 'Bob', email: 'bob@example.com' },
+            },
+          ]),
+        },
+      });
+
+      const result = await callerFor(db).getDetail({ groupId: 'group_1' });
+
+      expect(result.group.inviteCode).toBeNull();
+      expect(result.pendingInvites).toEqual([
+        { inviteId: 'invite_1', userId: 'user_2', name: 'Bob', invitedAt: '2026-09-20T00:00:00.000Z' },
+      ]);
     });
   });
 

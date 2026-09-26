@@ -138,7 +138,8 @@ export function routeNameFromSegments(segments: readonly string[]): string {
 
 // --- Client state -----------------------------------------------------------
 
-const DEFAULT_HOST = 'https://us.i.posthog.com';
+// Same PostHog managed reverse proxy as apps/web (posthog-provider.tsx api_host).
+const DEFAULT_HOST = 'https://stuff.cahootzcoops.com';
 const FIRST_OPEN_KEY = 'cahootz.analytics.firstOpenedAt';
 
 let client: PostHog | null = null;

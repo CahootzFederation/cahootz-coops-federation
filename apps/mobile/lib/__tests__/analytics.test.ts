@@ -71,7 +71,7 @@ describe("analytics with a key", () => {
     expect(PostHog).toHaveBeenCalledWith(
       "phc_test",
       expect.objectContaining({
-        host: "https://us.i.posthog.com",
+        host: "https://stuff.cahootzcoops.com",
         captureAppLifecycleEvents: false,
         personProfiles: "identified_only",
         disableGeoip: true,

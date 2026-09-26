@@ -7,7 +7,7 @@ The mobile app (native and web) sends product analytics to PostHog through `apps
 | Variable | Required | Notes |
 | --- | --- | --- |
 | `EXPO_PUBLIC_POSTHOG_KEY` | No | PostHog project API key (`phc_...`). The same project as web's `NEXT_PUBLIC_POSTHOG_KEY`. When it's unset, analytics does nothing at all. |
-| `EXPO_PUBLIC_POSTHOG_HOST` | No | Ingestion host. Defaults to `https://us.i.posthog.com`. Web sends to the `https://stuff.cahootzcoops.com` proxy; set this to that proxy if we want mobile to use it too. |
+| `EXPO_PUBLIC_POSTHOG_HOST` | No | Ingestion host. Defaults to `https://stuff.cahootzcoops.com`, the same proxy web uses (`api_host` in `apps/web/components/posthog-provider.tsx`). Set it to `https://us.i.posthog.com` to skip the proxy. |
 
 Expo inlines `EXPO_PUBLIC_*` values when it builds the bundle, so set them in the EAS build or update environment (and in `.env` for a local production-like build). A running dev server needs a restart to pick up a change.
 
@@ -22,7 +22,7 @@ Leave the key unset in local development, CI and the Playwright suite. With no k
 - `sanitizeProperties` is a backstop. It drops any property whose key looks like PII (`email`, `phone`, `wallet`, `address`, `name`, `handle`, `message`, `body`, `text`, `title`, `token`, ...), any string value that looks like an email, phone number or wallet address, and any value that isn't a primitive. In development it logs a warning when it drops something.
 - Screens are recorded by route pattern (`/people/[handle]`), not by URL, so ids and handles never appear in screen names.
 - Session replay, surveys, touch autocapture, SDK lifecycle events and GeoIP enrichment are all off. Person profiles are only created for signed-in people (`personProfiles: 'identified_only'`).
-- There's no analytics consent or opt-out setting in the app yet (see Open questions).
+- There's no analytics consent or opt-out setting in the app yet (see Decisions).
 
 ## Events
 
@@ -70,10 +70,13 @@ Break it down by `coop_id` to compare commons, or by `$os_name` to compare iOS, 
 - Period: Day, for 7 periods. Day 1 is "came back the next day" and the Day 7 cell is the 7-day return rate. For "within 7 days" as one number, use a Week period and read Week 1.
 - Break down by `coop_id`, or filter to `welcome_lounge_joined` people via a cohort, to see whether joining a lounge improves retention.
 
+## Decisions
+
+- **Host.** Mobile uses the same proxy as web. `stuff.cahootzcoops.com` is a PostHog managed reverse proxy (a CNAME to `proxyhog.com`), not the Next.js `/ingest` rewrite in `apps/web/next.config.js`, which the web client doesn't use. It serves PostHog's API at the root path, so there's no path prefix. Its CORS preflight echoes back the requesting origin with POST allowed (checked 2026-09-26 for `https://app.cahootz.coop` and `http://localhost:8081`), so mobile web works too. Native apps aren't subject to CORS.
+- **Consent.** None for now. A consent setting will be added later, via PostHog's `optOut()` / `optIn()` through a new wrapper function.
+- **IP addresses.** Sending the request IP is fine. `disableGeoip` still turns off location enrichment.
+- **Sentry** stays on `sendDefaultPii: true` (`apps/mobile/app/_layout.tsx`).
+
 ## Open questions
 
-- **Consent.** The app has no analytics consent or opt-out setting, so this doesn't add one. If we need one (for example for GDPR regions or App Store privacy labels), put a toggle in settings that calls PostHog's `optOut()` / `optIn()` through a new wrapper function.
-- **IP addresses.** `disableGeoip` stops location enrichment, but PostHog still receives the request IP. Turn on "Discard client IP data" in the PostHog project settings if we don't want it stored.
-- **Host.** Should mobile use the same `stuff.cahootzcoops.com` proxy as web?
 - **App Store and Play privacy labels** need an update to list product analytics tied to a user id.
-- Sentry is set up with `sendDefaultPii: true` in `apps/mobile/app/_layout.tsx`. That's separate from this work, but it doesn't fit the privacy rules above.

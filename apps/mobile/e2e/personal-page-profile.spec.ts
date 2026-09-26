@@ -58,7 +58,7 @@ test("a member adds a bio and emoji avatar to their page and another member sees
 
     // Picking a photo previews it in the sheet before anything is saved.
     const chooser = userA.page.waitForEvent("filechooser");
-    await userA.page.getByRole("button", { name: "Upload photo" }).click();
+    await userA.page.getByRole("button", { name: "Upload photo", exact: true }).click();
     await (await chooser).setFiles({
       name: "avatar.png",
       mimeType: "image/png",
@@ -71,15 +71,18 @@ test("a member adds a bio and emoji avatar to their page and another member sees
     ).toBeVisible();
 
     // Switch to an emoji avatar instead, then write the bio and save.
-    await userA.page.getByRole("button", { name: "Use emoji" }).click();
+    await userA.page.getByRole("button", { name: "Use emoji", exact: true }).click();
     await userA.page.getByLabel("Use emoji 🌻").click();
-    await userA.page.getByLabel("Bio").fill(bioText);
+    // exact: the "Add a bio" button behind the sheet also contains "bio".
+    await userA.page
+      .getByRole("textbox", { name: "Bio", exact: true })
+      .fill(bioText);
     await userA.page.getByRole("button", { name: "Save profile" }).click();
 
     await expect(userA.page.getByRole("button", { name: "Save profile" })).toBeHidden();
     await expect(userA.page.getByText(bioText, { exact: true })).toBeVisible();
     await expect(userA.page.getByText("🌻", { exact: true }).first()).toBeVisible();
-    await expect(userA.page.getByRole("button", { name: "Edit profile" })).toBeVisible();
+    await expect(userA.page.getByRole("button", { name: "Edit profile", exact: true })).toBeVisible();
 
     await userA.page.reload();
     await expect(userA.page.getByText(bioText, { exact: true })).toBeVisible();

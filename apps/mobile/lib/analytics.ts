@@ -62,7 +62,11 @@ export type AnalyticsEvents = {
 export type AnalyticsEvent = keyof AnalyticsEvents;
 
 /** Where a push-permission prompt came from. Extend when adding new entry points (e.g. a primer). */
-export type PushPromptSource = 'after_onboarding' | 'notification_settings' | (string & {});
+export type PushPromptSource =
+  | 'after_onboarding'
+  | 'notification_settings'
+  | 'welcome_intro_primer'
+  | (string & {});
 
 type Properties = Record<string, string | number | boolean | null>;
 

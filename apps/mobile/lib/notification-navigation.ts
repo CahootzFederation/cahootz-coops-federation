@@ -43,6 +43,13 @@ export function notificationDestination(
       params: {
         coopId: id("coopId") || notification.coopId,
         postId: id("postId")!,
+        // Intro and comment-like alerts point at one comment, which the
+        // post screen scrolls to and highlights.
+        ...(notification.type.startsWith("WELCOME_INTRO_") && id("commentId")
+          ? { commentId: id("commentId")!, focus: "intro" }
+          : notification.type === "COMMONS_COMMENT_LIKE" && id("commentId")
+            ? { commentId: id("commentId")! }
+            : {}),
       },
     };
   // A circle's feed (e.g. the new-member drip pointing at a welcome lounge

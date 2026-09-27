@@ -16,6 +16,8 @@ type CircleActivity = {
   mentionedUserIds: string[];
   /** Comments only: the post author (if they can still read the circle), who gets a "replied to your post" alert. */
   postAuthorId?: string | null;
+  /** Users already alerted about this same activity by a more specific notification. */
+  alreadyNotifiedUserIds?: string[];
 };
 
 /**
@@ -64,7 +66,11 @@ export async function notifyCircleActivity(db: any, activity: CircleActivity) {
     });
   const chattingIds = new Set(chatting.map((row) => row.userId));
 
-  const notified = new Set<string>([activity.actorId]);
+  const notified = new Set<string>([
+    activity.actorId,
+    ...(activity.alreadyNotifiedUserIds ?? []),
+  ]);
+  const skippedCount = notified.size;
   const send = (
     userId: string,
     type: string,
@@ -134,5 +140,5 @@ export async function notifyCircleActivity(db: any, activity: CircleActivity) {
     );
   }
 
-  return { recipients: notified.size - 1 };
+  return { recipients: notified.size - skippedCount };
 }

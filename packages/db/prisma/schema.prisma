@@ -95,6 +95,8 @@ model User {
   uploadedKnowledgeDocuments KnowledgeDocument[]
   verifiedAIObservations     AIObservation[]           @relation("AIObservationVerifier")
   welcomeTableConfigsGuiding WelcomeTableConfig[]      @relation("WelcomeTableGuide")
+  welcomeIntros              WelcomeIntro[]
+  commonsCommentReactions    CommonsCommentReaction[]
   circleChatPresence         CircleChatPresence[]
   eventsCreated              Event[]                   @relation("EventCreatedBy")
   eventHosting               EventHost[]
@@ -992,6 +994,8 @@ model CommonsComment {
   author   User                  @relation(fields: [authorId], references: [id], onDelete: Cascade)
   content  String                @db.Text
   media    CommonsCommentMedia[]
+  welcomeIntro WelcomeIntro?
+  reactions    CommonsCommentReaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1294,6 +1298,22 @@ model CommonsPostSupport {
   @@schema("public")
 }
 
+// A member's "like" on a commons comment - the comment-level counterpart of
+// CommonsPostSupport (one per member per comment, toggled).
+model CommonsCommentReaction {
+  id        String         @id @default(cuid())
+  commentId String
+  comment   CommonsComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+
+  @@unique([commentId, userId])
+  @@index([commentId])
+  @@index([userId, createdAt])
+  @@schema("public")
+}
+
 model CommonsSuggestion {
   id               String  @id @default(cuid())
   coopId           String  @default("cahootz")
@@ -1342,6 +1362,7 @@ model Group {
   comments           GroupComment[]
   presence           CircleChatPresence[]
   welcomeTableConfig WelcomeTableConfig?
+  welcomeIntros      WelcomeIntro[]
 
   @@unique([coopId, kind, welcomeTableNumber])
   @@index([coopId, createdAt])
@@ -1400,6 +1421,33 @@ model WelcomeTableConfig {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  @@schema("public")
+}
+
+// A newcomer's one-line introduction in a welcome lounge: their comment on
+// the lounge's Sage welcome post. Tracks whether anyone has answered it and
+// which unanswered-intro escalations have already fired, so each alert is
+// sent at most once (see packages/trpc/src/services/welcome-intros.ts).
+model WelcomeIntro {
+  id                String         @id @default(cuid())
+  coopId            String
+  groupId           String
+  group             Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  postId            String
+  commentId         String         @unique
+  comment           CommonsComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  newcomerId        String
+  newcomer          User           @relation(fields: [newcomerId], references: [id], onDelete: Cascade)
+  createdAt         DateTime       @default(now())
+  respondedAt       DateTime?
+  responderId       String?
+  responseCommentId String?
+  guideEscalatedAt  DateTime?
+  adminEscalatedAt  DateTime?
+
+  @@unique([groupId, newcomerId])
+  @@index([postId, respondedAt])
+  @@index([respondedAt, createdAt])
   @@schema("public")
 }
 

@@ -47,6 +47,40 @@ describe("notification destinations", () => {
       params: { coopId: "cahootz", postId: "post/with spaces" },
     });
   });
+  it("opens a welcome intro alert on the intro comment itself", () => {
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "WELCOME_INTRO_REPLY",
+        data: { postId: "welcome-post", commentId: "intro-comment", coopId: "cahootz" },
+      }),
+    ).toEqual({
+      pathname: "/[coopId]/posts/[postId]",
+      params: { coopId: "cahootz", postId: "welcome-post", commentId: "intro-comment", focus: "intro" },
+    });
+    // A comment like opens on the liked comment.
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "COMMONS_COMMENT_LIKE",
+        data: { postId: "post-1", commentId: "liked-comment" },
+      }),
+    ).toEqual({
+      pathname: "/[coopId]/posts/[postId]",
+      params: { coopId: "cahootz", postId: "post-1", commentId: "liked-comment" },
+    });
+    // Other post alerts keep opening the post without a comment focus.
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "WELCOME_LOUNGE_JOIN",
+        data: { postId: "welcome-post", commentId: "shout-out" },
+      }),
+    ).toEqual({
+      pathname: "/[coopId]/posts/[postId]",
+      params: { coopId: "cahootz", postId: "welcome-post" },
+    });
+  });
   it("opens events on the event screen, even when the event post is attached", () => {
     expect(
       notificationDestination({

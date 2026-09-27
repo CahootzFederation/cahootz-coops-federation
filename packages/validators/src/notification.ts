@@ -25,6 +25,7 @@ export const notificationCategoryTypes: Record<
   community: [
     "COMMONS_COMMENT",
     "COMMONS_SUPPORT",
+    "COMMONS_COMMENT_LIKE",
     "PERSONAL_PAGE_COMMENT",
     "PERSONAL_PAGE_SUPPORT",
     "MENTION",
@@ -33,6 +34,9 @@ export const notificationCategoryTypes: Record<
     "NEW_FOLLOWER",
     "EVENT_REMINDER",
     "WELCOME_LOUNGE_JOIN",
+    "WELCOME_INTRO_REPLY",
+    "WELCOME_INTRO_UNANSWERED",
+    "WELCOME_INTRO_UNANSWERED_ADMIN",
     "CIRCLE_INVITATION",
   ],
   governance: [

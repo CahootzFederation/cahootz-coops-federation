@@ -88,7 +88,7 @@ export async function createNotificationAndPush(
     sound: "default",
     title: payload.title,
     body: payload.body,
-    data: { ...payload.data, notificationId: notification.id },
+    data: { ...payload.data, notificationId: notification.id, notificationType: payload.type },
     channelId: "commons",
   }));
 

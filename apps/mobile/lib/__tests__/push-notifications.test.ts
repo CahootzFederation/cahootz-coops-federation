@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 
+import { track } from "../analytics";
 import { api } from "../api";
 import {
   getPushPermissionStatus,
@@ -11,6 +12,7 @@ import {
 jest.mock("../api", () => ({
   api: { getNotificationPreferences: jest.fn(), registerPushDevice: jest.fn() },
 }));
+jest.mock("../analytics", () => ({ track: jest.fn() }));
 jest.mock("expo-constants", () => ({
   easConfig: { projectId: "test-project" },
   expoConfig: { version: "1" },
@@ -96,6 +98,18 @@ describe("native push permissions", () => {
     await expect(registerForNativePushNotifications('session', 'cahootz', { onlyAskIfUndetermined: true })).resolves.toEqual({ registered: true });
     expect(Notifications.requestPermissionsAsync).toHaveBeenCalledTimes(1);
     expect(api.registerPushDevice).toHaveBeenCalledTimes(1);
+  });
+  it("tracks the prompt and its result with the caller's source", async () => {
+    jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ granted: false, status: 'undetermined', canAskAgain: true } as never);
+    jest.mocked(Notifications.requestPermissionsAsync).mockResolvedValue({ granted: false, status: 'denied' } as never);
+    await registerForNativePushNotifications('session', 'cahootz', { onlyAskIfUndetermined: true, source: 'after_onboarding' });
+    expect(track).toHaveBeenNthCalledWith(1, 'push_permission_prompted', { source: 'after_onboarding' });
+    expect(track).toHaveBeenNthCalledWith(2, 'push_permission_result', { source: 'after_onboarding', granted: false, status: 'denied' });
+  });
+  it("does not track a prompt when the OS dialog isn't shown", async () => {
+    jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ granted: true, status: 'granted' } as never);
+    await registerForNativePushNotifications('session');
+    expect(track).not.toHaveBeenCalled();
   });
   it("does not automatically ask again after an earlier denial", async () => {
     jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ granted: false, status: 'denied', canAskAgain: true } as never);

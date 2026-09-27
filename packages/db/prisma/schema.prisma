@@ -1327,7 +1327,10 @@ model Group {
   lastActivityAt     DateTime @default(now())
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
-  kind               String   @default("STANDARD") // "STANDARD" | "WELCOME_TABLE"
+  kind               String   @default("STANDARD") // "STANDARD" | "WELCOME_TABLE" | "DIRECT"
+  // Set only for kind DIRECT: "<coopId>:<userIdA>:<userIdB>" with the two ids
+  // sorted, so each pair of people has exactly one private DM circle per commons.
+  directKey          String?  @unique
   welcomeTableNumber Int?
   welcomeTableStatus String? // "OPEN" | "FULL" | "CLOSED" (null for STANDARD groups)
   capacity           Int?
@@ -1355,6 +1358,8 @@ model GroupMember {
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   joinedAt DateTime @default(now())
   role     String   @default("MEMBER") // "MEMBER" | "GUIDE" | "NEWCOMER"
+  // Last time this member read the circle's messages; drives DM unread counts.
+  lastReadAt DateTime?
   notificationLevel String @default("MENTIONS") // "ALL" | "MENTIONS" | "NONE"
 
   @@unique([groupId, userId])
@@ -1515,6 +1520,9 @@ model GroupComment {
   @@schema("public")
 }
 
+// DEPRECATED: direct messages now live in two-person DIRECT circles
+// (Group.kind = "DIRECT", messages in GroupComment). Rows were copied over by
+// the 20260926020000_direct_message_circles migration; nothing writes here.
 model DirectMessage {
   id         String @id @default(cuid())
   coopId     String @default("cahootz")

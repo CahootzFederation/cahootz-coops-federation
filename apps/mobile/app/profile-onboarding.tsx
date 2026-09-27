@@ -20,6 +20,7 @@ import { ArrowRight, Compass, HandHeart, Lightbulb, MessageCircle, UserCircle, U
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { getOrCreateAnonymousId, markAnonymousProfileIntroSeen } from '@/lib/anonymous-id';
+import { track } from '@/lib/analytics';
 import { secureStorage } from '@/lib/secure-storage';
 
 const MIN_SELF_DESCRIPTION = 40;
@@ -184,6 +185,14 @@ export default function ProfileOnboardingScreen() {
   const [isJoiningWelcomeTable, setIsJoiningWelcomeTable] = useState(false);
 
   const introComplete = selfDescription.trim().length >= introField.minChars;
+  const signedIn = !!user && !!sessionToken;
+
+  useEffect(() => {
+    if (isLoading) return;
+    track('onboarding_step_viewed', { step: wizardStep, signed_in: signedIn });
+    // Once per step; signedIn doesn't change while the wizard is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizardStep, isLoading]);
 
   const signalProgress = useMemo(() => {
     return signalFields.reduce<Record<ListFieldName, { count: number; complete: boolean }>>((acc, field) => {
@@ -217,6 +226,8 @@ export default function ProfileOnboardingScreen() {
   const handleSkip = async () => {
     if (isSaving) return;
 
+    track('onboarding_deferred', { step: 'profile', signed_in: signedIn });
+
     if (!user) {
       // Anonymous visitors still see the newcomer-home step - only the
       // account-only actions on it (join a welcome table) require signing
@@ -245,7 +256,12 @@ export default function ProfileOnboardingScreen() {
   // that only happens now, not right after the profile form saves. If the
   // profile form was skipped instead, deferProfileOnboarding() (called in
   // handleSkip) already lets us navigate freely, so there's nothing more to persist here.
-  const completeOnboarding = async (destination: { pathname: string; params?: Record<string, string> }) => {
+  const completeOnboarding = async (
+    destination: { pathname: string; params?: Record<string, string> },
+    exit: 'welcome_lounge' | 'explore' | 'skip',
+  ) => {
+    track('onboarding_completed', { exit, profile_completed: !!profileResult, signed_in: signedIn });
+
     if (!user || !sessionToken) {
       void markAnonymousProfileIntroSeen();
       router.replace('/' as any);
@@ -268,7 +284,7 @@ export default function ProfileOnboardingScreen() {
     router.replace(destination as any);
   };
 
-  const handleJoinWelcomeTable = async () => {
+  const handleJoinWelcomeTable = async (options: { autoJoined?: boolean } = {}) => {
     if (isJoiningWelcomeTable) return;
 
     if (!user || !sessionToken) {
@@ -282,10 +298,14 @@ export default function ProfileOnboardingScreen() {
     setIsJoiningWelcomeTable(true);
     try {
       const result = await api.assignWelcomeTable(sessionToken);
-      await completeOnboarding({
-        pathname: '/[coopId]/posts',
-        params: { coopId: 'cahootz', circleId: result.groupId },
-      });
+      track('welcome_lounge_joined', { source: 'onboarding', auto_joined: !!options.autoJoined });
+      await completeOnboarding(
+        {
+          pathname: '/[coopId]/posts',
+          params: { coopId: 'cahootz', circleId: result.groupId },
+        },
+        'welcome_lounge',
+      );
     } catch (err) {
       console.error('Could not join a welcome lounge:', err);
       setError('Could not join a welcome lounge right now. Try exploring on your own instead.');
@@ -306,7 +326,7 @@ export default function ProfileOnboardingScreen() {
     secureStorage.getItem(secureStorage.keys.WELCOME_TABLE_INTENT).then((intent) => {
       if (!intent || cancelled) return;
       void secureStorage.removeItem(secureStorage.keys.WELCOME_TABLE_INTENT);
-      void handleJoinWelcomeTable();
+      void handleJoinWelcomeTable({ autoJoined: true });
     });
 
     return () => {
@@ -316,11 +336,12 @@ export default function ProfileOnboardingScreen() {
   }, [wizardStep, user, sessionToken]);
 
   const handleExploreOnMyOwn = () => {
-    void completeOnboarding({ pathname: '/commons' });
+    void completeOnboarding({ pathname: '/commons' }, 'explore');
   };
 
   const handleSkipCircles = () => {
-    void completeOnboarding({ pathname: '/(tabs)', params: { welcome: '1' } });
+    track('onboarding_deferred', { step: 'circles', signed_in: signedIn });
+    void completeOnboarding({ pathname: '/(tabs)', params: { welcome: '1' } }, 'skip');
   };
 
   const handleSubmit = async () => {
@@ -482,7 +503,7 @@ export default function ProfileOnboardingScreen() {
           <Pressable
             accessibilityRole="button"
             disabled={isJoiningWelcomeTable}
-            onPress={handleJoinWelcomeTable}
+            onPress={() => void handleJoinWelcomeTable()}
             style={[circlesStyles.card, isJoiningWelcomeTable && circlesStyles.cardDisabled]}
           >
             <View style={[circlesStyles.cardIcon, { backgroundColor: '#FFF7ED' }]}>

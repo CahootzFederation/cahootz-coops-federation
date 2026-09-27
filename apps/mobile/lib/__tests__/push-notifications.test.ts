@@ -40,6 +40,7 @@ describe("native push permissions", () => {
         governance: true,
         payments: true,
         orders: true,
+        onboarding: true,
         other: true,
       });
     jest.mocked(api.registerPushDevice).mockResolvedValue({ success: true });
@@ -64,6 +65,7 @@ describe("native push permissions", () => {
         governance: true,
         payments: true,
         orders: true,
+        onboarding: true,
         other: true,
       });
     expect(await registerForNativePushNotifications("session")).toEqual({

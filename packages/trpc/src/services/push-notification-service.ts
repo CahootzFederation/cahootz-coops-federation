@@ -37,10 +37,11 @@ function chunk<T>(items: T[], size: number) {
   return chunks;
 }
 
+/** Writes the inbox row, pushes it when preferences allow, and returns the row. */
 export async function createNotificationAndPush(
   db: DbClient,
   payload: PushPayload,
-) {
+): Promise<{ id: string }> {
   const notification = await db.notification.create({
     data: {
       userId: payload.userId,
@@ -56,7 +57,7 @@ export async function createNotificationAndPush(
   console.info('[push] Inbox notification created', logContext);
   if (payload.push === false) {
     console.info("[push] Skipped: muted by circle notification level", logContext);
-    return;
+    return notification;
   }
   const preferences =
     (await db.notificationPreference.findUnique({
@@ -67,7 +68,7 @@ export async function createNotificationAndPush(
     !preferences[notificationCategory(payload.type)]
   ) {
     console.info("[push] Skipped: account/category preference disabled", logContext);
-    return;
+    return notification;
   }
 
   const devices = await db.pushDevice.findMany({
@@ -80,7 +81,7 @@ export async function createNotificationAndPush(
   });
 
   console.info("[push] Matching enabled devices", { ...logContext, count: devices.length });
-  if (!devices.length) return;
+  if (!devices.length) return notification;
 
   const messages = devices.map((device) => ({
     to: device.expoPushToken,
@@ -150,4 +151,5 @@ export async function createNotificationAndPush(
       console.warn("[push] Expo request or response processing failed", logContext);
     }
   }
+  return notification;
 }

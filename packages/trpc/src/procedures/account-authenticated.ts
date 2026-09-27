@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 
 import type { Context } from "../context.js";
+import { touchMemberActivity } from "../lib/member-activity.js";
 import { t } from "../trpc.js";
 
 const getHeaderValue = (value: string | string[] | undefined) =>
@@ -39,6 +40,7 @@ const requireAccountSession = t.middleware(async ({ ctx, next }) => {
       roles: true,
       status: true,
       deletedAt: true,
+      lastActiveAt: true,
     },
   });
 
@@ -60,11 +62,13 @@ const requireAccountSession = t.middleware(async ({ ctx, next }) => {
     where: { id: session.id },
     data: { lastActiveAt: new Date() },
   });
+  await touchMemberActivity(context.db, user);
 
+  const { lastActiveAt: _lastActiveAt, ...accountUser } = user;
   return next({
     ctx: {
       ...ctx,
-      accountUser: user,
+      accountUser,
       sessionToken: token,
     },
   });

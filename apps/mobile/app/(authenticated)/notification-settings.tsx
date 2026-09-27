@@ -238,13 +238,26 @@ export default function NotificationSettings() {
                     key={category}
                     style={[s.header, { paddingVertical: 10, minHeight: 52 }]}
                   >
-                    <Text style={[s.heading, s.grow]}>
-                      {notificationCategoryLabels[category]}
-                    </Text>
+                    <View style={s.grow}>
+                      <Text style={s.heading}>
+                        {notificationCategoryLabels[category]}
+                      </Text>
+                      {category === "onboarding" && (
+                        <Text style={s.text}>
+                          A few pointers in your first week, by push or email.
+                          Turning this off stops them everywhere.
+                        </Text>
+                      )}
+                    </View>
                     <PreferenceSwitch
                       label={notificationCategoryLabels[category]}
                       value={preferences[category]}
-                      disabled={mutation.isPending || !preferences.pushEnabled}
+                      // Tips can arrive by email when push is off, so their
+                      // switch stays usable without push.
+                      disabled={
+                        mutation.isPending ||
+                        (!preferences.pushEnabled && category !== "onboarding")
+                      }
                       onChange={(value) =>
                         mutation.mutate({ [category]: value })
                       }

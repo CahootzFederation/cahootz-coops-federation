@@ -47,6 +47,40 @@ describe("notification destinations", () => {
       params: { coopId: "cahootz", postId: "post/with spaces" },
     });
   });
+  it("opens events on the event screen, even when the event post is attached", () => {
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "ONBOARDING_DRIP",
+        data: { eventId: "event-1", postId: "event-post", coopId: "other" },
+      }),
+    ).toEqual({
+      pathname: "/[coopId]/events/[eventId]",
+      params: { coopId: "other", eventId: "event-1" },
+    });
+  });
+  it("opens a circle's feed when only a circle is given", () => {
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "ONBOARDING_DRIP",
+        data: { circleId: "circle-1" },
+      }),
+    ).toEqual({
+      pathname: "/[coopId]/posts",
+      params: { coopId: "cahootz", circleId: "circle-1" },
+    });
+    // A post inside a circle still opens the post itself.
+    expect(
+      notificationDestination({
+        ...notification,
+        data: { postId: "post-1", circleId: "circle-1" },
+      }),
+    ).toEqual({
+      pathname: "/[coopId]/posts/[postId]",
+      params: { coopId: "cahootz", postId: "post-1" },
+    });
+  });
   it("opens personal-page activity on the personal page", () => {
     expect(
       notificationDestination({

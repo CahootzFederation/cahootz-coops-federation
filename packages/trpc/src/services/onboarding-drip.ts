@@ -10,11 +10,12 @@ import {
   DRIP_BATCH_SIZE,
   DRIP_LOOKBACK_HOURS,
   DRIP_STEPS,
+  DRIP_EMAIL_CTA_LABEL,
   dripCopy,
-  dripLinkBaseUrl,
   eventStartsLabel,
   firstName,
   isDeliverableEmail,
+  memberAppLinkUrl,
   MIN_POPULAR_CIRCLE_MEMBERS,
   ONBOARDING_DRIP_NOTIFICATION_TYPE,
 } from "./onboarding-drip-config.js";
@@ -81,7 +82,11 @@ interface DripMember {
   email: string;
 }
 
-/** Notification `data`; `notificationDestination` in the app turns it into a screen. */
+/**
+ * Notification `data`; `notificationDestination` in the app turns it into a
+ * screen. Only push and in-app alerts deep-link: the member app is iOS-only,
+ * so the email fallback describes the target instead of linking to it.
+ */
 export function dripNotificationData(target: DripTarget, day: DripStepDay): Record<string, string> {
   const base = { coopId: target.coopId, dripStep: String(day) };
   if (target.type === "POST") {
@@ -89,18 +94,6 @@ export function dripNotificationData(target: DripTarget, day: DripStepDay): Reco
   }
   if (target.type === "EVENT") return { ...base, eventId: target.id, postId: target.postId };
   return { ...base, circleId: target.id };
-}
-
-/** The same destination as a web link, for the email fallback. */
-// Paths are the member app's expo-router URLs (route groups aren't part of
-// the URL): app/[coopId]/posts/[postId].tsx, app/[coopId]/events/[eventId].tsx,
-// and app/[coopId]/posts.tsx?circleId= for a circle feed or welcome lounge -
-// the same screens notificationDestination() opens for these ids.
-export function dripTargetUrl(target: DripTarget, baseUrl = dripLinkBaseUrl()): string {
-  const coop = encodeURIComponent(target.coopId);
-  if (target.type === "POST") return `${baseUrl}/${coop}/posts/${encodeURIComponent(target.id)}`;
-  if (target.type === "EVENT") return `${baseUrl}/${coop}/events/${encodeURIComponent(target.id)}`;
-  return `${baseUrl}/${coop}/posts?circleId=${encodeURIComponent(target.id)}`;
 }
 
 function displayName(user: { name: string | null; handle: string | null } | null | undefined) {
@@ -366,9 +359,9 @@ export async function deliverDripStep(
           commonsName: input.commonsName,
           subject: content.message.emailSubject,
           heading: content.message.title,
-          body: content.message.body,
-          ctaLabel: content.message.ctaLabel,
-          ctaUrl: dripTargetUrl(content.target),
+          body: content.message.emailBody,
+          ctaLabel: DRIP_EMAIL_CTA_LABEL,
+          ctaUrl: memberAppLinkUrl(),
         });
         channel = "EMAIL";
       } catch (error) {

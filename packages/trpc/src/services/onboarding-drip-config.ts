@@ -7,8 +7,6 @@
  * CoopConfig) and never a specific coin or co-op.
  */
 
-import { coopConfig } from "../config/coop.js";
-
 export const ONBOARDING_DRIP_NOTIFICATION_TYPE = "ONBOARDING_DRIP";
 
 export type DripStepDay = 1 | 3 | 7;
@@ -62,12 +60,20 @@ export function isDeliverableEmail(email: string | null | undefined): email is s
   return !domain.endsWith(".internal") && !domain.endsWith(".local");
 }
 
+/** Platform name for "open the app" wording; each commons still names itself. */
+export const MEMBER_APP_NAME = "Cahootz";
+export const DRIP_EMAIL_CTA_LABEL = "Open the app";
+export const DEFAULT_MEMBER_APP_LINK_URL = "https://cahootzcoops.com";
+
 /**
- * Email links open the member app's web build (the Expo app, `APP_URL`),
- * not the Next.js marketing/portal site, which has no post/event/circle routes.
+ * Where the drip email's "Open the app" button goes. The member app is
+ * iOS-only (no web build), so emails can't deep-link to a post, event or
+ * circle: they describe it in the text and link here instead. Set
+ * `MEMBER_APP_LINK_URL` to the App Store listing once it's public. This is
+ * deliberately not `APP_URL`, which other code uses as a backend/web URL.
  */
-export function dripLinkBaseUrl(): string {
-  return coopConfig().appUrl.replace(/\/+$/, "");
+export function memberAppLinkUrl(): string {
+  return process.env.MEMBER_APP_LINK_URL?.trim() || DEFAULT_MEMBER_APP_LINK_URL;
 }
 
 const SNIPPET_LENGTH = 70;
@@ -89,10 +95,15 @@ export function firstName(name: string | null | undefined): string | null {
 export interface DripMessage {
   title: string;
   body: string;
-  /** Email subject and call-to-action label for the email fallback. */
+  /**
+   * Email fallback. Emails can't deep-link into the app, so the body names
+   * the post, event or circle and says where to find it.
+   */
   emailSubject: string;
-  ctaLabel: string;
+  emailBody: string;
 }
+
+const inTheApp = (what: string) => `Open the ${MEMBER_APP_NAME} app to find ${what}.`;
 
 export const dripCopy = {
   day1(input: {
@@ -104,11 +115,12 @@ export const dripCopy = {
   }): DripMessage {
     const where = input.circleCount === 1 ? input.circleName : "your circles";
     const posts = `${input.newPostCount} new post${input.newPostCount === 1 ? "" : "s"}`;
+    const body = `${posts} since yesterday. Start with ${input.authorName}'s “${snippet(input.postTitle)}”.`;
     return {
       title: `Today in ${where}`,
-      body: `${posts} since yesterday. Start with ${input.authorName}'s “${snippet(input.postTitle)}”.`,
+      body,
       emailSubject: `${posts} in ${where}`,
-      ctaLabel: "Open the post",
+      emailBody: `${body} ${inTheApp(`it in ${where}`)}`,
     };
   },
 
@@ -126,7 +138,7 @@ export const dripCopy = {
       title: `Coming up in ${input.where}`,
       body: `“${snippet(input.eventTitle)}” is ${input.startsLabel}.${going} Take a look and RSVP.`,
       emailSubject: `Coming up: ${snippet(input.eventTitle, 60)}`,
-      ctaLabel: "See the event",
+      emailBody: `“${snippet(input.eventTitle)}” is ${input.startsLabel} in ${input.where}.${going} ${inTheApp("it")} Then RSVP.`,
     };
   },
 
@@ -136,11 +148,12 @@ export const dripCopy = {
     purpose: string | null;
   }): DripMessage {
     const about = input.purpose ? ` ${snippet(input.purpose, 80)}` : "";
+    const body = `${input.memberCount} member${input.memberCount === 1 ? "" : "s"} already talk there.${about}`;
     return {
       title: `A circle you might like: ${input.circleName}`,
-      body: `${input.memberCount} member${input.memberCount === 1 ? "" : "s"} already talk there.${about}`,
+      body,
       emailSubject: `A circle you might like: ${input.circleName}`,
-      ctaLabel: "Visit the circle",
+      emailBody: `${body} ${inTheApp(`${input.circleName} and join`)}`,
     };
   },
 
@@ -159,11 +172,12 @@ export const dripCopy = {
     const nudge = input.guideName
       ? `Your welcome lounge guide, ${input.guideName}, is around if you have questions. Stop by ${input.targetName} and say hi.`
       : `${input.targetName} is a good place to say hi, and members there are happy to help if you have questions.`;
+    const body = `${hello}, it's been a week since you joined ${input.commonsName}. ${nudge}`;
     return {
       title: `A note from ${input.commonsName}`,
-      body: `${hello}, it's been a week since you joined ${input.commonsName}. ${nudge}`,
+      body,
       emailSubject: `A note from ${input.commonsName}`,
-      ctaLabel: `Open ${input.targetName}`,
+      emailBody: `${body} ${inTheApp(input.targetName)}`,
     };
   },
 };

@@ -79,6 +79,8 @@ The current Playwright suite covers:
 
 The post-signup wizard used by every sign-in helper now has three steps (intro, profile, and a "find your way in" step offering a welcome lounge) - `e2e/support/auth.ts` is the single place that clicks through all three, so a future wizard change only needs updating there.
 
+Product analytics (`apps/mobile/lib/analytics.ts`, PostHog) is a no-op unless `EXPO_PUBLIC_POSTHOG_KEY` is set. Keep it unset for local runs and CI so journeys never send events. The wrapper's unit tests (`pnpm -F @cahootz/mobile test`) cover the no-op and no-PII guarantees. `e2e/analytics.spec.ts` is skipped unless `E2E_ANALYTICS_HOST` is set. To run it, start the web app with a fake `EXPO_PUBLIC_POSTHOG_KEY` and `EXPO_PUBLIC_POSTHOG_HOST=$E2E_ANALYTICS_HOST`. The spec intercepts every request to that host, walks the real onboarding and sign-in UI, and checks that the expected events arrive with no email, handle or wallet address in them. Event names, env vars and the suggested funnel and retention insights are in `docs/mobile-analytics.md`.
+
 ### Stripe payment journey
 
 Journey 20 is temporarily disabled: it's skipped unless `E2E_ENABLE_STRIPE_JOURNEY=1` is set, and it also needs `E2E_STRIPE_CONNECTED_ACCOUNT_ID`. It needs, from the same Stripe **test-mode** platform account:

@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { circleColorFromKey } from '@/lib/circle-color';
 import { secureStorage } from '@/lib/secure-storage';
+import { track } from '@/lib/analytics';
 import AppDrawer from '@/components/app-drawer';
 import { Menu, MessageCircle, Settings2, LogIn } from 'lucide-react-native';
 
@@ -95,6 +96,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
     setWelcomeTableError(null);
     try {
       const result = await api.assignWelcomeTable(sessionToken, coopId);
+      track('welcome_lounge_joined', { source: 'circle_view' });
       openCircle(result.groupId);
     } catch (err) {
       console.error('Failed to join welcome lounge:', err);

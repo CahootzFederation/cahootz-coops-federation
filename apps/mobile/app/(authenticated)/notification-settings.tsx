@@ -151,6 +151,7 @@ export default function NotificationSettings() {
       await registerForNativePushNotifications(
         sessionToken,
         user?.coop?.id || "cahootz",
+        { source: "notification_settings" },
       );
       await refreshPermission();
     } catch (error) {

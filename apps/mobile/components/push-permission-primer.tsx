@@ -69,7 +69,7 @@ export function PushPermissionPrimer({
         <View className="min-w-0 flex-1">
           <Text className="text-sm font-black text-gray-950">Want a heads-up when someone welcomes you?</Text>
           <Text className="mt-1 text-xs leading-5 text-gray-700">
-            We'll send a notification when someone replies to your intro. Nothing else changes.
+            We&apos;ll send a notification when someone replies to your intro. Nothing else changes.
           </Text>
         </View>
       </View>

@@ -106,7 +106,7 @@ export function WelcomeIntroPrompt({
         <View className="mb-4 rounded-2xl border border-gray-200 bg-white p-4" accessibilityLiveRegion="polite">
           <Text className="text-sm font-black text-gray-950">Your intro is posted 🎉</Text>
           <Text className="mt-1 text-xs leading-5 text-gray-700">
-            It's on the lounge's welcome thread, where people say hi to each other.
+            It&apos;s on the lounge&apos;s welcome thread, where people say hi to each other.
           </Text>
           <TouchableOpacity accessibilityRole="button" onPress={openIntro} className="mt-3 self-start">
             <Text className="text-xs font-black" style={{ color: PRIMARY }}>View your intro</Text>
@@ -132,7 +132,7 @@ export function WelcomeIntroPrompt({
         <View className="min-w-0 flex-1">
           <Text className="text-sm font-black text-gray-950">{status.prompt}</Text>
           <Text className="mt-1 text-xs leading-5 text-gray-700">
-            One line is plenty. It goes on the lounge's welcome thread so people can say hi back.
+            One line is plenty. It goes on the lounge&apos;s welcome thread so people can say hi back.
           </Text>
         </View>
       </View>

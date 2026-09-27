@@ -146,17 +146,23 @@ export const dripCopy = {
 
   day7(input: {
     memberFirstName: string | null;
-    /** The welcome lounge guide's name, or null to sign as the commons. */
+    /**
+     * The member's welcome lounge guide, named as someone to reach out to,
+     * or null. The note is always signed by the commons: the guide didn't
+     * write it, so it must never read as if they did.
+     */
     guideName: string | null;
     commonsName: string;
     targetName: string;
   }): DripMessage {
     const hello = input.memberFirstName ? `Hi ${input.memberFirstName}` : "Hi there";
-    const from = input.guideName ?? input.commonsName;
+    const nudge = input.guideName
+      ? `Your welcome lounge guide, ${input.guideName}, is around if you have questions. Stop by ${input.targetName} and say hi.`
+      : `${input.targetName} is a good place to say hi, and members there are happy to help if you have questions.`;
     return {
-      title: `A note from ${from}`,
-      body: `${hello}, it's been a week since you joined ${input.commonsName}. ${input.targetName} is a good place to say hello. We'd love to hear from you.`,
-      emailSubject: `A note from ${from}`,
+      title: `A note from ${input.commonsName}`,
+      body: `${hello}, it's been a week since you joined ${input.commonsName}. ${nudge}`,
+      emailSubject: `A note from ${input.commonsName}`,
       ctaLabel: `Open ${input.targetName}`,
     };
   },

@@ -384,28 +384,53 @@ describe("runOnboardingDrip", () => {
   describe("day 7", () => {
     const quietMember = () => [member({ lastActiveAt: at(40) })];
 
-    it("is signed by the member's welcome lounge guide and opens the lounge", async () => {
-      const state = baseState({
-        memberships: quietMember(),
-        lounge: {
-          group: { id: "wl4", name: "Welcome Lounge 4", members: [{ user: { name: "Maya Guide", handle: "maya" } }] },
-        },
-      });
-      await run(state, 170);
-      expect(pushed()[0]).toMatchObject({
-        title: "A note from Maya Guide",
-        data: { circleId: "wl4", coopId: "riverside", dripStep: "7" },
-      });
-      expect(pushed()[0]!.body).toMatch(/^Hi Ada, it's been a week since you joined Riverside Commons\./);
+    const loungeWithGuide = () => ({
+      group: { id: "wl4", name: "Welcome Lounge 4", members: [{ user: { name: "Maya Guide", handle: "maya" } }] },
     });
 
-    it("is signed by the commons when the lounge has no guide", async () => {
+    it("is signed by the commons and names the guide as someone to reach out to", async () => {
+      const state = baseState({ memberships: quietMember(), lounge: loungeWithGuide() });
+      await run(state, 170);
+      expect(pushed()[0]).toMatchObject({
+        title: "A note from Riverside Commons",
+        body:
+          "Hi Ada, it's been a week since you joined Riverside Commons. Your welcome lounge guide, " +
+          "Maya Guide, is around if you have questions. Stop by Welcome Lounge 4 and say hi.",
+        data: { circleId: "wl4", coopId: "riverside", dripStep: "7" },
+      });
+    });
+
+    it("sends the same commons-signed note by email", async () => {
+      const state = baseState({ memberships: quietMember(), lounge: loungeWithGuide(), deviceCount: 0 });
+      await run(state, 170);
+      expect(sendOnboardingDripEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: "A note from Riverside Commons",
+          heading: "A note from Riverside Commons",
+          body: pushed()[0]!.body,
+          ctaLabel: "Open Welcome Lounge 4",
+        }),
+      );
+    });
+
+    it("never reads as written by the guide", async () => {
+      const state = baseState({ memberships: quietMember(), lounge: loungeWithGuide(), deviceCount: 0 });
+      await run(state, 170);
+      const [email] = vi.mocked(sendOnboardingDripEmail).mock.calls[0]!;
+      for (const text of [pushed()[0]!.title, email.subject, email.heading]) {
+        expect(text).not.toContain("Maya");
+      }
+    });
+
+    it("leaves the guide out when the lounge has none", async () => {
       const state = baseState({
         memberships: quietMember(),
         lounge: { group: { id: "wl4", name: "Welcome Lounge 4", members: [] } },
       });
       await run(state, 170);
       expect(pushed()[0]).toMatchObject({ title: "A note from Riverside Commons", data: { circleId: "wl4" } });
+      expect(pushed()[0]!.body).not.toMatch(/guide/i);
+      expect(pushed()[0]!.body).toContain("Welcome Lounge 4 is a good place to say hi");
     });
 
     it("points at the member's most active circle when they have no lounge", async () => {

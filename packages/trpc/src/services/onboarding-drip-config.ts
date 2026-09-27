@@ -63,14 +63,19 @@ export function isDeliverableEmail(email: string | null | undefined): email is s
 /** Platform name for "open the app" wording; each commons still names itself. */
 export const MEMBER_APP_NAME = "Cahootz";
 export const DRIP_EMAIL_CTA_LABEL = "Open the app";
-export const DEFAULT_MEMBER_APP_LINK_URL = "https://cahootzcoops.com";
+/**
+ * The Cahootz Commons App Store listing. The id is the app's App Store
+ * Connect id, `ascAppId` in apps/mobile/eas.json; update both together.
+ */
+export const DEFAULT_MEMBER_APP_LINK_URL = "https://apps.apple.com/app/id6772781102";
 
 /**
  * Where the drip email's "Open the app" button goes. The member app is
  * iOS-only (no web build), so emails can't deep-link to a post, event or
- * circle: they describe it in the text and link here instead. Set
- * `MEMBER_APP_LINK_URL` to the App Store listing once it's public. This is
- * deliberately not `APP_URL`, which other code uses as a backend/web URL.
+ * circle: they describe it in the text and link here instead. Defaults to
+ * the App Store listing; `MEMBER_APP_LINK_URL` overrides it (e.g. a
+ * different listing for another deployment). This is deliberately not
+ * `APP_URL`, which other code uses as a backend/web URL.
  */
 export function memberAppLinkUrl(): string {
   return process.env.MEMBER_APP_LINK_URL?.trim() || DEFAULT_MEMBER_APP_LINK_URL;

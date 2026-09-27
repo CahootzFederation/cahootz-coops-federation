@@ -309,7 +309,7 @@ describe("runOnboardingDrip", () => {
             "1 new post since yesterday. Start with Grace's “Post p1 about the community garden”. " +
             "Open the Cahootz app to find it in Welcome Lounge 4.",
           ctaLabel: "Open the app",
-          ctaUrl: "https://cahootzcoops.com",
+          ctaUrl: "https://apps.apple.com/app/id6772781102",
         }),
       );
       expect(state.sends[0]).toMatchObject({ status: "SENT", channel: "EMAIL" });
@@ -471,9 +471,9 @@ describe("runOnboardingDrip", () => {
       delete process.env.APP_URL;
     });
 
-    it("defaults to the Cahootz site and ignores APP_URL", () => {
+    it("defaults to the App Store listing and ignores APP_URL", () => {
       process.env.APP_URL = "http://localhost:3000";
-      expect(memberAppLinkUrl()).toBe("https://cahootzcoops.com");
+      expect(memberAppLinkUrl()).toBe("https://apps.apple.com/app/id6772781102");
     });
 
     it("uses MEMBER_APP_LINK_URL when set (e.g. the App Store listing)", async () => {

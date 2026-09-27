@@ -247,6 +247,7 @@ export const eventsRouter = router({
             id: comment.id,
             authorId: comment.authorId,
             author: displayName(comment.author),
+            authorHandle: personHandle(comment.author),
             body: comment.content,
           })),
         },

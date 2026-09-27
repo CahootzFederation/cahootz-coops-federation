@@ -7,6 +7,7 @@ import { onSessionExpired } from '@/lib/api';
 import { registerForNativePushNotifications } from '@/lib/push-notifications';
 import { canAccessUpdateChannelDebug, clearUpdateChannelOverrideQuietly } from '@/lib/update-channel-debug';
 import { clearAnonymousProfileIntroSeen } from '@/lib/anonymous-id';
+import * as analytics from '@/lib/analytics';
 
 interface User {
   id: string;
@@ -75,6 +76,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
   const pathname = usePathname();
   const pushRegistrationAttempt = useRef<string | null>(null);
+  const userRef = useRef(user);
+  userRef.current = user;
   const inProfileOnboarding = segments[0] === 'profile-onboarding';
   const readyForPushRegistration = !!user && (
     !!user.profileOnboardingCompletedAt || profileOnboardingDeferredUserId === user.id
@@ -218,17 +221,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
+      // login() is also used to refresh the stored record for the same
+      // account (e.g. after profile onboarding) - only a new id is a sign-in.
+      const isNewSignIn = userRef.current?.id !== userData.id;
       setUser(userData);
       setSessionToken(userData.sessionToken || null);
+      if (isNewSignIn) {
+        analytics.identify(userData.id, { coopId: userData.coop?.id ?? 'cahootz' });
+        analytics.track('signed_in');
+      }
     } catch (error) {
       console.error('Error saving session:', error);
       throw new Error('Failed to save login session');
     }
   };
 
-  const logout = async () => {
+  const logout = () => performLogout('user');
+
+  const performLogout = async (reason: 'user' | 'session_expired') => {
     try {
       console.log('Starting logout process...');
+      if (userRef.current) analytics.track('signed_out', { reason });
+      analytics.reset();
       await secureStorage.clear();
       console.log('Secure storage cleared');
       resetCoopConfig();
@@ -282,9 +296,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setForceWelcomeIntro(false);
   };
 
-  const userRef = useRef(user);
-  userRef.current = user;
-
   // Any API call that comes back 401 means the backend no longer honors this
   // session (expired or revoked) - force the app back to a logged-out state
   // instead of leaving stale authenticated screens up.
@@ -292,7 +303,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return onSessionExpired(() => {
       if (!userRef.current) return; // already logged out
 
-      logout()
+      performLogout('session_expired')
         .then(() => {
           Alert.alert('Session expired', 'Please sign in again to continue.');
         })

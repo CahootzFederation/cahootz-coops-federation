@@ -24,6 +24,18 @@ describe("notification destinations", () => {
       }),
     ).toBeNull();
   });
+  it("opens a direct message on its private circle thread", () => {
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "DIRECT_MESSAGE",
+        data: { groupId: "dm_1", coopId: "cahootz" },
+      }),
+    ).toEqual({
+      pathname: "/(tabs)/messages",
+      params: { groupId: "dm_1" },
+    });
+  });
   it("uses structured parameters for commons posts", () => {
     expect(
       notificationDestination({

@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { api } from './api';
+import { track, type PushPromptSource } from './analytics';
 
 export class PushRegistrationError extends Error {
   constructor(public readonly step: string, message: string) {
@@ -32,6 +33,11 @@ Notifications.setNotificationHandler({
   }),
 });
 
+function permissionStatus(status: string | undefined, granted: boolean) {
+  if (granted) return 'granted' as const;
+  return status === 'denied' ? ('denied' as const) : ('undetermined' as const);
+}
+
 function getExpoProjectId() {
   const constants = Constants as any;
   return (
@@ -46,6 +52,7 @@ export async function registerForNativePushNotifications(
   coopId = 'cahootz',
   options: {
     onlyAskIfUndetermined?: boolean;
+    source?: PushPromptSource;
     /**
      * Register only when permission is already granted; never show the OS
      * prompt. Used on sign-in - the prompt itself waits for an in-app primer
@@ -92,12 +99,20 @@ export async function registerForNativePushNotifications(
   const mayAsk = !options.neverAsk && existingPermission.canAskAgain !== false &&
     (!options.onlyAskIfUndetermined || existingPermission.status === 'undetermined');
   if (!granted && mayAsk) {
+    const source = options.source ?? 'unspecified';
+    track('push_permission_prompted', { source });
     const requestedPermission = await step('Request notification permission', () => Notifications.requestPermissionsAsync());
     const requestedPermissionState = requestedPermission as unknown as {
       granted?: boolean;
       status?: string;
     };
-    granted = requestedPermissionState.granted || requestedPermissionState.status === 'granted' || requestedPermission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+    const provisional = requestedPermission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+    granted = requestedPermissionState.granted || requestedPermissionState.status === 'granted' || provisional;
+    track('push_permission_result', {
+      source,
+      granted: !!granted,
+      status: provisional ? 'provisional' : permissionStatus(requestedPermissionState.status, !!granted),
+    });
   }
 
   if (!granted) {

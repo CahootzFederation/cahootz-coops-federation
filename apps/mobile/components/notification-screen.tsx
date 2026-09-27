@@ -13,6 +13,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/contexts/auth-context";
 import { api } from "@/lib/api";
 import { notificationDestination } from "@/lib/notification-navigation";
+import { track } from "@/lib/analytics";
 import { useIsFocused } from "@react-navigation/native";
 import {
   useInfiniteQuery,
@@ -183,6 +184,11 @@ export default function NotificationScreen({
       await client.invalidateQueries({
         queryKey: ["notifications", sessionToken],
       });
+      if (notification)
+        track("notification_opened", {
+          channel: "in_app",
+          notification_type: notification.type,
+        });
       const destination = notification && notificationDestination(notification);
       if (destination) router.push(destination);
     },

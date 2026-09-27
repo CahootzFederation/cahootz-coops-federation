@@ -366,6 +366,7 @@ export interface PrivateGroupSummary {
 export interface PrivateGroupMember {
   userId: string;
   name: string;
+  handle?: string | null;
   isLeader: boolean;
   joinedAt: string;
 }
@@ -442,12 +443,26 @@ export interface PersonalPageProfile {
   followingCount: number;
   isOwnPage: boolean;
   viewerIsFollowing: boolean;
+  /** Public commons, plus private ones the viewer also belongs to. */
+  commons?: PersonalPageCommons[];
+}
+
+export interface PersonalPageCommons {
+  coopId: string;
+  name: string;
+  shortName: string;
+  iconEmoji?: string | null;
+  iconColor?: string | null;
+  isPrivate: boolean;
+  roles: string[];
+  badges: SupporterBadge[];
 }
 
 export interface PersonalPageComment {
   id: string;
   authorId?: string;
   author: string;
+  authorHandle?: string;
   body: string;
   createdAt: string;
 }
@@ -557,20 +572,29 @@ export interface ProposalSummary {
   };
 }
 
+// A direct message thread is a private two-person circle (Group kind DIRECT).
 export interface DirectThread {
+  groupId: string;
+  coopId: string;
+  person: DirectPerson;
+  preview: string | null;
+  lastMessageAt: string | null;
+  lastMessageFromMe: boolean;
+  unreadCount: number;
+}
+
+export interface DirectPerson {
   id: string;
   name: string;
-  role: string;
-  time: string;
-  unread: number;
-  preview: string;
-  online?: boolean;
-  messages: {
-    id: string;
-    fromMe: boolean;
-    body: string;
-    time: string;
-  }[];
+  handle: string | null;
+}
+
+export interface DirectMessage {
+  id: string;
+  authorId: string;
+  fromMe: boolean;
+  body: string;
+  createdAt: string;
 }
 
 export interface DirectMember {
@@ -1841,18 +1865,61 @@ export const api = {
   },
 
   async listDirectThreads(sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.listDirect`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+
+    return readTrpcResult<{ threads: DirectThread[] }>(
+      response,
+      'Create an account to view DMs',
+    );
+  },
+
+  async openDirectThread(
+    userId: string,
+    sessionToken?: string | null,
+    coopId = 'cahootz',
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.openDirect`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ userId, coopId }),
+    });
+
+    return readTrpcResult<{ groupId: string; coopId: string; person: DirectPerson }>(
+      response,
+      'Could not open this conversation',
+    );
+  },
+
+  async listDirectMessages(groupId: string, sessionToken?: string | null) {
+    const input = encodeURIComponent(JSON.stringify({ groupId }));
     const response = await fetch(
-      `${API_BASE_URL}/trpc/commons.listDirectThreads`,
+      `${API_BASE_URL}/trpc/groups.listDirectMessages?input=${input}`,
       {
         method: 'GET',
         headers: createApiHeaders(null, sessionToken),
       },
     );
 
-    return readTrpcResult<{ threads: DirectThread[] }>(
-      response,
-      'Create an account to view DMs',
-    );
+    return readTrpcResult<{
+      groupId: string;
+      coopId: string;
+      person: DirectPerson | null;
+      messages: DirectMessage[];
+      olderCursor: string | null;
+    }>(response, 'Could not load messages');
+  },
+
+  async markDirectThreadRead(groupId: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.markDirectRead`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ groupId }),
+    });
+
+    return readTrpcResult<{ success: boolean }>(response, 'Could not mark messages read');
   },
 
   async listDirectMembers(sessionToken?: string | null) {
@@ -1871,25 +1938,20 @@ export const api = {
   },
 
   async sendDirectMessage(
-    data: {
-      receiverId: string;
-      content: string;
-      coopId?: string;
-    },
+    groupId: string,
+    content: string,
     sessionToken?: string | null,
   ) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/commons.sendDirectMessage`,
-      {
-        method: 'POST',
-        headers: createApiHeaders(null, sessionToken),
-        body: JSON.stringify({ ...data, coopId: data.coopId || 'cahootz' }),
-      },
-    );
+    const response = await fetch(`${API_BASE_URL}/trpc/groups.sendDirect`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ groupId, content }),
+    });
 
-    return readTrpcResult<{
-      message: { id: string; body: string; createdAt: string };
-    }>(response, 'Create an account to send DMs');
+    return readTrpcResult<{ message: DirectMessage }>(
+      response,
+      'Create an account to send DMs',
+    );
   },
 
   async requestLoginCode(email: string, coopId?: string) {

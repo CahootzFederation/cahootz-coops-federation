@@ -61,7 +61,9 @@ export async function acceptPushPrimer(sessionToken: string, coopId: string) {
   // Stamp first so a crash mid-prompt doesn't bring the primer straight back.
   await dismissPushPrimer();
   try {
-    const result = await registerForNativePushNotifications(sessionToken, coopId);
+    const result = await registerForNativePushNotifications(sessionToken, coopId, {
+      source: 'welcome_intro_primer',
+    });
     return result.registered;
   } catch (error) {
     console.warn('Push registration from primer skipped', error);

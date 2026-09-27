@@ -384,6 +384,7 @@ describe.skipIf(!databaseUrl)(
       expect(messages).toHaveLength(1);
       expect(messages[0].to).toBe("ExponentPushToken[test-a]");
       expect(messages[0].data.notificationId).toBeTruthy();
+      expect(messages[0].data.notificationType).toBe("MENTION");
       await caller().updatePreferences({ pushEnabled: false });
       await createNotificationAndPush(db, payload);
       expect(fetchMock).toHaveBeenCalledTimes(1);

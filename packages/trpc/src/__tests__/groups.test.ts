@@ -18,6 +18,9 @@ vi.mock('../services/push-notification-service.js', () => ({
 
 vi.mock('../lib/bot.js', () => ({
   ensureSageBotUser: vi.fn().mockResolvedValue({ id: 'sage_1' }),
+  isSageUser: (user: { isBot: boolean; roles: string[] }) =>
+    user.isBot && user.roles.includes('sage'),
+  sageHandleForCoop: (coopId: string) => (coopId === 'cahootz' ? 'sage' : `sage-${coopId}`),
 }));
 
 vi.mock('../services/push-notification-service.js', () => ({
@@ -219,7 +222,9 @@ describe('groupsRouter', () => {
       const result = await callerFor(db).listMine();
 
       expect(db.groupMember.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { userId: ACTIVE_USER.id } }),
+        expect.objectContaining({
+          where: { userId: ACTIVE_USER.id, group: { kind: { not: 'DIRECT' } } },
+        }),
       );
       expect(result.groups).toHaveLength(1);
       expect(result.groups[0].id).toBe('group_1');
@@ -232,7 +237,10 @@ describe('groupsRouter', () => {
 
       expect(db.groupMember.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { userId: ACTIVE_USER.id, group: { coopId: 'artists' } },
+          where: {
+            userId: ACTIVE_USER.id,
+            group: { kind: { not: 'DIRECT' }, coopId: 'artists' },
+          },
         }),
       );
     });
@@ -767,6 +775,252 @@ describe('groupsRouter', () => {
           resourceId: 'comment_1',
         }),
       });
+    });
+  });
+
+  describe('direct messages as private two-person circles', () => {
+    const OTHER_USER = {
+      id: 'user_2',
+      email: 'bob@example.com',
+      name: 'Bob',
+      handle: 'bob',
+      roles: ['member'],
+      isBot: false,
+      deletedAt: null,
+    };
+    const DIRECT_KEY = `cahootz:${ACTIVE_USER.id}:${OTHER_USER.id}`;
+    const directGroup = {
+      id: 'dm_1',
+      coopId: 'cahootz',
+      kind: 'DIRECT',
+      privacy: 'private',
+      directKey: DIRECT_KEY,
+      leaderId: ACTIVE_USER.id,
+      name: 'Direct message',
+    };
+    const usersById = (extra: Record<string, any> = {}) =>
+      vi.fn().mockImplementation(({ where }: any) =>
+        Promise.resolve(
+          ({ [ACTIVE_USER.id]: ACTIVE_USER, [OTHER_USER.id]: OTHER_USER, ...extra } as any)[where.id] ?? null,
+        ),
+      );
+
+    it('creates one private circle with both people as members the first time', async () => {
+      const db = makeDb({
+        user: { findUnique: usersById() },
+        userCoopMembership: { upsert: vi.fn().mockResolvedValue({}) },
+        group: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockResolvedValue(directGroup),
+        },
+      });
+
+      const result = await callerFor(db).openDirect({ userId: OTHER_USER.id });
+
+      expect(result.groupId).toBe('dm_1');
+      expect(db.group.findUnique).toHaveBeenCalledWith({ where: { directKey: DIRECT_KEY } });
+      const created = db.group.create.mock.calls[0][0].data;
+      expect(created).toMatchObject({
+        kind: 'DIRECT',
+        privacy: 'private',
+        directKey: DIRECT_KEY,
+        members: {
+          create: [
+            expect.objectContaining({ userId: ACTIVE_USER.id }),
+            { userId: OTHER_USER.id },
+          ],
+        },
+      });
+      // Never a redeemable invite code: joinByCode upper-cases its input.
+      expect(created.inviteCode).toMatch(/^dm-[0-9a-f]+$/);
+    });
+
+    it('reuses the existing circle for the same pair, whoever opens it', async () => {
+      const db = makeDb({
+        user: { findUnique: usersById() },
+        userCoopMembership: { upsert: vi.fn().mockResolvedValue({}) },
+        group: { findUnique: vi.fn().mockResolvedValue(directGroup) },
+      });
+
+      const result = await callerFor(db).openDirect({ userId: OTHER_USER.id });
+
+      expect(result.groupId).toBe('dm_1');
+      expect(db.group.create).not.toHaveBeenCalled();
+      // Re-adds either person if they had left the conversation.
+      expect(db.groupMember.upsert).toHaveBeenCalledTimes(2);
+    });
+
+    it('refuses to open a DM with yourself or a non-member of the commons', async () => {
+      const db = makeDb({
+        user: { findUnique: usersById() },
+        userCoopMembership: {
+          findUnique: vi.fn().mockImplementation(({ where }: any) =>
+            Promise.resolve(where.userId_coopId.userId === ACTIVE_USER.id ? { status: 'ACTIVE' } : null),
+          ),
+        },
+      });
+
+      await expect(callerFor(db).openDirect({ userId: ACTIVE_USER.id })).rejects.toThrow(
+        'Pick another member to message.',
+      );
+      await expect(
+        callerFor(db).openDirect({ userId: OTHER_USER.id, coopId: 'artists' }),
+      ).rejects.toThrow('That person is not a member of this commons.');
+      expect(db.group.create).not.toHaveBeenCalled();
+    });
+
+    it('sends a message only to circle members, without mirroring it into the commons feed', async () => {
+      const db = makeDb({
+        user: { findUnique: usersById() },
+        group: { findUnique: vi.fn().mockResolvedValue(directGroup) },
+        groupMember: { update: vi.fn().mockResolvedValue({}) },
+      });
+
+      const result = await callerFor(db).sendDirect({ groupId: 'dm_1', content: 'hi Bob' });
+
+      expect(result.message).toMatchObject({ body: 'hi Bob', fromMe: true });
+      expect(db.groupComment.create).toHaveBeenCalledWith({
+        data: { groupId: 'dm_1', authorId: ACTIVE_USER.id, content: 'hi Bob' },
+      });
+      expect(db.commonsPost.create).not.toHaveBeenCalled();
+      expect(createNotificationAndPush).toHaveBeenCalledWith(
+        db,
+        expect.objectContaining({
+          userId: OTHER_USER.id,
+          type: 'DIRECT_MESSAGE',
+          data: { groupId: 'dm_1', coopId: 'cahootz' },
+        }),
+      );
+      // Sending marks your own side read.
+      expect(db.groupMember.update).toHaveBeenCalledWith({
+        where: { groupId_userId: { groupId: 'dm_1', userId: ACTIVE_USER.id } },
+        data: { lastReadAt: expect.any(Date) },
+      });
+    });
+
+    it('routes the legacy addComment path through the DM flow too', async () => {
+      const db = makeDb({
+        user: { findUnique: usersById() },
+        group: { findUnique: vi.fn().mockResolvedValue(directGroup) },
+        groupMember: { update: vi.fn().mockResolvedValue({}) },
+      });
+
+      await callerFor(db).addComment({ groupId: 'dm_1', content: 'hello' });
+
+      expect(db.groupComment.create).toHaveBeenCalled();
+      expect(db.commonsPost.create).not.toHaveBeenCalled();
+    });
+
+    it('blocks someone outside the circle from reading or sending', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue(directGroup) },
+        groupMember: { findUnique: vi.fn().mockResolvedValue(null) },
+      });
+
+      await expect(
+        callerFor(db).listDirectMessages({ groupId: 'dm_1' }),
+      ).rejects.toThrow('Conversation not found.');
+      await expect(
+        callerFor(db).sendDirect({ groupId: 'dm_1', content: 'sneaky' }),
+      ).rejects.toThrow('Conversation not found.');
+      expect(db.groupComment.create).not.toHaveBeenCalled();
+    });
+
+    it('lists threads with the other person and unread messages since lastReadAt', async () => {
+      const lastReadAt = new Date('2026-09-20T00:00:00.000Z');
+      const db = makeDb({
+        groupMember: {
+          findMany: vi.fn().mockResolvedValue([
+            {
+              userId: ACTIVE_USER.id,
+              lastReadAt,
+              group: {
+                ...directGroup,
+                members: [
+                  { userId: ACTIVE_USER.id, user: ACTIVE_USER },
+                  { userId: OTHER_USER.id, user: OTHER_USER },
+                ],
+                comments: [
+                  {
+                    id: 'c_2',
+                    authorId: OTHER_USER.id,
+                    content: 'see you there',
+                    createdAt: new Date('2026-09-21T00:00:00.000Z'),
+                  },
+                ],
+              },
+            },
+          ]),
+        },
+        groupComment: { count: vi.fn().mockResolvedValue(2) },
+      });
+
+      const { threads } = await callerFor(db).listDirect();
+
+      expect(db.groupMember.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: ACTIVE_USER.id, group: { kind: 'DIRECT' } } }),
+      );
+      expect(db.groupComment.count).toHaveBeenCalledWith({
+        where: { groupId: 'dm_1', authorId: { not: ACTIVE_USER.id }, createdAt: { gt: lastReadAt } },
+      });
+      expect(threads).toEqual([
+        expect.objectContaining({
+          groupId: 'dm_1',
+          person: { id: OTHER_USER.id, name: 'Bob', handle: 'bob' },
+          preview: 'see you there',
+          lastMessageFromMe: false,
+          unreadCount: 2,
+        }),
+      ]);
+    });
+
+    it('marks a thread read for the viewer', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue(directGroup) },
+        groupMember: { update: vi.fn().mockResolvedValue({}) },
+      });
+
+      await callerFor(db).markDirectRead({ groupId: 'dm_1' });
+
+      expect(db.groupMember.update).toHaveBeenCalledWith({
+        where: { groupId_userId: { groupId: 'dm_1', userId: ACTIVE_USER.id } },
+        data: { lastReadAt: expect.any(Date) },
+      });
+    });
+
+    it('keeps DM circles out of invites, codes, privacy changes, and AI digests', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue({ ...directGroup, inviteCode: 'dm-abc' }) },
+      });
+      const caller = callerFor(db);
+
+      await expect(caller.invite({ groupId: 'dm_1', userId: 'user_3' })).rejects.toThrow(
+        'Direct messages stay between two people.',
+      );
+      await expect(
+        caller.updatePrivacy({ groupId: 'dm_1', privacy: 'public', confirmExposeHistory: true }),
+      ).rejects.toThrow('Direct messages stay private');
+      await expect(
+        caller.transferLeadership({ groupId: 'dm_1', newLeaderUserId: 'user_2' }),
+      ).rejects.toThrow('Direct messages stay private');
+      await expect(caller.getAiDigest({ groupId: 'dm_1' })).rejects.toThrow(
+        'AI digests are not available for direct messages.',
+      );
+      await expect(caller.joinByCode({ inviteCode: 'dm-abc' })).rejects.toThrow('Invalid invite code.');
+      expect(db.groupInvite.upsert).not.toHaveBeenCalled();
+      expect(db.group.update).not.toHaveBeenCalled();
+    });
+
+    it('lets either person leave, deleting the circle once both have left', async () => {
+      const db = makeDb({
+        group: { findUnique: vi.fn().mockResolvedValue(directGroup) },
+        groupMember: { count: vi.fn().mockResolvedValue(0) },
+      });
+
+      const result = await callerFor(db).leave({ groupId: 'dm_1' });
+
+      expect(result).toEqual({ success: true, groupDeleted: true });
+      expect(db.group.delete).toHaveBeenCalledWith({ where: { id: 'dm_1' } });
     });
   });
 

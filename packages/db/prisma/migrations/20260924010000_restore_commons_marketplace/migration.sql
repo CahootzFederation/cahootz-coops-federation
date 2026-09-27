@@ -45,6 +45,29 @@ CREATE INDEX "FundingBadgeEntitlement_userId_coopId_status_idx"
 CREATE INDEX "FundingBadgeEntitlement_coopId_tier_status_idx"
   ON "public"."FundingBadgeEntitlement"("coopId", "tier", "status");
 
+-- Existing data can hold several active member shops for one owner in one
+-- Commons. Keep the most established shop (approved, then most orders, then
+-- oldest) and soft-delete the rest so the unique index below can be created.
+WITH ranked AS (
+  SELECT
+    "id",
+    ROW_NUMBER() OVER (
+      PARTITION BY "ownerId", "coopId"
+      ORDER BY
+        ("status" = 'APPROVED') DESC,
+        "totalOrders" DESC,
+        "createdAt" ASC,
+        "id" ASC
+    ) AS rn
+  FROM "public"."Store"
+  WHERE "kind" = 'MEMBER' AND "deletedAt" IS NULL
+)
+UPDATE "public"."Store" s
+SET "deletedAt" = CURRENT_TIMESTAMP,
+    "deletedBy" = 'migration:20260924010000_restore_commons_marketplace'
+FROM ranked
+WHERE s."id" = ranked."id" AND ranked.rn > 1;
+
 CREATE UNIQUE INDEX "Store_one_official_per_commons"
   ON "public"."Store"("coopId")
   WHERE "kind" = 'OFFICIAL_COMMONS' AND "deletedAt" IS NULL;

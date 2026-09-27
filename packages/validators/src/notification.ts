@@ -23,6 +23,7 @@ export const notificationCategoryTypes: Record<
   community: [
     "COMMONS_COMMENT",
     "COMMONS_SUPPORT",
+    "COMMONS_COMMENT_LIKE",
     "PERSONAL_PAGE_COMMENT",
     "PERSONAL_PAGE_SUPPORT",
     "MENTION",

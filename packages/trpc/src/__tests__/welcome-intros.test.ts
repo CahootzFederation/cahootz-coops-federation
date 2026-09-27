@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../services/push-notification-service.js", () => ({
   createNotificationAndPush: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("../lib/admin-config.js", () => ({
+  PLATFORM_ADMIN_EMAILS: ["root@example.test"],
+  PLATFORM_ADMIN_WALLETS: [],
+}));
 
 import { createNotificationAndPush } from "../services/push-notification-service.js";
 import {
@@ -16,6 +20,7 @@ import {
   getWelcomeIntroStatus,
   recordWelcomeIntroActivity,
   recordWelcomeIntroReaction,
+  welcomeLoungesAdminPath,
 } from "../services/welcome-intros.js";
 
 const push = vi.mocked(createNotificationAndPush);
@@ -84,8 +89,12 @@ function makeDb(options: {
           .map(([userId]) => ({ userId, notificationLevel: options.levels?.[userId] ?? "MENTIONS" })),
       ),
     },
+    // Platform admin accounts resolved from the (mocked) allowlist.
+    user: {
+      findMany: vi.fn().mockResolvedValue((options.admins ?? []).map((id) => ({ id }))),
+    },
     userCoopMembership: {
-      findMany: vi.fn().mockResolvedValue((options.admins ?? []).map((userId) => ({ userId }))),
+      findMany: vi.fn().mockResolvedValue([]),
     },
     welcomeIntro: {
       findUnique: vi.fn().mockImplementation(({ where }: any) => {
@@ -435,7 +444,7 @@ describe("escalateUnansweredIntros", () => {
     );
   });
 
-  it("notifies Commons admins once after ~12h without re-alerting the guide", async () => {
+  it("notifies platform admins once after ~12h, linking to guide assignment, without re-alerting the guide", async () => {
     const intro = { ...baseIntro(), guideEscalatedAt: at(INTRO_GUIDE_ESCALATION_AFTER_MS) };
     const { db, intros } = makeDb({ roles: { guide_1: "GUIDE" }, intros: [intro], admins: ["admin_1", "admin_2"] });
     const now = at(INTRO_ADMIN_ESCALATION_AFTER_MS + 60_000);
@@ -443,12 +452,27 @@ describe("escalateUnansweredIntros", () => {
     expect(await escalateUnansweredIntros(db, now)).toEqual({ guideNotified: 0, adminNotified: 0 });
     expect(intros[0].adminEscalatedAt).toEqual(now);
     expect(push.mock.calls.map(([, payload]) => payload.userId)).toEqual(["admin_1", "admin_2"]);
-    expect(push).toHaveBeenCalledWith(
-      db,
-      expect.objectContaining({ type: WELCOME_INTRO_UNANSWERED_ADMIN_NOTIFICATION }),
+
+    // Recipients come from the platform admin allowlist, not commons roles.
+    const adminLookup = db.user.findMany.mock.calls[0][0];
+    expect(adminLookup.where.OR).toEqual(
+      expect.arrayContaining([{ email: { in: ["root@example.test"], mode: "insensitive" } }]),
     );
+    expect(db.userCoopMembership.findMany).not.toHaveBeenCalled();
+
+    const payload = push.mock.calls[0][1];
+    expect(payload).toMatchObject({
+      type: WELCOME_INTRO_UNANSWERED_ADMIN_NOTIFICATION,
+      data: {
+        groupId: "lounge_1",
+        coopId: "coop_1",
+        introId: "intro_1",
+        adminPath: welcomeLoungesAdminPath("coop_1"),
+      },
+    });
+    expect(payload.body).toContain("/portal/admin/commons/coop_1/welcome-tables");
     // Private lounge: admins who aren't seated can't open the post.
-    expect(push.mock.calls[0][1].data).not.toHaveProperty("postId");
+    expect(payload.data).not.toHaveProperty("postId");
   });
 
   it("skips answered intros entirely", async () => {

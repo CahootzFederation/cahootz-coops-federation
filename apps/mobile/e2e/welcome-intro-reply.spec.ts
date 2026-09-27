@@ -158,6 +158,42 @@ test("liking a newcomer's welcome lounge intro sends them a reaction alert", asy
       groupId: lounge.groupId,
     });
     expect(status.intro?.respondedAt).toBeTruthy();
+    // ...and that like sent only the intro alert, not a generic like alert.
+    const { notifications } = await trpc("GET", "notification.getNotifications", newcomerToken, {
+      unreadOnly: true,
+    });
+    expect(notifications.map((n: { type: string }) => n.type)).not.toContain("COMMONS_COMMENT_LIKE");
+
+    // An ordinary (non-intro) comment: User B posts a follow-up in the
+    // thread, User A likes it, and User B gets the comment author's
+    // "liked your comment" alert, which opens on that comment.
+    const followUpText = `${runId} follow-up: mornings work best for me`;
+    const composer = newcomer.page.getByPlaceholder("Write a comment...");
+    await composer.click();
+    await composer.pressSequentially(followUpText);
+    await newcomer.page.getByLabel("Send comment").click();
+    await expect(threadComment(newcomer.page, followUpText)).toBeVisible();
+
+    await member.page.reload();
+    const followUp = threadComment(member.page, followUpText);
+    await expect(followUp).toBeVisible();
+    await followUp.getByRole("button", { name: /^Like .+'s comment, 0 likes$/ }).click();
+    await expect(
+      followUp.getByRole("button", { name: /^Remove your like from .+'s comment, 1 like$/ }),
+    ).toBeVisible();
+
+    await newcomer.page.reload();
+    await newcomer.page.getByLabel("Alerts", { exact: true }).click();
+    const likeAlert = newcomer.page.getByLabel("Unread: Someone liked your comment").first();
+    await expect(likeAlert).toBeVisible();
+    await likeAlert.click();
+    // The earlier intro screen can still be mounted (hidden) in the stack,
+    // so pick the highlighted comment by its text.
+    const likedComment = newcomer.page
+      .getByLabel("Highlighted comment")
+      .filter({ hasText: followUpText });
+    await expect(likedComment).toBeVisible();
+    await expect(likedComment.getByText("Your comment", { exact: true })).toBeVisible();
   } finally {
     // Un-react (User A) and delete the intro (User B, cascading the rest).
     await cleanUpRunComments(memberToken, welcomePostId, runId).catch(() => undefined);

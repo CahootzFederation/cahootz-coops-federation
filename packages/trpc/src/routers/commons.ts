@@ -23,10 +23,8 @@ import { recordAgentResultCost } from '../services/ai-cost.js';
 import { enqueueCommonsActionContent } from '../services/commons-action-dispatch.js';
 import { createNotificationAndPush } from '../services/push-notification-service.js';
 import { notifyCircleActivity } from '../services/circle-notifications.js';
-import {
-  recordWelcomeIntroActivity,
-  recordWelcomeIntroReaction,
-} from '../services/welcome-intros.js';
+import { notifyNewCommentReaction } from '../services/comment-reactions.js';
+import { recordWelcomeIntroActivity } from '../services/welcome-intros.js';
 import { FUNDING_BADGE_BY_TIER } from '../services/funding-badge-service.js';
 import {
   sendApplicationSubmittedNotification,
@@ -2719,7 +2717,7 @@ export const commonsRouter = router({
       const { accountUser } = ctx as AccountAuthenticatedContext;
       const comment = await ctx.db.commonsComment.findUnique({
         where: { id: input.commentId },
-        select: { id: true, post: true },
+        select: { id: true, authorId: true, author: { select: { isBot: true } }, post: true },
       });
       if (!comment) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Comment not found.' });
@@ -2735,21 +2733,28 @@ export const commonsRouter = router({
         await ctx.db.commonsCommentReaction.delete({ where: { id: existing.id } });
         reacted = false;
       } else {
+        let created = true;
         try {
           await ctx.db.commonsCommentReaction.create({
             data: { commentId: comment.id, userId: accountUser.id },
           });
         } catch (error) {
-          // A double tap raced us - the reaction exists either way.
+          // A double tap raced us - the reaction exists either way, and the
+          // winning request already sent the alert.
           if ((error as { code?: string } | undefined)?.code !== 'P2002') throw error;
+          created = false;
         }
         reacted = true;
-        await recordWelcomeIntroReaction(ctx.db, {
-          commentId: comment.id,
-          reactor: accountUser,
-        }).catch((error) =>
-          console.error('Welcome intro reaction tracking failed', { commentId: comment.id, error }),
-        );
+        if (created) {
+          // Intro's first response -> "reacted to your intro"; otherwise the
+          // comment author's "liked your comment" (never both).
+          await notifyNewCommentReaction(ctx.db, {
+            comment,
+            reactor: accountUser,
+          }).catch((error) =>
+            console.error('Comment reaction notification failed', { commentId: comment.id, error }),
+          );
+        }
       }
 
       const reactionCount = await ctx.db.commonsCommentReaction.count({

@@ -51,7 +51,7 @@ const THEME = {
 };
 
 export default function CommonsPostDetailScreen() {
-  const params = useLocalSearchParams<{ coopId?: string; postId?: string; commentId?: string }>();
+  const params = useLocalSearchParams<{ coopId?: string; postId?: string; commentId?: string; focus?: string }>();
   const coopId = params.coopId || 'cahootz';
   const postId = params.postId || '';
   // Set by alerts that point at one comment (e.g. "replied to your intro").
@@ -552,7 +552,7 @@ export default function CommonsPostDetailScreen() {
                     }
                   >
                     {isFocused && comment.authorId === user?.id ? (
-                      <Text className="mb-1 text-[10px] font-black uppercase" style={{ color: THEME.primary }}>Your intro</Text>
+                      <Text className="mb-1 text-[10px] font-black uppercase" style={{ color: THEME.primary }}>{params.focus === 'intro' ? 'Your intro' : 'Your comment'}</Text>
                     ) : null}
                     <View className="flex-row items-start justify-between gap-2">
                       <View className="flex-row items-center gap-1.5">

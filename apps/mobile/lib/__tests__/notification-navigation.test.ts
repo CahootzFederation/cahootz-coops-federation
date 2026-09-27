@@ -44,7 +44,18 @@ describe("notification destinations", () => {
       }),
     ).toEqual({
       pathname: "/[coopId]/posts/[postId]",
-      params: { coopId: "cahootz", postId: "welcome-post", commentId: "intro-comment" },
+      params: { coopId: "cahootz", postId: "welcome-post", commentId: "intro-comment", focus: "intro" },
+    });
+    // A comment like opens on the liked comment.
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "COMMONS_COMMENT_LIKE",
+        data: { postId: "post-1", commentId: "liked-comment" },
+      }),
+    ).toEqual({
+      pathname: "/[coopId]/posts/[postId]",
+      params: { coopId: "cahootz", postId: "post-1", commentId: "liked-comment" },
     });
     // Other post alerts keep opening the post without a comment focus.
     expect(

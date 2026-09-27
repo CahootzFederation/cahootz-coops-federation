@@ -1,13 +1,14 @@
 import { parseCircleNotificationLevel } from "@repo/validators/notification";
 
 import type { Context } from "../context.js";
+import { PLATFORM_ADMIN_EMAILS, PLATFORM_ADMIN_WALLETS } from "../lib/admin-config.js";
 import { createNotificationAndPush } from "./push-notification-service.js";
 
 type Db = Context["db"];
 
 /** How long an intro can sit with no reply before the lounge guide is nudged. */
 export const INTRO_GUIDE_ESCALATION_AFTER_MS = 2 * 60 * 60 * 1000;
-/** How long an intro can sit with no reply before the Commons admins are told. */
+/** How long an intro can sit with no reply before the platform admins are told. */
 export const INTRO_ADMIN_ESCALATION_AFTER_MS = 12 * 60 * 60 * 1000;
 /** Upper bound on intros handled per escalation stage in one sweep. */
 export const INTRO_ESCALATION_BATCH_SIZE = 200;
@@ -283,7 +284,7 @@ export interface IntroEscalationResult {
 
 /**
  * Nudges people about intros nobody has answered: the lounge guide after
- * INTRO_GUIDE_ESCALATION_AFTER_MS, then the Commons admins after
+ * INTRO_GUIDE_ESCALATION_AFTER_MS, then the platform admins after
  * INTRO_ADMIN_ESCALATION_AFTER_MS. Each stage is claimed per intro with a
  * conditional update before any alert goes out, so overlapping or retried
  * sweeps never alert anyone twice for the same intro.
@@ -355,7 +356,10 @@ export async function escalateUnansweredIntros(db: Db, now: Date = new Date()): 
     },
   });
 
-  const adminsByCoop = new Map<string, string[]>();
+  // Platform admins (not Commons admins) take the 12h stage: they're the
+  // ones who can assign lounge guides. Looked up once per sweep, only if
+  // something is due.
+  let platformAdminIds: string[] | null = null;
   for (const intro of adminDue) {
     const claimed = await db.welcomeIntro.updateMany({
       where: { id: intro.id, respondedAt: null, adminEscalatedAt: null },
@@ -363,38 +367,31 @@ export async function escalateUnansweredIntros(db: Db, now: Date = new Date()): 
     });
     if (claimed.count !== 1) continue;
 
-    let admins = adminsByCoop.get(intro.coopId);
-    if (!admins) {
-      const memberships = await db.userCoopMembership.findMany({
-        where: {
-          coopId: intro.coopId,
-          status: "ACTIVE",
-          roles: { has: "admin" },
-          user: { isBot: false, deletedAt: null },
-        },
-        select: { userId: true },
-      });
-      admins = memberships.map((membership) => membership.userId);
-      adminsByCoop.set(intro.coopId, admins);
-    }
+    platformAdminIds ??= await findPlatformAdminUserIds(db);
+    const adminPath = welcomeLoungesAdminPath(intro.coopId);
+    const adminUrl = process.env.APP_URL ? `${process.env.APP_URL.replace(/\/+$/, "")}${adminPath}` : null;
 
-    for (const adminId of admins) {
+    for (const adminId of platformAdminIds) {
       if (adminId === intro.newcomerId) continue;
       try {
         // Lounges rely on guides: admins get no read access to the private
-        // thread, so this alert carries no post link. It's a nudge to get a
-        // guide seated. Guides are assigned on the platform admin portal's
-        // Welcome lounges page, which commons admins can't open, so there's
-        // no in-app link to offer here.
+        // thread, so this alert carries no post link - it points at the
+        // portal page where a guide is assigned instead.
         await createNotificationAndPush(db, {
           userId: adminId,
           coopId: intro.coopId,
           type: WELCOME_INTRO_UNANSWERED_ADMIN_NOTIFICATION,
           title: `${intro.group.name} needs a guide`,
-          body: `${displayName(intro.newcomer)} introduced themselves ${Math.round(
+          body: `${displayName(intro.newcomer)} introduced themselves in ${intro.group.name} (commons ${intro.coopId}) ${Math.round(
             INTRO_ADMIN_ESCALATION_AFTER_MS / 3_600_000,
-          )}+ hours ago and no one has responded. Ask a platform admin to assign a guide to ${intro.group.name}.`,
-          data: { groupId: intro.groupId, coopId: intro.coopId, introId: intro.id },
+          )}+ hours ago and no one has responded. Assign a guide from the admin portal: ${adminUrl ?? adminPath}`,
+          data: {
+            groupId: intro.groupId,
+            coopId: intro.coopId,
+            introId: intro.id,
+            adminPath,
+            ...(adminUrl ? { adminUrl } : {}),
+          },
         });
         result.adminNotified += 1;
       } catch (error) {
@@ -404,4 +401,34 @@ export async function escalateUnansweredIntros(db: Db, now: Date = new Date()): 
   }
 
   return result;
+}
+
+/** The platform admin portal page where a commons' lounge guide is assigned. */
+export function welcomeLoungesAdminPath(coopId: string) {
+  return `/portal/admin/commons/${encodeURIComponent(coopId)}/welcome-tables`;
+}
+
+/**
+ * Accounts on the platform admin allowlist (PLATFORM_ADMIN_EMAILS /
+ * PLATFORM_ADMIN_WALLETS - see lib/admin-config.ts), matched by email or by
+ * any linked wallet.
+ */
+async function findPlatformAdminUserIds(db: Db): Promise<string[]> {
+  const emails = [...PLATFORM_ADMIN_EMAILS];
+  const wallets = [...PLATFORM_ADMIN_WALLETS];
+  if (!emails.length && !wallets.length) {
+    console.warn("[welcome-intros] No platform admins configured; unanswered-intro admin alerts have no recipients");
+    return [];
+  }
+  const or: Array<Record<string, unknown>> = [];
+  if (emails.length) or.push({ email: { in: emails, mode: "insensitive" } });
+  if (wallets.length) {
+    or.push({ walletAddress: { in: wallets, mode: "insensitive" } });
+    or.push({ wallets: { some: { address: { in: wallets, mode: "insensitive" } } } });
+  }
+  const users = await db.user.findMany({
+    where: { OR: or, isBot: false, deletedAt: null },
+    select: { id: true },
+  });
+  return users.map((user) => user.id);
 }

@@ -7,7 +7,7 @@ import {
 } from "../../../../packages/trpc/src/services/welcome-intros.js";
 
 // Finds welcome lounge intros nobody has answered and nudges the lounge
-// guide (after ~2h), then the Commons admins (after ~12h). Each stage fires
+// guide (after ~2h), then the platform admins, who can assign guides (after ~12h). Each stage fires
 // at most once per intro - the state lives on WelcomeIntro, so overlapping
 // or retried runs are safe.
 export const welcomeIntroEscalationSweep = schedules.task({

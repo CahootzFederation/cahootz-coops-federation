@@ -126,6 +126,18 @@ export default function PublicPersonPageScreen() {
     }
   };
 
+  const handleMessage = () => {
+    if (!isAuthenticated || !sessionToken) {
+      router.push({ pathname: '/', params: { entry: 'sign-in' } } as any);
+      return;
+    }
+    if (!profile) return;
+    router.push({
+      pathname: '/(tabs)/messages',
+      params: { userId: profile.id, name: profileName },
+    } as any);
+  };
+
   const openPost = (post: CommonsPost) => {
     router.push({
       pathname: '/[coopId]/posts/[postId]',
@@ -203,25 +215,38 @@ export default function PublicPersonPageScreen() {
                 </Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity
-                onPress={() => void handleFollow()}
-                disabled={isFollowBusy}
-                className="mt-4 rounded-2xl border py-3"
-                style={{
-                  borderColor: followsPerson ? THEME.primary : THEME.border,
-                  backgroundColor: followsPerson ? THEME.primarySoft : THEME.primary,
-                  opacity: isFollowBusy ? 0.6 : 1,
-                }}
-                activeOpacity={0.82}
-              >
-                {isFollowBusy ? (
-                  <ActivityIndicator size="small" color={followsPerson ? THEME.primary : '#FFFFFF'} />
-                ) : (
-                  <Text className="text-center text-sm font-black" style={{ color: followsPerson ? THEME.primary : '#FFFFFF' }}>
-                    {followsPerson ? 'Following' : 'Follow'}
-                  </Text>
-                )}
-              </TouchableOpacity>
+              <View className="mt-4 flex-row gap-2">
+                <TouchableOpacity
+                  onPress={() => void handleFollow()}
+                  disabled={isFollowBusy}
+                  className="flex-1 rounded-2xl border py-3"
+                  style={{
+                    borderColor: followsPerson ? THEME.primary : THEME.border,
+                    backgroundColor: followsPerson ? THEME.primarySoft : THEME.primary,
+                    opacity: isFollowBusy ? 0.6 : 1,
+                  }}
+                  activeOpacity={0.82}
+                >
+                  {isFollowBusy ? (
+                    <ActivityIndicator size="small" color={followsPerson ? THEME.primary : '#FFFFFF'} />
+                  ) : (
+                    <Text className="text-center text-sm font-black" style={{ color: followsPerson ? THEME.primary : '#FFFFFF' }}>
+                      {followsPerson ? 'Following' : 'Follow'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleMessage}
+                  disabled={!profile}
+                  accessibilityLabel={`Message ${profileName}`}
+                  className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl border bg-white py-3"
+                  style={{ borderColor: THEME.border, opacity: profile ? 1 : 0.6 }}
+                  activeOpacity={0.82}
+                >
+                  <MessageCircle size={15} color={THEME.ink} />
+                  <Text className="text-center text-sm font-black text-gray-950">Message</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
 

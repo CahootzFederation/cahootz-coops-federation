@@ -21,6 +21,13 @@ import {
 import { recordObservation } from '../services/ai-memory.js';
 import { recordAgentResultCost } from '../services/ai-cost.js';
 import { enqueueCommonsActionContent } from '../services/commons-action-dispatch.js';
+import {
+  DIRECT_KIND,
+  listDirectCircleMessages,
+  listDirectCircles,
+  openDirectCircle,
+  sendDirectCircleMessage,
+} from '../services/direct-circles.js';
 import { createNotificationAndPush } from '../services/push-notification-service.js';
 import { notifyCircleActivity } from '../services/circle-notifications.js';
 import { FUNDING_BADGE_BY_TIER } from '../services/funding-badge-service.js';
@@ -250,12 +257,19 @@ export async function requireCircleMembership(
 ) {
   const membership = await db.groupMember.findUnique({
     where: { groupId_userId: { groupId: circleId, userId } },
-    select: { group: { select: { coopId: true } } },
+    select: { group: { select: { coopId: true, kind: true } } },
   });
   if (membership?.group.coopId !== coopId) {
     throw new TRPCError({
       code: 'FORBIDDEN',
       message: 'Join this circle to participate.',
+    });
+  }
+  // Direct messages are private chats, never feed posts.
+  if (membership.group.kind === DIRECT_KIND) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Send direct messages from Messages.',
     });
   }
 }
@@ -1275,7 +1289,7 @@ export const commonsRouter = router({
           context.db.groupMember.findMany({
             where: {
               userId: accountUser.id,
-              group: { coopId: { in: coopIds } },
+              group: { coopId: { in: coopIds }, kind: { not: DIRECT_KIND } },
             },
             select: { group: { select: { coopId: true } } },
           }),
@@ -1371,7 +1385,7 @@ export const commonsRouter = router({
           context.db.groupComment.count({
             where: {
               createdAt: { gte: monthStart },
-              group: { coopId: input.coopId },
+              group: { coopId: input.coopId, kind: { not: DIRECT_KIND } },
             },
           }),
           context.db.proposal.count({
@@ -2810,6 +2824,8 @@ export const commonsRouter = router({
       return { supported: true };
     }),
 
+  // Legacy endpoint kept for older app builds; DMs now live in private
+  // two-person circles (see groups.openDirect / groups.sendDirect).
   sendDirectMessage: accountAuthenticatedProcedure
     .input(
       z.object({
@@ -2820,94 +2836,22 @@ export const commonsRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const { accountUser } = ctx as AccountAuthenticatedContext;
-      if (input.receiverId === accountUser.id) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Pick another member to message.',
-        });
-      }
-
-      const receiver = await ctx.db.user.findUnique({
-        where: { id: input.receiverId },
-        select: { id: true, deletedAt: true, isBot: true, handle: true, roles: true },
+      const { group } = await openDirectCircle(ctx.db, {
+        coopId: input.coopId,
+        userId: accountUser.id,
+        otherUserId: input.receiverId,
       });
-      if (!receiver || receiver.deletedAt) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Member not found.',
-        });
-      }
-
-      const isSage = isSageUser(receiver);
-      if (isSage) {
-        await requireActiveCommonsMembership(
-          ctx.db,
-          accountUser.id,
-          input.coopId,
-        );
-      }
-
-      const { content: encodedContent } = await encodeMentions(
-        ctx.db,
-        input.content,
-        { coopId: input.coopId },
-      );
-
-      const message = await ctx.db.directMessage.create({
-        data: {
-          coopId: input.coopId,
-          senderId: accountUser.id,
-          receiverId: input.receiverId,
-          content: encodedContent,
-        },
+      const message = await sendDirectCircleMessage(ctx.db, {
+        group,
+        sender: accountUser,
+        content: input.content,
       });
-
-      if (isSage) {
-        try {
-          const agent = getAgent('sage-commons-reply');
-          if (agent) {
-            const priorMessages = await ctx.db.directMessage.findMany({
-              where: {
-                OR: [
-                  { senderId: accountUser.id, receiverId: receiver.id },
-                  { senderId: receiver.id, receiverId: accountUser.id },
-                ],
-              },
-              orderBy: { createdAt: 'asc' },
-              take: 20,
-            });
-            const threadContext = priorMessages
-              .filter((m) => m.id !== message.id)
-              .map(
-                (m) =>
-                  `${m.senderId === accountUser.id ? displayName(accountUser) : 'Sage'}: ${m.content}`,
-              )
-              .join('\n');
-
-            const { reply } = await agent.run({
-              coopId: input.coopId,
-              message: encodedContent,
-              threadContext,
-            });
-            await ctx.db.directMessage.create({
-              data: {
-                coopId: input.coopId,
-                senderId: receiver.id,
-                receiverId: accountUser.id,
-                content: reply,
-              },
-            });
-          }
-        } catch (err) {
-          console.error('Sage DM auto-reply failed:', err);
-        }
-      }
 
       return {
         message: {
           id: message.id,
-          body: message.content,
-          createdAt: message.createdAt.toISOString(),
+          body: message.body,
+          createdAt: message.createdAt,
         },
       };
     }),
@@ -2940,49 +2884,38 @@ export const commonsRouter = router({
     };
   }),
 
+  // Legacy endpoint kept for older app builds, in its original shape.
   listDirectThreads: accountAuthenticatedProcedure.query(async ({ ctx }) => {
     const { accountUser } = ctx as AccountAuthenticatedContext;
-    const messages = await ctx.db.directMessage.findMany({
-      where: {
-        OR: [{ senderId: accountUser.id }, { receiverId: accountUser.id }],
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      include: {
-        sender: { select: { id: true, name: true, email: true } },
-        receiver: { select: { id: true, name: true, email: true } },
-      },
-    });
-
-    const threads = new Map<string, any>();
-    for (const message of messages) {
-      const other =
-        message.senderId === accountUser.id ? message.receiver : message.sender;
-      if (!threads.has(other.id)) {
-        threads.set(other.id, {
-          id: other.id,
-          name: displayName(other),
-          role: 'Cahootz Commons',
-          time: relativeTime(message.createdAt),
-          unread:
-            message.receiverId === accountUser.id && !message.readAt ? 1 : 0,
-          preview: message.content,
-          messages: [],
+    const circles = await listDirectCircles(ctx.db, accountUser.id);
+    const threads = await Promise.all(
+      circles.map(async (circle) => {
+        const { messages } = await listDirectCircleMessages(ctx.db, {
+          groupId: circle.groupId,
+          userId: accountUser.id,
+          limit: 50,
         });
-      }
+        return {
+          id: circle.person.id,
+          name: circle.person.name,
+          role: 'Cahootz Commons',
+          time: circle.lastMessageAt ? relativeTime(new Date(circle.lastMessageAt)) : '',
+          unread: circle.unreadCount,
+          preview: circle.preview ?? '',
+          messages: messages.map((message) => ({
+            id: message.id,
+            fromMe: message.fromMe,
+            body: message.body,
+            time: new Date(message.createdAt).toLocaleTimeString('en-US', {
+              hour: 'numeric',
+              minute: '2-digit',
+            }),
+          })),
+        };
+      }),
+    );
 
-      threads.get(other.id).messages.unshift({
-        id: message.id,
-        fromMe: message.senderId === accountUser.id,
-        body: message.content,
-        time: message.createdAt.toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-        }),
-      });
-    }
-
-    return { threads: Array.from(threads.values()) };
+    return { threads };
   }),
 
   toggleFollowUser: accountAuthenticatedProcedure

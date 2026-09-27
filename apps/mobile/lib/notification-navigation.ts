@@ -15,6 +15,11 @@ export function notificationDestination(
       pathname: "/(authenticated)/spaces",
       params: { coopId: id("coopId") || notification.coopId },
     };
+  if (notification.type === "DIRECT_MESSAGE")
+    return {
+      pathname: "/(tabs)/messages",
+      params: id("groupId") ? { groupId: id("groupId")! } : {},
+    };
   if (notification.type === "PROPOSAL_DRAFT_READY")
     return "/(authenticated)/commons-proposal-drafts";
   if (notification.type.startsWith("PERSONAL_PAGE_"))

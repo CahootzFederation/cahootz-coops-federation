@@ -282,6 +282,21 @@ describe('commonsRouter', () => {
     expect(db.commonsPost.create).not.toHaveBeenCalled();
   });
 
+  it('does not turn a direct-message circle into a feed', async () => {
+    const db = makeDb({
+      groupMember: {
+        findUnique: vi.fn().mockResolvedValue({ group: { coopId: 'cahootz', kind: 'DIRECT' } }),
+      },
+    });
+
+    await expect(callerFor(db, { 'x-session-token': 'token_1' }).createPost({
+      coopId: 'cahootz',
+      circleId: 'dm_1',
+      content: 'Posting into a DM',
+    })).rejects.toThrow('Send direct messages from Messages.');
+    expect(db.commonsPost.create).not.toHaveBeenCalled();
+  });
+
   it('requires joining before replying to or supporting public-circle posts', async () => {
     const db = makeDb({
       commonsPost: { findUnique: vi.fn().mockResolvedValue({ id: 'post_1', coopId: 'cahootz', circleId: 'public-circle' }) },

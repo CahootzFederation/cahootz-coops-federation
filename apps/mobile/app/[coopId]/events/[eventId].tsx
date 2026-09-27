@@ -14,6 +14,7 @@ import { ArrowLeft, Bell, BellOff, Calendar, MapPin, Repeat, Send, Users, Video 
 
 import { MentionComposerInput } from '@/components/mention-composer-input';
 import { MentionText } from '@/components/mention-text';
+import { PersonLink } from '@/components/person-link';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type EventDetail, type EventRsvpStatus } from '@/lib/api';
@@ -322,7 +323,9 @@ export default function EventDetailScreen() {
                   ) : null}
                   {event.post.comments.map((comment) => (
                     <View key={comment.id} className="rounded-xl bg-stone-50 p-3">
-                      <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
+                      <PersonLink name={comment.author} handle={comment.authorHandle} className="self-start">
+                        <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
+                      </PersonLink>
                       {comment.body ? (
                         <MentionText
                           content={comment.body}

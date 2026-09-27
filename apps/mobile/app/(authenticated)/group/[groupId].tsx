@@ -20,6 +20,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { IconAvatar } from '@/components/icon-avatar';
+import { PersonLink } from '@/components/person-link';
 import { EmojiColorPicker } from '@/components/emoji-color-picker';
 import {
   ArrowLeft,
@@ -743,7 +744,11 @@ export default function GroupDetailScreen() {
                   key={member.userId}
                   className="flex-row items-center justify-between gap-2"
                 >
-                  <View className="min-w-0 flex-1 flex-row items-center gap-2">
+                  <PersonLink
+                    name={member.name}
+                    handle={member.handle}
+                    className="min-w-0 flex-1 flex-row items-center gap-2"
+                  >
                     {member.isLeader ? (
                       <Crown size={14} color={THEME.primary} />
                     ) : null}
@@ -754,7 +759,7 @@ export default function GroupDetailScreen() {
                       {member.name}
                       {member.userId === user?.id ? ' (you)' : ''}
                     </Text>
-                  </View>
+                  </PersonLink>
                   {group.isLeader && !member.isLeader ? (
                     <TouchableOpacity
                       onPress={() => makeLeader(member.userId, member.name)}

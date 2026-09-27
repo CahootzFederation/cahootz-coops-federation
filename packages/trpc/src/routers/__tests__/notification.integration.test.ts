@@ -89,7 +89,16 @@ describe.skipIf(!databaseUrl)(
           ),
           "utf8",
         );
-        for (const statement of `${baseline}\n${migration}`
+        // Adds User.lastActiveAt (read by the session middleware) and the
+        // onboarding preference column.
+        const dripMigration = readFileSync(
+          new URL(
+            "../../../../db/prisma/migrations/20260927000000_onboarding_drip/migration.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        );
+        for (const statement of `${baseline}\n${migration}\n${dripMigration}`
           .split(";")
           .filter((s) => s.trim()))
           await db.$executeRawUnsafe(statement);

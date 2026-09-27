@@ -4,6 +4,7 @@ export {
   sendApplicationAcceptedEmail,
   sendLoginCode,
   sendNewOrderAlertEmail,
+  sendOnboardingDripEmail,
   sendOrderConfirmationEmail,
   sendOrderEmails,
   sendWaitlistWelcomeEmail,

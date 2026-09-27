@@ -42,6 +42,10 @@ model User {
   avatarUrl           String? // Uploaded profile photo URL (blob storage)
   avatarEmoji         String? // Notion-style emoji avatar, e.g. "🌻"
   avatarColor         String? // Hex background color behind avatarEmoji
+  // Last time this member used the app with a verified session. Written by
+  // accountAuthenticatedProcedure at most once per 15 minutes (see
+  // packages/trpc/src/lib/member-activity.ts); read by the new-member drip.
+  lastActiveAt        DateTime?
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
   deletedAt           DateTime?
@@ -99,6 +103,7 @@ model User {
   eventRSVPs                 EventRSVP[]
   eventReminders             EventReminder[]
   pinnedPosts                CommonsPost[]             @relation("CommonsPostPinnedBy")
+  onboardingDripSends        OnboardingDripSend[]
 
   @@index([deletedAt])
   @@schema("public")
@@ -2035,8 +2040,31 @@ model NotificationPreference {
   payments    Boolean  @default(true)
   orders      Boolean  @default(true)
   other       Boolean  @default(true)
+  onboarding  Boolean  @default(true) // New-member "getting started" drip; off skips the drip entirely
   updatedAt   DateTime @updatedAt
 
+  @@schema("public")
+}
+
+// One row per new-member drip step a member has been sent, per commons. The
+// unique key is the idempotency guard: the sweep claims the row before it
+// delivers, so a retried or overlapping run can never send a step twice.
+model OnboardingDripSend {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coopId         String
+  step           Int // Day number of the step: 1, 3 or 7
+  status         String    @default("SENDING") // "SENDING" | "SENT" | "FAILED"
+  channel        String? // "PUSH" | "EMAIL" | "INBOX"
+  targetType     String? // "POST" | "EVENT" | "CIRCLE"
+  targetId       String?
+  notificationId String?
+  createdAt      DateTime  @default(now())
+  sentAt         DateTime?
+
+  @@unique([userId, coopId, step])
+  @@index([coopId, createdAt])
   @@schema("public")
 }
 

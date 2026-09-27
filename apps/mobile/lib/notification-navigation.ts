@@ -29,6 +29,14 @@ export function notificationDestination(
       pathname: "/(authenticated)/sage/[id]",
       params: { id: id("actionId")! },
     };
+  if (id("eventId"))
+    return {
+      pathname: "/[coopId]/events/[eventId]",
+      params: {
+        coopId: id("coopId") || notification.coopId,
+        eventId: id("eventId")!,
+      },
+    };
   if (id("postId"))
     return {
       pathname: "/[coopId]/posts/[postId]",
@@ -42,6 +50,17 @@ export function notificationDestination(
           : notification.type === "COMMONS_COMMENT_LIKE" && id("commentId")
             ? { commentId: id("commentId")! }
             : {}),
+      },
+    };
+  // A circle's feed (e.g. the new-member drip pointing at a welcome lounge
+  // or a public circle to join). Checked after postId so alerts about a
+  // post inside a circle still open the post.
+  if (id("circleId"))
+    return {
+      pathname: "/[coopId]/posts",
+      params: {
+        coopId: id("coopId") || notification.coopId,
+        circleId: id("circleId")!,
       },
     };
   if (id("orderId"))

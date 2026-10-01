@@ -2069,6 +2069,10 @@ export const api = {
       method: 'POST',
       headers: createApiHeaders(null, sessionToken),
       body: JSON.stringify({ groupId }),
+      // Leaving is often sent as the page goes away (a reload, closing the
+      // tab, navigating off it on web). Without keepalive the browser cancels
+      // it, and the member looks "in the chat" for 90s and misses alerts.
+      keepalive: true,
     });
 
     return readTrpcResult<{ success: boolean }>(response, 'Could not leave circle chat');

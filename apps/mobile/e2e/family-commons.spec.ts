@@ -1,14 +1,7 @@
 import { execFileSync } from "node:child_process";
-import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import {
-  newSignedInPage,
-  storageStatePath,
-  USER_A_EMAIL,
-  USER_B_EMAIL,
-} from "./support/auth";
-import { leaveWelcomeLounges } from "./support/welcome-lounge";
+import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const TEST_CODE = process.env.E2E_LOGIN_CODE || "000000";
@@ -70,7 +63,10 @@ async function signInFromSignInScreen(page: Page, email: string) {
 
 /**
  * A fresh browser signed in through the UI and left on the onboarding
- * wizard's last step ("Find your way in"), like a newcomer.
+ * wizard's last step ("Find your way in"), like a newcomer. The onboarding
+ * journeys sign up throwaway accounts (see `newcomerEmail`) rather than the
+ * shared releaseclick fixtures, so seating someone in a welcome lounge never
+ * disturbs the lounge specs running alongside this file.
  */
 async function newcomerAtOnboardingChoices(browser: Browser, email: string) {
   const context = await browser.newContext({ viewport: { width: 430, height: 932 } });
@@ -85,19 +81,6 @@ async function newcomerAtOnboardingChoices(browser: Browser, email: string) {
   return { context, page };
 }
 
-/**
- * Fixture setup: take a fixture account out of any welcome lounge (using its
- * saved session), so the journey can show onboarding seated them in one.
- */
-async function unseatFromWelcomeLounges(email: string) {
-  const state = JSON.parse(fs.readFileSync(storageStatePath(email), "utf8"));
-  const token = state.origins
-    .flatMap((origin: { localStorage: { name: string; value: string }[] }) => origin.localStorage)
-    .find((entry: { name: string }) => entry.name === "cahootz.sessionToken")?.value;
-  if (!token) throw new Error(`No saved session for ${email}`);
-  await leaveWelcomeLounges(token);
-}
-
 /** Circle View shows the member's own lounge in place of the "join" card. */
 async function expectSeatedInWelcomeLounge(page: Page) {
   await page.goto("/");
@@ -110,20 +93,24 @@ test.describe.configure({ mode: "serial" });
 test.describe("family commons", () => {
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const familyName = `E2E Family ${runId}`;
+  // Brand-new accounts, created by signing in with them.
+  const invitedNewcomer = `e2e-family-${runId}@test.cahootz.local`;
+  const generalNewcomer = `e2e-general-${runId}@test.cahootz.local`;
   let familyPath = "";
   let welcomePostPath = "";
 
   test.afterAll(() => {
     familyFixture("cleanup", familyName);
     familyFixture("cleanup-referral", MARKET_COOP_ID, USER_B_EMAIL);
+    familyFixture("cleanup-newcomers", invitedNewcomer, generalNewcomer);
   });
 
-  test("a member starts a family and the person they invite by email joins it from onboarding", async ({
+  test("a member starts a family and a new person they invite by email joins it from onboarding", async ({
     browser,
   }) => {
     test.setTimeout(240_000);
     const steward = await newSignedInPage(browser, USER_A_EMAIL);
-    const invitee = await newSignedInPage(browser, USER_B_EMAIL);
+    const outsider = await newSignedInPage(browser, USER_B_EMAIL);
     let newcomer: Awaited<ReturnType<typeof newcomerAtOnboardingChoices>> | undefined;
 
     try {
@@ -136,24 +123,23 @@ test.describe("family commons", () => {
       familyPath = new URL(steward.page.url()).searchParams.get("coopId")!;
       await expect(shown(steward.page, "Steward tools")).toBeVisible();
 
-      // A steward's named invitation, bound to User B's email.
+      // A steward's named invitation, bound to the newcomer's email.
       await steward.page.getByLabel("Their name").fill("Cousin E2E");
-      await steward.page.getByLabel("Their email").fill(USER_B_EMAIL);
+      await steward.page.getByLabel("Their email").fill(invitedNewcomer);
       await shown(steward.page, "Send invitation", { exact: true }).click();
       await expect(shown(steward.page, "Invitation sent.")).toBeVisible();
       await steward.page.reload();
       await expect(shown(steward.page, "Cousin E2E", { exact: true })).toBeVisible();
 
-      // The family is private: it isn't listed for User B before joining.
-      await invitee.page.goto("/commons");
-      await expect(shown(invitee.page, "Start a family")).toBeVisible();
-      await expect(shown(invitee.page, familyName, { exact: true })).toHaveCount(0);
+      // The family is private: it isn't listed for someone outside it.
+      await outsider.page.goto("/commons");
+      await expect(shown(outsider.page, "Start a family")).toBeVisible();
+      await expect(shown(outsider.page, familyName, { exact: true })).toHaveCount(0);
 
-      // User B signs in like a newcomer. Onboarding's last step offers the
-      // family they were invited to, found just from their signed-in email,
+      // The invited person signs up. Onboarding's last step offers the family
+      // they were invited to, found just from their signed-in email,
       // alongside the welcome lounge and General.
-      await unseatFromWelcomeLounges(USER_B_EMAIL);
-      newcomer = await newcomerAtOnboardingChoices(browser, USER_B_EMAIL);
+      newcomer = await newcomerAtOnboardingChoices(browser, invitedNewcomer);
       const onboarding = newcomer.page;
       await expect(onboarding.getByRole("button", { name: "Join a welcome lounge" })).toBeVisible();
       await expect(shown(onboarding, "Go to General")).toBeVisible();
@@ -180,14 +166,15 @@ test.describe("family commons", () => {
       // Choosing their family still seated them in a welcome lounge.
       await expectSeatedInWelcomeLounge(onboarding);
 
-      // User A sees B as a member and the invitation as accepted.
+      // User A sees the invitation as accepted, and the newcomer as a member.
       await steward.page.reload();
       await expect(shown(steward.page, "Recently accepted")).toBeVisible();
-      await expect(shown(steward.page, "Test User 2", { exact: true }).first()).toBeVisible();
+      await expect(shown(steward.page, "Joined", { exact: true })).toBeVisible();
       await expect(shown(steward.page, "No pending invitations.")).toBeVisible();
+      await expect(shown(steward.page, "Remove", { exact: true })).toHaveCount(1);
     } finally {
       await steward.context.close();
-      await invitee.context.close();
+      await outsider.context.close();
       await newcomer?.context.close();
     }
   });
@@ -196,8 +183,7 @@ test.describe("family commons", () => {
     browser,
   }) => {
     test.setTimeout(180_000);
-    await unseatFromWelcomeLounges(USER_A_EMAIL);
-    const newcomer = await newcomerAtOnboardingChoices(browser, USER_A_EMAIL);
+    const newcomer = await newcomerAtOnboardingChoices(browser, generalNewcomer);
 
     try {
       await shown(newcomer.page, "Go to General").click();
@@ -211,24 +197,32 @@ test.describe("family commons", () => {
     }
   });
 
-  test("a removed member loses access, and a forwarded family link only lets them ask to join", async ({
+  test("a removed member loses access, and a forwarded family link only lets someone ask to join", async ({
     browser,
   }) => {
-    test.setTimeout(240_000);
+    test.setTimeout(300_000);
     expect(familyPath, "the first test creates the family").not.toBe("");
     const steward = await newSignedInPage(browser, USER_A_EMAIL);
     // A fresh, signed-out browser: someone opening a forwarded link.
     const visitorContext = await browser.newContext({ viewport: { width: 430, height: 932 } });
     const visitor = await visitorContext.newPage();
+    let removed: Awaited<ReturnType<typeof newcomerAtOnboardingChoices>> | undefined;
 
     try {
+      // A steward removes the member who joined in the first test.
       await steward.page.goto(`/commons-invites?coopId=${familyPath}`);
       await expect(shown(steward.page, "Members", { exact: true })).toBeVisible();
       await shown(steward.page, "Remove", { exact: true }).click();
-      await shown(steward.page, "Confirm remove Test User 2").click();
-      await expect(shown(steward.page, "Confirm remove Test User 2")).toHaveCount(0);
+      await shown(steward.page, /^Confirm remove /).click();
+      await expect(shown(steward.page, /^Confirm remove /)).toHaveCount(0);
       await steward.page.reload();
       await expect(shown(steward.page, "Remove", { exact: true })).toHaveCount(0);
+
+      // Their access ends right away: the family's welcome post is closed to them.
+      removed = await newcomerAtOnboardingChoices(browser, invitedNewcomer);
+      await shown(removed.page, "Skip for now", { exact: true }).click();
+      await removed.page.goto(welcomePostPath);
+      await expect(shown(removed.page, "Join this commons to view this post.")).toBeVisible();
 
       // A steward's shareable link.
       await shown(steward.page, "Create a shareable link").click();
@@ -242,8 +236,8 @@ test.describe("family commons", () => {
       await expect(shown(visitor, /This is a private family space/)).toBeVisible();
       await shown(visitor, "Sign in or create an account", { exact: true }).click();
 
-      // After signing in (and the onboarding wizard), the link resumes. As a
-      // removed member, User B can only ask to join again.
+      // After signing in (and the onboarding wizard), the link resumes, and it
+      // only lets User B ask to join.
       await signInFromSignInScreen(visitor, USER_B_EMAIL);
       await expect(visitor).toHaveURL(/\/invite\//);
       await expect(shown(visitor, "Request access", { exact: true })).toBeVisible();
@@ -258,7 +252,7 @@ test.describe("family commons", () => {
       await visitor.reload();
       await expect(shown(visitor, "Request sent")).toBeVisible();
 
-      // Removal ended their access, and a pending request doesn't restore it.
+      // A pending request doesn't open anything.
       await visitor.goto(welcomePostPath);
       await expect(shown(visitor, "Join this commons to view this post.")).toBeVisible();
       await visitor.goBack();
@@ -278,6 +272,7 @@ test.describe("family commons", () => {
     } finally {
       await steward.context.close();
       await visitorContext.close();
+      await removed?.context.close();
     }
   });
 

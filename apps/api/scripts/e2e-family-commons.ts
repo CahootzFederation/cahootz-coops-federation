@@ -97,17 +97,43 @@ async function cleanupReferral(coopId: string, inviteeEmail: string) {
   return { invitations: invitationIds.length };
 }
 
+/**
+ * Deletes the throwaway newcomer accounts a run signs up with (so onboarding
+ * journeys never touch the shared releaseclick fixtures' state). Their
+ * memberships, lounge seats, sessions and alerts go with them.
+ */
+async function cleanupNewcomers(emails: string[]) {
+  for (const email of emails) {
+    if (!/^e2e-[a-z0-9-]+@test\.cahootz\.local$/.test(email)) {
+      throw new Error(`Only throwaway e2e-…@test.cahootz.local accounts can be deleted, not ${email}`);
+    }
+  }
+  const users = await db.user.findMany({ where: { email: { in: emails } }, select: { id: true } });
+  const userIds = users.map((user) => user.id);
+  if (userIds.length === 0) return { deleted: 0 };
+  await db.$transaction([
+    db.session.deleteMany({ where: { userId: { in: userIds } } }),
+    db.loginCode.deleteMany({ where: { email: { in: emails } } }),
+    db.user.deleteMany({ where: { id: { in: userIds } } }),
+  ]);
+  return { deleted: userIds.length };
+}
+
 async function main() {
   assertSafeEnvironment();
-  const [command, first, second] = process.argv.slice(2);
+  const [command, first, second, ...rest] = process.argv.slice(2);
   const result =
     command === "cleanup" && first
       ? await cleanupFamily(first)
       : command === "cleanup-referral" && first && second
         ? await cleanupReferral(first, second)
-        : (() => {
-            throw new Error("Usage: e2e-family-commons.ts cleanup <familyName> | cleanup-referral <coopId> <email>");
-          })();
+        : command === "cleanup-newcomers" && first
+          ? await cleanupNewcomers([first, second, ...rest].filter(Boolean) as string[])
+          : (() => {
+              throw new Error(
+                "Usage: e2e-family-commons.ts cleanup <familyName> | cleanup-referral <coopId> <email> | cleanup-newcomers <email...>",
+              );
+            })();
   console.log(`E2E_RESULT ${JSON.stringify(result)}`);
 }
 

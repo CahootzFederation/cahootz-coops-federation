@@ -58,12 +58,14 @@ private-circle access; presence only powers the aggregate `chatting` count.
 After the member completes or defers their profile, onboarding shows one final
 choice:
 
-1. **Explore on my own**: open the Commons Explorer/directory, where a member
-   can select Cahootz or another available Common. Selecting a Common opens
-   that Common's home; its Circles entry opens the Circle Explorer.
-2. **Join a welcome lounge**: securely assign the member to a private welcome
+1. **Join a welcome lounge**: securely assign the member to a private welcome
    table under `coopId = cahootz`, then open that circle's normal feed.
+2. **Go to General**: open the Cahootz Commons General feed.
+3. **Their family**, shown only when a steward has invited this account (or
+   they arrived from an invitation link): open the invitation to join.
 
+Every choice except "Skip for now" seats the member in a welcome lounge, so
+someone heading to General or to their family still has one to come back to.
 The action is idempotent. A member who already has a welcome-table membership
 returns to that same table rather than receiving another one.
 

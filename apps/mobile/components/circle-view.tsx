@@ -10,6 +10,7 @@ import { circleColorFromKey } from '@/lib/circle-color';
 import { secureStorage } from '@/lib/secure-storage';
 import { track } from '@/lib/analytics';
 import AppDrawer from '@/components/app-drawer';
+import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
 import { Menu, MessageCircle, Settings2, LogIn } from 'lucide-react-native';
 
 const THEME = {
@@ -151,6 +152,12 @@ export default function CircleView({ coopId }: { coopId: string }) {
         <Text className="text-3xl font-black text-gray-950">Welcome In</Text>
         <Text className="mt-1 text-base font-semibold text-gray-500">Hey check out a circle</Text>
       </View>
+
+      {sessionToken ? (
+        <View className="px-5 pt-4">
+          <CommonsInvitationsCard />
+        </View>
+      ) : null}
 
       {isLoading && circles.length === 0 ? (
         <View className="items-center py-10">

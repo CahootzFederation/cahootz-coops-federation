@@ -48,6 +48,14 @@ const ACTIVE_USER = {
 
 function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
   const db: any = {
+    auditLog: {
+      create: vi.fn().mockResolvedValue({}),
+      ...overrides.auditLog,
+    },
+    commonsInvitation: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      ...overrides.commonsInvitation,
+    },
     commonsPost: {
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn(),
@@ -515,6 +523,9 @@ describe('commonsRouter', () => {
           ],
         }),
       },
+      userCoopMembership: {
+        findUnique: vi.fn().mockResolvedValue(null),
+      },
     });
 
     const result = await callerFor(db, {
@@ -538,6 +549,7 @@ describe('commonsRouter', () => {
           coopId: 'artists',
         },
       },
+      select: { id: true, status: true },
     });
     expect(db.application.create).toHaveBeenCalledWith({
       data: expect.objectContaining({

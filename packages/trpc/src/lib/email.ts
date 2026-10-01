@@ -819,6 +819,101 @@ export async function sendOnboardingDripEmail({
   });
 }
 
+function CommonsInvitationEmail({
+  heading,
+  commonsName,
+  description,
+  steps,
+  ctaLabel,
+  appLinkUrl,
+  expiresOn,
+}: {
+  heading: string;
+  commonsName: string;
+  description?: string | null;
+  steps: string;
+  ctaLabel: string;
+  appLinkUrl: string;
+  expiresOn: string;
+}) {
+  return h(
+    EmailShell,
+    {
+      brandName: commonsName,
+      preview: heading,
+      footer: `You're getting this because someone in ${commonsName} entered this email address. If you weren't expecting it, you can ignore it.`,
+    },
+    h(Heading, { style: styles.heading }, heading),
+    description ? h(Text, { style: styles.text }, description) : null,
+    h(Text, { style: styles.text }, steps),
+    h(
+      Section,
+      { style: { marginTop: "22px" } },
+      h(Button, { href: appLinkUrl, style: { ...styles.button, marginRight: "10px", marginBottom: "10px" } }, ctaLabel),
+      // Not a link: there's no Android app yet.
+      h(
+        "span",
+        {
+          style: {
+            ...styles.button,
+            backgroundColor: "#ECEAE4",
+            color: colors.muted,
+            marginBottom: "10px",
+          },
+        },
+        "Android · Coming soon",
+      ),
+    ),
+    h(Hr, { style: { borderColor: colors.line, margin: "24px 0" } }),
+    h(Text, { style: styles.muted }, `This invitation expires on ${expiresOn}.`),
+  );
+}
+
+/**
+ * A commons invitation. The member app is iOS-only with no web build, so the
+ * button goes to the App Store; the invitation itself is found in the app by
+ * signing in with this address.
+ */
+export async function sendCommonsInvitationEmail({
+  to,
+  subject,
+  ...content
+}: {
+  to: string;
+  subject: string;
+} & CommonsInvitationEmailContent): Promise<{ id: string; from: string }> {
+  const sent = await sendEmail({
+    to,
+    subject,
+    react: commonsInvitationEmailElement(content),
+    sentryContext: { emailType: "commons_invitation" },
+  });
+  // Resend's message id, to look the email up in the Resend dashboard.
+  return { id: sent.id, from: env.RESEND_FROM_EMAIL || DEFAULT_FROM_EMAIL };
+}
+
+type CommonsInvitationEmailContent = {
+  heading: string;
+  commonsName: string;
+  description?: string | null;
+  steps: string;
+  // "Download for iOS" for new people, "Open on iOS" for existing accounts.
+  ctaLabel: string;
+  appLinkUrl: string;
+  expiresAt: Date;
+};
+
+function commonsInvitationEmailElement({ expiresAt, ...content }: CommonsInvitationEmailContent) {
+  // Date only: a time would be in the server's time zone, not the reader's.
+  const expiresOn = expiresAt.toLocaleDateString("en-US", { dateStyle: "long" });
+  return h(CommonsInvitationEmail, { ...content, expiresOn });
+}
+
+/** The invitation email's HTML, without sending it (previews and tests). */
+export async function renderCommonsInvitationEmail(content: CommonsInvitationEmailContent) {
+  return render(commonsInvitationEmailElement(content));
+}
+
 export function generateLoginCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }

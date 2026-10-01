@@ -6,6 +6,7 @@ import type { Prisma } from '@repo/db';
 
 import type { AccountAuthenticatedContext, Context } from '../context.js';
 import { COMMUNITY_OBSERVER_POST_TYPES, getAgent } from '../agents/registry.js';
+import { auditLogEntry } from '../lib/audit.js';
 import { ensureSageBotUser, isSageUser } from '../lib/bot.js';
 import {
   COMMONS_COOP_ID,
@@ -14,6 +15,11 @@ import {
 } from '../lib/commons.js';
 import { encodeMentions } from '../lib/mentions.js';
 import { toE164 } from '../lib/phone.js';
+import { resolveApplyReferral } from '../services/commons-invitations.js';
+import {
+  getCommonsPolicy,
+  STEWARD_ROLES,
+} from '../services/commons-membership.js';
 import {
   accountAuthenticatedProcedure,
   publicProcedure,
@@ -1258,6 +1264,8 @@ export const commonsRouter = router({
         eligibility: true,
         iconEmoji: true,
         iconColor: true,
+        isPrivate: true,
+        joinPolicy: true,
       },
     });
     const coopIds = coops.map((coop: any) => coop.coopId);
@@ -1283,6 +1291,7 @@ export const commonsRouter = router({
               id: true,
               coopId: true,
               status: true,
+              requestType: true,
               createdAt: true,
               reviewedAt: true,
             },
@@ -1316,7 +1325,24 @@ export const commonsRouter = router({
       );
     }
 
-    const sortedCoops = [...coops].sort((a: any, b: any) => {
+    // Private and invite-only commons are never discoverable: they're listed
+    // only for people already in them or with a request pending.
+    const visibleCoops = coops.filter((coop: any) => {
+      const isHidden =
+        coop.coopId !== COMMONS_COOP_ID &&
+        (coop.isPrivate || coop.joinPolicy === 'INVITE_ONLY');
+      if (!isHidden) return true;
+      const membershipStatus = (membershipByCoop.get(coop.coopId) as any)?.status;
+      const applicationStatus = (applicationByCoop.get(coop.coopId) as any)?.status;
+      return (
+        membershipStatus === 'ACTIVE' ||
+        membershipStatus === 'PENDING' ||
+        applicationStatus === 'SUBMITTED' ||
+        applicationStatus === 'UNDER_REVIEW'
+      );
+    });
+
+    const sortedCoops = [...visibleCoops].sort((a: any, b: any) => {
       if (a.coopId === COMMONS_COOP_ID) return -1;
       if (b.coopId === COMMONS_COOP_ID) return 1;
       return 0;
@@ -1328,11 +1354,17 @@ export const commonsRouter = router({
         const application = applicationByCoop.get(coop.coopId);
         const membershipStatus = membership?.status as string | undefined;
         const applicationStatus = application?.status as string | undefined;
+        const joinPolicy = (
+          coop.coopId === COMMONS_COOP_ID
+            ? 'AUTOMATIC'
+            : coop.joinPolicy || 'APPLICATION_REQUIRED'
+        ) as 'AUTOMATIC' | 'APPLICATION_REQUIRED' | 'INVITE_ONLY';
         const accessStatus =
           membershipStatus === 'ACTIVE'
             ? 'ACTIVE'
-            : membershipStatus === 'PENDING' ||
-                applicationStatus === 'SUBMITTED'
+            : applicationStatus === 'SUBMITTED' ||
+                applicationStatus === 'UNDER_REVIEW' ||
+                (membershipStatus === 'PENDING' && applicationStatus !== 'WITHDRAWN')
               ? 'PENDING'
               : membershipStatus === 'REJECTED' ||
                   applicationStatus === 'REJECTED'
@@ -1353,11 +1385,20 @@ export const commonsRouter = router({
           iconEmoji: coop.iconEmoji || null,
           iconColor: coop.iconColor || null,
           accessStatus,
+          joinPolicy,
+          isPrivate: !!coop.isPrivate || joinPolicy === 'INVITE_ONLY',
           isMember: accessStatus === 'ACTIVE',
+          isSteward:
+            membership?.status === 'ACTIVE' &&
+            ((membership?.roles as string[] | undefined) || []).some((role) =>
+              STEWARD_ROLES.includes(role),
+            ),
           isLocked: accessStatus !== 'ACTIVE',
-          canApply: accessStatus === 'LOCKED',
+          // Invite-only commons are joined through an invitation, never applied to.
+          canApply: accessStatus === 'LOCKED' && joinPolicy === 'APPLICATION_REQUIRED',
           applicationId: application?.id || null,
           applicationStatus: applicationStatus || null,
+          requestType: (application as any)?.requestType || null,
           circleCount: circleCountByCoop.get(coop.coopId) || 0,
         };
       }),
@@ -1513,6 +1554,10 @@ export const commonsRouter = router({
         displayName: z.string().trim().max(160).optional(),
         phone: z.string().trim().max(40).optional(),
         dynamicAnswers: z.record(z.unknown()).default({}),
+        // The invitation that referred them. It's recorded as a referral
+        // only: the application still needs a steward's review.
+        invitationId: z.string().min(1).max(64).optional(),
+        invitationToken: z.string().trim().min(20).max(128).optional(),
       }),
     )
     .output(
@@ -1534,10 +1579,27 @@ export const commonsRouter = router({
         },
       });
 
-      if (!coopConfig) {
+      const policy = await getCommonsPolicy(context.db, input.coopId);
+      if (!coopConfig || !policy) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Commons not found.',
+        });
+      }
+
+      if (policy.joinPolicy === 'INVITE_ONLY') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message:
+            'This commons is invite-only. Ask a member for an invitation.',
+        });
+      }
+
+      // Applying must never demote an existing member back to PENDING.
+      if (await hasActiveCommonsMembership(context.db, user.id, input.coopId)) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: "You're already a member of this commons.",
         });
       }
 
@@ -1548,14 +1610,24 @@ export const commonsRouter = router({
             coopId: input.coopId,
           },
         },
+        select: { id: true, status: true },
       });
 
-      if (existingApplication) {
+      // A withdrawn application can be sent again; anything else is final
+      // until a steward acts on it.
+      if (existingApplication && existingApplication.status !== 'WITHDRAWN') {
         throw new TRPCError({
           code: 'CONFLICT',
           message: 'You have already applied to this commons.',
         });
       }
+
+      const referral = await resolveApplyReferral(context.db, {
+        coopId: input.coopId,
+        user,
+        invitationId: input.invitationId,
+        token: input.invitationToken,
+      }).catch(() => null);
 
       const questions = (
         (coopConfig.applicationQuestions as ApplicationQuestion[] | null) || []
@@ -1603,19 +1675,62 @@ export const commonsRouter = router({
           });
         }
 
-        const createdApplication = await tx.application.create({
-          data: {
-            userId: user.id,
-            coopId: input.coopId,
-            status: 'SUBMITTED',
-            data: toJsonValue({
-              firstName,
-              lastName,
-              email: user.email,
-              phone: normalizedPhone,
-              dynamicAnswers: input.dynamicAnswers,
-            }),
-          },
+        const applicationFields = {
+          status: 'SUBMITTED' as const,
+          requestType: 'APPLICATION',
+          invitationId: referral?.invitationId ?? null,
+          referredByUserId: referral?.referredByUserId ?? null,
+          data: toJsonValue({
+            firstName,
+            lastName,
+            email: user.email,
+            phone: normalizedPhone,
+            dynamicAnswers: input.dynamicAnswers,
+          }),
+        };
+        const createdApplication = existingApplication
+          ? await tx.application.update({
+              where: { id: existingApplication.id },
+              data: {
+                ...applicationFields,
+                reviewedBy: null,
+                reviewedByUserId: null,
+                reviewedAt: null,
+                reviewNotes: null,
+                withdrawnAt: null,
+              },
+            })
+          : await tx.application.create({
+              data: {
+                ...applicationFields,
+                userId: user.id,
+                coopId: input.coopId,
+              },
+            });
+
+        if (referral) {
+          // The referral has done its job; it never admits anyone.
+          await tx.commonsInvitation.updateMany({
+            where: { id: referral.invitationId, status: 'PENDING' },
+            data: {
+              status: 'ACCEPTED',
+              acceptedByUserId: user.id,
+              acceptedAt: new Date(),
+            },
+          });
+        }
+        await tx.auditLog.create({
+          data: auditLogEntry({
+            actorId: user.id,
+            action: 'COMMONS_APPLICATION_SUBMITTED',
+            resource: 'Application',
+            resourceId: createdApplication.id,
+            metadata: {
+              coopId: input.coopId,
+              invitationId: referral?.invitationId ?? null,
+              referredByUserId: referral?.referredByUserId ?? null,
+            },
+          }),
         });
 
         await ensureCommonsMembership(tx, user.id);

@@ -15,7 +15,9 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowRight, Compass, HandHeart, Lightbulb, MessageCircle, UserCircle, Users } from 'lucide-react-native';
+import { ArrowRight, HandHeart, Lightbulb, MessageCircle, MessagesSquare, UserCircle, Users } from 'lucide-react-native';
+
+import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
 
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
@@ -258,7 +260,7 @@ export default function ProfileOnboardingScreen() {
   // handleSkip) already lets us navigate freely, so there's nothing more to persist here.
   const completeOnboarding = async (
     destination: { pathname: string; params?: Record<string, string> },
-    exit: 'welcome_lounge' | 'explore' | 'skip',
+    exit: 'welcome_lounge' | 'general' | 'skip' | 'invitation',
   ) => {
     track('onboarding_completed', { exit, profile_completed: !!profileResult, signed_in: signedIn });
 
@@ -308,7 +310,7 @@ export default function ProfileOnboardingScreen() {
       );
     } catch (err) {
       console.error('Could not join a welcome lounge:', err);
-      setError('Could not join a welcome lounge right now. Try exploring on your own instead.');
+      setError('Could not join a welcome lounge right now. Try General instead.');
     } finally {
       setIsJoiningWelcomeTable(false);
     }
@@ -335,8 +337,54 @@ export default function ProfileOnboardingScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wizardStep, user, sessionToken]);
 
-  const handleExploreOnMyOwn = () => {
-    void completeOnboarding({ pathname: '/commons' }, 'explore');
+  // Every way out of this step except "Skip for now" also seats the newcomer
+  // in a Cahootz welcome lounge, so someone heading to General or to their
+  // family still has a small group to meet. Best effort: a failure here
+  // never blocks where they chose to go.
+  const seatInWelcomeLounge = async () => {
+    if (!sessionToken) return;
+    try {
+      await api.assignWelcomeTable(sessionToken);
+      track('welcome_lounge_joined', { source: 'onboarding', auto_joined: true });
+    } catch (err) {
+      console.error('Could not seat newcomer in a welcome lounge:', err);
+    }
+  };
+
+  // A commons invitation link opened while signed out (see
+  // components/commons-invitation-view.tsx) resumes here, once the new
+  // account has been through the wizard. Cleared first so it fires once.
+  useEffect(() => {
+    if (wizardStep !== 'circles' || !user || !sessionToken) return;
+
+    let cancelled = false;
+    secureStorage.getItem(secureStorage.keys.PENDING_INVITATION).then(async (token) => {
+      if (!token || cancelled) return;
+      void secureStorage.removeItem(secureStorage.keys.PENDING_INVITATION);
+      await seatInWelcomeLounge();
+      void completeOnboarding({ pathname: '/invite/[token]', params: { token } }, 'invitation');
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizardStep, user, sessionToken]);
+
+  const handleOpenInvitation = async (invitationId: string) => {
+    await seatInWelcomeLounge();
+    void completeOnboarding(
+      { pathname: '/invitations/[invitationId]', params: { invitationId } },
+      'invitation',
+    );
+  };
+
+  const handleGoToGeneral = async () => {
+    await seatInWelcomeLounge();
+    void completeOnboarding(
+      { pathname: '/[coopId]/posts', params: { coopId: 'cahootz' } },
+      'general',
+    );
   };
 
   const handleSkipCircles = () => {
@@ -495,10 +543,19 @@ export default function ProfileOnboardingScreen() {
           <Text style={circlesStyles.eyebrow}>Almost there</Text>
           <Text style={circlesStyles.title}>Find your way in</Text>
           <Text style={circlesStyles.subtitle}>
-            Meet people, visit a commons, or look around first.
+            Meet other newcomers, jump into General, or head to your family if someone invited you.
+            Either way, you&apos;ll have a welcome lounge to come back to.
           </Text>
 
           {error ? <Text style={circlesStyles.error}>{error}</Text> : null}
+
+          {user && sessionToken ? (
+            <View style={{ marginBottom: 12 }}>
+              <CommonsInvitationsCard
+                onOpen={(invitation) => void handleOpenInvitation(invitation.invitationId!)}
+              />
+            </View>
+          ) : null}
 
           <Pressable
             accessibilityRole="button"
@@ -524,30 +581,20 @@ export default function ProfileOnboardingScreen() {
 
           <Pressable
             accessibilityRole="button"
-            onPress={handleExploreOnMyOwn}
+            onPress={() => void handleGoToGeneral()}
             style={circlesStyles.card}
           >
             <View style={[circlesStyles.cardIcon, { backgroundColor: '#EFF6FF' }]}>
-              <Compass color="#1D4ED8" size={22} strokeWidth={2.4} />
+              <MessagesSquare color="#1D4ED8" size={22} strokeWidth={2.4} />
             </View>
             <View style={circlesStyles.cardBody}>
-              <Text style={circlesStyles.cardTitle}>Explore on my own</Text>
+              <Text style={circlesStyles.cardTitle}>Go to General</Text>
               <Text style={circlesStyles.cardText}>
-                Browse public commons and circles.
+                The Cahootz Commons conversation everyone can see.
               </Text>
             </View>
             <ArrowRight color="#1D4ED8" size={20} strokeWidth={2.6} />
           </Pressable>
-
-          <View style={[circlesStyles.card, circlesStyles.cardDisabled]}>
-            <View style={[circlesStyles.cardIcon, { backgroundColor: '#F0FDF4' }]}>
-              <Users color="#15803D" size={22} strokeWidth={2.4} />
-            </View>
-            <View style={circlesStyles.cardBody}>
-              <Text style={circlesStyles.cardTitle}>Meet someone</Text>
-              <Text style={circlesStyles.cardText}>Coming soon.</Text>
-            </View>
-          </View>
         </ScrollView>
 
         <View style={introStyles.footer}>

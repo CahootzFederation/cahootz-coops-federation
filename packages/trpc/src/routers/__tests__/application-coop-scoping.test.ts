@@ -332,9 +332,10 @@ describe('Application Coop Scoping', () => {
       agreeToPrivacy: true,
     });
 
+    // getApplicationStatus now reads the signed-in account (x-session-token),
+    // so re-enabling this test needs a session for testUserId on mockContext.
     // Query application for coop1
     const app1 = await applicationRouter.createCaller(mockContext).getApplicationStatus({
-      userId: testUserId,
       coopId: 'coop1',
     });
 
@@ -342,7 +343,6 @@ describe('Application Coop Scoping', () => {
 
     // Query application for coop2
     const app2 = await applicationRouter.createCaller(mockContext).getApplicationStatus({
-      userId: testUserId,
       coopId: 'coop2',
     });
 

@@ -3,8 +3,9 @@ import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import type { Prisma } from "@repo/db";
 
-import { Context, AuthenticatedContext } from "../context.js";
-import { publicProcedure, privateProcedure } from "../procedures/index.js";
+import { AccountAuthenticatedContext, Context, AuthenticatedContext } from "../context.js";
+import { accountAuthenticatedProcedure, publicProcedure, privateProcedure } from "../procedures/index.js";
+import { getCommonsPolicy } from "../services/commons-membership.js";
 import { router } from "../trpc.js";
 import { createWalletForUser } from "../services/wallet-service.js";
 import { syncMembershipToContract } from "../services/blockchain.js";
@@ -77,6 +78,16 @@ export const applicationRouter = router({
       console.log('🏢 Coop ID:', input.coopId);
       
       try {
+        // Invite-only (family) commons never take applications; people join
+        // them through an invitation (see services/commons-membership.ts).
+        const policy = await getCommonsPolicy(context.db, input.coopId);
+        if (policy?.joinPolicy === "INVITE_ONLY") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "This commons is invite-only.",
+          });
+        }
+
         // Check if user already has an application for this coop
         console.log('🔍 Checking for existing user...');
         const existingUser = await context.db.user.findUnique({
@@ -254,11 +265,11 @@ export const applicationRouter = router({
     }),
 
   /**
-   * Get application status by user ID and coop ID
+   * The signed-in person's own application to a coop. It used to take any
+   * userId and was public, which exposed every applicant's answers.
    */
-  getApplicationStatus: publicProcedure
-    .input(z.object({ 
-      userId: z.string(),
+  getApplicationStatus: accountAuthenticatedProcedure
+    .input(z.object({
       coopId: z.string(),
     }))
     .output(z.object({
@@ -270,12 +281,12 @@ export const applicationRouter = router({
       data: z.any().optional(), // Include application data
     }))
     .query(async ({ input, ctx }) => {
-      const context = ctx as Context;
+      const context = ctx as AccountAuthenticatedContext;
       
       const application = await context.db.application.findUnique({
         where: { 
           userId_coopId: {
-            userId: input.userId,
+            userId: context.accountUser.id,
             coopId: input.coopId,
           },
         },
@@ -307,11 +318,11 @@ export const applicationRouter = router({
     }),
 
   /**
-   * Get application data by user ID and coop ID (for admin/review purposes)
+   * The signed-in person's own application data. Reviewers read applications
+   * through the admin/steward procedures, which check their role.
    */
-  getApplicationData: publicProcedure
-    .input(z.object({ 
-      userId: z.string(),
+  getApplicationData: accountAuthenticatedProcedure
+    .input(z.object({
       coopId: z.string(),
     }))
     .output(z.object({
@@ -323,12 +334,12 @@ export const applicationRouter = router({
       reviewNotes: z.string().optional(),
     }))
     .query(async ({ input, ctx }) => {
-      const context = ctx as Context;
+      const context = ctx as AccountAuthenticatedContext;
       
       const application = await context.db.application.findUnique({
         where: { 
           userId_coopId: {
-            userId: input.userId,
+            userId: context.accountUser.id,
             coopId: input.coopId,
           },
         },

@@ -498,12 +498,91 @@ export interface CommonsDirectoryItem extends CommonsProfile {
   iconEmoji?: string | null;
   iconColor?: string | null;
   accessStatus: CommonsAccessStatus;
+  joinPolicy?: CommonsJoinPolicy;
+  isPrivate?: boolean;
   isMember: boolean;
+  isSteward?: boolean;
   isLocked: boolean;
   canApply: boolean;
   applicationId?: string | null;
   applicationStatus?: string | null;
+  requestType?: 'APPLICATION' | 'ACCESS_REQUEST' | null;
   circleCount?: number;
+}
+
+export type CommonsJoinPolicy = 'AUTOMATIC' | 'APPLICATION_REQUIRED' | 'INVITE_ONLY';
+export type CommonsInvitationPurpose = 'DIRECT_JOIN' | 'APPLY' | 'REQUEST_ACCESS';
+
+/** What an invitation shows before joining - never who else is a member. */
+export interface CommonsInvitationDetail {
+  invitationId: string | null;
+  purpose: CommonsInvitationPurpose;
+  status: 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'REVOKED' | 'PENDING_APPROVAL';
+  expiresAt: string;
+  recipientHint: string | null;
+  recipientName: string | null;
+  message: string | null;
+  inviterName: string;
+  commons: {
+    id: string;
+    name: string;
+    tagline: string | null;
+    description: string | null;
+    iconEmoji: string | null;
+    iconColor: string | null;
+    joinPolicy: CommonsJoinPolicy;
+    isPrivate: boolean;
+    rules: string | null;
+    privacyNotice: string | null;
+  };
+  viewer: {
+    signedIn: boolean;
+    isMember: boolean;
+    contactMatch: 'EMAIL' | 'PHONE' | null;
+    requestStatus: string | null;
+  };
+}
+
+export type AcceptCommonsInvitationResult =
+  | { outcome: 'JOINED' | 'ALREADY_MEMBER'; coopId: string; welcomePostId: string | null }
+  | { outcome: 'REQUESTED'; coopId: string; reason: string; alreadyRequested: boolean }
+  | { outcome: 'APPLY'; coopId: string; invitationId: string };
+
+export interface CommonsInvitationOverview {
+  commons: { id: string; name: string; joinPolicy: CommonsJoinPolicy; isPrivate: boolean };
+  isSteward: boolean;
+  canInviteDirectly: boolean;
+  invitations: {
+    id: string;
+    purpose: CommonsInvitationPurpose;
+    status: 'PENDING' | 'PENDING_APPROVAL' | 'ACCEPTED';
+    contact: string | null;
+    contactType: 'EMAIL' | 'PHONE';
+    recipientName: string | null;
+    inviterName: string;
+    isMine: boolean;
+    acceptedByName: string | null;
+    createdAt: string;
+    expiresAt: string;
+  }[];
+  shareLinks: { id: string; createdByName: string; createdAt: string; expiresAt: string }[];
+  requests: {
+    id: string;
+    requestType: string;
+    applicant: { id: string; name: string | null; handle: string | null; email: string };
+    note: string | null;
+    reason: string | null;
+    invitedAs: string | null;
+    invitedByName: string | null;
+    requestedAt: string;
+  }[];
+  members: {
+    id: string;
+    name: string | null;
+    handle: string | null;
+    isSteward: boolean;
+    isYou: boolean;
+  }[];
 }
 
 export interface CommonsMissionGoal {
@@ -619,6 +698,23 @@ async function readTrpcResult<T>(
   }
 
   return result.result?.data as T;
+}
+
+async function postCommonsInvitations<T>(
+  procedure: string,
+  body: unknown,
+  sessionToken: string,
+  fallbackMessage: string,
+) {
+  const response = await fetch(
+    `${API_BASE_URL}/trpc/commonsInvitations.${procedure}`,
+    {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(body),
+    },
+  );
+  return readTrpcResult<T>(response, fallbackMessage);
 }
 
 // Helper functions for API calls
@@ -839,6 +935,8 @@ export const api = {
       displayName?: string;
       phone?: string;
       dynamicAnswers?: Record<string, unknown>;
+      invitationId?: string;
+      invitationToken?: string;
     },
     sessionToken?: string | null,
   ) {
@@ -856,6 +954,157 @@ export const api = {
       message: string;
       applicationId: string;
     }>(response, 'Failed to apply to commons');
+  },
+
+  async createFamilyCommons(
+    data: { name: string; description?: string; iconEmoji?: string },
+    sessionToken: string,
+  ) {
+    return postCommonsInvitations<{ coopId: string; welcomePostId: string }>(
+      'createFamily',
+      data,
+      sessionToken,
+      'Could not start your family',
+    );
+  },
+
+  async previewCommonsInvitation(token: string, sessionToken?: string | null) {
+    const input = encodeURIComponent(JSON.stringify({ token }));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commonsInvitations.preview?input=${input}`,
+      { method: 'GET', headers: createApiHeaders(null, sessionToken) },
+    );
+    return readTrpcResult<CommonsInvitationDetail>(response, 'Could not open this invitation');
+  },
+
+  async getMyCommonsInvitation(invitationId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ invitationId }));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commonsInvitations.getMine?input=${input}`,
+      { method: 'GET', headers: createApiHeaders(null, sessionToken) },
+    );
+    return readTrpcResult<CommonsInvitationDetail>(response, 'Could not open this invitation');
+  },
+
+  async listMyCommonsInvitations(sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsInvitations.listMine`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<{ invitations: CommonsInvitationDetail[] }>(
+      response,
+      'Could not load your invitations',
+    );
+  },
+
+  async acceptCommonsInvitation(
+    data: { token?: string; invitationId?: string; acceptRules: boolean; note?: string },
+    sessionToken: string,
+  ) {
+    return postCommonsInvitations<AcceptCommonsInvitationResult>(
+      'accept',
+      data,
+      sessionToken,
+      'Could not accept this invitation',
+    );
+  },
+
+  async inviteToCommons(
+    data: {
+      coopId: string;
+      email?: string;
+      phone?: string;
+      recipientName?: string;
+      message?: string;
+    },
+    sessionToken: string,
+  ) {
+    return postCommonsInvitations<{
+      invitationId: string;
+      status: 'PENDING' | 'PENDING_APPROVAL';
+      alreadyInvited: boolean;
+      channels: string[];
+    }>('invite', data, sessionToken, 'Could not send the invitation');
+  },
+
+  async getCommonsInvitationOverview(coopId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commonsInvitations.overview?input=${input}`,
+      { method: 'GET', headers: createApiHeaders(null, sessionToken) },
+    );
+    return readTrpcResult<CommonsInvitationOverview>(response, 'Could not load invitations');
+  },
+
+  async approveCommonsRecommendation(invitationId: string, sessionToken: string) {
+    return postCommonsInvitations<{ invitationId: string; channels: string[] }>(
+      'approveRecommendation',
+      { invitationId },
+      sessionToken,
+      'Could not approve the recommendation',
+    );
+  },
+
+  async revokeCommonsInvitation(invitationId: string, sessionToken: string) {
+    return postCommonsInvitations<{ revoked: boolean }>(
+      'revoke',
+      { invitationId },
+      sessionToken,
+      'Could not cancel the invitation',
+    );
+  },
+
+  async createCommonsShareLink(coopId: string, sessionToken: string) {
+    return postCommonsInvitations<{
+      invitationId: string;
+      token: string;
+      appLink: string;
+      expiresAt: string;
+    }>('createShareLink', { coopId }, sessionToken, 'Could not create a link');
+  },
+
+  async reviewCommonsRequest(
+    data: { applicationId: string; decision: 'APPROVE' | 'DECLINE'; note?: string },
+    sessionToken: string,
+  ) {
+    return postCommonsInvitations<{ joined: boolean; coopId: string }>(
+      'reviewRequest',
+      data,
+      sessionToken,
+      'Could not review the request',
+    );
+  },
+
+  async withdrawCommonsRequest(coopId: string, sessionToken: string) {
+    return postCommonsInvitations<{ applicationId: string }>(
+      'withdrawRequest',
+      { coopId },
+      sessionToken,
+      'Could not withdraw your request',
+    );
+  },
+
+  async removeCommonsMember(coopId: string, userId: string, sessionToken: string) {
+    return postCommonsInvitations<{ removed: boolean }>(
+      'removeMember',
+      { coopId, userId },
+      sessionToken,
+      'Could not remove this member',
+    );
+  },
+
+  async setCommonsSteward(
+    coopId: string,
+    userId: string,
+    steward: boolean,
+    sessionToken: string,
+  ) {
+    return postCommonsInvitations<{ roles: string[] }>(
+      'setSteward',
+      { coopId, userId, steward },
+      sessionToken,
+      'Could not change stewards',
+    );
   },
 
   async getCommonsActivityStats(coopId: string, sessionToken?: string | null) {
@@ -1820,6 +2069,10 @@ export const api = {
       method: 'POST',
       headers: createApiHeaders(null, sessionToken),
       body: JSON.stringify({ groupId }),
+      // Leaving is often sent as the page goes away (a reload, closing the
+      // tab, navigating off it on web). Without keepalive the browser cancels
+      // it, and the member looks "in the chat" for 90s and misses alerts.
+      keepalive: true,
     });
 
     return readTrpcResult<{ success: boolean }>(response, 'Could not leave circle chat');
@@ -2133,70 +2386,6 @@ export const api = {
     // Check if there's a tRPC error in the response
     if (result.error) {
       throw new Error(result.error.message || 'Status check failed');
-    }
-
-    // If HTTP status is not OK but no error in JSON, throw generic error
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    // tRPC wraps the response in result.data.json
-    return result.result?.data;
-  },
-
-  /**
-   * Get application status
-   */
-  async getApplicationStatus(userId: string) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/application.getApplicationStatus`,
-      {
-        method: 'POST',
-        headers: {
-          ...networkConfig.defaultHeaders,
-        },
-        body: JSON.stringify({ userId }),
-      },
-    );
-
-    // Always parse the response body, even for error responses
-    const result = await response.json();
-
-    // Check if there's a tRPC error in the response
-    if (result.error) {
-      throw new Error(result.error.message || 'Status check failed');
-    }
-
-    // If HTTP status is not OK but no error in JSON, throw generic error
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    // tRPC wraps the response in result.data.json
-    return result.result?.data;
-  },
-
-  /**
-   * Get full application data (for admin/review purposes)
-   */
-  async getApplicationData(userId: string) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/application.getApplicationData`,
-      {
-        method: 'POST',
-        headers: {
-          ...networkConfig.defaultHeaders,
-        },
-        body: JSON.stringify({ userId }),
-      },
-    );
-
-    // Always parse the response body, even for error responses
-    const result = await response.json();
-
-    // Check if there's a tRPC error in the response
-    if (result.error) {
-      throw new Error(result.error.message || 'Data retrieval failed');
     }
 
     // If HTTP status is not OK but no error in JSON, throw generic error

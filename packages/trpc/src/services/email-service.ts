@@ -5,6 +5,7 @@ export {
   sendLoginCode,
   sendNewOrderAlertEmail,
   sendOnboardingDripEmail,
+  sendCommonsInvitationEmail,
   sendOrderConfirmationEmail,
   sendOrderEmails,
   sendWaitlistWelcomeEmail,

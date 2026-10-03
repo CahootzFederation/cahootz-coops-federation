@@ -3,11 +3,12 @@ import { TRPCError } from "@trpc/server";
 import { createWalletForUser } from "../services/wallet-service.js";
 import { syncMembershipToContract, getMemberStatus, MemberStatus, isActiveMember, getComprehensiveBlockchainInfo, getETHBalance, getUCTotalSupply } from "../services/blockchain.js";
 import { Context, CoopScopedContext } from "../context.js";
-import { publicProcedure, privateProcedure } from "../procedures/index.js";
+import { privateProcedure } from "../procedures/index.js";
 import { router } from "../trpc.js";
 import Stripe from "stripe";
 import { sendApplicationAcceptedEmail, isEmailConfigured } from "../services/email-service.js";
 import { createNotificationAndPush } from "../services/push-notification-service.js";
+import { getCommonsPolicy } from "../services/commons-membership.js";
 
 // Initialize Stripe (optional - only if key is configured)
 const stripe = process.env.STRIPE_SECRET_KEY
@@ -18,6 +19,49 @@ function getPortalUrl(coopId: string): string | undefined {
   const baseUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_URI;
   if (!baseUrl) return undefined;
   return `${baseUrl.replace(/\/$/, "")}/portal/${coopId}`;
+}
+
+/**
+ * Fields a coop admin may see about an applicant. Never the password hash
+ * or the (deprecated) encrypted private key, which a plain `include: { user }`
+ * used to send to the browser.
+ */
+const REVIEW_USER_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  handle: true,
+  phone: true,
+  status: true,
+  walletAddress: true,
+  createdAt: true,
+} as const;
+
+/**
+ * privateProcedure verifies the caller is an admin of the coop named in the
+ * `x-coop-id` header. Admin endpoints that take a coopId must act on that
+ * same coop, or an admin of one coop could review another's members.
+ */
+function assertAdminCoop(context: Context, coopId?: string): string {
+  const headerCoopId = context.coopId;
+  if (!headerCoopId) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Missing coop.' });
+  }
+  if (coopId !== undefined && coopId !== headerCoopId) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'You can only manage your own coop.' });
+  }
+  return headerCoopId;
+}
+
+/** Invite-only commons are reviewed by their stewards in the app, not the portal. */
+async function assertPortalReviewable(context: Context, coopId: string) {
+  const policy = await getCommonsPolicy(context.db, coopId);
+  if (policy?.joinPolicy === 'INVITE_ONLY') {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: "This commons' stewards review requests in the app.",
+    });
+  }
 }
 
 export const adminRouter = router({
@@ -155,22 +199,25 @@ export const adminRouter = router({
     }),
 
   /**
-   * Get all users with their applications for a specific coop
-   * TODO: Add proper authentication - only admins should access this
+   * Get all users with their applications for the admin's coop.
+   * Admin-only: privateProcedure verifies the wallet is an admin of the coop
+   * in `x-coop-id`, and the coop being read must be that coop.
    */
-  getAllUsersWithApplications: publicProcedure
+  getAllUsersWithApplications: privateProcedure
     .input(z.object({
       coopId: z.string(),
     }))
     .query(async ({ input, ctx }) => {
       const context = ctx as Context;
+      assertAdminCoop(context, input.coopId);
 
       // Get all memberships for this coop
       const memberships = await context.db.userCoopMembership.findMany({
         where: { coopId: input.coopId },
         include: {
           user: {
-            include: {
+            select: {
+              ...REVIEW_USER_SELECT,
               applications: {
                 where: { coopId: input.coopId },
               },
@@ -192,15 +239,16 @@ export const adminRouter = router({
     }),
 
   /**
-   * Get users by membership status for a specific coop
+   * Get users by membership status for the admin's coop
    */
-  getUsersByStatus: publicProcedure
+  getUsersByStatus: privateProcedure
     .input(z.object({
       coopId: z.string(),
       status: z.enum(['PENDING', 'ACTIVE', 'REJECTED', 'SUSPENDED']),
     }))
     .query(async ({ input, ctx }) => {
       const context = ctx as Context;
+      assertAdminCoop(context, input.coopId);
 
       // Get memberships for this coop with the specified status
       const memberships = await context.db.userCoopMembership.findMany({
@@ -210,7 +258,8 @@ export const adminRouter = router({
         },
         include: {
           user: {
-            include: {
+            select: {
+              ...REVIEW_USER_SELECT,
               applications: {
                 where: { coopId: input.coopId },
               },
@@ -232,23 +281,31 @@ export const adminRouter = router({
     }),
 
   /**
-   * Get a single user with full application data
+   * Get a single user with their application to the admin's coop
    */
-  getUserWithApplication: publicProcedure
+  getUserWithApplication: privateProcedure
     .input(z.object({
       userId: z.string(),
     }))
     .query(async ({ input, ctx }) => {
       const context = ctx as Context;
+      const coopId = assertAdminCoop(context);
 
-      const user = await context.db.user.findUnique({
-        where: {
-          id: input.userId,
-        },
-        include: {
-          applications: true,
-        },
+      const membership = await context.db.userCoopMembership.findUnique({
+        where: { userId_coopId: { userId: input.userId, coopId } },
+        select: { id: true },
       });
+      const user = membership
+        ? await context.db.user.findUnique({
+            where: {
+              id: input.userId,
+            },
+            select: {
+              ...REVIEW_USER_SELECT,
+              applications: { where: { coopId } },
+            },
+          })
+        : null;
 
       if (!user) {
         throw new TRPCError({
@@ -261,32 +318,20 @@ export const adminRouter = router({
     }),
 
   /**
-   * Update user status for a specific coop
-   * TODO: Add permission check - only admins with proper role should be able to update
+   * Update a user's membership status in the admin's coop.
    */
-  updateUserStatus: publicProcedure
+  updateUserStatus: privateProcedure
     .input(z.object({
       userId: z.string(),
       coopId: z.string(),
       status: z.enum(['PENDING', 'ACTIVE', 'REJECTED', 'SUSPENDED']),
       reviewNotes: z.string().optional(),
-      // TODO: Add adminUserId to track who made the change
     }))
     .mutation(async ({ input, ctx }) => {
-      console.log('\n🔷 updateUserStatus - START');
-      console.log('📥 Received input:', JSON.stringify(input, null, 2));
       const context = ctx as Context;
-
-      // TODO: Add permission check here
-      // const adminUser = await context.db.user.findUnique({
-      //   where: { id: input.adminUserId },
-      // });
-      // if (!adminUser || !adminUser.roles.includes('admin')) {
-      //   throw new TRPCError({
-      //     code: 'FORBIDDEN',
-      //     message: 'Only admins can update user status',
-      //   });
-      // }
+      assertAdminCoop(context, input.coopId);
+      const reviewer = (ctx as { walletAddress?: string }).walletAddress ?? 'unknown';
+      await assertPortalReviewable(context, input.coopId);
 
       // Update the coop-scoped membership status
       const membership = await context.db.userCoopMembership.update({
@@ -300,10 +345,12 @@ export const adminRouter = router({
           status: input.status,
           ...(input.status === 'ACTIVE' && {
             approvedAt: new Date(),
+            approvedBy: reviewer,
             joinedAt: new Date(),
           }),
           ...(input.status === 'REJECTED' && {
             rejectedAt: new Date(),
+            rejectedBy: reviewer,
             rejectionReason: input.reviewNotes,
           }),
         },
@@ -317,22 +364,33 @@ export const adminRouter = router({
         },
         data: {
           status: input.status === 'ACTIVE' ? 'APPROVED' :
-                 input.status === 'REJECTED' ? 'REJECTED' : 
+                 input.status === 'REJECTED' ? 'REJECTED' :
                  input.status === 'PENDING' ? 'SUBMITTED' : 'UNDER_REVIEW',
           reviewNotes: input.reviewNotes,
           reviewedAt: new Date(),
-          // TODO: Add reviewedBy: input.adminUserId,
+          reviewedBy: reviewer,
         },
       });
 
-      // Also update global user status for backward compatibility
-      // (can be removed once all code uses membership status)
-      await context.db.user.update({
-        where: {
-          id: input.userId,
-        },
+      // The global account status used to be overwritten here too, so being
+      // rejected or suspended by one coop locked someone out of every coop.
+      // It now only ever moves a brand-new account from PENDING to ACTIVE.
+      if (input.status === 'ACTIVE') {
+        await context.db.user.updateMany({
+          where: { id: input.userId, status: 'PENDING' },
+          data: { status: 'ACTIVE' },
+        });
+      }
+
+      await context.db.auditLog.create({
         data: {
-          status: input.status,
+          actorId: reviewer,
+          actorType: 'ADMIN',
+          action: 'COMMONS_MEMBERSHIP_STATUS_CHANGED',
+          resource: 'UserCoopMembership',
+          resourceId: membership.id,
+          metadata: { coopId: input.coopId, userId: input.userId, status: input.status },
+          status: 'SUCCESS',
         },
       });
 
@@ -382,54 +440,63 @@ export const adminRouter = router({
     }),
 
   /**
-   * Get pending applications (users with PENDING status)
+   * Pending applications to the admin's coop (oldest first). This used to
+   * return every PENDING account on the platform, across all coops.
    */
-  getPendingApplications: publicProcedure
+  getPendingApplications: privateProcedure
     .query(async ({ ctx }) => {
       const context = ctx as Context;
+      const coopId = assertAdminCoop(context);
 
-      const users = await context.db.user.findMany({
+      const memberships = await context.db.userCoopMembership.findMany({
         where: {
+          coopId,
           status: 'PENDING',
         },
         include: {
-          applications: true,
+          user: {
+            select: {
+              ...REVIEW_USER_SELECT,
+              applications: { where: { coopId } },
+            },
+          },
         },
         orderBy: {
           createdAt: 'asc', // Oldest first
         },
       });
 
-      return users;
+      return memberships.map((membership) => membership.user);
     }),
 
   /**
-   * Batch approve/reject applications
+   * Batch approve/reject applications to the admin's coop.
    */
-  batchUpdateStatus: publicProcedure
+  batchUpdateStatus: privateProcedure
     .input(z.object({
-      userIds: z.array(z.string()),
+      userIds: z.array(z.string()).max(200),
       status: z.enum(['ACTIVE', 'REJECTED']),
       reviewNotes: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const context = ctx as Context;
+      const coopId = assertAdminCoop(context);
+      const reviewer = (ctx as { walletAddress?: string }).walletAddress ?? 'unknown';
+      await assertPortalReviewable(context, coopId);
+      const now = new Date();
 
-      // Update all users
-      await context.db.user.updateMany({
-        where: {
-          id: {
-            in: input.userIds,
-          },
-        },
-        data: {
-          status: input.status,
-        },
+      // Only this coop's memberships and applications; the account-wide
+      // status is never set to REJECTED here.
+      await context.db.userCoopMembership.updateMany({
+        where: { coopId, userId: { in: input.userIds } },
+        data: input.status === 'ACTIVE'
+          ? { status: 'ACTIVE', approvedAt: now, approvedBy: reviewer, joinedAt: now }
+          : { status: 'REJECTED', rejectedAt: now, rejectedBy: reviewer, rejectionReason: input.reviewNotes },
       });
 
-      // Update all applications
       await context.db.application.updateMany({
         where: {
+          coopId,
           userId: {
             in: input.userIds,
           },
@@ -437,47 +504,55 @@ export const adminRouter = router({
         data: {
           status: input.status === 'ACTIVE' ? 'APPROVED' : 'REJECTED',
           reviewNotes: input.reviewNotes,
-          reviewedAt: new Date(),
+          reviewedAt: now,
+          reviewedBy: reviewer,
+        },
+      });
+
+      if (input.status === 'ACTIVE') {
+        await context.db.user.updateMany({
+          where: { id: { in: input.userIds }, status: 'PENDING' },
+          data: { status: 'ACTIVE' },
+        });
+      }
+
+      await context.db.auditLog.create({
+        data: {
+          actorId: reviewer,
+          actorType: 'ADMIN',
+          action: 'COMMONS_MEMBERSHIP_BATCH_STATUS_CHANGED',
+          resource: 'UserCoopMembership',
+          metadata: { coopId, userIds: input.userIds, status: input.status },
+          status: 'SUCCESS',
         },
       });
 
       if (input.status === 'ACTIVE' && isEmailConfigured()) {
         void (async () => {
           try {
-            const users = await context.db.user.findMany({
-              where: { id: { in: input.userIds } },
-              select: {
-                id: true,
-                email: true,
-                name: true,
-                applications: {
-                  where: { status: 'APPROVED' },
-                  select: { coopId: true },
-                  orderBy: { reviewedAt: 'desc' },
-                  take: 1,
-                },
-              },
-            });
-
-            const coopIds = Array.from(new Set(users.flatMap((user) => user.applications.map((application) => application.coopId))));
-            const coopConfigs = await context.db.coopConfig.findMany({
-              where: { coopId: { in: coopIds }, isActive: true },
-              select: { coopId: true, name: true },
-            });
-            const coopNames = new Map(coopConfigs.map((config) => [config.coopId, config.name]));
+            const [users, coopConfig] = await Promise.all([
+              context.db.user.findMany({
+                where: { id: { in: input.userIds } },
+                select: { email: true, name: true },
+              }),
+              context.db.coopConfig.findFirst({
+                where: { coopId, isActive: true },
+                select: { name: true },
+                orderBy: { version: 'desc' },
+              }),
+            ]);
 
             await Promise.all(
               users
                 .filter((user) => !!user.email)
-                .map((user) => {
-                  const coopId = user.applications[0]?.coopId;
-                  return sendApplicationAcceptedEmail({
+                .map((user) =>
+                  sendApplicationAcceptedEmail({
                     to: user.email,
                     applicantName: user.name,
-                    coopName: coopId ? coopNames.get(coopId) : undefined,
-                    portalUrl: coopId ? getPortalUrl(coopId) : undefined,
-                  });
-                }),
+                    coopName: coopConfig?.name,
+                    portalUrl: getPortalUrl(coopId),
+                  }),
+                ),
             );
           } catch (emailError) {
             console.error('Failed to send batch application acceptance emails:', emailError);
@@ -489,43 +564,31 @@ export const adminRouter = router({
     }),
 
   /**
-   * Get membership statistics for a specific coop
+   * Get membership statistics for the admin's coop
    */
-  getApplicationStats: publicProcedure
+  getApplicationStats: privateProcedure
     .input(z.object({
       coopId: z.string(),
     }))
     .query(async ({ input, ctx }) => {
-      console.log('\n🔷 getApplicationStats - START');
-      console.log(`📊 Coop ID: ${input.coopId}`);
       const context = ctx as Context;
+      assertAdminCoop(context, input.coopId);
 
-      try {
-        // Count memberships by status for this coop
-        const [pending, active, rejected, suspended] = await Promise.all([
-          context.db.userCoopMembership.count({ where: { coopId: input.coopId, status: 'PENDING' } }),
-          context.db.userCoopMembership.count({ where: { coopId: input.coopId, status: 'ACTIVE' } }),
-          context.db.userCoopMembership.count({ where: { coopId: input.coopId, status: 'REJECTED' } }),
-          context.db.userCoopMembership.count({ where: { coopId: input.coopId, status: 'SUSPENDED' } }),
-        ]);
+      // Count memberships by status for this coop
+      const [pending, active, rejected, suspended] = await Promise.all([
+        context.db.userCoopMembership.count({ where: { coopId: input.coopId, status: 'PENDING' } }),
+        context.db.userCoopMembership.count({ where: { coopId: input.coopId, status: 'ACTIVE' } }),
+        context.db.userCoopMembership.count({ where: { coopId: input.coopId, status: 'REJECTED' } }),
+        context.db.userCoopMembership.count({ where: { coopId: input.coopId, status: 'SUSPENDED' } }),
+      ]);
 
-        console.log(`✅ Stats calculated for ${input.coopId}:`, { pending, active, rejected, suspended });
-
-        const result = {
-          pending,
-          active,
-          rejected,
-          suspended,
-          total: pending + active + rejected + suspended,
-        };
-
-        console.log('🎉 getApplicationStats - SUCCESS');
-        console.log('📤 Returning:', result);
-        return result;
-      } catch (error) {
-        console.error('❌ Error in getApplicationStats:', error);
-        throw error;
-      }
+      return {
+        pending,
+        active,
+        rejected,
+        suspended,
+        total: pending + active + rejected + suspended,
+      };
     }),
 
   /**

@@ -13,6 +13,8 @@ const STORAGE_KEYS = {
   SESSION_TOKEN: 'cahootz.sessionToken',
   PROFILE_ONBOARDING_DEFERRED_USER: 'cahootz.profileOnboardingDeferredUser',
   WELCOME_TABLE_INTENT: 'cahootz.welcomeTableIntent',
+  // A commons invitation link opened while signed out, resumed after sign-in.
+  PENDING_INVITATION: 'cahootz.pendingInvitation',
 } as const;
 
 const LEGACY_STORAGE_KEYS = {
@@ -21,6 +23,7 @@ const LEGACY_STORAGE_KEYS = {
   SESSION_TOKEN: 'soulaan.sessionToken',
   PROFILE_ONBOARDING_DEFERRED_USER: 'soulaan.profileOnboardingDeferredUser',
   WELCOME_TABLE_INTENT: 'soulaan.welcomeTableIntent',
+  PENDING_INVITATION: 'soulaan.pendingInvitation',
 } as const;
 
 const WALLET_KEY_PREFIX = 'cahootz.wallet.privateKey';

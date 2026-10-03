@@ -67,7 +67,7 @@ export const DRIP_EMAIL_CTA_LABEL = "Open the app";
  * The Cahootz Commons App Store listing. The id is the app's App Store
  * Connect id, `ascAppId` in apps/mobile/eas.json; update both together.
  */
-export const DEFAULT_MEMBER_APP_LINK_URL = "https://apps.apple.com/app/id6772781102";
+export const DEFAULT_MEMBER_APP_LINK_URL = "https://apps.apple.com/us/app/cahootz-commons/id6772781102";
 
 /**
  * Where the drip email's "Open the app" button goes. The member app is

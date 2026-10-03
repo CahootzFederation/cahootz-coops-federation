@@ -18,6 +18,8 @@ env:
   FORCE_COLOR: 3
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  # CI verifies the checked-in snapshot; deployment builds refresh it from Notion.
+  SKIP_BLOG_SYNC: "true"
   # OpenAI API Key for AI agent tests
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
@@ -30,11 +32,11 @@ jobs:
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
       - name: Install pnpm 10.11.1+
         uses: pnpm/action-setup@v4
         with:
-          version: '10.11.1'
+          version: "10.11.1"
       - name: Check lockfile
         uses: ./tooling/github/lockfile-check
 
@@ -47,11 +49,11 @@ jobs:
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
       - name: Install pnpm 10.11.1+
         uses: pnpm/action-setup@v4
         with:
-          version: '10.11.1'
+          version: "10.11.1"
       - name: Setup
         uses: ./tooling/github/setup
       - name: Copy env
@@ -71,11 +73,11 @@ jobs:
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
       - name: Install pnpm 10.11.1+
         uses: pnpm/action-setup@v4
         with:
-          version: '10.11.1'
+          version: "10.11.1"
       - name: Setup
         uses: ./tooling/github/setup
       - name: Copy env
@@ -92,11 +94,11 @@ jobs:
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
       - name: Install pnpm 10.11.1+
         uses: pnpm/action-setup@v4
         with:
-          version: '10.11.1'
+          version: "10.11.1"
       - name: Setup
         uses: ./tooling/github/setup
       - name: Format
@@ -110,11 +112,11 @@ jobs:
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
       - name: Install pnpm 10.11.1+
         uses: pnpm/action-setup@v4
         with:
-          version: '10.11.1'
+          version: "10.11.1"
       - name: Setup
         uses: ./tooling/github/setup
       - name: Typecheck
@@ -131,11 +133,11 @@ jobs:
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
       - name: Install pnpm 10.11.1+
         uses: pnpm/action-setup@v4
         with:
-          version: '10.11.1'
+          version: "10.11.1"
       - name: Setup
         uses: ./tooling/github/setup
       - name: Copy environment files
@@ -149,7 +151,7 @@ jobs:
         run: pnpm build
       - name: Run all tests
         run: pnpm test
-        timeout-minutes: 30  # Allow extra time for AI agent tests
+        timeout-minutes: 30 # Allow extra time for AI agent tests
 
   # Fifth: Run test coverage (depends on build)
   test-coverage:
@@ -162,11 +164,11 @@ jobs:
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
       - name: Install pnpm 10.11.1+
         uses: pnpm/action-setup@v4
         with:
-          version: '10.11.1'
+          version: "10.11.1"
       - name: Setup
         uses: ./tooling/github/setup
       - name: Copy environment files

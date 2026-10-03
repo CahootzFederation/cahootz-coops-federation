@@ -21,6 +21,7 @@ export const env = createEnv({
     SESSION_SECRET: z.string().min(32).optional(),
     NOTION_TOKEN: z.string().optional(),
     NOTION_BLOG_DATABASE_ID: z.string().optional(),
+    SKIP_BLOG_SYNC: z.enum(["true", "false"]).default("false"),
   },
 
   /**
@@ -48,6 +49,7 @@ export const env = createEnv({
     SESSION_SECRET: process.env.SESSION_SECRET,
     NOTION_TOKEN: process.env.NOTION_TOKEN,
     NOTION_BLOG_DATABASE_ID: process.env.NOTION_BLOG_DATABASE_ID,
+    SKIP_BLOG_SYNC: process.env.SKIP_BLOG_SYNC,
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
     NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID,

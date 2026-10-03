@@ -39,7 +39,10 @@ export function notificationDestination(
       params: id("groupId") ? { groupId: id("groupId")! } : {},
     };
   if (notification.type === "PROPOSAL_DRAFT_READY")
-    return "/(authenticated)/commons-proposal-drafts";
+    return {
+      pathname: "/(authenticated)/commons-proposal-drafts",
+      params: { coopId: id("coopId") || notification.coopId },
+    };
   if (notification.type.startsWith("PERSONAL_PAGE_"))
     return "/(authenticated)/personal-page";
   if (notification.type.startsWith("SAGE_SUGGESTION_") && id("actionId"))
@@ -94,7 +97,7 @@ export function notificationDestination(
   if (id("proposalId"))
     return {
       pathname: "/(authenticated)/proposal-detail",
-      params: { id: id("proposalId")! },
+      params: { id: id("proposalId")!, coopId: id("coopId") || notification.coopId },
     };
   if (id("transactionId") || id("transferId") || id("paymentId"))
     return "/(authenticated)/history";

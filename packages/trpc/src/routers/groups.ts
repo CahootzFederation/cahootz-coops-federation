@@ -731,6 +731,15 @@ export const groupsRouter = router({
         });
       }
 
+      // A circle code never gets anyone into a commons they aren't in; for a
+      // private family that would bypass its invitation rules entirely.
+      if (!(await isCommonsMember(context.db, userId, group.coopId))) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Join this commons before joining its circles.',
+        });
+      }
+
       await context.db.$transaction([
         context.db.groupMember.upsert({
           where: { groupId_userId: { groupId: group.id, userId } },
@@ -1138,6 +1147,13 @@ export const groupsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const context = ctx as AccountAuthenticatedContext;
       const userId = context.accountUser.id;
+
+      if (input.coopId !== 'cahootz' && !(await isCommonsMember(context.db, userId, input.coopId))) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Join this commons before joining its welcome lounge.',
+        });
+      }
 
       const group = await assignWelcomeTable(context.db, input.coopId, userId);
 

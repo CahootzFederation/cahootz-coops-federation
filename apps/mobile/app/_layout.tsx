@@ -14,6 +14,7 @@ import Toast from 'react-native-toast-message';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { NotificationResponseHandler } from '@/components/notification-response-handler';
+import { PendingInvitationResume } from '@/components/pending-invitation-resume';
 import { AnalyticsTracker } from '@/components/analytics-tracker';
 import { AuthProvider } from '@/contexts/auth-context';
 import { CartProvider } from '@/contexts/cart-context';
@@ -136,6 +137,7 @@ export default Sentry.wrap(function RootLayout() {
           <AuthProvider>
             <AnalyticsTracker />
             <NotificationResponseHandler />
+            <PendingInvitationResume />
             <CartProvider>
               <PaymentConfirmationProvider>
                 <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

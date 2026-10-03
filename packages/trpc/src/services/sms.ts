@@ -243,3 +243,33 @@ function formatPhoneForTwilio(phone: string): string {
 
   return `+${cleaned}`;
 }
+
+/**
+ * Send a commons invitation by text. Phone numbers aren't verified in the
+ * app, so the text only helps the recipient find the invitation; accepting
+ * a phone invitation always goes to a steward for review.
+ */
+export async function sendCommonsInvitationSMS(params: {
+  recipientPhone: string;
+  text: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  if (!isTwilioConfigured()) {
+    console.warn('Twilio not configured, skipping commons invitation SMS');
+    return { success: false, error: 'SMS not configured' };
+  }
+
+  try {
+    const result = await getTwilioClient().messages.create({
+      body: params.text,
+      to: formatPhoneForTwilio(params.recipientPhone),
+      from: TWILIO_PHONE_NUMBER,
+    });
+    return { success: true, messageId: result.sid };
+  } catch (error) {
+    console.error('❌ Failed to send commons invitation SMS:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to send SMS',
+    };
+  }
+}

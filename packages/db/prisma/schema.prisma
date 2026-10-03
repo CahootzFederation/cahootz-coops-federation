@@ -104,6 +104,7 @@ model User {
   eventReminders             EventReminder[]
   pinnedPosts                CommonsPost[]             @relation("CommonsPostPinnedBy")
   onboardingDripSends        OnboardingDripSend[]
+  commonsInvitationsSent     CommonsInvitation[]       @relation("CommonsInvitationInviter")
 
   @@index([deletedAt])
   @@schema("public")
@@ -221,10 +222,24 @@ model Application {
   videoCID    String? // Legacy: Introduction video IPFS CID
   documentCID String? // Additional supporting documents (IPFS)
 
+  // "APPLICATION": the commons' normal application (APPLICATION_REQUIRED).
+  // "ACCESS_REQUEST": a request to join an invite-only commons, from a
+  // shareable link or an invitation whose contact didn't verify. Both need a
+  // steward's approval before any membership exists.
+  requestType String @default("APPLICATION")
+
+  // Invitations never admit anyone to an APPLICATION_REQUIRED commons; the
+  // inviter is only recorded as the referral.
+  invitationId     String?
+  invitation       CommonsInvitation? @relation(fields: [invitationId], references: [id], onDelete: SetNull)
+  referredByUserId String?
+
   // Review Process
-  reviewedBy  String?
-  reviewedAt  DateTime?
-  reviewNotes String?
+  reviewedBy       String? // Wallet address (portal review) or user id (in-app steward review)
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  reviewNotes      String?
+  withdrawnAt      DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -232,9 +247,12 @@ model Application {
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // One application per person per commons: a withdrawn or declined one is
+  // reopened rather than duplicated, so there's never more than one pending.
   @@unique([userId, coopId])
   @@index([coopId, status])
   @@index([userId])
+  @@index([invitationId])
   @@schema("public")
 }
 
@@ -293,6 +311,72 @@ enum MembershipStatus {
   @@schema("public")
 }
 
+enum CommonsJoinPolicy {
+  AUTOMATIC // Every account joins (Cahootz Commons only)
+  APPLICATION_REQUIRED // Everyone applies and a steward reviews, even when invited
+  INVITE_ONLY // Private family commons: a verified named invitation grants membership
+
+  @@schema("public")
+}
+
+enum CommonsInvitationPurpose {
+  DIRECT_JOIN // Named, verified recipient may join an INVITE_ONLY commons
+  APPLY // Referral to apply to an APPLICATION_REQUIRED commons
+  REQUEST_ACCESS // Shareable link: opener may only request access
+
+  @@schema("public")
+}
+
+enum CommonsInvitationStatus {
+  PENDING_APPROVAL // A member's recommendation, waiting for a steward before it's sent
+  PENDING // Sent / active
+  ACCEPTED
+  EXPIRED
+  REVOKED
+
+  @@schema("public")
+}
+
+// An invitation to a commons. Named invitations (DIRECT_JOIN, APPLY) carry the
+// recipient's normalized email or phone; shareable REQUEST_ACCESS links carry
+// neither and are reusable until they expire or are revoked. Only a SHA-256
+// hash of the invitation token is stored.
+model CommonsInvitation {
+  id        String                   @id @default(cuid())
+  coopId    String
+  inviterId String
+  inviter   User                     @relation("CommonsInvitationInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  purpose   CommonsInvitationPurpose
+
+  recipientEmailNormalized String?
+  recipientPhoneNormalized String? // E.164
+  recipientName            String? // How the inviter addressed them, e.g. "Grandma"
+  message                  String?
+
+  tokenHash String                  @unique
+  status    CommonsInvitationStatus @default(PENDING)
+  expiresAt DateTime
+
+  approvedByUserId String? // Steward who approved a member's recommendation
+  approvedAt       DateTime?
+  revokedByUserId  String?
+  revokedAt        DateTime?
+  acceptedByUserId String?
+  acceptedAt       DateTime?
+  sentAt           DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applications Application[]
+
+  @@index([coopId, status])
+  @@index([recipientEmailNormalized, status])
+  @@index([recipientPhoneNormalized, status])
+  @@index([inviterId, createdAt])
+  @@schema("public")
+}
+
 // ── Coop Configuration Models ────────────────────────────
 model CoopConfig {
   id       String  @id @default(cuid())
@@ -315,6 +399,10 @@ model CoopConfig {
   displayOrder    Int     @default(0)
   isDemo          Boolean @default(false)
   isPrivate       Boolean @default(false) // Hidden from public listing/onboarding, still reachable by direct coopId
+  // How people become members. AUTOMATIC is only for the Cahootz Commons;
+  // INVITE_ONLY commons (families) are always private. See
+  // packages/trpc/src/services/commons-membership.ts.
+  joinPolicy      CommonsJoinPolicy @default(APPLICATION_REQUIRED)
 
   // Application form configuration
   applicationQuestions Json? // [{ id, type, label, description?, placeholder?, required, options?, validation? }]
@@ -1711,10 +1799,11 @@ enum UserStatus {
 }
 
 enum ApplicationStatus {
-  SUBMITTED
+  SUBMITTED // Pending steward review
   UNDER_REVIEW
   APPROVED
-  REJECTED
+  REJECTED // Declined
+  WITHDRAWN // The applicant took it back
 
   @@schema("public")
 }

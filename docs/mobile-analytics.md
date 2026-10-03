@@ -32,7 +32,7 @@ Leave the key unset in local development, CI and the Playwright suite. With no k
 | `$screen` | same component, on every route change | route pattern |
 | `onboarding_step_viewed` | `app/profile-onboarding.tsx` | `step` (`intro` / `profile` / `circles`), `signed_in` |
 | `onboarding_deferred` | "Skip" on the profile form, "Skip for now" on the circles step | `step`, `signed_in` |
-| `onboarding_completed` | the wizard finished, however the person left it | `exit` (`welcome_lounge` / `explore` / `skip`), `profile_completed`, `signed_in` |
+| `onboarding_completed` | the wizard finished, however the person left it | `exit` (`welcome_lounge` / `general` / `skip` / `invitation`), `profile_completed`, `signed_in` |
 | `welcome_lounge_joined` | onboarding circles step, Circle View's "Join a welcome lounge" card | `source` (`onboarding` / `circle_view`), `auto_joined` |
 | `push_permission_prompted` | `lib/push-notifications.ts`, right before the OS dialog | `source` (`after_onboarding` / `notification_settings` / ...) |
 | `push_permission_result` | after the OS dialog. Only sent when the dialog was actually shown. | `source`, `granted`, `status` (`granted` / `provisional` / `denied` / `undetermined`) |

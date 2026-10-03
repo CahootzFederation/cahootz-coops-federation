@@ -145,8 +145,8 @@ jobs:
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build packages
-        run: pnpm build
+      # No separate `pnpm build`: turbo's test tasks build only the workspace
+      # dependencies they need (see turbo.json / packages/*/turbo.json).
       - name: Run all tests
         run: pnpm test
         timeout-minutes: 30  # Allow extra time for AI agent tests
@@ -176,8 +176,8 @@ jobs:
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build packages
-        run: pnpm build
+      # No separate `pnpm build`: turbo's test tasks build only the workspace
+      # dependencies they need (see turbo.json / packages/*/turbo.json).
       - name: Run test coverage
         run: pnpm test:coverage
         timeout-minutes: 30

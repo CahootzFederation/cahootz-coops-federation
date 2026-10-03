@@ -1,0 +1,14 @@
+{
+  "$schema": "https://turborepo.org/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      "dependsOn": ["@repo/db#db:generate"],
+      "inputs": ["$TURBO_DEFAULT$", "!coverage/**"]
+    },
+    "test:coverage": {
+      "dependsOn": ["@repo/db#db:generate"],
+      "inputs": ["$TURBO_DEFAULT$", "!coverage/**"]
+    }
+  }
+}

@@ -1,6 +1,16 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
+const validatorsSrc = fileURLToPath(new URL('../validators/src/', import.meta.url));
+
 export default defineConfig({
+  resolve: {
+    // Run against @repo/validators source so tests don't need its dist built first.
+    alias: [
+      { find: /^@repo\/validators$/, replacement: `${validatorsSrc}index.ts` },
+      { find: /^@repo\/validators\/(.*)$/, replacement: `${validatorsSrc}$1.ts` },
+    ],
+  },
   test: {
     globals: true,
     environment: 'node',
@@ -17,13 +27,5 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: ['src/**/*.test.ts', 'src/**/*.spec.ts']
     },
-    server: {
-      deps: {
-        inline: [
-          '@openai/agents',
-          '@sashimo/lib'
-        ]
-      }
-    }
   }
 });

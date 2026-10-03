@@ -27,7 +27,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx}\" --ignore-path ../../.gitignore",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:run": "vitest run"
   },
   "prettier": "@repo/prettier-config",

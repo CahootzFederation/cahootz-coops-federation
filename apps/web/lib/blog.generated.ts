@@ -2,6 +2,99 @@ import type { BlogPost } from "./blog";
 
 export const blogPosts: BlogPost[] = [
   {
+    "slug": "from-customers-to-co-owners-a-new-model-for-main-street-businesses",
+    "title": "From Customers to Co-Owners: A New Model for Main Street Businesses",
+    "description": "Ownership changes the relationship.\n\nSo when a customer comes in week on week he changes a core part of you business. The relieve the anxiety of how youre gonna pay the next month...",
+    "excerpt": "Ownership changes the relationship.\n\nSo when a customer comes in week on week he changes a core part of you business. The relieve the anxiety of how youre gonna pay the next month...",
+    "publishedAt": "2026-08-08",
+    "updatedAt": "2026-08-08",
+    "author": "Deon Robinson",
+    "category": "Publishing",
+    "readingTime": "7 min read",
+    "image": "/blog/e2dbda9b0a578fd5.jpg",
+    "imageAlt": "Cahootz blog post image.",
+    "featured": false,
+    "tags": [],
+    "blocks": [
+      {
+        "type": "paragraph",
+        "text": "Ownership changes the relationship."
+      },
+      {
+        "type": "paragraph",
+        "text": "So when a customer comes in week on week he changes a core part of you business. The relieve the anxiety of how youre gonna pay the next month bills. A vendor who is on time and consistant changes you life by relieving the anxiety of having enough goods to sell to you customer to create you livelihood. The same can be said of your supprorters and landlords. You all gain something from consistancy and honesty. Its also a relationship that easily corrupted. When a larger player comes in weather its a larger non local vendor who is more consistent but doesnt invest or hire in the community, or a big nonlocal business who only goal become extracting as much money from each customer. When big player comes in service and stability drop, but the size of the operation relives the anxiety."
+      },
+      {
+        "type": "paragraph",
+        "text": "What Stakeholder Ownership Means"
+      },
+      {
+        "type": "paragraph",
+        "text": "The play is to take the relationships that already keep the business stable and make them stronger.Most small businesses are already built on a few dependable people. The regular customer. The reliable vendor. The worker who knows how the place runs. The landlord who wants the business to stay. The local supporters who tell people to come by. These relationships already create value, but most of the time they stay informal or we have short term loyalty program. But what if we could establish long term sustained loyalty.That is the weakness. If those people leave, get replaced, or get pulled toward a bigger player, the business feels it immediately. Stakeholder ownership is one way to make those relationships more durable.Instead of treating customers, workers, vendors, landlords, and supporters as separate from the business, the business gives them a clearer reason to stay connected to its success. That could mean membership, shared rewards, community investment, preferred terms, or some form of ownership depending on the structure.The point is not to give away control or let everyone run the business. The point is to turn loose support into committed support. For a small business, that can mean more stability, more loyalty, and a stronger defense against larger players who can offer convenience but not real local commitment."
+      },
+      {
+        "type": "paragraph",
+        "text": "We want to layout here is what structures may work and the upside of it."
+      },
+      {
+        "type": "paragraph",
+        "text": "Upside #1: Loyalty Becomes Structural"
+      },
+      {
+        "type": "paragraph",
+        "text": "Most small businesses already depend on loyalty, but that loyalty is usually informal. A customer likes you, a worker respects you, a vendor trusts you, and a supporter believes in what you are building. That matters, but it can disappear quickly. When people have a real stake in the business, they have more reason to keep showing up, recommend it, defend it, and think long term. The relationship is no longer just based on habit or goodwill. It becomes part of the structure of the business. For long term."
+      },
+      {
+        "type": "paragraph",
+        "text": "Upside #2: Trust Gets Easier to Earn"
+      },
+      {
+        "type": "paragraph",
+        "text": "Small businesses ask people to trust them all the time. Trust that the product will be good. Trust that the service will be fair. Trust that the money spent there is doing something better for the community than going to a chain or a platform. But trust is harder to earn when the customer has no real way to see how the business is connected to them.Stakeholder Ownership makes the relationship clearer. It shows that the business is not just trying to extract as much as it can from the people around it. It gives customers, workers, vendors, and supporters a visible role in the business’s future. That makes the business easier to believe in because the structure matches the message."
+      },
+      {
+        "type": "paragraph",
+        "text": "Upside #3: Growth Can Come From People Who Already Believe"
+      },
+      {
+        "type": "paragraph",
+        "text": "A lot of small businesses need money to grow, but the usual options can be hard. Loans add pressure. Outside investors may want control or returns that do not match the pace of the business. Waiting until there is enough cash on hand can mean missing the moment.Stakeholder ownership opens another path. The people who already buy from the business, work in it, supply it, rent to it, or support it may be willing to help fund the next stage because they already understand why it matters. Growth does not have to come only from outsiders. It can come from the people who already want the business to win."
+      },
+      {
+        "type": "paragraph",
+        "text": "Upside #4: Better Feedback, Better Decisions"
+      },
+      {
+        "type": "paragraph",
+        "text": "The people closest to the business often see things early. Customers know what keeps them coming back. Workers know where the process breaks. Vendors know what is changing in supply. Supporters know how the business is talked about in the community.Stakeholder ownership can make those signals easier to hear. When people have a real stake, they are more likely to speak honestly and stay engaged. The business still needs clear leadership, but better information leads to better decisions. It helps the business catch problems sooner and notice opportunities that might otherwise be missed."
+      },
+      {
+        "type": "paragraph",
+        "text": "The Catch: Ownership Has to Be Designed Well"
+      },
+      {
+        "type": "paragraph",
+        "text": "Stakeholder ownership only works if the structure is clear. People need to understand what they are joining, what they get, what voice they have, and what decisions still belong to the business owner or leadership team. Without that clarity, ownership can create confusion instead of stability.The design also has to connect the business to something bigger than itself. One business can benefit from committed customers, workers, vendors, landlords, and supporters, but the real power grows when businesses are connected across a network. If members can support multiple local businesses, vendors can find better local partners, and businesses can share trust across the same ecosystem, ownership becomes more than a single-company tool. It becomes infrastructure for a stronger local economy."
+      },
+      {
+        "type": "paragraph",
+        "text": "Where Cahootz Comes In?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Cahootz helps make stakeholder ownership practical. The idea is simple, but the day-to-day details matter. A business needs a way to manage members, track participation, handle payments, keep records, communicate clearly, and set expectations around governance.Cahootz gives small businesses tools to organize those pieces in one place. It helps turn loose support into a real system, so customers, workers, vendors, landlords, and supporters can participate without creating more confusion for the business owner.Cahootz gives small businesses tools to organize those pieces in one place. It helps turn loose support into a real system, so customers, workers, vendors, landlords, and supporters can participate without creating more confusion for the business owner."
+      },
+      {
+        "type": "paragraph",
+        "text": "Closing: A Stronger Kind of Business Relationship"
+      },
+      {
+        "type": "paragraph",
+        "text": "Letting stakeholders own a piece is not just about being generous. It is a way to make the relationships a small business already depends on more stable, more honest, and more valuable.The regular customer, the reliable worker, the trusted vendor, the supportive landlord, and the local people who want the business to win are already part of the story. Stakeholder ownership gives them a clearer role in the future of the business.For small businesses, that can mean more loyalty, more trust, better feedback, stronger retention, and new ways to grow without losing what made the business matter in the first place.The goal is not to copy big business. The goal is to build a different kind of strength: one rooted in commitment, shared upside, and a local network that becomes harder to replace.`"
+      }
+    ]
+  },
+  {
     "slug": "taxation-with-representation-how-communities-and-co-ops-turn-spending-into-ownership",
     "title": "Taxation with Representation - How Communities and Co-ops  Turn Spending Into Ownership",
     "description": "Why Governments Tax\n\nEveryone pays taxes, from the smallest child to the old man.\n\nEvery time you buy something, you pay sales tax. Every paycheck is taxed. Every business transac...",
@@ -11,14 +104,14 @@ export const blogPosts: BlogPost[] = [
     "author": "Deon Robinson",
     "category": "Technology",
     "readingTime": "7 min read",
-    "image": "https://app.notion.com/images/page-cover/nationalMuseumOfAsianArt_sparrowsFeedingTheirYoung.jpg",
+    "image": "https://app.notion.com/images/page-cover/webb4.jpg",
     "imageAlt": "Cahootz blog post image.",
     "featured": false,
     "tags": [],
     "blocks": [
       {
         "type": "paragraph",
-        "text": "<strong>Why Governments Tax</strong>"
+        "text": "Why Governments Tax"
       },
       {
         "type": "paragraph",
@@ -42,7 +135,7 @@ export const blogPosts: BlogPost[] = [
       },
       {
         "type": "paragraph",
-        "text": "<strong>The Problem Communities Face</strong>"
+        "text": "The Problem Communities Face"
       },
       {
         "type": "paragraph",
@@ -82,7 +175,7 @@ export const blogPosts: BlogPost[] = [
       },
       {
         "type": "paragraph",
-        "text": "<strong>Why Representation Matters</strong>"
+        "text": "Why Representation Matters"
       },
       {
         "type": "paragraph",
@@ -98,7 +191,7 @@ export const blogPosts: BlogPost[] = [
       },
       {
         "type": "paragraph",
-        "text": "<strong>The Cahootz Treasury</strong>"
+        "text": "The Cahootz Treasury"
       },
       {
         "type": "paragraph",
@@ -126,7 +219,7 @@ export const blogPosts: BlogPost[] = [
       },
       {
         "type": "paragraph",
-        "text": "<strong>Taxation With Representation</strong>"
+        "text": "Taxation With Representation"
       },
       {
         "type": "paragraph",
@@ -158,7 +251,7 @@ export const blogPosts: BlogPost[] = [
       },
       {
         "type": "paragraph",
-        "text": "<strong>Why This Matters</strong>"
+        "text": "Why This Matters"
       },
       {
         "type": "paragraph",
@@ -194,7 +287,7 @@ export const blogPosts: BlogPost[] = [
       },
       {
         "type": "paragraph",
-        "text": "<strong>Conclusion</strong>"
+        "text": "Conclusion"
       },
       {
         "type": "paragraph",
@@ -232,11 +325,11 @@ export const blogPosts: BlogPost[] = [
     "description": "If you’ve visited the Bay Area, you’ve seen the ads. Startup ads. And more recently, AI ads. But there’s been one standout ad around San Francisco that has become the hallmark of...",
     "excerpt": "If you’ve visited the Bay Area, you’ve seen the ads. Startup ads. And more recently, AI ads. But there’s been one standout ad around San Francisco that has become the hallmark of...",
     "publishedAt": "2026-05-31",
-    "updatedAt": "2026-06-01",
+    "updatedAt": "2026-06-07",
     "author": "Deon Robinson",
     "category": "Technology",
     "readingTime": "6 min read",
-    "image": "/placeholder.jpg",
+    "image": "https://app.notion.com/images/page-cover/texturelabs_water_135S.jpg",
     "imageAlt": "Cahootz blog post image.",
     "featured": false,
     "tags": [],
@@ -405,11 +498,11 @@ export const blogPosts: BlogPost[] = [
     "description": "I’ve live in San Francisco Bay Area for more that decade. Over that time the cities has gotten older, its gotten richer and gotten more coordinated. A city for good and bad built...",
     "excerpt": "I’ve live in San Francisco Bay Area for more that decade. Over that time the cities has gotten older, its gotten richer and gotten more coordinated. A city for good and bad built...",
     "publishedAt": "2026-05-31",
-    "updatedAt": "2026-06-05",
+    "updatedAt": "2026-06-07",
     "author": "Deon Robinson",
     "category": "Technology",
     "readingTime": "4 min read",
-    "image": "/placeholder.jpg",
+    "image": "https://app.notion.com/images/page-cover/rijksmuseum_jan_lievens_1627.jpg",
     "imageAlt": "Cahootz blog post image.",
     "featured": false,
     "tags": [],
@@ -446,7 +539,7 @@ export const blogPosts: BlogPost[] = [
     "author": "Deon Robinson",
     "category": "Technology",
     "readingTime": "3 min read",
-    "image": "/placeholder.jpg",
+    "image": "https://app.notion.com/images/page-cover/webb3.jpg",
     "imageAlt": "Cahootz blog post image.",
     "featured": false,
     "tags": [],

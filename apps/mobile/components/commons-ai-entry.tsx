@@ -38,6 +38,9 @@ import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { track } from '@/lib/analytics';
+import { useCommonsProposalActions } from '@/hooks/use-commons-proposal-actions';
+import { proposalDraftsHref, proposalHubHref } from '@/lib/proposal-navigation';
 import { mergeFeedPosts, postsForCircle } from '@/lib/circle-feed';
 import {
   composerDestinationNavigation,
@@ -69,6 +72,7 @@ import {
   ChevronDown,
   ChevronRight,
   Compass,
+  FileText,
   Heart,
   Image as ImageIcon,
   Info,
@@ -81,6 +85,7 @@ import {
   Plus,
   Repeat2,
   RotateCcw,
+  Scale,
   Search,
   Send,
   Settings2,
@@ -353,6 +358,7 @@ export default function CommonsAiEntry({
       description: commons.description,
       icon: commons.name.slice(0, 1).toUpperCase(),
       accessStatus: commons.accessStatus,
+      isMember: commons.isMember,
       action: `/${commons.id}/posts`,
     }));
 
@@ -379,6 +385,12 @@ export default function CommonsAiEntry({
       ) || null,
     [commonsDrawerItems, commonsProfile.id],
   );
+  const proposalActions = useCommonsProposalActions({
+    enabled: drawerOpen,
+    coopId: activeDrawerCommons?.id,
+    sessionToken,
+    walletAddress: user?.walletAddress,
+  });
 
   const visibleDrawerSections = useMemo(
     () =>
@@ -399,6 +411,10 @@ export default function CommonsAiEntry({
       )
       .catch((error) => console.warn('Could not load following list:', error));
   }, [hasAccountSession, sessionToken]);
+
+  useEffect(() => {
+    if (drawerOpen) track('commons_tools_drawer_viewed', { signed_in: hasAccountSession });
+  }, [drawerOpen, hasAccountSession]);
 
   useEffect(() => {
     let mounted = true;
@@ -553,21 +569,15 @@ export default function CommonsAiEntry({
   useEffect(() => {
     let mounted = true;
 
-    if (!sessionToken) {
-      setMemberCommons([]);
-      setDirectoryLoaded(true);
-      return () => {
-        mounted = false;
-      };
-    }
-
     setDirectoryLoaded(false);
     api
       .listCommonsDirectory(sessionToken)
       .then((result) => {
         if (!mounted) return;
         setMemberCommons(
-          result.coops.filter((commons) => commons.accessStatus === 'ACTIVE'),
+          result.coops.filter((commons) =>
+            hasAccountSession ? commons.accessStatus === 'ACTIVE' : !commons.isLocked,
+          ),
         );
       })
       .catch((error) => {
@@ -581,7 +591,7 @@ export default function CommonsAiEntry({
     return () => {
       mounted = false;
     };
-  }, [sessionToken]);
+  }, [hasAccountSession, sessionToken]);
 
   useEffect(() => {
     let mounted = true;
@@ -1302,14 +1312,18 @@ export default function CommonsAiEntry({
     });
   };
 
-  const goToDrawerItem = (href: string | null) => {
+  const goToDrawerItem = (href: any) => {
     if (!href) {
       setDrawerOpen(false);
       return;
     }
 
     setDrawerOpen(false);
-    router[drawerNavigationMethod(href)](href as any);
+    if (typeof href === 'string') {
+      router[drawerNavigationMethod(href)](href as any);
+    } else {
+      router.push(href);
+    }
   };
 
   const goToCircleFeed = (coopId: string, circleId: string) => {
@@ -2387,11 +2401,13 @@ export default function CommonsAiEntry({
                                   : '#6B7280',
                             }}
                           >
-                            {item.accessStatus === 'ACTIVE'
-                              ? isActive
-                                ? 'Active Member'
-                                : 'Member'
-                              : 'Pending'}
+                            {item.id === PERSONAL_PAGE_DESTINATION_ID
+                              ? 'Your page'
+                              : hasAccountSession && 'isMember' in item && item.isMember
+                                ? isActive
+                                  ? 'Active Member'
+                                  : 'Member'
+                                : 'Public commons'}
                           </Text>
                         </View>
                         {item.id !== PERSONAL_PAGE_DESTINATION_ID ? (
@@ -2422,6 +2438,115 @@ export default function CommonsAiEntry({
 
               {activeDrawerCommons ? (
                 <>
+                  <Text className="mb-2 mt-4 text-[11px] font-black uppercase tracking-wide text-stone-400">
+                    In {activeDrawerCommons.label}
+                  </Text>
+                  <View className="mb-3 mt-4 overflow-hidden rounded-2xl border border-stone-200 bg-white">
+                    <TouchableOpacity
+                      onPress={() => goToDrawerItem(activeDrawerCommons.action)}
+                      className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
+                      activeOpacity={0.75}
+                      accessibilityLabel={`Open ${activeDrawerCommons.label} conversation`}
+                    >
+                      <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
+                        <MessageCircle size={17} color={SOCIAL_THEME.primary} />
+                      </View>
+                      <View className="min-w-0 flex-1">
+                        <Text className="text-sm font-black text-gray-900">Conversation</Text>
+                        <Text className="text-xs font-semibold text-stone-500">Posts and discussion</Text>
+                      </View>
+                      <ChevronRight size={15} color="#D6D3D1" />
+                    </TouchableOpacity>
+                    {hasAccountSession ? (
+                      <TouchableOpacity
+                        onPress={() => goToDrawerItem(`/(authenticated)/spaces?coopId=${activeDrawerCommons.id}&coopName=${encodeURIComponent(activeDrawerCommons.label)}`)}
+                        className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
+                        activeOpacity={0.75}
+                        accessibilityLabel={`Open ${activeDrawerCommons.label} circles`}
+                      >
+                        <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
+                          <Users size={17} color={SOCIAL_THEME.primary} />
+                        </View>
+                        <View className="min-w-0 flex-1">
+                          <Text className="text-sm font-black text-gray-900">Circles</Text>
+                          <Text className="text-xs font-semibold text-stone-500">Focused member spaces</Text>
+                        </View>
+                        <ChevronRight size={15} color="#D6D3D1" />
+                      </TouchableOpacity>
+                    ) : null}
+                    <TouchableOpacity
+                      onPress={() => {
+                        track('proposal_navigation_opened', {
+                          source: 'drawer', destination: 'hub',
+                          actionable_vote_count: proposalActions.actionableVoteCount,
+                          draft_count: proposalActions.draftCount,
+                        });
+                        goToDrawerItem(proposalHubHref(activeDrawerCommons.id) as any);
+                      }}
+                      className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
+                      activeOpacity={0.75}
+                      accessibilityLabel={`Open ${activeDrawerCommons.label} proposals and votes`}
+                    >
+                      <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
+                        <Scale size={17} color={SOCIAL_THEME.primary} />
+                      </View>
+                      <View className="min-w-0 flex-1">
+                        <Text className="text-sm font-black text-gray-900">
+                          Proposals &amp; Votes
+                        </Text>
+                        <Text className="text-xs font-semibold text-stone-500">
+                          Member decisions and voting
+                        </Text>
+                      </View>
+                      {proposalActions.actionableVoteCount > 0 ? (
+                        <View className="min-w-6 items-center rounded-full bg-orange-600 px-2 py-1">
+                          <Text className="text-[11px] font-black text-white">{proposalActions.actionableVoteCount}</Text>
+                        </View>
+                      ) : null}
+                      <ChevronRight size={15} color="#D6D3D1" />
+                    </TouchableOpacity>
+                    {hasAccountSession ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          track('proposal_navigation_opened', { source: 'drawer', destination: 'drafts', draft_count: proposalActions.draftCount });
+                          goToDrawerItem(proposalDraftsHref(activeDrawerCommons.id, activeDrawerCommons.label) as any);
+                        }}
+                        className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
+                        activeOpacity={0.75}
+                        accessibilityLabel={`Open ${activeDrawerCommons.label} proposal drafts`}
+                      >
+                        <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
+                          <FileText size={17} color={SOCIAL_THEME.primary} />
+                        </View>
+                        <View className="min-w-0 flex-1">
+                          <Text className="text-sm font-black text-gray-900">Drafts</Text>
+                          <Text className="text-xs font-semibold text-stone-500">Continue work in progress</Text>
+                        </View>
+                        {proposalActions.draftCount > 0 ? (
+                          <View className="min-w-6 items-center rounded-full bg-stone-200 px-2 py-1">
+                            <Text className="text-[11px] font-black text-stone-700">{proposalActions.draftCount}</Text>
+                          </View>
+                        ) : null}
+                        <ChevronRight size={15} color="#D6D3D1" />
+                      </TouchableOpacity>
+                    ) : null}
+                    <TouchableOpacity
+                      onPress={() => goToDrawerItem(`/commons/${activeDrawerCommons.id}`)}
+                      className="flex-row items-center gap-2.5 px-3 py-3"
+                      activeOpacity={0.75}
+                      accessibilityLabel={`Open ${activeDrawerCommons.label} information`}
+                    >
+                      <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
+                        <Info size={17} color={SOCIAL_THEME.primary} />
+                      </View>
+                      <View className="min-w-0 flex-1">
+                        <Text className="text-sm font-black text-gray-900">About this commons</Text>
+                        <Text className="text-xs font-semibold text-stone-500">Purpose, membership, and details</Text>
+                      </View>
+                      <ChevronRight size={15} color="#D6D3D1" />
+                    </TouchableOpacity>
+                  </View>
+
                   <View className="mb-2 mt-4 flex-row items-center justify-between">
                     <Text className="text-[11px] font-black uppercase tracking-wide text-stone-400">
                       Circles in this common

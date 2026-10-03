@@ -1,6 +1,6 @@
 import { Platform, useWindowDimensions } from "react-native";
 import { Tabs } from "expo-router";
-import { Bell, LayoutGrid, Scale, Store, UserCircle } from "lucide-react-native";
+import { Bell, LayoutGrid, Store, UserCircle } from "lucide-react-native";
 
 export default function TabLayout() {
   const { fontScale } = useWindowDimensions();
@@ -59,13 +59,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="proposals"
-        options={{
-          title: "Proposals",
-          tabBarIcon: ({ color, size }) => <Scale size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="wallet"
         options={{
           title: "You",
@@ -77,6 +70,7 @@ export default function TabLayout() {
 
       {/* ===== HIDDEN - Not ready yet ===== */}
       <Tabs.Screen name="messages" options={{ href: null }} />
+      <Tabs.Screen name="proposals" options={{ href: null }} />
       <Tabs.Screen name="proposal-detail" options={{ href: null }} />
       <Tabs.Screen name="community" options={{ href: null }} />
       <Tabs.Screen name="explore" options={{ href: null }} />

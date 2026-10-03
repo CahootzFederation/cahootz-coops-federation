@@ -4337,6 +4337,24 @@ export const api = {
     );
   },
 
+  async getProposalActionSummary(coopId: string, walletAddress: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/proposal.myActionSummary?input=${input}`,
+      {
+        headers: {
+          ...createApiHeaders(walletAddress),
+          'x-coop-id': coopId,
+        },
+      },
+    );
+    return readTrpcResult<{
+      canVote: true;
+      actionableVoteCount: number;
+      actionableProposalIds: string[];
+    }>(response, 'Could not load proposal actions');
+  },
+
   async saveCommonsProposalDraft(draftId: string, title: string, body: string, sessionToken: string) {
     const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.updateMyProposalDraft`, {
       method: 'POST', headers: createApiHeaders(null, sessionToken),
@@ -4749,10 +4767,14 @@ export const api = {
     proposalId: string,
     vote: 'FOR' | 'AGAINST' | 'ABSTAIN',
     walletAddress: string,
+    coopId: string,
   ) {
     const response = await fetch(`${API_BASE_URL}/trpc/proposal.councilVote`, {
       method: 'POST',
-      headers: createApiHeaders(walletAddress),
+      headers: {
+        ...createApiHeaders(walletAddress),
+        'x-coop-id': coopId,
+      },
       body: JSON.stringify({ proposalId, vote }),
     });
     const result = await response.json();

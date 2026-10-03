@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleEllipsis,
+  FileText,
   Menu,
   MessageCircle,
   PencilLine,
@@ -18,6 +19,9 @@ import {
 import { Text } from '@/components/ui/text';
 import { api, type CommonsDirectoryItem, type ProposalSummary } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import { useCommonsProposalActions } from '@/hooks/use-commons-proposal-actions';
+import { track } from '@/lib/analytics';
+import { proposalDetailHref, proposalDraftsHref } from '@/lib/proposal-navigation';
 import { SubmitModal } from '../(authenticated)/proposals';
 
 const PRIMARY = '#FF6B00';
@@ -29,7 +33,7 @@ const DEFAULT_COMMONS: CommonsDirectoryItem = {
   shortName: 'Commons',
   description: 'Shared proposals and member decisions.',
   accessStatus: 'ACTIVE',
-  isMember: true,
+  isMember: false,
   isLocked: false,
   canApply: false,
 };
@@ -80,7 +84,7 @@ function timeAgo(dateString: string) {
 export default function ProposalsScreen() {
   const params = useLocalSearchParams<{ coopId?: string; submit?: string }>();
   const insets = useSafeAreaInsets();
-  const { sessionToken, user } = useAuth();
+  const { isAuthenticated, sessionToken, user } = useAuth();
   const [commons, setCommons] = useState<CommonsDirectoryItem[]>([DEFAULT_COMMONS]);
   const [selectedCommonsId, setSelectedCommonsId] = useState(params.coopId || DEFAULT_COMMONS.id);
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -89,29 +93,40 @@ export default function ProposalsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [showActionableOnly, setShowActionableOnly] = useState(false);
   const shouldOpenSubmit = params.submit === '1' || params.submit === 'true';
 
   const selectedCommons = useMemo(
     () => commons.find((item) => item.id === selectedCommonsId) || commons[0] || DEFAULT_COMMONS,
     [commons, selectedCommonsId]
   );
+  const proposalActions = useCommonsProposalActions({
+    enabled: true,
+    coopId: selectedCommons?.id,
+    sessionToken,
+    walletAddress: user?.walletAddress,
+  });
+  const visibleProposals = useMemo(
+    () => showActionableOnly
+      ? proposals.filter((proposal) => proposalActions.actionableProposalIds.includes(proposal.id))
+      : proposals,
+    [proposalActions.actionableProposalIds, proposals, showActionableOnly],
+  );
+
+  useEffect(() => {
+    track('proposal_hub_viewed', { signed_in: isAuthenticated });
+  }, [isAuthenticated, selectedCommonsId]);
 
   useEffect(() => {
     let mounted = true;
-
-    if (!sessionToken) {
-      setCommons([DEFAULT_COMMONS]);
-      setSelectedCommonsId(DEFAULT_COMMONS.id);
-      return () => {
-        mounted = false;
-      };
-    }
 
     api
       .listCommonsDirectory(sessionToken)
       .then((result) => {
         if (!mounted) return;
-        const activeCommons = result.coops.filter((item) => item.accessStatus === 'ACTIVE');
+        const activeCommons = result.coops.filter((item) =>
+          sessionToken ? item.accessStatus === 'ACTIVE' : !item.isLocked,
+        );
         const nextCommons = activeCommons.length > 0 ? activeCommons : [DEFAULT_COMMONS];
         setCommons(nextCommons);
         setSelectedCommonsId((current) =>
@@ -165,12 +180,20 @@ export default function ProposalsScreen() {
   }, [shouldOpenSubmit, user?.walletAddress]);
 
   const handleOpenSubmit = useCallback(() => {
+    if (!isAuthenticated) {
+      router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
+      return;
+    }
+    if (!selectedCommons.isMember) {
+      router.push(`/commons/${selectedCommons.id}` as any);
+      return;
+    }
     if (!user?.walletAddress) {
-      setError('Add or connect your wallet before submitting a proposal.');
+      router.push('/(tabs)/wallet' as any);
       return;
     }
     setShowSubmit(true);
-  }, [user?.walletAddress]);
+  }, [isAuthenticated, selectedCommons.id, selectedCommons.isMember, user?.walletAddress]);
 
   const handleSubmitClose = useCallback(() => {
     setShowSubmit(false);
@@ -199,11 +222,15 @@ export default function ProposalsScreen() {
             <View className="min-w-0 flex-1">
               <View className="flex-row items-center gap-1.5">
                 <Text className="min-w-0 text-base font-black text-gray-950" numberOfLines={1}>
-                  Proposals
+                  Proposals &amp; Votes
                 </Text>
-                <View className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5">
-                  <Text className="text-[10px] font-black text-emerald-600">Member</Text>
-                </View>
+                {isAuthenticated ? (
+                  <View className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5">
+                    <Text className="text-[10px] font-black text-emerald-600">
+                      {selectedCommons.isMember ? 'Member' : 'View only'}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
               <TouchableOpacity
                 onPress={() => setSwitcherOpen(true)}
@@ -255,7 +282,15 @@ export default function ProposalsScreen() {
                 <PencilLine size={20} color="white" />
               </View>
               <View className="flex-1">
-                <Text className="font-black text-white">Submit from chat</Text>
+                <Text className="font-black text-white">
+                  {!isAuthenticated
+                    ? 'Sign in to propose'
+                    : !selectedCommons.isMember
+                      ? 'Join this commons to propose'
+                      : !user?.walletAddress
+                        ? 'Connect wallet to propose'
+                        : 'Start a proposal'}
+                </Text>
                 <Text className="mt-1 text-sm leading-5 text-white/80">
                   Commons AI can draft the need, options, people, budget, and vote language.
                 </Text>
@@ -263,6 +298,52 @@ export default function ProposalsScreen() {
               <Plus size={20} color="white" />
             </View>
           </TouchableOpacity>
+
+          {isAuthenticated ? (
+            <TouchableOpacity
+              onPress={() => {
+                track('proposal_navigation_opened', {
+                  source: 'proposal_hub', destination: 'drafts', draft_count: proposalActions.draftCount,
+                });
+                router.push(proposalDraftsHref(selectedCommons.id, selectedCommons.name) as any);
+              }}
+              className="mt-3 flex-row items-center gap-3 rounded-2xl border border-stone-200 bg-white p-4"
+              activeOpacity={0.75}
+              accessibilityLabel={`Continue proposal drafts in ${selectedCommons.name}`}
+            >
+              <View className="h-10 w-10 items-center justify-center rounded-xl bg-stone-100">
+                <FileText size={19} color={PRIMARY} />
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text className="font-black text-gray-950">Continue drafts</Text>
+                <Text className="mt-0.5 text-sm text-gray-500">
+                  {proposalActions.draftCount > 0
+                    ? `${proposalActions.draftCount} ${proposalActions.draftCount === 1 ? 'draft' : 'drafts'} in this commons`
+                    : 'No saved drafts in this commons'}
+                </Text>
+              </View>
+              <ChevronDown size={17} color="#78716C" style={{ transform: [{ rotate: '-90deg' }] }} />
+            </TouchableOpacity>
+          ) : null}
+
+          {proposalActions.canVote ? (
+            <TouchableOpacity
+              onPress={() => setShowActionableOnly((current) => !current)}
+              className="mt-3 flex-row items-center justify-between rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3"
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityState={{ selected: showActionableOnly }}
+              accessibilityLabel={`${proposalActions.actionableVoteCount} proposals need your vote`}
+            >
+              <View className="flex-row items-center gap-2">
+                <Vote size={18} color={PRIMARY} />
+                <Text className="font-black text-orange-900">
+                  {proposalActions.actionableVoteCount} need your vote
+                </Text>
+              </View>
+              <Text className="text-xs font-black text-orange-700">{showActionableOnly ? 'Show all' : 'Review'}</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {error ? (
             <View className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
@@ -275,24 +356,31 @@ export default function ProposalsScreen() {
               <ActivityIndicator size="large" color={PRIMARY} />
               <Text className="mt-3 text-sm font-semibold text-gray-500">Loading proposals...</Text>
             </View>
-          ) : proposals.length === 0 ? (
+          ) : visibleProposals.length === 0 ? (
             <View className="mt-5 rounded-[28px] border border-dashed border-stone-300 bg-white p-6">
               <View className="mb-4 h-14 w-14 items-center justify-center rounded-2xl bg-orange-50">
                 <Vote size={26} color={PRIMARY} />
               </View>
-              <Text className="text-xl font-black text-gray-950">No proposals yet</Text>
+              <Text className="text-xl font-black text-gray-950">
+                {showActionableOnly ? 'You are caught up' : 'No proposals yet'}
+              </Text>
               <Text className="mt-2 text-base leading-6 text-gray-600">
-                Proposals created inside {selectedCommons.name} will show here once they are ready for review.
+                {showActionableOnly
+                  ? `There are no proposals waiting for your vote in ${selectedCommons.name}.`
+                  : `Proposals created inside ${selectedCommons.name} will show here once they are ready for review.`}
               </Text>
             </View>
           ) : (
             <View className="mt-5 gap-3">
-              {proposals.map((proposal) => {
+              {visibleProposals.map((proposal) => {
                 const budget = formatBudget(proposal);
                 return (
                   <TouchableOpacity
                     key={proposal.id}
-                    onPress={() => router.push(`/(tabs)/proposal-detail?id=${proposal.id}` as any)}
+                    onPress={() => {
+                      track('proposal_navigation_opened', { source: 'proposal_hub', destination: 'detail' });
+                      router.push(proposalDetailHref(proposal.id, selectedCommons.id) as any);
+                    }}
                     className="rounded-2xl border bg-white p-4"
                     style={{ borderColor: BORDER }}
                     activeOpacity={0.75}

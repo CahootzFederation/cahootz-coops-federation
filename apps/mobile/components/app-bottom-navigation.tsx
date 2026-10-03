@@ -1,5 +1,5 @@
 import { router, useSegments } from 'expo-router';
-import { Bell, LayoutGrid, Scale, Store, UserCircle } from 'lucide-react-native';
+import { Bell, LayoutGrid, Store, UserCircle } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -10,7 +10,6 @@ const destinations = [
   { label: 'Commons', href: '/(tabs)' as const, icon: LayoutGrid },
   { label: 'Shop', href: '/(tabs)/store' as const, icon: Store },
   { label: 'Alerts', href: '/(tabs)/notifications' as const, icon: Bell },
-  { label: 'Proposals', href: '/(tabs)/proposals' as const, icon: Scale },
   { label: 'You', href: '/(tabs)/wallet' as const, icon: UserCircle },
 ];
 
@@ -30,9 +29,7 @@ export function AppBottomNavigation() {
   const screen: string = segments[segments.length - 1] || '';
   const active = screen === 'notifications' || screen === 'notification-settings'
     ? 'Alerts'
-    : screen === 'proposals' || screen === 'proposal-detail'
-      ? 'Proposals'
-      : ['store', 'store-detail', 'cart', 'checkout'].includes(screen)
+    : ['store', 'store-detail', 'cart', 'checkout'].includes(screen)
         ? 'Shop'
       : ['wallet', 'profile', 'personal-page', 'profile-onboarding', 'export-wallet', 'withdraw'].includes(screen)
         ? 'You'

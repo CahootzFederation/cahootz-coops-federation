@@ -6,7 +6,7 @@
   "scripts": {
     "blog:sync": "tsx ./scripts/sync-notion-blog.ts",
     "validate-env": "tsx ./scripts/validate-env.ts",
-    "build": "pnpm run validate-env && next build",
+    "build": "pnpm run validate-env && pnpm run blog:sync && next build",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",

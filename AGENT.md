@@ -1,6 +1,6 @@
 # 🤖 AI Agent Guidelines for Cahootz Co-ops Development
 
-**Version 1.1 - Last Updated: January 28, 2026**
+**Version 1.2 - Last Updated: October 3, 2026**
 
 This document guides AI agents working on the Cahootz Co-ops platform. Every code change, feature, and architectural decision must align with our mission, security requirements, and charter principles.
 
@@ -18,6 +18,96 @@ Cahootz Co-ops exists to help cooperative organizations remain healthy, honest, 
 **What a co-op chooses to do with that stability is up to its members. Our job is to make sure the foundation holds.**
 
 **Every action must serve this mission. Any feature, code, or design that deviates from it should be questioned.**
+
+---
+
+## Sage — Constitutional Operating Agent
+
+Sage is not merely a chatbot. Sage is a persistent, proactive operating agent that helps each Commons identify needs, form proposals, connect members, surface risks, and follow work through to completion.
+
+### Product Direction
+
+When implementing Sage, move the system toward these capabilities:
+
+1. Observe Commons and circle activity without requiring an explicit mention.
+2. State conclusions directly and recommend concrete actions.
+3. Suggest or draft useful comments, posts, events, alerts, and organization-level proposals.
+4. Route alerts to the responsible member, circle leader, administrator, or leadership role.
+5. Remember prior suggestions, member corrections, approvals, rejections, commitments, and outcomes.
+6. Follow up on accepted actions and verify whether the intended result occurred.
+7. Operate continuously through event-driven work, scheduled reviews, and durable state.
+8. Keep inference and operating costs visible, bounded, and configurable.
+
+### Communication Standard
+
+Sage must be candid, concise, and specific.
+
+- State the conclusion first.
+- Take a position when evidence supports one.
+- Give the strongest reasons.
+- Recommend a concrete next step.
+- Do not manufacture balance when one option is clearly worse.
+- Do not use vague hedging to appear agreeable.
+- When evidence is insufficient, state exactly what is missing.
+- Clearly distinguish verified facts, reasonable inferences, and uncertainty.
+- Never claim an action was completed unless the system verified it.
+
+### Autonomy Boundaries
+
+Sage may automatically perform low-risk, reversible actions authorized by Commons policy, including recording observations, offering grounded comments, sending appropriate alerts, and requesting clarification.
+
+Sage must obtain the required member or leadership approval before:
+
+- submitting a proposal;
+- publishing a sensitive or high-impact accusation;
+- committing organizational funds;
+- changing membership or roles;
+- making governance decisions;
+- executing an on-chain transaction;
+- taking disciplinary action;
+- performing an irreversible external action.
+
+The model recommends actions. Deterministic code enforces authorization, permissions, budgets, idempotency, and governance rules.
+
+### Memory Requirements
+
+Sage memory must be durable, scoped, bounded, and auditable.
+
+- Reuse existing `CommonsAction`, `CommonsActionReview`, `CommonsActionAudit`, and `AIObservation` records where appropriate.
+- Remember outcomes and corrections, not unlimited conversation transcripts.
+- Never treat an AI-generated memory as verified truth.
+- Store source references, confidence, visibility, expiry, and verification state.
+- Do not expose private-circle or member-specific memory outside its authorized scope.
+- Keep prompts bounded by retrieving only relevant recent memory.
+
+### Cost Requirements
+
+Every autonomous Sage feature must:
+
+- use the least expensive model capable of doing the task reliably;
+- batch compatible observations;
+- limit prompt and output size;
+- avoid repeating analysis of unchanged content;
+- reuse deterministic rules before calling a model;
+- record token usage and estimated cost;
+- respect per-Commons monthly dollar and call-count limits;
+- stop autonomous calls when a limit is reached without blocking ordinary member workflows;
+- expose spending and limit status to members or authorized administrators.
+
+### Evaluation Requirements
+
+Do not judge Sage only by how often it produces output. Measure:
+
+- suggestion acceptance rate;
+- incorrect or unnecessary alert rate;
+- repeated-suggestion rate;
+- completed-action rate;
+- charter-grounding accuracy;
+- member corrections;
+- cost per accepted action;
+- cost per completed outcome.
+
+When working on Sage, read and update `docs/sage-roadmap.md`. Advance the highest-priority incomplete milestone that is within the user's request. Do not silently broaden the task into unrelated Sage work.
 
 ---
 
@@ -543,4 +633,5 @@ If you encounter a situation not covered in this guide:
 **This is a living document. Update it as the project evolves and new patterns emerge.**
 
 **Version History:**
+- v1.2 (2026-10-03): Add Sage constitutional operating-agent direction, autonomy boundaries, memory rules, cost controls, and evaluation requirements
 - v1.0 (2026-06-13): Create Cahootz Repo

@@ -1,8 +1,8 @@
-import { config as loadDotenv } from "dotenv";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { config as loadDotenv } from "dotenv";
 
 import type { BlogPost, BlogPostBlock } from "../lib/blog";
 
@@ -138,6 +138,12 @@ loadDotenv({ path: resolve(webDir, ".env"), override: true });
 loadDotenv({ path: resolve(webDir, ".env.local"), override: true });
 
 const { env } = await import("../env");
+
+if (env.SKIP_BLOG_SYNC === "true") {
+  console.log("Skipping Notion blog sync because SKIP_BLOG_SYNC=true.");
+  process.exit(0);
+}
+
 const token = env.NOTION_TOKEN;
 const databaseId = env.NOTION_BLOG_DATABASE_ID;
 
@@ -160,56 +166,65 @@ async function notionFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Notion request failed (${response.status} ${response.statusText}): ${body}`);
+    throw new Error(
+      `Notion request failed (${response.status} ${response.statusText}): ${body}`,
+    );
   }
 
   return response.json() as Promise<T>;
 }
 
 function plainText(richText?: NotionRichText[]): string {
-  return richText?.map((text) => text.plain_text ?? "").join("").trim() ?? "";
+  return (
+    richText
+      ?.map((text) => text.plain_text ?? "")
+      .join("")
+      .trim() ?? ""
+  );
 }
 
 function richTextToHtml(richText?: NotionRichText[]): string {
   if (!richText || richText.length === 0) return "";
-  
-  return richText.map((segment) => {
-    let content = segment.plain_text ?? "";
-    const annotations = segment.annotations;
-    
-    // Escape HTML to prevent XSS
-    content = content
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-    
-    // Apply formatting
-    if (annotations?.code) {
-      content = `<code class="notion-code">${content}</code>`;
-    }
-    if (annotations?.bold) {
-      content = `<strong>${content}</strong>`;
-    }
-    if (annotations?.italic) {
-      content = `<em>${content}</em>`;
-    }
-    if (annotations?.strikethrough) {
-      content = `<s>${content}</s>`;
-    }
-    if (annotations?.underline) {
-      content = `<u>${content}</u>`;
-    }
-    
-    // Handle links
-    const link = segment.text?.link?.url || segment.href;
-    if (link) {
-      content = `<a href="${link}" target="_blank" rel="noopener noreferrer">${content}</a>`;
-    }
-    
-    return content;
-  }).join("");
+
+  return richText
+    .map((segment) => {
+      let content = segment.plain_text ?? "";
+      const annotations = segment.annotations;
+
+      // Escape HTML to prevent XSS
+      content = content
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+      // Apply formatting
+      if (annotations?.code) {
+        content = `<code class="notion-code">${content}</code>`;
+      }
+      if (annotations?.bold) {
+        content = `<strong>${content}</strong>`;
+      }
+      if (annotations?.italic) {
+        content = `<em>${content}</em>`;
+      }
+      if (annotations?.strikethrough) {
+        content = `<s>${content}</s>`;
+      }
+      if (annotations?.underline) {
+        content = `<u>${content}</u>`;
+      }
+
+      // Handle links
+      const link = segment.text?.link?.url || segment.href;
+      if (link) {
+        content = `<a href="${link}" target="_blank" rel="noopener noreferrer">${content}</a>`;
+      }
+
+      return content;
+    })
+    .join("");
 }
 
 function property(
@@ -229,7 +244,10 @@ function property(
   }
 }
 
-function textProperty(properties: Record<string, NotionProperty>, names: string[]): string {
+function textProperty(
+  properties: Record<string, NotionProperty>,
+  names: string[],
+): string {
   const prop = property(properties, names);
   if (!prop) return "";
 
@@ -238,14 +256,23 @@ function textProperty(properties: Record<string, NotionProperty>, names: string[
   if (prop.type === "select") return prop.select?.name ?? "";
   if (prop.type === "status") return prop.status?.name ?? "";
   if (prop.type === "url") return prop.url ?? "";
-  if (prop.type === "people") return prop.people?.map((person) => person.name).filter(Boolean).join(", ") ?? "";
+  if (prop.type === "people")
+    return (
+      prop.people
+        ?.map((person) => person.name)
+        .filter(Boolean)
+        .join(", ") ?? ""
+    );
   if (prop.type === "created_time") return prop.created_time ?? "";
   if (prop.type === "last_edited_time") return prop.last_edited_time ?? "";
 
   return "";
 }
 
-function dateProperty(properties: Record<string, NotionProperty>, names: string[]): string {
+function dateProperty(
+  properties: Record<string, NotionProperty>,
+  names: string[],
+): string {
   const prop = property(properties, names);
   return prop?.type === "date" ? (prop.date?.start ?? "") : "";
 }
@@ -261,8 +288,10 @@ function checkboxProperty(
 function tagsProperty(properties: Record<string, NotionProperty>): string[] {
   const prop = property(properties, ["Tags", "Tag"]);
   if (!prop) return [];
-  if (prop.type === "multi_select") return prop.multi_select?.map((tag) => tag.name ?? "") ?? [];
-  if (prop.type === "select") return prop.select?.name ? [prop.select.name] : [];
+  if (prop.type === "multi_select")
+    return prop.multi_select?.map((tag) => tag.name ?? "") ?? [];
+  if (prop.type === "select")
+    return prop.select?.name ? [prop.select.name] : [];
   return textProperty(properties, ["Tags", "Tag"])
     .split(",")
     .map((tag) => tag.trim())
@@ -276,14 +305,20 @@ interface ResolvedImage {
 }
 
 function imageProperty(page: NotionPage): ResolvedImage {
-  const prop = property(page.properties, ["Image", "Cover", "Hero Image", "Image URL"]);
+  const prop = property(page.properties, [
+    "Image",
+    "Cover",
+    "Hero Image",
+    "Image URL",
+  ]);
   if (prop?.type === "url" && prop.url) return { url: prop.url, hosted: false };
   if (prop?.type === "files") {
     const file = prop.files?.[0];
     if (file?.external?.url) return { url: file.external.url, hosted: false };
     if (file?.file?.url) return { url: file.file.url, hosted: true };
   }
-  if (page.cover?.external?.url) return { url: page.cover.external.url, hosted: false };
+  if (page.cover?.external?.url)
+    return { url: page.cover.external.url, hosted: false };
   if (page.cover?.file?.url) return { url: page.cover.file.url, hosted: true };
   return { url: DEFAULT_IMAGE, hosted: false };
 }
@@ -397,7 +432,9 @@ async function listBlocks(pageId: string): Promise<NotionBlock[]> {
   return blocks;
 }
 
-async function blocksFromNotion(blocks: NotionBlock[]): Promise<BlogPostBlock[]> {
+async function blocksFromNotion(
+  blocks: NotionBlock[],
+): Promise<BlogPostBlock[]> {
   const output: BlogPostBlock[] = [];
   let listItems: string[] = [];
 
@@ -409,7 +446,10 @@ async function blocksFromNotion(blocks: NotionBlock[]): Promise<BlogPostBlock[]>
   };
 
   for (const block of blocks) {
-    if (block.type !== "bulleted_list_item" && block.type !== "numbered_list_item") {
+    if (
+      block.type !== "bulleted_list_item" &&
+      block.type !== "numbered_list_item"
+    ) {
       flushList();
     }
 
@@ -418,7 +458,8 @@ async function blocksFromNotion(blocks: NotionBlock[]): Promise<BlogPostBlock[]>
         const source = block.image;
         const rawUrl = source?.external?.url ?? source?.file?.url ?? "";
         if (!rawUrl) break;
-        const hosted = source?.type !== "external" && Boolean(source?.file?.url);
+        const hosted =
+          source?.type !== "external" && Boolean(source?.file?.url);
         const url = await resolveImage({ url: rawUrl, hosted });
         const caption = plainText(source?.caption);
         output.push({
@@ -433,13 +474,22 @@ async function blocksFromNotion(blocks: NotionBlock[]): Promise<BlogPostBlock[]>
         pushParagraph(output, richTextToHtml(block.paragraph?.rich_text));
         break;
       case "heading_1":
-        output.push({ type: "heading", text: richTextToHtml(block.heading_1?.rich_text) });
+        output.push({
+          type: "heading",
+          text: richTextToHtml(block.heading_1?.rich_text),
+        });
         break;
       case "heading_2":
-        output.push({ type: "heading", text: richTextToHtml(block.heading_2?.rich_text) });
+        output.push({
+          type: "heading",
+          text: richTextToHtml(block.heading_2?.rich_text),
+        });
         break;
       case "heading_3":
-        output.push({ type: "heading", text: richTextToHtml(block.heading_3?.rich_text) });
+        output.push({
+          type: "heading",
+          text: richTextToHtml(block.heading_3?.rich_text),
+        });
         break;
       case "quote": {
         const text = richTextToHtml(block.quote?.rich_text);
@@ -463,16 +513,26 @@ async function blocksFromNotion(blocks: NotionBlock[]): Promise<BlogPostBlock[]>
 
 async function pageToPost(page: NotionPage): Promise<BlogPost> {
   const properties = page.properties;
-  const contentBrief = textProperty(properties, ["Content Brief", "Content", "Body"]);
+  const contentBrief = textProperty(properties, [
+    "Content Brief",
+    "Content",
+    "Body",
+  ]);
   const childBlocks = await blocksFromNotion(await listBlocks(page.id));
-  const blocks = childBlocks.length > 0 ? childBlocks : blocksFromPlainText(contentBrief);
+  const blocks =
+    childBlocks.length > 0 ? childBlocks : blocksFromPlainText(contentBrief);
   const title = textProperty(properties, ["Title", "Name"]);
   const description =
-    textProperty(properties, ["Description", "Summary"]) || truncate(contentBrief, 180);
+    textProperty(properties, ["Description", "Summary"]) ||
+    truncate(contentBrief, 180);
   const excerpt = textProperty(properties, ["Excerpt"]) || description;
   const publishedAt = isoDate(
-    dateProperty(properties, ["Publish Date", "Published At", "Published", "Date"]) ||
-      page.created_time,
+    dateProperty(properties, [
+      "Publish Date",
+      "Published At",
+      "Published",
+      "Date",
+    ]) || page.created_time,
   );
 
   return {
@@ -481,12 +541,17 @@ async function pageToPost(page: NotionPage): Promise<BlogPost> {
     description,
     excerpt,
     publishedAt,
-    updatedAt: isoDate(dateProperty(properties, ["Last Updated"]) || page.last_edited_time),
+    updatedAt: isoDate(
+      dateProperty(properties, ["Last Updated"]) || page.last_edited_time,
+    ),
     author: textProperty(properties, ["Author"]) || DEFAULT_AUTHOR,
     category: textProperty(properties, ["Category"]) || DEFAULT_CATEGORY,
-    readingTime: textProperty(properties, ["Reading Time"]) || estimateReadingTime(blocks),
+    readingTime:
+      textProperty(properties, ["Reading Time"]) || estimateReadingTime(blocks),
     image: await resolveImage(imageProperty(page)),
-    imageAlt: textProperty(properties, ["Image Alt", "ImageAlt", "Alt"]) || DEFAULT_IMAGE_ALT,
+    imageAlt:
+      textProperty(properties, ["Image Alt", "ImageAlt", "Alt"]) ||
+      DEFAULT_IMAGE_ALT,
     featured: checkboxProperty(properties, ["Featured"]) ?? false,
     tags: tagsProperty(properties),
     blocks,
@@ -495,7 +560,10 @@ async function pageToPost(page: NotionPage): Promise<BlogPost> {
 
 const posts = (await Promise.all((await listPages()).map(pageToPost)))
   .filter((post) => post.title && post.slug)
-  .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+  .sort(
+    (a, b) =>
+      new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
+  );
 
 const generated = `import type { BlogPost } from "./blog";
 
@@ -504,4 +572,6 @@ export const blogPosts: BlogPost[] = ${JSON.stringify(posts, null, 2)};
 
 await writeFile(resolve(webDir, "lib/blog.generated.ts"), generated);
 
-console.log(`Synced ${posts.length} Notion blog post${posts.length === 1 ? "" : "s"}.`);
+console.log(
+  `Synced ${posts.length} Notion blog post${posts.length === 1 ? "" : "s"}.`,
+);

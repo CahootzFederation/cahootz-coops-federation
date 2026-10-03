@@ -15,6 +15,24 @@ export function notificationDestination(
       pathname: "/(authenticated)/spaces",
       params: { coopId: id("coopId") || notification.coopId },
     };
+  if (notification.type === "COMMONS_INVITATION" && id("invitationId"))
+    return {
+      pathname: "/invitations/[invitationId]",
+      params: { invitationId: id("invitationId")! },
+    };
+  if (
+    notification.type === "COMMONS_ACCESS_REQUEST" ||
+    notification.type === "COMMONS_RECOMMENDATION"
+  )
+    return {
+      pathname: "/(authenticated)/commons-invites",
+      params: { coopId: id("coopId") || notification.coopId },
+    };
+  if (notification.type === "COMMONS_ACCESS_DECLINED")
+    return {
+      pathname: "/commons/[coopId]",
+      params: { coopId: id("coopId") || notification.coopId },
+    };
   if (notification.type === "DIRECT_MESSAGE")
     return {
       pathname: "/(tabs)/messages",
@@ -80,5 +98,13 @@ export function notificationDestination(
     };
   if (id("transactionId") || id("transferId") || id("paymentId"))
     return "/(authenticated)/history";
+  // Joined a commons (approved request, accepted invitation) with no
+  // welcome post to open: its feed.
+  if (
+    (notification.type === "COMMONS_ACCESS_APPROVED" ||
+      notification.type === "COMMONS_INVITATION_ACCEPTED") &&
+    id("coopId")
+  )
+    return { pathname: "/[coopId]/posts", params: { coopId: id("coopId")! } };
   return null;
 }

@@ -24,6 +24,46 @@ describe("notification destinations", () => {
       }),
     ).toBeNull();
   });
+  it("opens commons invitations and steward requests in their screens", () => {
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "COMMONS_INVITATION",
+        data: { invitationId: "inv_1" },
+      }),
+    ).toEqual({
+      pathname: "/invitations/[invitationId]",
+      params: { invitationId: "inv_1" },
+    });
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "COMMONS_ACCESS_REQUEST",
+        coopId: "family-abc",
+        data: { coopId: "family-abc", applicationId: "app_1" },
+      }),
+    ).toEqual({
+      pathname: "/(authenticated)/commons-invites",
+      params: { coopId: "family-abc" },
+    });
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "COMMONS_ACCESS_APPROVED",
+        data: { coopId: "family-abc", postId: "post_1" },
+      }),
+    ).toEqual({
+      pathname: "/[coopId]/posts/[postId]",
+      params: { coopId: "family-abc", postId: "post_1" },
+    });
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "COMMONS_ACCESS_APPROVED",
+        data: { coopId: "family-abc", postId: null },
+      }),
+    ).toEqual({ pathname: "/[coopId]/posts", params: { coopId: "family-abc" } });
+  });
   it("opens a direct message on its private circle thread", () => {
     expect(
       notificationDestination({

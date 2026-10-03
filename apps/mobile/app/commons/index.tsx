@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ArrowLeft, ChevronRight, Lock, Search, Users } from 'lucide-react-native';
+import { ArrowLeft, ChevronRight, Home, Lock, Search, Users } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
 import { api, type CommonsDirectoryItem } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { IconAvatar } from '@/components/icon-avatar';
+import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -25,15 +26,17 @@ const THEME = {
   border: '#E5E7EB',
 };
 
-function statusTone(status: CommonsDirectoryItem['accessStatus']) {
-  if (status === 'ACTIVE') return { label: 'Member', bg: THEME.greenSoft, fg: THEME.green };
+function statusTone(status: CommonsDirectoryItem['accessStatus'], commons?: CommonsDirectoryItem) {
+  if (status === 'ACTIVE') {
+    return { label: commons?.isSteward ? 'Steward' : 'Member', bg: THEME.greenSoft, fg: THEME.green };
+  }
   if (status === 'PENDING') return { label: 'Pending', bg: THEME.blueSoft, fg: THEME.blue };
   if (status === 'REJECTED') return { label: 'Closed', bg: THEME.redSoft, fg: THEME.red };
   return { label: 'Locked', bg: THEME.primarySoft, fg: THEME.primary };
 }
 
 function CommonsCard({ commons }: { commons: CommonsDirectoryItem }) {
-  const tone = statusTone(commons.accessStatus);
+  const tone = statusTone(commons.accessStatus, commons);
 
   return (
     <TouchableOpacity
@@ -75,7 +78,13 @@ function CommonsCard({ commons }: { commons: CommonsDirectoryItem }) {
       <View className="mt-4 flex-row items-center justify-between border-t border-gray-100 pt-3">
         <View className="flex-row items-center gap-2">
           <Text className="text-sm font-bold" style={{ color: commons.canApply ? THEME.primary : THEME.muted }}>
-            {commons.canApply ? 'View and apply' : commons.isMember ? 'Open commons' : 'View status'}
+            {commons.canApply
+              ? 'View and apply'
+              : commons.isMember
+                ? commons.joinPolicy === 'INVITE_ONLY'
+                  ? 'Open family'
+                  : 'Open commons'
+                : 'View status'}
           </Text>
           {commons.isMember && (commons.circleCount || 0) > 0 ? (
             <View className="flex-row items-center gap-1 rounded-full px-2 py-0.5" style={{ backgroundColor: THEME.primarySoft }}>
@@ -93,7 +102,7 @@ function CommonsCard({ commons }: { commons: CommonsDirectoryItem }) {
 }
 
 export default function CommonsDirectoryScreen() {
-  const { sessionToken } = useAuth();
+  const { sessionToken, user } = useAuth();
   const [commons, setCommons] = useState<CommonsDirectoryItem[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -172,6 +181,30 @@ export default function CommonsDirectoryScreen() {
         </View>
 
         <View className="px-4">
+          {user ? (
+            <View className="mb-5 gap-3">
+              <CommonsInvitationsCard />
+              <TouchableOpacity
+                onPress={() => router.push('/(authenticated)/create-family' as any)}
+                className="flex-row items-center gap-3 rounded-2xl border border-dashed bg-white p-4"
+                style={{ borderColor: THEME.primaryBorder }}
+                accessibilityRole="button"
+                accessibilityLabel="Start a family"
+              >
+                <View className="h-11 w-11 items-center justify-center rounded-xl" style={{ backgroundColor: THEME.primarySoft }}>
+                  <Home size={20} color={THEME.primary} />
+                </View>
+                <View className="min-w-0 flex-1">
+                  <Text className="text-base font-black text-gray-950">Start a family</Text>
+                  <Text className="text-sm leading-5 text-gray-600">
+                    A private, invite-only space for your family.
+                  </Text>
+                </View>
+                <ChevronRight size={18} color={THEME.primary} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           {loading ? (
             <View className="rounded-2xl border border-gray-200 bg-white p-5">
               <ActivityIndicator color={THEME.primary} />

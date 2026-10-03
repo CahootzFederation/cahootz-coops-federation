@@ -37,6 +37,7 @@ import {
   Target,
   Users,
   Vote,
+  UserPlus,
 } from 'lucide-react-native';
 
 const THEME = {
@@ -141,14 +142,26 @@ function proposalBudget(proposal: ProposalSummary) {
   );
 }
 
-function accessCopy(status: CommonsAccessStatus) {
+function accessCopy(status: CommonsAccessStatus, inviteOnly = false) {
   if (status === 'ACTIVE')
     return { label: 'Member', bg: THEME.greenSoft, fg: THEME.green };
   if (status === 'PENDING')
-    return { label: 'Application pending', bg: THEME.blueSoft, fg: THEME.blue };
+    return {
+      label: inviteOnly ? 'Request pending' : 'Application pending',
+      bg: THEME.blueSoft,
+      fg: THEME.blue,
+    };
   if (status === 'REJECTED')
-    return { label: 'Application closed', bg: THEME.redSoft, fg: THEME.red };
-  return { label: 'Locked', bg: THEME.primarySoft, fg: THEME.primary };
+    return {
+      label: inviteOnly ? 'Request declined' : 'Application closed',
+      bg: THEME.redSoft,
+      fg: THEME.red,
+    };
+  return {
+    label: inviteOnly ? 'Invite only' : 'Locked',
+    bg: THEME.primarySoft,
+    fg: THEME.primary,
+  };
 }
 
 function isEmailQuestion(question: ApplicationQuestion) {
@@ -174,7 +187,14 @@ function isPhoneQuestion(question: ApplicationQuestion) {
 }
 
 export default function CommonsDetailScreen() {
-  const params = useLocalSearchParams<{ coopId?: string }>();
+  // `apply`, `invitationId` and `invitationToken` come from an "invited you
+  // to apply" invitation: open the application and record the referral.
+  const params = useLocalSearchParams<{
+    coopId?: string;
+    apply?: string;
+    invitationId?: string;
+    invitationToken?: string;
+  }>();
   const coopId = params.coopId || 'cahootz';
   const { sessionToken, user } = useAuth();
   const [config, setConfig] = useState<CoopConfigDetail | null>(null);
@@ -310,9 +330,14 @@ export default function CommonsDetailScreen() {
     activeConfig.displayMission ||
     DEFAULT_CONFIG.description;
   const accessStatus = directoryItem?.accessStatus || 'LOCKED';
-  const accessTone = accessCopy(accessStatus);
+  // A commons that isn't listed for this viewer is private: treat it as
+  // invite-only rather than offering an application it won't accept.
+  const joinPolicy = directoryItem?.joinPolicy || (directoryItem ? 'APPLICATION_REQUIRED' : 'INVITE_ONLY');
+  const inviteOnly = joinPolicy === 'INVITE_ONLY';
+  const accessTone = accessCopy(accessStatus, inviteOnly);
   const isMember = accessStatus === 'ACTIVE';
-  const canApply = accessStatus === 'LOCKED';
+  const canApply = accessStatus === 'LOCKED' && joinPolicy === 'APPLICATION_REQUIRED';
+  const [withdrawing, setWithdrawing] = useState(false);
   const visibleApplicationQuestions = useMemo(
     () =>
       (activeConfig.applicationQuestions || []).filter(
@@ -328,6 +353,32 @@ export default function CommonsDetailScreen() {
   const needsProfileName = !user?.name?.trim();
   const needsProfilePhone = !user?.phone?.trim() && !phoneQuestion;
   const canOpenApply = canApply && !!sessionToken && !!user;
+
+  useEffect(() => {
+    if (params.apply === '1' && !loading && canOpenApply) setApplyOpen(true);
+  }, [params.apply, loading, canOpenApply]);
+
+  async function handleWithdraw() {
+    if (!sessionToken || withdrawing) return;
+    setWithdrawing(true);
+    try {
+      await api.withdrawCommonsRequest(coopId, sessionToken);
+      setDirectoryItem((current) =>
+        current
+          ? {
+              ...current,
+              accessStatus: 'LOCKED',
+              canApply: current.joinPolicy === 'APPLICATION_REQUIRED',
+              applicationStatus: 'WITHDRAWN',
+            }
+          : current,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not withdraw right now.');
+    } finally {
+      setWithdrawing(false);
+    }
+  }
 
   function handleAnswerChange(questionId: string, value: unknown) {
     setApplicationAnswers((current) => ({
@@ -373,6 +424,8 @@ export default function CommonsDetailScreen() {
             ...applicationAnswers,
             source: 'mobile_commons_detail',
           },
+          invitationId: params.invitationId || undefined,
+          invitationToken: params.invitationToken || undefined,
         },
         sessionToken,
       );
@@ -622,13 +675,31 @@ export default function CommonsDetailScreen() {
                     <MessageCircle size={17} color="white" />
                     <Text className="font-black text-white">Posts</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => router.push(`/${coopId}/proposal` as any)}
-                    className="flex-1 flex-row items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3"
-                  >
-                    <Vote size={17} color={THEME.primary} />
-                    <Text className="font-black text-gray-900">Proposal</Text>
-                  </TouchableOpacity>
+                  {joinPolicy !== 'INVITE_ONLY' ? (
+                    <TouchableOpacity
+                      onPress={() => router.push(`/${coopId}/proposal` as any)}
+                      className="flex-1 flex-row items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3"
+                    >
+                      <Vote size={17} color={THEME.primary} />
+                      <Text className="font-black text-gray-900">Proposal</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {joinPolicy !== 'AUTOMATIC' ? (
+                    <TouchableOpacity
+                      onPress={() =>
+                        router.push({
+                          pathname: '/(authenticated)/commons-invites',
+                          params: { coopId },
+                        } as any)
+                      }
+                      className="flex-1 flex-row items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3"
+                    >
+                      <UserPlus size={17} color={THEME.primary} />
+                      <Text className="font-black text-gray-900">
+                        {directoryItem?.isSteward && inviteOnly ? 'Invite & manage' : 'Invite'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </>
               ) : (
                 <TouchableOpacity
@@ -698,14 +769,37 @@ export default function CommonsDetailScreen() {
                 <View className="min-w-0 flex-1">
                   <Text className="text-base font-black text-gray-950">
                     {accessStatus === 'PENDING'
-                      ? 'Application pending'
-                      : 'Membership required'}
+                      ? inviteOnly
+                        ? 'Request pending'
+                        : 'Application pending'
+                      : inviteOnly
+                        ? 'Invite only'
+                        : 'Membership required'}
                   </Text>
                   <Text className="mt-1 text-sm leading-5 text-gray-700">
                     {accessStatus === 'PENDING'
-                      ? 'You applied to this commons. The full info page unlocks after approval.'
-                      : 'Apply to join this commons. Overview, community, and governance details are only visible to approved members.'}
+                      ? inviteOnly
+                        ? 'You asked to join. A steward reviews every request, and nothing here is visible until they approve it.'
+                        : 'You applied to this commons. The full info page unlocks after approval.'
+                      : inviteOnly
+                        ? 'This is a private, invite-only commons. Ask a steward to invite you.'
+                        : 'Apply to join this commons. Overview, community, and governance details are only visible to approved members.'}
                   </Text>
+                  {accessStatus === 'PENDING' && sessionToken ? (
+                    <TouchableOpacity
+                      onPress={handleWithdraw}
+                      disabled={withdrawing}
+                      className="mt-3 self-start rounded-lg border border-gray-300 bg-white px-3 py-2"
+                    >
+                      <Text className="text-sm font-black text-gray-800">
+                        {withdrawing
+                          ? 'Withdrawing...'
+                          : inviteOnly
+                            ? 'Withdraw request'
+                            : 'Withdraw application'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               </View>
             </View>

@@ -285,7 +285,7 @@ export const coopConfigRouter = router({
     })))
     .query(async ({ ctx }) => {
       const coops = await ctx.db.coopConfig.findMany({
-        where: { isActive: true, isDemo: false, isPrivate: false },
+        where: { isActive: true, isDemo: false, isPrivate: false, joinPolicy: { not: 'INVITE_ONLY' } },
         orderBy: { displayOrder: 'asc' },
         select: {
           coopId: true,
@@ -362,6 +362,8 @@ export const coopConfigRouter = router({
           isActive: true,
           isDemo: false,
           isPrivate: false,
+          // Invite-only (family) commons never take applications.
+          joinPolicy: { not: 'INVITE_ONLY' },
           name: { not: null },
         },
         orderBy: { displayOrder: 'asc' },

@@ -140,20 +140,20 @@ function CommentItem({ comment }: { comment: any }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ProposalDetailRedirect() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, coopId } = useLocalSearchParams<{ id: string; coopId?: string }>();
 
   return (
     <Redirect
       href={{
         pathname: '/(tabs)/proposal-detail',
-        params: id ? { id } : {},
+        params: id ? { id, ...(coopId ? { coopId } : {}) } : {},
       } as any}
     />
   );
 }
 
 export function ProposalDetailContent() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, coopId = 'cahootz' } = useLocalSearchParams<{ id: string; coopId?: string }>();
   const { user } = useAuth();
 
   const [proposal, setProposal] = useState<any>(null);
@@ -274,7 +274,7 @@ export function ProposalDetailContent() {
     if (!user?.walletAddress || !id) return;
     setCastingVote(true);
     try {
-      const result = await api.councilVote(id, vote, user.walletAddress);
+      const result = await api.councilVote(id, vote, user.walletAddress, coopId);
       if (result) {
         setCouncilVoteResult(result);
         if (result.newStatus) {
@@ -314,7 +314,7 @@ export function ProposalDetailContent() {
     return (
       <SafeAreaView className="flex-1 bg-cream-100 items-center justify-center p-8">
         <Text className="text-charcoal-500 text-center">Proposal not found.</Text>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/proposals' as any)} className="mt-4">
+        <TouchableOpacity onPress={() => router.replace({ pathname: '/(tabs)/proposals', params: { coopId } } as any)} className="mt-4">
           <Text className="text-primary font-semibold">Go back</Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -479,7 +479,7 @@ export function ProposalDetailContent() {
       {/* Sticky header */}
       <View className="bg-white px-3 pt-7 pb-2 border-b border-gray-200 flex-row items-center gap-3">
         <TouchableOpacity
-          onPress={() => router.replace('/(tabs)/proposals' as any)}
+          onPress={() => router.replace({ pathname: '/(tabs)/proposals', params: { coopId } } as any)}
           className="h-12 w-12 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
           accessibilityLabel="Back to proposals"
         >

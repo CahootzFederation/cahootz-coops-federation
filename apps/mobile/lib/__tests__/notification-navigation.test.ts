@@ -164,16 +164,27 @@ describe("notification destinations", () => {
       }),
     ).toBe("/(authenticated)/personal-page");
   });
+  it("keeps proposal drafts scoped to their commons", () => {
+    expect(notificationDestination({ ...notification, type: "PROPOSAL_DRAFT_READY", data: null })).toEqual({
+      pathname: "/(authenticated)/commons-proposal-drafts",
+      params: { coopId: "cahootz" },
+    });
+  });
   it.each([
     ["orderId", "order-detail"],
     ["storeId", "store-detail"],
-    ["proposalId", "proposal-detail"],
   ])("opens %s on its existing detail screen", (key, screen) => {
     expect(
       notificationDestination({ ...notification, data: { [key]: "item" } }),
     ).toEqual({
       pathname: `/(authenticated)/${screen}`,
       params: { id: "item" },
+    });
+  });
+  it("opens a proposal in its commons context", () => {
+    expect(notificationDestination({ ...notification, data: { proposalId: "item", coopId: "another" } })).toEqual({
+      pathname: "/(authenticated)/proposal-detail",
+      params: { id: "item", coopId: "another" },
     });
   });
   it.each(["transactionId", "transferId", "paymentId"])(

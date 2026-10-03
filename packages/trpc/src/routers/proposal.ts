@@ -69,6 +69,41 @@ async function requireProposalMembership(db: any, walletAddress: string, coopId:
 
 export const proposalRouter = router({
   /**
+   * Drawer/hub summary for the currently verified council member.
+   * `privateProcedure` verifies the wallet's on-chain admin role for the
+   * commons supplied in x-coop-id before this query runs.
+   */
+  myActionSummary: privateProcedure
+    .input(z.object({ coopId: z.string().min(1) }))
+    .output(z.object({
+      canVote: z.literal(true),
+      actionableVoteCount: z.number(),
+      actionableProposalIds: z.array(z.string()),
+    }))
+    .query(async ({ input, ctx }) => {
+      if (ctx.coopId !== input.coopId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Commons context does not match." });
+      }
+
+      const { walletAddress } = ctx as AuthenticatedContext;
+      const proposals = await ctx.db.proposal.findMany({
+        where: {
+          coopId: input.coopId,
+          status: ProposalStatus.VOTABLE,
+          councilRequired: true,
+          votes: { none: { voterWallet: walletAddress } },
+        },
+        select: { id: true },
+      });
+
+      return {
+        canVote: true as const,
+        actionableVoteCount: proposals.length,
+        actionableProposalIds: proposals.map((proposal: { id: string }) => proposal.id),
+      };
+    }),
+
+  /**
    * Create a new proposal (authenticated — any wallet holder)
    * Auto-approves if AI says "advance" AND budget < councilVoteThresholdUSD
    * Sets councilRequired=true if AI says "advance" AND budget >= threshold
@@ -448,6 +483,10 @@ export const proposalRouter = router({
       const proposal = await ctx.db.proposal.findUnique({ where: { id: input.proposalId } });
       if (!proposal) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Proposal not found" });
+      }
+
+      if (!proposal.coopId || proposal.coopId !== ctx.coopId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Council role must be verified for this proposal's commons." });
       }
 
       if (!proposal.councilRequired) {

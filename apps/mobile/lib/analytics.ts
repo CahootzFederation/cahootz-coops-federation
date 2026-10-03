@@ -55,6 +55,14 @@ export type AnalyticsEvents = {
     /** Notification type enum, e.g. POST_COMMENT. 'unknown' for older pushes without it. */
     notification_type: string;
   };
+  proposal_navigation_opened: {
+    source: 'drawer' | 'proposal_hub' | 'notification';
+    destination: 'hub' | 'drafts' | 'detail';
+    actionable_vote_count?: number;
+    draft_count?: number;
+  };
+  commons_tools_drawer_viewed: { signed_in: boolean };
+  proposal_hub_viewed: { signed_in: boolean };
   signed_in: Record<string, never>;
   signed_out: { reason: 'user' | 'session_expired' };
 };

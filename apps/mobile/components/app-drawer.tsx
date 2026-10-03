@@ -4,17 +4,23 @@ import { router } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsDirectoryItem } from '@/lib/api';
+import { track } from '@/lib/analytics';
 import { PERSONAL_PAGE_DESTINATION_ID } from '@/lib/composer-destination';
+import { useCommonsProposalActions } from '@/hooks/use-commons-proposal-actions';
+import { proposalDraftsHref, proposalHubHref } from '@/lib/proposal-navigation';
 import { IconAvatar } from '@/components/icon-avatar';
 import {
   CheckCircle2,
   ChevronRight,
   Compass,
+  FileText,
   Info,
   LogOut,
   MessageCircle,
   RotateCcw,
+  Scale,
   Store,
+  Users,
   UserCircle,
   Wrench,
   X,
@@ -62,17 +68,22 @@ export default function AppDrawer({
     user?.handle || (user?.email?.split('@')[0] || accountName).toLowerCase().replace(/[^a-z0-9]/g, '');
 
   useEffect(() => {
-    if (!visible || !sessionToken) {
-      if (!sessionToken) setMemberCommons([]);
+    if (visible) track('commons_tools_drawer_viewed', { signed_in: hasAccountSession });
+  }, [hasAccountSession, visible]);
+
+  useEffect(() => {
+    if (!visible) {
       return;
     }
     setIsLoading(true);
     api
       .listCommonsDirectory(sessionToken)
-      .then((result) => setMemberCommons(result.coops.filter((c) => c.accessStatus === 'ACTIVE')))
+      .then((result) => setMemberCommons(result.coops.filter((c) =>
+        hasAccountSession ? c.accessStatus === 'ACTIVE' : !c.isLocked,
+      )))
       .catch((error) => console.error('Failed to load member commons:', error))
       .finally(() => setIsLoading(false));
-  }, [visible, sessionToken]);
+  }, [hasAccountSession, visible, sessionToken]);
 
   const activeCommonsForDrawer =
     memberCommons.length > 0
@@ -83,6 +94,7 @@ export default function AppDrawer({
     id: commons.id,
     label: commons.name,
     accessStatus: commons.accessStatus,
+    isMember: commons.isMember,
     icon: commons.name.slice(0, 1).toUpperCase(),
     iconEmoji: 'iconEmoji' in commons ? commons.iconEmoji : null,
     iconColor: 'iconColor' in commons ? commons.iconColor : null,
@@ -102,9 +114,19 @@ export default function AppDrawer({
       ]
     : commonsItems;
 
+  const activeCommons =
+    activeCommonsForDrawer.find((commons) => commons.id === activeCommonsId) ||
+    activeCommonsForDrawer[0];
+  const proposalActions = useCommonsProposalActions({
+    enabled: visible,
+    coopId: activeCommons?.id,
+    sessionToken,
+    walletAddress: user?.walletAddress,
+  });
+
   const visibleSections = DRAWER_SECTIONS.filter((item) => !item.requiresAuth || hasAccountSession);
 
-  const goTo = (href: string) => {
+  const goTo = (href: any) => {
     onClose();
     router.push(href as any);
   };
@@ -203,7 +225,11 @@ export default function AppDrawer({
                         className="text-xs font-semibold"
                         style={{ color: item.accessStatus === 'ACTIVE' ? '#059669' : '#6B7280' }}
                       >
-                        {item.accessStatus === 'ACTIVE' ? (isActive ? 'Active Member' : 'Member') : 'Pending'}
+                        {item.id === PERSONAL_PAGE_DESTINATION_ID
+                          ? 'Your page'
+                          : hasAccountSession && 'isMember' in item && item.isMember
+                            ? (isActive ? 'Active Member' : 'Member')
+                            : 'Public commons'}
                       </Text>
                     </View>
                     {item.id !== PERSONAL_PAGE_DESTINATION_ID ? (
@@ -236,6 +262,115 @@ export default function AppDrawer({
                 Explore all Commons directory
               </Text>
             </TouchableOpacity>
+
+            {activeCommons ? (
+              <>
+                <Text className="mb-2 mt-4 text-[11px] font-black uppercase tracking-wide text-stone-400">
+                  In {activeCommons.name}
+                </Text>
+                <View className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
+                  <TouchableOpacity
+                    onPress={() => goTo(`/${activeCommons.id}/posts`)}
+                    className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
+                    activeOpacity={0.75}
+                    accessibilityLabel={`Open ${activeCommons.name} conversation`}
+                  >
+                    <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
+                      <MessageCircle size={17} color={THEME.primary} />
+                    </View>
+                    <View className="min-w-0 flex-1">
+                      <Text className="text-sm font-black text-gray-900">Conversation</Text>
+                      <Text className="text-xs font-semibold text-stone-500">Posts and discussion</Text>
+                    </View>
+                    <ChevronRight size={15} color="#D6D3D1" />
+                  </TouchableOpacity>
+                  {hasAccountSession ? (
+                    <TouchableOpacity
+                      onPress={() => goTo({ pathname: '/(authenticated)/spaces', params: { coopId: activeCommons.id, coopName: activeCommons.name } })}
+                      className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
+                      activeOpacity={0.75}
+                      accessibilityLabel={`Open ${activeCommons.name} circles`}
+                    >
+                      <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
+                        <Users size={17} color={THEME.primary} />
+                      </View>
+                      <View className="min-w-0 flex-1">
+                        <Text className="text-sm font-black text-gray-900">Circles</Text>
+                        <Text className="text-xs font-semibold text-stone-500">Focused member spaces</Text>
+                      </View>
+                      <ChevronRight size={15} color="#D6D3D1" />
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity
+                    onPress={() => {
+                      track('proposal_navigation_opened', {
+                        source: 'drawer', destination: 'hub',
+                        actionable_vote_count: proposalActions.actionableVoteCount,
+                        draft_count: proposalActions.draftCount,
+                      });
+                      goTo(proposalHubHref(activeCommons.id));
+                    }}
+                    className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
+                    activeOpacity={0.75}
+                    accessibilityLabel={`Open ${activeCommons.name} proposals and votes`}
+                  >
+                    <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
+                      <Scale size={17} color={THEME.primary} />
+                    </View>
+                    <View className="min-w-0 flex-1">
+                      <Text className="text-sm font-black text-gray-900">Proposals &amp; Votes</Text>
+                      <Text className="text-xs font-semibold text-stone-500">Member decisions and voting</Text>
+                    </View>
+                    {proposalActions.actionableVoteCount > 0 ? (
+                      <View className="min-w-6 items-center rounded-full bg-orange-600 px-2 py-1">
+                        <Text className="text-[11px] font-black text-white">{proposalActions.actionableVoteCount}</Text>
+                      </View>
+                    ) : null}
+                    <ChevronRight size={15} color="#D6D3D1" />
+                  </TouchableOpacity>
+                  {hasAccountSession ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        track('proposal_navigation_opened', { source: 'drawer', destination: 'drafts', draft_count: proposalActions.draftCount });
+                        goTo(proposalDraftsHref(activeCommons.id, activeCommons.name));
+                      }}
+                      className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
+                      activeOpacity={0.75}
+                      accessibilityLabel={`Open ${activeCommons.name} proposal drafts`}
+                    >
+                      <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
+                        <FileText size={17} color={THEME.primary} />
+                      </View>
+                      <View className="min-w-0 flex-1">
+                        <Text className="text-sm font-black text-gray-900">Drafts</Text>
+                        <Text className="text-xs font-semibold text-stone-500">Continue work in progress</Text>
+                      </View>
+                      {proposalActions.draftCount > 0 ? (
+                        <View className="min-w-6 items-center rounded-full bg-stone-200 px-2 py-1">
+                          <Text className="text-[11px] font-black text-stone-700">{proposalActions.draftCount}</Text>
+                        </View>
+                      ) : null}
+                      <ChevronRight size={15} color="#D6D3D1" />
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity
+                    onPress={() => goTo(`/commons/${activeCommons.id}`)}
+                    className="flex-row items-center gap-2.5 px-3 py-3"
+                    activeOpacity={0.75}
+                    accessibilityLabel={`Open ${activeCommons.name} information`}
+                  >
+                    <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
+                      <Info size={17} color={THEME.primary} />
+                    </View>
+                    <View className="min-w-0 flex-1">
+                      <Text className="text-sm font-black text-gray-900">About this commons</Text>
+                      <Text className="text-xs font-semibold text-stone-500">Purpose, membership, and details</Text>
+                    </View>
+                    <ChevronRight size={15} color="#D6D3D1" />
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : null}
 
             <Text className="mb-2 mt-4 text-[11px] font-black uppercase tracking-wide text-stone-400">Sections</Text>
             <View className="mb-5 overflow-hidden rounded-2xl border border-stone-200 bg-white">

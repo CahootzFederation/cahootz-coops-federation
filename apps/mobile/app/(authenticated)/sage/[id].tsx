@@ -80,6 +80,7 @@ function labelForReviewType(reviewType: string, capability: string | null) {
   if (reviewType === 'PROVIDE_CONTEXT') return 'Sage needs a few details from you';
   if (reviewType === 'CONSENT_TO_SHARE') return 'Confirm what to share';
   if (reviewType === 'ACCEPT_MATCH') return 'A member could use your help';
+  if (reviewType === 'ACCEPT_INTRODUCTION') return 'Sage can introduce you';
   if (reviewType === 'APPROVE_SUGGESTION') {
     if (capability === 'comment_on_post') return 'Sage recommends commenting';
     if (capability === 'draft_proposal') return 'Sage recommends a proposal';

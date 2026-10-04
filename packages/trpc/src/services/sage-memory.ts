@@ -62,7 +62,7 @@ export async function consolidateSageMemory(coopId: string, now = new Date()): P
   const since = new Date(now.getTime() - CONSOLIDATE_LOOKBACK_DAYS * DAY_MS);
   const [actions, tasks] = await Promise.all([
     db.commonsAction.findMany({
-      where: { coopId, status: { in: [...TERMINAL] }, updatedAt: { gte: since }, type: { notIn: ["RIDE_MATCH_PROPOSAL", "ESCALATE_TO_ADMIN", "NO_ACTION"] } },
+      where: { coopId, status: { in: [...TERMINAL] }, updatedAt: { gte: since }, type: { notIn: ["RIDE_MATCH_PROPOSAL", "CONNECT_MEMBERS", "ESCALATE_TO_ADMIN", "NO_ACTION"] } },
       select: { id: true, summary: true, status: true, createdAt: true, payload: true, circleId: true, type: true,
         feedback: { select: { rating: true, notes: true, correctedText: true } } },
       orderBy: { updatedAt: "asc" }, take: 200,

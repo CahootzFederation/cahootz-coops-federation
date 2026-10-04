@@ -30,8 +30,9 @@ const { DecisionTrail } = await import("../services/sage-decision-trail.js");
 const { sageAutonomyAllowed } = await import("../services/sage-autonomy.js");
 
 const ctx = { db: db as never, requestingUserId: null, coopId: "harbor" };
-const call = (tools: Array<{ name: string; invoke: (c: unknown, args: string) => Promise<unknown> }>, name: string, args: Record<string, unknown>) =>
-  tools.find((t) => t.name === name)!.invoke({}, JSON.stringify(args));
+type InvokableTool = { name: string; invoke: (c: unknown, args: string) => Promise<unknown> };
+const call = (tools: unknown[], name: string, args: Record<string, unknown>) =>
+  (tools as InvokableTool[]).find((t) => t.name === name)!.invoke({}, JSON.stringify(args));
 const blankAction = {
   type: "NONE" as const, reason: "r", subjectType: "" as const, subjectId: "", ownerUserId: "", expected: "", followUpDays: 0,
   category: "" as const, circleId: "", severity: "MEDIUM" as const, title: "", recommendation: "", needUserId: "", helperUserId: "", needSummary: "",

@@ -52,6 +52,9 @@ interface Dashboard {
   };
   neededTools: NeededToolRow[];
   escalations: EscalationRow[];
+  tasks: { id: string; kind: string; status: string; title: string; reason: string; ownerUserId: string | null; postId: string | null; attempts: number; maxAttempts: number; outcome: string | null; nextWakeAt: string; updatedAt: string }[];
+  alerts: { id: string; category: string; recipientUserId: string | null; status: string; severity: string; title: string; body: string; feedback: string | null; postId: string | null; createdAt: string }[];
+  wakeCycles: { id: string; reason: string; status: string; tasksProcessed: number; error: string | null; startedAt: string; finishedAt: string | null }[];
 }
 
 export default function CommonsAIClient({ apiUrl, token }: { apiUrl: string; token: string }) {
@@ -143,6 +146,40 @@ export default function CommonsAIClient({ apiUrl, token }: { apiUrl: string; tok
         <p className="text-sm text-slate-400">Every Sage analysis in this Commons, newest first: what it read, what it considered, each rule it checked, what it did, and what happened next. Includes analyses where Sage did nothing.</p>
         {data.trails.length ? data.trails.map((trail) => <TrailCard key={trail.id} trail={trail} open={openTrailId === trail.id}
           onToggle={() => setOpenTrailId(openTrailId === trail.id ? null : trail.id)} />) : <p className="text-sm text-slate-400">No analyses yet.</p>}
+      </section>
+      <section className="space-y-3" aria-label="Sage follow-ups">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Follow-ups</h2>
+          <button disabled={busy} onClick={() => void command({ command: "wake" })} className="rounded-md border border-orange-300/60 px-3 py-1.5 text-sm font-semibold text-orange-200 disabled:opacity-50">Run wake now</button>
+        </div>
+        <p className="text-sm text-slate-400">What Sage is waiting on. Each wake checks the outcome in the app&apos;s own records, sends at most one reminder, then stops following up. Wakes run every 15 minutes.</p>
+        {data.tasks.length ? <div className="overflow-x-auto rounded-lg border border-white/10"><table className="w-full text-left text-sm"><thead className="bg-white/5 text-slate-400"><tr><th className="p-3">Task</th><th className="p-3">Status</th><th className="p-3">Next check</th><th className="p-3">Reminders</th><th className="p-3">Outcome</th></tr></thead><tbody>
+          {data.tasks.map((task) => <tr key={task.id} className="border-t border-white/10 align-top">
+            <td className="p-3"><strong>{task.title}</strong><div className="text-xs text-slate-400">{task.kind.toLowerCase().replace(/_/g, " ")} · {task.reason}</div></td>
+            <td className="p-3">{task.status.toLowerCase()}</td>
+            <td className="p-3">{OPEN_TASK.has(task.status) ? new Date(task.nextWakeAt).toLocaleString() : "—"}</td>
+            <td className="p-3">{task.attempts}/{task.maxAttempts}</td>
+            <td className="p-3 text-slate-300">{task.outcome ?? ""}</td>
+          </tr>)}
+        </tbody></table></div> : <p className="text-sm text-slate-400">Sage isn&apos;t following up on anything here.</p>}
+        <details><summary className="cursor-pointer text-sm text-orange-200">Recent wake runs</summary>
+          {data.wakeCycles.length ? <ul className="mt-2 space-y-1 text-sm text-slate-300">{data.wakeCycles.map((cycle) => <li key={cycle.id}>
+            {new Date(cycle.startedAt).toLocaleString()} · {cycle.reason.toLowerCase()} · {cycle.status.toLowerCase()} · {cycle.tasksProcessed} task{cycle.tasksProcessed === 1 ? "" : "s"}{cycle.error ? ` · ${cycle.error}` : ""}
+          </li>)}</ul> : <p className="mt-2 text-sm text-slate-400">No wake runs yet.</p>}
+        </details>
+      </section>
+      <section className="space-y-3" aria-label="Sage alerts">
+        <h2 className="text-lg font-semibold">Alerts</h2>
+        <p className="text-sm text-slate-400">Things Sage routed to a responsible person: circle leader, Commons admin, or the governance, treasury or support admin. Alerts with no one to receive them are marked platform queue for the Cahootz team.</p>
+        {data.alerts.length ? <ul className="space-y-2">{data.alerts.map((alert) => <li key={alert.id} className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <strong>{alert.title}</strong>
+            <span className="text-xs text-slate-400">{alert.severity.toLowerCase()} · {alert.category.toLowerCase().replace(/_/g, " ")} · {alert.recipientUserId ? alert.status.toLowerCase() : "platform queue"}</span>
+          </div>
+          <p className="mt-1 text-slate-300">{alert.body}</p>
+          {alert.feedback && <p className="mt-1 text-xs text-slate-400">&ldquo;Not for me&rdquo;: {alert.feedback}</p>}
+          <p className="mt-1 text-xs text-slate-500">{new Date(alert.createdAt).toLocaleString()}</p>
+        </li>)}</ul> : <p className="text-sm text-slate-400">No alerts yet.</p>}
       </section>
       <section className="rounded-lg border border-white/10 bg-white/5 p-5">
         <strong>Skipped repeats</strong>
@@ -259,7 +296,9 @@ const SOURCE_LABEL: Record<string, string> = {
 const AGENT_LABELS: Record<string, string> = {
   "commons-action-agent": "Commons feed", "sage-trend": "Circle trends", "sage-ride-match": "Ride matches",
   "proposal-engine": "Proposal review", "comment-evaluation": "Comment evaluation", "sage-reply": "Sage replies",
+  cadence: "Follow-ups", guardian: "Routing", steward: "Steward review",
 };
+const OPEN_TASK = new Set(["OPEN", "WAITING"]);
 
 function TrailCard({ trail, open, onToggle }: { trail: Trail; open: boolean; onToggle: () => void }) {
   return <div id={`trail-${trail.id}`} className="rounded-lg border border-white/10 bg-white/5">

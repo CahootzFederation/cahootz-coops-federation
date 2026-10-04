@@ -63,8 +63,10 @@ async function testUser(email: string) {
 
 async function followUp(ownerEmail: string, postId: string, title: string, due: boolean) {
   const ownerUserId = await testUser(ownerEmail);
-  const post = await db.commonsPost.findUnique({ where: { id: postId }, select: { coopId: true, authorId: true, content: true } });
-  if (!post || post.coopId !== COOP_ID || post.authorId !== ownerUserId || !post.content.includes("E2E")) throw new Error("Only the owner's own E2E post can be followed up on");
+  // The owner must be a seeded test account (checked above) and the post must be theirs, so this also
+  // works for posts made by hand while testing locally, not only E2E runs.
+  const post = await db.commonsPost.findUnique({ where: { id: postId }, select: { coopId: true, authorId: true } });
+  if (!post || post.coopId !== COOP_ID || post.authorId !== ownerUserId) throw new Error("Only the test account's own post in this Commons can be followed up on");
   const result = await createSageTask({
     coopId: COOP_ID, kind: "FOLLOW_UP", title, ownerUserId, subjectType: "commons_post", subjectId: postId, postId,
     reason: "Sage asked for the delivery details so it can draft a shared-driver proposal.",

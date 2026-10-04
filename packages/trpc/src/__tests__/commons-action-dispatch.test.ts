@@ -28,8 +28,14 @@ describe("Commons action event dispatch", () => {
   it("runs the scan on the API backend when Trigger is not configured", async () => {
     vi.stubEnv("TRIGGER_SECRET_KEY", "");
     await expect(enqueueCommonsActionContent("commons_post", "post-1")).resolves.toBeUndefined();
-    expect(processContent).toHaveBeenCalledWith("commons_post", "post-1");
+    await vi.waitFor(() => expect(processContent).toHaveBeenCalledWith("commons_post", "post-1"));
     expect(trigger).not.toHaveBeenCalled();
+  });
+
+  it("doesn't make the post or comment wait for the local scan", async () => {
+    vi.stubEnv("TRIGGER_SECRET_KEY", "");
+    processContent.mockReturnValueOnce(new Promise(() => {}));
+    await expect(enqueueCommonsActionContent("commons_post", "post-slow")).resolves.toBeUndefined();
   });
 
   it("does not send local scans to Trigger production with a production key", async () => {
@@ -38,7 +44,7 @@ describe("Commons action event dispatch", () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       await expect(enqueueCommonsActionContent("commons_post", "post-2")).resolves.toBeUndefined();
-      expect(processContent).toHaveBeenCalledWith("commons_post", "post-2");
+      await vi.waitFor(() => expect(processContent).toHaveBeenCalledWith("commons_post", "post-2"));
       expect(trigger).not.toHaveBeenCalled();
     } finally {
       warning.mockRestore();

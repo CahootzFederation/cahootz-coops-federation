@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { useWeb3Auth } from '@/hooks/use-web3-auth';
@@ -19,16 +19,24 @@ function AdminGate({ children }: { children: React.ReactNode }) {
   // /portal/admin/login and getting redirected to /portal/admin would still
   // see this gate's stale pre-login "not authenticated" state and bounce
   // straight back to the login page.
+  // Redirect only on the result of the check for the current page. Both effects run in the same
+  // commit, so without this the redirect saw the pre-login "not authenticated" state and bounced a
+  // freshly signed-in admin back to the login page.
+  const [checkedPath, setCheckedPath] = useState<string | null>(null);
   useEffect(() => {
-    checkAuth();
+    let cancelled = false;
+    void checkAuth().finally(() => {
+      if (!cancelled) setCheckedPath(pathname);
+    });
+    return () => { cancelled = true; };
   }, [pathname, checkAuth]);
 
   useEffect(() => {
-    if (isLoading || isLoginPage) return;
+    if (isLoading || isLoginPage || checkedPath !== pathname) return;
     if (!isAuthenticated) {
       router.push('/portal/admin/login');
     }
-  }, [isLoading, isLoginPage, isAuthenticated, router]);
+  }, [isLoading, isLoginPage, isAuthenticated, router, checkedPath, pathname]);
 
   if (isLoginPage) {
     return <>{children}</>;

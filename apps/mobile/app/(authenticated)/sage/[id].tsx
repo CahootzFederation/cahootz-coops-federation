@@ -6,6 +6,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { sageStatusMeta } from '@/lib/sage-status';
+import { SageDecisionTrails } from '@/components/sage-decision-trail';
 import { ArrowLeft } from 'lucide-react-native';
 
 const THEME = {
@@ -19,13 +20,79 @@ const THEME = {
 
 type Detail = Awaited<ReturnType<typeof api.getSageSuggestion>>;
 type ReviewRow = Detail['reviews'][number];
+type SuggestionContext = NonNullable<Detail['context']>;
 
-function labelForReviewType(reviewType: string) {
+function formatWhen(iso: string) {
+  return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+/** Where the suggestion came from, so a leader can judge it against the real conversation before acting. */
+function SuggestionContextCard({ context, coopId }: { context: SuggestionContext; coopId: string }) {
+  const card = { borderRadius: 14, padding: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: THEME.border, gap: 8 } as const;
+  return (
+    <View style={card}>
+      <Text style={{ fontSize: 12, fontWeight: '700', color: THEME.muted }}>Circle</Text>
+      <TouchableOpacity
+        accessibilityRole="link"
+        accessibilityLabel={`Open circle ${context.circle.name}`}
+        onPress={() => router.push({ pathname: '/[coopId]/posts', params: { coopId, circleId: context.circle.id } } as any)}
+      >
+        <Text style={{ color: THEME.primary, fontWeight: '700' }}>{context.circle.name}</Text>
+      </TouchableOpacity>
+
+      {context.targetPost ? (
+        <View style={{ gap: 4 }}>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: THEME.muted, marginTop: 6 }}>Replying to</Text>
+          <TouchableOpacity
+            accessibilityRole="link"
+            accessibilityLabel="Open the post Sage is replying to"
+            onPress={() => router.push({ pathname: '/[coopId]/posts/[postId]', params: { coopId, postId: context.targetPost!.id } } as any)}
+            style={{ borderLeftWidth: 3, borderLeftColor: THEME.primary, paddingLeft: 10, gap: 2 }}
+          >
+            <Text style={{ fontSize: 12, color: THEME.muted }}>
+              {context.targetPost.author} · {formatWhen(context.targetPost.createdAt)}
+            </Text>
+            <Text style={{ color: THEME.ink }}>{context.targetPost.content}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      <Text style={{ fontSize: 12, fontWeight: '700', color: THEME.muted, marginTop: 6 }}>Conversation Sage read</Text>
+      {context.conversation.length ? (
+        <View style={{ gap: 8 }}>
+          {context.conversation.map((entry, index) => (
+            <View key={`${entry.createdAt}-${index}`} style={{ gap: 1 }}>
+              <Text style={{ fontSize: 12, color: THEME.muted }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: THEME.ink }}>{entry.author}</Text> · {formatWhen(entry.createdAt)}
+              </Text>
+              <Text style={{ color: THEME.ink }}>{entry.content}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={{ color: THEME.muted, fontSize: 13 }}>The conversation is no longer available.</Text>
+      )}
+    </View>
+  );
+}
+
+function labelForReviewType(reviewType: string, capability: string | null) {
   if (reviewType === 'PROVIDE_CONTEXT') return 'Sage needs a few details from you';
   if (reviewType === 'CONSENT_TO_SHARE') return 'Confirm what to share';
   if (reviewType === 'ACCEPT_MATCH') return 'A member could use your help';
-  if (reviewType === 'APPROVE_SUGGESTION') return 'Sage has an idea';
+  if (reviewType === 'APPROVE_SUGGESTION') {
+    if (capability === 'comment_on_post') return 'Sage recommends commenting';
+    if (capability === 'draft_proposal') return 'Sage recommends a proposal';
+    return 'Sage has an idea';
+  }
   return 'Confirm details';
+}
+
+// What approving actually does, stated before the member taps Approve.
+function approvalConsequence(capability: string | null) {
+  if (capability === 'comment_on_post') return 'Approving posts this comment as Sage on that post. It will not speak for you.';
+  if (capability === 'draft_proposal') return 'Approving saves an editable draft for you. Nothing is submitted until you submit it.';
+  return null;
 }
 
 export default function SageSuggestionDetailScreen() {
@@ -100,6 +167,12 @@ export default function SageSuggestionDetailScreen() {
             <View style={{ borderRadius: 14, padding: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: THEME.border, gap: 6 }}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: THEME.muted }}>Sage suggestion</Text>
               <Text style={{ color: THEME.ink }}>{detail.suggestion.title}</Text>
+              {detail.suggestion.reason ? (
+                <View style={{ marginTop: 6, gap: 2 }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: THEME.muted }}>Why Sage suggests this</Text>
+                  <Text style={{ color: THEME.ink }}>{detail.suggestion.reason}</Text>
+                </View>
+              ) : null}
               {detail.suggestion.evidence ? (
                 <Text style={{ color: THEME.muted, fontStyle: 'italic', marginTop: 6 }}>&ldquo;{detail.suggestion.evidence}&rdquo;</Text>
               ) : null}
@@ -112,6 +185,35 @@ export default function SageSuggestionDetailScreen() {
                 );
               })()}
             </View>
+
+            {detail.context ? <SuggestionContextCard context={detail.context} coopId={detail.suggestion.coopId} /> : null}
+
+            {!pendingReview && detail.suggestion.capability === 'comment_on_post' && detail.suggestion.proposedText ? (
+              <View style={{ borderRadius: 14, padding: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: THEME.border, gap: 6 }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: THEME.muted }}>
+                  {detail.suggestion.status === 'PUBLISHED' || detail.suggestion.status === 'APPROVED' ? "Sage's comment" : 'Proposed comment'}
+                </Text>
+                <Text style={{ color: THEME.ink }}>{detail.suggestion.proposedText}</Text>
+              </View>
+            ) : null}
+
+            {detail.suggestion.result?.entityType === 'CommonsProposalDraft' ? (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Edit proposal draft"
+                onPress={() =>
+                  router.push({
+                    pathname: '/(authenticated)/commons-proposal-drafts',
+                    params: { coopId: detail.suggestion.coopId },
+                  } as any)
+                }
+                style={{ borderRadius: 10, paddingVertical: 12, alignItems: 'center', backgroundColor: THEME.primary }}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Edit proposal draft</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <SageDecisionTrails filter={{ actionId: detail.suggestion.id }} sessionToken={sessionToken} refreshKey={detail.suggestion.status} />
 
             {detail.auditEvents.length > 0 ? (
               <View style={{ borderRadius: 14, padding: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: THEME.border, gap: 4 }}>
@@ -126,7 +228,7 @@ export default function SageSuggestionDetailScreen() {
 
             {pendingReview ? (
               <View style={{ borderRadius: 14, padding: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: THEME.border, gap: 10 }}>
-                <Text style={{ fontSize: 16, fontWeight: '700', color: THEME.ink }}>{labelForReviewType(pendingReview.reviewType)}</Text>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: THEME.ink }}>{labelForReviewType(pendingReview.reviewType, detail.suggestion.capability)}</Text>
                 {typeof pendingReview.presentationData?.body === 'string' ? (
                   <View style={{ gap: 4 }}>
                     {typeof pendingReview.presentationData?.title === 'string' ? (
@@ -138,6 +240,10 @@ export default function SageSuggestionDetailScreen() {
                   <Text style={{ color: THEME.muted }}>{pendingReview.presentationData.message as string}</Text>
                 ) : typeof pendingReview.presentationData?.summary === 'string' ? (
                   <Text style={{ color: THEME.muted }}>{pendingReview.presentationData.summary as string}</Text>
+                ) : null}
+
+                {pendingReview.reviewType === 'APPROVE_SUGGESTION' && approvalConsequence(detail.suggestion.capability) ? (
+                  <Text style={{ color: THEME.muted, fontSize: 13 }}>{approvalConsequence(detail.suggestion.capability)}</Text>
                 ) : null}
 
                 {pendingReview.reviewType === 'PROVIDE_CONTEXT' ? (

@@ -27,11 +27,16 @@ test("a member reaches the commons info page from the drawer's info button and c
     await expect(page.getByText("AI spending", { exact: true })).toBeVisible();
     await expect(page.getByText("last month", { exact: true })).toBeVisible();
     await expect(page.getByText("This month", { exact: true })).toBeVisible();
+    // Sage's autonomous-work limit: usage against both monthly caps and whether it is paused.
+    const autonomy = page.getByTestId("sage-autonomy-usage");
+    await expect(autonomy.getByText("Sage on its own", { exact: true })).toBeVisible();
+    await expect(autonomy.getByText(/^(Active|Paused)$/)).toBeVisible();
+    await expect(autonomy.getByText(/ of \$[\d.,]+ · \d+ of [\d,]+ tasks this month/)).toBeVisible();
 
     // Community tab
     await page.getByText("Community", { exact: true }).click();
     await expect(page.getByText("People", { exact: true })).toBeVisible();
-    await expect(page.getByText("Circles", { exact: true })).toBeVisible();
+    await expect(page.getByText("Circles", { exact: true }).first()).toBeVisible();
 
     // Governance tab
     await page.getByText("Governance", { exact: true }).click();

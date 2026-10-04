@@ -9,6 +9,7 @@ import { isSageUser } from '../lib/bot.js';
 import { COMMONS_COOP_ID, ensureCommonsMembership } from '../lib/commons.js';
 import { encodeMentions } from '../lib/mentions.js';
 import { createNotificationAndPush } from './push-notification-service.js';
+import { traceSageReply } from './sage-reply-trails.js';
 
 // A direct message is a private circle with exactly two members. It reuses
 // circle membership for access control and GroupComment for messages, but
@@ -260,15 +261,17 @@ async function replyAsSage(
       .reverse()
       .map((m) => `${m.authorId === sender.id ? displayName(sender) : 'Sage'}: ${m.content}`)
       .join('\n');
-    const { reply } = await agent.run({
-      coopId: group.coopId,
-      message: message.content,
-      threadContext,
-    });
-    await db.groupComment.create({
-      data: { groupId: group.id, authorId: sage.id, content: reply },
-    });
-    await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
+    await traceSageReply(
+      { kind: 'dm', coopId: group.coopId, groupId: group.id, messageId: message.id },
+      { message: message.content, threadContext, threadCount: prior.length },
+      (cleanMessage, thread) => agent.run({ coopId: group.coopId, message: cleanMessage, threadContext: thread }),
+      async (reply) => {
+        await db.groupComment.create({
+          data: { groupId: group.id, authorId: sage.id, content: reply },
+        });
+        await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
+      },
+    );
   } catch (error) {
     console.error('Sage DM auto-reply failed:', error);
   }

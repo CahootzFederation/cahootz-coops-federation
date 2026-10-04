@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Settings,
   Shield,
+  Sparkles,
   Store,
   Trash2,
   UserCircle,
@@ -168,6 +169,12 @@ export default function AccountProfileScreen() {
       description: 'Choose push notifications and categories',
       icon: Settings,
       href: '/(authenticated)/notification-settings',
+    },
+    {
+      label: 'Sage settings',
+      description: "See how Sage decides what to do",
+      icon: Sparkles,
+      href: '/(authenticated)/sage-settings',
     },
     {
       label: 'Commons Marketplace',

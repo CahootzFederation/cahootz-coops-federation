@@ -39,6 +39,10 @@ import { notifyCircleActivity } from '../services/circle-notifications.js';
 import { notifyNewCommentReaction } from '../services/comment-reactions.js';
 import { recordWelcomeIntroActivity } from '../services/welcome-intros.js';
 import { FUNDING_BADGE_BY_TIER } from '../services/funding-badge-service.js';
+import { getSageAutonomyUsage } from '../services/sage-autonomy.js';
+import { touchCircleWindow } from '../services/circle-window.js';
+import { recordSkippedCircleMention, traceSageReply } from '../services/sage-reply-trails.js';
+import { notifySageComment } from '../services/sage-comment-notifications.js';
 import {
   sendApplicationSubmittedNotification,
   sendCommonsSuggestionNotification,
@@ -1464,7 +1468,7 @@ export const commonsRouter = router({
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
       );
 
-      const [thisMonthByFeature, lastMonth] = await Promise.all([
+      const [thisMonthByFeature, lastMonth, sageAutonomy] = await Promise.all([
         context.db.aICostEvent.groupBy({
           by: ['feature'],
           where: { coopId: input.coopId, createdAt: { gte: monthStart } },
@@ -1478,6 +1482,7 @@ export const commonsRouter = router({
           },
           _sum: { costUsd: true },
         }),
+        getSageAutonomyUsage(input.coopId, context.db, now),
       ]);
 
       const byCategory = new Map<
@@ -1511,6 +1516,7 @@ export const commonsRouter = router({
         byCategory: [...byCategory.values()].sort(
           (a, b) => b.estimatedUsd - a.estimatedUsd || b.calls - a.calls,
         ),
+        sageAutonomy,
       };
     }),
 
@@ -2477,6 +2483,11 @@ export const commonsRouter = router({
         await enqueueCommonsActionContent('commons_post', post.id).catch((error) =>
           console.error('Could not enqueue Commons action scan for post', { postId: post.id, error }),
         );
+      } else {
+        // Circle activity feeds Sage's circle window (direct messages can't reach this path).
+        touchCircleWindow(circleId, input.coopId).catch((error) =>
+          console.error('Could not update Sage circle window', { circleId, error }),
+        );
       }
       const coop = await loadCoopSummary(ctx.db, input.coopId);
 
@@ -2496,17 +2507,26 @@ export const commonsRouter = router({
           const sage = await ensureSageBotUser(ctx.db, input.coopId);
           const agent = getAgent('sage-commons-reply');
           if (agent) {
-            const { reply } = await agent.run({
-              coopId: input.coopId,
-              message: encodedContent,
-            });
-            await ctx.db.commonsComment.create({
-              data: { postId: post.id, authorId: sage.id, content: reply },
-            });
+            await traceSageReply(
+              { kind: 'post', coopId: input.coopId, postId: post.id },
+              { message: encodedContent, threadCount: 0 },
+              (message) => agent.run({ coopId: input.coopId, message }),
+              async (reply) => {
+                const sageComment = await ctx.db.commonsComment.create({
+                  data: { postId: post.id, authorId: sage.id, content: reply },
+                });
+                await notifySageComment({ postId: post.id, commentId: sageComment.id });
+              },
+            );
           }
         } catch (err) {
           console.error('Sage auto-reply on createPost failed:', err);
         }
+      } else if (sageMention) {
+        await recordSkippedCircleMention(
+          { coopId: input.coopId, circleId, postId: post.id, sourceId: post.id, kind: 'post' },
+          encodedContent,
+        );
       }
 
       if (circleId !== generalCircleId(input.coopId)) {
@@ -2711,6 +2731,11 @@ export const commonsRouter = router({
 
       const isCirclePost =
         !!post.circleId && post.circleId !== generalCircleId(post.coopId);
+      if (isCirclePost) {
+        touchCircleWindow(post.circleId!, post.coopId).catch((error) =>
+          console.error('Could not update Sage circle window', { circleId: post.circleId, error }),
+        );
+      }
       // Welcome lounge intros: record a newcomer's intro, or alert a
       // newcomer the first time someone answers theirs. Best-effort - the
       // comment is already saved.
@@ -2798,18 +2823,26 @@ export const commonsRouter = router({
               ),
             ].join('\n');
 
-            const { reply } = await agent.run({
-              coopId: post.coopId,
-              message: encodedContent,
-              threadContext,
-            });
-            await ctx.db.commonsComment.create({
-              data: { postId: post.id, authorId: sage.id, content: reply },
-            });
+            await traceSageReply(
+              { kind: 'comment', coopId: post.coopId, postId: post.id, commentId: comment.id },
+              { message: encodedContent, threadContext, threadCount: priorComments.length + 1 },
+              (message, thread) => agent.run({ coopId: post.coopId, message, threadContext: thread }),
+              async (reply) => {
+                const sageComment = await ctx.db.commonsComment.create({
+                  data: { postId: post.id, authorId: sage.id, content: reply },
+                });
+                await notifySageComment({ postId: post.id, commentId: sageComment.id });
+              },
+            );
           }
         } catch (err) {
           console.error('Sage auto-reply on createComment failed:', err);
         }
+      } else if (sageMention && post.circleId) {
+        await recordSkippedCircleMention(
+          { coopId: post.coopId, circleId: post.circleId, postId: post.id, sourceId: comment.id, kind: 'comment' },
+          encodedContent,
+        );
       }
 
       for (const mentioned of isCirclePost ? [] : mentionedUsers) {

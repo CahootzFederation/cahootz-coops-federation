@@ -11,9 +11,12 @@ export async function enqueueCommonsActionContent(sourceType: CommonsActionSourc
     warnedAboutLocalTriggerKey = true;
   }
   if (!triggerKey || wrongLocalKey) {
-    // Local API development can run without Trigger.dev. Keep processing on the API backend.
-    const { processCommonsActionContent } = await import("./commons-action-agent.js");
-    await processCommonsActionContent(sourceType, sourceId);
+    // Local API development can run without Trigger.dev, so the scan runs on the API backend - in the
+    // background, like the Trigger job it stands in for, so creating a post or comment never waits on
+    // a model call. The durable scan claim and the daily recovery scan cover a crash mid-scan.
+    void import("./commons-action-agent.js")
+      .then(({ processCommonsActionContent }) => processCommonsActionContent(sourceType, sourceId))
+      .catch((error) => console.error("Commons action scan failed", { sourceType, sourceId, error }));
     return;
   }
   const { tasks } = await import("@trigger.dev/sdk");

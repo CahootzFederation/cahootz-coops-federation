@@ -77,6 +77,17 @@ jobs:
       E2E_USER_A_EMAIL: releaseclick1@test.cahootz.local
       E2E_USER_B_EMAIL: releaseclick2@test.cahootz.local
       E2E_LOGIN_CODE: "000000"
+      # Platform admin journey (admin-commons-ai.spec.ts) drives the web admin portal. The web app and
+      # API must share SESSION_SECRET (admin API tokens) and both allowlist the test admin.
+      E2E_ADMIN_BASE_URL: http://localhost:3000
+      E2E_ADMIN_EMAIL: e2e-admin@test.cahootz.local
+      PLATFORM_ADMIN_EMAILS: e2e-admin@test.cahootz.local
+      SESSION_SECRET: ci-only-session-secret-0123456789abcdef0123456789
+      NEXT_PUBLIC_API_URL: http://localhost:3001/trpc
+      NEXT_PUBLIC_URI: http://localhost:3001
+      NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID: ci-placeholder
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.E2E_STRIPE_PUBLISHABLE_KEY || 'pk_test_ci_placeholder' }}
+      SKIP_BLOG_SYNC: "true"
 
     steps:
       - name: Checkout code
@@ -116,6 +127,8 @@ jobs:
           echo $! > /tmp/cahootz-api.pid
           nohup pnpm -F @cahootz/mobile dev > /tmp/cahootz-mobile.log 2>&1 &
           echo $! > /tmp/cahootz-mobile.pid
+          nohup pnpm -F @cahootz/web dev --port 3000 > /tmp/cahootz-web.log 2>&1 &
+          echo $! > /tmp/cahootz-web.pid
 
       - name: Wait for services
         shell: bash
@@ -137,6 +150,18 @@ jobs:
             fi
             if [ "$attempt" -eq 60 ]; then
               cat /tmp/cahootz-mobile.log
+              exit 1
+            fi
+            sleep 2
+          done
+
+          # Next compiles a route on first request; this also warms the admin login page.
+          for attempt in {1..90}; do
+            if curl --fail --silent --max-time 120 http://localhost:3000/portal/admin/login >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 90 ]; then
+              cat /tmp/cahootz-web.log
               exit 1
             fi
             sleep 2
@@ -166,6 +191,9 @@ jobs:
           fi
           if [ -f /tmp/cahootz-mobile.log ]; then
             cp /tmp/cahootz-mobile.log output/playwright/server-logs/mobile.log
+          fi
+          if [ -f /tmp/cahootz-web.log ]; then
+            cp /tmp/cahootz-web.log output/playwright/server-logs/web.log
           fi
 
       - name: Upload E2E artifacts

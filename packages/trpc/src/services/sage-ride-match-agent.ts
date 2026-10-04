@@ -5,6 +5,9 @@ import { z } from "zod";
 
 import { recordAICost, recordAgentResultCost } from "./ai-cost.js";
 import { createNotificationAndPush } from "./push-notification-service.js";
+import { sageAutonomyAllowed } from "./sage-autonomy.js";
+import { DecisionTrail, percent } from "./sage-decision-trail.js";
+import { cleanseUntrustedText } from "./untrusted-input.js";
 
 export const RIDE_MATCH_MODEL = "gpt-5.6-luna";
 export const RIDE_MATCH_CHARTER_KEY = "sage-ride-match:v1";
@@ -86,6 +89,21 @@ export async function processRideMatchWindow(windowId: string): Promise<{ proces
     orderBy: { createdAt: "asc" },
   });
   if (!messages.length) return { processed: 0 };
+  // Ride needs involve a member's private details, so this trail is visible to platform admins only.
+  const trail = new DecisionTrail({
+    agent: "sage-ride-match",
+    coopId: window.coopId, circleId: window.groupId, sourceType: "circle_ride_match", sourceId: window.id,
+    trigger: window.messageCount < 40 ? "ADMIN_ANALYZE" : "CIRCLE_WINDOW_FULL", visibility: "ADMINS",
+    observed: {
+      itemCount: messages.length, from: window.openedAt.toISOString(), to: (window.closedAt ?? window.lastMessageAt).toISOString(),
+      items: messages.map((message) => ({ author: message.authorId, content: message.content, at: message.createdAt.toISOString() })),
+    },
+  }).step("OBSERVED", `Read ${messages.length} circle chat messages for ride needs`);
+  if (!(await sageAutonomyAllowed(window.coopId))) {
+    trail.policy("Within Sage's monthly limit for this Commons", false);
+    await trail.setOutcome("Not analyzed: monthly limit reached").save();
+    return { processed: 0 };
+  }
 
   const claimed: Array<{ message: WindowMessage; contentHash: string; where: NonNullable<Awaited<ReturnType<typeof claimMessageScan>>>["where"] }> = [];
   for (const message of messages) {
@@ -95,9 +113,16 @@ export async function processRideMatchWindow(windowId: string): Promise<{ proces
   if (!claimed.length) return { processed: 0 };
 
   let processed = 0;
-  for (let offset = 0; offset < claimed.length; offset += DETECTION_BATCH_SIZE) {
-    processed += await analyzeDetectionBatch(window.coopId, window.groupId, claimed.slice(offset, offset + DETECTION_BATCH_SIZE));
+  try {
+    for (let offset = 0; offset < claimed.length; offset += DETECTION_BATCH_SIZE) {
+      processed += await analyzeDetectionBatch(window.coopId, window.groupId, claimed.slice(offset, offset + DETECTION_BATCH_SIZE), trail);
+    }
+  } catch (error) {
+    await trail.taken("Analysis failed", "FAIL", error instanceof Error ? error.message : String(error)).setOutcome("Analysis failed").save();
+    throw error;
   }
+  if (!trail.snapshot().steps.some((step) => step.stage === "CONSIDERED")) trail.step("CONSIDERED", "No ride needs found", { outcome: "INFO" }).taken("Did nothing", "INFO");
+  await trail.save();
   return { processed };
 }
 
@@ -105,10 +130,11 @@ async function analyzeDetectionBatch(
   coopId: string,
   groupId: string,
   claimed: Array<{ message: WindowMessage; contentHash: string; where: NonNullable<Awaited<ReturnType<typeof claimMessageScan>>>["where"] }>,
+  trail?: DecisionTrail,
 ): Promise<number> {
   let modelCallCompleted = false;
   try {
-    const prompt = JSON.stringify({ items: claimed.map(({ message }) => ({ id: message.id, content: message.content.slice(0, 1000) })) });
+    const prompt = JSON.stringify({ items: claimed.map(({ message }) => ({ id: message.id, content: cleanseUntrustedText(message.content, { maxChars: 1000 }).text })) });
     const result = await run(createRideMatchDetectorAgent(), prompt);
     modelCallCompleted = true;
     await recordAgentResultCost({ coopId, feature: "sage-ride-match-detect", model: RIDE_MATCH_MODEL, result }).catch(console.error);
@@ -117,8 +143,12 @@ async function analyzeDetectionBatch(
 
     for (const claim of claimed) {
       const detection = byId.get(claim.message.id);
-      if (detection?.hasRideNeed && detection.confidence >= RIDE_MATCH_CONFIDENCE_THRESHOLD) {
-        await createRideMatchSuggestion(coopId, groupId, claim.message, claim.contentHash, detection.summary);
+      if (detection?.hasRideNeed) {
+        trail?.step("CONSIDERED", `Ride need: ${detection.summary}`, { outcome: "INFO", detail: `Confidence ${percent(detection.confidence)}\nMessage: ${claim.message.content.slice(0, 500)}` });
+        if (trail?.policy(`Confident enough to ask the member (${percent(RIDE_MATCH_CONFIDENCE_THRESHOLD)}+)`, detection.confidence >= RIDE_MATCH_CONFIDENCE_THRESHOLD) ?? detection.confidence >= RIDE_MATCH_CONFIDENCE_THRESHOLD) {
+          const actionId = await createRideMatchSuggestion(coopId, groupId, claim.message, claim.contentHash, detection.summary);
+          trail?.taken("Asked the member for ride details").linkAction(actionId);
+        }
       }
       await db.commonsContentScan.update({ where: claim.where, data: { status: "SUCCESS", scannedAt: new Date() } });
     }
@@ -132,7 +162,7 @@ async function analyzeDetectionBatch(
   }
 }
 
-async function createRideMatchSuggestion(coopId: string, groupId: string, message: WindowMessage, contentHash: string, summary: string) {
+async function createRideMatchSuggestion(coopId: string, groupId: string, message: WindowMessage, contentHash: string, summary: string): Promise<string> {
   const initialPayloadHash = payloadHash(null);
   const action = await db.commonsAction.upsert({
     where: { sourceType_sourceId_contentHash_charterConfigId_position: {
@@ -177,4 +207,5 @@ async function createRideMatchSuggestion(coopId: string, groupId: string, messag
       data: { actionId: action.id },
     }).catch((error) => console.error("Could not notify Sage suggestion subject", error));
   }
+  return action.id;
 }

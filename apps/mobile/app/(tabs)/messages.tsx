@@ -22,6 +22,7 @@ import {
   type DirectThread,
 } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import { SageDecisionTrails } from '@/components/sage-decision-trail';
 
 // Each DM is a private circle shared by exactly two people. A conversation
 // entry is either an existing circle (has groupId) or a commons member you
@@ -413,6 +414,12 @@ export default function MessagesScreen() {
                 </View>
               ))}
             </View>
+
+            {selectedGroupId ? (
+              <View className="px-4 pb-2">
+                <SageDecisionTrails filter={{ circleId: selectedGroupId }} sessionToken={sessionToken} refreshKey={messages.length} hideWhenEmpty />
+              </View>
+            ) : null}
 
             <View className="border-t border-stone-100 p-3">
               <View className="flex-row items-end gap-2">

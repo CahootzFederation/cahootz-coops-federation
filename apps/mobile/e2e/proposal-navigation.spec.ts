@@ -6,6 +6,15 @@ test('proposals live in the active commons drawer instead of the main tab bar', 
   const { page } = member;
 
   try {
+    // The drawer loads the commons directory when it opens. Slowing that
+    // response down holds the drawer in its pre-load state, which must not
+    // name a commons (it once said "Cahootz Commons" while linking to a
+    // commons with another name).
+    await page.route('**/trpc/commons.listDirectory**', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 3_000));
+      await route.continue();
+    });
+
     const mainNavigation = page.getByRole('tablist', { name: 'Main navigation' });
     await expect(mainNavigation.getByRole('tab', { name: 'Proposals' })).toHaveCount(0);
 

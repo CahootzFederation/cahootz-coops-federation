@@ -4,12 +4,15 @@
  */
 import { expireSageAlerts } from "./sage-responsibility.js";
 import { maintainSageMemory } from "./sage-memory.js";
+import { runStewardReview } from "./sage-steward.js";
 
 type Step = { name: string; run: (coopId: string, now: Date) => Promise<unknown> };
 
 const steps: Step[] = [
   { name: "expire alerts", run: expireSageAlerts },
   { name: "maintain memory", run: maintainSageMemory },
+  // At most once a day per Commons (the steward checks its own last run), and only within the monthly limit.
+  { name: "steward review", run: (coopId, now) => runStewardReview(coopId, now) },
 ];
 
 export async function wakeCycleWork(coopId: string, now = new Date()): Promise<void> {

@@ -10,6 +10,7 @@ import { createNotificationAndPush } from "../services/push-notification-service
 import { describeSageAuditEvent } from "../services/sage-audit-descriptions.js";
 import { presentTrails } from "../services/sage-decision-trail.js";
 import { dismissSageTask } from "../services/sage-tasks.js";
+import { askIntroductionHelper } from "../services/sage-introductions.js";
 import { acknowledgeSageAlert, rerouteSageAlert } from "../services/sage-responsibility.js";
 import { router } from "../trpc.js";
 
@@ -421,6 +422,11 @@ export const sageRouter = router({
             data: { actionId: action.id },
           }).catch((error) => console.error("Could not notify Sage suggestion helper", error));
         }
+      } else if (review.reviewType === "ACCEPT_INTRODUCTION") {
+        // The person with the need says yes first; then the helper is asked; both yeses create the circle.
+        const participant = await context.db.commonsActionParticipant.findUnique({ where: { actionId_userId: { actionId: action.id, userId } }, select: { role: true } });
+        if (participant?.role === "SUBJECT") await askIntroductionHelper(action.id);
+        else await enqueueSageActionExecute(action.id, action.revision);
       } else if (review.reviewType === "ACCEPT_MATCH" || review.reviewType === "APPROVE_SUGGESTION") {
         await enqueueSageActionExecute(action.id, action.revision);
       }

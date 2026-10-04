@@ -77,3 +77,55 @@ describe("SUGGEST_ACTION open tool vocabulary", () => {
     vi.doUnmock("@repo/db");
   });
 });
+
+describe("Suggestion context", () => {
+  const action = {
+    id: "action-c", coopId: "harbor", type: "SUGGEST_ACTION", status: "PENDING", summary: "Coordinate the ride",
+    sourceType: "circle_trend", sourceId: "window-1", circleId: "circle-1", payload: { capability: "comment_on_post", body: "Share your pickup area", targetPostId: "circle:msg-1" },
+    evidence: "Two members asked for rides.", sourceTextSnapshot: null, payloadHash: "h",
+  };
+  function detailDb(membership: unknown) {
+    return accountSessionDb({
+      commonsAction: { findUnique: vi.fn().mockResolvedValue(action) },
+      commonsActionParticipant: { findUnique: vi.fn().mockResolvedValue({ role: "SUBJECT" }) },
+      commonsActionReview: { findMany: vi.fn().mockResolvedValue([]) },
+      commonsActionAudit: { findMany: vi.fn().mockResolvedValue([]) },
+      groupMember: { findUnique: vi.fn().mockResolvedValue(membership) },
+      circleAgentWindow: { findUnique: vi.fn().mockResolvedValue({ groupId: "circle-1", openedAt: new Date("2026-10-01T10:00:00Z"), closedAt: new Date("2026-10-01T11:00:00Z"), lastMessageAt: new Date("2026-10-01T11:00:00Z") }) },
+      commonsPost: {
+        findFirst: vi.fn().mockResolvedValue({ id: "circle:msg-1", title: "I need a ride", content: "I need a ride Saturday", createdAt: new Date("2026-10-01T10:30:00Z"), author: { name: "Maya", handle: "maya" } }),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      commonsComment: { findMany: vi.fn().mockResolvedValue([]) },
+      groupComment: { findMany: vi.fn().mockResolvedValue([
+        { content: "I need a ride Saturday", createdAt: new Date("2026-10-01T10:30:00Z"), author: { name: "Maya", handle: "maya" } },
+        { content: "Anyone near the market?", createdAt: new Date("2026-10-01T10:20:00Z"), author: { name: null, handle: "sam" } },
+      ]) },
+    });
+  }
+
+  it("shows the circle, the post Sage replies to, and the conversation in order to a circle member", async () => {
+    const db = detailDb({ group: { id: "circle-1", name: "Market riders", coopId: "harbor" } });
+    const detail = await callerFor(db).getDetail({ actionId: "action-c" });
+    expect(detail.suggestion).toMatchObject({ reason: "Two members asked for rides.", proposedText: "Share your pickup area" });
+    expect(detail.context).toMatchObject({
+      circle: { id: "circle-1", name: "Market riders" },
+      targetPost: { id: "circle:msg-1", author: "Maya", content: "I need a ride Saturday" },
+      conversation: [
+        { author: "@sam", content: "Anyone near the market?" },
+        { author: "Maya", content: "I need a ride Saturday" },
+      ],
+    });
+    // Mirrored chat posts are excluded from the post list so messages aren't shown twice.
+    expect(db.commonsPost.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ NOT: { id: { startsWith: "circle:" } } }),
+    }));
+  });
+
+  it("hides the conversation from someone who is no longer in the circle", async () => {
+    const db = detailDb(null);
+    const detail = await callerFor(db).getDetail({ actionId: "action-c" });
+    expect(detail.context).toBeNull();
+    expect(db.groupComment.findMany).not.toHaveBeenCalled();
+  });
+});

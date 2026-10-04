@@ -21,6 +21,7 @@ model User {
   roles                        String[]                @default(["member"]) // member, business, admin, governor, sage (platform bot)
   status                       UserStatus              @default(PENDING)
   isBot                        Boolean                 @default(false) // true for platform bot accounts (e.g. Sage)
+  showSageDecisionTrails       Boolean                 @default(false) // personal app setting: show Sage's decision trails on content this user can see
   password                     String?
   phone                        String?                 @unique // E.164 format: +1XXXXXXXXXX
   walletAddress                String?                 @unique // DEPRECATED: Use Wallet model instead
@@ -39,17 +40,17 @@ model User {
   profileSignals               Json                    @default("{}")
   profileOnboardingCompletedAt DateTime?
   // Personal page avatar: a photo wins over an emoji, which wins over initials.
-  avatarUrl           String? // Uploaded profile photo URL (blob storage)
-  avatarEmoji         String? // Notion-style emoji avatar, e.g. "🌻"
-  avatarColor         String? // Hex background color behind avatarEmoji
+  avatarUrl                    String? // Uploaded profile photo URL (blob storage)
+  avatarEmoji                  String? // Notion-style emoji avatar, e.g. "🌻"
+  avatarColor                  String? // Hex background color behind avatarEmoji
   // Last time this member used the app with a verified session. Written by
   // accountAuthenticatedProcedure at most once per 15 minutes (see
   // packages/trpc/src/lib/member-activity.ts); read by the new-member drip.
-  lastActiveAt        DateTime?
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
-  deletedAt           DateTime?
-  deletedBy           String?
+  lastActiveAt                 DateTime?
+  createdAt                    DateTime                @default(now())
+  updatedAt                    DateTime                @updatedAt
+  deletedAt                    DateTime?
+  deletedBy                    String?
 
   // Stripe integration for P2P payments
   stripeCustomerId       String? @unique
@@ -388,17 +389,17 @@ model CoopConfig {
   name            String?
   slug            String?
   tagline         String?
-  description     String? @db.Text
-  displayMission  String? @db.Text
+  description     String?           @db.Text
+  displayMission  String?           @db.Text
   displayFeatures Json? // [{ title, description }]
-  eligibility     String? @db.Text
-  bgColor         String  @default("bg-red-700")
-  accentColor     String  @default("bg-gold-600")
+  eligibility     String?           @db.Text
+  bgColor         String            @default("bg-red-700")
+  accentColor     String            @default("bg-gold-600")
   iconEmoji       String? // Notion-style emoji avatar, e.g. "🏠". Falls back to initials when unset.
   iconColor       String? // Hex color for the icon background, e.g. "#FF6B00". Falls back to primary theme color when unset.
-  displayOrder    Int     @default(0)
-  isDemo          Boolean @default(false)
-  isPrivate       Boolean @default(false) // Hidden from public listing/onboarding, still reachable by direct coopId
+  displayOrder    Int               @default(0)
+  isDemo          Boolean           @default(false)
+  isPrivate       Boolean           @default(false) // Hidden from public listing/onboarding, still reachable by direct coopId
   // How people become members. AUTOMATIC is only for the Cahootz Commons;
   // INVITE_ONLY commons (families) are always private. See
   // packages/trpc/src/services/commons-membership.ts.
@@ -1075,13 +1076,13 @@ model CommonsPostMedia {
 }
 
 model CommonsComment {
-  id       String                @id @default(cuid())
-  postId   String
-  post     CommonsPost           @relation(fields: [postId], references: [id], onDelete: Cascade)
-  authorId String
-  author   User                  @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  content  String                @db.Text
-  media    CommonsCommentMedia[]
+  id           String                   @id @default(cuid())
+  postId       String
+  post         CommonsPost              @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId     String
+  author       User                     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content      String                   @db.Text
+  media        CommonsCommentMedia[]
   welcomeIntro WelcomeIntro?
   reactions    CommonsCommentReaction[]
 
@@ -1141,18 +1142,21 @@ enum CommonsActionFeedbackReason {
 }
 
 model CommonsAgentSetting {
-  coopId                String    @id
-  autoReply             Boolean   @default(true)
-  lastScanAt            DateTime?
-  newPostOffset         Int       @default(0)
-  newCommentOffset      Int       @default(0)
-  backfillPostCursor    String?
-  backfillCommentCursor String?
-  backfillPostsDone     Boolean   @default(false)
-  backfillCommentsDone  Boolean   @default(false)
-  lastCharterKey        String?
-  updatedBy             String?
-  updatedAt             DateTime  @updatedAt
+  coopId                   String    @id
+  autoReply                Boolean   @default(true)
+  // Monthly cap on model work Sage starts on its own (UTC month). Member-requested AI is not counted.
+  autonomyMonthlyUsdLimit  Decimal   @default(5) @db.Decimal(10, 2)
+  autonomyMonthlyCallLimit Int       @default(2000)
+  lastScanAt               DateTime?
+  newPostOffset            Int       @default(0)
+  newCommentOffset         Int       @default(0)
+  backfillPostCursor       String?
+  backfillCommentCursor    String?
+  backfillPostsDone        Boolean   @default(false)
+  backfillCommentsDone     Boolean   @default(false)
+  lastCharterKey           String?
+  updatedBy                String?
+  updatedAt                DateTime  @updatedAt
 
   @@schema("public")
 }
@@ -1331,6 +1335,34 @@ model CommonsProposalDraft {
   @@schema("public")
 }
 
+// One record per Sage analysis (a Commons post or comment, a circle window, a ride-match window),
+// including analyses where Sage decided to do nothing. Steps up to "action taken" are written when
+// Sage decides; result and follow-up are read live from the linked CommonsActions.
+model SageDecisionTrail {
+  id             String   @id @default(cuid())
+  agent          String // commons-action-agent | sage-trend | sage-ride-match | proposal-engine | comment-evaluation | sage-reply
+  coopId         String
+  circleId       String?
+  proposalId     String?
+  sourceType     String // commons_post | commons_comment | circle_window | circle_ride_match | proposal | proposal_comment | sage_mention | sage_dm
+  sourceId       String
+  trigger        String // NEW_CONTENT | SCHEDULED_SCAN | ADMIN_SCAN | CIRCLE_WINDOW_FULL | ADMIN_ANALYZE | PROPOSAL_SUBMITTED | PROPOSAL_RESUBMITTED | PROPOSAL_ALTERNATIVE_APPLIED | PROPOSAL_COMMENT | SAGE_MENTION | SAGE_DM
+  visibility     String // COMMONS_MEMBERS | CIRCLE | ADMINS
+  outcome        String   @db.Text
+  observed       Json // what Sage read, bounded
+  steps          Json // ordered TrailStep[]
+  relatedPostIds String[]
+  actionIds      String[]
+  createdAt      DateTime @default(now())
+
+  @@index([coopId, createdAt])
+  @@index([coopId, agent, createdAt])
+  @@index([circleId, createdAt])
+  @@index([proposalId, createdAt])
+  @@index([sourceType, sourceId])
+  @@schema("public")
+}
+
 model AICostEvent {
   id                String   @id @default(cuid())
   coopId            String?
@@ -1460,16 +1492,16 @@ model Group {
 }
 
 model GroupMember {
-  id       String   @id @default(cuid())
-  groupId  String
-  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  userId   String
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  joinedAt DateTime @default(now())
-  role     String   @default("MEMBER") // "MEMBER" | "GUIDE" | "NEWCOMER"
+  id                String    @id @default(cuid())
+  groupId           String
+  group             Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt          DateTime  @default(now())
+  role              String    @default("MEMBER") // "MEMBER" | "GUIDE" | "NEWCOMER"
   // Last time this member read the circle's messages; drives DM unread counts.
-  lastReadAt DateTime?
-  notificationLevel String @default("MENTIONS") // "ALL" | "MENTIONS" | "NONE"
+  lastReadAt        DateTime?
+  notificationLevel String    @default("MENTIONS") // "ALL" | "MENTIONS" | "NONE"
 
   @@unique([groupId, userId])
   @@index([userId])

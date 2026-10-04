@@ -8,6 +8,22 @@ import { extractEncodedMentionHandles } from "../lib/mentions.js";
 import { createNotificationAndPush } from "./push-notification-service.js";
 import { isPlaceholderCharter, starterCharter, type StarterGoal } from "./starter-charter.js";
 import { recordAICost, recordAgentResultCost } from "./ai-cost.js";
+import { sageAutonomyAllowed } from "./sage-autonomy.js";
+import { notifySageComment } from "./sage-comment-notifications.js";
+import { DecisionTrail, type TrailTrigger } from "./sage-decision-trail.js";
+import { SAGE_FOLLOW_THROUGH_RULE, renderTemplatedReply, sageReplyStyleInstructions } from "./sage-reply-templates.js";
+import {
+  checkSageOutput, cleanseUntrustedText, describeInputFlags, describeOutputProblems, isSteeringAttempt, mergeFlags,
+  type InputFlag,
+} from "./untrusted-input.js";
+
+/** The member-written parts of an item, cleansed before they reach the model. */
+export function cleanseSourceItem(item: SourceItem) {
+  const title = cleanseUntrustedText(item.title, { maxChars: 160 });
+  const content = cleanseUntrustedText(item.content, { maxChars: 2200 });
+  const context = cleanseUntrustedText(item.context, { maxChars: THREAD_CONTEXT_CHARS });
+  return { item: { ...item, title: title.text, content: content.text, context: context.text }, check: mergeFlags([title, content, context]) };
+}
 
 export const COMMONS_ACTION_TYPES = [
   "MAKE_PROPOSAL", "RESPOND_CHARTER_CORRECTION", "RESPOND_MISSION_ALIGNMENT",
@@ -19,6 +35,8 @@ export const REPLY_ACTIONS = new Set<string>([
   "ANSWER_QUESTION", "CLARIFY_NEED", "CONNECT_MEMBERS",
 ]);
 export const RECENT_REPLY_MS = 48 * 60 * 60 * 1000;
+// Below this, a grounded reply still becomes a queued action for review, but Sage does not publish it.
+export const AUTO_REPLY_MIN_CONFIDENCE = 0.75;
 export const COMMONS_ACTION_MODEL = "gpt-5.6-luna";
 const BATCH_SIZE = 6;
 const PAGE_SIZE = 48;
@@ -32,11 +50,18 @@ const ActionOutputZ = z.object({
   resourceKind: z.enum(["", "PERSON", "ORGANIZATION", "SKILL", "EQUIPMENT", "SPACE", "FUNDING", "SERVICE", "INFORMATION"]),
   resourceTitle: z.string(),
   targetHandle: z.string(),
+  // Optional reply template (see sage-reply-templates.ts); "" and empty when no template fits.
+  templateKey: z.string(),
+  templateLead: z.string(),
+  templateSteps: z.array(z.string()).max(4),
+  templateOffer: z.string(),
 });
 const BatchOutputZ = z.object({
   items: z.array(z.object({ id: z.string(), actions: z.array(ActionOutputZ).max(5) })),
 });
 type ActionOutput = z.infer<typeof ActionOutputZ>;
+/** The parts of an action the reply rules look at; template fields are already rendered into draftText. */
+type ReplyDraft = Omit<ActionOutput, "templateKey" | "templateLead" | "templateSteps" | "templateOffer">;
 
 export interface SourceItem {
   sourceType: "commons_post" | "commons_comment";
@@ -81,14 +106,28 @@ export function hasExactGrounding(evidence: string, config: Pick<CoopConfig, "ch
   });
 }
 
-export function mayAutoReply(action: ActionOutput, item: SourceItem, config: CoopConfig, autoReply: boolean, now = new Date()): boolean {
+/** Every rule a reply must pass before Sage publishes it without review. The decision trail shows each one. */
+export function replyPolicyChecks(action: ReplyDraft, item: SourceItem, config: CoopConfig, autoReply: boolean, now = new Date(), inputFlags: InputFlag[] = []) {
+  const output = checkSageOutput(action.draftText);
   const citeIsVisible = action.type !== "RESPOND_CHARTER_CORRECTION" || action.draftText.toLowerCase().includes(action.evidence.trim().toLowerCase());
-  return autoReply && REPLY_ACTIONS.has(action.type) && !!action.draftText.trim()
-    && hasExactGrounding(action.evidence, config)
-    && citeIsVisible
-    && now.getTime() - item.createdAt.getTime() <= RECENT_REPLY_MS
-    && now.getTime() >= item.createdAt.getTime()
-    && !item.content.toLowerCase().includes("[@sage]");
+  const ageMs = now.getTime() - item.createdAt.getTime();
+  return [
+    { label: "Auto-reply is on for this Commons", passed: autoReply },
+    { label: "This kind of action is a reply", passed: REPLY_ACTIONS.has(action.type) },
+    { label: "Has reply text", passed: !!action.draftText.trim() },
+    { label: `Confident enough to reply without review (${Math.round(AUTO_REPLY_MIN_CONFIDENCE * 100)}%+)`, passed: action.confidence >= AUTO_REPLY_MIN_CONFIDENCE,
+      detail: `Confidence ${Math.round(action.confidence * 100)}%` },
+    { label: "Quotes the charter or a mission goal exactly", passed: hasExactGrounding(action.evidence, config), detail: action.evidence ? `"${action.evidence}"` : undefined },
+    ...(action.type === "RESPOND_CHARTER_CORRECTION" ? [{ label: "The correction shows the charter quote in the reply", passed: citeIsVisible }] : []),
+    { label: "The post is less than 48 hours old", passed: ageMs <= RECENT_REPLY_MS && ageMs >= 0 },
+    { label: "The post isn't addressed to Sage", passed: !item.content.toLowerCase().includes("[@sage]") },
+    { label: "The member's text has no instructions aimed at Sage", passed: !isSteeringAttempt(inputFlags) },
+    { label: "The reply passes the safety check", passed: output.ok, detail: describeOutputProblems(output.problems) },
+  ];
+}
+
+export function mayAutoReply(action: ReplyDraft, item: SourceItem, config: CoopConfig, autoReply: boolean, now = new Date(), inputFlags: InputFlag[] = []): boolean {
+  return replyPolicyChecks(action, item, config, autoReply, now, inputFlags).every((check) => check.passed);
 }
 
 async function ensureActiveCharter(config: CoopConfig): Promise<CoopConfig> {
@@ -133,41 +172,69 @@ async function claimScan(item: SourceItem, charterConfigId: string) {
   }
 }
 
-async function invitePerson(resourceId: string, item: SourceItem, action: ActionOutput) {
+async function invitePerson(resourceId: string, item: SourceItem, action: ActionOutput): Promise<string> {
   const handle = action.targetHandle.replace(/^@/, "").trim();
   const exactMention = handle && extractEncodedMentionHandles(item.content).some((value) => value.toLowerCase() === handle.toLowerCase());
   const selfOffer = /\b(i can|i offer|i have|i am available|i'm available|my (skills|space|equipment|service)|happy to help)\b/i.test(item.content);
   const target = exactMention
     ? await db.user.findFirst({ where: { handle: { equals: handle, mode: "insensitive" }, isBot: false, deletedAt: null }, select: { id: true } })
     : !handle && selfOffer ? await db.user.findFirst({ where: { id: item.sourceAuthorId, isBot: false }, select: { id: true } }) : null;
-  if (!target) return;
+  if (!target) return "No eligible person: they must be @mentioned, or the author offering their own skills";
   const member = await db.userCoopMembership.findUnique({ where: { userId_coopId: { userId: target.id, coopId: item.coopId } }, select: { status: true } });
-  if (member?.status !== "ACTIVE") return;
+  if (member?.status !== "ACTIVE") return "Not invited: not an active member of this Commons";
   const resource = await db.commonsResource.findUnique({ where: { id: resourceId } });
-  if (!resource) return;
+  if (!resource) return "Not invited: the resource record is missing";
   const duplicate = await db.commonsResource.findFirst({ where: {
     id: { not: resourceId }, coopId: item.coopId, candidateUserId: target.id,
     kind: "PERSON",
     invitedAt: { gte: new Date(Date.now() - 30 * 86400000) },
     status: { in: ["INVITED", "ACCEPTED", "VERIFIED", "PUBLISHED"] },
   }, select: { id: true } });
-  if (duplicate) return;
+  if (duplicate) return "Not invited: already invited in the last 30 days";
   const updated = await db.commonsResource.updateMany({ where: { id: resourceId, invitedAt: null }, data: { candidateUserId: target.id, status: "INVITED", invitedAt: new Date() } });
-  if (!updated.count) return;
+  if (!updated.count) return "Not invited: an invitation was already sent";
   await createNotificationAndPush(db, {
     userId: target.id, coopId: item.coopId, type: "RESOURCE_INVITATION",
     title: "Would you like to be listed as a resource?",
     body: action.resourceTitle || "A Commons member suggested your skills as a resource.",
     data: { resourceId, coopId: item.coopId },
   });
+  return "Invited them to be listed as a resource";
 }
 
-async function saveActions(item: SourceItem, actions: ActionOutput[], config: CoopConfig, autoReply: boolean, contentHash: string, charterKey: string) {
+const ACTION_LABEL: Record<string, string> = {
+  MAKE_PROPOSAL: "Draft a proposal", RESPOND_CHARTER_CORRECTION: "Correct a charter misunderstanding",
+  RESPOND_MISSION_ALIGNMENT: "Reply about mission alignment", RESPOND_RESOURCE_FOLLOWUP: "Follow up on an offer",
+  VERIFY_RESOURCE: "Flag a resource to verify", LOG_RESOURCE: "Log a resource", ANSWER_QUESTION: "Answer a question",
+  CLARIFY_NEED: "Ask a clarifying question", CONNECT_MEMBERS: "Connect members", ESCALATE_TO_ADMIN: "Flag for an admin",
+};
+
+async function saveActions(item: SourceItem, actions: ActionOutput[], config: CoopConfig, autoReply: boolean, contentHash: string, charterKey: string, trail: DecisionTrail, inputFlags: InputFlag[]) {
   const sage = await ensureSageBotUser(db, item.coopId);
+  const proposed = actions.filter((action) => action.type !== "NO_ACTION");
+  if (!proposed.length) {
+    trail.step("CONSIDERED", "Nothing worth doing", { outcome: "INFO" });
+    trail.taken("Did nothing", "INFO");
+  }
   for (const [position, action] of actions.entries()) {
     if (action.type === "NO_ACTION") continue;
-    const evidenceValid = hasExactGrounding(action.evidence, config);
-    if (!evidenceValid) continue;
+    // Admin escalations can concern a member's conduct; they never appear in a member's view of the trail.
+    const adminOnly = action.type === "ESCALATE_TO_ADMIN";
+    trail.step("CONSIDERED", `${ACTION_LABEL[action.type] ?? action.type}: ${action.summary}`, {
+      outcome: "INFO", adminOnly,
+      detail: [
+        `Confidence ${Math.round(action.confidence * 100)}%`,
+        action.evidence && `Evidence: "${action.evidence}"`,
+        action.draftText && `Draft: ${action.draftText}`,
+        action.resourceTitle && `Resource: ${action.resourceTitle}`,
+      ].filter(Boolean).join("\n"),
+    });
+    const evidenceValid = trail.policy("Quotes the charter or a mission goal exactly", hasExactGrounding(action.evidence, config),
+      action.evidence ? `"${action.evidence}"` : "No quote given", adminOnly);
+    if (!evidenceValid) {
+      trail.taken("Discarded: no exact charter or goal quote to back it", "FAIL", undefined, adminOnly);
+      continue;
+    }
     const isReply = REPLY_ACTIONS.has(action.type);
     const row = await db.commonsAction.upsert({
       where: { sourceType_sourceId_contentHash_charterConfigId_position: {
@@ -180,29 +247,42 @@ async function saveActions(item: SourceItem, actions: ActionOutput[], config: Co
         evidence: action.evidence.slice(0, 2000), confidence: action.confidence,
         draftText: action.draftText.slice(0, 2000), charterConfigId: charterKey,
         generatedDraftText: action.draftText.slice(0, 2000),
-        sourceTextSnapshot: item.content.slice(0, 2200), contextSnapshot: item.context.slice(0, 550),
+        sourceTextSnapshot: item.content.slice(0, 2200), contextSnapshot: item.context.slice(0, THREAD_CONTEXT_CHARS),
         charterSnapshot: config.charterText.slice(0, 8000),
         goalsSnapshot: JSON.parse(JSON.stringify(missionGoals(config).slice(0, 20))) as Prisma.InputJsonValue,
         status: "PENDING",
       },
       update: {},
     });
-    if (isReply && mayAutoReply(action, item, config, autoReply)) {
-      await db.$transaction(async (tx) => {
-        const current = await tx.commonsAction.findUnique({ where: { id: row.id } });
-        if (current?.status !== "PENDING") return;
-        const priorReply = await tx.commonsAction.findFirst({ where: {
-          sourceType: item.sourceType, sourceId: item.sourceId, publishedCommentId: { not: null },
-        }, select: { id: true } });
-        if (priorReply) return;
-        const comment = await tx.commonsComment.create({
-          data: { postId: item.sourcePostId, authorId: sage.id, content: action.draftText.slice(0, 2000) },
+    trail.linkAction(row.id);
+    if (isReply) {
+      const checks = replyPolicyChecks(action, item, config, autoReply, new Date(), inputFlags).filter((check) => check.label !== "This kind of action is a reply"
+        && check.label !== "Quotes the charter or a mission goal exactly" && check.label !== "The member's text has no instructions aimed at Sage");
+      for (const check of checks) trail.policy(check.label, check.passed, check.detail);
+      let published = false;
+      let publishedCommentId: string | null = null;
+      if (checks.every((check) => check.passed)) {
+        published = await db.$transaction(async (tx) => {
+          const current = await tx.commonsAction.findUnique({ where: { id: row.id } });
+          if (current?.status !== "PENDING") return false;
+          const priorReply = await tx.commonsAction.findFirst({ where: {
+            sourceType: item.sourceType, sourceId: item.sourceId, publishedCommentId: { not: null },
+          }, select: { id: true } });
+          if (priorReply) return false;
+          const comment = await tx.commonsComment.create({
+            data: { postId: item.sourcePostId, authorId: sage.id, content: action.draftText.slice(0, 2000) },
+          });
+          await tx.commonsAction.update({ where: { id: row.id }, data: {
+            status: "PUBLISHED", publishedCommentId: comment.id,
+            replySourceKey: `${item.sourceType}:${item.sourceId}`,
+          } });
+          publishedCommentId = comment.id;
+          return true;
         });
-        await tx.commonsAction.update({ where: { id: row.id }, data: {
-          status: "PUBLISHED", publishedCommentId: comment.id,
-          replySourceKey: `${item.sourceType}:${item.sourceId}`,
-        } });
-      });
+        if (publishedCommentId) await notifySageComment({ postId: item.sourcePostId, commentId: publishedCommentId });
+        trail.policy("Sage hasn't already replied here", published);
+      }
+      trail.taken(published ? "Published a reply as Sage" : "Queued the reply for a platform admin to review", published ? "PASS" : "INFO");
     }
     if ((action.type === "VERIFY_RESOURCE" || action.type === "LOG_RESOURCE") && action.resourceKind.trim()) {
       const resource = await db.commonsResource.upsert({
@@ -214,8 +294,10 @@ async function saveActions(item: SourceItem, actions: ActionOutput[], config: Co
         },
         update: {},
       });
+      trail.taken(`Flagged a ${resource.kind.toLowerCase()} resource for platform admin verification`, "PASS");
       if (resource.kind === "PERSON" && !resource.invitedAt && resource.status === "CANDIDATE") {
-        await invitePerson(resource.id, item, action);
+        // Who was invited is private until they accept, so this step is admin-only.
+        trail.taken(await invitePerson(resource.id, item, action), "INFO", undefined, true);
       }
     }
     if (action.type === "MAKE_PROPOSAL") {
@@ -231,9 +313,23 @@ async function saveActions(item: SourceItem, actions: ActionOutput[], config: Co
           title: "A proposal draft is ready", body: "Review and edit this Commons suggestion before you submit it.",
           data: { draftId: draft.id, coopId: item.coopId },
         }).catch((error) => console.error("Could not notify proposal author", error));
+        trail.taken("Created an editable proposal draft for the author", "PASS");
+      } else {
+        trail.taken("The proposal draft already existed", "INFO");
       }
     }
+    if (action.type === "ESCALATE_TO_ADMIN") trail.taken("Flagged for a platform admin", "INFO", undefined, true);
   }
+}
+
+function itemTrail(item: SourceItem, trigger: TrailTrigger) {
+  return new DecisionTrail({
+    agent: "commons-action-agent",
+    coopId: item.coopId, circleId: null, sourceType: item.sourceType, sourceId: item.sourceId, trigger,
+    visibility: "COMMONS_MEMBERS",
+    observed: { title: item.title, content: item.content, context: item.sourceType === "commons_comment" ? item.context : undefined },
+    relatedPostIds: [item.sourcePostId],
+  }).step("OBSERVED", item.sourceType === "commons_comment" ? "Read a new comment in the Commons feed" : "Read a post in the Commons feed");
 }
 
 export function createCommonsActionAgent() {
@@ -246,11 +342,15 @@ export function createCommonsActionAgent() {
       "Use only the supplied active charter and mission goals for advice. For EVERY reply action, evidence must be an exact continuous excerpt of at least 12 characters from the charter or one goal label/description.",
       "For a charter correction, include that exact supporting excerpt in the reply itself so the member can inspect the basis.",
       "If there is no exact supporting passage, do not propose a reply. Never invent governance, funding, membership, or disciplinary rules.",
-      "Do not create replies to bots. Keep replies concise, specific, and civil. Do not claim an action happened unless it did.",
+      "Do not create replies to bots. Do not claim an action happened unless it did.",
+      "How to write reply drafts:",
+      sageReplyStyleInstructions({ structured: true }),
+      SAGE_FOLLOW_THROUGH_RULE,
+      "confidence is how sure you are that the action is correct and useful now. Use below 0.75 when you are guessing at intent or the charter only loosely applies.",
       "For a PERSON resource, targetHandle must be an exact encoded @mention in that item, or empty for the author offering their own skills. A third-party name alone is not a verified person.",
       "When a member offers a concrete tool, skill, space, service, or contact aligned with a goal, include VERIFY_RESOURCE with resourceKind and resourceTitle. A short helpful reply may be an additional action, but never replaces VERIFY_RESOURCE.",
       "When a member suggests a decision or shared spending that the charter assigns to a member proposal or vote, include MAKE_PROPOSAL and draft a title and body for the author to review. A reply may be an additional action, but never replaces MAKE_PROPOSAL.",
-      "Classify the item's content, not its surrounding thread context. If the content asserts a governance rule that directly contradicts the quoted charter, include RESPOND_CHARTER_CORRECTION and quote the relevant charter passage in the draft. Do not treat the surrounding thread's question as the author's proposal.",
+      "Classify the item's content, not its surrounding thread context. If the content asserts a governance rule that directly contradicts the quoted charter, include RESPOND_CHARTER_CORRECTION and quote the relevant charter passage in the draft. Do not treat the surrounding thread's question as the author's proposal, except when following through on something Sage offered in the thread.",
       "Preserve every qualification in the evidence. If the charter covers major spending, do not say it restricts all spending; if it calls for a proposal and vote, do not invent other approval steps. Explain only the narrower rule the text actually states.",
       "Resource kinds include PERSON, ORGANIZATION, SKILL, EQUIPMENT, SPACE, FUNDING, SERVICE, INFORMATION.",
       "Use ANSWER_QUESTION only when the item's own content asks a question. For an offer, a brief acknowledgment is RESPOND_RESOURCE_FOLLOWUP; do not invent a question to answer.",
@@ -265,11 +365,11 @@ export function commonsActionPrompt(config: CoopConfig, items: SourceItem[]): st
     commons: config.name || config.coopId,
     charter: config.charterText.slice(0, 8000),
     goals: missionGoals(config).slice(0, 20),
-    items: items.map((item) => ({ id: item.sourceId, type: item.sourceType, title: item.title.slice(0, 160), content: item.content.slice(0, 2200), context: item.context.slice(0, 550) })),
+    items: items.map((item) => ({ id: item.sourceId, type: item.sourceType, title: item.title.slice(0, 160), content: item.content.slice(0, 2200), context: item.context.slice(0, THREAD_CONTEXT_CHARS) })),
   });
 }
 
-async function analyzeBatch(items: SourceItem[], config: CoopConfig, autoReply: boolean): Promise<number> {
+async function analyzeBatch(items: SourceItem[], config: CoopConfig, autoReply: boolean, trigger: TrailTrigger): Promise<number> {
   const claimed: Array<{ item: SourceItem; contentHash: string; where: ReturnType<typeof scanWhere> }> = [];
   const charterKey = charterSnapshotKey(config);
   for (const item of items) {
@@ -279,15 +379,23 @@ async function analyzeBatch(items: SourceItem[], config: CoopConfig, autoReply: 
   if (!claimed.length) return 0;
   let modelCallCompleted = false;
   try {
-    const result = await run(createCommonsActionAgent(), commonsActionPrompt(config, claimed.map((claim) => claim.item)));
+    const cleansed = new Map(claimed.map((claim) => [claim.item.sourceId, cleanseSourceItem(claim.item)]));
+    const result = await run(createCommonsActionAgent(), commonsActionPrompt(config, claimed.map((claim) => cleansed.get(claim.item.sourceId)!.item)));
     modelCallCompleted = true;
     await recordAgentResultCost({ coopId: config.coopId, feature: "commons-action-agent", model: COMMONS_ACTION_MODEL, result }).catch(console.error);
     const output = BatchOutputZ.parse(result.finalOutput);
-    const byId = new Map(output.items.map((entry) => [entry.id, entry.actions]));
+    // A reply that picked a template is rendered from its parts, so the format is exact.
+    const byId = new Map(output.items.map((entry) => [entry.id, entry.actions.map((action) => ({ ...action, draftText: renderTemplatedReply(action).text }))]));
     for (const claim of claimed) {
       const actions = byId.get(claim.item.sourceId) ?? [];
-      await saveActions(claim.item, actions, config, autoReply, claim.contentHash, charterKey);
+      const trail = itemTrail(claim.item, trigger).step("EVIDENCE",
+        `The active charter (version ${config.version}) and ${missionGoals(config).length} mission goals`);
+      const inputCheck = cleansed.get(claim.item.sourceId)!.check;
+      trail.policy("The member's text has no instructions aimed at Sage", !isSteeringAttempt(inputCheck.flags),
+        describeInputFlags(inputCheck) ?? undefined);
+      await saveActions(claim.item, actions, config, autoReply, claim.contentHash, charterKey, trail, inputCheck.flags);
       await db.commonsContentScan.update({ where: claim.where, data: { status: "SUCCESS", scannedAt: new Date() } });
+      await trail.save();
     }
     return claimed.length;
   } catch (error) {
@@ -295,6 +403,11 @@ async function analyzeBatch(items: SourceItem[], config: CoopConfig, autoReply: 
     await Promise.all(claimed.map((claim) => db.commonsContentScan.update({
       where: claim.where, data: { status: "ERROR", error: error instanceof Error ? error.message : String(error) },
     })));
+    for (const claim of claimed) {
+      await itemTrail(claim.item, trigger)
+        .taken("Analysis failed", "FAIL", error instanceof Error ? error.message : String(error), true)
+        .setOutcome("Analysis failed").save();
+    }
     throw error;
   }
 }
@@ -303,10 +416,43 @@ function scanWhere(item: SourceItem, contentHash: string, charterConfigId: strin
   return { sourceType_sourceId_contentHash_charterConfigId: { sourceType: item.sourceType, sourceId: item.sourceId, contentHash, charterConfigId } };
 }
 
-async function processItems(items: SourceItem[], config: CoopConfig, autoReply: boolean): Promise<number> {
+const THREAD_CONTEXT_CHARS = 2400;
+const THREAD_COMMENTS = 10;
+
+/**
+ * A comment's context is its post plus the thread before it, Sage's own comments included, so Sage
+ * can follow through on something it offered earlier instead of treating each comment in isolation.
+ */
+export async function withThreadContext(items: SourceItem[]): Promise<SourceItem[]> {
+  return Promise.all(items.map(async (item) => {
+    if (item.sourceType !== "commons_comment") return item;
+    const earlier = await db.commonsComment.findMany({
+      where: { postId: item.sourcePostId, id: { not: item.sourceId }, createdAt: { lte: item.createdAt } },
+      orderBy: { createdAt: "desc" }, take: THREAD_COMMENTS,
+      select: { content: true, author: { select: { name: true, handle: true, isBot: true } } },
+    });
+    const lines = earlier.reverse().map((comment) =>
+      `${comment.author.isBot ? "Sage" : comment.author.name || (comment.author.handle ? `@${comment.author.handle}` : "A member")}: ${comment.content}`);
+    return { ...item, context: [`Original post: ${item.title ? `${item.title}: ` : ""}${item.context}`, ...(lines.length ? ["Earlier in the thread:", ...lines] : [])].join("\n") };
+  }));
+}
+
+async function processItems(rawItems: SourceItem[], config: CoopConfig, autoReply: boolean, trigger: TrailTrigger): Promise<number> {
+  const items = await withThreadContext(rawItems);
   let count = 0;
   for (let offset = 0; offset < items.length; offset += BATCH_SIZE) {
-    count += await analyzeBatch(items.slice(offset, offset + BATCH_SIZE), config, autoReply);
+    if (!(await sageAutonomyAllowed(config.coopId))) {
+      // Recorded for new content only: catch-up scans revisit the same items and would repeat the entry.
+      if (trigger === "NEW_CONTENT") {
+        for (const item of items.slice(offset)) {
+          const trail = itemTrail(item, trigger);
+          trail.policy("Within Sage's monthly limit for this Commons", false, "Sage stops starting work on its own until the limit resets or a platform admin raises it.");
+          await trail.setOutcome("Not analyzed: monthly limit reached").save();
+        }
+      }
+      break;
+    }
+    count += await analyzeBatch(items.slice(offset, offset + BATCH_SIZE), config, autoReply, trigger);
   }
   return count;
 }
@@ -341,10 +487,10 @@ export async function processCommonsActionContent(sourceType: SourceItem["source
   if (!raw) return { processed: 0 };
   const config = await ensureActiveCharter(raw);
   const settings = await db.commonsAgentSetting.upsert({ where: { coopId }, create: { coopId }, update: {} });
-  return { processed: await processItems([source], config, settings.autoReply) };
+  return { processed: await processItems([source], config, settings.autoReply, "NEW_CONTENT") };
 }
 
-export async function scanCommons(coopId: string) {
+export async function scanCommons(coopId: string, trigger: Extract<TrailTrigger, "SCHEDULED_SCAN" | "ADMIN_SCAN"> = "SCHEDULED_SCAN") {
   const raw = await db.coopConfig.findFirst({ where: { coopId, isActive: true }, orderBy: { version: "desc" } });
   if (!raw) throw new Error(`No active Commons config for ${coopId}`);
   const config = await ensureActiveCharter(raw);
@@ -367,8 +513,8 @@ export async function scanCommons(coopId: string) {
       db.commonsPost.findMany({ where: { coopId, ...generalCircle, createdAt: { gte: settings.lastScanAt }, author: { isBot: false } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], skip: settings.newPostOffset, take: PAGE_SIZE }),
       db.commonsComment.findMany({ where: { post: { coopId, ...generalCircle }, createdAt: { gte: settings.lastScanAt }, author: { isBot: false } }, include: { post: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], skip: settings.newCommentOffset, take: PAGE_SIZE }),
     ]);
-    processed += await processItems(posts.map(postItem), config, settings.autoReply);
-    processed += await processItems(comments.map(commentItem), config, settings.autoReply);
+    processed += await processItems(posts.map(postItem), config, settings.autoReply, trigger);
+    processed += await processItems(comments.map(commentItem), config, settings.autoReply, trigger);
     if (posts.length < PAGE_SIZE && comments.length < PAGE_SIZE) {
       await db.commonsAgentSetting.update({ where: { coopId }, data: { lastScanAt: startedAt, newPostOffset: 0, newCommentOffset: 0 } });
     } else {
@@ -382,7 +528,7 @@ export async function scanCommons(coopId: string) {
     const posts = await db.commonsPost.findMany({ where: { coopId, ...generalCircle, author: { isBot: false } },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: PAGE_SIZE,
       ...(settings.backfillPostCursor ? { cursor: { id: settings.backfillPostCursor }, skip: 1 } : {}) });
-    processed += await processItems(posts.map(postItem), config, settings.autoReply);
+    processed += await processItems(posts.map(postItem), config, settings.autoReply, trigger);
     await db.commonsAgentSetting.update({ where: { coopId }, data: {
       backfillPostCursor: posts.at(-1)?.id ?? settings.backfillPostCursor,
       backfillPostsDone: posts.length < PAGE_SIZE,
@@ -392,7 +538,7 @@ export async function scanCommons(coopId: string) {
     const comments = await db.commonsComment.findMany({ where: { post: { coopId, ...generalCircle }, author: { isBot: false } }, include: { post: true },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: PAGE_SIZE,
       ...(settings.backfillCommentCursor ? { cursor: { id: settings.backfillCommentCursor }, skip: 1 } : {}) });
-    processed += await processItems(comments.map(commentItem), config, settings.autoReply);
+    processed += await processItems(comments.map(commentItem), config, settings.autoReply, trigger);
     await db.commonsAgentSetting.update({ where: { coopId }, data: {
       backfillCommentCursor: comments.at(-1)?.id ?? settings.backfillCommentCursor,
       backfillCommentsDone: comments.length < PAGE_SIZE,

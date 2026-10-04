@@ -51,6 +51,47 @@ describe("Commons admin API authentication", () => {
     });
   });
 
+  it("lets a signed platform admin set a Commons' Sage autonomy limits", async () => {
+    const token = issueCommonsAdminToken({ userId: "platform-user", email: "platform@example.com" });
+    const db = {
+      user: { findUnique: vi.fn().mockResolvedValue({ deletedAt: null, status: "ACTIVE" }) },
+      coopConfig: { findFirst: vi.fn().mockResolvedValue({ id: "config-1" }) },
+      commonsAgentSetting: {
+        upsert: vi.fn().mockResolvedValue({}),
+        findUnique: vi.fn().mockResolvedValue({ autonomyMonthlyUsdLimit: "12.5", autonomyMonthlyCallLimit: 500 }),
+      },
+      aICostEvent: { aggregate: vi.fn().mockResolvedValue({ _sum: { costUsd: "1" }, _count: { _all: 10 } }) },
+    };
+    const caller = commonsActionsAdminRouter.createCaller({ db, req: { headers: { authorization: `Bearer ${token}` } } } as never);
+    await expect(caller.command({ coopId: "harbor", command: "autonomy-limits", monthlyUsdLimit: 12.5, monthlyCallLimit: 500 }))
+      .resolves.toMatchObject({ usdLimit: 12.5, callLimit: 500, paused: false });
+    const data = { autonomyMonthlyUsdLimit: 12.5, autonomyMonthlyCallLimit: 500, updatedBy: "platform@example.com" };
+    expect(db.commonsAgentSetting.upsert).toHaveBeenCalledWith({ where: { coopId: "harbor" }, create: { coopId: "harbor", ...data }, update: data });
+    await expect(caller.command({ coopId: "harbor", command: "autonomy-limits", monthlyUsdLimit: -1, monthlyCallLimit: 500 })).rejects.toThrow();
+  });
+
+  it("lets a platform admin analyze a circle now, and refuses another Commons' circle", async () => {
+    vi.doMock("../services/circle-window.js", () => ({ closeCircleWindowNow: vi.fn().mockResolvedValue({ windowId: "w9", messageCount: 12 }) }));
+    vi.resetModules();
+    const { commonsActionsAdminRouter: freshRouter } = await import("../routers/commons-actions-admin.js");
+    const { issueCommonsAdminToken: freshIssue } = await import("../lib/commons-admin-token.js");
+    const token = freshIssue({ userId: "platform-user", email: "platform@example.com" });
+    const group = { findUnique: vi.fn().mockResolvedValue({ coopId: "harbor", kind: "CIRCLE" }) };
+    const db = {
+      user: { findUnique: vi.fn().mockResolvedValue({ deletedAt: null, status: "ACTIVE" }) },
+      coopConfig: { findFirst: vi.fn().mockResolvedValue({ id: "config-1" }) },
+      commonsAgentSetting: { findUnique: vi.fn().mockResolvedValue(null) },
+      aICostEvent: { aggregate: vi.fn().mockResolvedValue({ _sum: { costUsd: null }, _count: { _all: 0 } }) },
+      group,
+      sageDecisionTrail: { findFirst: vi.fn().mockResolvedValue({ id: "trail-9" }) },
+    };
+    const caller = freshRouter.createCaller({ db, req: { headers: { authorization: `Bearer ${token}` } } } as never);
+    await expect(caller.command({ coopId: "harbor", command: "analyze-circle", groupId: "g1" })).resolves.toEqual({ windowId: "w9", messageCount: 12, trailId: "trail-9" });
+    group.findUnique.mockResolvedValueOnce({ coopId: "elsewhere", kind: "CIRCLE" });
+    await expect(caller.command({ coopId: "harbor", command: "analyze-circle", groupId: "g2" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    vi.doUnmock("../services/circle-window.js");
+  });
+
   it("includes the original comment and its parent post in review actions", async () => {
     const token = issueCommonsAdminToken({ userId: "platform-user", email: "platform@example.com" });
     const now = new Date("2026-09-20T12:00:00Z");
@@ -63,8 +104,10 @@ describe("Commons admin API authentication", () => {
       ]) },
       commonsActionFeedback: { findMany: vi.fn().mockResolvedValue([]) },
       commonsActionAudit: { findMany: vi.fn().mockResolvedValue([]) },
+      group: { findMany: vi.fn().mockResolvedValue([]) },
+      sageDecisionTrail: { findMany: vi.fn().mockResolvedValue([]) },
       commonsResource: { findMany: vi.fn().mockResolvedValue([]) },
-      aICostEvent: { findMany: vi.fn().mockResolvedValue([]) },
+      aICostEvent: { findMany: vi.fn().mockResolvedValue([]), aggregate: vi.fn().mockResolvedValue({ _sum: { costUsd: null }, _count: { _all: 0 } }) },
       $queryRaw: vi.fn().mockResolvedValue([]),
       commonsPost: { findMany: vi.fn().mockResolvedValue([
         { id: "post-1", title: "Neighborhood garden", content: "We need tools.", createdAt: now, author: { name: "Avery", handle: "avery" } },

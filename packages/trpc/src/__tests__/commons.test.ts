@@ -161,6 +161,10 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
       aggregate: vi.fn().mockResolvedValue({ _sum: { costUsd: null } }),
       ...overrides.aICostEvent,
     },
+    commonsAgentSetting: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      ...overrides.commonsAgentSetting,
+    },
     $transaction: vi.fn(async (callback: any) => callback(db)),
   };
 
@@ -905,7 +909,13 @@ describe('commonsRouter', () => {
         { feature: 'sage-trend-detect', _sum: { costUsd: '0.75' }, _count: { _all: 4, costUsd: 3 } },
         { feature: 'proposal-engine', _sum: { costUsd: '3.5' }, _count: { _all: 2, costUsd: 2 } },
       ]);
-      const aggregate = vi.fn().mockResolvedValue({ _sum: { costUsd: '4.2' } });
+      const aggregate = vi.fn().mockImplementation(({ where }) =>
+        Promise.resolve(
+          where.feature
+            ? { _sum: { costUsd: '0.75' }, _count: { _all: 4 } }
+            : { _sum: { costUsd: '4.2' } },
+        ),
+      );
       const db = makeDb({ aICostEvent: { groupBy, aggregate } });
 
       const result = await callerFor(db, { 'x-session-token': 'token_1' }).getAISpending({
@@ -921,6 +931,14 @@ describe('commonsRouter', () => {
           { category: 'Proposal reviews', estimatedUsd: 3.5, calls: 2 },
           { category: 'Sage', estimatedUsd: 2, calls: 14 },
         ],
+        sageAutonomy: expect.objectContaining({
+          usd: 0.75,
+          calls: 4,
+          usdLimit: 5,
+          callLimit: 2000,
+          paused: false,
+          pausedReason: null,
+        }),
       });
       expect(groupBy).toHaveBeenCalledWith(
         expect.objectContaining({

@@ -105,6 +105,24 @@ vi.mock('@repo/db', async () => {
   };
 });
 
+// bcryptjs is pure JS: a cost-12 hash takes ~300ms, which dominated the
+// application/signup tests. Keep the real algorithm (so compare() still works
+// against produced hashes) but clamp the cost factor to the minimum.
+vi.mock('bcryptjs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('bcryptjs')>();
+  const real = (actual as any).default ?? actual;
+  const MIN_ROUNDS = 4;
+  const clamp = (salt: unknown) => (typeof salt === 'number' ? Math.min(salt, MIN_ROUNDS) : salt);
+  const fast = {
+    ...real,
+    hash: (s: string, salt: any, ...rest: any[]) => real.hash(s, clamp(salt), ...rest),
+    hashSync: (s: string, salt: any) => real.hashSync(s, clamp(salt)),
+    genSalt: (rounds?: any, ...rest: any[]) => real.genSalt(clamp(rounds ?? MIN_ROUNDS), ...rest),
+    genSaltSync: (rounds?: any, ...rest: any[]) => real.genSaltSync(clamp(rounds ?? MIN_ROUNDS), ...rest),
+  };
+  return { ...fast, default: fast };
+});
+
 // Mock Stripe SDK
 vi.mock('stripe', () => {
   class MockStripe {

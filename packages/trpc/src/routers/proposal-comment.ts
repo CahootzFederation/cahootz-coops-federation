@@ -5,6 +5,18 @@ import { CommentInputZ, CommentOutputZ, proposalEngine } from "@repo/validators"
 import type { AuthenticatedContext } from "../context.js";
 import { withAIEvaluationLogging } from "../services/ai-evaluation-log.js";
 import { withCostedProposalRun } from "../services/ai-cost.js";
+import { buildCommentEvaluationFailureTrail, buildCommentEvaluationTrail } from "../services/proposal-trails.js";
+import { cleanseUntrustedText } from "../services/untrusted-input.js";
+
+function goalList(missionGoals: unknown): Array<{ key: string; label: string }> {
+  if (!Array.isArray(missionGoals)) return [];
+  return missionGoals.flatMap((goal) => {
+    if (!goal || typeof goal !== "object") return [];
+    const record = goal as { key?: unknown; label?: unknown };
+    const label = typeof record.label === "string" ? record.label : typeof record.key === "string" ? record.key : null;
+    return label ? [{ key: typeof record.key === "string" ? record.key : label, label }] : [];
+  });
+}
 
 type CommentAIEvaluationOutput = {
   alignment: "ALIGNED" | "NEUTRAL" | "MISALIGNED";
@@ -63,15 +75,19 @@ export const proposalCommentRouter = router({
         },
       });
 
-      // Run AI evaluation
+      // Run AI evaluation on cleansed text; the original comment is what's stored and shown.
+      const commentCheck = cleanseUntrustedText(input.content, { maxChars: 5000 });
       let aiEvaluation: CommentAIEvaluationOutput | null = null;
+      const trailContext = proposal.coopId ? {
+        coopId: proposal.coopId, proposalId: proposal.id, proposalTitle: proposal.title, commentId: comment.id, content: input.content,
+      } : null;
+      // Fetch coop config if available
+      const coopConfig = proposal.coopId
+        ? await ctx.db.coopConfig.findFirst({
+            where: { coopId: proposal.coopId, isActive: true },
+          })
+        : null;
       try {
-        // Fetch coop config if available
-        const coopConfig = proposal.coopId
-          ? await ctx.db.coopConfig.findFirst({
-              where: { coopId: proposal.coopId, isActive: true },
-            })
-          : null;
 
         const configData = coopConfig
           ? {
@@ -99,7 +115,7 @@ export const proposalCommentRouter = router({
           },
           () => withCostedProposalRun(proposal.coopId, "proposal-comment-evaluation", () =>
             proposalEngine.evaluateComment(
-              input.content,
+              commentCheck.text,
               {
                 title: proposal.title,
                 summary: proposal.summary,
@@ -108,9 +124,17 @@ export const proposalCommentRouter = router({
               configData,
             )),
         );
+        if (trailContext) {
+          const evaluation = aiEvaluation;
+          await buildCommentEvaluationTrail(evaluation, {
+            ...trailContext, missionGoals: goalList(coopConfig?.missionGoals), charterLength: coopConfig?.charterText.length ?? 0,
+            inputCheck: commentCheck,
+          }).save();
+        }
       } catch (err) {
         // AI evaluation failure should not block comment creation
         console.error("AI comment evaluation failed:", err);
+        if (trailContext && !aiEvaluation) await buildCommentEvaluationFailureTrail(trailContext, err).save();
       }
 
       return mapCommentToOutput(comment, aiEvaluation);

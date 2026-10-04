@@ -45,6 +45,7 @@ test("a circle leader receives and approves a Sage trend suggestion", { tag: "@s
   const leader = await newSignedInPage(browser, USER_A_EMAIL);
   const member = await newSignedInPage(browser, USER_B_EMAIL);
   let circleId: string | undefined;
+  let seededPostId: string | undefined;
 
   try {
     const leaderToken = await sessionTokenFor(leader.page);
@@ -63,13 +64,19 @@ test("a circle leader receives and approves a Sage trend suggestion", { tag: "@s
       `E2E ${runId}: a cleanup day would be awesome, count me in if it happens.`,
       `E2E ${runId}: does anyone else think we should finally do that cleanup day?`,
     ];
-    for (let i = 0; i < CIRCLE_WINDOW_MESSAGE_LIMIT - 1; i++) {
+    // Seed the conversation the way the current app does: a circle post plus replies on it (not the
+    // legacy circle chat endpoint), so this also proves circle posts and comments reach Sage's window.
+    const { post } = await trpcPost("commons.createPost", leaderToken, {
+      coopId: "cahootz", circleId, title: `E2E ${runId} cleanup day`, content: themedLines[0], tag: "Idea",
+    });
+    seededPostId = post.id;
+    for (let i = 1; i < CIRCLE_WINDOW_MESSAGE_LIMIT - 1; i++) {
       const token = i % 2 === 0 ? leaderToken : memberToken;
       const content = i < themedLines.length ? themedLines[i] : `E2E ${runId}: chatting, message ${i}.`;
-      await trpcPost("groups.addComment", token, { groupId: circleId, content });
+      await trpcPost("commons.createComment", token, { postId: post.id, content });
     }
-    // Message #40 closes the window and kicks off both detection passes (ride-match and trend).
-    await trpcPost("groups.addComment", leaderToken, { groupId: circleId, content: `E2E ${runId}: ok last thought - a cleanup day, who's with me?` });
+    // Item #40 closes the window and kicks off both detection passes (ride-match and trend).
+    await trpcPost("commons.createComment", leaderToken, { postId: post.id, content: `E2E ${runId}: ok last thought - a cleanup day, who's with me?` });
 
     let suggestionId: string | undefined;
     await expect.poll(async () => {
@@ -81,7 +88,10 @@ test("a circle leader receives and approves a Sage trend suggestion", { tag: "@s
     }, { message: "Sage never surfaced a trend suggestion for this window", ...SAGE_POLL }).toBeTruthy();
 
     await leader.page.goto(`/sage/${suggestionId}`);
-    await expect(leader.page.getByText(/Sage has an idea/i)).toBeVisible();
+    // The model may pick an event, a post, or (for a converging decision) a proposal draft.
+    await expect(leader.page.getByText(/Sage has an idea|Sage recommends a proposal/i)).toBeVisible();
+    // Sage leads with a recommendation and shows why.
+    await expect(leader.page.getByText("Why Sage suggests this")).toBeVisible();
     await expect(leader.page.getByRole("button", { name: "Approve" })).toBeVisible();
     await leader.page.getByRole("button", { name: "Approve" }).click();
 
@@ -97,6 +107,7 @@ test("a circle leader receives and approves a Sage trend suggestion", { tag: "@s
   } finally {
     const leaderToken = await sessionTokenFor(leader.page).catch(() => null);
     const memberToken = await sessionTokenFor(member.page).catch(() => null);
+    if (seededPostId && leaderToken) await trpcPost("commons.deletePost", leaderToken, { postId: seededPostId }).catch(() => {});
     if (circleId) {
       if (memberToken) await trpcPost("groups.leave", memberToken, { groupId: circleId }).catch(() => {});
       if (leaderToken) await trpcPost("groups.leave", leaderToken, { groupId: circleId }).catch(() => {});

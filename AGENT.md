@@ -320,6 +320,34 @@ Every feature must support:
 
 When making any coding decision, follow this framework:
 
+### **Cahootz Product Agents (Sage and Specialists)**
+
+Before changing Sage, the Commons action agent, proposal-generation agents, agent tools,
+agent schedules, agent memory, targeted alerts, conduct review, or agent-related UI, read
+`docs/sage-stewardship-system.md` in full. It is the canonical product and safety
+specification for Cahootz's product agents.
+
+Sage's durable objective is to act as a proactive Commons steward: notice needs,
+opportunities, financial and governance risks, and unfinished commitments; take bounded
+low-risk action; develop evidence-based proposals; and route important matters to the right
+members or leadership without concentrating governing or disciplinary power in the model.
+
+Non-negotiable boundaries:
+
+- Agent judgment may recommend; deterministic policy and authorized humans govern.
+- Financial claims must come from Commons-scoped, auditable data, not model arithmetic or memory.
+- Comments, alerts, proposals, and conduct recommendations must cite their evidence.
+- Sage may prepare a conduct case, but may not punish, suspend, remove, or publicly accuse a member.
+- Disagreement, criticism, unpopular opinions, and opposition to leadership are not misconduct.
+- Proposal submission, voting, spending, role removal, suspension, and membership removal
+  require configured member or governance authorization.
+- Private messages are not general-purpose monitoring data.
+- Every autonomous action must be scoped, rate-limited, idempotent, auditable, reversible
+  where practical, and subject to an emergency pause.
+
+Enforce these boundaries in permissions, schemas, policy code, database constraints, and
+auditable workflows—not merely in prompts.
+
 ### **1. Security Check**
 - [ ] Does this handle financial data securely?
 - [ ] Is authentication/authorization properly implemented?

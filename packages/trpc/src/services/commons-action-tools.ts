@@ -5,6 +5,7 @@ import { auditLogEntry } from "../lib/audit.js";
 import { ensureSageBotUser } from "../lib/bot.js";
 import { generateInviteCode } from "../lib/invite-code.js";
 import { createNotificationAndPush } from "./push-notification-service.js";
+import { notifySageComment } from "./sage-comment-notifications.js";
 
 interface ToolContext {
   action: CommonsAction;
@@ -16,6 +17,9 @@ interface ToolResult {
   resultEntityId: string;
 }
 
+/** A policy refusal rather than a transient failure: the action is marked FAILED instead of retried. */
+export class ToolRefusal extends Error {}
+
 function generalCircleId(coopId: string): string {
   return `general:${coopId}`;
 }
@@ -26,13 +30,14 @@ function subjectUserId(ctx: ToolContext): string {
   return subject.userId;
 }
 
-function suggestionPayload(ctx: ToolContext): { title: string; body: string; suggestedStartAt?: string; suggestedDurationMinutes?: number } {
-  const payload = ctx.action.payload as { title?: unknown; body?: unknown; suggestedStartAt?: unknown; suggestedDurationMinutes?: unknown } | null;
+function suggestionPayload(ctx: ToolContext): { title: string; body: string; suggestedStartAt?: string; suggestedDurationMinutes?: number; targetPostId?: string } {
+  const payload = ctx.action.payload as { title?: unknown; body?: unknown; suggestedStartAt?: unknown; suggestedDurationMinutes?: unknown; targetPostId?: unknown } | null;
   return {
     title: typeof payload?.title === "string" ? payload.title : ctx.action.summary,
     body: typeof payload?.body === "string" ? payload.body : ctx.action.summary,
     suggestedStartAt: typeof payload?.suggestedStartAt === "string" ? payload.suggestedStartAt : undefined,
     suggestedDurationMinutes: typeof payload?.suggestedDurationMinutes === "number" ? payload.suggestedDurationMinutes : undefined,
+    targetPostId: typeof payload?.targetPostId === "string" ? payload.targetPostId : undefined,
   };
 }
 
@@ -89,6 +94,78 @@ async function createCommonsPost(ctx: ToolContext): Promise<ToolResult> {
   return createPost(ctx, generalCircleId(ctx.action.coopId));
 }
 
+/** A Sage-authored comment on one post in the suggestion's own Commons and circle. Re-checks scope at
+ * execution time rather than trusting the stored payload, and keeps Sage to one comment per post. */
+async function commentOnPost(ctx: ToolContext): Promise<ToolResult> {
+  const { body, targetPostId } = suggestionPayload(ctx);
+  if (!targetPostId) throw new ToolRefusal("No target post for this comment");
+  const post = await db.commonsPost.findUnique({ where: { id: targetPostId }, select: { id: true, coopId: true, circleId: true } });
+  const circleId = ctx.action.circleId ?? generalCircleId(ctx.action.coopId);
+  if (!post || post.coopId !== ctx.action.coopId || (post.circleId ?? generalCircleId(post.coopId)) !== circleId) {
+    throw new ToolRefusal("Target post is outside this suggestion's Commons and circle");
+  }
+  const sage = await ensureSageBotUser(db, ctx.action.coopId);
+  const prior = await db.commonsComment.findFirst({ where: { postId: post.id, authorId: sage.id }, select: { id: true } });
+  if (prior) throw new ToolRefusal("Sage has already commented on this post");
+  const comment = await db.commonsComment.create({
+    data: { postId: post.id, authorId: sage.id, content: body.slice(0, 2000) },
+  });
+  await notifySageComment({ postId: post.id, commentId: comment.id });
+  return { resultEntityType: "CommonsComment", resultEntityId: comment.id };
+}
+
+/**
+ * Publishes a Sage comment without a review, for a suggestion that passed the autonomous-comment
+ * policy (confidence and the Commons' Auto-reply switch, checked by the caller). The same scope and
+ * one-per-post checks as an approved comment apply. The comment is recorded like an auto-reply, so
+ * a platform admin can remove it, and replySourceKey keeps Sage to one comment per post across both
+ * the Commons action agent and circle suggestions.
+ */
+export async function publishSageCommentAutonomously(actionId: string): Promise<{ published: boolean; reason?: string }> {
+  const action = await db.commonsAction.findUnique({ where: { id: actionId } });
+  if (!action || action.status !== "PENDING") return { published: false, reason: "The suggestion was no longer pending" };
+  const participants = await db.commonsActionParticipant.findMany({ where: { actionId } });
+  try {
+    const result = await commentOnPost({ action, participants });
+    const { targetPostId } = suggestionPayload({ action, participants });
+    try {
+      await db.commonsAction.update({ where: { id: action.id }, data: {
+        status: "PUBLISHED", publishedCommentId: result.resultEntityId, replySourceKey: `commons_post:${targetPostId}`,
+      } });
+    } catch (error) {
+      // Another Sage path claimed this post concurrently (unique replySourceKey): withdraw ours.
+      await db.commonsComment.delete({ where: { id: result.resultEntityId } });
+      if ((error as { code?: string }).code === "P2002") throw new ToolRefusal("Sage has already commented on this post");
+      throw error;
+    }
+    await db.commonsActionAudit.create({ data: { actionId: action.id, eventType: "AUTO_PUBLISHED", metadata: { ...result } } });
+    return { published: true };
+  } catch (error) {
+    if (!(error instanceof ToolRefusal)) throw error;
+    await db.commonsAction.update({ where: { id: action.id }, data: { status: "FAILED" } });
+    await db.commonsActionAudit.create({ data: { actionId: action.id, eventType: "ACTION_REFUSED", metadata: { reason: error.message } } });
+    return { published: false, reason: error.message };
+  }
+}
+
+/** An editable organization-proposal draft owned by the approving member. It is never submitted here:
+ * the member edits it and submits it through the normal proposal flow, or leaves it as a draft. */
+async function draftProposal(ctx: ToolContext): Promise<ToolResult> {
+  const authorId = subjectUserId(ctx);
+  const { title, body } = suggestionPayload(ctx);
+  const draft = await db.commonsProposalDraft.upsert({
+    where: { actionId: ctx.action.id },
+    create: { actionId: ctx.action.id, coopId: ctx.action.coopId, authorId, title: title.slice(0, 160), body: body.slice(0, 10_000) },
+    update: {},
+  });
+  await createNotificationAndPush(db, {
+    userId: authorId, coopId: ctx.action.coopId, type: "PROPOSAL_DRAFT_READY",
+    title: "A proposal draft is ready", body: "Sage drafted this from your circle. Edit it before you submit it.",
+    data: { draftId: draft.id, coopId: ctx.action.coopId },
+  }).catch((error) => console.error("Could not notify proposal draft owner", error));
+  return { resultEntityType: "CommonsProposalDraft", resultEntityId: draft.id };
+}
+
 /** Mirrors groupsRouter.create's transaction (packages/trpc/src/routers/groups.ts), but seeds every named participant as a member instead of just the caller. */
 async function createPrivateCircle(ctx: ToolContext): Promise<ToolResult> {
   const participantIds = [...new Set(ctx.participants.map((participant) => participant.userId))];
@@ -135,11 +212,14 @@ const TOOL_REGISTRY: Record<string, (ctx: ToolContext) => Promise<ToolResult>> =
   create_event: createEvent,
   create_circle_post: createCirclePost,
   create_commons_post: createCommonsPost,
+  comment_on_post: commentOnPost,
+  draft_proposal: draftProposal,
 };
 
-// Tools that publish under Sage's own account rather than a member's. The post itself is the
-// announcement, so a separate "your suggestion is done" alert on top of it would be redundant noise.
-const SAGE_AUTHORED_TOOL_KEYS = new Set(["create_circle_post", "create_commons_post"]);
+// Tools whose result announces itself: Sage-authored posts and comments are visible in the feed, and a
+// proposal draft sends its own "draft is ready" alert. A generic "your suggestion is done" alert on top
+// of those would be redundant noise.
+const SELF_ANNOUNCING_TOOL_KEYS = new Set(["create_circle_post", "create_commons_post", "comment_on_post", "draft_proposal"]);
 
 const TOOL_KEY_BY_ACTION_TYPE: Partial<Record<CommonsAction["type"], string>> = {
   RIDE_MATCH_PROPOSAL: "create_private_circle",
@@ -188,7 +268,7 @@ export async function executeSageAction(actionId: string): Promise<void> {
     const result = await tool({ action, participants });
     await db.commonsAction.update({ where: { id: action.id }, data: { status: "APPROVED", reviewedAt: new Date() } });
     await db.commonsActionAudit.create({ data: { actionId: action.id, eventType: "ACTION_EXECUTED", metadata: { ...result } } });
-    if (!SAGE_AUTHORED_TOOL_KEYS.has(toolKey!)) {
+    if (!SELF_ANNOUNCING_TOOL_KEYS.has(toolKey!)) {
       await Promise.all(participants.map((participant) =>
         createNotificationAndPush(db, {
           userId: participant.userId, coopId: action.coopId, type: "SAGE_SUGGESTION_DONE",
@@ -198,6 +278,11 @@ export async function executeSageAction(actionId: string): Promise<void> {
       ));
     }
   } catch (error) {
+    if (error instanceof ToolRefusal) {
+      await db.commonsAction.update({ where: { id: action.id }, data: { status: "FAILED" } });
+      await db.commonsActionAudit.create({ data: { actionId: action.id, eventType: "ACTION_REFUSED", metadata: { reason: error.message } } });
+      return;
+    }
     await db.commonsActionAudit.create({
       data: { actionId: action.id, eventType: "ACTION_FAILED", metadata: { error: error instanceof Error ? error.message : String(error) } },
     });

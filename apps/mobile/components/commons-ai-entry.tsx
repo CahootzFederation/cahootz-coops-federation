@@ -376,14 +376,17 @@ export default function CommonsAiEntry({
         ]
       : commonsItems;
   }, [accountName, hasAccountSession, memberCommons]);
+  // Until the directory settles, commonsDrawerItems holds only the hardcoded
+  // fallback, whose name may not match the commons the drawer links open.
   const activeDrawerCommons = useMemo(
     () =>
+      directoryLoaded &&
       commonsDrawerItems.find(
         (item) =>
           item.id === commonsProfile.id &&
           item.id !== PERSONAL_PAGE_DESTINATION_ID,
       ) || null,
-    [commonsDrawerItems, commonsProfile.id],
+    [commonsDrawerItems, commonsProfile.id, directoryLoaded],
   );
   const proposalActions = useCommonsProposalActions({
     enabled: drawerOpen,

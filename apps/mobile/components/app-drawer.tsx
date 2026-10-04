@@ -61,6 +61,10 @@ export default function AppDrawer({
   const { isAuthenticated, sessionToken, user, logout, previewWelcomeScreen } = useAuth();
   const [memberCommons, setMemberCommons] = useState<CommonsDirectoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  // The directory is fetched when the drawer opens. Until it settles, the
+  // active commons is only the hardcoded fallback, whose name may not match
+  // the real commons the links below open.
+  const [directoryLoaded, setDirectoryLoaded] = useState(false);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
   const hasAccountSession = isAuthenticated && !!sessionToken;
   const accountName = user?.name?.trim() || user?.email?.split('@')[0] || 'member';
@@ -82,7 +86,10 @@ export default function AppDrawer({
         hasAccountSession ? c.accessStatus === 'ACTIVE' : !c.isLocked,
       )))
       .catch((error) => console.error('Failed to load member commons:', error))
-      .finally(() => setIsLoading(false));
+      .finally(() => {
+        setIsLoading(false);
+        setDirectoryLoaded(true);
+      });
   }, [hasAccountSession, visible, sessionToken]);
 
   const activeCommonsForDrawer =
@@ -263,7 +270,7 @@ export default function AppDrawer({
               </Text>
             </TouchableOpacity>
 
-            {activeCommons ? (
+            {directoryLoaded && activeCommons ? (
               <>
                 <Text className="mb-2 mt-4 text-[11px] font-black uppercase tracking-wide text-stone-400">
                   In {activeCommons.name}

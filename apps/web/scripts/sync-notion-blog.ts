@@ -5,6 +5,12 @@ import { fileURLToPath } from "node:url";
 import { config as loadDotenv } from "dotenv";
 
 import type { BlogPost, BlogPostBlock } from "../lib/blog";
+import type {
+  NotionBlock,
+  NotionRichText,
+  ResolvedImage,
+} from "../lib/notion-blog-blocks";
+import { notionBlocksToBlogBlocks, plainText } from "../lib/notion-blog-blocks";
 
 const NOTION_VERSION = "2025-09-03";
 const DEFAULT_AUTHOR = "Cahootz Team";
@@ -12,23 +18,6 @@ const DEFAULT_CATEGORY = "Publishing";
 const DEFAULT_IMAGE = "/placeholder.jpg";
 const DEFAULT_IMAGE_ALT = "Cahootz blog post image.";
 
-interface NotionRichText {
-  plain_text?: string;
-  href?: string | null;
-  annotations?: {
-    bold?: boolean;
-    italic?: boolean;
-    strikethrough?: boolean;
-    underline?: boolean;
-    code?: boolean;
-    color?: string;
-  };
-  type?: string;
-  text?: {
-    content?: string;
-    link?: { url?: string } | null;
-  };
-}
 interface NotionOption {
   name?: string;
 }
@@ -61,25 +50,6 @@ interface NotionPage {
   is_archived?: boolean;
   in_trash?: boolean;
 }
-interface NotionBlock {
-  id: string;
-  type: string;
-  has_children?: boolean;
-  paragraph?: { rich_text?: NotionRichText[] };
-  heading_1?: { rich_text?: NotionRichText[] };
-  heading_2?: { rich_text?: NotionRichText[] };
-  heading_3?: { rich_text?: NotionRichText[] };
-  quote?: { rich_text?: NotionRichText[] };
-  bulleted_list_item?: { rich_text?: NotionRichText[] };
-  numbered_list_item?: { rich_text?: NotionRichText[] };
-  image?: {
-    type?: string;
-    file?: { url?: string };
-    external?: { url?: string };
-    caption?: NotionRichText[];
-  };
-}
-
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const webDir = resolve(scriptDir, "..");
 const repoDir = resolve(webDir, "../..");
@@ -93,6 +63,12 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/gif": "gif",
   "image/svg+xml": "svg",
   "image/avif": "avif",
+  "audio/mpeg": "mp3",
+  "audio/wav": "wav",
+  "audio/ogg": "ogg",
+  "video/mp4": "mp4",
+  "video/webm": "webm",
+  "application/pdf": "pdf",
 };
 
 // Notion-uploaded images are served via short-lived signed AWS URLs that expire
@@ -174,59 +150,6 @@ async function notionFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function plainText(richText?: NotionRichText[]): string {
-  return (
-    richText
-      ?.map((text) => text.plain_text ?? "")
-      .join("")
-      .trim() ?? ""
-  );
-}
-
-function richTextToHtml(richText?: NotionRichText[]): string {
-  if (!richText || richText.length === 0) return "";
-
-  return richText
-    .map((segment) => {
-      let content = segment.plain_text ?? "";
-      const annotations = segment.annotations;
-
-      // Escape HTML to prevent XSS
-      content = content
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-
-      // Apply formatting
-      if (annotations?.code) {
-        content = `<code class="notion-code">${content}</code>`;
-      }
-      if (annotations?.bold) {
-        content = `<strong>${content}</strong>`;
-      }
-      if (annotations?.italic) {
-        content = `<em>${content}</em>`;
-      }
-      if (annotations?.strikethrough) {
-        content = `<s>${content}</s>`;
-      }
-      if (annotations?.underline) {
-        content = `<u>${content}</u>`;
-      }
-
-      // Handle links
-      const link = segment.text?.link?.url || segment.href;
-      if (link) {
-        content = `<a href="${link}" target="_blank" rel="noopener noreferrer">${content}</a>`;
-      }
-
-      return content;
-    })
-    .join("");
-}
-
 function property(
   properties: Record<string, NotionProperty>,
   names: string[],
@@ -298,12 +221,6 @@ function tagsProperty(properties: Record<string, NotionProperty>): string[] {
     .filter(Boolean);
 }
 
-interface ResolvedImage {
-  url: string;
-  /** Notion-hosted files use expiring URLs and must be mirrored locally. */
-  hosted: boolean;
-}
-
 function imageProperty(page: NotionPage): ResolvedImage {
   const prop = property(page.properties, [
     "Image",
@@ -364,21 +281,39 @@ function isoDate(value: string): string {
 }
 
 function estimateReadingTime(blocks: BlogPostBlock[]): string {
+  const textFromBlock = (block: BlogPostBlock): string[] => {
+    if (block.type === "list")
+      return block.items.flatMap((item) =>
+        typeof item === "string"
+          ? [item]
+          : [
+              item.text,
+              ...(item.children ?? []).flatMap((child) => textFromBlock(child)),
+            ],
+      );
+    if (block.type === "image" || block.type === "bookmark")
+      return [block.caption ?? ""];
+    if (block.type === "media") return [block.caption ?? ""];
+    if (block.type === "divider") return [];
+    if (block.type === "table") return block.rows.flat();
+    if (block.type === "columns")
+      return block.columns.flatMap((column) => column.flatMap(textFromBlock));
+    if (block.type === "equation") return [block.expression];
+    if (block.type === "callout" || block.type === "toggle")
+      return [
+        block.text,
+        ...(block.children ?? []).flatMap((child) => textFromBlock(child)),
+      ];
+    return [block.text];
+  };
+
   const words = blocks
-    .flatMap((block) => {
-      if (block.type === "list") return block.items;
-      if (block.type === "image") return [block.caption ?? ""];
-      return [block.text];
-    })
+    .flatMap(textFromBlock)
     .join(" ")
     .trim()
     .split(/\s+/)
     .filter(Boolean).length;
   return `${Math.max(1, Math.ceil(words / 200))} min read`;
-}
-
-function pushParagraph(blocks: BlogPostBlock[], text: string) {
-  if (text) blocks.push({ type: "paragraph", text });
 }
 
 async function listPages(): Promise<NotionPage[]> {
@@ -429,86 +364,13 @@ async function listBlocks(pageId: string): Promise<NotionBlock[]> {
     cursor = result.next_cursor ?? undefined;
   } while (cursor);
 
-  return blocks;
-}
-
-async function blocksFromNotion(
-  blocks: NotionBlock[],
-): Promise<BlogPostBlock[]> {
-  const output: BlogPostBlock[] = [];
-  let listItems: string[] = [];
-
-  const flushList = () => {
-    if (listItems.length > 0) {
-      output.push({ type: "list", items: listItems });
-      listItems = [];
-    }
-  };
-
-  for (const block of blocks) {
-    if (
-      block.type !== "bulleted_list_item" &&
-      block.type !== "numbered_list_item"
-    ) {
-      flushList();
-    }
-
-    switch (block.type) {
-      case "image": {
-        const source = block.image;
-        const rawUrl = source?.external?.url ?? source?.file?.url ?? "";
-        if (!rawUrl) break;
-        const hosted =
-          source?.type !== "external" && Boolean(source?.file?.url);
-        const url = await resolveImage({ url: rawUrl, hosted });
-        const caption = plainText(source?.caption);
-        output.push({
-          type: "image",
-          url,
-          alt: caption || "Blog post image.",
-          ...(caption ? { caption } : {}),
-        });
-        break;
-      }
-      case "paragraph":
-        pushParagraph(output, richTextToHtml(block.paragraph?.rich_text));
-        break;
-      case "heading_1":
-        output.push({
-          type: "heading",
-          text: richTextToHtml(block.heading_1?.rich_text),
-        });
-        break;
-      case "heading_2":
-        output.push({
-          type: "heading",
-          text: richTextToHtml(block.heading_2?.rich_text),
-        });
-        break;
-      case "heading_3":
-        output.push({
-          type: "heading",
-          text: richTextToHtml(block.heading_3?.rich_text),
-        });
-        break;
-      case "quote": {
-        const text = richTextToHtml(block.quote?.rich_text);
-        if (text) output.push({ type: "quote", text });
-        break;
-      }
-      case "bulleted_list_item":
-        listItems.push(richTextToHtml(block.bulleted_list_item?.rich_text));
-        break;
-      case "numbered_list_item":
-        listItems.push(richTextToHtml(block.numbered_list_item?.rich_text));
-        break;
-      default:
-        break;
-    }
-  }
-
-  flushList();
-  return output;
+  return Promise.all(
+    blocks.map(async (block) =>
+      block.has_children
+        ? { ...block, children: await listBlocks(block.id) }
+        : block,
+    ),
+  );
 }
 
 async function pageToPost(page: NotionPage): Promise<BlogPost> {
@@ -518,7 +380,10 @@ async function pageToPost(page: NotionPage): Promise<BlogPost> {
     "Content",
     "Body",
   ]);
-  const childBlocks = await blocksFromNotion(await listBlocks(page.id));
+  const childBlocks = await notionBlocksToBlogBlocks(
+    await listBlocks(page.id),
+    resolveImage,
+  );
   const blocks =
     childBlocks.length > 0 ? childBlocks : blocksFromPlainText(contentBrief);
   const title = textProperty(properties, ["Title", "Name"]);

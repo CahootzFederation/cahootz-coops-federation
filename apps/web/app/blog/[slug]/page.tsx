@@ -1,18 +1,14 @@
+import type { BlogColor, BlogListItem, BlogPostBlock } from "@/lib/blog";
 import type { Metadata } from "next";
-import { ArrowLeft, Clock } from "lucide-react";
+import type { CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-
 import { BlogCard } from "@/components/blog/blog-card";
 import { BlogComments } from "@/components/blog/comments";
 import { SiteShell } from "@/components/blog/site-shell";
-import {
-  formatPostDate,
-  getBlogPost,
-  getPublishedBlogPosts,
-} from "@/lib/blog";
-import type { BlogPostBlock } from "@/lib/blog";
+import { formatPostDate, getBlogPost, getPublishedBlogPosts } from "@/lib/blog";
+import { ArrowLeft, Clock } from "lucide-react";
 
 interface BlogPostPageProps {
   params: Promise<{ slug: string }>;
@@ -51,7 +47,9 @@ export async function generateMetadata({
       tags: post.tags,
       images: [
         {
-          url: post.image.startsWith("http") ? post.image : `https://cahootz.coop${post.image}`,
+          url: post.image.startsWith("http")
+            ? post.image
+            : `https://cahootz.coop${post.image}`,
           alt: post.imageAlt,
         },
       ],
@@ -60,38 +58,124 @@ export async function generateMetadata({
       card: "summary_large_image",
       title: post.title,
       description: post.description,
-      images: [post.image.startsWith("http") ? post.image : `https://cahootz.coop${post.image}`],
+      images: [
+        post.image.startsWith("http")
+          ? post.image
+          : `https://cahootz.coop${post.image}`,
+      ],
     },
   };
 }
 
-function BlogBlock({ block }: { block: BlogPostBlock }) {
+const BLOCK_COLOR_STYLES: Partial<Record<BlogColor, CSSProperties>> = {
+  gray: { color: "#94a3b8" },
+  brown: { color: "#d6a77a" },
+  orange: { color: "#fb923c" },
+  yellow: { color: "#facc15" },
+  green: { color: "#4ade80" },
+  blue: { color: "#60a5fa" },
+  purple: { color: "#c084fc" },
+  pink: { color: "#f472b6" },
+  red: { color: "#f87171" },
+  gray_background: { backgroundColor: "rgba(148,163,184,.16)" },
+  brown_background: { backgroundColor: "rgba(180,120,70,.18)" },
+  orange_background: { backgroundColor: "rgba(251,146,60,.16)" },
+  yellow_background: { backgroundColor: "rgba(250,204,21,.16)" },
+  green_background: { backgroundColor: "rgba(74,222,128,.16)" },
+  blue_background: { backgroundColor: "rgba(96,165,250,.16)" },
+  purple_background: { backgroundColor: "rgba(192,132,252,.16)" },
+  pink_background: { backgroundColor: "rgba(244,114,182,.16)" },
+  red_background: { backgroundColor: "rgba(248,113,113,.16)" },
+};
+
+function blockColorStyle(color?: BlogColor): CSSProperties | undefined {
+  return color ? BLOCK_COLOR_STYLES[color] : undefined;
+}
+
+function BlogList({
+  block,
+}: {
+  block: Extract<BlogPostBlock, { type: "list" }>;
+}) {
+  const List = block.ordered ? "ol" : "ul";
+  return (
+    <List
+      className={`mt-5 space-y-3 pl-7 text-slate-300 marker:font-bold marker:text-[#facc15] ${
+        block.ordered ? "list-decimal" : "list-disc"
+      }`}
+      style={blockColorStyle(block.color)}
+    >
+      {block.items.map((rawItem, index) => {
+        const item: BlogListItem =
+          typeof rawItem === "string" ? { text: rawItem } : rawItem;
+        return (
+          <li
+            key={index}
+            className="pl-1 leading-8"
+            style={blockColorStyle(item.color)}
+          >
+            <span dangerouslySetInnerHTML={{ __html: item.text }} />
+            {item.children?.length ? (
+              <div className="-mt-2 ml-1">
+                {item.children.map((child, childIndex) => (
+                  <BlogBlock
+                    key={`${child.type}-${childIndex}`}
+                    block={child}
+                    nested
+                  />
+                ))}
+              </div>
+            ) : null}
+          </li>
+        );
+      })}
+    </List>
+  );
+}
+
+export function BlogBlock({
+  block,
+  nested = false,
+}: {
+  block: BlogPostBlock;
+  nested?: boolean;
+}) {
   if (block.type === "heading") {
+    const style = blockColorStyle(block.color);
+    if (block.level === 1)
+      return (
+        <h2
+          className="mt-12 text-3xl font-black tracking-tight text-white md:text-4xl"
+          style={style}
+          dangerouslySetInnerHTML={{ __html: block.text }}
+        />
+      );
+    if (block.level === 3)
+      return (
+        <h4
+          className="mt-8 text-xl font-extrabold tracking-tight text-white md:text-2xl"
+          style={style}
+          dangerouslySetInnerHTML={{ __html: block.text }}
+        />
+      );
     return (
-      <h2 
+      <h3
         className="mt-10 text-2xl font-black tracking-tight text-white md:text-3xl"
+        style={style}
         dangerouslySetInnerHTML={{ __html: block.text }}
       />
     );
   }
 
   if (block.type === "list") {
-    return (
-      <ul className="mt-5 space-y-3">
-        {block.items.map((item, idx) => (
-          <li key={idx} className="flex gap-3 text-slate-300">
-            <span className="mt-3 h-1.5 w-1.5 shrink-0 rounded-full bg-[#facc15]" />
-            <span className="leading-8" dangerouslySetInnerHTML={{ __html: item }} />
-          </li>
-        ))}
-      </ul>
-    );
+    return <BlogList block={block} />;
   }
 
   if (block.type === "quote") {
     return (
-      <blockquote 
+      <blockquote
         className="mt-8 border-l-4 border-[#f59e0b] bg-white/[0.04] px-5 py-4 text-xl font-semibold leading-9 text-white"
+        style={blockColorStyle(block.color)}
         dangerouslySetInnerHTML={{ __html: block.text }}
       />
     );
@@ -119,10 +203,233 @@ function BlogBlock({ block }: { block: BlogPostBlock }) {
     );
   }
 
+  if (block.type === "callout") {
+    return (
+      <aside
+        className="mt-7 rounded-lg border border-white/10 bg-white/[0.05] p-5 text-slate-200"
+        style={blockColorStyle(block.color)}
+      >
+        <div className="flex gap-3">
+          {block.icon ? (
+            <span className="text-xl" aria-hidden>
+              {block.icon}
+            </span>
+          ) : null}
+          <div className="min-w-0 flex-1">
+            <div
+              className="leading-8"
+              dangerouslySetInnerHTML={{ __html: block.text }}
+            />
+            {block.children?.map((child, index) => (
+              <BlogBlock key={`${child.type}-${index}`} block={child} nested />
+            ))}
+          </div>
+        </div>
+      </aside>
+    );
+  }
+
+  if (block.type === "code") {
+    return (
+      <figure className="mt-7 overflow-hidden rounded-lg border border-white/10 bg-black/40">
+        {block.language ? (
+          <div className="border-b border-white/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+            {block.language}
+          </div>
+        ) : null}
+        <pre className="overflow-x-auto p-5 text-sm leading-7 text-slate-200">
+          <code>{block.text}</code>
+        </pre>
+        {block.caption ? (
+          <figcaption className="border-t border-white/10 px-4 py-2 text-sm text-slate-400">
+            {block.caption}
+          </figcaption>
+        ) : null}
+      </figure>
+    );
+  }
+
+  if (block.type === "divider") {
+    return <hr className="my-10 border-white/15" />;
+  }
+
+  if (block.type === "todo") {
+    return (
+      <div
+        className="mt-4 flex items-start gap-3 text-slate-300"
+        style={blockColorStyle(block.color)}
+      >
+        <input
+          type="checkbox"
+          checked={block.checked}
+          readOnly
+          aria-label={block.checked ? "Completed" : "Not completed"}
+          className="mt-2 h-4 w-4 accent-[#facc15]"
+        />
+        <span
+          className={`leading-8 ${block.checked ? "line-through opacity-70" : ""}`}
+          dangerouslySetInnerHTML={{ __html: block.text }}
+        />
+      </div>
+    );
+  }
+
+  if (block.type === "toggle") {
+    return (
+      <details
+        className="mt-6 rounded-lg border border-white/10 bg-white/[0.03] px-5 py-4"
+        style={blockColorStyle(block.color)}
+      >
+        <summary
+          className="cursor-pointer font-bold text-white"
+          dangerouslySetInnerHTML={{ __html: block.text }}
+        />
+        <div className="pb-1 pl-2">
+          {block.children.map((child, index) => (
+            <BlogBlock key={`${child.type}-${index}`} block={child} nested />
+          ))}
+        </div>
+      </details>
+    );
+  }
+
+  if (block.type === "table") {
+    return (
+      <div className="mt-8 overflow-x-auto rounded-lg border border-white/10">
+        <table className="w-full min-w-[36rem] border-collapse text-left text-base">
+          <tbody>
+            {block.rows.map((row, rowIndex) => (
+              <tr
+                key={rowIndex}
+                className="border-b border-white/10 last:border-b-0"
+              >
+                {row.map((cell, cellIndex) => {
+                  const isHeader =
+                    (block.hasColumnHeader && rowIndex === 0) ||
+                    (block.hasRowHeader && cellIndex === 0);
+                  const Cell = isHeader ? "th" : "td";
+                  return (
+                    <Cell
+                      key={cellIndex}
+                      className={
+                        isHeader
+                          ? "bg-white/[0.06] px-4 py-3 font-bold text-white"
+                          : "px-4 py-3 text-slate-300"
+                      }
+                      dangerouslySetInnerHTML={{ __html: cell }}
+                    />
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  if (block.type === "columns") {
+    const columnClass =
+      block.columns.length >= 4
+        ? "md:grid-cols-4"
+        : block.columns.length === 3
+          ? "md:grid-cols-3"
+          : "md:grid-cols-2";
+    return (
+      <div className={`mt-7 grid gap-6 ${columnClass}`}>
+        {block.columns.map((column, columnIndex) => (
+          <div key={columnIndex} className="min-w-0">
+            {column.map((child, childIndex) => (
+              <BlogBlock
+                key={`${child.type}-${childIndex}`}
+                block={child}
+                nested
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (block.type === "equation") {
+    return (
+      <div className="mt-7 overflow-x-auto rounded-lg bg-white/[0.04] px-5 py-4 text-center font-mono text-white">
+        {block.expression}
+      </div>
+    );
+  }
+
+  if (block.type === "bookmark") {
+    return (
+      <a
+        href={block.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-7 block rounded-lg border border-white/10 bg-white/[0.03] p-5 font-semibold text-white transition hover:border-[#f59e0b]/50 hover:bg-white/[0.06]"
+      >
+        <span className="block break-all">{block.caption || block.url}</span>
+        {block.caption ? (
+          <span className="mt-2 block break-all text-sm font-normal text-slate-400">
+            {block.url}
+          </span>
+        ) : null}
+      </a>
+    );
+  }
+
+  if (block.type === "media") {
+    if (block.mediaType === "audio") {
+      return (
+        <figure className="mt-7">
+          <audio
+            controls
+            preload="metadata"
+            className="w-full"
+            src={block.url}
+          />
+          {block.caption ? (
+            <figcaption className="mt-2 text-sm text-slate-400">
+              {block.caption}
+            </figcaption>
+          ) : null}
+        </figure>
+      );
+    }
+    if (block.mediaType === "video" && !block.external) {
+      return (
+        <figure className="mt-7">
+          <video
+            controls
+            preload="metadata"
+            className="w-full rounded-lg border border-white/10"
+            src={block.url}
+          />
+          {block.caption ? (
+            <figcaption className="mt-2 text-sm text-slate-400">
+              {block.caption}
+            </figcaption>
+          ) : null}
+        </figure>
+      );
+    }
+    return (
+      <a
+        href={block.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-7 block rounded-lg border border-white/10 bg-white/[0.03] p-4 font-semibold text-[#facc15]"
+      >
+        {block.caption || `Open ${block.mediaType}`}
+      </a>
+    );
+  }
+
   return (
-    <p 
-      className="mt-5 leading-8 text-slate-300" 
-      dangerouslySetInnerHTML={{ __html: block.text }} 
+    <p
+      className={`${nested ? "mt-3" : "mt-5"} leading-8 text-slate-300`}
+      style={blockColorStyle(block.color)}
+      dangerouslySetInnerHTML={{ __html: block.text }}
     />
   );
 }

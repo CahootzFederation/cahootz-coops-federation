@@ -72,9 +72,10 @@ export const commonsActionsAdminRouter = router({
       }),
     ]);
     const trails = await presentTrails(trailRows, { forAdmin: true }, ctx.db);
-    const [tasks, wakeCycles] = await Promise.all([
+    const [tasks, wakeCycles, alerts] = await Promise.all([
       ctx.db.sageTask.findMany({ where: { coopId: input.coopId }, orderBy: { updatedAt: "desc" }, take: 50 }),
       ctx.db.sageWakeCycle.findMany({ where: { coopId: input.coopId }, orderBy: { startedAt: "desc" }, take: 10 }),
+      ctx.db.sageAlert.findMany({ where: { coopId: input.coopId }, orderBy: { createdAt: "desc" }, take: 50 }),
     ]);
     const windows = circles.length ? await ctx.db.circleAgentWindow.findMany({
       where: { groupId: { in: circles.map((circle) => circle.id) } },
@@ -144,6 +145,10 @@ export const commonsActionsAdminRouter = router({
         id: task.id, kind: task.kind, status: task.status, title: task.title, reason: task.reason, ownerUserId: task.ownerUserId,
         postId: task.postId, attempts: task.attempts, maxAttempts: task.maxAttempts, outcome: task.outcome,
         nextWakeAt: task.nextWakeAt.toISOString(), updatedAt: task.updatedAt.toISOString(),
+      })),
+      alerts: alerts.map((alert) => ({
+        id: alert.id, category: alert.category, recipientUserId: alert.recipientUserId, status: alert.status, severity: alert.severity,
+        title: alert.title, body: alert.body, feedback: alert.feedback, postId: alert.postId, createdAt: alert.createdAt.toISOString(),
       })),
       wakeCycles: wakeCycles.map((cycle) => ({
         id: cycle.id, reason: cycle.reason, status: cycle.status, tasksProcessed: cycle.tasksProcessed, error: cycle.error,

@@ -10,6 +10,7 @@ import { createNotificationAndPush } from "../services/push-notification-service
 import { describeSageAuditEvent } from "../services/sage-audit-descriptions.js";
 import { presentTrails } from "../services/sage-decision-trail.js";
 import { dismissSageTask } from "../services/sage-tasks.js";
+import { acknowledgeSageAlert, rerouteSageAlert } from "../services/sage-responsibility.js";
 import { router } from "../trpc.js";
 
 const TERMINAL_STATUSES = ["APPROVED", "DISMISSED", "FAILED"] as const;
@@ -220,6 +221,38 @@ export const sageRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "This follow-up is no longer open." });
       }
       return { dismissed: true };
+    }),
+
+  /** A routed alert, for its recipient: what happened, the evidence, why them, and what's recommended. */
+  getAlert: accountAuthenticatedProcedure
+    .input(z.object({ alertId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const alert = await context.db.sageAlert.findUnique({ where: { id: input.alertId } });
+      if (!alert || alert.recipientUserId !== context.accountUser.id) throw new TRPCError({ code: "NOT_FOUND", message: "Alert not found" });
+      return {
+        id: alert.id, coopId: alert.coopId, category: alert.category, severity: alert.severity, title: alert.title, body: alert.body,
+        evidence: alert.evidence as { source: string; quote?: string; why: string; recommendation: string },
+        postId: alert.postId, status: alert.status, dueAt: alert.dueAt?.toISOString() ?? null, expiresAt: alert.expiresAt.toISOString(),
+        createdAt: alert.createdAt.toISOString(),
+      };
+    }),
+
+  acknowledgeAlert: accountAuthenticatedProcedure
+    .input(z.object({ alertId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      return { acknowledged: await acknowledgeSageAlert(input.alertId, context.accountUser.id) };
+    }),
+
+  /** "Not for me": sends the alert to the next responsible person and remembers the answer. */
+  alertNotForMe: accountAuthenticatedProcedure
+    .input(z.object({ alertId: z.string().min(1), feedback: z.string().trim().max(500).optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const result = await rerouteSageAlert(input.alertId, context.accountUser.id, input.feedback ?? null);
+      if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "This alert can no longer be passed on." });
+      return { rerouted: true, to: result.status === "ROUTED" ? result.category : null };
     }),
 
   markSeen: accountAuthenticatedProcedure.mutation(async ({ ctx }) => {

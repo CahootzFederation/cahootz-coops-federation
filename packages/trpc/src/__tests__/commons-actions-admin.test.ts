@@ -108,6 +108,7 @@ describe("Commons admin API authentication", () => {
       sageDecisionTrail: { findMany: vi.fn().mockResolvedValue([]) },
       sageTask: { findMany: vi.fn().mockResolvedValue([]) },
       sageWakeCycle: { findMany: vi.fn().mockResolvedValue([]) },
+      sageAlert: { findMany: vi.fn().mockResolvedValue([]) },
       commonsResource: { findMany: vi.fn().mockResolvedValue([]) },
       aICostEvent: { findMany: vi.fn().mockResolvedValue([]), aggregate: vi.fn().mockResolvedValue({ _sum: { costUsd: null }, _count: { _all: 0 } }) },
       $queryRaw: vi.fn().mockResolvedValue([]),

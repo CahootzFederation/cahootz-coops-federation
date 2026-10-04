@@ -11,6 +11,7 @@ import { recordAICost, recordAgentResultCost } from "./ai-cost.js";
 import { sageAutonomyAllowed } from "./sage-autonomy.js";
 import { notifySageComment } from "./sage-comment-notifications.js";
 import { FOLLOW_UP_DEFAULT_DAYS, clampFollowUpDays, createSageTask } from "./sage-tasks.js";
+import { routeSageAlert, type ResponsibilityCategory } from "./sage-responsibility.js";
 import { DecisionTrail, type TrailTrigger } from "./sage-decision-trail.js";
 import { SAGE_FOLLOW_THROUGH_RULE, renderTemplatedReply, sageReplyStyleInstructions } from "./sage-reply-templates.js";
 import {
@@ -60,13 +61,17 @@ const ActionOutputZ = z.object({
   // what Sage is waiting for. Code clamps the days and turns this into a SageTask.
   followUpDays: z.number().int().min(0).max(14),
   followUpExpect: z.string(),
+  // For ESCALATE_TO_ADMIN: who should look (code resolves the person), and whether it concerns a
+  // specific member, which always goes privately to a Commons admin.
+  escalationCategory: z.enum(["", "CIRCLE_LEADER", "COMMONS_ADMIN", "GOVERNANCE", "TREASURY", "SUPPORT"]),
+  escalationAboutMember: z.boolean(),
 });
 const BatchOutputZ = z.object({
   items: z.array(z.object({ id: z.string(), actions: z.array(ActionOutputZ).max(5) })),
 });
 type ActionOutput = z.infer<typeof ActionOutputZ>;
 /** The parts of an action the reply rules look at; template fields are already rendered into draftText. */
-type ReplyDraft = Omit<ActionOutput, "templateKey" | "templateLead" | "templateSteps" | "templateOffer" | "followUpDays" | "followUpExpect">;
+type ReplyDraft = Omit<ActionOutput, "templateKey" | "templateLead" | "templateSteps" | "templateOffer" | "followUpDays" | "followUpExpect" | "escalationCategory" | "escalationAboutMember">;
 
 export interface SourceItem {
   sourceType: "commons_post" | "commons_comment";
@@ -324,8 +329,29 @@ async function saveActions(item: SourceItem, actions: ActionOutput[], config: Co
         trail.taken("The proposal draft already existed", "INFO");
       }
     }
-    if (action.type === "ESCALATE_TO_ADMIN") trail.taken("Flagged for a platform admin", "INFO", undefined, true);
+    if (action.type === "ESCALATE_TO_ADMIN") await escalate(item, action, row.id, trail);
   }
+}
+
+/**
+ * Routes a flag to the person responsible. Anything about a specific member goes privately to a
+ * Commons admin - never to a circle leader, who could be involved - and is never published.
+ */
+async function escalate(item: SourceItem, action: ActionOutput, actionId: string, trail: DecisionTrail) {
+  const category: ResponsibilityCategory = action.escalationAboutMember ? "COMMONS_ADMIN" : (action.escalationCategory || "COMMONS_ADMIN");
+  const result = await routeSageAlert({
+    coopId: item.coopId, category, subjectType: item.sourceType, subjectId: item.sourceId, postId: item.sourcePostId,
+    severity: action.confidence >= 0.85 ? "HIGH" : "MEDIUM", title: "Sage flagged something for you to look at",
+    body: action.summary,
+    evidence: {
+      source: item.content.slice(0, 600), quote: action.evidence || undefined,
+      why: action.escalationAboutMember ? "It concerns a member, so it comes to an admin privately." : "It needs a person's judgment.",
+      recommendation: action.draftText || "Take a look and decide what, if anything, should happen.",
+    },
+    sourceActionId: actionId,
+  });
+  trail.taken(result.status === "DEDUPED" ? "Already flagged; didn't alert again" : `Flagged privately for ${category === "CIRCLE_LEADER" ? "the circle leader" : "an admin"}`,
+    "INFO", undefined, true);
 }
 
 /**
@@ -381,6 +407,7 @@ export function createCommonsActionAgent() {
       "Preserve every qualification in the evidence. If the charter covers major spending, do not say it restricts all spending; if it calls for a proposal and vote, do not invent other approval steps. Explain only the narrower rule the text actually states.",
       "Resource kinds include PERSON, ORGANIZATION, SKILL, EQUIPMENT, SPACE, FUNDING, SERVICE, INFORMATION.",
       "Use ANSWER_QUESTION only when the item's own content asks a question. For an offer, a brief acknowledgment is RESPOND_RESOURCE_FOLLOWUP; do not invent a question to answer.",
+      "Use ESCALATE_TO_ADMIN when something needs a person's judgment that Sage shouldn't handle (a safety concern, a dispute, a governance or money question beyond the charter). Set escalationCategory to who should look: CIRCLE_LEADER, COMMONS_ADMIN, GOVERNANCE, TREASURY or SUPPORT. Set escalationAboutMember true when it concerns a specific member's behavior. Never accuse anyone; describe what was said. For every other action type, set escalationCategory to \"\" and escalationAboutMember to false.",
       "Use NO_ACTION only when nothing useful should happen. Include every input id exactly once.",
     ].join("\n"),
     outputType: BatchOutputZ,

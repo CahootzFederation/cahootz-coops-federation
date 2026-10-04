@@ -182,7 +182,7 @@ async function createPrivateCircle(ctx: ToolContext): Promise<ToolResult> {
     const created = await tx.group.create({
       data: {
         coopId: ctx.action.coopId,
-        name: "Ride match",
+        name: (ctx.action.payload as { circleName?: unknown } | null)?.circleName === "Introduction" ? "Introduction" : "Ride match",
         purpose: ctx.action.summary.slice(0, 500),
         privacy: "private",
         inviteCode,
@@ -223,6 +223,7 @@ const SELF_ANNOUNCING_TOOL_KEYS = new Set(["create_circle_post", "create_commons
 
 const TOOL_KEY_BY_ACTION_TYPE: Partial<Record<CommonsAction["type"], string>> = {
   RIDE_MATCH_PROPOSAL: "create_private_circle",
+  CONNECT_MEMBERS: "create_private_circle",
 };
 
 // The reviewType whose approval actually authorizes execution, per action type. SUGGEST_ACTION resolves
@@ -230,6 +231,7 @@ const TOOL_KEY_BY_ACTION_TYPE: Partial<Record<CommonsAction["type"], string>> = 
 export const FINAL_REVIEW_TYPE_BY_ACTION_TYPE: Partial<Record<CommonsAction["type"], string>> = {
   RIDE_MATCH_PROPOSAL: "ACCEPT_MATCH",
   SUGGEST_ACTION: "APPROVE_SUGGESTION",
+  CONNECT_MEMBERS: "ACCEPT_INTRODUCTION",
 };
 
 /** Open vocabulary for SUGGEST_ACTION: the model names any capability it thinks fits in payload.capability,
@@ -253,6 +255,11 @@ export async function executeSageAction(actionId: string): Promise<void> {
     ? await db.commonsActionReview.findFirst({ where: { actionId, reviewType: finalReviewType, status: "APPROVED" } })
     : null;
   if (!finalReview || finalReview.payloadHash !== action.payloadHash) return; // not yet approved, or a stale revision
+  if (action.type === "CONNECT_MEMBERS") {
+    // An introduction needs every participant's yes, not just one.
+    const approvals = await db.commonsActionReview.count({ where: { actionId, reviewType: "ACCEPT_INTRODUCTION", status: "APPROVED", payloadHash: action.payloadHash } });
+    if (approvals < participants.length) return;
+  }
 
   const toolKey = resolveToolKey(action);
   const tool = toolKey ? TOOL_REGISTRY[toolKey] : undefined;

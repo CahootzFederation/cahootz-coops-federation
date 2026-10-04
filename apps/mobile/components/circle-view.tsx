@@ -1,6 +1,6 @@
 import type { PrivateGroupSummary } from '@/lib/api';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Text } from '@/components/ui/text';
@@ -120,7 +120,8 @@ export default function CircleView({ coopId }: { coopId: string }) {
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
       <AppDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} activeCommonsId={coopId} />
-      <View className="flex-row items-center justify-between px-5 pt-4">
+      {/* The header stays put; everything below it scrolls. */}
+      <View className="flex-row items-center justify-between bg-white px-5 pb-2 pt-4">
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Open menu"
@@ -148,91 +149,98 @@ export default function CircleView({ coopId }: { coopId: string }) {
         )}
       </View>
 
-      <View className="px-5 pt-4">
-        <Text className="text-3xl font-black text-gray-950">Welcome In</Text>
-        <Text className="mt-1 text-base font-semibold text-gray-500">Hey check out a circle</Text>
-      </View>
-
-      {sessionToken ? (
-        <View className="px-5 pt-4">
-          <CommonsInvitationsCard />
+      <ScrollView
+        testID="circle-view-scroll"
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 32 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View className="px-5 pt-2">
+          <Text className="text-3xl font-black text-gray-950">Welcome In</Text>
+          <Text className="mt-1 text-base font-semibold text-gray-500">Hey check out a circle</Text>
         </View>
-      ) : null}
 
-      {isLoading && circles.length === 0 ? (
-        <View className="items-center py-10">
-          <ActivityIndicator size="small" color={THEME.primary} />
-        </View>
-      ) : (
-        <View className="gap-5 px-5 pt-6">
-          <View className="flex-row flex-wrap justify-between gap-y-6">
-            {cards.map((card) =>
-              isGeneral(card) ? (
+        {sessionToken ? (
+          <View className="px-5 pt-4">
+            <CommonsInvitationsCard />
+          </View>
+        ) : null}
+
+        {isLoading && circles.length === 0 ? (
+          <View className="items-center py-10">
+            <ActivityIndicator size="small" color={THEME.primary} />
+          </View>
+        ) : (
+          <View className="gap-5 px-5 pt-6">
+            <View className="flex-row flex-wrap justify-between gap-y-6">
+              {cards.map((card) =>
+                isGeneral(card) ? (
+                  <CircleCardView
+                    key="general"
+                    name="General"
+                    colorKey="blue"
+                    chattingCount={0}
+                    hideStatus
+                    onPress={() => openCircle(undefined)}
+                  />
+                ) : (
+                  <CircleCardView
+                    key={card.id}
+                    name={card.name}
+                    colorKey={card.colorKey}
+                    iconEmoji={card.iconEmoji}
+                    iconColor={card.iconColor}
+                    chattingCount={card.chattingCount}
+                    joinLabel={!card.isMember}
+                    onPress={() => (card.isMember ? openCircle(card.id) : joinPublicCircle(card.id))}
+                  />
+                ),
+              )}
+              {myWelcomeTable ? (
                 <CircleCardView
-                  key="general"
-                  name="General"
-                  colorKey="blue"
-                  chattingCount={0}
-                  hideStatus
-                  onPress={() => openCircle(undefined)}
+                  name={myWelcomeTable.name}
+                  colorKey={myWelcomeTable.colorKey}
+                  chattingCount={myWelcomeTable.chattingCount}
+                  onPress={() => openCircle(myWelcomeTable.id)}
                 />
               ) : (
-                <CircleCardView
-                  key={card.id}
-                  name={card.name}
-                  colorKey={card.colorKey}
-                  iconEmoji={card.iconEmoji}
-                  iconColor={card.iconColor}
-                  chattingCount={card.chattingCount}
-                  joinLabel={!card.isMember}
-                  onPress={() => (card.isMember ? openCircle(card.id) : joinPublicCircle(card.id))}
-                />
-              ),
-            )}
-            {myWelcomeTable ? (
-              <CircleCardView
-                name={myWelcomeTable.name}
-                colorKey={myWelcomeTable.colorKey}
-                chattingCount={myWelcomeTable.chattingCount}
-                onPress={() => openCircle(myWelcomeTable.id)}
-              />
-            ) : (
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel={sessionToken ? 'Join a welcome lounge' : 'Sign in'}
-                disabled={isAssigning}
-                onPress={sessionToken ? joinWelcomeTable : () => router.push({ pathname: '/', params: { entry: 'sign-in' } } as any)}
-                className="items-center"
-                style={{ width: '47%' }}
-                activeOpacity={0.8}
-              >
-                <View
-                  className="h-28 w-28 items-center justify-center rounded-full border-2 border-dashed"
-                  style={{ borderColor: THEME.primary, backgroundColor: THEME.primarySoft }}
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={sessionToken ? 'Join a welcome lounge' : 'Sign in'}
+                  disabled={isAssigning}
+                  onPress={sessionToken ? joinWelcomeTable : () => router.push({ pathname: '/', params: { entry: 'sign-in' } } as any)}
+                  className="items-center"
+                  style={{ width: '47%' }}
+                  activeOpacity={0.8}
                 >
-                  {isAssigning ? (
-                    <ActivityIndicator size="small" color={THEME.primary} />
-                  ) : sessionToken ? (
-                    <MessageCircle size={30} color={THEME.primary} />
-                  ) : (
-                    <LogIn size={30} color={THEME.primary} />
-                  )}
-                </View>
-                <Text className="mt-3 text-center text-base font-black text-gray-900">
-                  {sessionToken ? 'Join a welcome lounge' : 'Sign in'}
-                </Text>
-                <Text className="mt-0.5 text-center text-xs font-semibold text-gray-500">
-                  {sessionToken ? 'Meet a small group of newcomers' : 'Log in to join your commons'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
+                  <View
+                    className="h-28 w-28 items-center justify-center rounded-full border-2 border-dashed"
+                    style={{ borderColor: THEME.primary, backgroundColor: THEME.primarySoft }}
+                  >
+                    {isAssigning ? (
+                      <ActivityIndicator size="small" color={THEME.primary} />
+                    ) : sessionToken ? (
+                      <MessageCircle size={30} color={THEME.primary} />
+                    ) : (
+                      <LogIn size={30} color={THEME.primary} />
+                    )}
+                  </View>
+                  <Text className="mt-3 text-center text-base font-black text-gray-900">
+                    {sessionToken ? 'Join a welcome lounge' : 'Sign in'}
+                  </Text>
+                  <Text className="mt-0.5 text-center text-xs font-semibold text-gray-500">
+                    {sessionToken ? 'Meet a small group of newcomers' : 'Log in to join your commons'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
-          {welcomeTableError ? (
-            <Text className="text-sm font-bold text-red-600">{welcomeTableError}</Text>
-          ) : null}
-        </View>
-      )}
+            {welcomeTableError ? (
+              <Text className="text-sm font-bold text-red-600">{welcomeTableError}</Text>
+            ) : null}
+          </View>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }

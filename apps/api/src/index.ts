@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 import { resolve } from "path";
 import { env } from "./env.js";
 import { getHealthStatus, startHealthMonitoring } from "./health-monitor.js";
+import { startLocalSageWakeLoop } from "@repo/trpc/services/sage-wake";
 
 const app: Application = express();
 
@@ -415,6 +416,9 @@ const server = app.listen(port, async () => {
 
   // Start health monitoring (check every 60 seconds)
   startHealthMonitoring(60000);
+
+  // Without Trigger.dev, the API runs Sage's wake-and-wait loop itself (follow-ups, reminders).
+  if (startLocalSageWakeLoop()) console.log('⏰ Sage wake loop running in the API (no Trigger key)');
 });
 
 // Graceful shutdown handling

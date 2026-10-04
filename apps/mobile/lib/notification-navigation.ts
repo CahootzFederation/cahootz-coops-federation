@@ -58,6 +58,9 @@ export function notificationDestination(
         eventId: id("eventId")!,
       },
     };
+  // A routed Sage alert opens its own page with the evidence and "Not for me".
+  if (notification.type === "SAGE_ALERT" && id("alertId"))
+    return { pathname: "/(authenticated)/sage/alert/[id]", params: { id: id("alertId")! } };
   if (id("postId"))
     return {
       pathname: "/[coopId]/posts/[postId]",

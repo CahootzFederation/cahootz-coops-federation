@@ -19,6 +19,11 @@ function mergeFlagsWithText(original: CleansedText, rewritten: CleansedText): Cl
   return { text: rewritten.text, ...mergeFlags([original, rewritten]) };
 }
 
+/** When voting closes for a proposal that just became votable; null otherwise. Gives Sage real deadlines. */
+export function votingEndsAtFor(status: ProposalStatus, votingWindowDays: number, now = new Date()): Date | null {
+  return status === ProposalStatus.VOTABLE ? new Date(now.getTime() + Math.max(1, votingWindowDays) * 86_400_000) : null;
+}
+
 /** Records a proposal-engine decision trail. Never affects the proposal: failures are logged only. */
 async function saveProposalTrail(build: () => DecisionTrail) {
   try {
@@ -321,6 +326,7 @@ export const proposalRouter = router({
           votingWindowDays: processedProposal.governance.votingWindowDays,
           engineVersion: processedProposal.audit.engineVersion,
           status: finalStatus,
+          votingEndsAt: votingEndsAtFor(finalStatus, processedProposal.governance.votingWindowDays),
           councilRequired,
           // New evaluation model
           evaluation: processedProposal.evaluation as any,
@@ -462,6 +468,10 @@ export const proposalRouter = router({
 
       const newStatus = input.status.toUpperCase() as ProposalStatus;
       const updateData: Record<string, any> = { status: newStatus };
+      if (newStatus === ProposalStatus.VOTABLE) {
+        const current = await ctx.db.proposal.findUnique({ where: { id: input.id }, select: { votingWindowDays: true } });
+        updateData.votingEndsAt = votingEndsAtFor(newStatus, current?.votingWindowDays ?? 7);
+      }
 
       if (newStatus === ProposalStatus.WITHDRAWN) {
         const { walletAddress: adminWallet } = ctx as AuthenticatedContext;
@@ -794,6 +804,7 @@ export const proposalRouter = router({
           votingWindowDays: processedProposal.governance.votingWindowDays,
           engineVersion: processedProposal.audit.engineVersion,
           status: finalStatus,
+          votingEndsAt: votingEndsAtFor(finalStatus, processedProposal.governance.votingWindowDays),
           councilRequired,
           evaluation: processedProposal.evaluation as any,
           rawText: input.text,
@@ -969,6 +980,7 @@ export const proposalRouter = router({
           votingWindowDays: processedProposal.governance.votingWindowDays,
           engineVersion: processedProposal.audit.engineVersion,
           status: finalStatus,
+          votingEndsAt: votingEndsAtFor(finalStatus, processedProposal.governance.votingWindowDays),
           councilRequired,
           evaluation: processedProposal.evaluation as any,
           rawText: rewrittenText,

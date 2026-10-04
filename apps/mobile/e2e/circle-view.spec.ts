@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enterFeed, newSignedInPage } from "./support/auth";
+import { enterFeed, newSignedInPage, skipOnboardingWizard } from "./support/auth";
 
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 const USER_A_EMAIL =
@@ -163,4 +163,68 @@ test("signed-out visitors see a sign-in card in place of the welcome lounge", as
   } finally {
     await context.close();
   }
+});
+
+test("Circle View scrolls to circles below the fold while its header stays put", async ({ browser }) => {
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
+  const groupIds: string[] = [];
+  let sessionToken: string | null = null;
+
+  try {
+    sessionToken = await page.evaluate(() => window.localStorage.getItem("cahootz.sessionToken"));
+    expect(sessionToken).toBeTruthy();
+    // Fixture setup: enough circles that the grid runs past the bottom of the screen.
+    for (let index = 1; index <= 10; index += 1) {
+      const created = await fetch(`${API_BASE_URL}/trpc/groups.create`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-session-token": sessionToken! },
+        body: JSON.stringify({ name: `E2E Scroll ${index} ${runId}`, privacy: "invite-only" }),
+      }).then((res) => res.json());
+      const groupId = created?.result?.data?.group?.id;
+      expect(groupId).toBeTruthy();
+      groupIds.push(groupId);
+    }
+
+    await page.setViewportSize({ width: 390, height: 700 });
+    await page.reload();
+    await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
+    // Newest circles come first, so the first one created is at the bottom of the grid.
+    const lastCircle = page.getByText(`E2E Scroll 1 ${runId}`, { exact: true });
+    await expect(lastCircle).toBeVisible();
+    await expect(lastCircle).not.toBeInViewport();
+
+    // Scroll the circle list with the mouse wheel, as a person would.
+    await page.getByText("Welcome In", { exact: true }).hover();
+    await expect(async () => {
+      await page.mouse.wheel(0, 600);
+      await expect(lastCircle).toBeInViewport({ timeout: 500 });
+    }).toPass({ timeout: 10_000 });
+
+    // The heading scrolled away; the header with the menu stayed on screen.
+    await expect(page.getByText("Welcome In", { exact: true })).not.toBeInViewport();
+    await expect(page.getByLabel("Open menu")).toBeInViewport();
+    await expect(page.getByLabel("Manage circles")).toBeInViewport();
+  } finally {
+    for (const groupId of groupIds) {
+      await fetch(`${API_BASE_URL}/trpc/groups.leave`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-session-token": sessionToken! },
+        body: JSON.stringify({ groupId }),
+      }).catch(() => {});
+    }
+    await context.close();
+  }
+});
+
+test("onboarding hides the app's tab bar until it's finished", async ({ page }) => {
+  // A fresh, signed-out visitor lands in onboarding.
+  await page.goto("/");
+  await expect(page).toHaveURL(/profile-onboarding/);
+  await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Main navigation" })).toHaveCount(0);
+
+  await skipOnboardingWizard(page, "always");
+  await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Main navigation" })).toBeVisible();
 });

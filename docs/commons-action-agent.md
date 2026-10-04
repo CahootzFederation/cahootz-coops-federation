@@ -27,6 +27,10 @@ Sage reads a circle after 40 new items: circle posts, comments on circle posts, 
 
 Every Sage decision records a decision trail: Commons posts and comments, circle and ride-match windows, proposal reviews (create, resubmit, applied alternatives), proposal comment evaluations, and Sage's @mention and direct-message replies. Each trail records what Sage read, the evidence it used, what it considered, each policy check and whether it passed, what it did, and the live result and follow-up. Platform admins see all of them under **Decision trails** on the Commons AI actions page, filterable by agent. Members see trails for content they can already see once they turn on **Sage settings → Show Sage decision trails** in the app. Ride-match trails, admin escalations, invitations of a named person and error details are admin-only.
 
+## Follow-ups, routed alerts and the daily review
+
+Sage's wake loop runs every 15 minutes through the `sage-wake-sweep` Trigger.dev schedule, or every 60 seconds inside the API when `TRIGGER_SECRET_KEY` is blank (`SAGE_WAKE_INTERVAL_MS` overrides the interval). Each run, per Commons: follows up on due tasks (one reminder, then it stops), expires old alerts, consolidates and expires Sage's memory, and once a day runs the steward review. Escalations from the feed agent and the steward become alerts routed in code to the responsible person. Platform admins see tasks, wake runs and alerts on the Commons AI actions page and can **Run wake now**. Details and limits are in `docs/sage-roadmap.md`.
+
 ## Alerts and steering defenses
 
 When Sage comments on a post, the post's author and everyone else who commented get a "Sage commented" alert. Bots are never alerted, and only people who can still see the post (circle members, or active members of the Commons) are told.

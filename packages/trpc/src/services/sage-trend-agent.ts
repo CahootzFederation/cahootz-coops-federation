@@ -10,12 +10,14 @@ import { CIRCLE_WINDOW_MESSAGE_LIMIT } from "./circle-window.js";
 import { renderTemplatedReply, sageReplyStyleInstructions } from "./sage-reply-templates.js";
 import { createNotificationAndPush } from "./push-notification-service.js";
 import { DecisionTrail, percent } from "./sage-decision-trail.js";
+import { FOLLOW_UP_DEFAULT_DAYS, clampFollowUpDays, createSageTask } from "./sage-tasks.js";
 import {
   checkSageOutput, cleanseUntrustedText, describeInputFlags, describeOutputProblems, isSteeringAttempt, mergeFlags,
   type CleansedText,
 } from "./untrusted-input.js";
 import { sageAutonomyAllowed } from "./sage-autonomy.js";
 import { loadCircleOutcomeMemory } from "./sage-outcome-memory.js";
+import { retrieveSageMemory } from "./sage-memory.js";
 import { payloadHash } from "./sage-ride-match-agent.js";
 
 export const TREND_MODEL = "gpt-5.6-luna";
@@ -38,6 +40,8 @@ const TrendOutputZ = z.object({
   templateLead: z.string().optional(),
   templateSteps: z.array(z.string()).max(4).optional(),
   templateOffer: z.string().optional(),
+  followUpDays: z.number().int().min(0).max(14).optional(),
+  followUpExpect: z.string().optional(),
 });
 export type TrendOutput = z.infer<typeof TrendOutputZ>;
 
@@ -60,6 +64,7 @@ export function createTrendDetectorAgent() {
       "For comment_on_post, body is the comment Sage would post: a fact, connection, warning, or next step that adds something the thread lacks. Write it in this voice:",
       sageReplyStyleInstructions({ structured: true }).replaceAll("draftText", "body"),
       "priorOutcomes lists what members already did with Sage's earlier suggestions here. Do not repeat a DECLINED or AWAITING REVIEW suggestion unless the activity shows clearly new evidence; learn from reviewer corrections.",
+      "For comment_on_post that asks the post's author to do or share something, set followUpDays (1-14) and followUpExpect to what you're waiting for; otherwise omit them.",
       "Only set suggestedStartAt/suggestedDurationMinutes when capability is 'create_event' and the conversation actually implies timing; otherwise omit them. Omit targetPostId unless capability is 'comment_on_post'.",
     ].join("\n"),
     outputType: TrendOutputZ,
@@ -197,14 +202,20 @@ async function runTrendWindow(windowId: string, decide: (prompt: string, coopId:
   if (!scanWhere) return { processed: 0 };
 
   try {
-    const priorOutcomes = await loadCircleOutcomeMemory(window.coopId, window.groupId);
+    // Live outcomes in this circle, plus consolidated memory from this circle and the Commons (never
+    // another circle). Bounded both ways; duplicates removed.
+    const liveOutcomes = await loadCircleOutcomeMemory(window.coopId, window.groupId);
+    const remembered = await retrieveSageMemory({
+      coopId: window.coopId, circleId: window.groupId, about: combinedText.slice(0, 2000), purpose: "circle trend analysis", maxItems: 5, maxChars: 800,
+    }).catch(() => []);
+    const priorOutcomes = [...liveOutcomes, ...remembered.map((line) => line.text).filter((text) => !liveOutcomes.some((live) => text.startsWith(live.slice(0, 60))))];
     const replyTargets = posts.slice(-10);
     trail.step("EVIDENCE", replyTargets.length ? `${replyTargets.length} posts Sage could reply to` : "No posts to reply to", {
       detail: replyTargets.map((post) => `• ${post.title.slice(0, 120)}`).join("\n") || undefined,
     });
     trail.step("EVIDENCE", priorOutcomes.length
-      ? `${priorOutcomes.length} of Sage's recent suggestions in this circle and what members decided`
-      : "No earlier Sage suggestions in this circle", { detail: priorOutcomes.join("\n") || undefined });
+      ? `${priorOutcomes.length} earlier Sage outcomes it remembered (this circle and the Commons)`
+      : "No earlier Sage outcomes to remember", { detail: priorOutcomes.join("\n") || undefined });
 
     const prompt = JSON.stringify({
       circleName: group.name,
@@ -333,6 +344,23 @@ export function mayCommentAutonomously(output: TrendOutput, autoReply: boolean, 
     && checkSageOutput(output.body).ok;
 }
 
+/** A comment Sage posted that asks the post's author for something becomes a follow-up task. */
+async function scheduleCommentFollowUp(coopId: string, groupId: string, output: TrendOutput, actionId: string, trail?: DecisionTrail) {
+  const steps = output.templateSteps ?? [];
+  const expected = output.followUpExpect?.trim() || (output.templateKey ? steps.join("; ") : "");
+  if (!expected || (!output.followUpDays && !output.templateKey)) return;
+  const post = await db.commonsPost.findUnique({ where: { id: output.targetPostId! }, select: { authorId: true, author: { select: { isBot: true } } } });
+  if (!post || post.author.isBot) return;
+  const days = clampFollowUpDays(output.followUpDays || FOLLOW_UP_DEFAULT_DAYS);
+  const result = await createSageTask({
+    coopId, circleId: groupId, kind: "FOLLOW_UP", title: output.title, ownerUserId: post.authorId,
+    reason: `Sage commented on the post asking: ${expected}`, expected, offer: output.templateOffer || undefined,
+    subjectType: "commons_post", subjectId: output.targetPostId!, postId: output.targetPostId, sourceActionId: actionId, dueInDays: days,
+  });
+  trail?.taken(result.created ? `Will check back in ${days} day${days === 1 ? "" : "s"}` : "No new follow-up", result.created ? "PASS" : "INFO",
+    result.created ? `Waiting for the author to ${expected}` : result.reason);
+}
+
 export async function createTrendSuggestion(
   coopId: string, groupId: string, leaderId: string, windowId: string, contentHash: string,
   output: TrendOutput, options: { autoReply: boolean; trail?: DecisionTrail; steering?: boolean },
@@ -402,6 +430,7 @@ export async function createTrendSuggestion(
       });
       const published = await publishSageCommentAutonomously(action.id);
       trail?.taken(published.published ? "Commented on the post as Sage" : "Didn't comment", published.published ? "PASS" : "FAIL", published.reason);
+      if (published.published && output.targetPostId) await scheduleCommentFollowUp(coopId, groupId, output, action.id, trail);
     } else {
       trail?.taken("This comment was already handled", "INFO");
     }

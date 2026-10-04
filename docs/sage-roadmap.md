@@ -38,6 +38,7 @@ Already present in the repository:
 - Bounded tool execution with payload hashes, idempotency, and audit events.
 - AI Working Memory through scoped `AIObservation` records.
 - Token and estimated-cost accounting through `AICostEvent`.
+- Sage tasks and the wake-and-wait loop (`SageTask`, `SageWakeCycle`), routed alerts (`SageAlert`), the daily steward review with read-only specialist tools, consent-first introductions, and consolidated memory (2026-10-04, see the P1 sections).
 - Member-visible monthly AI spending.
 
 P0 proactive-suggestion slice (branch `claude/sage-stewart-system-plan-5f647c`, 2026-10-03). Implemented:
@@ -91,7 +92,7 @@ Known limitations:
 - A trail showed a reply grounded on an exact but irrelevant charter quote (a ladder request answered with a line about proposals). Exact-quote grounding doesn't check relevance; an independent relevance check belongs with P2 oversight.
 - Not yet traced: community observer, Commons assistant and recommender, proposal-engine playground and test runs, newsletter agents, knowledge base.
 - Found while tracing proposals (not changed here): the proposal engine computes KPIs and then discards them; `proposal.testEngine` is a public procedure that runs the paid engine; proposal and comment-evaluation reads are public; `authenticatedProcedure` trusts the `x-wallet-address` header without a signature.
-- Memory is per-circle outcome history only. Cross-circle consolidation, expiry and supersession remain P1.
+- Memory: see the P1 memory status below for what consolidation does and doesn't cover.
 
 ## Prioritized plan
 
@@ -131,6 +132,16 @@ Acceptance criteria:
 - Sensitive allegations require review before wider publication.
 - Every delivery and response is audited.
 
+Status (2026-10-04): built and verified, except the items listed as remaining.
+
+- `packages/trpc/src/services/sage-responsibility.ts` resolves a category (`CIRCLE_LEADER`, `COMMONS_ADMIN`, `GOVERNANCE`, `TREASURY`, `SUPPORT`) to people in code: the circle's `Group.leaderId`, or active members holding the matching `AdminRole` (plus `SUPER_ADMIN`). At most two recipients. Unresolved categories fall back to Commons admin, then the platform queue (an alert with no recipient).
+- The Commons action agent's `ESCALATE_TO_ADMIN` and the steward's `ROUTE_ALERT` now deliver a `SAGE_ALERT` with an evidence packet (source, quote, why this person, recommendation, due date). Allegations about a named member go only to a Commons admin, privately. Sage takes no disciplinary step.
+- Deduplication by subject and category, a 7-day expiry swept by the wake loop, 5 alerts per recipient per day (the rest are held as `QUEUED` with no push), and **Not for me**, which reroutes to the next category and skips that person for that category for 90 days.
+- Every routing decision is a `guardian` decision trail visible to admins.
+- Members open an alert at `/(authenticated)/sage/alert/[id]`; platform admins see all alerts, including the platform queue, on the Commons AI actions page.
+- Tests: `sage-responsibility.test.ts` (10), the routing checks in `sage-steward.test.ts`, Playwright `sage-steward.spec.ts` (routed alert).
+- Remaining: there's no designated safety-contact role (disciplinary work is out of scope by decision), no Commons-admin-facing queue screen (the platform queue is visible only to platform admins), and a "high-confidence, high-impact concern" reaching the right role depends on the model choosing to escalate; the routing after that is deterministic.
+
 ### P1 — Durable commitments and follow-up
 
 Goal: move Sage from one-shot detection to an accountable operating loop.
@@ -148,6 +159,15 @@ Acceptance criteria:
 - Every accepted suggestion either reaches a verified terminal state or has an explicit owner and next review time.
 - Sage does not repeatedly ask about completed or dismissed work.
 - Members can see why Sage followed up and dismiss an incorrect commitment.
+
+Status (2026-10-04): built and verified, except the items listed as remaining.
+
+- `SageTask` records what Sage is waiting for, from whom, why, and when it will check back. Sage creates tasks itself: after a published reply that asks the member for something (the action-plan template's offer, or `followUpDays` > 0), after an autonomous circle comment, for proposal drafts left unsubmitted for 7 days, and from the steward's daily review. Code clamps the due date to 1–14 days, allows one open task per subject and owner, requires an active member, and won't recreate a task the member dismissed in the last 30 days.
+- The wake loop (`sage-tasks.ts` `runSageWakeCycle`) runs every 15 minutes through Trigger.dev (`sage-wake-sweep`), or every 60 seconds inside the API when there's no Trigger key. It claims due tasks with a lease, checks the outcome from app data only (an owner reply, a draft created from the thread, a draft's `submittedAt`, a proposal's status or `votingEndsAt`, an event's `startAt`), and either closes the task, sends one `SAGE_REMINDER`, or stops following up after that one reminder. A reply from the owner wakes the task immediately.
+- `Proposal.votingEndsAt` is set when a proposal becomes votable, so voting deadlines are real data. Vote counting is unchanged.
+- Members see open and recently closed follow-ups in the Sage hub's **Following** tab and can dismiss any of them. Platform admins see tasks and recent wake runs, and can **Run wake now**.
+- Tests: `sage-tasks.test.ts` (14), Playwright `sage-steward.spec.ts` (follow-up journey; in the local run Sage also started its own follow-up from a live reply).
+- Remaining: reminders are notifications only (Sage never posts a public reminder comment); proposal and draft status changes are picked up by the 15-minute sweep, not an immediate event wake; accepted suggestions other than replies, comments and stale drafts don't yet create a task automatically.
 
 ### P1 — Memory consolidation and retrieval
 
@@ -167,6 +187,27 @@ Acceptance criteria:
 - Private-circle memory never appears in another circle or Commons.
 - Retrieved memory has source references, confidence, status, and age.
 - Prompt memory remains within a fixed token budget.
+
+Status (2026-10-04): built and verified, except the items listed as remaining.
+
+- `sage-memory.ts` consolidates finished Sage actions (with reviewer feedback and corrections) and closed tasks from the last 30 days into `AIObservation` rows (`sage_outcome`, `sage_follow_up`) with sources, confidence, a 180-day expiry and a 90-day review date. Each source is remembered once. A newer memory about a near-identical subject (title overlap of at least 0.8) supersedes the older one. The wake loop runs consolidation and the expiry sweep.
+- Ride matches, introductions and escalations are never consolidated: they're about specific people.
+- Retrieval (`retrieveSageMemory`) reads only the Commons' member-visible memory and, if given, that one circle's memory; never another circle's. It ranks by relevance and recency, stops at an item and character budget (the steward uses 8 items and 1,200 characters), and audits each read as `SAGE_MEMORY_READ`.
+- Used by the Commons action agent, the circle trend agent and the steward. The steward's trail shows the memory it read.
+- Tests: `sage-memory.test.ts` (7, including private-circle isolation and the budget), Playwright `sage-steward.spec.ts` (a dismissed follow-up appears in the next steward review's memory).
+- Remaining: supersession is by near-identical title, not by detecting a genuine contradiction; "verified observations" from other agents aren't consolidated yet; members can't yet ask Sage directly what happened to a past suggestion.
+
+### P1 — Steward and specialists (from `docs/sage-stewardship-system.md`)
+
+Status (2026-10-04): built and verified.
+
+- Once a day per Commons (at most every 20 hours), the wake loop runs the steward review (`sage-steward.ts`, `gpt-5.6-luna`, at most 8 turns, at most 3 actions, counted against the monthly autonomy limit as `sage-steward`).
+- The steward calls read-only, Commons-bound specialist tools (`agents/tools/specialist-tools.ts`): Cadence (`list_open_tasks`, `list_upcoming_deadlines`), Guardian (`get_charter_and_rules`, `check_authority`, `check_message_policy`), Bridge (`find_members_for_need`, `list_published_resources`) and Ledger (`get_proposal_exposure`, proposal budgets only, no treasury data). Each call is an EVIDENCE step in the steward's trail.
+- It can propose only `FOLLOW_UP`, `ROUTE_ALERT` and `SUGGEST_INTRODUCTION`; code checks each one (the subject is in this Commons, the category is valid, the circle is in this Commons, both members are active) before anything happens.
+- Introductions are consent-first: the member with the need is asked first, the helper only after they accept, and a private **Introduction** circle is created only when both have accepted. 30-day cooldown per pair.
+- Fixed scoping gaps: `get_user_profile` requires an active member of the same Commons; `query_event_log` is limited to members of the Commons; knowledge search requires membership for circle scopes.
+- Tests: `sage-steward.test.ts` (8), `sage-introduction-execution.test.ts` (2), updated `agent-tools` and `knowledge-tools` tests, Playwright `sage-steward.spec.ts` (introduction journey).
+- Remaining: the live steward model's choices are not covered by an end-to-end test (the journey uses a fixed decision); its checks and tools are unit-tested.
 
 ### P2 — Cost optimization and budget administration
 
@@ -241,6 +282,8 @@ For every Sage behavior change:
 - 2026-10-03: Financial, governance, membership, disciplinary, on-chain, and irreversible actions remain approval-gated.
 - 2026-10-03: Memory is bounded and source-linked; generated observations are not treated as truth.
 - 2026-10-03: Cost control uses both a dollar limit and a call-count limit.
+- 2026-10-04: Specialists (Cadence, Guardian, Bridge, Ledger) are read-only tools the one steward model calls, not separate agents.
+- 2026-10-04: New autonomous actions (follow-ups, routed alerts, introduction offers) go live within the monthly limit and safety checks. No conduct review or disciplinary action. Ledger reads proposal budgets only.
 
 ## Completed milestones
 
@@ -248,4 +291,6 @@ Move verified work here with the completion date, linked files, and passing test
 
 - 2026-10-03 — P0 proactive-suggestion slice: direct recommendations with visible reasons, the auto-reply confidence gate, approval-gated Sage comments and editable proposal drafts from circle trends, bounded circle-scoped outcome memory, and monthly autonomy limits with member-visible usage and paused status. Files: `packages/db/prisma/migrations/20261003010000_sage_autonomy_limits`, `apps/web/app/portal/admin/commons/[coopId]/ai/commons-ai-client.tsx`, `packages/trpc/src/services/{sage-autonomy,sage-outcome-memory,sage-trend-agent,commons-action-agent,commons-action-tools,circle-window}.ts`, `packages/trpc/src/routers/{sage,commons,commons-actions-admin}.ts`, `apps/mobile/app/(authenticated)/sage/[id].tsx`, `apps/mobile/app/commons/[coopId].tsx`. Tests: `pnpm -F @repo/trpc test` (501 passed), `pnpm -F @repo/trpc build`, `pnpm -F @cahootz/mobile type-check`, Playwright `sage-stewardship`, `sage-trend`, `sage-ride-match`, `commons-info-page`.
 
-Next highest-priority incomplete item: P1 — Proactive leadership and responsibility routing.
+- 2026-10-04 — P1 tasks and the wake-and-wait loop, responsibility routing, memory consolidation and retrieval, and the steward with specialist tools (remaining gaps listed in each P1 status). Files: `packages/db/prisma/migrations/20261005010000_sage_tasks_alerts`, `packages/trpc/src/services/{sage-tasks,sage-wake,sage-wake-work,sage-responsibility,sage-memory,sage-steward,sage-introductions}.ts`, `packages/trpc/src/agents/tools/specialist-tools.ts`, `apps/api/src/trigger/sage-wake.ts`, `apps/mobile/components/sage-following.tsx`, `apps/mobile/app/(authenticated)/sage/alert/[id].tsx`, the Commons AI actions page. Tests: `pnpm -F @repo/trpc test:run` (563 passed), `pnpm -F @repo/trpc build`, `pnpm -F @cahootz/mobile type-check`, mobile unit test `notification-navigation`, Playwright `sage-steward.spec.ts` (3 journeys) plus the existing Sage journeys.
+
+Next highest-priority incomplete item: P2 — Cost optimization and budget administration (Commons-admin control of limits, forecasts and pre-limit alerts), unless the remaining P1 gaps above are prioritized first.

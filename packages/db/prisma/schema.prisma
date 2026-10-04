@@ -698,9 +698,11 @@ model Proposal {
   charterVersionId String? // snapshot of active CoopConfig.id at submission time
 
   // Governance settings
-  quorumPercent            Float @default(20)
-  approvalThresholdPercent Float @default(60)
-  votingWindowDays         Int   @default(7)
+  quorumPercent            Float     @default(20)
+  approvalThresholdPercent Float     @default(60)
+  votingWindowDays         Int       @default(7)
+  // When voting closes; set when the proposal becomes votable. Gives Sage real deadlines to follow.
+  votingEndsAt             DateTime?
 
   // Audit trail
   engineVersion String
@@ -1338,6 +1340,101 @@ model CommonsProposalDraft {
 // One record per Sage analysis (a Commons post or comment, a circle window, a ride-match window),
 // including analyses where Sage decided to do nothing. Steps up to "action taken" are written when
 // Sage decides; result and follow-up are read live from the linked CommonsActions.
+// Something Sage is waiting on or will check back about: a promise it made, an answer it asked
+// for, a deadline. The wake loop picks up due tasks, verifies the outcome from app data, and either
+// closes the task, sends one reminder, or gives up. Members see their tasks under Following.
+model SageTask {
+  id             String          @id @default(cuid())
+  coopId         String
+  circleId       String?
+  kind           String // FOLLOW_UP | DEADLINE_REMINDER | REVIEW_STALE_DRAFT
+  status         String          @default("OPEN") // OPEN | DONE | DISMISSED | ABANDONED | FAILED
+  title          String
+  reason         String          @db.Text
+  expected       String?         @db.Text // what Sage is waiting for
+  offer          String?         @db.Text // what Sage will do once it arrives
+  ownerUserId    String? // whom Sage is waiting on
+  subjectType    String // commons_post | proposal | proposal_draft | event
+  subjectId      String
+  postId         String? // the discussion a reminder points to
+  sourceActionId String?
+  dueAt          DateTime
+  nextWakeAt     DateTime
+  attempts       Int             @default(0)
+  maxAttempts    Int             @default(1)
+  lastWokeAt     DateTime?
+  leaseUntil     DateTime?
+  outcome        String?         @db.Text
+  createdBy      String          @default("SAGE") // SAGE | SYSTEM
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  events         SageTaskEvent[]
+
+  @@index([status, nextWakeAt])
+  @@index([coopId, status])
+  @@index([ownerUserId, status])
+  @@index([subjectType, subjectId])
+  @@schema("public")
+}
+
+model SageTaskEvent {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      SageTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  eventType String // CREATED | WOKE | REMINDED | RESOLVED | DISMISSED | ABANDONED | FAILED
+  detail    String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([taskId, createdAt])
+  @@schema("public")
+}
+
+// One run of the wake loop for one Commons. The lease keeps two runs from overlapping.
+model SageWakeCycle {
+  id             String    @id @default(cuid())
+  coopId         String
+  reason         String // SCHEDULED | EVENT | MANUAL
+  status         String    @default("RUNNING") // RUNNING | DONE | FAILED
+  leaseUntil     DateTime
+  tasksProcessed Int       @default(0)
+  error          String?   @db.Text
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+
+  @@index([coopId, startedAt])
+  @@schema("public")
+}
+
+// An alert Sage routed to the person responsible for something (a circle leader, a Commons admin, a
+// treasury or support contact). Recipients are resolved in code from roles, never chosen by the model.
+model SageAlert {
+  id              String    @id @default(cuid())
+  coopId          String
+  circleId        String?
+  category        String // CIRCLE_LEADER | COMMONS_ADMIN | GOVERNANCE | TREASURY | SUPPORT | PLATFORM_ADMIN
+  recipientUserId String? // null = the platform admin queue
+  subjectType     String
+  subjectId       String
+  postId          String?
+  severity        String // LOW | MEDIUM | HIGH
+  title           String
+  body            String    @db.Text
+  evidence        Json // { source, quote?, why, recommendation }
+  dueAt           DateTime?
+  expiresAt       DateTime
+  status          String    @default("SENT") // SENT | QUEUED | ACKNOWLEDGED | REROUTED | EXPIRED
+  reroutedFromId  String?
+  feedback        String?   @db.Text
+  sourceActionId  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([recipientUserId, createdAt])
+  @@index([coopId, status, createdAt])
+  @@index([subjectType, subjectId, category])
+  @@schema("public")
+}
+
 model SageDecisionTrail {
   id             String   @id @default(cuid())
   agent          String // commons-action-agent | sage-trend | sage-ride-match | proposal-engine | comment-evaluation | sage-reply

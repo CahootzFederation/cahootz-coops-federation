@@ -653,6 +653,38 @@ export interface ProposalSummary {
 
 export type SageTrailStage = 'OBSERVED' | 'EVIDENCE' | 'CONSIDERED' | 'POLICY' | 'TAKEN' | 'RESULT' | 'FOLLOW_UP';
 
+export interface SageTaskView {
+  id: string;
+  kind: string;
+  status: string;
+  title: string;
+  reason: string;
+  expected: string | null;
+  offer: string | null;
+  postId: string | null;
+  subjectType: string;
+  subjectId: string;
+  nextWakeAt: string;
+  attempts: number;
+  outcome: string | null;
+  updatedAt: string;
+}
+
+export interface SageAlertView {
+  id: string;
+  coopId: string;
+  category: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH';
+  title: string;
+  body: string;
+  evidence: { source: string; quote?: string; why: string; recommendation: string };
+  postId: string | null;
+  status: string;
+  dueAt: string | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
 export type SageTrailFilter = { postId: string } | { actionId: string } | { proposalId: string } | { circleId: string };
 
 export interface SageDecisionTrail {
@@ -4734,6 +4766,39 @@ export const api = {
       body: JSON.stringify({ reviewId, response: response_, ...(payload ? { payload } : {}) }),
     });
     return readTrpcResult<{ success: boolean }>(response, 'Could not send your response');
+  },
+
+  async listSageTasks(sessionToken: string, coopId = 'cahootz') {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.listTasks?input=${input}`, { headers: createApiHeaders(null, sessionToken) });
+    return readTrpcResult<{ open: SageTaskView[]; closed: SageTaskView[] }>(response, "Could not load Sage's follow-ups");
+  },
+
+  async dismissSageTask(taskId: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.dismissTask`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken), body: JSON.stringify({ taskId }),
+    });
+    return readTrpcResult<{ dismissed: boolean }>(response, 'Could not dismiss this follow-up');
+  },
+
+  async getSageAlert(alertId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ alertId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.getAlert?input=${input}`, { headers: createApiHeaders(null, sessionToken) });
+    return readTrpcResult<SageAlertView>(response, 'Could not load this alert');
+  },
+
+  async acknowledgeSageAlert(alertId: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.acknowledgeAlert`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken), body: JSON.stringify({ alertId }),
+    });
+    return readTrpcResult<{ acknowledged: boolean }>(response, 'Could not update this alert');
+  },
+
+  async sageAlertNotForMe(alertId: string, sessionToken: string, feedback?: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.alertNotForMe`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken), body: JSON.stringify({ alertId, ...(feedback ? { feedback } : {}) }),
+    });
+    return readTrpcResult<{ rerouted: boolean; to: string | null }>(response, 'Could not pass this alert on');
   },
 
   async getSageTrailSettings(sessionToken: string) {

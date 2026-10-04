@@ -12,6 +12,7 @@ import { sageAutonomyAllowed } from "./sage-autonomy.js";
 import { notifySageComment } from "./sage-comment-notifications.js";
 import { FOLLOW_UP_DEFAULT_DAYS, clampFollowUpDays, createSageTask } from "./sage-tasks.js";
 import { routeSageAlert, type ResponsibilityCategory } from "./sage-responsibility.js";
+import { retrieveSageMemory } from "./sage-memory.js";
 import { DecisionTrail, type TrailTrigger } from "./sage-decision-trail.js";
 import { SAGE_FOLLOW_THROUGH_RULE, renderTemplatedReply, sageReplyStyleInstructions } from "./sage-reply-templates.js";
 import {
@@ -408,17 +409,19 @@ export function createCommonsActionAgent() {
       "Resource kinds include PERSON, ORGANIZATION, SKILL, EQUIPMENT, SPACE, FUNDING, SERVICE, INFORMATION.",
       "Use ANSWER_QUESTION only when the item's own content asks a question. For an offer, a brief acknowledgment is RESPOND_RESOURCE_FOLLOWUP; do not invent a question to answer.",
       "Use ESCALATE_TO_ADMIN when something needs a person's judgment that Sage shouldn't handle (a safety concern, a dispute, a governance or money question beyond the charter). Set escalationCategory to who should look: CIRCLE_LEADER, COMMONS_ADMIN, GOVERNANCE, TREASURY or SUPPORT. Set escalationAboutMember true when it concerns a specific member's behavior. Never accuse anyone; describe what was said. For every other action type, set escalationCategory to \"\" and escalationAboutMember to false.",
+      "memory lists what members already decided about Sage's earlier suggestions and follow-ups in this Commons. Treat it as records of decisions, not facts. Don't repeat something members declined unless the item shows clearly new evidence.",
       "Use NO_ACTION only when nothing useful should happen. Include every input id exactly once.",
     ].join("\n"),
     outputType: BatchOutputZ,
   });
 }
 
-export function commonsActionPrompt(config: CoopConfig, items: SourceItem[]): string {
+export function commonsActionPrompt(config: CoopConfig, items: SourceItem[], memory: string[] = []): string {
   return JSON.stringify({
     commons: config.name || config.coopId,
     charter: config.charterText.slice(0, 8000),
     goals: missionGoals(config).slice(0, 20),
+    memory,
     items: items.map((item) => ({ id: item.sourceId, type: item.sourceType, title: item.title.slice(0, 160), content: item.content.slice(0, 2200), context: item.context.slice(0, THREAD_CONTEXT_CHARS) })),
   });
 }
@@ -434,7 +437,11 @@ async function analyzeBatch(items: SourceItem[], config: CoopConfig, autoReply: 
   let modelCallCompleted = false;
   try {
     const cleansed = new Map(claimed.map((claim) => [claim.item.sourceId, cleanseSourceItem(claim.item)]));
-    const result = await run(createCommonsActionAgent(), commonsActionPrompt(config, claimed.map((claim) => cleansed.get(claim.item.sourceId)!.item)));
+    const memoryLines = (await retrieveSageMemory({
+      coopId: config.coopId, about: claimed.map((claim) => `${claim.item.title} ${claim.item.content}`).join(" ").slice(0, 2000),
+      purpose: "Commons feed analysis", maxItems: 5, maxChars: 800,
+    }).catch(() => [])).map((line) => line.text);
+    const result = await run(createCommonsActionAgent(), commonsActionPrompt(config, claimed.map((claim) => cleansed.get(claim.item.sourceId)!.item), memoryLines));
     modelCallCompleted = true;
     await recordAgentResultCost({ coopId: config.coopId, feature: "commons-action-agent", model: COMMONS_ACTION_MODEL, result }).catch(console.error);
     const output = BatchOutputZ.parse(result.finalOutput);

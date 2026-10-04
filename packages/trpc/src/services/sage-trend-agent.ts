@@ -17,6 +17,7 @@ import {
 } from "./untrusted-input.js";
 import { sageAutonomyAllowed } from "./sage-autonomy.js";
 import { loadCircleOutcomeMemory } from "./sage-outcome-memory.js";
+import { retrieveSageMemory } from "./sage-memory.js";
 import { payloadHash } from "./sage-ride-match-agent.js";
 
 export const TREND_MODEL = "gpt-5.6-luna";
@@ -201,14 +202,20 @@ async function runTrendWindow(windowId: string, decide: (prompt: string, coopId:
   if (!scanWhere) return { processed: 0 };
 
   try {
-    const priorOutcomes = await loadCircleOutcomeMemory(window.coopId, window.groupId);
+    // Live outcomes in this circle, plus consolidated memory from this circle and the Commons (never
+    // another circle). Bounded both ways; duplicates removed.
+    const liveOutcomes = await loadCircleOutcomeMemory(window.coopId, window.groupId);
+    const remembered = await retrieveSageMemory({
+      coopId: window.coopId, circleId: window.groupId, about: combinedText.slice(0, 2000), purpose: "circle trend analysis", maxItems: 5, maxChars: 800,
+    }).catch(() => []);
+    const priorOutcomes = [...liveOutcomes, ...remembered.map((line) => line.text).filter((text) => !liveOutcomes.some((live) => text.startsWith(live.slice(0, 60))))];
     const replyTargets = posts.slice(-10);
     trail.step("EVIDENCE", replyTargets.length ? `${replyTargets.length} posts Sage could reply to` : "No posts to reply to", {
       detail: replyTargets.map((post) => `• ${post.title.slice(0, 120)}`).join("\n") || undefined,
     });
     trail.step("EVIDENCE", priorOutcomes.length
-      ? `${priorOutcomes.length} of Sage's recent suggestions in this circle and what members decided`
-      : "No earlier Sage suggestions in this circle", { detail: priorOutcomes.join("\n") || undefined });
+      ? `${priorOutcomes.length} earlier Sage outcomes it remembered (this circle and the Commons)`
+      : "No earlier Sage outcomes to remember", { detail: priorOutcomes.join("\n") || undefined });
 
     const prompt = JSON.stringify({
       circleName: group.name,

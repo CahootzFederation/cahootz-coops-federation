@@ -31,11 +31,14 @@ export function AppBottomNavigation() {
     ? 'Alerts'
     : ['store', 'store-detail', 'cart', 'checkout'].includes(screen)
         ? 'Shop'
-      : ['wallet', 'profile', 'personal-page', 'profile-onboarding', 'export-wallet', 'withdraw'].includes(screen)
+      : ['wallet', 'profile', 'personal-page', 'export-wallet', 'withdraw'].includes(screen)
         ? 'You'
         : screen === '(tabs)' || screen === 'index' || screen === ''
           ? 'Commons'
           : undefined;
+
+  // Onboarding is a focused, full-screen flow; the app's tabs appear once it's done.
+  if (screen === 'profile-onboarding') return null;
 
   return (
     <View accessibilityRole="tablist" accessibilityLabel="Main navigation" style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>

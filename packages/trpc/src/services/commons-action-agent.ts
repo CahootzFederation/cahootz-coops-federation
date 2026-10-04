@@ -10,6 +10,9 @@ import { isPlaceholderCharter, starterCharter, type StarterGoal } from "./starte
 import { recordAICost, recordAgentResultCost } from "./ai-cost.js";
 import { sageAutonomyAllowed } from "./sage-autonomy.js";
 import { notifySageComment } from "./sage-comment-notifications.js";
+import { FOLLOW_UP_DEFAULT_DAYS, clampFollowUpDays, createSageTask } from "./sage-tasks.js";
+import { routeSageAlert, type ResponsibilityCategory } from "./sage-responsibility.js";
+import { retrieveSageMemory } from "./sage-memory.js";
 import { DecisionTrail, type TrailTrigger } from "./sage-decision-trail.js";
 import { SAGE_FOLLOW_THROUGH_RULE, renderTemplatedReply, sageReplyStyleInstructions } from "./sage-reply-templates.js";
 import {
@@ -55,13 +58,21 @@ const ActionOutputZ = z.object({
   templateLead: z.string(),
   templateSteps: z.array(z.string()).max(4),
   templateOffer: z.string(),
+  // When the reply asks the member for something: days until Sage checks back (0 = no follow-up) and
+  // what Sage is waiting for. Code clamps the days and turns this into a SageTask.
+  followUpDays: z.number().int().min(0).max(14),
+  followUpExpect: z.string(),
+  // For ESCALATE_TO_ADMIN: who should look (code resolves the person), and whether it concerns a
+  // specific member, which always goes privately to a Commons admin.
+  escalationCategory: z.enum(["", "CIRCLE_LEADER", "COMMONS_ADMIN", "GOVERNANCE", "TREASURY", "SUPPORT"]),
+  escalationAboutMember: z.boolean(),
 });
 const BatchOutputZ = z.object({
   items: z.array(z.object({ id: z.string(), actions: z.array(ActionOutputZ).max(5) })),
 });
 type ActionOutput = z.infer<typeof ActionOutputZ>;
 /** The parts of an action the reply rules look at; template fields are already rendered into draftText. */
-type ReplyDraft = Omit<ActionOutput, "templateKey" | "templateLead" | "templateSteps" | "templateOffer">;
+type ReplyDraft = Omit<ActionOutput, "templateKey" | "templateLead" | "templateSteps" | "templateOffer" | "followUpDays" | "followUpExpect" | "escalationCategory" | "escalationAboutMember">;
 
 export interface SourceItem {
   sourceType: "commons_post" | "commons_comment";
@@ -283,6 +294,7 @@ async function saveActions(item: SourceItem, actions: ActionOutput[], config: Co
         trail.policy("Sage hasn't already replied here", published);
       }
       trail.taken(published ? "Published a reply as Sage" : "Queued the reply for a platform admin to review", published ? "PASS" : "INFO");
+      if (published) await scheduleReplyFollowUp(item, action, row.id, trail);
     }
     if ((action.type === "VERIFY_RESOURCE" || action.type === "LOG_RESOURCE") && action.resourceKind.trim()) {
       const resource = await db.commonsResource.upsert({
@@ -318,8 +330,49 @@ async function saveActions(item: SourceItem, actions: ActionOutput[], config: Co
         trail.taken("The proposal draft already existed", "INFO");
       }
     }
-    if (action.type === "ESCALATE_TO_ADMIN") trail.taken("Flagged for a platform admin", "INFO", undefined, true);
+    if (action.type === "ESCALATE_TO_ADMIN") await escalate(item, action, row.id, trail);
   }
+}
+
+/**
+ * Routes a flag to the person responsible. Anything about a specific member goes privately to a
+ * Commons admin - never to a circle leader, who could be involved - and is never published.
+ */
+async function escalate(item: SourceItem, action: ActionOutput, actionId: string, trail: DecisionTrail) {
+  const category: ResponsibilityCategory = action.escalationAboutMember ? "COMMONS_ADMIN" : (action.escalationCategory || "COMMONS_ADMIN");
+  const result = await routeSageAlert({
+    coopId: item.coopId, category, subjectType: item.sourceType, subjectId: item.sourceId, postId: item.sourcePostId,
+    severity: action.confidence >= 0.85 ? "HIGH" : "MEDIUM", title: "Sage flagged something for you to look at",
+    body: action.summary,
+    evidence: {
+      source: item.content.slice(0, 600), quote: action.evidence || undefined,
+      why: action.escalationAboutMember ? "It concerns a member, so it comes to an admin privately." : "It needs a person's judgment.",
+      recommendation: action.draftText || "Take a look and decide what, if anything, should happen.",
+    },
+    sourceActionId: actionId,
+  });
+  trail.taken(result.status === "DEDUPED" ? "Already flagged; didn't alert again" : `Flagged privately for ${category === "CIRCLE_LEADER" ? "the circle leader" : "an admin"}`,
+    "INFO", undefined, true);
+}
+
+/**
+ * When a published reply asks the member for something, Sage remembers it as a task and checks back,
+ * so the promise in "Once you've done that, I can..." survives even if nobody replies in the thread.
+ */
+async function scheduleReplyFollowUp(item: SourceItem, action: ActionOutput, actionId: string, trail: DecisionTrail) {
+  const templated = !!action.templateKey && action.templateSteps.length > 0;
+  if (action.followUpDays <= 0 && !templated) return;
+  const expected = action.followUpExpect.trim() || action.templateSteps.join("; ");
+  if (!expected) return;
+  const days = clampFollowUpDays(action.followUpDays || FOLLOW_UP_DEFAULT_DAYS);
+  const result = await createSageTask({
+    coopId: item.coopId, kind: "FOLLOW_UP", title: action.summary, ownerUserId: item.sourceAuthorId,
+    reason: `Sage asked ${item.sourceType === "commons_comment" ? "in a reply" : "on the post"}: ${expected}`,
+    expected, offer: action.templateOffer || undefined,
+    subjectType: "commons_post", subjectId: item.sourcePostId, postId: item.sourcePostId, sourceActionId: actionId, dueInDays: days,
+  });
+  trail.taken(result.created ? `Will check back in ${days} day${days === 1 ? "" : "s"}` : "No new follow-up", result.created ? "PASS" : "INFO",
+    result.created ? `Waiting for the member to ${expected}` : result.reason);
 }
 
 function itemTrail(item: SourceItem, trigger: TrailTrigger) {
@@ -346,6 +399,7 @@ export function createCommonsActionAgent() {
       "How to write reply drafts:",
       sageReplyStyleInstructions({ structured: true }),
       SAGE_FOLLOW_THROUGH_RULE,
+      "When a reply asks the member to do or share something specific, set followUpDays (1-14) to when Sage should check back and followUpExpect to what you're waiting for, phrased as what the member does (for example \"share your delivery days and costs\"). Otherwise set followUpDays to 0 and followUpExpect to \"\".",
       "confidence is how sure you are that the action is correct and useful now. Use below 0.75 when you are guessing at intent or the charter only loosely applies.",
       "For a PERSON resource, targetHandle must be an exact encoded @mention in that item, or empty for the author offering their own skills. A third-party name alone is not a verified person.",
       "When a member offers a concrete tool, skill, space, service, or contact aligned with a goal, include VERIFY_RESOURCE with resourceKind and resourceTitle. A short helpful reply may be an additional action, but never replaces VERIFY_RESOURCE.",
@@ -354,17 +408,20 @@ export function createCommonsActionAgent() {
       "Preserve every qualification in the evidence. If the charter covers major spending, do not say it restricts all spending; if it calls for a proposal and vote, do not invent other approval steps. Explain only the narrower rule the text actually states.",
       "Resource kinds include PERSON, ORGANIZATION, SKILL, EQUIPMENT, SPACE, FUNDING, SERVICE, INFORMATION.",
       "Use ANSWER_QUESTION only when the item's own content asks a question. For an offer, a brief acknowledgment is RESPOND_RESOURCE_FOLLOWUP; do not invent a question to answer.",
+      "Use ESCALATE_TO_ADMIN when something needs a person's judgment that Sage shouldn't handle (a safety concern, a dispute, a governance or money question beyond the charter). Set escalationCategory to who should look: CIRCLE_LEADER, COMMONS_ADMIN, GOVERNANCE, TREASURY or SUPPORT. Set escalationAboutMember true when it concerns a specific member's behavior. Never accuse anyone; describe what was said. For every other action type, set escalationCategory to \"\" and escalationAboutMember to false.",
+      "memory lists what members already decided about Sage's earlier suggestions and follow-ups in this Commons. Treat it as records of decisions, not facts. Don't repeat something members declined unless the item shows clearly new evidence.",
       "Use NO_ACTION only when nothing useful should happen. Include every input id exactly once.",
     ].join("\n"),
     outputType: BatchOutputZ,
   });
 }
 
-export function commonsActionPrompt(config: CoopConfig, items: SourceItem[]): string {
+export function commonsActionPrompt(config: CoopConfig, items: SourceItem[], memory: string[] = []): string {
   return JSON.stringify({
     commons: config.name || config.coopId,
     charter: config.charterText.slice(0, 8000),
     goals: missionGoals(config).slice(0, 20),
+    memory,
     items: items.map((item) => ({ id: item.sourceId, type: item.sourceType, title: item.title.slice(0, 160), content: item.content.slice(0, 2200), context: item.context.slice(0, THREAD_CONTEXT_CHARS) })),
   });
 }
@@ -380,7 +437,11 @@ async function analyzeBatch(items: SourceItem[], config: CoopConfig, autoReply: 
   let modelCallCompleted = false;
   try {
     const cleansed = new Map(claimed.map((claim) => [claim.item.sourceId, cleanseSourceItem(claim.item)]));
-    const result = await run(createCommonsActionAgent(), commonsActionPrompt(config, claimed.map((claim) => cleansed.get(claim.item.sourceId)!.item)));
+    const memoryLines = (await retrieveSageMemory({
+      coopId: config.coopId, about: claimed.map((claim) => `${claim.item.title} ${claim.item.content}`).join(" ").slice(0, 2000),
+      purpose: "Commons feed analysis", maxItems: 5, maxChars: 800,
+    }).catch(() => [])).map((line) => line.text);
+    const result = await run(createCommonsActionAgent(), commonsActionPrompt(config, claimed.map((claim) => cleansed.get(claim.item.sourceId)!.item), memoryLines));
     modelCallCompleted = true;
     await recordAgentResultCost({ coopId: config.coopId, feature: "commons-action-agent", model: COMMONS_ACTION_MODEL, result }).catch(console.error);
     const output = BatchOutputZ.parse(result.finalOutput);

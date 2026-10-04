@@ -76,6 +76,18 @@ describe("notification destinations", () => {
       params: { groupId: "dm_1" },
     });
   });
+  it("opens a routed Sage alert on its own page, not the post it's about", () => {
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "SAGE_ALERT",
+        data: { alertId: "alert_1", coopId: "cahootz", postId: "post_1" },
+      }),
+    ).toEqual({
+      pathname: "/(authenticated)/sage/alert/[id]",
+      params: { id: "alert_1" },
+    });
+  });
   it("uses structured parameters for commons posts", () => {
     expect(
       notificationDestination({

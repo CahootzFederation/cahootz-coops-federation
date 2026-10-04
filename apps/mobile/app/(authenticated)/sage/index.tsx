@@ -13,6 +13,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { sageStatusMeta } from '@/lib/sage-status';
+import { SageFollowing } from '@/components/sage-following';
 import { ArrowLeft, Sparkles } from 'lucide-react-native';
 
 const THEME = {
@@ -27,6 +28,7 @@ const THEME = {
 const TABS = [
   { key: 'NEEDS_YOU', label: 'Needs you' },
   { key: 'WAITING', label: 'Waiting' },
+  { key: 'FOLLOWING', label: 'Following' },
   { key: 'DONE', label: 'Done' },
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
@@ -47,7 +49,7 @@ export default function SageSuggestionsScreen() {
   }, [isAuthenticated, isLoading, sessionToken]);
 
   const load = React.useCallback(() => {
-    if (!sessionToken) return;
+    if (!sessionToken || activeTab === 'FOLLOWING') return;
     setIsLoadingList(true);
     setError(null);
     api
@@ -114,7 +116,9 @@ export default function SageSuggestionsScreen() {
         contentContainerStyle={{ padding: 16, paddingTop: 0, gap: 10, flexGrow: 1 }}
         refreshControl={<RefreshControl refreshing={isLoadingList} onRefresh={load} />}
       >
-        {isLoadingList && suggestions.length === 0 ? (
+        {activeTab === 'FOLLOWING' && sessionToken ? (
+          <SageFollowing sessionToken={sessionToken} />
+        ) : isLoadingList && suggestions.length === 0 ? (
           <ActivityIndicator accessibilityLabel="Loading Sage suggestions" color={THEME.primary} />
         ) : error ? (
           <Text style={{ color: '#B91C1C' }}>{error}</Text>

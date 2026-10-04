@@ -1,6 +1,7 @@
 let warnedAboutLocalTriggerKey = false;
 
-function useLocalFallback(): boolean {
+/** True when there is no usable Trigger key, so Sage work runs in the API process instead. */
+export function useLocalFallback(): boolean {
   const triggerKey = process.env.TRIGGER_SECRET_KEY?.trim();
   const wrongLocalKey = Boolean(triggerKey && process.env.NODE_ENV !== "production" && !triggerKey.startsWith("tr_dev_"));
   if (wrongLocalKey && !warnedAboutLocalTriggerKey) {

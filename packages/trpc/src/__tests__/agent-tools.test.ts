@@ -42,9 +42,16 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
       ]),
       ...overrides.groupComment,
     },
+    userCoopMembership: {
+      findUnique: vi.fn().mockResolvedValue({ status: "ACTIVE" }),
+      findMany: vi.fn().mockImplementation(({ where }: { where: { userId: { in: string[] } } }) =>
+        Promise.resolve(where.userId.in.filter((id) => id !== "outsider").map((userId) => ({ userId })))),
+      ...overrides.userCoopMembership,
+    },
     auditLog: {
       findMany: vi.fn().mockResolvedValue([
         {
+          actorId: "user_1",
           action: "GROUP_CREATED",
           resource: "Group",
           resourceId: "group_1",
@@ -80,6 +87,17 @@ describe("agent tools", () => {
         select: expect.objectContaining({ name: true, skills: true }),
       });
       expect(result).toMatchObject({ name: "Alice" });
+    });
+
+    it("won't read the profile of someone outside this Commons", async () => {
+      const db = makeDb({ userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null) } });
+      const result = await callTool(buildGetUserProfileTool(makeCtx(db)), { userId: "outsider" });
+
+      expect(result).toBeNull();
+      expect(db.userCoopMembership.findUnique).toHaveBeenCalledWith({
+        where: { userId_coopId: { userId: "outsider", coopId: "cahootz" } }, select: { status: true },
+      });
+      expect(db.user.findUnique).not.toHaveBeenCalled();
     });
 
     it("returns null for an unknown user", async () => {
@@ -135,6 +153,18 @@ describe("agent tools", () => {
           occurredAt: "2026-09-08T00:00:00.000Z",
         },
       ]);
+    });
+
+    it("refuses an actor outside this Commons and drops outsiders' entries", async () => {
+      const db = makeDb({ userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null) } });
+      await expect(callTool(buildQueryEventLogTool(makeCtx(db)), { actorId: "outsider", limit: 20 })).rejects.toThrow(/FORBIDDEN/);
+
+      const mixed = makeDb({ auditLog: { findMany: vi.fn().mockResolvedValue([
+        { actorId: "outsider", action: "X", resource: "Group", resourceId: "group_1", metadata: {}, occurredAt: new Date("2026-09-08T00:00:00.000Z") },
+        { actorId: "system/sage", action: "Y", resource: "Group", resourceId: "group_1", metadata: {}, occurredAt: new Date("2026-09-08T00:00:00.000Z") },
+      ]) } });
+      const result = await callTool(buildQueryEventLogTool(makeCtx(mixed)), { resourceId: "group_1", limit: 20 });
+      expect(result.map((entry: { action: string }) => entry.action)).toEqual(["Y"]);
     });
 
     it("rejects an unscoped query with neither actorId nor resourceId", async () => {

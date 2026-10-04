@@ -9,6 +9,9 @@ import { enqueueSageActionExecute } from "../services/sage-dispatch.js";
 import { createNotificationAndPush } from "../services/push-notification-service.js";
 import { describeSageAuditEvent } from "../services/sage-audit-descriptions.js";
 import { presentTrails } from "../services/sage-decision-trail.js";
+import { dismissSageTask } from "../services/sage-tasks.js";
+import { askIntroductionHelper } from "../services/sage-introductions.js";
+import { acknowledgeSageAlert, rerouteSageAlert } from "../services/sage-responsibility.js";
 import { router } from "../trpc.js";
 
 const TERMINAL_STATUSES = ["APPROVED", "DISMISSED", "FAILED"] as const;
@@ -186,6 +189,73 @@ export const sageRouter = router({
 
   // Called when the member opens the Sage suggestions list, so the Alerts tab's
   // unread dot clears without requiring them to separately open each notification.
+  /** What Sage is following up on with this member: their open tasks, newest due first, plus recent closed ones. */
+  listTasks: accountAuthenticatedProcedure
+    .input(z.object({ coopId: z.string().min(1).default("cahootz") }))
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+      const [open, closed] = await Promise.all([
+        context.db.sageTask.findMany({
+          where: { coopId: input.coopId, ownerUserId: userId, status: "OPEN" },
+          orderBy: { nextWakeAt: "asc" }, take: 50,
+        }),
+        context.db.sageTask.findMany({
+          where: { coopId: input.coopId, ownerUserId: userId, status: { in: ["DONE", "DISMISSED", "ABANDONED"] }, updatedAt: { gte: new Date(Date.now() - 30 * 86_400_000) } },
+          orderBy: { updatedAt: "desc" }, take: 20,
+        }),
+      ]);
+      const view = (task: (typeof open)[number]) => ({
+        id: task.id, kind: task.kind, status: task.status, title: task.title, reason: task.reason,
+        expected: task.expected, offer: task.offer, postId: task.postId, subjectType: task.subjectType, subjectId: task.subjectId,
+        nextWakeAt: task.nextWakeAt.toISOString(), attempts: task.attempts, outcome: task.outcome, updatedAt: task.updatedAt.toISOString(),
+      });
+      return { open: open.map(view), closed: closed.map(view) };
+    }),
+
+  /** The member says they don't need Sage to follow this; Sage won't recreate it for 30 days. */
+  dismissTask: accountAuthenticatedProcedure
+    .input(z.object({ taskId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      if (!(await dismissSageTask(input.taskId, context.accountUser.id))) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "This follow-up is no longer open." });
+      }
+      return { dismissed: true };
+    }),
+
+  /** A routed alert, for its recipient: what happened, the evidence, why them, and what's recommended. */
+  getAlert: accountAuthenticatedProcedure
+    .input(z.object({ alertId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const alert = await context.db.sageAlert.findUnique({ where: { id: input.alertId } });
+      if (!alert || alert.recipientUserId !== context.accountUser.id) throw new TRPCError({ code: "NOT_FOUND", message: "Alert not found" });
+      return {
+        id: alert.id, coopId: alert.coopId, category: alert.category, severity: alert.severity, title: alert.title, body: alert.body,
+        evidence: alert.evidence as { source: string; quote?: string; why: string; recommendation: string },
+        postId: alert.postId, status: alert.status, dueAt: alert.dueAt?.toISOString() ?? null, expiresAt: alert.expiresAt.toISOString(),
+        createdAt: alert.createdAt.toISOString(),
+      };
+    }),
+
+  acknowledgeAlert: accountAuthenticatedProcedure
+    .input(z.object({ alertId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      return { acknowledged: await acknowledgeSageAlert(input.alertId, context.accountUser.id) };
+    }),
+
+  /** "Not for me": sends the alert to the next responsible person and remembers the answer. */
+  alertNotForMe: accountAuthenticatedProcedure
+    .input(z.object({ alertId: z.string().min(1), feedback: z.string().trim().max(500).optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const result = await rerouteSageAlert(input.alertId, context.accountUser.id, input.feedback ?? null);
+      if (!result) throw new TRPCError({ code: "NOT_FOUND", message: "This alert can no longer be passed on." });
+      return { rerouted: true, to: result.status === "ROUTED" ? result.category : null };
+    }),
+
   markSeen: accountAuthenticatedProcedure.mutation(async ({ ctx }) => {
     const context = ctx as AccountAuthenticatedContext;
     const result = await context.db.notification.updateMany({
@@ -352,6 +422,11 @@ export const sageRouter = router({
             data: { actionId: action.id },
           }).catch((error) => console.error("Could not notify Sage suggestion helper", error));
         }
+      } else if (review.reviewType === "ACCEPT_INTRODUCTION") {
+        // The person with the need says yes first; then the helper is asked; both yeses create the circle.
+        const participant = await context.db.commonsActionParticipant.findUnique({ where: { actionId_userId: { actionId: action.id, userId } }, select: { role: true } });
+        if (participant?.role === "SUBJECT") await askIntroductionHelper(action.id);
+        else await enqueueSageActionExecute(action.id, action.revision);
       } else if (review.reviewType === "ACCEPT_MATCH" || review.reviewType === "APPROVE_SUGGESTION") {
         await enqueueSageActionExecute(action.id, action.revision);
       }

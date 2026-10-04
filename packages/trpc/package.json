@@ -162,6 +162,11 @@
       "types": "./dist/services/push-notification-service.d.ts",
       "import": "./dist/services/push-notification-service.js",
       "require": "./dist/services/push-notification-service.js"
+    },
+    "./services/sage-wake": {
+      "types": "./dist/services/sage-wake.d.ts",
+      "import": "./dist/services/sage-wake.js",
+      "require": "./dist/services/sage-wake.js"
     }
   },
   "keywords": [],

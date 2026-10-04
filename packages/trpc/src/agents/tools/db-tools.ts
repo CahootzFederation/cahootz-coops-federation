@@ -33,6 +33,11 @@ export function buildGetUserProfileTool(ctx: AgentToolContext) {
     parameters: z.object({ userId: z.string() }),
     errorFunction: null,
     execute: async ({ userId }) => {
+      // Only members of the Commons the agent is working in: an agent can't read arbitrary profiles.
+      const membership = await ctx.db.userCoopMembership.findUnique({
+        where: { userId_coopId: { userId, coopId: ctx.coopId } }, select: { status: true },
+      });
+      if (membership?.status !== "ACTIVE") return null;
       const user = await ctx.db.user.findUnique({
         where: { id: userId },
         select: USER_PROFILE_SELECT,
@@ -91,6 +96,13 @@ export function buildQueryEventLogTool(ctx: AgentToolContext) {
       if (!actorId && !resourceId) {
         throw new Error("query_event_log requires actorId or resourceId to avoid unscoped scans.");
       }
+      // AuditLog has no Commons column, so scope by actor: only members of this Commons (or system jobs).
+      if (actorId && !actorId.startsWith("system")) {
+        const membership = await ctx.db.userCoopMembership.findUnique({
+          where: { userId_coopId: { userId: actorId, coopId: ctx.coopId } }, select: { status: true },
+        });
+        if (membership?.status !== "ACTIVE") throw new Error("FORBIDDEN: that actor isn't a member of this Commons.");
+      }
 
       const events = await ctx.db.auditLog.findMany({
         where: {
@@ -102,7 +114,11 @@ export function buildQueryEventLogTool(ctx: AgentToolContext) {
         take: limit,
       });
 
-      return events.map((e) => ({
+      const actors = [...new Set(events.map((e) => e.actorId).filter((id) => !id.startsWith("system")))];
+      const members = actors.length
+        ? new Set((await ctx.db.userCoopMembership.findMany({ where: { coopId: ctx.coopId, userId: { in: actors } }, select: { userId: true } })).map((row) => row.userId))
+        : new Set<string>();
+      return events.filter((e) => e.actorId.startsWith("system") || members.has(e.actorId)).map((e) => ({
         action: e.action,
         resource: e.resource,
         resourceId: e.resourceId,

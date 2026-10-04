@@ -7,6 +7,8 @@ import { createNotificationAndPush } from "../services/push-notification-service
 import { FINAL_REVIEW_TYPE_BY_ACTION_TYPE } from "../services/commons-action-tools.js";
 import { closeCircleWindowNow } from "../services/circle-window.js";
 import { presentTrails } from "../services/sage-decision-trail.js";
+import { runSageWakeCycle } from "../services/sage-tasks.js";
+import { wakeCycleWork } from "../services/sage-wake-work.js";
 import { getSageAutonomyUsage } from "../services/sage-autonomy.js";
 import { notifySageComment } from "../services/sage-comment-notifications.js";
 import { enqueueSageActionExecute } from "../services/sage-dispatch.js";
@@ -21,6 +23,7 @@ const Command = z.discriminatedUnion("command", [
     monthlyCallLimit: z.number().int().min(0).max(1_000_000) }),
   Scoped.extend({ command: z.literal("scan") }),
   Scoped.extend({ command: z.literal("analyze-circle"), groupId: z.string().min(1) }),
+  Scoped.extend({ command: z.literal("wake") }),
   Scoped.extend({ command: z.literal("dismiss"), actionId: z.string().min(1) }),
   Scoped.extend({ command: z.literal("edit-draft"), actionId: z.string().min(1), draftText: z.string().trim().max(2000) }),
   Scoped.extend({ command: z.literal("approve"), actionId: z.string().min(1) }),
@@ -69,6 +72,10 @@ export const commonsActionsAdminRouter = router({
       }),
     ]);
     const trails = await presentTrails(trailRows, { forAdmin: true }, ctx.db);
+    const [tasks, wakeCycles] = await Promise.all([
+      ctx.db.sageTask.findMany({ where: { coopId: input.coopId }, orderBy: { updatedAt: "desc" }, take: 50 }),
+      ctx.db.sageWakeCycle.findMany({ where: { coopId: input.coopId }, orderBy: { startedAt: "desc" }, take: 10 }),
+    ]);
     const windows = circles.length ? await ctx.db.circleAgentWindow.findMany({
       where: { groupId: { in: circles.map((circle) => circle.id) } },
       orderBy: { openedAt: "desc" },
@@ -133,6 +140,15 @@ export const commonsActionsAdminRouter = router({
           lastAnalyzedAt: lastClosed?.closedAt?.toISOString() ?? null };
       }),
       trails,
+      tasks: tasks.map((task) => ({
+        id: task.id, kind: task.kind, status: task.status, title: task.title, reason: task.reason, ownerUserId: task.ownerUserId,
+        postId: task.postId, attempts: task.attempts, maxAttempts: task.maxAttempts, outcome: task.outcome,
+        nextWakeAt: task.nextWakeAt.toISOString(), updatedAt: task.updatedAt.toISOString(),
+      })),
+      wakeCycles: wakeCycles.map((cycle) => ({
+        id: cycle.id, reason: cycle.reason, status: cycle.status, tasksProcessed: cycle.tasksProcessed, error: cycle.error,
+        startedAt: cycle.startedAt.toISOString(), finishedAt: cycle.finishedAt?.toISOString() ?? null,
+      })),
       skippedRepeats: skippedRepeats.map((event) => ({
         createdAt: event.createdAt.toISOString(),
         title: (event.metadata as { title?: unknown } | null)?.title ?? null,
@@ -170,6 +186,11 @@ export const commonsActionsAdminRouter = router({
       const data = { autonomyMonthlyUsdLimit: input.monthlyUsdLimit, autonomyMonthlyCallLimit: input.monthlyCallLimit, updatedBy: actor };
       await ctx.db.commonsAgentSetting.upsert({ where: { coopId }, create: { coopId, ...data }, update: data });
       return getSageAutonomyUsage(coopId, ctx.db);
+    }
+    if (input.command === "wake") {
+      // Runs the wake-and-wait loop for this Commons now instead of waiting for the schedule.
+      const result = await runSageWakeCycle(coopId, "MANUAL", new Date(), (id) => wakeCycleWork(id));
+      return result.skipped ? conflict("A wake run for this Commons is already in progress.") : result;
     }
     if (input.command === "analyze-circle") {
       const group = await ctx.db.group.findUnique({ where: { id: input.groupId }, select: { coopId: true, kind: true } });

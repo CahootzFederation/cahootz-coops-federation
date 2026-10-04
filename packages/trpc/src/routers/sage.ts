@@ -9,6 +9,7 @@ import { enqueueSageActionExecute } from "../services/sage-dispatch.js";
 import { createNotificationAndPush } from "../services/push-notification-service.js";
 import { describeSageAuditEvent } from "../services/sage-audit-descriptions.js";
 import { presentTrails } from "../services/sage-decision-trail.js";
+import { dismissSageTask } from "../services/sage-tasks.js";
 import { router } from "../trpc.js";
 
 const TERMINAL_STATUSES = ["APPROVED", "DISMISSED", "FAILED"] as const;
@@ -186,6 +187,41 @@ export const sageRouter = router({
 
   // Called when the member opens the Sage suggestions list, so the Alerts tab's
   // unread dot clears without requiring them to separately open each notification.
+  /** What Sage is following up on with this member: their open tasks, newest due first, plus recent closed ones. */
+  listTasks: accountAuthenticatedProcedure
+    .input(z.object({ coopId: z.string().min(1).default("cahootz") }))
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+      const [open, closed] = await Promise.all([
+        context.db.sageTask.findMany({
+          where: { coopId: input.coopId, ownerUserId: userId, status: "OPEN" },
+          orderBy: { nextWakeAt: "asc" }, take: 50,
+        }),
+        context.db.sageTask.findMany({
+          where: { coopId: input.coopId, ownerUserId: userId, status: { in: ["DONE", "DISMISSED", "ABANDONED"] }, updatedAt: { gte: new Date(Date.now() - 30 * 86_400_000) } },
+          orderBy: { updatedAt: "desc" }, take: 20,
+        }),
+      ]);
+      const view = (task: (typeof open)[number]) => ({
+        id: task.id, kind: task.kind, status: task.status, title: task.title, reason: task.reason,
+        expected: task.expected, offer: task.offer, postId: task.postId, subjectType: task.subjectType, subjectId: task.subjectId,
+        nextWakeAt: task.nextWakeAt.toISOString(), attempts: task.attempts, outcome: task.outcome, updatedAt: task.updatedAt.toISOString(),
+      });
+      return { open: open.map(view), closed: closed.map(view) };
+    }),
+
+  /** The member says they don't need Sage to follow this; Sage won't recreate it for 30 days. */
+  dismissTask: accountAuthenticatedProcedure
+    .input(z.object({ taskId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      if (!(await dismissSageTask(input.taskId, context.accountUser.id))) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "This follow-up is no longer open." });
+      }
+      return { dismissed: true };
+    }),
+
   markSeen: accountAuthenticatedProcedure.mutation(async ({ ctx }) => {
     const context = ctx as AccountAuthenticatedContext;
     const result = await context.db.notification.updateMany({

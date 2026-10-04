@@ -10,6 +10,7 @@ import { isPlaceholderCharter, starterCharter, type StarterGoal } from "./starte
 import { recordAICost, recordAgentResultCost } from "./ai-cost.js";
 import { sageAutonomyAllowed } from "./sage-autonomy.js";
 import { notifySageComment } from "./sage-comment-notifications.js";
+import { FOLLOW_UP_DEFAULT_DAYS, clampFollowUpDays, createSageTask } from "./sage-tasks.js";
 import { DecisionTrail, type TrailTrigger } from "./sage-decision-trail.js";
 import { SAGE_FOLLOW_THROUGH_RULE, renderTemplatedReply, sageReplyStyleInstructions } from "./sage-reply-templates.js";
 import {
@@ -55,13 +56,17 @@ const ActionOutputZ = z.object({
   templateLead: z.string(),
   templateSteps: z.array(z.string()).max(4),
   templateOffer: z.string(),
+  // When the reply asks the member for something: days until Sage checks back (0 = no follow-up) and
+  // what Sage is waiting for. Code clamps the days and turns this into a SageTask.
+  followUpDays: z.number().int().min(0).max(14),
+  followUpExpect: z.string(),
 });
 const BatchOutputZ = z.object({
   items: z.array(z.object({ id: z.string(), actions: z.array(ActionOutputZ).max(5) })),
 });
 type ActionOutput = z.infer<typeof ActionOutputZ>;
 /** The parts of an action the reply rules look at; template fields are already rendered into draftText. */
-type ReplyDraft = Omit<ActionOutput, "templateKey" | "templateLead" | "templateSteps" | "templateOffer">;
+type ReplyDraft = Omit<ActionOutput, "templateKey" | "templateLead" | "templateSteps" | "templateOffer" | "followUpDays" | "followUpExpect">;
 
 export interface SourceItem {
   sourceType: "commons_post" | "commons_comment";
@@ -283,6 +288,7 @@ async function saveActions(item: SourceItem, actions: ActionOutput[], config: Co
         trail.policy("Sage hasn't already replied here", published);
       }
       trail.taken(published ? "Published a reply as Sage" : "Queued the reply for a platform admin to review", published ? "PASS" : "INFO");
+      if (published) await scheduleReplyFollowUp(item, action, row.id, trail);
     }
     if ((action.type === "VERIFY_RESOURCE" || action.type === "LOG_RESOURCE") && action.resourceKind.trim()) {
       const resource = await db.commonsResource.upsert({
@@ -322,6 +328,26 @@ async function saveActions(item: SourceItem, actions: ActionOutput[], config: Co
   }
 }
 
+/**
+ * When a published reply asks the member for something, Sage remembers it as a task and checks back,
+ * so the promise in "Once you've done that, I can..." survives even if nobody replies in the thread.
+ */
+async function scheduleReplyFollowUp(item: SourceItem, action: ActionOutput, actionId: string, trail: DecisionTrail) {
+  const templated = !!action.templateKey && action.templateSteps.length > 0;
+  if (action.followUpDays <= 0 && !templated) return;
+  const expected = action.followUpExpect.trim() || action.templateSteps.join("; ");
+  if (!expected) return;
+  const days = clampFollowUpDays(action.followUpDays || FOLLOW_UP_DEFAULT_DAYS);
+  const result = await createSageTask({
+    coopId: item.coopId, kind: "FOLLOW_UP", title: action.summary, ownerUserId: item.sourceAuthorId,
+    reason: `Sage asked ${item.sourceType === "commons_comment" ? "in a reply" : "on the post"}: ${expected}`,
+    expected, offer: action.templateOffer || undefined,
+    subjectType: "commons_post", subjectId: item.sourcePostId, postId: item.sourcePostId, sourceActionId: actionId, dueInDays: days,
+  });
+  trail.taken(result.created ? `Will check back in ${days} day${days === 1 ? "" : "s"}` : "No new follow-up", result.created ? "PASS" : "INFO",
+    result.created ? `Waiting for the member to ${expected}` : result.reason);
+}
+
 function itemTrail(item: SourceItem, trigger: TrailTrigger) {
   return new DecisionTrail({
     agent: "commons-action-agent",
@@ -346,6 +372,7 @@ export function createCommonsActionAgent() {
       "How to write reply drafts:",
       sageReplyStyleInstructions({ structured: true }),
       SAGE_FOLLOW_THROUGH_RULE,
+      "When a reply asks the member to do or share something specific, set followUpDays (1-14) to when Sage should check back and followUpExpect to what you're waiting for, phrased as what the member does (for example \"share your delivery days and costs\"). Otherwise set followUpDays to 0 and followUpExpect to \"\".",
       "confidence is how sure you are that the action is correct and useful now. Use below 0.75 when you are guessing at intent or the charter only loosely applies.",
       "For a PERSON resource, targetHandle must be an exact encoded @mention in that item, or empty for the author offering their own skills. A third-party name alone is not a verified person.",
       "When a member offers a concrete tool, skill, space, service, or contact aligned with a goal, include VERIFY_RESOURCE with resourceKind and resourceTitle. A short helpful reply may be an additional action, but never replaces VERIFY_RESOURCE.",

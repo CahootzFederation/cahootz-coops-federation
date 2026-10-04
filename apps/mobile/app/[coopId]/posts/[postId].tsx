@@ -39,6 +39,7 @@ import { MentionComposerInput } from '@/components/mention-composer-input';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsPost, type CommonsProfile } from '@/lib/api';
 import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
+import { SageDecisionTrails } from '@/components/sage-decision-trail';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -524,6 +525,8 @@ export default function CommonsPostDetailScreen() {
             </View>
 
             {error ? <Text className="mt-3 text-sm font-semibold text-red-600">{error}</Text> : null}
+
+            <SageDecisionTrails filter={{ postId: post.id }} sessionToken={sessionToken} refreshKey={post.comments.length} />
 
             <View className="mt-4" onLayout={(event) => { commentsOffsetY.current = event.nativeEvent.layout.y; }}>
               <Text className="text-base font-black text-gray-950">Comments</Text>

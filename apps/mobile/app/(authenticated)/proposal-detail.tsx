@@ -35,6 +35,7 @@ import {
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
+import { SageDecisionTrails } from '@/components/sage-decision-trail';
 import { api } from '@/lib/api';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -154,7 +155,7 @@ export default function ProposalDetailRedirect() {
 
 export function ProposalDetailContent() {
   const { id, coopId = 'cahootz' } = useLocalSearchParams<{ id: string; coopId?: string }>();
-  const { user } = useAuth();
+  const { user, sessionToken } = useAuth();
 
   const [proposal, setProposal] = useState<any>(null);
   const [comments, setComments] = useState<any[]>([]);
@@ -1070,6 +1071,11 @@ export function ProposalDetailContent() {
               </>
             )}
           </View>
+
+          {/* ── Sage decision trails: how the review and comment evaluations were decided ── */}
+          {id ? (
+            <SageDecisionTrails filter={{ proposalId: id }} sessionToken={sessionToken} refreshKey={`${proposal?.status}:${comments.length}`} />
+          ) : null}
 
           {/* ── Submission History / Audit Trail ── */}
           {revisions.length > 0 && (

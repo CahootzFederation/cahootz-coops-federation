@@ -651,6 +651,33 @@ export interface ProposalSummary {
   };
 }
 
+export type SageTrailStage = 'OBSERVED' | 'EVIDENCE' | 'CONSIDERED' | 'POLICY' | 'TAKEN' | 'RESULT' | 'FOLLOW_UP';
+
+export type SageTrailFilter = { postId: string } | { actionId: string } | { proposalId: string } | { circleId: string };
+
+export interface SageDecisionTrail {
+  id: string;
+  agent: string;
+  agentLabel: string;
+  coopId: string;
+  circleId: string | null;
+  sourceType: string;
+  trigger: string;
+  triggerLabel: string;
+  outcome: string;
+  observed: {
+    title?: string;
+    content?: string;
+    context?: string;
+    circleName?: string;
+    itemCount?: number;
+    items?: { author: string; content: string; at: string }[];
+  };
+  steps: { stage: SageTrailStage; label: string; detail?: string; outcome?: 'PASS' | 'FAIL' | 'INFO' }[];
+  hiddenSteps: number;
+  createdAt: string;
+}
+
 // A direct message thread is a private two-person circle (Group kind DIRECT).
 export interface DirectThread {
   groupId: string;
@@ -1140,6 +1167,15 @@ export const api = {
       callsThisMonth: number;
       unpricedCallsThisMonth: number;
       byCategory: { category: string; estimatedUsd: number; calls: number }[];
+      sageAutonomy: {
+        usd: number;
+        calls: number;
+        usdLimit: number;
+        callLimit: number;
+        paused: boolean;
+        pausedReason: 'USD_LIMIT' | 'CALL_LIMIT' | null;
+        resetsAt: string;
+      };
     }>(response, 'Failed to load commons AI spending');
   },
 
@@ -4663,7 +4699,24 @@ export const api = {
       { headers: createApiHeaders(null, sessionToken) },
     );
     return readTrpcResult<{
-      suggestion: { id: string; title: string; status: string; circleId: string | null; evidence: string | null; role: string };
+      suggestion: {
+        id: string;
+        coopId: string;
+        title: string;
+        status: string;
+        circleId: string | null;
+        evidence: string | null;
+        role: string;
+        capability: string | null;
+        proposedText: string | null;
+        reason: string | null;
+        result: { entityType: string; entityId: string } | null;
+      };
+      context: {
+        circle: { id: string; name: string };
+        targetPost: { id: string; title: string; content: string; author: string; createdAt: string } | null;
+        conversation: Array<{ author: string; content: string; createdAt: string }>;
+      } | null;
       reviews: Array<{ id: string; reviewType: string; status: string; presentationData: Record<string, unknown> | null; payloadHash: string }>;
       auditEvents: Array<{ description: string; createdAt: string }>;
     }>(response, 'Could not load this Sage suggestion');
@@ -4681,6 +4734,30 @@ export const api = {
       body: JSON.stringify({ reviewId, response: response_, ...(payload ? { payload } : {}) }),
     });
     return readTrpcResult<{ success: boolean }>(response, 'Could not send your response');
+  },
+
+  async getSageTrailSettings(sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.trailSettings`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<{ showSageDecisionTrails: boolean }>(response, 'Could not load Sage settings');
+  },
+
+  async setSageTrailSettings(showSageDecisionTrails: boolean, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.setTrailSettings`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ showSageDecisionTrails }),
+    });
+    return readTrpcResult<{ showSageDecisionTrails: boolean }>(response, 'Could not save Sage settings');
+  },
+
+  async listSageTrails(filter: SageTrailFilter, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify(filter));
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.listTrails?input=${input}`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<{ enabled: boolean; trails: SageDecisionTrail[] }>(response, "Could not load Sage's decision trail");
   },
 
   async markSageSuggestionsSeen(sessionToken: string) {

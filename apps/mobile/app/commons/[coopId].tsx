@@ -87,6 +87,15 @@ type AISpending = {
   callsThisMonth: number;
   unpricedCallsThisMonth: number;
   byCategory: { category: string; estimatedUsd: number; calls: number }[];
+  sageAutonomy?: {
+    usd: number;
+    calls: number;
+    usdLimit: number;
+    callLimit: number;
+    paused: boolean;
+    pausedReason: 'USD_LIMIT' | 'CALL_LIMIT' | null;
+    resetsAt: string;
+  };
 };
 
 type MembersPreview = {
@@ -1256,6 +1265,7 @@ function AISpendingCard({ spending }: { spending: AISpending }) {
           No AI has run for this commons yet this month.
         </Text>
       )}
+      {spending.sageAutonomy ? <SageAutonomyRow autonomy={spending.sageAutonomy} /> : null}
       {spending.unpricedCallsThisMonth > 0 ? (
         <Text className="mt-3 text-xs leading-4 text-gray-500">
           {spending.unpricedCallsThisMonth} task
@@ -1264,6 +1274,42 @@ function AISpendingCard({ spending }: { spending: AISpending }) {
           included in the total.
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+function SageAutonomyRow({
+  autonomy,
+}: {
+  autonomy: NonNullable<AISpending['sageAutonomy']>;
+}) {
+  const resets = new Date(autonomy.resetsAt).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+  return (
+    <View
+      testID="sage-autonomy-usage"
+      className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-3"
+    >
+      <View className="flex-row items-center justify-between gap-3">
+        <Text className="font-bold text-gray-900">Sage on its own</Text>
+        <Text
+          className={`text-xs font-black ${autonomy.paused ? 'text-red-700' : 'text-gray-600'}`}
+        >
+          {autonomy.paused ? 'Paused' : 'Active'}
+        </Text>
+      </View>
+      <Text className="mt-1 text-xs leading-4 text-gray-600">
+        {formatAICost(autonomy.usd)} of {formatAICost(autonomy.usdLimit)} ·{' '}
+        {autonomy.calls} of {autonomy.callLimit} tasks this month
+      </Text>
+      <Text className="mt-1 text-xs leading-4 text-gray-500">
+        {autonomy.paused
+          ? `Sage has stopped noticing and suggesting on its own until ${resets}. Asking Sage for help still works.`
+          : 'Work Sage starts without being asked stops at either monthly limit. Asking Sage for help is not limited.'}
+      </Text>
     </View>
   );
 }

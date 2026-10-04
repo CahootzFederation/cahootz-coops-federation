@@ -7,6 +7,8 @@ import { payloadHash } from "../services/sage-ride-match-agent.js";
 import { findRideMatchCandidate } from "../services/sage-ride-matcher.js";
 import { enqueueSageActionExecute } from "../services/sage-dispatch.js";
 import { createNotificationAndPush } from "../services/push-notification-service.js";
+import { describeSageAuditEvent } from "../services/sage-audit-descriptions.js";
+import { presentTrails } from "../services/sage-decision-trail.js";
 import { router } from "../trpc.js";
 
 const TERMINAL_STATUSES = ["APPROVED", "DISMISSED", "FAILED"] as const;
@@ -16,27 +18,172 @@ function conflict(message: string): never {
   throw new TRPCError({ code: "CONFLICT", message });
 }
 
-// Server-side only, so raw eventType/metadata (e.g. a missing tool key) never reaches the client.
-function describeAuditEvent(eventType: string, metadata: unknown): string {
-  const reviewType = metadata && typeof metadata === "object" ? (metadata as { reviewType?: string }).reviewType : undefined;
-  switch (eventType) {
-    case "SUGGESTION_CREATED": return "Sage made a suggestion";
-    case "REVIEW_APPROVED":
-      if (reviewType === "PROVIDE_CONTEXT") return "Details were confirmed";
-      if (reviewType === "CONSENT_TO_SHARE") return "Sharing was approved";
-      if (reviewType === "ACCEPT_MATCH") return "The match was accepted";
-      if (reviewType === "APPROVE_SUGGESTION") return "The suggestion was approved";
-      return "A step was approved";
-    case "REVIEW_DECLINED": return "The suggestion was declined";
-    case "ESCALATED_TO_ADMIN": return "Sent to an admin to look at";
-    case "ACTION_EXECUTED": return "Sage completed the suggestion";
-    case "ACTION_FAILED": return "Sage couldn't complete this";
-    case "MISSING_TOOL": return "Sage couldn't complete this";
-    default: return "Update";
+const CONTEXT_MESSAGE_LIMIT = 30;
+
+function authorName(author: { name: string | null; handle: string | null }) {
+  return author.name || (author.handle ? `@${author.handle}` : "A member");
+}
+
+/**
+ * Where a circle suggestion came from: the circle, the post Sage would reply to, and the conversation
+ * window Sage read. Only returned to a viewer who is still a member of that circle, so a suggestion
+ * never reveals a private circle's conversation to anyone outside it.
+ */
+async function loadCircleSuggestionContext(
+  db: AccountAuthenticatedContext["db"],
+  action: { sourceType: string; sourceId: string; circleId: string | null; coopId: string; payload: unknown },
+  userId: string,
+) {
+  if (action.sourceType !== "circle_trend" || !action.circleId) return null;
+  const membership = await db.groupMember.findUnique({
+    where: { groupId_userId: { groupId: action.circleId, userId } },
+    select: { group: { select: { id: true, name: true, coopId: true } } },
+  });
+  if (!membership || membership.group.coopId !== action.coopId) return null;
+
+  const targetPostId = (action.payload as { targetPostId?: unknown } | null)?.targetPostId;
+  const [window, targetPost] = await Promise.all([
+    db.circleAgentWindow.findUnique({ where: { id: action.sourceId }, select: { groupId: true, openedAt: true, closedAt: true, lastMessageAt: true } }),
+    typeof targetPostId === "string"
+      ? db.commonsPost.findFirst({
+          where: { id: targetPostId, coopId: action.coopId, circleId: action.circleId },
+          select: { id: true, title: true, content: true, createdAt: true, author: { select: { name: true, handle: true } } },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  let conversation: Array<{ author: string; content: string; createdAt: string }> = [];
+  if (window && window.groupId === action.circleId) {
+    const range = { gte: window.openedAt, lte: window.closedAt ?? window.lastMessageAt };
+    const [messages, posts, postComments] = await Promise.all([
+      db.groupComment.findMany({
+        where: { groupId: action.circleId, createdAt: range },
+        orderBy: { createdAt: "desc" }, take: CONTEXT_MESSAGE_LIMIT,
+        select: { content: true, createdAt: true, author: { select: { name: true, handle: true } } },
+      }),
+      // Circle chat messages are mirrored into the feed as "circle:<id>" posts; skip the mirrors.
+      db.commonsPost.findMany({
+        where: { circleId: action.circleId, createdAt: range, NOT: { id: { startsWith: "circle:" } } },
+        orderBy: { createdAt: "desc" }, take: CONTEXT_MESSAGE_LIMIT,
+        select: { title: true, content: true, createdAt: true, author: { select: { name: true, handle: true } } },
+      }),
+      db.commonsComment.findMany({
+        where: { post: { circleId: action.circleId }, createdAt: range },
+        orderBy: { createdAt: "desc" }, take: CONTEXT_MESSAGE_LIMIT,
+        select: { content: true, createdAt: true, author: { select: { name: true, handle: true } } },
+      }),
+    ]);
+    conversation = [
+      ...messages.map((message) => ({ author: authorName(message.author), content: message.content, createdAt: message.createdAt })),
+      ...posts.map((post) => ({
+        author: authorName(post.author),
+        content: post.title && !post.content.startsWith(post.title) ? `${post.title}: ${post.content}` : post.content,
+        createdAt: post.createdAt,
+      })),
+      ...postComments.map((comment) => ({ author: authorName(comment.author), content: comment.content, createdAt: comment.createdAt })),
+    ]
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .slice(-CONTEXT_MESSAGE_LIMIT)
+      .map((entry) => ({ ...entry, content: entry.content.slice(0, 1000), createdAt: entry.createdAt.toISOString() }));
   }
+
+  return {
+    circle: { id: membership.group.id, name: membership.group.name },
+    targetPost: targetPost ? {
+      id: targetPost.id, title: targetPost.title, content: targetPost.content.slice(0, 2000),
+      author: authorName(targetPost.author), createdAt: targetPost.createdAt.toISOString(),
+    } : null,
+    conversation,
+  };
+}
+
+const TRAIL_LIMIT = 10;
+
+/**
+ * Decision trails a member may see for a post or a suggestion: never admin-only trails (ride matches),
+ * Commons-feed trails only for active members of that Commons, circle trails only for members of that
+ * circle. Content that has since been deleted is not shown.
+ */
+async function memberVisibleTrails(
+  db: AccountAuthenticatedContext["db"],
+  userId: string,
+  filter: { postId?: string; actionId?: string; proposalId?: string; circleId?: string },
+) {
+  const rows = await db.sageDecisionTrail.findMany({
+    where: {
+      visibility: { not: "ADMINS" },
+      ...(filter.postId ? { relatedPostIds: { has: filter.postId } } : {}),
+      ...(filter.actionId ? { actionIds: { has: filter.actionId } } : {}),
+      ...(filter.proposalId ? { proposalId: filter.proposalId } : {}),
+      ...(filter.circleId ? { circleId: filter.circleId } : {}),
+    },
+    orderBy: { createdAt: "desc" }, take: TRAIL_LIMIT,
+  });
+  if (!rows.length) return [];
+  const coopIds = [...new Set(rows.map((row) => row.coopId))];
+  const circleIds = [...new Set(rows.flatMap((row) => (row.circleId ? [row.circleId] : [])))];
+  const [memberships, circleMemberships] = await Promise.all([
+    db.userCoopMembership.findMany({ where: { userId, coopId: { in: coopIds }, status: "ACTIVE" }, select: { coopId: true } }),
+    circleIds.length
+      ? db.groupMember.findMany({ where: { userId, groupId: { in: circleIds } }, select: { groupId: true, group: { select: { coopId: true } } } })
+      : Promise.resolve([]),
+  ]);
+  const activeCoops = new Set(memberships.map((membership) => membership.coopId));
+  const visible = rows.filter((row) => {
+    if (row.visibility === "COMMONS_MEMBERS") return activeCoops.has(row.coopId);
+    if (row.visibility === "CIRCLE") return circleMemberships.some((membership) => membership.groupId === row.circleId && membership.group.coopId === row.coopId);
+    return false;
+  });
+  const postSources = visible.filter((row) => row.sourceType === "commons_post").map((row) => row.sourceId);
+  const commentSources = visible.filter((row) => row.sourceType === "commons_comment").map((row) => row.sourceId);
+  const [livePosts, liveComments] = await Promise.all([
+    postSources.length ? db.commonsPost.findMany({ where: { id: { in: postSources } }, select: { id: true } }) : Promise.resolve([]),
+    commentSources.length ? db.commonsComment.findMany({ where: { id: { in: commentSources } }, select: { id: true } }) : Promise.resolve([]),
+  ]);
+  const live = new Set([...livePosts, ...liveComments].map((row) => row.id));
+  const presented = await presentTrails(visible, { forAdmin: false }, db);
+  return presented.map((trail) => (trail.sourceType === "commons_post" || trail.sourceType === "commons_comment") && !live.has(trail.sourceId)
+    ? { ...trail, observed: { content: "This content was deleted." } }
+    : trail);
 }
 
 export const sageRouter = router({
+  /** The member's personal "Show Sage decision trails" app setting. */
+  trailSettings: accountAuthenticatedProcedure.query(async ({ ctx }) => {
+    const context = ctx as AccountAuthenticatedContext;
+    const user = await context.db.user.findUnique({ where: { id: context.accountUser.id }, select: { showSageDecisionTrails: true } });
+    return { showSageDecisionTrails: user?.showSageDecisionTrails ?? false };
+  }),
+
+  setTrailSettings: accountAuthenticatedProcedure
+    .input(z.object({ showSageDecisionTrails: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const user = await context.db.user.update({
+        where: { id: context.accountUser.id },
+        data: { showSageDecisionTrails: input.showSageDecisionTrails },
+        select: { showSageDecisionTrails: true },
+      });
+      return { showSageDecisionTrails: user.showSageDecisionTrails };
+    }),
+
+  /**
+   * Decision trails for one subject, if the member turned them on: a post (and its comments), a Sage
+   * suggestion, a proposal (its reviews and comment evaluations), or a circle or direct message.
+   */
+  listTrails: accountAuthenticatedProcedure
+    .input(z.object({
+      postId: z.string().min(1).optional(), actionId: z.string().min(1).optional(),
+      proposalId: z.string().min(1).optional(), circleId: z.string().min(1).optional(),
+    }).refine((input) => [input.postId, input.actionId, input.proposalId, input.circleId].filter(Boolean).length === 1,
+      { message: "Pass exactly one of postId, actionId, proposalId or circleId" }))
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const user = await context.db.user.findUnique({ where: { id: context.accountUser.id }, select: { showSageDecisionTrails: true } });
+      if (!user?.showSageDecisionTrails) return { enabled: false, trails: [] };
+      return { enabled: true, trails: await memberVisibleTrails(context.db, context.accountUser.id, input) };
+    }),
+
   // Called when the member opens the Sage suggestions list, so the Alerts tab's
   // unread dot clears without requiring them to separately open each notification.
   markSeen: accountAuthenticatedProcedure.mutation(async ({ ctx }) => {
@@ -88,24 +235,38 @@ export const sageRouter = router({
       });
       if (!participant) throw new TRPCError({ code: "FORBIDDEN", message: "Not part of this suggestion" });
 
-      const [myReviews, auditEvents] = await Promise.all([
+      const [myReviews, auditEvents, context_] = await Promise.all([
         context.db.commonsActionReview.findMany({ where: { actionId: action.id, userId }, orderBy: { createdAt: "asc" } }),
         context.db.commonsActionAudit.findMany({ where: { actionId: action.id }, orderBy: { createdAt: "asc" }, select: { eventType: true, metadata: true, createdAt: true } }),
+        loadCircleSuggestionContext(context.db, action, userId),
       ]);
 
+      const payload = action.payload as { capability?: unknown; body?: unknown } | null;
+      const suggestionReview = myReviews.find((review) => review.reviewType === "APPROVE_SUGGESTION");
+      const reason = (suggestionReview?.presentationData as { reason?: unknown } | null)?.reason
+        ?? (action.type === "SUGGEST_ACTION" ? action.evidence : null);
+      const resultEvent = [...auditEvents].reverse().find((event) => event.eventType === "ACTION_EXECUTED");
+      const result = resultEvent?.metadata as { resultEntityType?: unknown; resultEntityId?: unknown } | null;
       return {
         suggestion: {
-          id: action.id, title: action.summary, status: action.status, circleId: action.circleId,
+          id: action.id, coopId: action.coopId, title: action.summary, status: action.status, circleId: action.circleId,
+          capability: action.type === "SUGGEST_ACTION" && typeof payload?.capability === "string" ? payload.capability : null,
+          proposedText: action.type === "SUGGEST_ACTION" && typeof payload?.body === "string" ? payload.body : null,
+          // Sage's stated reason stays visible after the review is answered.
+          reason: typeof reason === "string" ? reason : null,
+          result: typeof result?.resultEntityType === "string" && typeof result.resultEntityId === "string"
+            ? { entityType: result.resultEntityType, entityId: result.resultEntityId } : null,
           // The subject's own raw message excerpt is only shown to the subject, never to a helper/candidate.
           evidence: participant.role === "SUBJECT" ? action.sourceTextSnapshot : null,
           role: participant.role,
         },
+        context: context_,
         reviews: myReviews.map((review) => ({
           id: review.id, reviewType: review.reviewType, status: review.status,
           presentationData: review.presentationData, payloadHash: review.payloadHash,
         })),
         auditEvents: auditEvents.map((event) => ({
-          description: describeAuditEvent(event.eventType, event.metadata),
+          description: describeSageAuditEvent(event.eventType, event.metadata),
           createdAt: event.createdAt.toISOString(),
         })),
       };

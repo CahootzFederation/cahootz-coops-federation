@@ -5,6 +5,10 @@ import { charterSnapshotKey, hasExactGrounding, REPLY_ACTIONS, scanCommons } fro
 import { ingestDocument } from "../services/knowledge-base.js";
 import { createNotificationAndPush } from "../services/push-notification-service.js";
 import { FINAL_REVIEW_TYPE_BY_ACTION_TYPE } from "../services/commons-action-tools.js";
+import { closeCircleWindowNow } from "../services/circle-window.js";
+import { presentTrails } from "../services/sage-decision-trail.js";
+import { getSageAutonomyUsage } from "../services/sage-autonomy.js";
+import { notifySageComment } from "../services/sage-comment-notifications.js";
 import { enqueueSageActionExecute } from "../services/sage-dispatch.js";
 import { router } from "../trpc.js";
 
@@ -12,7 +16,11 @@ const Scoped = z.object({ coopId: z.string().min(1) });
 const FeedbackReasons = z.enum(["WRONG_ACTION", "INCORRECT_CHARTER_USE", "INACCURATE", "MISSED_CONTEXT", "TONE", "UNCLEAR", "OTHER"]);
 const Command = z.discriminatedUnion("command", [
   Scoped.extend({ command: z.literal("auto-reply"), enabled: z.boolean() }),
+  Scoped.extend({ command: z.literal("autonomy-limits"),
+    monthlyUsdLimit: z.number().min(0).max(10_000).multipleOf(0.01),
+    monthlyCallLimit: z.number().int().min(0).max(1_000_000) }),
   Scoped.extend({ command: z.literal("scan") }),
+  Scoped.extend({ command: z.literal("analyze-circle"), groupId: z.string().min(1) }),
   Scoped.extend({ command: z.literal("dismiss"), actionId: z.string().min(1) }),
   Scoped.extend({ command: z.literal("edit-draft"), actionId: z.string().min(1), draftText: z.string().trim().max(2000) }),
   Scoped.extend({ command: z.literal("approve"), actionId: z.string().min(1) }),
@@ -28,10 +36,10 @@ function conflict(message: string): never {
 }
 
 export const commonsActionsAdminRouter = router({
-  dashboard: commonsPlatformAdminProcedure.input(Scoped).query(async ({ ctx, input }) => {
+  dashboard: commonsPlatformAdminProcedure.input(Scoped.extend({ trailAgent: z.string().max(40).optional() })).query(async ({ ctx, input }) => {
     const config = await ctx.db.coopConfig.findFirst({ where: { coopId: input.coopId, isActive: true }, select: { id: true } });
     if (!config) throw new TRPCError({ code: "NOT_FOUND", message: "Commons not found" });
-    const [setting, actions, resources, costEvents, monthlyCosts] = await Promise.all([
+    const [setting, actions, resources, costEvents, monthlyCosts, autonomy, circles, skippedRepeats, trailRows] = await Promise.all([
       ctx.db.commonsAgentSetting.findUnique({ where: { coopId: input.coopId } }),
       ctx.db.commonsAction.findMany({ where: { coopId: input.coopId }, orderBy: { createdAt: "desc" }, take: 150 }),
       ctx.db.commonsResource.findMany({ where: { coopId: input.coopId }, orderBy: { createdAt: "desc" }, take: 150 }),
@@ -44,7 +52,28 @@ export const commonsActionsAdminRouter = router({
         FROM "public"."AICostEvent"
         WHERE "coopId" = ${input.coopId} AND "createdAt" >= NOW() - INTERVAL '12 months'
         GROUP BY 1 ORDER BY 1 DESC`,
+      getSageAutonomyUsage(input.coopId, ctx.db),
+      ctx.db.group.findMany({
+        where: { coopId: input.coopId, kind: { not: "DIRECT" } },
+        orderBy: { lastActivityAt: "desc" }, take: 100,
+        select: { id: true, name: true, lastActivityAt: true },
+      }),
+      ctx.db.commonsActionAudit.findMany({
+        where: { eventType: "DUPLICATE_SKIPPED", action: { coopId: input.coopId } },
+        orderBy: { createdAt: "desc" }, take: 50,
+        select: { createdAt: true, metadata: true, action: { select: { id: true, summary: true, status: true, circleId: true } } },
+      }),
+      ctx.db.sageDecisionTrail.findMany({
+        where: { coopId: input.coopId, ...(input.trailAgent ? { agent: input.trailAgent } : {}) },
+        orderBy: { createdAt: "desc" }, take: 50,
+      }),
     ]);
+    const trails = await presentTrails(trailRows, { forAdmin: true }, ctx.db);
+    const windows = circles.length ? await ctx.db.circleAgentWindow.findMany({
+      where: { groupId: { in: circles.map((circle) => circle.id) } },
+      orderBy: { openedAt: "desc" },
+      select: { groupId: true, status: true, messageCount: true, closedAt: true },
+    }) : [];
     const feedback = await ctx.db.commonsActionFeedback.findMany({ where: { coopId: input.coopId, actionId: { in: actions.map((action) => action.id) } } });
     const [missingToolEvents, escalatedActions] = await Promise.all([
       ctx.db.commonsActionAudit.findMany({ where: { eventType: "MISSING_TOOL", action: { coopId: input.coopId } }, select: { actionId: true, metadata: true } }),
@@ -96,6 +125,19 @@ export const commonsActionsAdminRouter = router({
     return {
       setting: { autoReply: setting?.autoReply ?? true, backfillPostsDone: setting?.backfillPostsDone ?? false,
         backfillCommentsDone: setting?.backfillCommentsDone ?? false },
+      autonomy,
+      circles: circles.map((circle) => {
+        const open = windows.find((window) => window.groupId === circle.id && window.status === "OPEN");
+        const lastClosed = windows.find((window) => window.groupId === circle.id && window.status === "CLOSED");
+        return { id: circle.id, name: circle.name, pendingMessages: open?.messageCount ?? 0,
+          lastAnalyzedAt: lastClosed?.closedAt?.toISOString() ?? null };
+      }),
+      trails,
+      skippedRepeats: skippedRepeats.map((event) => ({
+        createdAt: event.createdAt.toISOString(),
+        title: (event.metadata as { title?: unknown } | null)?.title ?? null,
+        matched: event.action,
+      })),
       actions: actions.map((action) => ({
         ...action,
         feedback: feedbackByActionId.get(action.id) ?? null,
@@ -124,7 +166,22 @@ export const commonsActionsAdminRouter = router({
       const setting = await ctx.db.commonsAgentSetting.upsert({ where: { coopId }, create: { coopId, autoReply: input.enabled, updatedBy: actor }, update: { autoReply: input.enabled, updatedBy: actor } });
       return { autoReply: setting.autoReply };
     }
-    if (input.command === "scan") return scanCommons(coopId);
+    if (input.command === "autonomy-limits") {
+      const data = { autonomyMonthlyUsdLimit: input.monthlyUsdLimit, autonomyMonthlyCallLimit: input.monthlyCallLimit, updatedBy: actor };
+      await ctx.db.commonsAgentSetting.upsert({ where: { coopId }, create: { coopId, ...data }, update: data });
+      return getSageAutonomyUsage(coopId, ctx.db);
+    }
+    if (input.command === "analyze-circle") {
+      const group = await ctx.db.group.findUnique({ where: { id: input.groupId }, select: { coopId: true, kind: true } });
+      if (!group || group.coopId !== coopId || group.kind === "DIRECT") throw new TRPCError({ code: "NOT_FOUND", message: "Circle not found" });
+      if ((await getSageAutonomyUsage(coopId, ctx.db)).paused) conflict("Sage is paused for this Commons until its monthly limit resets or is raised.");
+      const closed = await closeCircleWindowNow(input.groupId);
+      if (!closed) conflict("No new circle activity since Sage last read this circle.");
+      // Without a Trigger worker the analysis has already run; with one, the trail appears when it finishes.
+      const trail = await ctx.db.sageDecisionTrail.findFirst({ where: { sourceType: "circle_window", sourceId: closed.windowId }, select: { id: true } });
+      return { ...closed, trailId: trail?.id ?? null };
+    }
+    if (input.command === "scan") return scanCommons(coopId, "ADMIN_SCAN");
     if (input.command === "publish-resource") {
       const resource = await ctx.db.commonsResource.findFirst({ where: { id: input.resourceId, coopId } });
       if (!resource) throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
@@ -172,7 +229,8 @@ export const commonsActionsAdminRouter = router({
     if (input.command === "remove-reply") {
       if (!action.publishedCommentId) conflict("No published reply");
       await ctx.db.$transaction(async (tx) => {
-        await tx.commonsComment.deleteMany({ where: { id: action.publishedCommentId!, postId: action.sourcePostId, author: { isBot: true } } });
+        // Scoped by Commons rather than sourcePostId: a circle-trend comment's source is its window, not the post.
+        await tx.commonsComment.deleteMany({ where: { id: action.publishedCommentId!, post: { coopId }, author: { isBot: true } } });
         await tx.commonsAction.update({ where: { id: action.id }, data: { status: "DISMISSED", publishedCommentId: null, replySourceKey: null, reviewedBy: actor, reviewedAt: new Date() } });
       });
       return { success: true };
@@ -190,7 +248,7 @@ export const commonsActionsAdminRouter = router({
       if (existingReply) conflict("This item already has an agent reply");
       const sage = await ctx.db.user.findUnique({ where: { handle: "sage" }, select: { id: true, isBot: true } });
       if (!sage?.isBot) conflict("Sage account missing");
-      await ctx.db.$transaction(async (tx) => {
+      const publishedId = await ctx.db.$transaction(async (tx) => {
         const priorReply = await tx.commonsAction.findFirst({ where: {
           sourceType: action.sourceType, sourceId: action.sourceId, publishedCommentId: { not: null },
         }, select: { id: true } });
@@ -201,7 +259,9 @@ export const commonsActionsAdminRouter = router({
           replySourceKey: `${action.sourceType}:${action.sourceId}`,
           reviewedBy: actor, reviewedAt: new Date(),
         } });
+        return comment.id;
       });
+      await notifySageComment({ postId: action.sourcePostId, commentId: publishedId });
     } else if (action.type === "MAKE_PROPOSAL") {
       const draft = await ctx.db.commonsProposalDraft.upsert({ where: { actionId: action.id }, create: {
         actionId: action.id, coopId, authorId: action.sourceAuthorId, title: action.summary.slice(0, 160), body: action.draftText || action.summary,

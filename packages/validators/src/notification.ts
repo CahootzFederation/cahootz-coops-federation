@@ -24,6 +24,7 @@ export const notificationCategoryTypes: Record<
 > = {
   community: [
     "COMMONS_COMMENT",
+    "SAGE_COMMENT",
     "COMMONS_SUPPORT",
     "COMMONS_COMMENT_LIKE",
     "PERSONAL_PAGE_COMMENT",

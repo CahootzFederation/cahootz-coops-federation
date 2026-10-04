@@ -68,7 +68,7 @@ export function notificationDestination(
         // post screen scrolls to and highlights.
         ...(notification.type.startsWith("WELCOME_INTRO_") && id("commentId")
           ? { commentId: id("commentId")!, focus: "intro" }
-          : notification.type === "COMMONS_COMMENT_LIKE" && id("commentId")
+          : (notification.type === "COMMONS_COMMENT_LIKE" || notification.type === "SAGE_COMMENT") && id("commentId")
             ? { commentId: id("commentId")! }
             : {}),
       },

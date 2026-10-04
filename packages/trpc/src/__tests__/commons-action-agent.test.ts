@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CoopConfig } from "@repo/db";
-import { COMMONS_ACTION_MODEL, charterSnapshotKey, createCommonsActionAgent, hasExactGrounding, mayAutoReply } from "../services/commons-action-agent.js";
+import { AUTO_REPLY_MIN_CONFIDENCE, COMMONS_ACTION_MODEL, charterSnapshotKey, createCommonsActionAgent, hasExactGrounding, mayAutoReply } from "../services/commons-action-agent.js";
 import { estimateAICost } from "../services/ai-cost.js";
 import { isPlaceholderCharter, starterCharter } from "../services/starter-charter.js";
 
@@ -33,6 +33,12 @@ describe("Commons action safeguards", () => {
     expect(mayAutoReply(reply, item, config, true, new Date("2026-09-21T10:00:01.000Z"))).toBe(false);
     expect(mayAutoReply(reply, { ...item, content: "[@sage] I can share a drill." }, config, true, now)).toBe(false);
     expect(mayAutoReply({ ...reply, evidence: "Invented rule" }, item, config, true, now)).toBe(false);
+  });
+
+  it("does not publish a grounded reply below the confidence gate", () => {
+    const now = new Date("2026-09-20T10:00:00.000Z");
+    expect(mayAutoReply({ ...reply, confidence: AUTO_REPLY_MIN_CONFIDENCE }, item, config, true, now)).toBe(true);
+    expect(mayAutoReply({ ...reply, confidence: AUTO_REPLY_MIN_CONFIDENCE - 0.01 }, item, config, true, now)).toBe(false);
   });
 
   it("changes the scan key when the charter changes", () => {

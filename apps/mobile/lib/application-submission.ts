@@ -5,8 +5,6 @@ export interface MobileApplicationFormData {
   lastName: string;
   email: string;
   phone: string;
-  password: string;
-  confirmPassword: string;
   videoCID: string;
   photoCID: string;
   agreeToCoopValues: boolean;
@@ -25,8 +23,6 @@ export function buildMobileApplicationSubmissionInput(
     lastName: formData.lastName,
     email: formData.email,
     phone: formData.phone,
-    password: formData.password,
-    confirmPassword: formData.confirmPassword,
     dynamicAnswers: formData.dynamicAnswers,
     videoCID: formData.videoCID || undefined,
     photoCID: formData.photoCID || undefined,

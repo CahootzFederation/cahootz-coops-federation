@@ -24,7 +24,9 @@ import {
   DollarSign,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/auth-context';
+import { useCoin } from '@/contexts/platform-config-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 
 interface StoreData {
   id: string;
@@ -42,7 +44,10 @@ interface StoreData {
 
 export default function MyStoresScreen() {
   const { user } = useAuth();
+  const coin = useCoin();
   const [stores, setStores] = useState<StoreData[]>([]);
+  // Kept apart from "no stores" so a failed load never invites a new application.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [storeCategories, setStoreCategories] = useState<{ key: string; label: string }[]>([]);
@@ -52,11 +57,18 @@ export default function MyStoresScreen() {
     try {
       const storesData = await api.getMyStores(user.walletAddress);
       setStores(storesData || []);
+      setLoadError(null);
     } catch (error) {
       console.error('Failed to load stores:', error);
-      setStores([]);
+      setLoadError(friendlyError(error, "We couldn't load your stores."));
     }
   }, [user?.walletAddress]);
+
+  const retryLoad = async () => {
+    setLoading(true);
+    await loadStores();
+    setLoading(false);
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -160,7 +172,7 @@ export default function MyStoresScreen() {
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900" edges={['top']}>
       {/* Header */}
       <View className="flex-row items-center justify-between px-5 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
         <Text className="text-lg font-semibold text-gray-900 dark:text-white">My Commons Stores</Text>
@@ -180,7 +192,19 @@ export default function MyStoresScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        {stores.length === 0 ? (
+        {loadError && stores.length === 0 ? (
+          <View className="flex-1 items-center justify-center px-8 py-20">
+            <Text className="text-gray-700 dark:text-gray-300 text-lg text-center">{loadError}</Text>
+            <TouchableOpacity
+              onPress={retryLoad}
+              accessibilityRole="button"
+              className="bg-primary px-8 py-3 rounded-xl mt-6 items-center justify-center"
+              style={{ minHeight: 48 }}
+            >
+              <Text className="text-white font-bold">Try again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : stores.length === 0 ? (
           <View className="flex-1 items-center justify-center px-8 py-20">
             <Store size={64} color="#9CA3AF" />
             <Text className="text-xl font-bold text-gray-900 dark:text-white mt-4 text-center">
@@ -236,7 +260,7 @@ export default function MyStoresScreen() {
                     {store.isScVerified && (
                       <View className="bg-white/20 px-2 py-1 rounded-full flex-row items-center">
                         <BadgeCheck size={12} color="white" />
-                        <Text className="text-white font-medium ml-1 text-xs">SC Verified</Text>
+                        <Text className="text-white font-medium ml-1 text-xs">Earns {coin.symbol} rewards</Text>
                       </View>
                     )}
                   </View>

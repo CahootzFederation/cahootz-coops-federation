@@ -3,7 +3,9 @@ import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from "rea
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
+import { LoadError } from "@/components/load-error";
 import { api } from "@/lib/api";
+import { friendlyError } from "@/lib/friendly-error";
 
 export default function CommonsResources() {
   const { coopId } = useLocalSearchParams<{ coopId: string }>();
@@ -15,7 +17,13 @@ export default function CommonsResources() {
     <Text style={{ fontSize: 24, fontWeight: "800", color: "#111827" }}>Commons resources</Text>
     <Text style={{ color: "#475569" }}>Verified resources shared with {coopId} members.</Text>
     {query.isLoading && <ActivityIndicator />}
-    {query.isError && <Text style={{ color: "#B91C1C" }}>Could not load resources.</Text>}
+    {query.isError && !query.data && (
+      <LoadError
+        message={friendlyError(query.error, "We couldn't load the resources.")}
+        retrying={query.isFetching}
+        onRetry={() => void query.refetch()}
+      />
+    )}
     {query.data?.length === 0 && <Text style={{ color: "#64748B" }}>No verified resources yet.</Text>}
     {query.data?.map((resource) => <View key={resource.id} style={{ padding: 16, borderRadius: 12, backgroundColor: "white", borderWidth: 1, borderColor: "#E5E7EB", gap: 7 }}>
       <Text style={{ color: "#9A3412", fontWeight: "700", fontSize: 12 }}>{resource.kind}</Text>

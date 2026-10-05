@@ -7,12 +7,13 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useState, useEffect } from 'react';
-import { router, Stack } from 'expo-router';
+import { useState, useCallback } from 'react';
+import { router, Stack, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Landmark, ChevronRight, Plus, Check } from 'lucide-react-native';
 import { api } from '~/lib/api';
 import { useAuth } from '~/contexts/auth-context';
 import { authenticateForPayment } from '~/lib/biometric';
+import { friendlyError } from '~/lib/friendly-error';
 
 interface BankAccount {
   id: string;
@@ -27,8 +28,10 @@ interface BankAccount {
 export default function WithdrawScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [balance, setBalance] = useState<number>(0);
+  const [balanceFormatted, setBalanceFormatted] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
 
   // Bank accounts
@@ -36,36 +39,48 @@ export default function WithdrawScreen() {
   const [selectedAccount, setSelectedAccount] = useState<BankAccount | null>(null);
   const [showAccountPicker, setShowAccountPicker] = useState(false);
 
-  useEffect(() => {
-    if (user?.id) {
-      loadData();
-    }
-  }, [user?.id]);
+  // Reload when the screen regains focus so a bank account added on the
+  // Bank Accounts screen shows up when the member comes back.
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) {
+        loadData();
+      }
+    }, [user?.id, user?.walletAddress])
+  );
 
   const loadData = async () => {
     if (!user?.id) return;
 
     try {
+      setLoadError(null);
       const [balanceResult, accountsResult] = await Promise.all([
         api.getUSDBalance(user.id, user.walletAddress),
         api.getBankAccounts(user.id, user.walletAddress),
       ]);
 
       setBalance(balanceResult.balance);
+      setBalanceFormatted(balanceResult.formatted ?? `$${Number(balanceResult.balance || 0).toFixed(2)}`);
       setBankAccounts(accountsResult.accounts);
 
-      // Select default account
-      const defaultAccount = accountsResult.accounts.find((a: BankAccount) => a.isDefault);
-      if (defaultAccount) {
-        setSelectedAccount(defaultAccount);
-      } else if (accountsResult.accounts.length > 0) {
-        setSelectedAccount(accountsResult.accounts[0]);
-      }
+      // Keep the member's choice if it still exists, otherwise pick the default.
+      setSelectedAccount((current) => {
+        const stillThere = current && accountsResult.accounts.find((a: BankAccount) => a.id === current.id);
+        if (stillThere) return stillThere;
+        const defaultAccount = accountsResult.accounts.find((a: BankAccount) => a.isDefault);
+        return defaultAccount || accountsResult.accounts[0] || null;
+      });
     } catch (err) {
       console.error('Error loading data:', err);
+      setLoadError(friendlyError(err, "We couldn't load your balance and bank accounts."));
     } finally {
       setLoading(false);
     }
+  };
+
+  const retryLoad = () => {
+    setLoading(true);
+    loadData();
   };
 
   const handleWithdraw = async () => {
@@ -75,26 +90,26 @@ export default function WithdrawScreen() {
 
     // Validation
     if (!amount || amountNum <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount');
+      Alert.alert('Check the amount', 'Enter how much you want to withdraw.');
       return;
     }
 
     if (amountNum > balance) {
-      Alert.alert('Error', 'Insufficient balance');
+      Alert.alert('Not enough money', `You can withdraw up to ${balanceFormatted ?? `$${balance.toFixed(2)}`}.`);
       return;
     }
 
     if (amountNum < 1) {
-      Alert.alert('Error', 'Minimum withdrawal is $1.00');
+      Alert.alert('Amount too small', 'The smallest withdrawal is $1.00.');
       return;
     }
 
     // Biometric authentication
     const authResult = await authenticateForPayment(`$${amountNum.toFixed(2)}`);
     if (!authResult.success) {
-      if (authResult.error) {
-        Alert.alert('Authentication Failed', authResult.error);
-      }
+      // Backing out of Face ID or the confirm sheet isn't a failure.
+      if (authResult.cancelled) return;
+      Alert.alert("Couldn't confirm it's you", authResult.error || 'Please try again.');
       return;
     }
 
@@ -113,7 +128,8 @@ export default function WithdrawScreen() {
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Withdrawal failed');
+      console.error('Withdrawal failed:', err);
+      Alert.alert("Withdrawal didn't go through", friendlyError(err, "We couldn't start your withdrawal."));
     } finally {
       setSubmitting(false);
     }
@@ -138,6 +154,37 @@ export default function WithdrawScreen() {
     );
   }
 
+  if (loadError) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View className="flex-1 bg-gray-50">
+          <View className="pt-14 pb-4 px-4 bg-white border-b border-gray-100">
+            <View className="flex-row items-center">
+              <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2" accessibilityLabel="Go back">
+                <ArrowLeft size={24} color="#111827" />
+              </TouchableOpacity>
+              <Text className="flex-1 text-center text-lg font-semibold text-gray-900 -ml-8">
+                Withdraw to Bank
+              </Text>
+            </View>
+          </View>
+          <View className="flex-1 items-center justify-center p-8">
+            <Text className="text-gray-700 text-lg text-center">{loadError}</Text>
+            <TouchableOpacity
+              onPress={retryLoad}
+              accessibilityRole="button"
+              className="mt-6 bg-primary px-6 py-3 rounded-xl items-center justify-center"
+              style={{ minHeight: 48 }}
+            >
+              <Text className="text-white font-semibold">Try again</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </>
+    );
+  }
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -145,7 +192,7 @@ export default function WithdrawScreen() {
         {/* Header */}
         <View className="pt-14 pb-4 px-4 bg-white border-b border-gray-100">
           <View className="flex-row items-center">
-            <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
+            <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2" accessibilityLabel="Go back">
               <ArrowLeft size={24} color="#111827" />
             </TouchableOpacity>
             <Text className="flex-1 text-center text-lg font-semibold text-gray-900 -ml-8">
@@ -156,6 +203,13 @@ export default function WithdrawScreen() {
 
         <ScrollView className="flex-1">
           <View className="p-4">
+            {balanceFormatted && (
+              <View className="bg-white rounded-xl p-4 mb-4 border border-gray-200">
+                <Text className="text-gray-500 text-sm">Available to withdraw</Text>
+                <Text className="text-gray-900 text-2xl font-bold mt-1">{balanceFormatted}</Text>
+              </View>
+            )}
+
             {/* Bank Account Selection */}
             <Text className="text-gray-900 font-semibold text-lg mb-3">Withdraw To</Text>
 

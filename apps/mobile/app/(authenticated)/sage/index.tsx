@@ -14,6 +14,8 @@ import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { sageStatusMeta } from '@/lib/sage-status';
 import { SageFollowing } from '@/components/sage-following';
+import { SageIntro } from '@/components/sage-intro';
+import { friendlyError } from '@/lib/friendly-error';
 import { ArrowLeft, Sparkles } from 'lucide-react-native';
 
 const THEME = {
@@ -55,7 +57,7 @@ export default function SageSuggestionsScreen() {
     api
       .listSageSuggestions(activeTab, sessionToken)
       .then((result) => setSuggestions(result.suggestions))
-      .catch((err) => setError(err instanceof Error ? err.message : 'Could not load Sage suggestions.'))
+      .catch((err) => setError(friendlyError(err, "We couldn't load Sage's suggestions.")))
       .finally(() => setIsLoadingList(false));
   }, [activeTab, sessionToken]);
 
@@ -84,6 +86,9 @@ export default function SageSuggestionsScreen() {
         </TouchableOpacity>
         <Sparkles size={22} color={THEME.primary} />
         <Text style={{ fontSize: 20, fontWeight: '800', color: THEME.ink }}>Sage suggestions</Text>
+      </View>
+      <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+        <SageIntro />
       </View>
 
       <ScrollView
@@ -121,7 +126,19 @@ export default function SageSuggestionsScreen() {
         ) : isLoadingList && suggestions.length === 0 ? (
           <ActivityIndicator accessibilityLabel="Loading Sage suggestions" color={THEME.primary} />
         ) : error ? (
-          <Text style={{ color: '#B91C1C' }}>{error}</Text>
+          <View style={{ gap: 10 }}>
+            <Text accessibilityRole="alert" style={{ color: '#B91C1C', fontSize: 15 }}>{error}</Text>
+            <TouchableOpacity
+              accessibilityRole="button"
+              onPress={load}
+              style={{
+                minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: THEME.border,
+                backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Text style={{ color: THEME.ink, fontWeight: '700' }}>Try again</Text>
+            </TouchableOpacity>
+          </View>
         ) : suggestions.length === 0 ? (
           <View style={{ borderRadius: 14, padding: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: THEME.border }}>
             <Text style={{ fontWeight: '700', color: THEME.ink }}>Nothing here yet</Text>

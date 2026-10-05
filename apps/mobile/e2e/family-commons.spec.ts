@@ -49,7 +49,7 @@ function shown(page: Page, text: string | RegExp, options?: { exact?: boolean })
   return page.getByText(text, options).filter({ visible: true });
 }
 
-/** Signs in from the sign-in screen and skips the wizard's first two steps. */
+/** Signs in from the sign-in screen and skips the wizard's intro (if shown) and profile steps. */
 async function signInFromSignInScreen(page: Page, email: string) {
   await page.getByPlaceholder("name@email.com").fill(email);
   await page.getByRole("button", { name: "Log in with code" }).click();
@@ -57,8 +57,12 @@ async function signInFromSignInScreen(page: Page, email: string) {
   await page.getByRole("button", { name: "Verify & Sign In" }).click();
 
   await expect(page).toHaveURL(/profile-onboarding/);
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Do this later" }).click();
+  // Someone who already saw the intro on this device starts at the profile form.
+  const introContinue = page.getByRole("button", { name: "Continue", exact: true });
+  const deferProfile = page.getByRole("button", { name: "Do this later" });
+  await expect(introContinue.or(deferProfile).first()).toBeVisible();
+  if (await introContinue.isVisible()) await introContinue.click();
+  await deferProfile.click();
 }
 
 /**

@@ -3,7 +3,9 @@ import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from "rea
 import { router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
+import { LoadError } from "@/components/load-error";
 import { api } from "@/lib/api";
+import { friendlyError } from "@/lib/friendly-error";
 
 export default function ResourceInvitations() {
   const { sessionToken } = useAuth();
@@ -22,7 +24,10 @@ export default function ResourceInvitations() {
     try {
       await api.respondToResourceInvitation(resourceId, accept, sessionToken);
       await client.invalidateQueries({ queryKey: ["resource-invitations", sessionToken] });
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not respond."); }
+    } catch (cause) {
+      console.error("Failed to respond to resource invitation:", cause);
+      setError(friendlyError(cause, accept ? "We couldn't accept this invitation." : "We couldn't decline this invitation."));
+    }
     finally { setBusyId(null); }
   }
 
@@ -32,8 +37,14 @@ export default function ResourceInvitations() {
     <Text style={{ color: "#475569" }}>Accepting lets a platform admin review your listing before it appears in the Commons resource catalog.</Text>
     {!!error && <Text style={{ color: "#B91C1C" }}>{error}</Text>}
     {query.isLoading && <ActivityIndicator />}
-    {query.isError && <Text style={{ color: "#B91C1C" }}>Could not load invitations.</Text>}
-    {query.data?.length === 0 && <Text style={{ color: "#64748B" }}>No pending invitations.</Text>}
+    {query.isError && !query.data && (
+      <LoadError
+        message={friendlyError(query.error, "We couldn't load your resource invitations.")}
+        retrying={query.isFetching}
+        onRetry={() => void query.refetch()}
+      />
+    )}
+    {query.data?.length === 0 && <Text style={{ color: "#64748B" }}>You have no invitations right now.</Text>}
     {query.data?.map((item) => <View key={item.id} style={{ backgroundColor: "white", borderRadius: 12, padding: 16, gap: 10, borderWidth: 1, borderColor: "#E5E7EB" }}>
       <Text style={{ fontSize: 17, fontWeight: "700", color: "#111827" }}>{item.title}</Text>
       <Text style={{ color: "#475569" }}>{item.description}</Text>

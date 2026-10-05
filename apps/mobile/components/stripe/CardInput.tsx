@@ -11,7 +11,7 @@ export default function CardInput({ onCancel }: CardInputProps) {
     <View className="flex-1 bg-white">
       <View className="pt-14 pb-4 px-4 border-b border-gray-100">
         <View className="flex-row items-center">
-          <TouchableOpacity onPress={onCancel} className="p-2 -ml-2">
+          <TouchableOpacity onPress={onCancel} className="p-2 -ml-2" accessibilityLabel="Close">
             <X size={24} color="#111827" />
           </TouchableOpacity>
           <Text className="flex-1 text-center text-lg font-semibold text-gray-900 -ml-8">
@@ -25,7 +25,7 @@ export default function CardInput({ onCancel }: CardInputProps) {
           Cards are added at checkout
         </Text>
         <Text className="text-gray-600 text-center mt-3">
-          Cahootz now uses Stripe-hosted Checkout for card payments in the mobile app.
+          When you pay for something in the app, you&apos;ll enter your card on a secure Stripe page.
         </Text>
         <TouchableOpacity
           onPress={onCancel}

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 import BlobPhotoUpload from '@/components/blob-photo-upload';
 import BlobMultiPhotoUpload from '@/components/blob-multi-photo-upload';
 
@@ -35,6 +36,7 @@ export default function AddProductScreen() {
   const [loading, setLoading] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [productCategories, setProductCategories] = useState<{ key: string; label: string; isAdminOnly: boolean }[]>([]);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
 
   // Form data
   const [formData, setFormData] = useState({
@@ -58,17 +60,20 @@ export default function AddProductScreen() {
   };
 
   // Load product categories on mount (exclude admin-only for regular users)
-  React.useEffect(() => {
-    const loadCategories = async () => {
-      try {
-        const categories = await api.getProductCategories(false); // Exclude admin-only categories
-        setProductCategories(categories);
-      } catch (error) {
-        console.error('Failed to load product categories:', error);
-      }
-    };
-    loadCategories();
+  const loadCategories = React.useCallback(async () => {
+    try {
+      setCategoriesError(null);
+      const categories = await api.getProductCategories(false); // Exclude admin-only categories
+      setProductCategories(categories);
+    } catch (error) {
+      console.error('Failed to load product categories:', error);
+      setCategoriesError(friendlyError(error, "We couldn't load the list of categories."));
+    }
   }, []);
+
+  React.useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
 
   const getCategoryLabel = (value: string) => {
     return productCategories.find((c) => c.key === value)?.label || 'Select Category';
@@ -76,15 +81,15 @@ export default function AddProductScreen() {
 
   const validateForm = (): boolean => {
     if (!formData.name.trim()) {
-      Alert.alert('Required', 'Please enter a product name');
+      Alert.alert('Name needed', 'Enter a name for this product.');
       return false;
     }
     if (!formData.category) {
-      Alert.alert('Required', 'Please select a category');
+      Alert.alert('Category needed', 'Pick a category for this product.');
       return false;
     }
     if (!formData.priceUSD || parseFloat(formData.priceUSD) <= 0) {
-      Alert.alert('Required', 'Please enter a valid price');
+      Alert.alert('Price needed', 'Enter a price greater than $0.');
       return false;
     }
     return true;
@@ -93,11 +98,11 @@ export default function AddProductScreen() {
   const handleSubmit = async () => {
     if (!validateForm()) return;
     if (!user?.walletAddress) {
-      Alert.alert('Error', 'Please ensure you are logged in');
+      Alert.alert('Sign in needed', 'Sign in again, then add your product.');
       return;
     }
     if (!storeId) {
-      Alert.alert('Error', 'Store ID is required');
+      Alert.alert("Couldn't tell which store", 'Go back to My Store and tap Add again.');
       return;
     }
 
@@ -124,11 +129,11 @@ export default function AddProductScreen() {
 
       // Show success message after navigation
       setTimeout(() => {
-        Alert.alert('Success', 'Product added successfully!');
+        Alert.alert('Product added', 'Your product was added to your store.');
       }, 100);
     } catch (error: any) {
       console.error('Add product error:', error);
-      Alert.alert('Error', error.message || 'Failed to add product');
+      Alert.alert("Couldn't add your product", friendlyError(error, "We couldn't add your product."));
       setLoading(false);
     }
   };
@@ -183,7 +188,20 @@ export default function AddProductScreen() {
                 </Text>
                 <ChevronDown size={20} color="#9CA3AF" />
               </TouchableOpacity>
-              {showCategoryPicker && (
+              {showCategoryPicker && categoriesError && (
+                <View className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl mt-2 p-4">
+                  <Text className="text-gray-700 dark:text-gray-300">{categoriesError}</Text>
+                  <TouchableOpacity
+                    onPress={loadCategories}
+                    accessibilityRole="button"
+                    className="mt-2 self-start bg-gray-100 dark:bg-gray-700 px-4 rounded-xl items-center justify-center"
+                    style={{ minHeight: 44 }}
+                  >
+                    <Text className="text-gray-900 dark:text-white font-semibold">Try again</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {showCategoryPicker && !categoriesError && (
                 <View className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl mt-2 overflow-hidden max-h-48">
                   <ScrollView nestedScrollEnabled>
                     {productCategories

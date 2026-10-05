@@ -8,6 +8,7 @@ import {
   Share,
   Modal,
   Clipboard,
+  Alert,
 } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { router, Stack } from 'expo-router';
@@ -25,6 +26,7 @@ import {
 import QRCode from 'react-native-qrcode-svg';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import { friendlyError } from '@/lib/friendly-error';
 
 interface PaymentRequest {
   requestId: string;
@@ -39,6 +41,7 @@ interface PaymentRequest {
 export default function AcceptPaymentScreen() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [hasStore, setHasStore] = useState(false);
   const [storeName, setStoreName] = useState<string | null>(null);
@@ -59,13 +62,18 @@ export default function AcceptPaymentScreen() {
 
   useEffect(() => {
     loadQuickPayInfo();
-  }, []);
+  }, [user?.walletAddress]);
 
   const loadQuickPayInfo = async () => {
-    if (!user?.walletAddress) return;
+    if (!user?.walletAddress) {
+      setLoadError("Your wallet isn't set up yet, so you can't accept payments right now.");
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
+      setLoadError(null);
       const info = await api.getQuickPayInfo(user.walletAddress);
       setHasStore(info.hasStore);
       setStoreName(info.storeName);
@@ -73,6 +81,7 @@ export default function AcceptPaymentScreen() {
       setQrCodeData(info.qrCodeData);
     } catch (err) {
       console.error('Error loading quick pay info:', err);
+      setLoadError(friendlyError(err, "We couldn't load your store's payment details."));
     } finally {
       setLoading(false);
     }
@@ -88,6 +97,7 @@ export default function AcceptPaymentScreen() {
       setQrCodeData(result.qrCodeData);
     } catch (err) {
       console.error('Error generating code:', err);
+      Alert.alert("Couldn't make your store code", friendlyError(err, "We couldn't make your store code."));
     } finally {
       setGenerating(false);
     }
@@ -115,6 +125,10 @@ export default function AcceptPaymentScreen() {
       setDescription('');
     } catch (err) {
       console.error('Error creating payment request:', err);
+      Alert.alert(
+        "Couldn't create the payment request",
+        friendlyError(err, "We couldn't create the payment request."),
+      );
     } finally {
       setGenerating(false);
     }
@@ -161,6 +175,39 @@ export default function AcceptPaymentScreen() {
       <View className="flex-1 bg-white items-center justify-center">
         <ActivityIndicator size="large" color="#FF8A2A" />
       </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View className="flex-1 bg-white">
+          <View className="pt-14 pb-4 px-4 border-b border-gray-100">
+            <View className="flex-row items-center">
+              <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2" accessibilityLabel="Go back">
+                <ArrowLeft size={24} color="#111827" />
+              </TouchableOpacity>
+              <Text className="flex-1 text-center text-lg font-semibold text-gray-900">
+                Accept Payment
+              </Text>
+              <View className="w-10" />
+            </View>
+          </View>
+
+          <View className="flex-1 items-center justify-center p-8">
+            <Text className="text-gray-700 text-lg text-center">{loadError}</Text>
+            <TouchableOpacity
+              onPress={loadQuickPayInfo}
+              accessibilityRole="button"
+              className="mt-6 bg-primary px-6 py-3 rounded-xl items-center justify-center"
+              style={{ minHeight: 48 }}
+            >
+              <Text className="text-white font-semibold">Try again</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </>
     );
   }
 

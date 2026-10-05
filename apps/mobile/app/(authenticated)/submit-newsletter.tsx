@@ -16,6 +16,7 @@ import { ArrowLeft, CalendarDays, FileText, Image, Link as LinkIcon, MapPin, New
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, resolveCoopId } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 import { coopConfig } from '@/lib/coop-config';
 import { resolveBrandColor, withAlpha } from '@/lib/brand-colors';
 
@@ -75,8 +76,9 @@ export default function SubmitNewsletterScreen() {
         'Thanks. Your submission went to the commons newsletter inbox for review.',
         [{ text: 'Done', onPress: () => router.back() }]
       );
-    } catch (error: any) {
-      Alert.alert('Submission Failed', error.message || 'Could not submit to the newsletter.');
+    } catch (error: unknown) {
+      console.error('Failed to submit newsletter item:', error);
+      Alert.alert("Couldn't send your submission", friendlyError(error, "We couldn't send your newsletter submission."));
     } finally {
       setSubmitting(false);
     }

@@ -13,6 +13,7 @@ import {
   Copy,
   HelpCircle,
   LogOut,
+  QrCode,
   RotateCcw,
   Settings,
   Shield,
@@ -26,7 +27,9 @@ import {
 
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
+import { useCoin } from '@/contexts/platform-config-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 import { canAccessUpdateChannelDebug } from '@/lib/update-channel-debug';
 
 const PROFILE_THEME = {
@@ -49,6 +52,7 @@ type NavItem = {
 
 export default function AccountProfileScreen() {
   const { user, logout, resetProfileOnboarding } = useAuth();
+  const coin = useCoin();
   const [copiedAddress, setCopiedAddress] = React.useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = React.useState(false);
   const [fundingBadges, setFundingBadges] = React.useState<any[]>([]);
@@ -62,7 +66,7 @@ export default function AccountProfileScreen() {
 
   const displayName = user?.name?.trim() || user?.email?.split('@')[0] || 'Member';
   const handle = user?.email?.split('@')[0]?.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() || 'member';
-  const commonsName = user?.coop?.name || 'Oakland Commons';
+  const commonsName = user?.coop?.name?.trim() || 'Your commons';
   const roleLabel = user?.roles?.join(', ') || 'Member';
   const statusLabel = user?.status?.toLowerCase() || 'active';
   const canUseUpdateDebug = canAccessUpdateChannelDebug(user?.email);
@@ -116,7 +120,7 @@ export default function AccountProfileScreen() {
       ]);
     } catch (error) {
       console.error('Delete account error:', error);
-      Alert.alert('Deletion failed', error instanceof Error ? error.message : 'Please try again.');
+      Alert.alert("Couldn't delete your account", friendlyError(error, "We couldn't delete your account."));
     } finally {
       setIsDeletingAccount(false);
     }
@@ -154,9 +158,15 @@ export default function AccountProfileScreen() {
     // standalone profile-menu link made it look like they existed outside one.
     {
       label: 'Wallet',
-      description: 'SC balance, wallet address, cards, and funding',
+      description: `${coin.name} balance, wallet address, and saved cards`,
       icon: Wallet,
       href: '/(authenticated)/payment-methods',
+    },
+    {
+      label: 'Pay a store',
+      description: "Scan a store's QR code or type in its store code",
+      icon: QrCode,
+      href: '/(authenticated)/scan-pay',
     },
     {
       label: 'Alerts',

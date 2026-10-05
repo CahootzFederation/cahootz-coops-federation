@@ -5,6 +5,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
+import { friendlyError } from '@/lib/friendly-error';
+import { SAGE_ONE_LINER } from '@/components/sage-intro';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type SageAlertView } from '@/lib/api';
 
@@ -51,7 +53,7 @@ export default function SageAlertScreen() {
 
   const load = React.useCallback(() => {
     if (!sessionToken || !id) return;
-    api.getSageAlert(id, sessionToken).then(setAlert).catch((err) => setError(err instanceof Error ? err.message : 'Could not load this alert.'));
+    api.getSageAlert(id, sessionToken).then(setAlert).catch((err) => setError(friendlyError(err, "We couldn't load this alert.")));
   }, [id, sessionToken]);
   React.useEffect(() => { load(); }, [load]);
 
@@ -70,7 +72,7 @@ export default function SageAlertScreen() {
       }
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.');
+      setError(friendlyError(err, "We couldn't send your answer."));
     } finally {
       setBusy(false);
     }
@@ -94,6 +96,7 @@ export default function SageAlertScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
+        <Text style={{ color: THEME.muted, fontSize: 15 }}>{SAGE_ONE_LINER}</Text>
         {!alert ? (
           error ? <Text style={{ color: THEME.danger }}>{error}</Text> : <ActivityIndicator accessibilityLabel="Loading alert" color={THEME.primary} />
         ) : (

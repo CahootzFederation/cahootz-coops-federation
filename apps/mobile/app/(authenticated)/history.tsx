@@ -8,9 +8,10 @@ import {
 } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { router, Stack } from 'expo-router';
-import { ArrowDownLeft, ArrowUpRight, Clock, Heart, Home, Briefcase, Store } from 'lucide-react-native';
+import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Clock, Heart, Home, Briefcase, Store } from 'lucide-react-native';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import { friendlyError } from '@/lib/friendly-error';
 
 type TransferType = 'PERSONAL' | 'RENT' | 'SERVICE' | 'STORE';
 
@@ -39,6 +40,9 @@ export default function HistoryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  // Kept apart from "no transactions" so a failed load never looks like an empty history.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [moreError, setMoreError] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(user?.walletAddress || null);
 
   useEffect(() => {
@@ -74,14 +78,22 @@ export default function HistoryScreen() {
 
     try {
       const result = await api.getP2PHistory(user.id, 20, offset, addressToUse);
+      const transfers: Transaction[] = result?.transfers ?? [];
       if (offset === 0) {
-        setTransactions(result.transfers);
+        setTransactions(transfers);
+        setLoadError(null);
       } else {
-        setTransactions((prev) => [...prev, ...result.transfers]);
+        setTransactions((prev) => [...prev, ...transfers]);
       }
-      setHasMore(result.transfers.length === 20);
+      setMoreError(null);
+      setHasMore(transfers.length === 20);
     } catch (err) {
       console.error('Error loading history:', err);
+      if (offset === 0) {
+        setLoadError(friendlyError(err, "We couldn't load your transactions."));
+      } else {
+        setMoreError(friendlyError(err, "We couldn't load more transactions."));
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -95,9 +107,29 @@ export default function HistoryScreen() {
   }, [user?.id, walletAddress]);
 
   const loadMore = () => {
-    if (loadingMore || !hasMore) return;
+    if (loadingMore || !hasMore || moreError) return;
     setLoadingMore(true);
     loadTransactions(transactions.length, walletAddress);
+  };
+
+  const retryLoad = () => {
+    setLoading(true);
+    setLoadError(null);
+    initAndLoad();
+  };
+
+  const retryMore = () => {
+    setMoreError(null);
+    setLoadingMore(true);
+    loadTransactions(transactions.length, walletAddress);
+  };
+
+  const goBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/wallet' as any);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -220,28 +252,48 @@ export default function HistoryScreen() {
       />
       <View className="flex-1 bg-gray-50">
         {/* Header */}
-        <View className="pt-14 pb-4 px-6 bg-white border-b border-gray-100">
-          <Text className="text-2xl font-bold text-gray-900">History</Text>
-          <Text className="text-sm text-gray-500 mt-1">Your recent transactions</Text>
+        <View className="pt-14 pb-4 px-4 bg-white border-b border-gray-100 flex-row items-center">
+          <TouchableOpacity
+            onPress={goBack}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            className="items-center justify-center mr-2"
+            style={{ minWidth: 44, minHeight: 44 }}
+          >
+            <ArrowLeft size={24} color="#111827" />
+          </TouchableOpacity>
+          <View className="flex-1">
+            <Text className="text-2xl font-bold text-gray-900">History</Text>
+            <Text className="text-sm text-gray-500 mt-1">Your recent transactions</Text>
+          </View>
         </View>
 
         {loading ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator size="large" color="#6B7280" />
           </View>
+        ) : loadError && transactions.length === 0 ? (
+          <View className="flex-1 items-center justify-center p-8">
+            <Text className="text-gray-900 text-lg font-semibold text-center">
+              Your history didn&apos;t load
+            </Text>
+            <Text className="text-gray-600 text-center mt-2">{loadError}</Text>
+            <TouchableOpacity
+              onPress={retryLoad}
+              accessibilityRole="button"
+              className="mt-6 bg-primary px-6 py-3 rounded-xl items-center justify-center"
+              style={{ minHeight: 48 }}
+            >
+              <Text className="text-white font-semibold">Try again</Text>
+            </TouchableOpacity>
+          </View>
         ) : transactions.length === 0 ? (
           <View className="flex-1 items-center justify-center p-8">
             <Clock size={48} color="#9CA3AF" />
             <Text className="text-gray-500 text-lg mt-4">No transactions yet</Text>
             <Text className="text-gray-400 text-center mt-2">
-              When you send or receive money, it will show up here
+              Payments you make or receive will show up here.
             </Text>
-            <TouchableOpacity
-              onPress={() => router.push('/(authenticated)/pay' as any)}
-              className="mt-6 bg-primary px-6 py-3 rounded-xl"
-            >
-              <Text className="text-white font-semibold">Send Money</Text>
-            </TouchableOpacity>
           </View>
         ) : (
           <FlatList
@@ -253,10 +305,37 @@ export default function HistoryScreen() {
             }
             onEndReached={loadMore}
             onEndReachedThreshold={0.5}
+            ListHeaderComponent={
+              loadError ? (
+                <View className="m-4 p-4 rounded-xl bg-red-50 border border-red-100">
+                  <Text className="text-red-800">{loadError}</Text>
+                  <TouchableOpacity
+                    onPress={onRefresh}
+                    accessibilityRole="button"
+                    className="mt-2 self-start bg-white px-4 rounded-xl items-center justify-center border border-red-200"
+                    style={{ minHeight: 44 }}
+                  >
+                    <Text className="text-red-800 font-semibold">Try again</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null
+            }
             ListFooterComponent={
               loadingMore ? (
                 <View className="py-4">
                   <ActivityIndicator size="small" color="#6B7280" />
+                </View>
+              ) : moreError ? (
+                <View className="p-4 items-center">
+                  <Text className="text-gray-600 text-center">{moreError}</Text>
+                  <TouchableOpacity
+                    onPress={retryMore}
+                    accessibilityRole="button"
+                    className="mt-2 bg-gray-900 px-6 rounded-xl items-center justify-center"
+                    style={{ minHeight: 44 }}
+                  >
+                    <Text className="text-white font-semibold">Try again</Text>
+                  </TouchableOpacity>
                 </View>
               ) : null
             }

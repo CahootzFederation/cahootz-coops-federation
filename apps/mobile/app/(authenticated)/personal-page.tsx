@@ -12,6 +12,7 @@ import {
   type CommonsMediaPreview,
 } from '@/components/commons-media-viewer';
 import { EditPersonalProfileSheet } from '@/components/edit-personal-profile-sheet';
+import { LoadError } from '@/components/load-error';
 import { PersonAvatar } from '@/components/person-avatar';
 import { PersonalPagePostCard } from '@/components/personal-page-post-card';
 import { ProfileCommonsSection } from '@/components/profile-commons-section';
@@ -19,6 +20,7 @@ import { PostTypeSelector } from '@/components/post-type-selector';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type PersonalPageFeedPost, type PersonalPageProfile } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 import { DEFAULT_POST_TYPE, postTypePlaceholder, type SelectedPostType } from '@/lib/post-types';
 import { personDisplayHandle, personHandleFromName } from '@/lib/social-profile';
 
@@ -51,6 +53,9 @@ export default function PersonalPageScreen() {
   const [nextPostsCursor, setNextPostsCursor] = React.useState<string | null>(null);
   const [isLoadingMorePosts, setIsLoadingMorePosts] = React.useState(false);
   const [isEditingProfile, setIsEditingProfile] = React.useState(false);
+  const [isLoadingPage, setIsLoadingPage] = React.useState(true);
+  const [pageError, setPageError] = React.useState<string | null>(null);
+  const [pageReloadKey, setPageReloadKey] = React.useState(0);
 
   React.useEffect(() => {
     if (isLoading || (isAuthenticated && sessionToken)) return;
@@ -61,15 +66,29 @@ export default function PersonalPageScreen() {
   React.useEffect(() => {
     if (!user?.email || !sessionToken) return;
 
+    let mounted = true;
+    setIsLoadingPage(true);
+    setPageError(null);
     Promise.all([api.getPersonalPage(publicHandle, sessionToken), api.listFollowing(sessionToken)])
       .then(([page, followingResult]) => {
+        if (!mounted) return;
         setPosts(page.posts);
         setProfile(page.profile);
         setNextPostsCursor(page.nextCursor);
         setFollowing(followingResult.members);
       })
-      .catch((error) => console.warn('Could not load personal page data:', error));
-  }, [publicHandle, sessionToken, user?.email]);
+      .catch((error) => {
+        console.warn('Could not load personal page data:', error);
+        if (mounted) setPageError(friendlyError(error, "We couldn't load your page."));
+      })
+      .finally(() => {
+        if (mounted) setIsLoadingPage(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [publicHandle, sessionToken, user?.email, pageReloadKey]);
 
   const loadMorePosts = async () => {
     if (!nextPostsCursor || isLoadingMorePosts || !sessionToken) return;
@@ -167,6 +186,10 @@ export default function PersonalPageScreen() {
       setDraft('');
       setSelectedType(DEFAULT_POST_TYPE);
       setSelectedMedia([]);
+    } catch (error) {
+      // Keep the draft so nothing they wrote is lost.
+      console.error('Failed to publish personal page post:', error);
+      Alert.alert("Couldn't post to your page", friendlyError(error, "We couldn't post that. Your words are still in the box."));
     } finally {
       setIsSaving(false);
     }
@@ -186,7 +209,8 @@ export default function PersonalPageScreen() {
             await api.deletePersonalPagePost(postId, sessionToken);
             setPosts((current) => current.filter((post) => post.id !== postId));
           } catch (error) {
-            Alert.alert('Could not delete post', error instanceof Error ? error.message : 'Please try again.');
+            console.error('Failed to delete personal page post:', error);
+            Alert.alert("Couldn't delete your post", friendlyError(error, "We couldn't delete your post."));
           } finally {
             setDeletingPostId(null);
           }
@@ -388,7 +412,17 @@ export default function PersonalPageScreen() {
           </View>
 
           <View className="mt-4 gap-4">
-            {posts.length === 0 ? (
+            {pageError && posts.length === 0 ? (
+              <LoadError
+                message={pageError}
+                retrying={isLoadingPage}
+                onRetry={() => setPageReloadKey((key) => key + 1)}
+              />
+            ) : isLoadingPage && posts.length === 0 ? (
+              <View className="items-center py-6">
+                <ActivityIndicator size="small" color={PAGE_THEME.primary} />
+              </View>
+            ) : posts.length === 0 ? (
               <View className="rounded-[28px] border border-dashed border-gray-300 bg-white p-5">
                 <Text className="text-base font-black text-gray-950">No page posts yet</Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">

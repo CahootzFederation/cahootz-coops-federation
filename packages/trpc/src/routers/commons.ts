@@ -201,12 +201,12 @@ async function loadFeedPosts(
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     include: {
-      author: { select: { name: true, email: true, handle: true } },
+      author: { select: { name: true, email: true, handle: true, isBot: true } },
       comments: {
         orderBy: { createdAt: 'asc' },
         take: 2,
         include: {
-          author: { select: { name: true, email: true, handle: true } },
+          author: { select: { name: true, email: true, handle: true, isBot: true } },
         },
       },
       media: {
@@ -384,6 +384,7 @@ function mapPersonalPagePost(record: any) {
         authorId: comment.authorId,
         author: displayName(comment.author),
         authorHandle: personHandle(comment.author),
+        authorIsAi: !!comment.author?.isBot,
         body: comment.content,
         createdAt: comment.createdAt.toISOString(),
       })) ?? [],
@@ -732,6 +733,7 @@ function mapPostWithGroup(record: any, groupName: string, viewerId?: string) {
     authorId: record.authorId,
     author: displayName(record.author),
     authorHandle: personHandle(record.author),
+    authorIsAi: !!record.author?.isBot,
     supporterBadge: record.supporterBadge ?? null,
     group: groupName,
     time: relativeTime(record.createdAt),
@@ -763,6 +765,7 @@ function mapPostWithGroup(record: any, groupName: string, viewerId?: string) {
         authorId: comment.authorId,
         author: displayName(comment.author),
         authorHandle: personHandle(comment.author),
+        authorIsAi: !!comment.author?.isBot,
         reactionCount: comment._count?.reactions ?? 0,
         viewerReacted: (comment.reactions?.length ?? 0) > 0,
         supporterBadge: comment.supporterBadge ?? null,
@@ -1118,11 +1121,11 @@ export const commonsRouter = router({
         ctx.db.commonsPost.findFirst({
           where: { ...feedCircleWhere, isPinned: true },
           include: {
-            author: { select: { name: true, email: true, handle: true } },
+            author: { select: { name: true, email: true, handle: true, isBot: true } },
             comments: {
               orderBy: { createdAt: 'asc' },
               take: 2,
-              include: { author: { select: { name: true, email: true, handle: true } } },
+              include: { author: { select: { name: true, email: true, handle: true, isBot: true } } },
             },
             media: { orderBy: { order: 'asc' } },
             event: { include: eventInclude },
@@ -1222,13 +1225,13 @@ export const commonsRouter = router({
               orderBy: { createdAt: 'desc' },
               take: input.limit,
               include: {
-                author: { select: { name: true, email: true, handle: true } },
+                author: { select: { name: true, email: true, handle: true, isBot: true } },
                 comments: {
                   orderBy: { createdAt: 'asc' },
                   take: 2,
                   include: {
                     author: {
-                      select: { name: true, email: true, handle: true },
+                      select: { name: true, email: true, handle: true, isBot: true },
                     },
                   },
                 },
@@ -1857,7 +1860,7 @@ export const commonsRouter = router({
         where: { postId: input.postId },
         orderBy: { createdAt: 'asc' },
         include: {
-          author: { select: { name: true, email: true, handle: true } },
+          author: { select: { name: true, email: true, handle: true, isBot: true } },
         },
       });
 
@@ -1867,6 +1870,7 @@ export const commonsRouter = router({
           authorId: comment.authorId,
           author: displayName(comment.author),
           authorHandle: personHandle(comment.author),
+          authorIsAi: !!comment.author?.isBot,
           body: comment.content,
         })),
       };
@@ -1885,7 +1889,7 @@ export const commonsRouter = router({
       const post = await context.db.commonsPost.findUnique({
         where: { id: input.postId },
         include: {
-          author: { select: { name: true, email: true, handle: true } },
+          author: { select: { name: true, email: true, handle: true, isBot: true } },
           media: {
             orderBy: { order: 'asc' },
           },
@@ -1895,7 +1899,7 @@ export const commonsRouter = router({
             orderBy: { createdAt: 'desc' },
             take: 100,
             include: {
-              author: { select: { name: true, email: true, handle: true } },
+              author: { select: { name: true, email: true, handle: true, isBot: true } },
               media: { orderBy: { order: 'asc' } },
               _count: { select: { reactions: true } },
               // Only the viewer's own reaction, to show whether they reacted.
@@ -1971,7 +1975,7 @@ export const commonsRouter = router({
               orderBy: { createdAt: 'asc' },
               take: 10,
               include: {
-                author: { select: { name: true, email: true, handle: true } },
+                author: { select: { name: true, email: true, handle: true, isBot: true } },
               },
             },
           },
@@ -2037,12 +2041,12 @@ export const commonsRouter = router({
             take: input.limit + 1,
             ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
             include: {
-              author: { select: { name: true, email: true, handle: true } },
+              author: { select: { name: true, email: true, handle: true, isBot: true } },
               comments: {
                 orderBy: { createdAt: 'asc' },
                 take: 50,
                 include: {
-                  author: { select: { name: true, email: true, handle: true } },
+                  author: { select: { name: true, email: true, handle: true, isBot: true } },
                 },
               },
               _count: { select: { comments: true, supports: true } },
@@ -2121,11 +2125,11 @@ export const commonsRouter = router({
           media: toJsonValue(input.media),
         },
         include: {
-          author: { select: { name: true, email: true, handle: true } },
+          author: { select: { name: true, email: true, handle: true, isBot: true } },
           comments: {
             orderBy: { createdAt: 'asc' },
             include: {
-              author: { select: { name: true, email: true, handle: true } },
+              author: { select: { name: true, email: true, handle: true, isBot: true } },
             },
           },
           _count: { select: { comments: true, supports: true } },
@@ -2235,7 +2239,7 @@ export const commonsRouter = router({
           content: input.content,
         },
         include: {
-          author: { select: { name: true, email: true, handle: true } },
+          author: { select: { name: true, email: true, handle: true, isBot: true } },
         },
       });
 
@@ -2256,6 +2260,7 @@ export const commonsRouter = router({
           authorId: comment.authorId,
           author: displayName(comment.author),
           authorHandle: personHandle(comment.author),
+          authorIsAi: !!comment.author?.isBot,
           body: comment.content,
           createdAt: comment.createdAt.toISOString(),
         },
@@ -2293,7 +2298,7 @@ export const commonsRouter = router({
         where: { id: input.commentId },
         data: { content: input.content },
         include: {
-          author: { select: { name: true, email: true, handle: true } },
+          author: { select: { name: true, email: true, handle: true, isBot: true } },
         },
       });
 
@@ -2466,7 +2471,7 @@ export const commonsRouter = router({
             : undefined,
         },
         include: {
-          author: { select: { name: true, email: true, handle: true } },
+          author: { select: { name: true, email: true, handle: true, isBot: true } },
           media: {
             orderBy: { order: 'asc' },
           },
@@ -2474,7 +2479,7 @@ export const commonsRouter = router({
             orderBy: { createdAt: 'asc' },
             take: 2,
             include: {
-              author: { select: { name: true, email: true, handle: true } },
+              author: { select: { name: true, email: true, handle: true, isBot: true } },
             },
           },
           _count: { select: { comments: true, supports: true } },
@@ -2720,7 +2725,7 @@ export const commonsRouter = router({
             : undefined,
         },
         include: {
-          author: { select: { name: true, email: true, handle: true } },
+          author: { select: { name: true, email: true, handle: true, isBot: true } },
           media: { orderBy: { order: 'asc' } },
         },
       });
@@ -2818,7 +2823,7 @@ export const commonsRouter = router({
               orderBy: { createdAt: 'asc' },
               take: 10,
               include: {
-                author: { select: { name: true, email: true, handle: true } },
+                author: { select: { name: true, email: true, handle: true, isBot: true } },
               },
             });
             const threadContext = [
@@ -2868,6 +2873,7 @@ export const commonsRouter = router({
           authorId: comment.authorId,
           author: displayName(comment.author),
           authorHandle: personHandle(comment.author),
+          authorIsAi: !!comment.author?.isBot,
           reactionCount: 0,
           viewerReacted: false,
           body: comment.content,
@@ -2925,7 +2931,7 @@ export const commonsRouter = router({
         where: { id: input.commentId },
         data: { content: encodedContent },
         include: {
-          author: { select: { name: true, email: true, handle: true } },
+          author: { select: { name: true, email: true, handle: true, isBot: true } },
           media: { orderBy: { order: 'asc' } },
         },
       });

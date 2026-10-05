@@ -20,8 +20,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 import { IconAvatar } from '@/components/icon-avatar';
+import { LoadError } from '@/components/load-error';
 import { PersonLink } from '@/components/person-link';
+import { StewardHelp } from '@/components/role-help';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -220,6 +223,10 @@ export default function CommonsDetailScreen() {
   const [circles, setCircles] = useState<PrivateGroupSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // True when `error` is a failed page load (shown with "Try again"),
+  // false when it's a failed action such as withdrawing.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [activeTab, setActiveTab] = useState<InfoTab>('overview');
   const [charterExpanded, setCharterExpanded] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
@@ -238,6 +245,7 @@ export default function CommonsDetailScreen() {
     async function load() {
       setLoading(true);
       setError('');
+      setLoadFailed(false);
       try {
         const [configResult, directoryResult] = await Promise.all([
           api.getCoopConfig(coopId),
@@ -301,6 +309,20 @@ export default function CommonsDetailScreen() {
         } else if (circlesResult) {
           console.error('Failed to load circles:', circlesResult.reason);
         }
+
+        // A tab that failed to load would otherwise look empty. Say so once,
+        // with "Try again", instead of showing "nothing here yet".
+        const firstFailure = [
+          proposalsResult,
+          statsResult,
+          membersResult,
+          circlesResult,
+          aiSpendingResult,
+        ].find((result) => result?.status === 'rejected') as PromiseRejectedResult | undefined;
+        if (firstFailure) {
+          setLoadFailed(true);
+          setError(friendlyError(firstFailure.reason, "We couldn't load all of this commons."));
+        }
       } catch (err) {
         console.error('Failed to load commons detail:', err);
         if (!mounted) return;
@@ -311,9 +333,8 @@ export default function CommonsDetailScreen() {
         setAISpending(null);
         setMembersPreview(null);
         setCircles([]);
-        setError(
-          'Could not load the full commons page. Showing the starter view.',
-        );
+        setLoadFailed(true);
+        setError(friendlyError(err, "We couldn't load this commons."));
       } finally {
         if (mounted) setLoading(false);
       }
@@ -324,7 +345,7 @@ export default function CommonsDetailScreen() {
     return () => {
       mounted = false;
     };
-  }, [coopId, sessionToken, user?.walletAddress]);
+  }, [coopId, sessionToken, user?.walletAddress, reloadKey]);
 
 
   useEffect(() => {
@@ -370,6 +391,8 @@ export default function CommonsDetailScreen() {
   async function handleWithdraw() {
     if (!sessionToken || withdrawing) return;
     setWithdrawing(true);
+    setError('');
+    setLoadFailed(false);
     try {
       await api.withdrawCommonsRequest(coopId, sessionToken);
       setDirectoryItem((current) =>
@@ -383,7 +406,8 @@ export default function CommonsDetailScreen() {
           : current,
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not withdraw right now.');
+      console.error('Failed to withdraw commons request:', err);
+      setError(friendlyError(err, "We couldn't withdraw your request."));
     } finally {
       setWithdrawing(false);
     }
@@ -463,9 +487,7 @@ export default function CommonsDetailScreen() {
       setApplySuccess(true);
     } catch (err) {
       console.error('Failed to apply to commons:', err);
-      setApplyError(
-        err instanceof Error ? err.message : 'Could not submit application.',
-      );
+      setApplyError(friendlyError(err, "We couldn't send your application."));
     } finally {
       setApplying(false);
     }
@@ -746,9 +768,17 @@ export default function CommonsDetailScreen() {
             </View>
           </View>
 
-          {error ? (
+          {error && loadFailed ? (
+            <View className="mt-3">
+              <LoadError
+                message={error}
+                retrying={loading}
+                onRetry={() => setReloadKey((key) => key + 1)}
+              />
+            </View>
+          ) : error ? (
             <View className="mt-3 rounded-xl border border-orange-200 bg-orange-50 p-3">
-              <Text className="text-sm font-semibold text-orange-800">
+              <Text accessibilityRole="alert" className="text-base font-semibold text-orange-800">
                 {error}
               </Text>
             </View>
@@ -794,6 +824,7 @@ export default function CommonsDetailScreen() {
                         ? 'This is a private, invite-only commons. Ask a steward to invite you.'
                         : 'Apply to join this commons. Overview, community, and governance details are only visible to approved members.'}
                   </Text>
+                  {inviteOnly ? <StewardHelp /> : null}
                   {accessStatus === 'PENDING' && sessionToken ? (
                     <TouchableOpacity
                       onPress={handleWithdraw}
@@ -858,6 +889,7 @@ export default function CommonsDetailScreen() {
               {activeTab === 'community' ? (
                 <CommunityTab
                   membersPreview={membersPreview}
+                  isSteward={!!directoryItem?.isSteward}
                   circles={circles}
                   onOpenCircle={(circle) =>
                     router.push(
@@ -881,7 +913,10 @@ export default function CommonsDetailScreen() {
                     router.push(`/${coopId}/proposal` as any)
                   }
                   onOpenProposal={(id) =>
-                    router.push(`/(tabs)/proposal-detail?id=${id}` as any)
+                    router.push({
+                      pathname: '/(tabs)/proposal-detail',
+                      params: { id, coopId },
+                    } as any)
                   }
                 />
               ) : null}
@@ -1316,11 +1351,13 @@ function SageAutonomyRow({
 
 function CommunityTab({
   membersPreview,
+  isSteward,
   circles,
   onOpenCircle,
   onSeeAllCircles,
 }: {
   membersPreview: MembersPreview | null;
+  isSteward: boolean;
   circles: PrivateGroupSummary[];
   onOpenCircle: (circle: PrivateGroupSummary) => void;
   onSeeAllCircles: () => void;
@@ -1357,6 +1394,14 @@ function CommunityTab({
         ) : (
           <ActivityIndicator color={THEME.primary} />
         )}
+        {isSteward ? (
+          <Text className="mt-3 text-sm font-semibold text-gray-700">
+            You&apos;re a steward here.
+          </Text>
+        ) : null}
+        <View className="mt-2">
+          <StewardHelp />
+        </View>
       </View>
 
       <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">

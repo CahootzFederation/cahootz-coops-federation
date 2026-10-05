@@ -10,6 +10,7 @@ import type { CommonsPostTag } from './post-types';
 // Uses native fetch API - no additional dependencies required
 
 import { getApiUrl, getWebUrl, networkConfig } from './config';
+import { apiError, httpError } from './friendly-error';
 import { coopConfig } from './coop-config';
 
 /**
@@ -230,6 +231,8 @@ export interface CommonsComment {
   authorId?: string;
   author: string;
   authorHandle?: string;
+  /** Written by Sage (or another AI account), so the app labels it. */
+  authorIsAi?: boolean;
   reactionCount?: number;
   /** Whether the signed-in viewer has reacted to this comment. */
   viewerReacted?: boolean;
@@ -321,6 +324,8 @@ export interface CommonsPost {
   authorId?: string;
   author: string;
   authorHandle?: string;
+  /** Written by Sage (or another AI account), so the app labels it. */
+  authorIsAi?: boolean;
   supporterBadge?: SupporterBadge | null;
   group: string;
   time: string;
@@ -749,11 +754,11 @@ async function readTrpcResult<T>(
   const result = await response.json();
 
   if (result.error) {
-    throw new Error(result.error.message || fallbackMessage);
+    throw apiError(result.error, fallbackMessage);
   }
 
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    throw httpError(response.status);
   }
 
   return result.result?.data as T;
@@ -811,12 +816,12 @@ export const api = {
         result.error.data?.message ||
         'Application submission failed';
       console.log('📥 Throwing error with message:', errorMessage);
-      throw new Error(errorMessage);
+      throw apiError(result.error, errorMessage);
     }
 
     // If HTTP status is not OK but no error in JSON, throw generic error
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     // tRPC wraps the response in result.data
@@ -864,13 +869,11 @@ export const api = {
     const result = await response.json();
 
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Could not submit to the newsletter',
-      );
+      throw apiError(result.error, 'Could not submit to the newsletter');
     }
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -1685,7 +1688,7 @@ export const api = {
     }
 
     if (!tokenResponse.ok) {
-      throw new Error(`HTTP error! status: ${tokenResponse.status}`);
+      throw httpError(tokenResponse.status);
     }
 
     const fileResponse = await fetch(data.uri);
@@ -1701,7 +1704,7 @@ export const api = {
     });
 
     if (!uploadResponse.ok) {
-      throw new Error(`Upload failed with status: ${uploadResponse.status}`);
+      throw httpError(uploadResponse.status);
     }
 
     const blobResult = await uploadResponse.json();
@@ -1756,7 +1759,7 @@ export const api = {
     }
 
     if (!tokenResponse.ok) {
-      throw new Error(`HTTP error! status: ${tokenResponse.status}`);
+      throw httpError(tokenResponse.status);
     }
 
     const fileResponse = await fetch(data.uri);
@@ -1772,7 +1775,7 @@ export const api = {
     });
 
     if (!uploadResponse.ok) {
-      throw new Error(`Upload failed with status: ${uploadResponse.status}`);
+      throw httpError(uploadResponse.status);
     }
 
     const blobResult = await uploadResponse.json();
@@ -2436,12 +2439,12 @@ export const api = {
 
     // Check if there's a tRPC error in the response
     if (result.error) {
-      throw new Error(result.error.message || 'Login failed');
+      throw apiError(result.error, 'Login failed');
     }
 
     // If HTTP status is not OK but no error in JSON, throw generic error
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     // tRPC wraps the response in result.data.json
@@ -2465,12 +2468,12 @@ export const api = {
 
     // Check if there's a tRPC error in the response
     if (result.error) {
-      throw new Error(result.error.message || 'Status check failed');
+      throw apiError(result.error, 'Status check failed');
     }
 
     // If HTTP status is not OK but no error in JSON, throw generic error
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     // tRPC wraps the response in result.data.json
@@ -2493,17 +2496,17 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to refresh user');
+      throw apiError(result.error, 'Failed to refresh user');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
   },
 
   // ──────────────────────────────────────────────────────────
-  // UNITY COIN (UC) WALLET & TRANSFER FUNCTIONS
+  // WALLET FUNCTIONS
   // ──────────────────────────────────────────────────────────
 
   /**
@@ -2525,10 +2528,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get wallet info');
+      throw apiError(result.error, 'Failed to get wallet info');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -2547,10 +2550,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to export wallet');
+      throw apiError(result.error, 'Failed to export wallet');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data as {
@@ -2569,10 +2572,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to delete account');
+      throw apiError(result.error, 'Failed to delete account');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data as {
@@ -2602,12 +2605,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to request wallet challenge',
-      );
+      throw apiError(result.error, 'Failed to request wallet challenge');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data as {
@@ -2635,12 +2636,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to verify wallet signature',
-      );
+      throw apiError(result.error, 'Failed to verify wallet signature');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data as {
@@ -2667,279 +2666,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to create wallet');
+      throw apiError(result.error, 'Failed to create wallet');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
-  },
-
-  /**
-   * Get UC balance for a wallet
-   */
-  async getUCBalance(walletAddress: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/ucTransfer.getBalance`, {
-      method: 'POST',
-      headers: {
-        ...networkConfig.defaultHeaders,
-      },
-      body: JSON.stringify({ walletAddress }),
-    });
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message || 'Failed to get balance');
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
-  },
-
-  /**
-   * Get transfer history for a wallet
-   */
-  async getTransferHistory(walletAddress: string, limit = 50) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/ucTransfer.getTransferHistory`,
-      {
-        method: 'POST',
-        headers: {
-          ...networkConfig.defaultHeaders,
-        },
-        body: JSON.stringify({ walletAddress, limit }),
-      },
-    );
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message || 'Failed to get transfer history');
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
-  },
-
-  /**
-   * Validate a recipient address for transfers
-   */
-  async validateRecipient(recipientAddress: string) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/ucTransfer.validateRecipient`,
-      {
-        method: 'POST',
-        headers: {
-          ...networkConfig.defaultHeaders,
-        },
-        body: JSON.stringify({ recipientAddress }),
-      },
-    );
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message || 'Failed to validate recipient');
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
-  },
-
-  /**
-   * Find user by username for transfers
-   */
-  async getUserByUsername(username: string) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/ucTransfer.getUserByUsername`,
-      {
-        method: 'POST',
-        headers: {
-          ...networkConfig.defaultHeaders,
-        },
-        body: JSON.stringify({ username }),
-      },
-    );
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message || 'User not found');
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
-  },
-
-  /**
-   * Execute a UC transfer
-   */
-  async executeTransfer(
-    userId: string,
-    recipientAddress: string,
-    amount: string,
-  ) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/ucTransfer.executeTransfer`,
-      {
-        method: 'POST',
-        headers: {
-          ...networkConfig.defaultHeaders,
-        },
-        body: JSON.stringify({ userId, recipientAddress, amount }),
-      },
-    );
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message || 'Transfer failed');
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
-  },
-
-  /**
-   * Get available payment processors for onramp
-   * @param walletAddress - User's wallet address for authentication
-   */
-  async getAvailableProcessors(walletAddress?: string | null) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/onramp.getAvailableProcessors`,
-      {
-        method: 'POST',
-        headers: createApiHeaders(walletAddress),
-        body: JSON.stringify({}),
-      },
-    );
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message || 'Failed to get processors');
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
-  },
-
-  /**
-   * Create payment intent for buying UC
-   * @param walletAddress - User's wallet address for authentication
-   */
-  async createPaymentIntent(
-    amountUSD: number,
-    walletAddress: string | null,
-    processor?: 'stripe' | 'paypal' | 'square',
-  ) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/onramp.createPaymentIntent`,
-      {
-        method: 'POST',
-        headers: createApiHeaders(walletAddress),
-        body: JSON.stringify({ amountUSD, processor }),
-      },
-    );
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to create payment intent',
-      );
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
-  },
-
-  /**
-   * Get onramp transaction history
-   * @param walletAddress - User's wallet address for authentication
-   */
-  async getOnrampHistory(walletAddress: string | null, limit = 50, offset = 0) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/onramp.getOnrampHistory`,
-      {
-        method: 'POST',
-        headers: createApiHeaders(walletAddress),
-        body: JSON.stringify({ limit, offset }),
-      },
-    );
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message || 'Failed to get onramp history');
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
-  },
-
-  /**
-   * Fund wallet with a saved card
-   * Charges the saved card and mints UC to user's wallet
-   * @param walletAddress - User's wallet address for authentication
-   */
-  async fundWithSavedCard(
-    amountUSD: number,
-    walletAddress: string,
-    paymentMethodId?: string,
-  ) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/onramp.fundWithSavedCard`,
-      {
-        method: 'POST',
-        headers: createApiHeaders(walletAddress),
-        body: JSON.stringify({ amountUSD, paymentMethodId }),
-      },
-    );
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message || 'Failed to fund wallet');
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
-  },
-
-  /**
-   * Get onramp transaction status
-   * @param walletAddress - User's wallet address for authentication
-   */
-  async getOnrampStatus(transactionId: string, walletAddress?: string | null) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/onramp.getOnrampStatus`,
-      {
-        method: 'POST',
-        headers: createApiHeaders(walletAddress),
-        body: JSON.stringify({ transactionId }),
-      },
-    );
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to get transaction status',
-      );
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -2964,17 +2694,17 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get balance');
+      throw apiError(result.error, 'Failed to get balance');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
   },
 
   /**
-   * Get token balances (SC and UC) from blockchain
+   * Get the commons coin (SC) balance from the blockchain
    */
   async getTokenBalances(walletAddress: string) {
     const input = encodeURIComponent(JSON.stringify({ walletAddress }));
@@ -2990,84 +2720,13 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get token balances');
+      throw apiError(result.error, 'Failed to get token balances');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
-    return result.result?.data || { sc: '0', uc: '0', scRaw: '0', ucRaw: '0' };
-  },
-
-  /**
-   * Send payment to another user (Soulaan user or non-user via phone)
-   */
-  async sendPayment(
-    userId: string,
-    recipient: string,
-    recipientType: 'username' | 'phone' | 'userId',
-    amount: number,
-    note?: string,
-    walletAddress?: string | null,
-    transferType: 'PERSONAL' | 'RENT' | 'SERVICE' | 'STORE' = 'PERSONAL',
-    transferMetadata?: {
-      rentMonth?: string;
-      providerRole?: string;
-      storeName?: string;
-      personalNote?: string;
-    },
-  ) {
-    const response = await fetch(`${API_BASE_URL}/trpc/p2p.sendPayment`, {
-      method: 'POST',
-      headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({
-        userId,
-        recipient,
-        recipientType,
-        amount,
-        note,
-        transferType,
-        transferMetadata,
-      }),
-    });
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message || 'Payment failed');
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
-  },
-
-  /**
-   * Look up a recipient by username or phone
-   */
-  async lookupRecipient(
-    query: string,
-    type: 'username' | 'phone',
-    walletAddress?: string | null,
-  ) {
-    const input = encodeURIComponent(JSON.stringify({ query, type }));
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/p2p.lookupRecipient?input=${input}`,
-      {
-        method: 'GET',
-        headers: createApiHeaders(walletAddress),
-      },
-    );
-
-    const result = await response.json();
-    if (result.error) {
-      throw new Error(result.error.message || 'Lookup failed');
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return result.result?.data;
+    return result.result?.data || { sc: '0', scRaw: '0' };
   },
 
   /**
@@ -3090,10 +2749,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get history');
+      throw apiError(result.error, 'Failed to get history');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3114,10 +2773,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get payment methods');
+      throw apiError(result.error, 'Failed to get payment methods');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3135,10 +2794,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to create setup intent');
+      throw apiError(result.error, 'Failed to create setup intent');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3160,10 +2819,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to save payment method');
+      throw apiError(result.error, 'Failed to save payment method');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3188,12 +2847,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to remove payment method',
-      );
+      throw apiError(result.error, 'Failed to remove payment method');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3218,12 +2875,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to set default payment method',
-      );
+      throw apiError(result.error, 'Failed to set default payment method');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3251,10 +2906,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get notifications');
+      throw apiError(result.error, 'Failed to get notifications');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3278,12 +2933,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to mark notification as read',
-      );
+      throw apiError(result.error, 'Failed to mark notification as read');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3304,12 +2957,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to mark notifications as read',
-      );
+      throw apiError(result.error, 'Failed to mark notifications as read');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3334,10 +2985,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get bank accounts');
+      throw apiError(result.error, 'Failed to get bank accounts');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3368,10 +3019,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to add bank account');
+      throw apiError(result.error, 'Failed to add bank account');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3393,10 +3044,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to remove bank account');
+      throw apiError(result.error, 'Failed to remove bank account');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3421,12 +3072,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to set default bank account',
-      );
+      throw apiError(result.error, 'Failed to set default bank account');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3453,10 +3102,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to process withdrawal');
+      throw apiError(result.error, 'Failed to process withdrawal');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3482,10 +3131,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get withdrawals');
+      throw apiError(result.error, 'Failed to get withdrawals');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3522,10 +3171,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get stores');
+      throw apiError(result.error, 'Failed to get stores');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3548,10 +3197,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get store');
+      throw apiError(result.error, 'Failed to get store');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3587,10 +3236,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get products');
+      throw apiError(result.error, 'Failed to get products');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3613,10 +3262,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get product');
+      throw apiError(result.error, 'Failed to get product');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3633,7 +3282,7 @@ export const api = {
 
     const result = await response.json();
     if (!response.ok) {
-      throw new Error(result.error?.message || 'Failed to fetch store');
+      throw apiError(result.error, 'Failed to fetch store');
     }
     return result.result?.data || null;
   },
@@ -3646,10 +3295,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get my store');
+      throw apiError(result.error, 'Failed to get my store');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3662,7 +3311,7 @@ export const api = {
     });
     const result = await response.json();
     if (!response.ok || result.error) {
-      throw new Error(result.error?.message || 'Failed to load funding badges');
+      throw apiError(result.error, 'Failed to load funding badges');
     }
     return result.result?.data;
   },
@@ -3674,7 +3323,7 @@ export const api = {
     });
     const result = await response.json();
     if (!response.ok || result.error) {
-      throw new Error(result.error?.message || 'Failed to load badge history');
+      throw apiError(result.error, 'Failed to load badge history');
     }
     return result.result?.data ?? [];
   },
@@ -3694,12 +3343,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to get commerce transaction',
-      );
+      throw apiError(result.error, 'Failed to get commerce transaction');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3726,12 +3373,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to list commerce transactions',
-      );
+      throw apiError(result.error, 'Failed to list commerce transactions');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3771,12 +3416,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to submit store application',
-      );
+      throw apiError(result.error, 'Failed to submit store application');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3806,12 +3449,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to start Stripe onboarding',
-      );
+      throw apiError(result.error, 'Failed to start Stripe onboarding');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3835,12 +3476,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to sync Stripe onboarding status',
-      );
+      throw apiError(result.error, 'Failed to sync Stripe onboarding status');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3870,10 +3509,10 @@ export const api = {
         result.error?.json?.message ||
         result.error?.message ||
         'Failed to submit SC rewards application';
-      throw new Error(message);
+      throw apiError(result.error, message);
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data ?? result.result?.data?.json;
@@ -3895,10 +3534,10 @@ export const api = {
         result.error?.json?.message ||
         result.error?.message ||
         'Failed to get SC rewards status';
-      throw new Error(message);
+      throw apiError(result.error, message);
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data ?? result.result?.data?.json;
@@ -3925,10 +3564,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get my products');
+      throw apiError(result.error, 'Failed to get my products');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -3962,10 +3601,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to add product');
+      throw apiError(result.error, 'Failed to add product');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4000,10 +3639,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to update product');
+      throw apiError(result.error, 'Failed to update product');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4021,10 +3660,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to delete product');
+      throw apiError(result.error, 'Failed to delete product');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4047,12 +3686,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to get featured products',
-      );
+      throw apiError(result.error, 'Failed to get featured products');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data || [];
@@ -4076,10 +3713,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get quick pay info');
+      throw apiError(result.error, 'Failed to get quick pay info');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4103,10 +3740,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to generate short code');
+      throw apiError(result.error, 'Failed to generate short code');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4127,10 +3764,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to validate short code');
+      throw apiError(result.error, 'Failed to validate short code');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4159,12 +3796,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to create payment request',
-      );
+      throw apiError(result.error, 'Failed to create payment request');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4187,10 +3822,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get payment request');
+      throw apiError(result.error, 'Failed to get payment request');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4208,10 +3843,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Payment failed');
+      throw apiError(result.error, 'Payment failed');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4220,8 +3855,10 @@ export const api = {
   /**
    * Get store by short code (public)
    */
-  async getStoreByCode(code: string) {
-    const input = encodeURIComponent(JSON.stringify({ code }));
+  async getStoreByCode(code: string, coopId: string = resolveCoopId()) {
+    // Store codes are only unique within a commons, so always send the
+    // member's active commons.
+    const input = encodeURIComponent(JSON.stringify({ code, coopId }));
     const response = await fetch(
       `${API_BASE_URL}/trpc/storePay.getStoreByCode?input=${input}`,
       {
@@ -4234,10 +3871,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get store');
+      throw apiError(result.error, 'Failed to get store');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4251,22 +3888,23 @@ export const api = {
     amount: number,
     note: string | undefined,
     walletAddress: string,
+    coopId: string = resolveCoopId(),
   ) {
     const response = await fetch(
       `${API_BASE_URL}/trpc/storePay.payByStoreCode`,
       {
         method: 'POST',
         headers: createApiHeaders(walletAddress),
-        body: JSON.stringify({ storeCode, amount, note }),
+        body: JSON.stringify({ storeCode, amount, note, coopId }),
       },
     );
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Payment failed');
+      throw apiError(result.error, 'Payment failed');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4292,10 +3930,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get payment requests');
+      throw apiError(result.error, 'Failed to get payment requests');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4316,12 +3954,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to cancel payment request',
-      );
+      throw apiError(result.error, 'Failed to cancel payment request');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4348,10 +3984,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get store categories');
+      throw apiError(result.error, 'Failed to get store categories');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4381,10 +4017,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to create order');
+      throw apiError(result.error, 'Failed to create order');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4405,10 +4041,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get orders');
+      throw apiError(result.error, 'Failed to get orders');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4429,10 +4065,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get order');
+      throw apiError(result.error, 'Failed to get order');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4461,10 +4097,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get store orders');
+      throw apiError(result.error, 'Failed to get store orders');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4490,10 +4126,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to update order status');
+      throw apiError(result.error, 'Failed to update order status');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4516,12 +4152,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to get product categories',
-      );
+      throw apiError(result.error, 'Failed to get product categories');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4557,10 +4191,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get SC rewards');
+      throw apiError(result.error, 'Failed to get SC rewards');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data;
@@ -4860,10 +4494,10 @@ export const api = {
     );
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to get available coops');
+      throw apiError(result.error, 'Failed to get available coops');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
     return result.result?.data as {
       id: string;
@@ -4926,7 +4560,7 @@ export const api = {
     );
     const result = await response.json();
     if (result.error)
-      throw new Error(result.error.message || 'Failed to load proposals');
+      throw apiError(result.error, 'Failed to load proposals');
     return result.result?.data as {
       proposals: ProposalSummary[];
       total: number;
@@ -4948,7 +4582,7 @@ export const api = {
     );
     const result = await response.json();
     if (result.error)
-      throw new Error(result.error.message || 'Failed to load proposal');
+      throw apiError(result.error, 'Failed to load proposal');
     return result.result?.data;
   },
 
@@ -4973,7 +4607,7 @@ export const api = {
     );
     const result = await response.json();
     if (result.error)
-      throw new Error(result.error.message || 'Failed to load proposals');
+      throw apiError(result.error, 'Failed to load proposals');
     return result.result?.data as { proposals: any[]; total: number };
   },
 
@@ -4988,7 +4622,7 @@ export const api = {
     });
     const result = await response.json();
     if (result.error)
-      throw new Error(result.error.message || 'Failed to submit proposal');
+      throw apiError(result.error, 'Failed to submit proposal');
     return result.result?.data;
   },
 
@@ -5011,7 +4645,7 @@ export const api = {
     );
     const result = await response.json();
     if (result.error)
-      throw new Error(result.error.message || 'Failed to load comments');
+      throw apiError(result.error, 'Failed to load comments');
     return result.result?.data as { comments: any[]; total: number };
   },
 
@@ -5033,7 +4667,7 @@ export const api = {
     );
     const result = await response.json();
     if (result.error)
-      throw new Error(result.error.message || 'Failed to post comment');
+      throw apiError(result.error, 'Failed to post comment');
     return result.result?.data;
   },
 
@@ -5056,7 +4690,7 @@ export const api = {
     );
     const result = await response.json();
     if (result.error)
-      throw new Error(result.error.message || 'Failed to react');
+      throw apiError(result.error, 'Failed to react');
     return result.result?.data as {
       support: number;
       concern: number;
@@ -5080,7 +4714,7 @@ export const api = {
     );
     const result = await response.json();
     if (result.error)
-      throw new Error(result.error.message || 'Failed to get reaction counts');
+      throw apiError(result.error, 'Failed to get reaction counts');
     return result.result?.data as {
       support: number;
       concern: number;
@@ -5099,7 +4733,7 @@ export const api = {
     });
     const result = await response.json();
     if (result.error)
-      throw new Error(result.error.message || 'Failed to withdraw proposal');
+      throw apiError(result.error, 'Failed to withdraw proposal');
     return result.result?.data;
   },
 
@@ -5122,7 +4756,7 @@ export const api = {
     });
     const result = await response.json();
     if (result.error)
-      throw new Error(result.error.message || 'Failed to cast council vote');
+      throw apiError(result.error, 'Failed to cast council vote');
     return result.result?.data as {
       vote: string;
       forCount: number;
@@ -5147,7 +4781,7 @@ export const api = {
     });
     const result = await response.json();
     if (result.error)
-      throw new Error(result.error.message || 'Failed to resubmit proposal');
+      throw apiError(result.error, 'Failed to resubmit proposal');
     return result.result?.data;
   },
 
@@ -5168,9 +4802,7 @@ export const api = {
     );
     const result = await response.json();
     if (result.error)
-      throw new Error(
-        result.error.message || 'Failed to load revision history',
-      );
+      throw apiError(result.error, 'Failed to load revision history');
     return result.result?.data as {
       id: string;
       revisionNumber: number;
@@ -5225,7 +4857,7 @@ export const api = {
         result.error?.json?.message ||
         result.error?.message ||
         'Failed to load fee config';
-      throw new Error(message);
+      throw apiError(result.error, message);
     }
 
     return (
@@ -5253,10 +4885,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(result.error.message || 'Failed to load platform config');
+      throw apiError(result.error, 'Failed to load platform config');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return (
@@ -5281,12 +4913,10 @@ export const api = {
 
     const result = await response.json();
     if (result.error) {
-      throw new Error(
-        result.error.message || 'Failed to get application questions',
-      );
+      throw apiError(result.error, 'Failed to get application questions');
     }
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw httpError(response.status);
     }
 
     return result.result?.data as { questions: ApplicationQuestion[] };

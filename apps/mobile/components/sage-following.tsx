@@ -3,6 +3,7 @@ import { ActivityIndicator, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { Text } from '@/components/ui/text';
+import { friendlyError } from '@/lib/friendly-error';
 import { api, type SageTaskView } from '@/lib/api';
 
 const THEME = { primary: '#FF6B00', border: '#E5E7EB', muted: '#64748B', ink: '#111827', done: '#047857', danger: '#B91C1C' };
@@ -24,7 +25,7 @@ export function SageFollowing({ sessionToken, coopId = 'cahootz' }: { sessionTok
 
   const load = React.useCallback(() => {
     setError(null);
-    api.listSageTasks(sessionToken, coopId).then(setData).catch((err) => setError(err instanceof Error ? err.message : 'Could not load follow-ups.'));
+    api.listSageTasks(sessionToken, coopId).then(setData).catch((err) => setError(friendlyError(err, "We couldn't load Sage's follow-ups.")));
   }, [sessionToken, coopId]);
   React.useEffect(() => { load(); }, [load]);
 
@@ -34,7 +35,7 @@ export function SageFollowing({ sessionToken, coopId = 'cahootz' }: { sessionTok
       await api.dismissSageTask(taskId, sessionToken);
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not dismiss this follow-up.');
+      setError(friendlyError(err, "We couldn't dismiss this follow-up."));
     } finally {
       setBusy(null);
     }

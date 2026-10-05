@@ -407,8 +407,8 @@ export const storePayRouter = router({
    */
   getStoreByCode: publicProcedure
     .input(z.object({
-      code: z.string(),
-      coopId: z.string(),
+      code: z.string().min(1),
+      coopId: z.string().min(1),
     }))
     .output(z.object({
       found: z.boolean(),
@@ -446,8 +446,13 @@ export const storePayRouter = router({
    */
   payByStoreCode: authenticatedProcedure
     .input(z.object({
-      userId: z.string(),
-      storeCode: z.string(),
+      // Optional and only cross-checked: the payer is always the account that
+      // owns the signed-in wallet, never a client-supplied id.
+      userId: z.string().optional(),
+      // Store codes are only unique within a commons, so the client sends the
+      // member's active commons (falls back to the X-Coop-Id header).
+      coopId: z.string().min(1).optional(),
+      storeCode: z.string().min(1),
       amount: z.number().positive().max(10000),
       note: z.string().max(100).optional(),
     }))
@@ -457,11 +462,46 @@ export const storePayRouter = router({
       message: z.string(),
     }))
     .mutation(async ({ input, ctx }) => {
+      const coopId = input.coopId || (ctx as CoopScopedContext).coopId;
+      if (!coopId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "We couldn't tell which commons this store belongs to.",
+        });
+      }
+
+      const walletAddress = (ctx as { walletAddress?: string }).walletAddress;
+      const payer = walletAddress
+        ? await db.user.findFirst({
+            where: {
+              deletedAt: null,
+              OR: [
+                { walletAddress: { equals: walletAddress, mode: "insensitive" } },
+                { wallets: { some: { address: { equals: walletAddress, mode: "insensitive" } } } },
+              ],
+            },
+            select: { id: true },
+          })
+        : null;
+
+      if (!payer) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Please sign in again to pay this store.",
+        });
+      }
+
+      if (input.userId && input.userId !== payer.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You can only pay from your own account.",
+        });
+      }
+
       try {
-        const coopId = (ctx as CoopScopedContext).coopId || '???';
         const result = await payByStoreCode({
           storeCode: input.storeCode,
-          payerId: input.userId,
+          payerId: payer.id,
           amount: input.amount,
           coopId,
           note: input.note,

@@ -19,7 +19,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { ApiError, friendlyError } from '@/lib/friendly-error';
 import { IconAvatar } from '@/components/icon-avatar';
+import { LoadError } from '@/components/load-error';
 import { PersonLink } from '@/components/person-link';
 import { EmojiColorPicker } from '@/components/emoji-color-picker';
 import {
@@ -73,6 +75,7 @@ export default function GroupDetailScreen() {
   const [members, setMembers] = React.useState<PrivateGroupMember[]>([]);
   const [isLoadingGroup, setIsLoadingGroup] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [groupGone, setGroupGone] = React.useState(false);
   const [pendingInvites, setPendingInvites] = React.useState<
     PrivateGroupPendingInvite[]
   >([]);
@@ -81,6 +84,7 @@ export default function GroupDetailScreen() {
     CircleInviteCandidate[]
   >([]);
   const [isSearchingInvitees, setIsSearchingInvitees] = React.useState(false);
+  const [inviteSearchError, setInviteSearchError] = React.useState<string | null>(null);
   const [invitingUserId, setInvitingUserId] = React.useState<string | null>(
     null,
   );
@@ -108,6 +112,7 @@ export default function GroupDetailScreen() {
 
     setIsLoadingGroup(true);
     setError(null);
+    setGroupGone(false);
     api
       .getGroupDetail(groupId, sessionToken)
       .then((detail) => {
@@ -115,9 +120,12 @@ export default function GroupDetailScreen() {
         setMembers(detail.members);
         setPendingInvites(detail.pendingInvites ?? []);
       })
-      .catch((err) =>
-        setError(err instanceof Error ? err.message : 'Failed to load group.'),
-      )
+      .catch((err) => {
+        console.error('Failed to load circle:', err);
+        // A circle that's gone or private can't be fixed by trying again.
+        setGroupGone(err instanceof ApiError && (err.code === 'NOT_FOUND' || err.code === 'FORBIDDEN'));
+        setError(friendlyError(err, "We couldn't load this circle."));
+      })
       .finally(() => setIsLoadingGroup(false));
   }, [groupId, sessionToken]);
 
@@ -137,13 +145,20 @@ export default function GroupDetailScreen() {
 
     let cancelled = false;
     setIsSearchingInvitees(true);
+    setInviteSearchError(null);
     const timer = setTimeout(() => {
       api
         .searchCircleInvitees(groupId, query, sessionToken)
         .then(({ people }) => {
           if (!cancelled) setInviteResults(people);
         })
-        .catch((err) => console.warn('Could not search people:', err))
+        .catch((err) => {
+          console.warn('Could not search people:', err);
+          if (!cancelled) {
+            setInviteResults([]);
+            setInviteSearchError(friendlyError(err, "We couldn't search for people."));
+          }
+        })
         .finally(() => {
           if (!cancelled) setIsSearchingInvitees(false);
         });
@@ -187,8 +202,8 @@ export default function GroupDetailScreen() {
       );
     } catch (err) {
       Alert.alert(
-        'Could not send invitation',
-        err instanceof Error ? err.message : 'Try again.',
+        "Couldn't send the invitation",
+        friendlyError(err, "We couldn't send the invitation."),
       );
     } finally {
       setInvitingUserId(null);
@@ -213,8 +228,8 @@ export default function GroupDetailScreen() {
       );
     } catch (err) {
       Alert.alert(
-        'Could not cancel invitation',
-        err instanceof Error ? err.message : 'Try again.',
+        "Couldn't cancel the invitation",
+        friendlyError(err, "We couldn't cancel the invitation."),
       );
     } finally {
       setRevokingInviteId(null);
@@ -243,8 +258,8 @@ export default function GroupDetailScreen() {
               load();
             } catch (err) {
               Alert.alert(
-                'Could not transfer leadership',
-                err instanceof Error ? err.message : 'Try again.',
+                "Couldn't make them the leader",
+                friendlyError(err, "We couldn't change the circle's leader."),
               );
             } finally {
               setTransferringUserId(null);
@@ -270,8 +285,8 @@ export default function GroupDetailScreen() {
             router.back();
           } catch (err) {
             Alert.alert(
-              'Could not leave circle',
-              err instanceof Error ? err.message : 'Try again.',
+              "Couldn't leave the circle",
+              friendlyError(err, "We couldn't take you out of this circle."),
             );
             setIsLeaving(false);
           }
@@ -295,8 +310,8 @@ export default function GroupDetailScreen() {
       );
     } catch (err) {
       Alert.alert(
-        'Could not update icon',
-        err instanceof Error ? err.message : 'Try again.',
+        "Couldn't change the icon",
+        friendlyError(err, "We couldn't change the circle's icon."),
       );
     } finally {
       setIsSavingIcon(false);
@@ -318,8 +333,8 @@ export default function GroupDetailScreen() {
         current ? { ...current, myNotificationLevel: previous } : current,
       );
       Alert.alert(
-        'Could not update notifications',
-        err instanceof Error ? err.message : 'Try again.',
+        "Couldn't change notifications",
+        friendlyError(err, "We couldn't change your notification setting."),
       );
     } finally {
       setSavingNotificationLevel(null);
@@ -350,7 +365,7 @@ export default function GroupDetailScreen() {
               );
               setGroup((current) => current ? { ...current, privacy: result.privacy } : current);
             } catch (err) {
-              Alert.alert('Could not update privacy', err instanceof Error ? err.message : 'Try again.');
+              Alert.alert("Couldn't change who can see this circle", friendlyError(err, "We couldn't change this circle's privacy."));
             } finally {
               setIsUpdatingPrivacy(false);
             }
@@ -372,16 +387,22 @@ export default function GroupDetailScreen() {
     return (
       <SafeAreaView className="flex-1 bg-white px-6">
         <TouchableOpacity
+          accessibilityRole="button"
           onPress={() => router.back()}
           className="mt-4 flex-row items-center gap-2"
+          style={{ minHeight: 44 }}
         >
           <ArrowLeft size={18} color="#1F2937" />
-          <Text className="text-sm font-bold text-gray-700">Back</Text>
+          <Text className="text-base font-bold text-gray-700">Back</Text>
         </TouchableOpacity>
-        <View className="flex-1 items-center justify-center">
-          <Text className="text-base font-black text-gray-900">
-            {error || 'Group not found'}
-          </Text>
+        <View className="flex-1 justify-center">
+          {error && !groupGone ? (
+            <LoadError message={error} onRetry={load} />
+          ) : (
+            <Text className="text-center text-base font-black text-gray-900">
+              {error || "We couldn't find this circle."}
+            </Text>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -625,7 +646,11 @@ export default function GroupDetailScreen() {
                 ) : null}
               </View>
 
-              {inviteQuery.trim() &&
+              {inviteSearchError && inviteQuery.trim() && !isSearchingInvitees ? (
+                <Text accessibilityRole="alert" className="mt-3 text-sm font-semibold text-red-700">
+                  {inviteSearchError}
+                </Text>
+              ) : inviteQuery.trim() &&
               !isSearchingInvitees &&
               inviteResults.length === 0 ? (
                 <Text className="mt-3 text-xs font-semibold text-gray-500">

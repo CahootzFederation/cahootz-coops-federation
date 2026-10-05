@@ -36,7 +36,10 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { SageDecisionTrails } from '@/components/sage-decision-trail';
+import { LoadError } from '@/components/load-error';
+import { ConfirmSheet } from '@/components/confirm-sheet';
 import { api } from '@/lib/api';
+import { ApiError, friendlyError } from '@/lib/friendly-error';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -52,6 +55,29 @@ function statusLabel(status: string) {
   };
   return map[status] ?? status;
 }
+
+/** A plain word for a proposal's status, for sentences like "This proposal is now approved." */
+function plainStatus(status: string) {
+  const map: Record<string, string> = {
+    submitted: 'in review',
+    votable: 'open for discussion',
+    approved: 'approved',
+    funded: 'funded',
+    rejected: 'not approved',
+    failed: 'not approved',
+    withdrawn: 'withdrawn',
+  };
+  return map[status.toLowerCase()] ?? status.toLowerCase().replace(/_/g, ' ');
+}
+
+type VoteChoice = 'FOR' | 'AGAINST' | 'ABSTAIN';
+
+/** Plain labels for the council vote. The values sent to the server stay FOR / AGAINST / ABSTAIN. */
+const VOTE_CHOICES: Record<VoteChoice, { label: string; tally: string; bg: string; border: string; text: string }> = {
+  FOR: { label: 'Yes, approve', tally: 'yes', bg: '#F0FDF4', border: '#86EFAC', text: '#15803D' },
+  AGAINST: { label: 'No, reject', tally: 'no', bg: '#FEF2F2', border: '#FCA5A5', text: '#DC2626' },
+  ABSTAIN: { label: 'No opinion', tally: 'no opinion', bg: '#F9FAFB', border: '#E5E7EB', text: '#374151' },
+};
 
 function decisionColor(d?: string) {
   if (d === 'advance') return { bg: '#F0FDF4', border: '#86EFAC', text: '#15803D', label: 'Advance' };
@@ -154,13 +180,17 @@ export default function ProposalDetailRedirect() {
 }
 
 export function ProposalDetailContent() {
-  const { id, coopId = 'cahootz' } = useLocalSearchParams<{ id: string; coopId?: string }>();
+  const { id, coopId: routeCoopId } = useLocalSearchParams<{ id: string; coopId?: string }>();
+  // Where "back" goes when the link didn't name a commons.
+  const coopId = routeCoopId || 'cahootz';
   const { user, sessionToken } = useAuth();
 
   const [proposal, setProposal] = useState<any>(null);
   const [comments, setComments] = useState<any[]>([]);
   const [categoryLabels, setCategoryLabels] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [comment, setComment] = useState('');
   const [posting, setPosting] = useState(false);
@@ -175,8 +205,15 @@ export function ProposalDetailContent() {
   const [withdrawing, setWithdrawing] = useState(false);
 
   // Council vote state
-  const [councilVoteResult, setCouncilVoteResult] = useState<{ forCount: number; againstCount: number; abstainCount: number; newStatus: string | null } | null>(null);
+  const [councilVoteResult, setCouncilVoteResult] = useState<{ vote: VoteChoice; forCount: number; againstCount: number; abstainCount: number; newStatus: string | null } | null>(null);
   const [castingVote, setCastingVote] = useState(false);
+  // The choice waiting for "Cast my vote". Nothing is sent until then.
+  const [pendingVote, setPendingVote] = useState<VoteChoice | null>(null);
+  const [voteError, setVoteError] = useState<string | null>(null);
+
+  // Withdraw confirmation
+  const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
 
   // Edit & resubmit state
   const [showEditPanel, setShowEditPanel] = useState(false);
@@ -190,29 +227,43 @@ export function ProposalDetailContent() {
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const [p, c, r, cfg, revs] = await Promise.all([
+      const [p, c, r, revs] = await Promise.all([
         api.getProposal(id, user?.walletAddress),
         api.listProposalComments(id, user?.walletAddress),
         api.getReactionCounts(id, user?.walletAddress),
-        api.getCoopConfig('soulaan'),
         api.getProposalRevisions(id, user?.walletAddress),
       ]);
       setProposal(p);
       setComments(c?.comments ?? []);
       if (r) setReactionCounts(r);
-      if (cfg?.proposalCategories) {
-        setCategoryLabels(
-          Object.fromEntries(cfg.proposalCategories.map((cat: { key: string; label: string }) => [cat.key, cat.label]))
-        );
-      }
       setRevisions(revs ?? []);
-    } catch {
-      // keep existing state on error
+
+      // Category names come from this proposal's own commons. Use its coopId
+      // when the server sends one, else the commons in the link. With
+      // neither, or if the config can't load (getCoopConfig returns null on
+      // error), fall back to the plain category key.
+      const configCoopId = (p as { coopId?: string | null } | null)?.coopId || routeCoopId;
+      const cfg = configCoopId ? await api.getCoopConfig(configCoopId).catch(() => null) : null;
+      setCategoryLabels(
+        cfg?.proposalCategories
+          ? Object.fromEntries(cfg.proposalCategories.map((cat: { key: string; label: string }) => [cat.key, cat.label]))
+          : {},
+      );
+      setLoadError(null);
+      setNotFound(false);
+    } catch (e: unknown) {
+      // Keep what's already on screen, but say the load failed.
+      console.error('Failed to load proposal:', e);
+      if (e instanceof ApiError && e.code === 'NOT_FOUND') {
+        setNotFound(true);
+      } else {
+        setLoadError(friendlyError(e, "We couldn't load this proposal."));
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [id, user?.walletAddress]);
+  }, [id, routeCoopId, user?.walletAddress]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -225,8 +276,8 @@ export function ProposalDetailContent() {
       const c = await api.listProposalComments(id!, user.walletAddress);
       setComments(c?.comments ?? []);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to post comment';
-      Alert.alert('Could not post comment', msg);
+      console.error('Failed to post comment:', e);
+      Alert.alert("Couldn't post your comment", friendlyError(e, "We couldn't post your comment."));
     } finally {
       setPosting(false);
     }
@@ -238,52 +289,48 @@ export function ProposalDetailContent() {
     try {
       const result = await api.reactToProposal(id, reaction, user.walletAddress);
       if (result) setReactionCounts(result);
-    } catch {
-      // ignore
+    } catch (e: unknown) {
+      console.error('Failed to react to proposal:', e);
+      Alert.alert("Couldn't save your reaction", friendlyError(e, "We couldn't save your reaction."));
     } finally {
       setReactingTo(null);
     }
   }
 
-  function confirmWithdraw() {
-    Alert.alert(
-      'Withdraw Proposal',
-      'Are you sure you want to withdraw this proposal? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Withdraw',
-          style: 'destructive',
-          onPress: async () => {
-            if (!user?.walletAddress || !id) return;
-            setWithdrawing(true);
-            try {
-              await api.withdrawProposal(id, user.walletAddress);
-              await load();
-            } catch (e: any) {
-              Alert.alert('Error', e.message || 'Failed to withdraw proposal');
-            } finally {
-              setWithdrawing(false);
-            }
-          },
-        },
-      ],
-    );
+  async function withdrawProposal() {
+    if (!user?.walletAddress || !id) return;
+    setWithdrawing(true);
+    setWithdrawError(null);
+    try {
+      await api.withdrawProposal(id, user.walletAddress);
+      setConfirmingWithdraw(false);
+      await load();
+    } catch (e: unknown) {
+      console.error('Failed to withdraw proposal:', e);
+      setWithdrawError(friendlyError(e, "We couldn't withdraw your proposal."));
+    } finally {
+      setWithdrawing(false);
+    }
   }
 
-  async function handleCouncilVote(vote: 'FOR' | 'AGAINST' | 'ABSTAIN') {
+  async function handleCouncilVote(vote: VoteChoice) {
     if (!user?.walletAddress || !id) return;
     setCastingVote(true);
+    setVoteError(null);
     try {
-      const result = await api.councilVote(id, vote, user.walletAddress, coopId);
+      // The council check is made against the proposal's own commons.
+      const voteCoopId = (proposal as { coopId?: string | null } | null)?.coopId || coopId;
+      const result = await api.councilVote(id, vote, user.walletAddress, voteCoopId);
+      setPendingVote(null);
       if (result) {
-        setCouncilVoteResult(result);
+        setCouncilVoteResult({ ...result, vote });
         if (result.newStatus) {
           await load(); // reload if status changed
         }
       }
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to cast vote');
+    } catch (e: unknown) {
+      console.error('Failed to cast council vote:', e);
+      setVoteError(friendlyError(e, "We couldn't record your vote."));
     } finally {
       setCastingVote(false);
     }
@@ -296,8 +343,9 @@ export function ProposalDetailContent() {
       await api.resubmitProposal(id, editText.trim(), user.walletAddress);
       setShowEditPanel(false);
       await load();
-    } catch (e: any) {
-      Alert.alert('Resubmit Failed', e.message || 'Could not resubmit proposal');
+    } catch (e: unknown) {
+      console.error('Failed to resubmit proposal:', e);
+      Alert.alert("Couldn't send your changes", friendlyError(e, "We couldn't send your updated proposal."));
     } finally {
       setResubmitting(false);
     }
@@ -311,10 +359,33 @@ export function ProposalDetailContent() {
     );
   }
 
+  if (!proposal && loadError && !notFound) {
+    return (
+      <SafeAreaView className="flex-1 bg-cream-100 justify-center p-6">
+        <LoadError
+          message={loadError}
+          retrying={refreshing}
+          onRetry={() => {
+            setRefreshing(true);
+            void load();
+          }}
+        />
+        <TouchableOpacity
+          accessibilityRole="button"
+          onPress={() => router.replace({ pathname: '/(tabs)/proposals', params: { coopId } } as any)}
+          className="mt-4 items-center justify-center"
+          style={{ minHeight: 44 }}
+        >
+          <Text className="text-primary font-semibold">Back to proposals</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
   if (!proposal) {
     return (
       <SafeAreaView className="flex-1 bg-cream-100 items-center justify-center p-8">
-        <Text className="text-charcoal-500 text-center">Proposal not found.</Text>
+        <Text className="text-charcoal-500 text-center">We couldn&apos;t find this proposal.</Text>
         <TouchableOpacity onPress={() => router.replace({ pathname: '/(tabs)/proposals', params: { coopId } } as any)} className="mt-4">
           <Text className="text-primary font-semibold">Go back</Text>
         </TouchableOpacity>
@@ -499,6 +570,17 @@ export function ProposalDetailContent() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#FF6B00" />}
           keyboardShouldPersistTaps="handled"
         >
+          {loadError ? (
+            <LoadError
+              message={loadError}
+              retrying={refreshing}
+              onRetry={() => {
+                setRefreshing(true);
+                void load();
+              }}
+            />
+          ) : null}
+
           {/* ── Proposal header ── */}
           <View className="bg-white rounded-2xl p-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
             {/* Badges row */}
@@ -848,17 +930,21 @@ export function ProposalDetailContent() {
           {canWithdraw && (
             <View className="bg-white rounded-2xl p-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
               <TouchableOpacity
-                onPress={confirmWithdraw}
+                onPress={() => {
+                  setWithdrawError(null);
+                  setConfirmingWithdraw(true);
+                }}
                 disabled={withdrawing}
+                accessibilityRole="button"
                 className="flex-row items-center justify-center gap-2 border-2 rounded-xl py-3"
-                style={{ borderColor: '#EF4444', backgroundColor: withdrawing ? '#FEF2F2' : '#fff', opacity: withdrawing ? 0.6 : 1 }}
+                style={{ minHeight: 48, borderColor: '#EF4444', backgroundColor: withdrawing ? '#FEF2F2' : '#fff', opacity: withdrawing ? 0.6 : 1 }}
               >
                 {withdrawing
                   ? <ActivityIndicator size="small" color="#DC2626" />
                   : <LogOut size={16} color="#DC2626" />
                 }
                 <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>
-                  {withdrawing ? 'Withdrawing…' : 'Withdraw Proposal'}
+                  {withdrawing ? 'Withdrawing…' : 'Withdraw proposal'}
                 </Text>
               </TouchableOpacity>
               <Text className="text-charcoal-400 text-xs text-center mt-2">
@@ -872,40 +958,46 @@ export function ProposalDetailContent() {
             <View className="rounded-2xl p-4 border-2" style={{ borderColor: '#A855F7', backgroundColor: '#FAF5FF' }}>
               <View className="flex-row items-center gap-2 mb-3">
                 <Shield size={18} color="#7C3AED" />
-                <Text className="text-purple-800 font-bold text-base">Council Vote Required</Text>
+                <Text className="text-purple-800 font-bold text-base">Council vote</Text>
               </View>
-              <Text className="text-purple-600 text-sm mb-3 leading-relaxed">
-                This proposal exceeds the council review threshold. Cast your vote below.
+              <Text className="text-purple-700 text-sm mb-3 leading-relaxed">
+                This proposal asks for more money than the council review limit, so the council decides. Choose your vote.
               </Text>
-              <View className="flex-row gap-2 mb-3">
+              <View className="gap-2 mb-3">
                 {(['FOR', 'AGAINST', 'ABSTAIN'] as const).map(v => (
                   <TouchableOpacity
                     key={v}
-                    onPress={() => handleCouncilVote(v)}
+                    onPress={() => {
+                      setVoteError(null);
+                      setPendingVote(v);
+                    }}
                     disabled={castingVote}
-                    className="flex-1 rounded-xl py-2.5 items-center border"
+                    accessibilityRole="button"
+                    className="rounded-xl px-4 items-center justify-center border"
                     style={{
-                      backgroundColor: v === 'FOR' ? '#F0FDF4' : v === 'AGAINST' ? '#FEF2F2' : '#F9FAFB',
-                      borderColor: v === 'FOR' ? '#86EFAC' : v === 'AGAINST' ? '#FCA5A5' : '#E5E7EB',
+                      minHeight: 48,
+                      backgroundColor: VOTE_CHOICES[v].bg,
+                      borderColor: VOTE_CHOICES[v].border,
                       opacity: castingVote ? 0.6 : 1,
                     }}
                   >
-                    {castingVote ? <ActivityIndicator size="small" color="#7C3AED" /> : null}
-                    <Text style={{ color: v === 'FOR' ? '#15803D' : v === 'AGAINST' ? '#DC2626' : '#6B7280', fontWeight: '700', fontSize: 12 }}>
-                      {v}
+                    <Text style={{ color: VOTE_CHOICES[v].text, fontWeight: '700', fontSize: 16 }}>
+                      {VOTE_CHOICES[v].label}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
               {councilVoteResult && (
                 <View className="bg-white rounded-xl p-3 border border-purple-200">
-                  <Text className="text-charcoal-700 text-xs font-semibold mb-1">Current Tally</Text>
-                  <Text className="text-charcoal-600 text-xs">
-                    {councilVoteResult.forCount} FOR · {councilVoteResult.againstCount} AGAINST · {councilVoteResult.abstainCount} ABSTAIN
+                  <Text className="text-charcoal-800 text-sm font-semibold mb-1">
+                    Your vote was counted: {VOTE_CHOICES[councilVoteResult.vote].label}.
+                  </Text>
+                  <Text className="text-charcoal-600 text-sm">
+                    So far: {councilVoteResult.forCount} {VOTE_CHOICES.FOR.tally} · {councilVoteResult.againstCount} {VOTE_CHOICES.AGAINST.tally} · {councilVoteResult.abstainCount} {VOTE_CHOICES.ABSTAIN.tally}
                   </Text>
                   {councilVoteResult.newStatus && (
-                    <Text className="text-purple-700 text-xs font-semibold mt-1">
-                      → Status updated to {councilVoteResult.newStatus.toUpperCase()}
+                    <Text className="text-purple-700 text-sm font-semibold mt-1">
+                      This proposal is now {plainStatus(councilVoteResult.newStatus)}.
                     </Text>
                   )}
                 </View>
@@ -1177,6 +1269,49 @@ export function ProposalDetailContent() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ConfirmSheet
+        visible={pendingVote !== null}
+        title="Cast your vote?"
+        confirmLabel="Cast my vote"
+        busy={castingVote}
+        error={voteError}
+        onConfirm={() => {
+          if (pendingVote) void handleCouncilVote(pendingVote);
+        }}
+        onCancel={() => {
+          setPendingVote(null);
+          setVoteError(null);
+        }}
+      >
+        <Text className="text-base text-charcoal-800">
+          Your vote: <Text className="text-base font-bold text-charcoal-800">{pendingVote ? VOTE_CHOICES[pendingVote].label : ''}</Text>
+        </Text>
+        <Text className="text-base text-charcoal-800">
+          Proposal: <Text className="text-base font-bold text-charcoal-800">{proposal.title}</Text>
+        </Text>
+        <Text className="text-sm leading-5 text-charcoal-600">
+          You can change your vote while voting is still open. Once enough of the council has voted, the result is final.
+        </Text>
+      </ConfirmSheet>
+
+      <ConfirmSheet
+        visible={confirmingWithdraw}
+        title="Withdraw this proposal?"
+        confirmLabel="Yes, withdraw it"
+        tone="danger"
+        busy={withdrawing}
+        error={withdrawError}
+        onConfirm={() => void withdrawProposal()}
+        onCancel={() => {
+          setConfirmingWithdraw(false);
+          setWithdrawError(null);
+        }}
+      >
+        <Text className="text-base leading-6 text-charcoal-800">
+          &ldquo;{proposal.title}&rdquo; will be taken down, and no one can vote on it. You can&apos;t undo this.
+        </Text>
+      </ConfirmSheet>
     </SafeAreaView>
   );
 }

@@ -6,6 +6,8 @@ import { ArrowLeft, ChevronRight, Home, Lock, Search, Users } from 'lucide-react
 
 import { Text } from '@/components/ui/text';
 import { api, type CommonsDirectoryItem } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
+import { LoadError } from '@/components/load-error';
 import { useAuth } from '@/contexts/auth-context';
 import { IconAvatar } from '@/components/icon-avatar';
 import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
@@ -107,10 +109,12 @@ export default function CommonsDirectoryScreen() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let mounted = true;
 
+    setLoading(true);
     api
       .listCommonsDirectory(sessionToken)
       .then((result) => {
@@ -120,7 +124,7 @@ export default function CommonsDirectoryScreen() {
       })
       .catch((err) => {
         console.error('Failed to load commons directory:', err);
-        if (mounted) setError('Could not load commons right now.');
+        if (mounted) setError(friendlyError(err, "We couldn't load the list of commons."));
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -129,7 +133,7 @@ export default function CommonsDirectoryScreen() {
     return () => {
       mounted = false;
     };
-  }, [sessionToken]);
+  }, [sessionToken, reloadKey]);
 
   const filteredCommons = useMemo(() => {
     const text = query.trim().toLowerCase();
@@ -212,9 +216,9 @@ export default function CommonsDirectoryScreen() {
             </View>
           ) : null}
 
-          {error ? (
-            <View className="mb-3 rounded-xl border border-orange-200 bg-orange-50 p-3">
-              <Text className="text-sm font-semibold text-orange-800">{error}</Text>
+          {error && !loading ? (
+            <View className="mb-3">
+              <LoadError message={error} onRetry={() => setReloadKey((key) => key + 1)} />
             </View>
           ) : null}
 
@@ -230,7 +234,7 @@ export default function CommonsDirectoryScreen() {
           <Text className="mb-2 text-xs font-black uppercase tracking-wide text-gray-500">Other commons</Text>
           <View className="gap-3">
             {availableCommons.map((item) => <CommonsCard key={item.id} commons={item} />)}
-            {!loading && filteredCommons.length === 0 ? (
+            {!loading && !error && filteredCommons.length === 0 ? (
               <View className="rounded-2xl border border-dashed border-gray-300 bg-white p-5">
                 <Text className="text-base font-black text-gray-900">No commons found</Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">Try a different search.</Text>

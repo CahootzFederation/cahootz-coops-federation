@@ -16,6 +16,7 @@ import { COLOR_OPTIONS, EMOJI_OPTIONS } from '@/components/emoji-color-picker';
 import { PersonAvatar } from '@/components/person-avatar';
 import { Text } from '@/components/ui/text';
 import { api, type PersonalPageProfile } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 
 const BIO_MAX_LENGTH = 5000;
 const PRIMARY = '#FF6B00';
@@ -126,7 +127,8 @@ export function EditPersonalProfileSheet({
       onSaved(saved);
       onClose();
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Could not save your profile.');
+      console.error('Failed to save personal profile:', caughtError);
+      setError(friendlyError(caughtError, "We couldn't save your profile."));
     } finally {
       setIsSaving(false);
     }

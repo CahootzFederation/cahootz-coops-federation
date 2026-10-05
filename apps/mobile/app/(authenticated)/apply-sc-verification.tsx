@@ -6,6 +6,7 @@ import { ArrowLeft, BadgeCheck, Clock, ShieldCheck, XCircle, Info, TrendingDown,
 import { useAuth } from '@/contexts/auth-context';
 import { useCoin } from '@/contexts/platform-config-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 
 function bpsToPercent(bps: number): string {
   return (bps / 100).toFixed(1) + '%';
@@ -21,12 +22,15 @@ export default function ApplyScVerificationScreen() {
     treasuryFeeBps: number;
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [whyScEligible, setWhyScEligible] = useState('');
   const [agreedToFees, setAgreedToFees] = useState(false);
 
   const loadData = useCallback(async () => {
-    if (!user?.walletAddress || !storeId) return;
+    if (!user?.walletAddress || !storeId) {
+      throw new Error("We couldn't tell which store this is. Go back to My Store and try again.");
+    }
     const [result, fees] = await Promise.all([
       api.getMyScVerificationStatus(String(storeId), user.walletAddress),
       api.getActiveFeeConfig(user.walletAddress).catch(() => null),
@@ -38,33 +42,36 @@ export default function ApplyScVerificationScreen() {
     }
   }, [storeId, user?.walletAddress]);
 
-  useEffect(() => {
-    async function init() {
-      try {
-        setLoading(true);
-        await loadData();
-      } catch (error: any) {
-        Alert.alert('Error', error.message || `Failed to load ${coin.symbol} rewards status`);
-      } finally {
-        setLoading(false);
-      }
+  const init = useCallback(async () => {
+    try {
+      setLoading(true);
+      setLoadError(null);
+      await loadData();
+    } catch (error: any) {
+      console.error('Failed to load rewards status:', error);
+      setLoadError(friendlyError(error, `We couldn't load your ${coin.symbol} rewards status.`));
+    } finally {
+      setLoading(false);
     }
+  }, [loadData, coin.symbol]);
+
+  useEffect(() => {
     void init();
-  }, [loadData]);
+  }, [init]);
 
   const handleSubmit = async () => {
     if (!user?.walletAddress || !storeId) {
-      Alert.alert('Error', 'Missing required information. Please go back and try again.');
+      Alert.alert("Couldn't tell which store", 'Go back to My Store and try again.');
       return;
     }
 
     if (!agreedToFees) {
-      Alert.alert('Agreement Required', 'Please confirm you understand and agree to the platform fee structure before submitting.');
+      Alert.alert('Please agree to the fees', 'Check the box to show you understand the fees before you apply.');
       return;
     }
 
     if (whyScEligible.trim().length < 50) {
-      Alert.alert('More Detail Needed', `Please explain why your store should earn ${coin.symbol} rewards in at least 50 characters.`);
+      Alert.alert('Tell us a bit more', `Explain why your store should earn ${coin.symbol} rewards in at least 50 letters.`);
       return;
     }
 
@@ -76,9 +83,13 @@ export default function ApplyScVerificationScreen() {
       }, user.walletAddress);
 
       await loadData();
-      Alert.alert('Application Submitted', `Your ${coin.symbol} rewards application is now pending admin review.`);
+      Alert.alert('Application sent', `An admin will review your ${coin.symbol} rewards application.`);
     } catch (error: any) {
-      Alert.alert('Submission Failed', error.message || `Failed to submit ${coin.symbol} rewards application`);
+      console.error('Rewards application error:', error);
+      Alert.alert(
+        "Couldn't send your application",
+        friendlyError(error, `We couldn't send your ${coin.symbol} rewards application.`),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -89,6 +100,30 @@ export default function ApplyScVerificationScreen() {
       <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#FF6B00" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900" edges={['top']}>
+        <View className="flex-row items-center px-5 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+          <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
+            <ArrowLeft size={24} color="#374151" />
+          </TouchableOpacity>
+          <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">Earn {coin.symbol} Rewards</Text>
+        </View>
+        <View className="flex-1 items-center justify-center px-8">
+          <Text className="text-gray-700 dark:text-gray-300 text-lg text-center">{loadError}</Text>
+          <TouchableOpacity
+            onPress={() => void init()}
+            accessibilityRole="button"
+            className="bg-primary px-8 py-3 rounded-xl mt-6 items-center justify-center"
+            style={{ minHeight: 48 }}
+          >
+            <Text className="text-white font-bold">Try again</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -108,7 +143,7 @@ export default function ApplyScVerificationScreen() {
   return (
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900" edges={['top']}>
       <View className="flex-row items-center justify-between px-5 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
         <Text className="text-lg font-semibold text-gray-900 dark:text-white">Earn {coin.symbol} Rewards</Text>

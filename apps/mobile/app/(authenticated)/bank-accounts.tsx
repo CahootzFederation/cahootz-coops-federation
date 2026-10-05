@@ -13,6 +13,7 @@ import { router, Stack } from 'expo-router';
 import { ArrowLeft, Plus, Landmark, Trash2, Check, X } from 'lucide-react-native';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import { friendlyError } from '@/lib/friendly-error';
 
 interface BankAccount {
   id: string;
@@ -28,6 +29,7 @@ export default function BankAccountsScreen() {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
   // Add account form state
@@ -47,10 +49,12 @@ export default function BankAccountsScreen() {
     if (!user?.id) return;
 
     try {
+      setLoadError(null);
       const result = await api.getBankAccounts(user.id, user.walletAddress);
-      setAccounts(result.accounts);
+      setAccounts(result?.accounts ?? []);
     } catch (err) {
       console.error('Error loading bank accounts:', err);
+      setLoadError(friendlyError(err, "We couldn't load your bank accounts."));
     } finally {
       setLoading(false);
     }
@@ -68,19 +72,19 @@ export default function BankAccountsScreen() {
 
     // Validation
     if (!accountHolderName.trim()) {
-      Alert.alert('Error', 'Please enter account holder name');
+      Alert.alert('Name needed', 'Enter the name on the bank account.');
       return;
     }
     if (routingNumber.length !== 9) {
-      Alert.alert('Error', 'Routing number must be 9 digits');
+      Alert.alert('Check the routing number', 'The routing number has 9 digits. You can find it on a check or in your bank app.');
       return;
     }
     if (accountNumber.length < 4 || accountNumber.length > 17) {
-      Alert.alert('Error', 'Please enter a valid account number');
+      Alert.alert('Check the account number', 'Enter your full account number. You can find it on a check or in your bank app.');
       return;
     }
     if (accountNumber !== confirmAccountNumber) {
-      Alert.alert('Error', 'Account numbers do not match');
+      Alert.alert("Account numbers don't match", 'Enter the same account number in both boxes.');
       return;
     }
 
@@ -97,9 +101,10 @@ export default function BankAccountsScreen() {
       setShowAddModal(false);
       resetForm();
       loadAccounts();
-      Alert.alert('Success', 'Bank account added successfully');
+      Alert.alert('Bank account added', 'Your bank account was added.');
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to add bank account');
+      console.error('Error adding bank account:', err);
+      Alert.alert("Couldn't add your bank account", friendlyError(err, "We couldn't add your bank account."));
     } finally {
       setAdding(false);
     }
@@ -119,7 +124,8 @@ export default function BankAccountsScreen() {
               await api.removeBankAccount(user!.id, account.id, user!.walletAddress);
               loadAccounts();
             } catch (err) {
-              Alert.alert('Error', err instanceof Error ? err.message : 'Failed to remove account');
+              console.error('Error removing bank account:', err);
+              Alert.alert("Couldn't remove the account", friendlyError(err, "We couldn't remove this bank account."));
             }
           },
         },
@@ -134,7 +140,8 @@ export default function BankAccountsScreen() {
       await api.setDefaultBankAccount(user!.id, account.id, user!.walletAddress);
       loadAccounts();
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to set default');
+      console.error('Error setting default bank account:', err);
+      Alert.alert("Couldn't change your default account", friendlyError(err, "We couldn't make this your default account."));
     }
   };
 
@@ -145,7 +152,7 @@ export default function BankAccountsScreen() {
         {/* Header */}
         <View className="pt-14 pb-4 px-4 bg-white border-b border-gray-100">
           <View className="flex-row items-center">
-            <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
+            <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2" accessibilityLabel="Go back">
               <ArrowLeft size={24} color="#111827" />
             </TouchableOpacity>
             <Text className="flex-1 text-center text-lg font-semibold text-gray-900 -ml-8">
@@ -157,6 +164,21 @@ export default function BankAccountsScreen() {
         {loading ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator size="large" color="#6B7280" />
+          </View>
+        ) : loadError ? (
+          <View className="flex-1 items-center justify-center p-8">
+            <Text className="text-gray-700 text-lg text-center">{loadError}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                setLoading(true);
+                loadAccounts();
+              }}
+              accessibilityRole="button"
+              className="mt-6 bg-primary px-6 py-3 rounded-xl items-center justify-center"
+              style={{ minHeight: 48 }}
+            >
+              <Text className="text-white font-semibold">Try again</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <ScrollView className="flex-1 p-4">

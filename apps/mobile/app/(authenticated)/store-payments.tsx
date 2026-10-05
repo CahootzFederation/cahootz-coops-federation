@@ -18,6 +18,7 @@ import {
 } from 'lucide-react-native';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import { friendlyError } from '@/lib/friendly-error';
 
 interface PaymentRequest {
   id: string;
@@ -48,13 +49,20 @@ export default function StorePaymentsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('ALL');
+  // Kept apart from "no requests" so a failed load never looks empty.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [moreError, setMoreError] = useState<string | null>(null);
 
   useEffect(() => {
     loadRequests(true);
-  }, [filter]);
+  }, [filter, user?.walletAddress]);
 
   const loadRequests = async (reset = false) => {
-    if (!user?.walletAddress) return;
+    if (!user?.walletAddress) {
+      setLoading(false);
+      setLoadError("Your wallet isn't set up yet, so we can't show payment requests.");
+      return;
+    }
 
     try {
       if (reset) {
@@ -74,8 +82,15 @@ export default function StorePaymentsScreen() {
         setRequests(prev => [...prev, ...result.requests]);
       }
       setNextCursor(result.nextCursor);
+      if (reset) setLoadError(null);
+      setMoreError(null);
     } catch (err) {
       console.error('Error loading payment requests:', err);
+      if (reset) {
+        setLoadError(friendlyError(err, "We couldn't load your payment requests."));
+      } else {
+        setMoreError(friendlyError(err, "We couldn't load more payment requests."));
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -89,7 +104,7 @@ export default function StorePaymentsScreen() {
   }, [filter]);
 
   const loadMore = () => {
-    if (loadingMore || !nextCursor) return;
+    if (loadingMore || !nextCursor || moreError) return;
     setLoadingMore(true);
     loadRequests(false);
   };
@@ -182,7 +197,7 @@ export default function StorePaymentsScreen() {
         {/* Header */}
         <View className="pt-14 pb-4 px-4 bg-white border-b border-gray-100">
           <View className="flex-row items-center mb-4">
-            <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
+            <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2" accessibilityLabel="Go back">
               <ArrowLeft size={24} color="#111827" />
             </TouchableOpacity>
             <Text className="flex-1 text-center text-lg font-semibold text-gray-900">
@@ -212,6 +227,18 @@ export default function StorePaymentsScreen() {
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator size="large" color="#FF8A2A" />
           </View>
+        ) : loadError && requests.length === 0 ? (
+          <View className="flex-1 items-center justify-center p-8">
+            <Text className="text-gray-700 text-lg text-center">{loadError}</Text>
+            <TouchableOpacity
+              onPress={() => loadRequests(true)}
+              accessibilityRole="button"
+              className="mt-6 bg-primary px-6 py-3 rounded-xl items-center justify-center"
+              style={{ minHeight: 48 }}
+            >
+              <Text className="text-white font-semibold">Try again</Text>
+            </TouchableOpacity>
+          </View>
         ) : requests.length === 0 ? (
           <View className="flex-1 items-center justify-center p-8">
             <DollarSign size={48} color="#9CA3AF" />
@@ -238,10 +265,41 @@ export default function StorePaymentsScreen() {
             }
             onEndReached={loadMore}
             onEndReachedThreshold={0.5}
+            ListHeaderComponent={
+              loadError ? (
+                <View className="m-4 p-4 rounded-xl bg-red-50 border border-red-100">
+                  <Text className="text-red-800">{loadError}</Text>
+                  <TouchableOpacity
+                    onPress={onRefresh}
+                    accessibilityRole="button"
+                    className="mt-2 self-start bg-white px-4 rounded-xl items-center justify-center border border-red-200"
+                    style={{ minHeight: 44 }}
+                  >
+                    <Text className="text-red-800 font-semibold">Try again</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null
+            }
             ListFooterComponent={
               loadingMore ? (
                 <View className="py-4">
                   <ActivityIndicator size="small" color="#FF8A2A" />
+                </View>
+              ) : moreError ? (
+                <View className="p-4 items-center">
+                  <Text className="text-gray-600 text-center">{moreError}</Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setMoreError(null);
+                      setLoadingMore(true);
+                      loadRequests(false);
+                    }}
+                    accessibilityRole="button"
+                    className="mt-2 bg-gray-900 px-6 rounded-xl items-center justify-center"
+                    style={{ minHeight: 44 }}
+                  >
+                    <Text className="text-white font-semibold">Try again</Text>
+                  </TouchableOpacity>
                 </View>
               ) : null
             }

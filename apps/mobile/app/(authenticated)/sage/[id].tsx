@@ -3,6 +3,8 @@ import { ActivityIndicator, ScrollView, TextInput, TouchableOpacity, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
+import { friendlyError } from '@/lib/friendly-error';
+import { SAGE_ONE_LINER } from '@/components/sage-intro';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { sageStatusMeta } from '@/lib/sage-status';
@@ -119,7 +121,7 @@ export default function SageSuggestionDetailScreen() {
     api
       .getSageSuggestion(id, sessionToken)
       .then(setDetail)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Could not load this suggestion.'))
+      .catch((err) => setError(friendlyError(err, "We couldn't load this suggestion.")))
       .finally(() => setIsLoadingDetail(false));
   }, [id, sessionToken]);
 
@@ -138,7 +140,7 @@ export default function SageSuggestionDetailScreen() {
       await api.respondToSageReview(pendingReview.id, response, sessionToken, payload);
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send your response.');
+      setError(friendlyError(err, "We couldn't send your answer."));
     } finally {
       setIsResponding(false);
     }
@@ -159,6 +161,7 @@ export default function SageSuggestionDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
+        <Text style={{ color: THEME.muted, fontSize: 15 }}>{SAGE_ONE_LINER}</Text>
         {isLoadingDetail && !detail ? (
           <ActivityIndicator accessibilityLabel="Loading Sage suggestion" color={THEME.primary} />
         ) : !detail ? (

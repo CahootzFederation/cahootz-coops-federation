@@ -19,11 +19,16 @@ import {
   X,
 } from 'lucide-react-native';
 import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/auth-context';
+import { friendlyError } from '@/lib/friendly-error';
 
 type Mode = 'scan' | 'code';
 
 export default function ScanPayScreen() {
   const [permission, requestPermission] = useCameraPermissions();
+  // Store codes are only unique within a commons, so look codes up in the member's own.
+  const { user } = useAuth();
+  const coopId = user?.coop?.id;
   const [mode, setMode] = useState<Mode>('scan');
   const [torch, setTorch] = useState(false);
   const [scanned, setScanned] = useState(false);
@@ -32,6 +37,9 @@ export default function ScanPayScreen() {
   // Manual code entry
   const [storeCode, setStoreCode] = useState('');
   const [lookingUp, setLookingUp] = useState(false);
+  // Shown under the code box. Alert.alert does nothing on web, so the message
+  // must also appear on screen.
+  const [lookupError, setLookupError] = useState<string | null>(null);
 
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
     if (scanned || processing) return;
@@ -70,23 +78,23 @@ export default function ScanPayScreen() {
         } as any);
       } else if (code) {
         // Validate the store code first
-        const result = await api.getStoreByCode(code);
+        const result = await api.getStoreByCode(code, coopId);
         if (result.found) {
           router.replace({
             pathname: '/(authenticated)/quick-pay',
             params: { code },
           } as any);
         } else {
-          Alert.alert('Invalid QR Code', 'This QR code is not recognized as a valid payment code.');
+          Alert.alert("This code doesn't work", "This isn't a store payment code. Ask the store for their code.");
           setScanned(false);
         }
       } else {
-        Alert.alert('Invalid QR Code', 'This QR code is not a valid payment code.');
+        Alert.alert("This code doesn't work", "This isn't a store payment code. Ask the store for their code.");
         setScanned(false);
       }
     } catch (err) {
       console.error('Error processing QR code:', err);
-      Alert.alert('Error', 'Failed to process QR code. Please try again.');
+      Alert.alert("Couldn't read the code", friendlyError(err, "We couldn't read this payment code."));
       setScanned(false);
     } finally {
       setProcessing(false);
@@ -97,9 +105,10 @@ export default function ScanPayScreen() {
     if (!storeCode.trim() || lookingUp) return;
 
     setLookingUp(true);
+    setLookupError(null);
 
     try {
-      const result = await api.getStoreByCode(storeCode.trim());
+      const result = await api.getStoreByCode(storeCode.trim(), coopId);
 
       if (result.found) {
         router.replace({
@@ -107,11 +116,15 @@ export default function ScanPayScreen() {
           params: { code: storeCode.trim().toUpperCase() },
         } as any);
       } else {
-        Alert.alert('Store Not Found', 'No store found with this code. Please check and try again.');
+        const message = "We couldn't find a store with that code. Check the code and try again.";
+        setLookupError(message);
+        Alert.alert('Store not found', message);
       }
     } catch (err) {
       console.error('Error looking up store:', err);
-      Alert.alert('Error', 'Failed to look up store. Please try again.');
+      const message = friendlyError(err, "We couldn't look up that store code.");
+      setLookupError(message);
+      Alert.alert("Couldn't look up the store", message);
     } finally {
       setLookingUp(false);
     }
@@ -161,6 +174,7 @@ export default function ScanPayScreen() {
             <TouchableOpacity
               onPress={() => setMode('code')}
               className="mt-4 px-6 py-3"
+              accessibilityRole="button"
             >
               <Text className="text-amber-500 font-semibold">Enter Code Manually</Text>
             </TouchableOpacity>
@@ -180,6 +194,8 @@ export default function ScanPayScreen() {
             <TouchableOpacity
               onPress={() => router.back()}
               className="p-2 -ml-2 bg-black/30 rounded-full"
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
             >
               <ArrowLeft size={24} color="white" />
             </TouchableOpacity>
@@ -245,6 +261,8 @@ export default function ScanPayScreen() {
                 <TouchableOpacity
                   onPress={() => setMode('code')}
                   className="p-4 bg-white/20 rounded-full"
+                  accessibilityRole="button"
+                  accessibilityLabel="Enter Code Manually"
                 >
                   <Keyboard size={24} color="white" />
                 </TouchableOpacity>
@@ -273,15 +291,28 @@ export default function ScanPayScreen() {
                 placeholder="e.g., JOES-COFFEE"
                 placeholderTextColor="#6B7280"
                 value={storeCode}
-                onChangeText={(text) => setStoreCode(text.toUpperCase())}
+                onChangeText={(text) => {
+                  setStoreCode(text.toUpperCase());
+                  setLookupError(null);
+                }}
+                onSubmitEditing={handleLookupCode}
+                returnKeyType="go"
+                accessibilityLabel="Store code"
                 autoCapitalize="characters"
                 autoCorrect={false}
                 maxLength={20}
               />
 
+              {lookupError && (
+                <Text accessibilityRole="alert" className="text-red-300 text-base mt-3 text-center">
+                  {lookupError}
+                </Text>
+              )}
+
               <TouchableOpacity
                 onPress={handleLookupCode}
                 disabled={!storeCode.trim() || lookingUp}
+                accessibilityRole="button"
                 className={`mt-4 py-4 rounded-xl items-center ${
                   storeCode.trim() && !lookingUp ? 'bg-primary' : 'bg-gray-600'
                 }`}

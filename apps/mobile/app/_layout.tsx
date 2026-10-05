@@ -64,34 +64,44 @@ function handleDeepLink(url: string) {
       return;
     }
 
-    // Handle commons://pay/r/{token} - Payment request
+    // Store codes are letters, digits and dashes; tokens are URL-safe ids.
+    // Anything else is ignored rather than passed to the pay screen.
+    const cleanToken = (value: unknown) =>
+      typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value) ? value : null;
+    const cleanCode = (value: unknown) =>
+      typeof value === 'string' && /^[A-Za-z0-9-]{1,20}$/.test(value) ? value.toUpperCase() : null;
+
+    // commons://pay/r/{token} - Payment request
     if (path.startsWith('pay/r/')) {
-      const token = path.replace('pay/r/', '');
+      const token = cleanToken(path.replace('pay/r/', ''));
       if (token) {
         router.push({ pathname: '/(authenticated)/quick-pay', params: { token } } as any);
         return;
       }
     }
 
-    // Handle commons://pay/s/{code} - Store code
+    // commons://pay/s/{code} - Store code
     if (path.startsWith('pay/s/')) {
-      const code = path.replace('pay/s/', '');
+      const code = cleanCode(path.replace('pay/s/', ''));
       if (code) {
         router.push({ pathname: '/(authenticated)/quick-pay', params: { code } } as any);
         return;
       }
     }
 
-    // Handle web URL fallback: https://app.cahootz.coop/pay?r={token}
-    if (parsed.queryParams?.r) {
-      router.push({ pathname: '/(authenticated)/quick-pay', params: { token: parsed.queryParams.r as string } } as any);
-      return;
-    }
-
-    // Handle web URL fallback: https://app.cahootz.coop/pay?s={code}
-    if (parsed.queryParams?.s) {
-      router.push({ pathname: '/(authenticated)/quick-pay', params: { code: parsed.queryParams.s as string } } as any);
-      return;
+    // Web URL fallback: https://app.cahootz.coop/pay?r={token} or /pay?s={code}.
+    // Only for the /pay path, so an unrelated link with ?r= or ?s= can't open the pay screen.
+    if (path === 'pay') {
+      const token = cleanToken(parsed.queryParams?.r);
+      if (token) {
+        router.push({ pathname: '/(authenticated)/quick-pay', params: { token } } as any);
+        return;
+      }
+      const code = cleanCode(parsed.queryParams?.s);
+      if (code) {
+        router.push({ pathname: '/(authenticated)/quick-pay', params: { code } } as any);
+        return;
+      }
     }
   } catch (err) {
     console.error('Error handling deep link:', err);

@@ -17,6 +17,10 @@ import { ArrowLeft, Link2, Lock, Send, Shield } from 'lucide-react-native';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsInvitationOverview } from '@/lib/api';
+import { ApiError, friendlyError } from '@/lib/friendly-error';
+import { LoadError } from '@/components/load-error';
+import { ConfirmSheet } from '@/components/confirm-sheet';
+import { StewardHelp, stewardPowersFor } from '@/components/role-help';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -65,8 +69,9 @@ function SmallButton({
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled}
-      className="rounded-lg border px-3 py-2"
-      style={{ backgroundColor: colors.bg, borderColor: colors.border, opacity: disabled ? 0.5 : 1 }}
+      accessibilityRole="button"
+      className="items-center justify-center rounded-lg border px-3 py-2"
+      style={{ minHeight: 44, backgroundColor: colors.bg, borderColor: colors.border, opacity: disabled ? 0.5 : 1 }}
     >
       <Text className="text-sm font-black" style={{ color: colors.fg }}>
         {label}
@@ -91,6 +96,8 @@ export default function CommonsInvitesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  // The member isn't allowed to invite here, so trying again won't help.
+  const [notAllowed, setNotAllowed] = useState(false);
   const [contactType, setContactType] = useState<'EMAIL' | 'PHONE'>('EMAIL');
   const [contact, setContact] = useState('');
   const [recipientName, setRecipientName] = useState('');
@@ -100,6 +107,10 @@ export default function CommonsInvitesScreen() {
   const [formError, setFormError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  // "Make steward" / "Remove as steward" waits for a confirmation that says what changes.
+  const [stewardChange, setStewardChange] = useState<{ id: string; name: string; makeSteward: boolean } | null>(null);
+  const [stewardChanging, setStewardChanging] = useState(false);
+  const [stewardError, setStewardError] = useState('');
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -108,8 +119,11 @@ export default function CommonsInvitesScreen() {
     try {
       setOverview(await api.getCommonsInvitationOverview(coopId, sessionToken));
       setError('');
+      setNotAllowed(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load invitations.');
+      console.error('Failed to load commons invitations:', err);
+      setNotAllowed(err instanceof ApiError && (err.code === 'FORBIDDEN' || err.code === 'NOT_FOUND'));
+      setError(friendlyError(err, "We couldn't load your invitations."));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -120,14 +134,19 @@ export default function CommonsInvitesScreen() {
     void load();
   }, [load]);
 
-  const run = async (id: string, action: () => Promise<unknown>) => {
+  const run = async (
+    id: string,
+    action: () => Promise<unknown>,
+    fallback = "We couldn't make that change.",
+  ) => {
     setBusyId(id);
     setError('');
     try {
       await action();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
+      console.error('Invitation action failed:', err);
+      setError(friendlyError(err, fallback));
     } finally {
       setBusyId(null);
     }
@@ -165,7 +184,8 @@ export default function CommonsInvitesScreen() {
       setMessage('');
       await load();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Could not send the invitation.');
+      console.error('Failed to send commons invitation:', err);
+      setFormError(friendlyError(err, "We couldn't send the invitation."));
     } finally {
       setSending(false);
     }
@@ -176,7 +196,23 @@ export default function CommonsInvitesScreen() {
       const result = await api.createCommonsShareLink(coopId!, sessionToken!);
       setShareLink(Linking.createURL(`invite/${result.token}`));
       setCopied(false);
-    });
+    }, "We couldn't make a share link.");
+
+  const confirmStewardChange = async () => {
+    if (!stewardChange || !overview || !sessionToken) return;
+    setStewardChanging(true);
+    setStewardError('');
+    try {
+      await api.setCommonsSteward(overview.commons.id, stewardChange.id, stewardChange.makeSteward, sessionToken);
+      setStewardChange(null);
+      await load();
+    } catch (err) {
+      console.error('Failed to change steward role:', err);
+      setStewardError(friendlyError(err, "We couldn't change this member's steward role."));
+    } finally {
+      setStewardChanging(false);
+    }
+  };
 
   const goBack = () => {
     if (router.canGoBack()) router.back();
@@ -197,7 +233,18 @@ export default function CommonsInvitesScreen() {
         <TouchableOpacity onPress={goBack} accessibilityLabel="Go back" className="mb-4 h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white">
           <ArrowLeft size={20} color={THEME.ink} />
         </TouchableOpacity>
-        <Text className="text-base font-semibold text-gray-700">{error || 'Only members can invite people here.'}</Text>
+        {error && !notAllowed ? (
+          <LoadError
+            message={error}
+            retrying={refreshing}
+            onRetry={() => {
+              setRefreshing(true);
+              void load();
+            }}
+          />
+        ) : (
+          <Text className="text-base font-semibold text-gray-700">{error || 'Only members can invite people here.'}</Text>
+        )}
       </SafeAreaView>
     );
   }
@@ -256,6 +303,7 @@ export default function CommonsInvitesScreen() {
                 ? "They join as soon as they sign in with this email and accept. Phone invitations are confirmed by a steward, since phone numbers aren't verified."
                 : 'A steward reviews your recommendation before the invitation is sent.'}
           </Text>
+          <StewardHelp />
 
           <View className="mt-3 flex-row rounded-xl border border-gray-200 p-1">
             {(['EMAIL', 'PHONE'] as const).map((type) => (
@@ -288,6 +336,8 @@ export default function CommonsInvitesScreen() {
             placeholder={contactType === 'EMAIL' ? 'name@email.com' : '(555) 555-5555'}
             placeholderTextColor={THEME.muted}
             keyboardType={contactType === 'EMAIL' ? 'email-address' : 'phone-pad'}
+            autoComplete={contactType === 'EMAIL' ? 'email' : 'tel'}
+            textContentType={contactType === 'EMAIL' ? 'emailAddress' : 'telephoneNumber'}
             autoCapitalize="none"
             autoCorrect={false}
             accessibilityLabel={contactType === 'EMAIL' ? 'Their email' : 'Their phone number'}
@@ -346,8 +396,10 @@ export default function CommonsInvitesScreen() {
                     tone="primary"
                     disabled={busyId === request.id}
                     onPress={() =>
-                      run(request.id, () =>
-                        api.reviewCommonsRequest({ applicationId: request.id, decision: 'APPROVE' }, sessionToken!),
+                      run(
+                        request.id,
+                        () => api.reviewCommonsRequest({ applicationId: request.id, decision: 'APPROVE' }, sessionToken!),
+                        "We couldn't approve this request.",
                       )
                     }
                   />
@@ -356,8 +408,10 @@ export default function CommonsInvitesScreen() {
                     tone="danger"
                     disabled={busyId === request.id}
                     onPress={() =>
-                      run(request.id, () =>
-                        api.reviewCommonsRequest({ applicationId: request.id, decision: 'DECLINE' }, sessionToken!),
+                      run(
+                        request.id,
+                        () => api.reviewCommonsRequest({ applicationId: request.id, decision: 'DECLINE' }, sessionToken!),
+                        "We couldn't decline this request.",
                       )
                     }
                   />
@@ -381,14 +435,14 @@ export default function CommonsInvitesScreen() {
                       label="Approve and send"
                       tone="primary"
                       disabled={busyId === item.id}
-                      onPress={() => run(item.id, () => api.approveCommonsRecommendation(item.id, sessionToken!))}
+                      onPress={() => run(item.id, () => api.approveCommonsRecommendation(item.id, sessionToken!), "We couldn't approve this recommendation.")}
                     />
                   ) : null}
                   <SmallButton
                     label={isSteward && !item.isMine ? 'Decline' : 'Cancel'}
                     tone="danger"
                     disabled={busyId === item.id}
-                    onPress={() => run(item.id, () => api.revokeCommonsInvitation(item.id, sessionToken!))}
+                    onPress={() => run(item.id, () => api.revokeCommonsInvitation(item.id, sessionToken!), "We couldn't cancel this invitation.")}
                   />
                 </View>
               </View>
@@ -416,7 +470,7 @@ export default function CommonsInvitesScreen() {
                     label="Cancel"
                     tone="danger"
                     disabled={busyId === item.id}
-                    onPress={() => run(item.id, () => api.revokeCommonsInvitation(item.id, sessionToken!))}
+                    onPress={() => run(item.id, () => api.revokeCommonsInvitation(item.id, sessionToken!), "We couldn't cancel this invitation.")}
                   />
                 ) : null}
               </View>
@@ -491,7 +545,7 @@ export default function CommonsInvitesScreen() {
                     label="Turn off"
                     tone="danger"
                     disabled={busyId === link.id}
-                    onPress={() => run(link.id, () => api.revokeCommonsInvitation(link.id, sessionToken!))}
+                    onPress={() => run(link.id, () => api.revokeCommonsInvitation(link.id, sessionToken!), "We couldn't turn off this link.")}
                   />
                 </View>
               ))}
@@ -520,29 +574,40 @@ export default function CommonsInvitesScreen() {
                     <SmallButton
                       label={member.isSteward ? 'Remove as steward' : 'Make steward'}
                       disabled={busyId === member.id}
-                      onPress={() =>
-                        run(member.id, () =>
-                          api.setCommonsSteward(commons.id, member.id, !member.isSteward, sessionToken!),
-                        )
-                      }
+                      onPress={() => {
+                        setStewardError('');
+                        setStewardChange({ id: member.id, name: personLabel(member), makeSteward: !member.isSteward });
+                      }}
                     />
                     {confirmRemoveId === member.id ? (
-                      <SmallButton
-                        label={`Confirm remove ${personLabel(member)}`}
-                        tone="danger"
-                        disabled={busyId === member.id}
-                        onPress={() =>
-                          run(member.id, async () => {
-                            await api.removeCommonsMember(commons.id, member.id, sessionToken!);
-                            setConfirmRemoveId(null);
-                          })
-                        }
-                      />
+                      <>
+                        <SmallButton
+                          label={`Confirm remove ${personLabel(member)}`}
+                          tone="danger"
+                          disabled={busyId === member.id}
+                          onPress={() =>
+                            run(
+                              member.id,
+                              async () => {
+                                await api.removeCommonsMember(commons.id, member.id, sessionToken!);
+                                setConfirmRemoveId(null);
+                              },
+                              "We couldn't remove this member.",
+                            )
+                          }
+                        />
+                        <SmallButton label="Keep" disabled={busyId === member.id} onPress={() => setConfirmRemoveId(null)} />
+                      </>
                     ) : (
                       <SmallButton label="Remove" tone="danger" onPress={() => setConfirmRemoveId(member.id)} />
                     )}
                   </View>
                 )}
+                {confirmRemoveId === member.id ? (
+                  <Text className="mt-2 text-sm leading-5 text-gray-700">
+                    {personLabel(member)} will leave {commons.name} and lose access right away.
+                  </Text>
+                ) : null}
               </View>
             ))}
           </Section>
@@ -558,6 +623,33 @@ export default function CommonsInvitesScreen() {
           </View>
         ) : null}
       </ScrollView>
+
+      <ConfirmSheet
+        visible={stewardChange !== null}
+        title={
+          stewardChange?.makeSteward
+            ? `Make ${stewardChange.name} a steward?`
+            : `Remove ${stewardChange?.name ?? 'them'} as a steward?`
+        }
+        confirmLabel={stewardChange?.makeSteward ? 'Yes, make steward' : 'Yes, remove as steward'}
+        tone={stewardChange?.makeSteward ? 'primary' : 'danger'}
+        busy={stewardChanging}
+        error={stewardError}
+        onConfirm={() => void confirmStewardChange()}
+        onCancel={() => {
+          setStewardChange(null);
+          setStewardError('');
+        }}
+      >
+        <Text className="text-base leading-6 text-gray-800">
+          {stewardChange?.makeSteward
+            ? stewardPowersFor(stewardChange.name)
+            : `${stewardChange?.name ?? 'They'} will stay a member, but won't be able to approve people, manage invitations, or remove members.`}
+        </Text>
+        {stewardChange?.makeSteward ? (
+          <Text className="text-sm leading-5 text-gray-600">You can change this later.</Text>
+        ) : null}
+      </ConfirmSheet>
     </SafeAreaView>
   );
 }

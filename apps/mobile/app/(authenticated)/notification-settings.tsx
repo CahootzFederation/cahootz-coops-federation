@@ -49,7 +49,7 @@ export default function NotificationSettings() {
     try {
       setPermission(await getPushPermissionStatus());
     } catch {
-      setPermission("Could not check device permission.");
+      setPermission("We couldn't check whether notifications are allowed on this phone.");
     }
   }, []);
   const { refetch } = query;
@@ -77,9 +77,14 @@ export default function NotificationSettings() {
       );
       await refreshPermission();
     } catch (error) {
-      setDeviceError(error instanceof PushRegistrationError
-        ? `Could not register this device. Failed step: ${error.step}. Check the device logs for details.`
-        : "Could not register this device. Try again.");
+      console.error(
+        "Failed to register device for push notifications:",
+        error instanceof PushRegistrationError ? `step ${error.step}` : "",
+        error,
+      );
+      setDeviceError(
+        "We couldn't turn on notifications for this phone. Make sure notifications are allowed for Cahootz in your phone's Settings, then try again.",
+      );
     } finally {
       setDeviceBusy(false);
     }
@@ -124,9 +129,9 @@ export default function NotificationSettings() {
           {query.isError && (
             <View style={s.card}>
               <Text accessibilityRole="alert" style={s.error}>
-                Could not load notification settings.
+                We couldn&apos;t load your notification settings. Please try again.
               </Text>
-              <AlertButton label="Retry" onPress={() => void query.refetch()} />
+              <AlertButton label="Try again" onPress={() => void query.refetch()} />
             </View>
           )}
           {preferences && (
@@ -200,11 +205,11 @@ export default function NotificationSettings() {
               {mutation.isError && (
                 <View style={s.card}>
                   <Text accessibilityRole="alert" style={s.error}>
-                    Could not save your settings. Your previous choices are
-                    still active.
+                    We couldn&apos;t save your settings. Your previous choices are
+                    still on.
                   </Text>
                   <AlertButton
-                    label="Retry save"
+                    label="Try saving again"
                     onPress={() => mutation.mutate(mutation.variables!)}
                   />
                 </View>
@@ -233,7 +238,7 @@ export default function NotificationSettings() {
               onPress={() => {
                 void Linking.openSettings().catch(() =>
                   setDeviceError(
-                    "Could not open device settings. Open Settings on your device manually.",
+                    "We couldn't open your phone's Settings. Open the Settings app yourself, then find Cahootz.",
                   ),
                 );
               }}

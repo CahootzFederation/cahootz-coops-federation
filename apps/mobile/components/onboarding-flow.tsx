@@ -3,6 +3,7 @@ import { ScrollView, View, Pressable, TextInput, Alert, ActivityIndicator } from
 import { router } from 'expo-router';
 import { useSubmitApplication } from '@/hooks/use-api';
 import { useAuth } from '@/contexts/auth-context';
+import { friendlyError } from '@/lib/friendly-error';
 import { getApiUrl } from '@/lib/config';
 import { api } from '@/lib/api';
 import { getAnonymousId, clearAnonymousId } from '@/lib/anonymous-id';
@@ -25,8 +26,6 @@ import {
   Vote,
   Shield,
   Building,
-  Eye,
-  EyeOff,
   Award,
   ChevronLeft,
   ChevronRight,
@@ -43,8 +42,6 @@ interface FormData {
   lastName: string;
   email: string;
   phone: string;
-  password: string;
-  confirmPassword: string;
   agreeToTerms: boolean;
   agreeToPrivacy: boolean;
   agreeToCoopValues: boolean;
@@ -80,10 +77,10 @@ const getInitialStep = (initialStep: OnboardingFlowProps['initialStep']) => {
 export default function OnboardingFlow({ initialStep = 'intro', onBack }: OnboardingFlowProps = {}) {
   const [currentStep, setCurrentStep] = useState(getInitialStep(initialStep));
   const [selectedCoopId, setSelectedCoopId] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [submissionStatus, setSubmissionStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [submissionStatus, setSubmissionStatus] = useState<'idle' | 'submitting' | 'success'>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
+  // Saved on the application by the server (Application.referenceCode).
+  const [applicationReference, setApplicationReference] = useState<string | null>(null);
   const [loginData, setLoginData] = useState({
     email: '',
     code: '',
@@ -174,8 +171,6 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
     lastName: '',
     email: '',
     phone: '',
-    password: '',
-    confirmPassword: '',
     agreeToTerms: false,
     agreeToPrivacy: false,
     agreeToCoopValues: false,
@@ -247,6 +242,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
 
   const handleInputChange = (field: keyof FormData, value: string | boolean | string[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    setErrorMessage('');
   };
 
   const handleDynamicAnswerChange = (questionId: string, value: any) => {
@@ -284,7 +280,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
     } catch (error) {
       console.error('Waitlist signup error:', error);
       setWaitlistStatus('error');
-      setWaitlistMessage(error instanceof Error ? error.message : 'Could not join the waitlist. Please try again.');
+      setWaitlistMessage(friendlyError(error, "We couldn't add you to the waitlist."));
     }
   };
 
@@ -423,10 +419,45 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
   };
 
   const nextStep = () => {
+    setErrorMessage('');
     setCurrentStep(currentStep + 1);
   };
 
+  const unansweredRequiredQuestions = applicationQuestions.filter((q) => {
+    if (!q.required) return false;
+    const answer = formData.dynamicAnswers[q.id];
+    if (q.type === 'multiselect') {
+      return !answer || (answer as string[]).length === 0;
+    }
+    return !answer || answer === '';
+  });
+
+  // Continue buttons stay tappable and say what's missing, instead of
+  // sitting greyed out with no reason.
+  const continuePastPersonalInfo = () => {
+    const missing: string[] = [];
+    if (!formData.firstName.trim()) missing.push('First Name');
+    if (!formData.lastName.trim()) missing.push('Last Name');
+    if (!formData.email.trim()) missing.push('Email');
+    if (missing.length > 0) {
+      setErrorMessage(`Please fill in these to continue:\n• ${missing.join('\n• ')}`);
+      return;
+    }
+    nextStep();
+  };
+
+  const continuePastQuestions = () => {
+    if (unansweredRequiredQuestions.length > 0) {
+      setErrorMessage(
+        `Please answer these questions to continue:\n• ${unansweredRequiredQuestions.map((q) => q.label).join('\n• ')}`,
+      );
+      return;
+    }
+    nextStep();
+  };
+
   const prevStep = () => {
+    setErrorMessage('');
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
     }
@@ -463,28 +494,6 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
       if (!formData.lastName) missingFields.push('Last Name');
       if (!formData.email) missingFields.push('Email');
       if (!formData.phone) missingFields.push('Phone Number');
-      if (!formData.password) missingFields.push('Password');
-      if (!formData.confirmPassword) missingFields.push('Confirm Password');
-      
-      if (formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword) {
-        setErrorMessage('Your passwords do not match. Please make sure both password fields are identical.');
-        setSubmissionStatus('error');
-        setTimeout(() => {
-          setErrorMessage('');
-          setSubmissionStatus('idle');
-        }, 5000);
-        return;
-      }
-      
-      if (formData.password && formData.password.length < 8) {
-        setErrorMessage('Your password must be at least 8 characters long.');
-        setSubmissionStatus('error');
-        setTimeout(() => {
-          setErrorMessage('');
-          setSubmissionStatus('idle');
-        }, 5000);
-        return;
-      }
       
       // Validate dynamic questions
       applicationQuestions.forEach((question) => {
@@ -496,17 +505,13 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
         }
       });
       
-      if (!formData.agreeToCoopValues) missingFields.push('Commons Values Agreement');
-      if (!formData.agreeToTerms) missingFields.push('Terms of Service Agreement');
-      if (!formData.agreeToPrivacy) missingFields.push('Privacy Policy Agreement');
+      if (!formData.agreeToCoopValues) missingFields.push("Check the box for this commons' values and mission");
+      if (!formData.agreeToTerms) missingFields.push('Check the box for the Terms of Service');
+      if (!formData.agreeToPrivacy) missingFields.push('Check the box for the Privacy Policy');
       
       if (missingFields.length > 0) {
-        setErrorMessage(`Please complete the following fields:\n• ${missingFields.join('\n• ')}`);
-        setSubmissionStatus('error');
-        setTimeout(() => {
-          setErrorMessage('');
-          setSubmissionStatus('idle');
-        }, 5000);
+        setErrorMessage(`Please finish these before you submit:\n• ${missingFields.join('\n• ')}`);
+        setSubmissionStatus('idle');
         return;
       }
 
@@ -514,11 +519,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(formData.email)) {
         setErrorMessage('Please enter a valid email address.');
-        setSubmissionStatus('error');
-        setTimeout(() => {
-          setErrorMessage('');
-          setSubmissionStatus('idle');
-        }, 5000);
+        setSubmissionStatus('idle');
         return;
       }
 
@@ -526,13 +527,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
       const applicationData = buildMobileApplicationSubmissionInput(selectedCoopId!, formData);
 
       // Submit application using hook
-      // Sanitize sensitive fields before logging
-      const sanitizedApplicationData = {
-        ...applicationData,
-        password: '[REDACTED]',
-        confirmPassword: '[REDACTED]'
-      };
-      console.log('📤 Submitting application data:', sanitizedApplicationData);
+      console.log('📤 Submitting application for coop:', applicationData.coopId);
       
       setSubmissionStatus('submitting');
       
@@ -543,6 +538,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
         console.log('✅ Application submitted successfully:', result);
       
       if (result.success) {
+          setApplicationReference(result.referenceCode ?? null);
           setSubmissionStatus('success');
           // Success! Move to success screen
           setTimeout(() => {
@@ -550,53 +546,20 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             setSubmissionStatus('idle');
           }, 1000); // Show success state for 1 second before transitioning
       } else {
-          setSubmissionStatus('error');
+          setSubmissionStatus('idle');
           setErrorMessage(result.message || 'Submission failed. Please try again.');
           console.error('❌ Submission failed:', result);
-          setTimeout(() => {
-            setErrorMessage('');
-            setSubmissionStatus('idle');
-          }, 5000);
         }
       } catch (submitError) {
         console.error('❌ Application submission error:', submitError);
         
-        // Parse the error to show detailed message
-        let errorMessage = 'Failed to submit application. Please try again.';
-        let errorDetails = '';
-        
-        if (submitError instanceof Error) {
-          errorMessage = submitError.message;
-          
-          // Try to parse tRPC error details
-          try {
-            const errorJson = JSON.parse(submitError.message);
-            if (errorJson.error) {
-              errorMessage = errorJson.error.message || errorMessage;
-              errorDetails = JSON.stringify(errorJson.error, null, 2);
-            }
-          } catch {
-            // Not a JSON error, use the error message as is
-          }
-        }
-        
-        console.error('💥 Error details:', errorDetails || errorMessage);
-        
-        setSubmissionStatus('error');
-        setErrorMessage(errorMessage || 'Failed to submit application. Please try again.');
-        setTimeout(() => {
-          setErrorMessage('');
-          setSubmissionStatus('idle');
-        }, 5000);
+        setSubmissionStatus('idle');
+        setErrorMessage(friendlyError(submitError, "We couldn't send your application."));
       }
     } catch (error) {
       console.error('💥 Outer catch - Application submission error:', error);
-      setSubmissionStatus('error');
-      setErrorMessage('Unexpected error occurred. Please try again.');
-      setTimeout(() => {
-        setErrorMessage('');
-        setSubmissionStatus('idle');
-      }, 5000);
+      setSubmissionStatus('idle');
+      setErrorMessage(friendlyError(error, "We couldn't send your application."));
     }
   };
 
@@ -630,7 +593,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
       Alert.alert('Code Sent', result.message || 'Check your email for the login code');
     } catch (error) {
       console.error('Request code error:', error);
-      setLoginError('Failed to send code. Please try again.');
+      setLoginError(friendlyError(error, "We couldn't send your code. Check the email address and try again."));
     } finally {
       setIsRequestingCode(false);
     }
@@ -670,14 +633,16 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
         console.log('🎉 Login complete!');
         router.replace('/(tabs)' as any);
       } else {
-        const errorMsg = 'Invalid code';
+        const errorMsg = "That code didn't work. Check the code in your email, or tap Resend to get a new one.";
         console.error('❌ Verification failed:', errorMsg);
         console.error('📦 Full response:', data);
         setLoginError(errorMsg);
       }
     } catch (error) {
       console.error('Verify code error:', error);
-      setLoginError('Failed to verify code. Please try again.');
+      setLoginError(
+        friendlyError(error, "That code didn't work. Check the code in your email, or tap Resend to get a new one."),
+      );
     } finally {
       setIsVerifyingCode(false);
     }
@@ -773,6 +738,9 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             placeholder="Email address"
             keyboardType="email-address"
             autoCapitalize="none"
+            autoComplete="email"
+            textContentType="emailAddress"
+            autoCorrect={false}
           />
           <Button
             onPress={handleWaitlistSignup}
@@ -1079,6 +1047,9 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                     placeholder="marcus@example.com"
                     keyboardType="email-address"
                     autoCapitalize="none"
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    autoCorrect={false}
                   />
                 </View>
 
@@ -1094,56 +1065,15 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                   />
                 </View>
 
-                {/* Password */}
-                <View>
-                  <Label className="text-foreground">Password</Label>
-                  <View className="relative mt-1">
-                    <Input
-                      value={formData.password}
-                      onChangeText={(text) => handleInputChange('password', text)}
-                      className="border-input pr-12"
-                      placeholder="Create a strong password"
-                      secureTextEntry={!showPassword}
-                    />
-                    <Pressable
-                      onPress={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-0 h-full justify-center"
-                    >
-                      <Icon
-                        as={showPassword ? EyeOff : Eye}
-                        size={16}
-                        className="text-muted-foreground"
-                      />
-                    </Pressable>
-                  </View>
-                </View>
-
-                {/* Confirm Password */}
-                <View>
-                  <Label className="text-foreground">Confirm Password</Label>
-                  <View className="relative mt-1">
-                    <Input
-                      value={formData.confirmPassword}
-                      onChangeText={(text) => handleInputChange('confirmPassword', text)}
-                      className="border-input pr-12"
-                      placeholder="Confirm your password"
-                      secureTextEntry={!showConfirmPassword}
-                    />
-                    <Pressable
-                      onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-0 h-full justify-center"
-                    >
-                      <Icon
-                        as={showConfirmPassword ? EyeOff : Eye}
-                        size={16}
-                        className="text-muted-foreground"
-                      />
-                    </Pressable>
-                  </View>
-                </View>
               </View>
             </CardContent>
           </Card>
+
+          {errorMessage ? (
+            <View accessibilityRole="alert" className="bg-red-50 border border-red-300 rounded-xl p-4 mt-6">
+              <Text className="text-red-800 text-base whitespace-pre-line">{errorMessage}</Text>
+            </View>
+          ) : null}
 
           {/* Navigation */}
           <View className="flex flex-row justify-between items-center mt-6">
@@ -1151,17 +1081,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
               <Icon as={ChevronLeft} size={16} className="text-muted-foreground" />
               <Text className="text-muted-foreground ml-1">Back</Text>
             </Button>
-            <Button
-              onPress={nextStep}
-              disabled={
-                !formData.firstName ||
-                !formData.lastName ||
-                !formData.email ||
-                !formData.password ||
-                !formData.confirmPassword
-              }
-              className="bg-primary"
-            >
+            <Button onPress={continuePastPersonalInfo} className="bg-primary">
               <Text className="text-white font-semibold">Continue</Text>
               <Icon as={ChevronRight} size={16} className="text-white ml-1" />
             </Button>
@@ -1223,6 +1143,12 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             </Card>
           )}
 
+          {errorMessage ? (
+            <View accessibilityRole="alert" className="bg-red-50 border border-red-300 rounded-xl p-4 mt-6">
+              <Text className="text-red-800 text-base whitespace-pre-line">{errorMessage}</Text>
+            </View>
+          ) : null}
+
           {/* Navigation */}
           <View className="flex flex-row justify-between items-center mt-6">
             <Button variant="ghost" onPress={prevStep}>
@@ -1230,18 +1156,8 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
               <Text className="text-muted-foreground ml-1">Back</Text>
             </Button>
             <Button
-              onPress={nextStep}
-              disabled={
-                isLoadingQuestions ||
-                applicationQuestions.some((q) => {
-                  if (!q.required) return false;
-                  const answer = formData.dynamicAnswers[q.id];
-                  if (q.type === 'multiselect') {
-                    return !answer || (answer as string[]).length === 0;
-                  }
-                  return !answer || answer === '';
-                })
-              }
+              onPress={continuePastQuestions}
+              disabled={isLoadingQuestions}
               className="bg-primary"
             >
               <Text className="text-white font-semibold">Continue</Text>
@@ -1397,7 +1313,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                 <View className="flex flex-row items-start gap-3">
                   <Text className="text-2xl">⚠️</Text>
                   <View className="flex-1">
-                    <Text className="font-bold text-red-800 mb-1">Validation Error</Text>
+                    <Text className="font-bold text-red-800 mb-1">Please check the form</Text>
                     <Text className="text-red-700 text-sm whitespace-pre-line">{errorMessage}</Text>
                   </View>
                 </View>
@@ -1413,25 +1329,12 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             </Button>
             <Button
               onPress={handleSubmitApplication}
-              disabled={
-                submissionStatus !== 'idle' ||
-                isSubmitting ||
-                !formData.agreeToCoopValues ||
-                !formData.agreeToTerms ||
-                !formData.agreeToPrivacy
-              }
-              className={
-                submissionStatus === 'success' 
-                  ? 'bg-green-600' 
-                  : submissionStatus === 'error'
-                  ? 'bg-red-800'
-                  : 'bg-primary'
-              }
+              disabled={submissionStatus !== 'idle' || isSubmitting}
+              className={submissionStatus === 'success' ? 'bg-green-600' : 'bg-primary'}
             >
               <Text className="text-white font-semibold">
                 {submissionStatus === 'submitting' && '⏳ Submitting...'}
                 {submissionStatus === 'success' && '✅ Success!'}
-                {submissionStatus === 'error' && '❌ Error - Try Again'}
                 {submissionStatus === 'idle' && 'Submit Application'}
               </Text>
               {submissionStatus === 'idle' && <Icon as={ChevronRight} size={16} className="text-white ml-1" />}
@@ -1500,19 +1403,23 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             </CardContent>
           </Card>
 
-          <Card className="bg-gold-50 border-gold-200 mt-6">
-            <CardContent className="p-4">
-              <View className="flex flex-row items-center gap-2">
-                <Icon as={Building} size={20} className="text-primary" />
-                <View className="flex-1">
-                  <Text className="font-medium text-gold-800">
-                    Application Reference: #{Math.random().toString(36).substr(2, 9).toUpperCase()}
-                  </Text>
-                  <Text className="text-sm text-primary">Save this reference number for your records</Text>
+          {applicationReference ? (
+            <Card className="bg-gold-50 border-gold-200 mt-6">
+              <CardContent className="p-4">
+                <View className="flex flex-row items-center gap-2">
+                  <Icon as={Building} size={20} className="text-primary" />
+                  <View className="flex-1">
+                    <Text className="font-medium text-gold-800">
+                      Your reference number: {applicationReference}
+                    </Text>
+                    <Text className="text-sm text-gold-800">
+                      Keep this number. If you contact us about your application, share it so we can find it quickly.
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ) : null}
 
           {/* Action Button */}
           <View className="mt-8">
@@ -1553,10 +1460,11 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             <View className="bg-primary p-3 rounded-full mb-4">
               <Icon as={Building} size={32} className="text-white" />
             </View>
-              <Text className="text-xs font-black uppercase text-gray-500">Personal Details</Text>
-              <Text className="text-3xl font-black text-foreground mb-2 text-center">Common</Text>
-            <Text className="text-muted-foreground text-center leading-6">
-              {codeSent ? 'Enter the code sent to your email' : 'Start your application to join a cooperative or sign in with passwordless email verification.'}
+            <Text className="text-3xl font-black text-foreground mb-2 text-center">Sign in</Text>
+            <Text className="text-muted-foreground text-center text-base leading-6">
+              {codeSent
+                ? "We emailed you a 6-digit code. Type it below. If you don't see it, check your spam folder."
+                : "Type your email and we'll send you a 6-digit code. No password needed."}
             </Text>
           </View>
 
@@ -1573,6 +1481,9 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                     placeholder="name@email.com"
                     keyboardType="email-address"
                     autoCapitalize="none"
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    autoCorrect={false}
                     editable={!codeSent}
                   />
                 </View>
@@ -1587,6 +1498,8 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                       className="mt-1 border-input"
                       placeholder="Enter 6-digit code"
                       keyboardType="number-pad"
+                      autoComplete="one-time-code"
+                      textContentType="oneTimeCode"
                       maxLength={6}
                       autoFocus
                     />

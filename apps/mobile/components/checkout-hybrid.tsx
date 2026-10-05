@@ -28,6 +28,7 @@ import { coopConfig } from '@/lib/coop-config';
 import { getWebUrl } from '@/lib/config';
 import { resolveBrandColor, withAlpha } from '@/lib/brand-colors';
 import CommercePaymentConfirmation from '@/components/commerce-payment-confirmation';
+import { apiError, friendlyError } from '@/lib/friendly-error';
 
 interface CheckoutHybridProps {
   storeId: string;
@@ -130,6 +131,8 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
   const { getStoreItems, clearStoreItems } = useCart();
 
   const [loading, setLoading] = useState(true);
+  // Kept apart from an empty cart so a failed load never says "Your cart is empty".
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [store, setStore] = useState<any>(null);
   const [preview, setPreview] = useState<any>(null);
@@ -169,6 +172,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
     if (!user?.id || !storeId) return;
 
     try {
+      setLoadError(null);
       const storeResult = await api.getStore(storeId);
       const businessId = storeResult?.businessId || storeId;
       const checkoutCoopId: string = storeResult?.coopId || resolveCoopId();
@@ -218,7 +222,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
       }
     } catch (error) {
       console.error('Failed to load checkout data:', error);
-      Alert.alert('Error', 'Failed to load checkout information.');
+      setLoadError(friendlyError(error, "We couldn't load checkout."));
     } finally {
       setLoading(false);
     }
@@ -269,7 +273,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
     if (!user?.id || !checkoutBusinessId || cartItems.length === 0) return;
 
     if (!user.walletAddress) {
-      Alert.alert('Wallet Required', 'Your account needs a wallet before checkout can continue.');
+      Alert.alert('Checkout failed', "Your wallet isn't set up yet, so you can't check out right now. Please try again later.");
       return;
     }
 
@@ -323,13 +327,15 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
       }).then(res => res.json());
 
       if (checkoutResult.error) {
-        throw new Error(checkoutResult.error.message);
+        // Keep the server's code/status so friendlyError can hide raw validation text.
+        throw apiError(checkoutResult.error, "We couldn't start checkout.");
       }
 
       const { transactionId, clientSecret, checkoutUrl, totalChargedCents } = checkoutResult.result.data;
 
       if (!clientSecret && !checkoutUrl) {
-        throw new Error('Checkout did not return a payment method.');
+        console.error('Checkout returned no clientSecret or checkoutUrl:', checkoutResult.result.data);
+        throw new Error("We couldn't start your payment. Please try again.");
       }
 
       setPaymentSession({
@@ -340,7 +346,8 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
       });
     } catch (error: any) {
       console.error('Checkout failed:', error);
-      Alert.alert('Checkout Failed', error.message || 'An error occurred during checkout.');
+      // lib/alert shows titles containing "failed" as error toasts that stay until tapped.
+      Alert.alert('Checkout failed', friendlyError(error, "We couldn't start checkout."));
     } finally {
       setProcessing(false);
     }
@@ -351,6 +358,35 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
       <SafeAreaView className="flex-1 bg-gray-50">
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color={accentColor} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (loadError && !store) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-gray-700 text-lg text-center">{loadError}</Text>
+          <TouchableOpacity
+            className="mt-6 px-6 rounded-xl items-center justify-center"
+            style={{ backgroundColor: accentColor, minHeight: 48 }}
+            accessibilityRole="button"
+            onPress={() => {
+              setLoading(true);
+              loadData();
+            }}
+          >
+            <Text className="text-white font-semibold">Try again</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            className="mt-3 px-6 rounded-xl items-center justify-center"
+            style={{ minHeight: 48 }}
+            accessibilityRole="button"
+            onPress={() => router.back()}
+          >
+            <Text className="text-gray-700 font-semibold">Go back</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -679,7 +715,10 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
             accentColor={accentColor}
             cardholderName={cardholderName || undefined}
             onSuccess={handlePaymentSuccess}
-            onError={(message) => Alert.alert('Payment Error', message)}
+            onError={(message) => {
+              // The payment card already shows this next to its Pay button; don't show it twice.
+              console.error('Payment confirmation error:', message);
+            }}
           />
         )}
       </ScrollView>

@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import { getCoopId } from '@/lib/config';
+import { friendlyError } from '@/lib/friendly-error';
 
 interface VideoUploadProps {
   onUploadComplete: (cid: string, url: string) => void;
@@ -26,7 +27,7 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
       // Request permission
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please allow access to your media library');
+        Alert.alert('Allow video access', 'To add a video, allow Cahootz to use your photos and videos in Settings.');
         return;
       }
 
@@ -59,7 +60,7 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
       }
     } catch (error) {
       console.error('Error picking video:', error);
-      Alert.alert('Error', 'Failed to pick video');
+      Alert.alert("Couldn't open your videos", "We couldn't open your videos. Please try again.");
     }
   };
 
@@ -68,7 +69,7 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
       // Request camera permission
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please allow camera access');
+        Alert.alert('Allow camera access', 'To record a video, allow Cahootz to use your camera in Settings.');
         return;
       }
 
@@ -100,7 +101,7 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
       }
     } catch (error) {
       console.error('Error recording video:', error);
-      Alert.alert('Error', 'Failed to record video');
+      Alert.alert("Couldn't open the camera", "We couldn't open the camera. Please try again.");
     }
   };
 
@@ -178,7 +179,7 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
       );
     } catch (error) {
       console.error('Upload error:', error);
-      Alert.alert('Upload failed', error instanceof Error ? error.message : 'Please try again');
+      Alert.alert("Couldn't upload your video", friendlyError(error, "We couldn't upload your video."));
     } finally {
       setIsUploading(false);
     }

@@ -213,6 +213,11 @@ model Application {
   coopId String
   status ApplicationStatus @default(SUBMITTED)
 
+  // Short reference shown to the applicant after they apply (e.g.
+  // "APP-7K3M9Q") so they and stewards can find the application later.
+  // Null for applications created before references existed.
+  referenceCode String? @unique
+
   // Application data stored as JSON blob for flexibility
   data Json
 

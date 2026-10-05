@@ -8,8 +8,6 @@ describe('buildMobileApplicationSubmissionInput', () => {
       lastName: 'Robinson',
       email: 'applicant@example.com',
       phone: '4159363880',
-      password: 'password123',
-      confirmPassword: 'password123',
       videoCID: '',
       photoCID: '',
       agreeToCoopValues: true,
@@ -28,5 +26,7 @@ describe('buildMobileApplicationSubmissionInput', () => {
     expect(input).not.toHaveProperty('fullName');
     expect(input.videoCID).toBeUndefined();
     expect(input.photoCID).toBeUndefined();
+    // Sign-in uses an emailed code, so applications never ask for a password.
+    expect(input).not.toHaveProperty('password');
   });
 });

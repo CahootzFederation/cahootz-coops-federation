@@ -23,6 +23,8 @@ import {
 } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { SageDecisionTrails } from '@/components/sage-decision-trail';
+import { LoadError } from '@/components/load-error';
+import { friendlyError } from '@/lib/friendly-error';
 
 // Each DM is a private circle shared by exactly two people. A conversation
 // entry is either an existing circle (has groupId) or a commons member you
@@ -79,7 +81,14 @@ export default function MessagesScreen() {
   const [isSending, setIsSending] = useState(false);
   const [messageDraft, setMessageDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  // Sending failed (shown above the conversation).
   const [dmError, setDmError] = useState('');
+  // The list of people/conversations failed to load.
+  const [listError, setListError] = useState('');
+  const [listReloadKey, setListReloadKey] = useState(0);
+  // The open conversation's messages failed to load.
+  const [conversationError, setConversationError] = useState('');
+  const [conversationReloadKey, setConversationReloadKey] = useState(0);
 
   // A person opened from a profile ("Message" button) may not be in the
   // member preview list, so keep a placeholder entry for them.
@@ -110,13 +119,13 @@ export default function MessagesScreen() {
         if (fromNotification) {
           setSelectedPersonId((current) => current ?? fromNotification.person.id);
         }
-        setDmError('');
+        setListError('');
       })
       .catch((error) => {
         console.error('Failed to load direct messages:', error);
-        setDmError(error instanceof Error ? error.message : 'Could not load direct messages.');
+        setListError(friendlyError(error, "We couldn't load your messages."));
       });
-  }, [hasAccountSession, loadThreads, params.groupId, sessionToken]);
+  }, [hasAccountSession, loadThreads, params.groupId, sessionToken, listReloadKey]);
 
   const conversations = useMemo(() => {
     const byPerson = new Map<string, Conversation>();
@@ -178,15 +187,16 @@ export default function MessagesScreen() {
 
   useEffect(() => {
     setMessages([]);
+    setConversationError('');
     if (!selectedGroupId) return;
     setIsLoadingMessages(true);
     loadMessages(selectedGroupId)
       .catch((error) => {
         console.error('Failed to load conversation:', error);
-        setDmError(error instanceof Error ? error.message : 'Could not load messages.');
+        setConversationError(friendlyError(error, "We couldn't load this conversation."));
       })
       .finally(() => setIsLoadingMessages(false));
-  }, [loadMessages, selectedGroupId]);
+  }, [loadMessages, selectedGroupId, conversationReloadKey]);
 
   // Poll while the screen is focused so replies show up without a reload.
   useFocusEffect(
@@ -220,7 +230,7 @@ export default function MessagesScreen() {
       await loadMessages(groupId);
     } catch (error) {
       console.error('Failed to send direct message:', error);
-      setDmError(error instanceof Error ? error.message : 'Could not send message.');
+      setDmError(friendlyError(error, "We couldn't send your message. It's still in the box."));
     } finally {
       setIsSending(false);
     }
@@ -339,7 +349,11 @@ export default function MessagesScreen() {
               })}
             </View>
           </ScrollView>
-          {visibleConversations.length === 0 ? (
+          {listError ? (
+            <View className="mt-3">
+              <LoadError message={listError} onRetry={() => setListReloadKey((key) => key + 1)} />
+            </View>
+          ) : visibleConversations.length === 0 ? (
             <View className="mt-3 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4">
               <Text className="font-bold text-gray-900">
                 {searchQuery ? 'No messages found' : 'No Commons members yet'}
@@ -386,7 +400,13 @@ export default function MessagesScreen() {
               {isLoadingMessages && messages.length === 0 ? (
                 <ActivityIndicator size="small" color="#047857" />
               ) : null}
-              {!isLoadingMessages && messages.length === 0 ? (
+              {conversationError && !isLoadingMessages && messages.length === 0 ? (
+                <LoadError
+                  message={conversationError}
+                  onRetry={() => setConversationReloadKey((key) => key + 1)}
+                />
+              ) : null}
+              {!isLoadingMessages && !conversationError && messages.length === 0 ? (
                 <View className="rounded-xl bg-stone-100 px-4 py-3">
                   <Text className="text-sm leading-5 text-gray-700">
                     No private messages yet. Send the first note when it should not be public.

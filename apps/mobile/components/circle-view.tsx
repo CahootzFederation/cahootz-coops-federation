@@ -11,6 +11,8 @@ import { secureStorage } from '@/lib/secure-storage';
 import { track } from '@/lib/analytics';
 import AppDrawer from '@/components/app-drawer';
 import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
+import { LoadError } from '@/components/load-error';
+import { friendlyError } from '@/lib/friendly-error';
 import { Menu, MessageCircle, Settings2, LogIn } from 'lucide-react-native';
 
 const THEME = {
@@ -32,7 +34,10 @@ export default function CircleView({ coopId }: { coopId: string }) {
   const [circles, setCircles] = useState<PrivateGroupSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAssigning, setIsAssigning] = useState(false);
-  const [welcomeTableError, setWelcomeTableError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  // Shown under the grid when joining a circle or a welcome lounge fails.
+  const [actionError, setActionError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Single fetch per focus - no polling. Live updates are planned via
@@ -42,6 +47,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
     useCallback(() => {
       if (!sessionToken) {
         setCircles([]);
+        setLoadError(null);
         setIsLoading(false);
         return;
       }
@@ -51,11 +57,16 @@ export default function CircleView({ coopId }: { coopId: string }) {
       api
         .listVisibleCircles(sessionToken, coopId)
         .then((result) => {
-          if (mounted) setCircles(result?.groups || []);
+          if (!mounted) return;
+          setCircles(result?.groups || []);
+          setLoadError(null);
         })
         .catch((err) => {
           console.error('Failed to load circles:', err);
-          if (mounted) setCircles([]);
+          if (!mounted) return;
+          // Keep circles from an earlier successful load, but say the
+          // refresh failed instead of quietly showing an empty grid.
+          setLoadError(friendlyError(err, "We couldn't load your circles."));
         })
         .finally(() => {
           if (mounted) setIsLoading(false);
@@ -64,8 +75,13 @@ export default function CircleView({ coopId }: { coopId: string }) {
       return () => {
         mounted = false;
       };
-    }, [coopId, sessionToken]),
+    }, [coopId, sessionToken, reloadKey]),
   );
+
+  const retryLoad = () => {
+    setActionError(null);
+    setReloadKey((key) => key + 1);
+  };
 
   const openCircle = (circleId?: string) => {
     router.push({ pathname: '/[coopId]/posts', params: { coopId, circleId } } as any);
@@ -73,11 +89,13 @@ export default function CircleView({ coopId }: { coopId: string }) {
 
   const joinPublicCircle = async (groupId: string) => {
     if (!sessionToken) return;
+    setActionError(null);
     try {
       await api.joinPublicCircle(groupId, sessionToken);
       openCircle(groupId);
     } catch (err) {
       console.error('Failed to join circle:', err);
+      setActionError(friendlyError(err, "We couldn't add you to that circle."));
     }
   };
 
@@ -94,14 +112,14 @@ export default function CircleView({ coopId }: { coopId: string }) {
     }
 
     setIsAssigning(true);
-    setWelcomeTableError(null);
+    setActionError(null);
     try {
       const result = await api.assignWelcomeTable(sessionToken, coopId);
       track('welcome_lounge_joined', { source: 'circle_view' });
       openCircle(result.groupId);
     } catch (err) {
       console.error('Failed to join welcome lounge:', err);
-      setWelcomeTableError(err instanceof Error ? err.message : 'Could not join a welcome lounge.');
+      setActionError(friendlyError(err, "We couldn't add you to a welcome lounge."));
     } finally {
       setIsAssigning(false);
     }
@@ -166,12 +184,19 @@ export default function CircleView({ coopId }: { coopId: string }) {
           </View>
         ) : null}
 
-        {isLoading && circles.length === 0 ? (
+        {isLoading && circles.length === 0 && !loadError ? (
           <View className="items-center py-10">
             <ActivityIndicator size="small" color={THEME.primary} />
           </View>
+        ) : loadError && circles.length === 0 ? (
+          <View className="px-5 pt-6">
+            <LoadError message={loadError} onRetry={retryLoad} retrying={isLoading} />
+          </View>
         ) : (
           <View className="gap-5 px-5 pt-6">
+            {loadError ? (
+              <LoadError message={loadError} onRetry={retryLoad} retrying={isLoading} />
+            ) : null}
             <View className="flex-row flex-wrap justify-between gap-y-6">
               {cards.map((card) =>
                 isGeneral(card) ? (
@@ -235,8 +260,10 @@ export default function CircleView({ coopId }: { coopId: string }) {
               )}
             </View>
 
-            {welcomeTableError ? (
-              <Text className="text-sm font-bold text-red-600">{welcomeTableError}</Text>
+            {actionError ? (
+              <Text accessibilityRole="alert" className="text-base font-bold text-red-700">
+                {actionError}
+              </Text>
             ) : null}
           </View>
         )}

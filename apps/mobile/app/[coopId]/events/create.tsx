@@ -16,6 +16,7 @@ import { EventDateField } from '@/components/event-date-field';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type EventRecurrenceFreq, type PrivateGroupSummary } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -120,7 +121,8 @@ export default function CreateEventScreen() {
         params: { coopId, eventId: result.event.id },
       } as any);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create the event.');
+      console.error('Failed to create event:', err);
+      setError(friendlyError(err, "We couldn't create your event."));
     } finally {
       setIsSubmitting(false);
     }

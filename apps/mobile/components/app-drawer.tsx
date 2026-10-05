@@ -4,6 +4,8 @@ import { router } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsDirectoryItem } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
+import { LoadError } from '@/components/load-error';
 import { track } from '@/lib/analytics';
 import { PERSONAL_PAGE_DESTINATION_ID } from '@/lib/composer-destination';
 import { useCommonsProposalActions } from '@/hooks/use-commons-proposal-actions';
@@ -65,6 +67,8 @@ export default function AppDrawer({
   // active commons is only the hardcoded fallback, whose name may not match
   // the real commons the links below open.
   const [directoryLoaded, setDirectoryLoaded] = useState(false);
+  const [directoryError, setDirectoryError] = useState('');
+  const [directoryReloadKey, setDirectoryReloadKey] = useState(0);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
   const hasAccountSession = isAuthenticated && !!sessionToken;
   const accountName = user?.name?.trim() || user?.email?.split('@')[0] || 'member';
@@ -80,17 +84,21 @@ export default function AppDrawer({
       return;
     }
     setIsLoading(true);
+    setDirectoryError('');
     api
       .listCommonsDirectory(sessionToken)
       .then((result) => setMemberCommons(result.coops.filter((c) =>
         hasAccountSession ? c.accessStatus === 'ACTIVE' : !c.isLocked,
       )))
-      .catch((error) => console.error('Failed to load member commons:', error))
+      .catch((error) => {
+        console.error('Failed to load member commons:', error);
+        setDirectoryError(friendlyError(error, "We couldn't load your commons."));
+      })
       .finally(() => {
         setIsLoading(false);
         setDirectoryLoaded(true);
       });
-  }, [hasAccountSession, visible, sessionToken]);
+  }, [hasAccountSession, visible, sessionToken, directoryReloadKey]);
 
   const activeCommonsForDrawer =
     memberCommons.length > 0
@@ -194,6 +202,14 @@ export default function AppDrawer({
               <Text className="text-[11px] font-black uppercase tracking-wide text-stone-400">Switch commons</Text>
               {isLoading ? <ActivityIndicator size="small" color={THEME.primary} /> : null}
             </View>
+            {directoryError && !isLoading ? (
+              <View className="mb-3">
+                <LoadError
+                  message={directoryError}
+                  onRetry={() => setDirectoryReloadKey((key) => key + 1)}
+                />
+              </View>
+            ) : null}
             <View className="mb-3 overflow-hidden rounded-2xl border border-stone-200 bg-white">
               {drawerItems.map((item) => {
                 const isActive = item.id === activeCommonsId || (item.id === 'cahootz' && activeCommonsId === 'cahootz');

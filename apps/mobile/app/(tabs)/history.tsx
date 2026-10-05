@@ -2,6 +2,7 @@ import { View, Text, ScrollView, RefreshControl, ActivityIndicator, TouchableOpa
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '~/lib/api';
 import { useAuth } from '~/contexts/auth-context';
+import { friendlyError } from '~/lib/friendly-error';
 
 interface Transfer {
   id: string;
@@ -31,10 +32,10 @@ export default function HistoryScreen() {
 
       // Get P2P transfer history
       const history = await api.getP2PHistory(user.id, 50, 0, user.walletAddress);
-      setTransfers(history.transfers || []);
+      setTransfers(history?.transfers || []);
     } catch (err) {
       console.error('Error loading history:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load history');
+      setError(friendlyError(err, "We couldn't load your activity."));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -130,16 +131,21 @@ export default function HistoryScreen() {
     );
   }
 
-  if (error) {
+  if (error && transfers.length === 0) {
     return (
       <View className="flex-1 items-center justify-center bg-gray-50 px-6">
-        <Text className="text-lg text-red-600 mb-4">Error</Text>
+        <Text className="text-lg font-semibold text-gray-900 mb-2">Your activity didn&apos;t load</Text>
         <Text className="text-center text-gray-600 mb-6">{error}</Text>
         <TouchableOpacity
-          onPress={loadHistory}
-          className="bg-primary px-6 py-3 rounded-lg"
+          onPress={() => {
+            setLoading(true);
+            loadHistory();
+          }}
+          accessibilityRole="button"
+          className="bg-primary px-6 py-3 rounded-lg items-center justify-center"
+          style={{ minHeight: 48 }}
         >
-          <Text className="text-white font-semibold">Retry</Text>
+          <Text className="text-white font-semibold">Try again</Text>
         </TouchableOpacity>
       </View>
     );
@@ -155,12 +161,26 @@ export default function HistoryScreen() {
       <View className="p-4">
         <Text className="text-2xl font-bold text-gray-900 mb-4">Activity</Text>
 
+        {error && (
+          <View className="mb-4 p-4 rounded-xl bg-red-50 border border-red-100">
+            <Text className="text-red-800">{error}</Text>
+            <TouchableOpacity
+              onPress={onRefresh}
+              accessibilityRole="button"
+              className="mt-2 self-start bg-white px-4 rounded-xl items-center justify-center border border-red-200"
+              style={{ minHeight: 44 }}
+            >
+              <Text className="text-red-800 font-semibold">Try again</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {transfers.length === 0 ? (
           <View className="bg-white rounded-xl p-8 items-center">
             <Text className="text-4xl mb-4">💸</Text>
             <Text className="text-gray-900 font-semibold text-lg mb-2">No activity yet</Text>
             <Text className="text-gray-500 text-center">
-              Your payments will appear here once you send or receive money.
+              Payments you make or receive will show up here.
             </Text>
           </View>
         ) : (

@@ -7,6 +7,7 @@ import type { AuthenticatedContext } from "../context.js";
 import { linkExternalWalletToUser } from "../services/wallet-service.js";
 import { isPlaceholderCharter, starterCharter } from "../services/starter-charter.js";
 import { ensureCommonsFundingStore } from "../services/funding-badge-service.js";
+import { assertCommonsNameAvailable, cleanCommonsName } from "../lib/commons-name.js";
 
 type MissionGoalConfig = {
   key: string;
@@ -172,14 +173,17 @@ export async function createCommonsConfig(
     ? fields.charterText
     : starterCharter(fields.name || coopId, initialGoals, fields.displayMission);
 
+  const name = fields.name ? cleanCommonsName(fields.name) : fields.name;
+
   const newConfig = await db.$transaction(async (tx: any) => {
+    if (name) await assertCommonsNameAvailable(tx, name);
     const config = await tx.coopConfig.create({
       data: {
         coopId,
         version: 1,
         isActive: true,
         // Display fields for mobile app
-        name: fields.name,
+        name,
         slug: fields.slug ?? coopId,
         tagline: fields.tagline,
         description: fields.description,
@@ -987,26 +991,32 @@ export const coopConfigRouter = router({
       if (!current) throw new Error(`No active config found for coopId: ${input.coopId}`);
 
       const changes = normalizeConfigChanges(audit.proposedChanges as Record<string, unknown> | null ?? {});
+      if (typeof changes.name === "string") changes.name = cleanCommonsName(changes.name);
       const sequence = await nextSequence(ctx.db, current.id);
 
-      const [updatedConfig] = await ctx.db.$transaction([
-        ctx.db.coopConfig.update({
+      const updatedConfig = await ctx.db.$transaction(async (tx: any) => {
+        // An amendment can rename the commons; the new name must still be unique.
+        if (typeof changes.name === "string" && changes.name) {
+          await assertCommonsNameAvailable(tx, changes.name, { exceptCoopId: input.coopId });
+        }
+        const config = await tx.coopConfig.update({
           where: { id: current.id },
           data: {
             version: current.version + 1,
             ...changes,
           },
-        }),
-        ctx.db.coopConfigAudit.update({
+        });
+        await tx.coopConfigAudit.update({
           where: { id: audit.id },
-          data: { 
-            status: "APPLIED", 
+          data: {
+            status: "APPLIED",
             sequence,
-            reviewedBy: walletAddress, 
-            reviewedAt: new Date() 
+            reviewedBy: walletAddress,
+            reviewedAt: new Date(),
           },
-        }),
-      ]);
+        });
+        return config;
+      });
 
       return mapDbToConfigOutput(updatedConfig);
     }),

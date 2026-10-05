@@ -117,7 +117,24 @@ test.describe("family commons", () => {
       // User A starts a private family from the commons directory.
       await steward.page.goto("/commons");
       await steward.page.getByRole("button", { name: "Start a family" }).click();
-      await steward.page.getByLabel("Family name").fill(familyName);
+      const nameField = steward.page.getByLabel("Family name").filter({ visible: true });
+
+      // A name idea fills the field; it doesn't have to be anyone's last name.
+      await steward.page
+        .getByRole("button", { name: "Use the name Grandma Mae's Crew" })
+        .filter({ visible: true })
+        .click();
+      await expect(nameField).toHaveValue("Grandma Mae's Crew");
+
+      // Names are unique across every commons, regardless of case.
+      await nameField.fill(MARKET_NAME.toLowerCase());
+      await shown(steward.page, "Create family", { exact: true }).click();
+      await expect(
+        shown(steward.page, `The name "${MARKET_NAME.toLowerCase()}" is already taken. Try another one.`),
+      ).toBeVisible();
+      await expect(steward.page).toHaveURL(/create-family/);
+
+      await nameField.fill(familyName);
       await shown(steward.page, "Create family", { exact: true }).click();
       await expect(steward.page).toHaveURL(/commons-invites\?coopId=family-/);
       familyPath = new URL(steward.page.url()).searchParams.get("coopId")!;

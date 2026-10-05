@@ -20,6 +20,18 @@ const THEME = {
 
 const ICONS = ['🏡', '🌳', '❤️', '🌻', '🍲', '🎉'];
 
+// Families with more than one last name often go by an elder, a place or a
+// tradition instead. Tapping one fills the name field to edit: names are
+// unique across all commons, so these exact ones may already be taken.
+const NAME_IDEAS = [
+  "Grandma Mae's Crew",
+  "Big Mama's House",
+  'The Oak Street Crew',
+  'Sunday Dinner',
+  'Reunion Committee',
+  'Robinson–Hayes Family',
+];
+
 /**
  * Starts a private, invite-only family commons. The creator becomes its
  * first steward and lands on the invite screen to bring family in.
@@ -85,16 +97,46 @@ export default function CreateFamilyScreen() {
         </View>
 
         <View className="rounded-2xl border border-gray-200 bg-white p-4">
-          <Text className="text-sm font-black text-gray-900">Family name</Text>
+          <Text className="text-sm font-black text-gray-900">What should we call your family?</Text>
+          <Text className="mt-1 text-xs leading-4 text-gray-500">
+            Any name works: a last name, a grandparent, a place or an inside joke. Every family
+            needs its own name, so pick something only yours would use.
+          </Text>
           <TextInput
             value={name}
-            onChangeText={setName}
-            placeholder="The Robinson Family"
+            onChangeText={(value) => {
+              setName(value);
+              if (error) setError('');
+            }}
+            placeholder="Grandma Mae's Crew"
             placeholderTextColor={THEME.muted}
             maxLength={60}
             accessibilityLabel="Family name"
             className="mt-2 rounded-xl border border-gray-200 px-3 py-3 text-base text-gray-900"
           />
+          <Text className="mt-3 text-xs font-bold text-gray-500">
+            Need an idea? Tap one, then make it yours.
+          </Text>
+          <View className="mt-2 flex-row flex-wrap gap-2">
+            {NAME_IDEAS.map((idea) => (
+              <TouchableOpacity
+                key={idea}
+                onPress={() => {
+                  setName(idea);
+                  setError('');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Use the name ${idea}`}
+                className="rounded-full border px-3 py-2"
+                style={{
+                  borderColor: name === idea ? THEME.primary : THEME.border,
+                  backgroundColor: name === idea ? THEME.primarySoft : '#FFFFFF',
+                }}
+              >
+                <Text className="text-xs font-semibold text-gray-800">{idea}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           <Text className="mt-4 text-sm font-black text-gray-900">A short description (optional)</Text>
           <TextInput

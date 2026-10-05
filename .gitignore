@@ -60,3 +60,6 @@ dist/
 
 # Local browser verification artifacts
 /output/playwright/
+
+# Trigger.dev local build output
+.trigger/

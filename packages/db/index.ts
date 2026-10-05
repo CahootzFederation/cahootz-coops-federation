@@ -1,6 +1,9 @@
 import { PrismaClient } from "@prisma/client";
 
 export * from "@prisma/client";
+// Named re-export so bundlers (Trigger.dev/esbuild) can resolve the `Prisma`
+// runtime namespace; `export *` from the CJS client is not statically visible.
+export { Prisma } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;

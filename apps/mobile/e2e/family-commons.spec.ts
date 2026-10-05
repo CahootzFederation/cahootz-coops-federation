@@ -117,7 +117,17 @@ test.describe("family commons", () => {
       // User A starts a private family from the commons directory.
       await steward.page.goto("/commons");
       await steward.page.getByRole("button", { name: "Start a family" }).click();
-      await steward.page.getByLabel("Family name").fill(familyName);
+      const nameField = steward.page.getByLabel("Family name").filter({ visible: true });
+
+      // Names are unique across every commons, regardless of case.
+      await nameField.fill(MARKET_NAME.toLowerCase());
+      await shown(steward.page, "Create family", { exact: true }).click();
+      await expect(
+        shown(steward.page, `The name "${MARKET_NAME.toLowerCase()}" is already taken. Try another one.`),
+      ).toBeVisible();
+      await expect(steward.page).toHaveURL(/create-family/);
+
+      await nameField.fill(familyName);
       await shown(steward.page, "Create family", { exact: true }).click();
       await expect(steward.page).toHaveURL(/commons-invites\?coopId=family-/);
       familyPath = new URL(steward.page.url()).searchParams.get("coopId")!;
@@ -176,6 +186,29 @@ test.describe("family commons", () => {
       await steward.context.close();
       await outsider.context.close();
       await newcomer?.context.close();
+    }
+  });
+
+  test("AI name ideas fill the family name with one no commons uses", { tag: "@sage" }, async ({ browser }) => {
+    test.setTimeout(180_000);
+    const steward = await newSignedInPage(browser, USER_A_EMAIL);
+    try {
+      await steward.page.goto("/commons");
+      await steward.page.getByRole("button", { name: "Start a family" }).click();
+      await steward.page
+        .getByLabel("Family description")
+        .filter({ visible: true })
+        .fill(`E2E ${runId}: Sunday dinners at Grandma Ruth's in Memphis, three last names between us`);
+      await steward.page.getByRole("button", { name: "Suggest names" }).filter({ visible: true }).click();
+
+      const firstIdea = steward.page.getByRole("button", { name: /^Use the name / }).filter({ visible: true }).first();
+      await expect(firstIdea).toBeVisible({ timeout: 90_000 });
+      const idea = (await firstIdea.textContent())!.trim();
+      await firstIdea.click();
+      await expect(steward.page.getByLabel("Family name").filter({ visible: true })).toHaveValue(idea);
+      await expect(steward.page.getByRole("button", { name: "More ideas" }).filter({ visible: true })).toBeVisible();
+    } finally {
+      await steward.context.close();
     }
   });
 

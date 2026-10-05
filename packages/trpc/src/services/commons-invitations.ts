@@ -7,6 +7,7 @@ import type { Prisma } from "@repo/db";
 import type { Context } from "../context.js";
 import { auditLogEntry } from "../lib/audit.js";
 import { COMMONS_COOP_ID } from "../lib/commons.js";
+import { assertCommonsNameAvailable, cleanCommonsName } from "../lib/commons-name.js";
 import { isEmailConfigured, sendCommonsInvitationEmail } from "../lib/email.js";
 import {
   createInvitationToken,
@@ -1021,13 +1022,14 @@ export async function createFamilyCommons(
     });
   }
 
-  const name = params.name.trim();
+  const name = cleanCommonsName(params.name);
   // Unguessable, so a private family can't be found by trying ids.
   const coopId = `family-${randomBytes(6).toString("hex")}`;
   const description = params.description?.trim() || `A private space for ${name}.`;
   const now = new Date();
 
   const result = await db.$transaction(async (tx) => {
+    await assertCommonsNameAvailable(tx, name);
     await tx.coopConfig.create({
       data: {
         coopId,

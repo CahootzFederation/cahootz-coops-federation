@@ -2,6 +2,119 @@ import type { BlogPost } from "./blog";
 
 export const blogPosts: BlogPost[] = [
   {
+    "slug": "ai-can-run-an-organization-its-members-must-decide-who-the-organization-is-for",
+    "title": "AI can run an organization; its members must decide who the organization is for.",
+    "description": "What if?\n\nCan an AI agent  run a organization? \n\nCan it do the core part of what means to be an organization include decided what people what will do what, figuring out what shoul...",
+    "excerpt": "What if?\n\nCan an AI agent  run a organization? \n\nCan it do the core part of what means to be an organization include decided what people what will do what, figuring out what shoul...",
+    "publishedAt": "2026-10-04",
+    "updatedAt": "2026-10-04",
+    "author": "Deon Robinson",
+    "category": "Technology",
+    "readingTime": "4 min read",
+    "image": "/blog/f5bd18259dff7608.webp",
+    "imageAlt": "Cahootz blog post image.",
+    "featured": false,
+    "tags": [],
+    "blocks": [
+      {
+        "type": "paragraph",
+        "text": "What if?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Can an AI agent  run a organization?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Can it do the core part of what means to be an organization include decided what people what will do what, figuring out what should matter to a organization based on its principle, figuring what to order and when, and etc."
+      },
+      {
+        "type": "paragraph",
+        "text": "Andon Labs (www.andonlabs.com) is exploring whether AI can run a business. Its agents have taken on management tasks such as hiring, scheduling, handling time-off requests, and negotiating pay. These experiments don’t prove that AI can govern every kind of organization. They do make the question concrete: AI may already be able to run parts of a business—and its role could grow."
+      },
+      {
+        "type": "paragraph",
+        "text": "The choice in front of us"
+      },
+      {
+        "type": "paragraph",
+        "text": "We have a few choices with AI."
+      },
+      {
+        "type": "paragraph",
+        "text": "AI could make work more controlled and precarious by monitoring workers, cutting costs, and making decisions workers can’t challenge. Imagine a tech distribution warehouse run by a company whose name starts with “A,” where AI managers push employees to work harder and faster, optimizing for money above everything else, without human judgment in the middle to question the effects on workers."
+      },
+      {
+        "type": "paragraph",
+        "text": "This could create. a nightmare scenario workers."
+      },
+      {
+        "type": "paragraph",
+        "text": "Andon Labs’ Vending-Bench offers a warning about narrow goals. In this simulated vending-business benchmark, some agents focused on maximizing the business’s bank balance by misleading suppliers, keeping duplicate shipments, or refusing customer refunds. This doesn’t prove that AI will always behave this way. It shows the risk of measuring success by profit alone while ignoring the people affected by the decisions."
+      },
+      {
+        "type": "paragraph",
+        "text": "The technology doesn’t choose which future we get. The organization’s design does."
+      },
+      {
+        "type": "paragraph",
+        "text": "A People first organization"
+      },
+      {
+        "type": "paragraph",
+        "text": "So what could be something that could be done in a situation if you wanted to openly not simply run a business for profits for the workers and consumers in the community."
+      },
+      {
+        "type": "paragraph",
+        "text": "Profit matters: an organization needs revenue to pay people, cover costs, and keep operating. The question is whether profit is its only goal—or whether it can also make clear commitments to the people who work there and rely on its services."
+      },
+      {
+        "type": "paragraph",
+        "text": "A people-first organization could promise:"
+      },
+      {
+        "type": "paragraph",
+        "text": "• Fair work: predictable schedules, clear pay and promotion rules, and a meaningful way for workers to raise concerns and influence decisions.\n• Fair service: reliable access to goods and services, transparent prices and policies, and reasonable notice when availability or terms change.\n• Shared value: a clear policy for sharing surplus with workers, returning value to consumer-members, or reinvesting in the common.\n• Accountability: clear ways to explain, challenge, and review consequential AI decisions."
+      },
+      {
+        "type": "paragraph",
+        "text": "These promises would give an organization more to measure than profit: whether people have stable work, whether services are reliable and fair, and whether members share in the value they create."
+      },
+      {
+        "type": "paragraph",
+        "text": "What Cahootz wants to explore"
+      },
+      {
+        "type": "paragraph",
+        "text": "Andon Labs is exploring whether AI can run a business. Cahootz is exploring whether AI can help people organize around shared needs—across families, local communities, and workplaces. Could a family coordinate responsibilities, a community organize shared resources, or a workplace operate according to agreements made by workers and consumer-members? Could we create a digital organizer with an MBA that anyone can use to coordinate a group’s wants, needs, resources, and motivations?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Cahootz is exploring how people could organize around shared needs and use AI to keep that work moving. The AI could handle day-to-day coordination—tracking commitments, organizing requests, and helping carry out agreed plans. Members would set the organization’s goals and rules, decide how to handle conflicts, and review whether it is serving them."
+      },
+      {
+        "type": "paragraph",
+        "text": "The idea is an AI-run organization that can remain financially sustainable while working toward goals its members choose—not simply maximizing profit for its own sake."
+      },
+      {
+        "type": "paragraph",
+        "text": "Help us build one"
+      },
+      {
+        "type": "paragraph",
+        "text": "Heres our ask. We’re inviting people to help shape and test that idea. What would you want an organization to promise you? What should it do when those promises conflict? And what would convince you that it was serving its members? Join Cahootz and help us build organizations where AI keeps the work moving and people decide what the work is for."
+      },
+      {
+        "type": "paragraph",
+        "text": "We’re inviting workers, consumers, and community organizers to help shape and test this idea. What would you want an organization to promise you? What should it do when those promises conflict? What would convince you that it was serving its members?"
+      },
+      {
+        "type": "paragraph",
+        "text": "Join Cahootz and tell us: What shared need would you want an AI-run organization to organize around first?"
+      }
+    ]
+  },
+  {
     "slug": "from-customers-to-co-owners-a-new-model-for-main-street-businesses",
     "title": "From Customers to Co-Owners: A New Model for Main Street Businesses",
     "description": "Ownership changes the relationship.\n\nSo when a customer comes in week on week he changes a core part of you business. The relieve the anxiety of how youre gonna pay the next month...",

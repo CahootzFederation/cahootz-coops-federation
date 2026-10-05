@@ -20,6 +20,7 @@ import {
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { authenticateForPayment } from '@/lib/biometric';
+import { friendlyError } from '@/lib/friendly-error';
 
 interface StoreInfo {
   id: string;
@@ -41,12 +42,17 @@ interface PaymentRequestInfo {
 }
 
 export default function QuickPayScreen() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
+  // Store codes are only unique within a commons. Wait for the saved session
+  // to load (a reload or a deep link opens this screen cold) and use its commons.
+  const coopId = user?.coop?.id;
   const params = useLocalSearchParams<{ token?: string; code?: string }>();
 
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // True when the screen failed to load (network/server), so "Try again" can help.
+  const [canRetry, setCanRetry] = useState(false);
 
   // Payment request (from QR/link)
   const [paymentRequest, setPaymentRequest] = useState<PaymentRequestInfo | null>(null);
@@ -61,6 +67,7 @@ export default function QuickPayScreen() {
   // Balance
   const [balance, setBalance] = useState<number>(0);
   const [balanceFormatted, setBalanceFormatted] = useState('$0.00');
+  const [balanceError, setBalanceError] = useState<string | null>(null);
 
   // Modals
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -68,28 +75,41 @@ export default function QuickPayScreen() {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  useEffect(() => {
+  const loadTarget = () => {
+    setError(null);
+    setCanRetry(false);
     if (params.token) {
       loadPaymentRequest(params.token);
     } else if (params.code) {
-      loadStoreByCode(params.code);
+      if (!coopId) {
+        setError("We couldn't tell which commons you're in. Go back and try again.");
+        setLoading(false);
+        return;
+      }
+      loadStoreByCode(params.code, coopId);
     } else {
-      setError('Invalid payment link');
+      setError("This payment link doesn't work. Ask the store for a new one.");
       setLoading(false);
     }
+  };
 
+  useEffect(() => {
+    if (authLoading) return;
+    loadTarget();
     loadBalance();
-  }, [params.token, params.code]);
+  }, [params.token, params.code, authLoading, coopId]);
 
   const loadBalance = async () => {
     if (!user?.id) return;
 
     try {
+      setBalanceError(null);
       const result = await api.getUSDBalance(user.id, user.walletAddress);
       setBalance(result.balance);
       setBalanceFormatted(result.formatted);
     } catch (err) {
       console.error('Error loading balance:', err);
+      setBalanceError(friendlyError(err, "We couldn't load your balance."));
     }
   };
 
@@ -99,20 +119,20 @@ export default function QuickPayScreen() {
       const result = await api.getPaymentRequest(token);
 
       if (!result.found) {
-        setError('Payment request not found');
+        setError("We couldn't find this payment request. Ask the store for a new one.");
         return;
       }
 
       if (result.isExpired) {
-        setError('This payment request has expired');
+        setError('This payment request has expired. Ask the store for a new one.');
         return;
       }
 
       if (result.status !== 'PENDING') {
         setError(
           result.status === 'COMPLETED'
-            ? 'This payment has already been completed'
-            : 'This payment request is no longer valid'
+            ? 'This payment has already been made.'
+            : 'This payment request can no longer be used. Ask the store for a new one.'
         );
         return;
       }
@@ -132,26 +152,28 @@ export default function QuickPayScreen() {
       }
     } catch (err) {
       console.error('Error loading payment request:', err);
-      setError('Failed to load payment request');
+      setError(friendlyError(err, "We couldn't load this payment request."));
+      setCanRetry(true);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadStoreByCode = async (code: string) => {
+  const loadStoreByCode = async (code: string, storeCoopId: string) => {
     try {
       setLoading(true);
-      const result = await api.getStoreByCode(code);
+      const result = await api.getStoreByCode(code, storeCoopId);
 
       if (!result.found) {
-        setError('Store not found');
+        setError("We couldn't find a store with that code. Check the code and try again.");
         return;
       }
 
       setStore(result.store!);
     } catch (err) {
       console.error('Error loading store:', err);
-      setError('Failed to load store');
+      setError(friendlyError(err, "We couldn't load this store."));
+      setCanRetry(true);
     } finally {
       setLoading(false);
     }
@@ -170,56 +192,69 @@ export default function QuickPayScreen() {
     return amountNum > 0 && amountNum <= 10000;
   };
 
+  const showPaymentError = (message: string) => {
+    setErrorMessage(message);
+    setShowErrorModal(true);
+  };
+
   const handlePay = async () => {
-    if (!user?.walletAddress || !canPay()) return;
+    if (!canPay()) return;
+    if (!user?.walletAddress) {
+      showPaymentError("Your wallet isn't set up yet, so you can't pay right now. Please try again later.");
+      return;
+    }
 
     const amountNum = parseFloat(amount);
 
-    // Biometric authentication
+    // Face ID / fingerprint, or the Confirm Payment sheet where those aren't available.
     const authResult = await authenticateForPayment(`$${amountNum.toFixed(2)}`);
     if (!authResult.success) {
-      if (authResult.error) {
-        setErrorMessage(authResult.error);
-        setShowErrorModal(true);
-      }
+      // Backing out of Face ID or the confirm sheet isn't a failure.
+      if (authResult.cancelled) return;
+      showPaymentError(authResult.error || "We couldn't confirm this payment. Please try again.");
+      return;
+    }
+
+    if (!paymentRequest && !store) {
+      showPaymentError("We couldn't tell which store to pay. Go back and open the payment link again.");
       return;
     }
 
     setPaying(true);
 
     try {
-      let result;
+      const result = paymentRequest
+        ? await api.payRequest(params.token!, amountNum, user.walletAddress)
+        : await api.payByStoreCode(
+            store!.shortCode || params.code!,
+            amountNum,
+            note.trim() || undefined,
+            user.walletAddress,
+            coopId,
+          );
 
-      if (paymentRequest) {
-        // Pay via payment request
-        result = await api.payRequest(params.token!, amountNum, user.walletAddress);
-      } else if (store) {
-        // Pay via store code
-        result = await api.payByStoreCode(
-          store.shortCode!,
-          amountNum,
-          note || undefined,
-          user.walletAddress
-        );
-      } else {
-        throw new Error('No payment target');
-      }
-
-      if (result.success) {
+      if (result?.success) {
         const storeName = paymentRequest?.store.name || store?.name;
         setSuccessMessage(`Paid $${amountNum.toFixed(2)} to ${storeName}`);
         setShowSuccessModal(true);
+        loadBalance();
+      } else {
+        console.error('Quick pay returned no success:', result);
+        showPaymentError(friendlyError({ message: result?.message }, "Your payment didn't go through."));
       }
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : 'Payment failed';
-      setErrorMessage(errMsg);
-      setShowErrorModal(true);
+      console.error('Quick pay failed:', err);
+      showPaymentError(friendlyError(err, "Your payment didn't go through."));
     } finally {
       setPaying(false);
     }
   };
 
   const currentStore = paymentRequest?.store || store;
+  // A payment request can carry a fixed amount; a store code never does.
+  const fixedAmount = paymentRequest?.amount != null ? paymentRequest.amount : null;
+  const amountNum = parseFloat(amount);
+  const hasValidAmount = canPay();
 
   if (loading) {
     return (
@@ -237,7 +272,7 @@ export default function QuickPayScreen() {
         <View className="flex-1 bg-white">
           <View className="pt-14 pb-4 px-4 border-b border-gray-100">
             <View className="flex-row items-center">
-              <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
+              <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2" accessibilityRole="button" accessibilityLabel="Go back">
                 <ArrowLeft size={24} color="#111827" />
               </TouchableOpacity>
               <Text className="flex-1 text-center text-lg font-semibold text-gray-900">
@@ -252,9 +287,21 @@ export default function QuickPayScreen() {
             <Text className="text-gray-900 text-xl font-semibold mt-4 text-center">
               {error}
             </Text>
+            {canRetry && (
+              <TouchableOpacity
+                onPress={loadTarget}
+                accessibilityRole="button"
+                className="mt-6 bg-primary px-6 py-3 rounded-xl items-center justify-center"
+                style={{ minHeight: 48 }}
+              >
+                <Text className="text-white font-semibold">Try again</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={() => router.back()}
-              className="mt-6 bg-gray-900 px-6 py-3 rounded-xl"
+              accessibilityRole="button"
+              className={`${canRetry ? 'mt-3' : 'mt-6'} bg-gray-900 px-6 py-3 rounded-xl items-center justify-center`}
+              style={{ minHeight: 48 }}
             >
               <Text className="text-white font-semibold">Go Back</Text>
             </TouchableOpacity>
@@ -271,7 +318,7 @@ export default function QuickPayScreen() {
         {/* Header */}
         <View className="pt-14 pb-4 px-4 bg-white border-b border-gray-100">
           <View className="flex-row items-center">
-            <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
+            <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2" accessibilityRole="button" accessibilityLabel="Go back">
               <ArrowLeft size={24} color="#111827" />
             </TouchableOpacity>
             <Text className="flex-1 text-center text-lg font-semibold text-gray-900">
@@ -321,36 +368,56 @@ export default function QuickPayScreen() {
 
             {/* Amount */}
             <View className="mb-4">
-              <Text className="text-gray-500 text-sm mb-2">Amount</Text>
-              {paymentRequest?.amount !== null ? (
+              <Text nativeID="quick-pay-amount-label" className="text-gray-700 text-base font-medium mb-2">
+                {fixedAmount != null ? 'Amount' : 'Amount in dollars'}
+              </Text>
+              {fixedAmount != null ? (
                 <Text className="text-gray-900 text-4xl font-bold">
-                  ${paymentRequest?.amount.toFixed(2)}
+                  ${fixedAmount.toFixed(2)}
                 </Text>
               ) : (
-                <View className="flex-row items-center">
-                  <Text className="text-gray-400 text-4xl">$</Text>
+                <View className="flex-row items-center bg-gray-50 border border-gray-300 rounded-xl px-4">
+                  <Text className="text-gray-500 text-4xl">$</Text>
                   <TextInput
-                    className="text-gray-900 text-4xl font-bold flex-1"
+                    className="text-gray-900 text-4xl font-bold flex-1 py-3 ml-1"
                     placeholder="0.00"
-                    placeholderTextColor="#D1D5DB"
+                    placeholderTextColor="#9CA3AF"
                     value={amount}
                     onChangeText={handleAmountChange}
                     keyboardType="decimal-pad"
+                    inputMode="decimal"
+                    accessibilityLabel="Amount in dollars"
+                    accessibilityLabelledBy="quick-pay-amount-label"
+                    maxLength={8}
                   />
                 </View>
               )}
             </View>
 
             {/* Balance */}
-            <View className="flex-row items-center justify-between py-3 border-t border-gray-100">
-              <Text className="text-gray-500">Your Balance</Text>
-              <Text className="text-gray-900 font-medium">{balanceFormatted}</Text>
-            </View>
+            {balanceError ? (
+              <View className="py-3 border-t border-gray-100">
+                <Text className="text-gray-700">{balanceError}</Text>
+                <TouchableOpacity
+                  onPress={loadBalance}
+                  accessibilityRole="button"
+                  className="mt-2 self-start bg-gray-100 px-4 rounded-xl items-center justify-center"
+                  style={{ minHeight: 44 }}
+                >
+                  <Text className="text-gray-900 font-semibold">Try again</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View className="flex-row items-center justify-between py-3 border-t border-gray-100">
+                <Text className="text-gray-500">Your Balance</Text>
+                <Text className="text-gray-900 font-medium">{balanceFormatted}</Text>
+              </View>
+            )}
 
-            {parseFloat(amount) > balance && (
+            {!balanceError && amountNum > balance && (
               <View className="bg-yellow-50 rounded-xl p-3 mt-2">
                 <Text className="text-yellow-800 text-sm">
-                  Your default payment method will be charged for the difference.
+                  This is more than your balance. If you have a default card saved, it pays the rest. If not, this payment won't go through.
                 </Text>
               </View>
             )}
@@ -385,14 +452,43 @@ export default function QuickPayScreen() {
             )}
           </View>
 
+          {/* Review: who gets paid and how much, right above the Pay button */}
+          {hasValidAmount && currentStore && (
+            <View
+              className="bg-white mx-4 mt-4 rounded-2xl p-5 border border-gray-200"
+              accessibilityLabel={`Review: you are paying ${currentStore.name} $${amountNum.toFixed(2)}`}
+            >
+              <Text className="text-gray-900 text-lg font-semibold mb-3">Review your payment</Text>
+              <View className="flex-row justify-between py-1">
+                <Text className="text-gray-600 text-base">To</Text>
+                <Text className="text-gray-900 text-base font-semibold flex-1 text-right ml-4">
+                  {currentStore.name}
+                </Text>
+              </View>
+              <View className="flex-row justify-between py-1">
+                <Text className="text-gray-600 text-base">Amount</Text>
+                <Text className="text-gray-900 text-base font-semibold">${amountNum.toFixed(2)}</Text>
+              </View>
+              {!paymentRequest && note.trim() !== '' && (
+                <View className="flex-row justify-between py-1">
+                  <Text className="text-gray-600 text-base">Note</Text>
+                  <Text className="text-gray-900 text-base flex-1 text-right ml-4">{note.trim()}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Pay Button */}
           <View className="mx-4 mt-6 mb-8">
             <TouchableOpacity
               onPress={handlePay}
-              disabled={!canPay() || paying}
+              disabled={!hasValidAmount || paying}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !hasValidAmount || paying }}
               className={`py-4 rounded-xl items-center ${
-                canPay() && !paying ? 'bg-primary' : 'bg-gray-300'
+                hasValidAmount && !paying ? 'bg-primary' : 'bg-gray-300'
               }`}
+              style={{ minHeight: 56 }}
             >
               {paying ? (
                 <View className="flex-row items-center">
@@ -401,13 +497,13 @@ export default function QuickPayScreen() {
                 </View>
               ) : (
                 <Text className="text-white font-bold text-lg">
-                  Pay ${parseFloat(amount || '0').toFixed(2)}
+                  {hasValidAmount ? `Pay $${amountNum.toFixed(2)}` : 'Enter an amount to pay'}
                 </Text>
               )}
             </TouchableOpacity>
 
             <Text className="text-gray-400 text-xs text-center mt-3">
-              You&apos;ll be asked to confirm with Face ID or fingerprint
+              You&apos;ll confirm with Face ID, your fingerprint, or a Confirm button before any money moves.
             </Text>
           </View>
         </ScrollView>
@@ -461,15 +557,17 @@ export default function QuickPayScreen() {
                 <AlertCircle size={32} color="#DC2626" />
               </View>
               <Text className="text-xl font-bold text-gray-900 text-center">
-                Payment Failed
+                Payment didn&apos;t go through
               </Text>
             </View>
             <Text className="text-gray-600 text-center mb-6">{errorMessage}</Text>
             <TouchableOpacity
               onPress={() => setShowErrorModal(false)}
-              className="bg-gray-900 py-3 rounded-xl items-center"
+              accessibilityRole="button"
+              className="bg-gray-900 py-3 rounded-xl items-center justify-center"
+              style={{ minHeight: 48 }}
             >
-              <Text className="text-white font-semibold">Try Again</Text>
+              <Text className="text-white font-semibold">OK</Text>
             </TouchableOpacity>
           </View>
         </View>

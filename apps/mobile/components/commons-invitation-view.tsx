@@ -11,10 +11,13 @@ import { router } from 'expo-router';
 import { ArrowLeft, Check, Clock, Lock, Mail } from 'lucide-react-native';
 
 import { IconAvatar } from '@/components/icon-avatar';
+import { LoadError } from '@/components/load-error';
+import { StewardHelp } from '@/components/role-help';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { markAnonymousProfileIntroSeen } from '@/lib/anonymous-id';
 import { api, type CommonsInvitationDetail } from '@/lib/api';
+import { ApiError, friendlyError } from '@/lib/friendly-error';
 import { secureStorage } from '@/lib/secure-storage';
 
 const THEME = {
@@ -70,6 +73,8 @@ export function CommonsInvitationView({
   const [invitation, setInvitation] = useState<CommonsInvitationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // The invitation is gone (not found or no longer valid), so trying again won't help.
+  const [invitationGone, setInvitationGone] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -79,16 +84,23 @@ export function CommonsInvitationView({
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
+    setInvitationGone(false);
+    if (!token && !(invitationId && sessionToken)) {
+      // Opened from "My invitations" while signed out.
+      setInvitation(null);
+      setLoading(false);
+      return;
+    }
     try {
       const result = token
         ? await api.previewCommonsInvitation(token, sessionToken)
-        : invitationId && sessionToken
-          ? await api.getMyCommonsInvitation(invitationId, sessionToken)
-          : null;
-      if (!result) throw new Error('Sign in to see this invitation.');
+        : await api.getMyCommonsInvitation(invitationId!, sessionToken!);
       setInvitation(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not open this invitation.');
+      console.error('Failed to load invitation:', err);
+      const code = err instanceof ApiError ? err.code : undefined;
+      setInvitationGone(code === 'NOT_FOUND' || code === 'BAD_REQUEST' || code === 'FORBIDDEN');
+      setError(friendlyError(err, "We couldn't open this invitation."));
     } finally {
       setLoading(false);
     }
@@ -150,7 +162,8 @@ export function CommonsInvitationView({
         setRequested(true);
       }
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
+      console.error('Failed to respond to invitation:', err);
+      setActionError(friendlyError(err, "We couldn't accept this invitation."));
     } finally {
       setSubmitting(false);
     }
@@ -182,6 +195,38 @@ export function CommonsInvitationView({
     );
   }
 
+  if (!invitation && !error && !token) {
+    return (
+      <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
+        <View className="px-4 pt-2">
+          {header}
+          <View className="rounded-2xl border border-gray-200 bg-white p-5">
+            <Text className="text-lg font-black text-gray-950">Sign in to see this invitation</Text>
+            <TouchableOpacity
+              accessibilityRole="button"
+              onPress={() => void signInToContinue()}
+              className="mt-4 items-center justify-center rounded-xl"
+              style={{ minHeight: 48, backgroundColor: THEME.primary }}
+            >
+              <Text className="text-base font-bold text-white">Sign in</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error && !invitationGone) {
+    return (
+      <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
+        <View className="px-4 pt-2">
+          {header}
+          <LoadError message={error} onRetry={() => void load()} retrying={loading} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (error || !invitation) {
     return (
       <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
@@ -189,8 +234,11 @@ export function CommonsInvitationView({
           {header}
           <View className="rounded-2xl border border-gray-200 bg-white p-5">
             <Text className="text-lg font-black text-gray-950">This invitation can&apos;t be opened</Text>
-            <Text className="mt-2 text-sm leading-5 text-gray-600">
-              {error || 'Ask the person who invited you to send a new one.'}
+            <Text className="mt-2 text-base leading-6 text-gray-700">
+              {error || "We couldn't find this invitation."}
+            </Text>
+            <Text className="mt-2 text-base leading-6 text-gray-700">
+              Ask the person who invited you to send a new one.
             </Text>
           </View>
         </View>
@@ -253,6 +301,7 @@ export function CommonsInvitationView({
               invitation doesn&apos;t skip that.
             </Text>
           ) : null}
+          {invitation.purpose === 'APPLY' ? <StewardHelp /> : null}
         </View>
 
         <View className="mt-4 rounded-2xl border border-gray-200 bg-white p-5">
@@ -308,6 +357,7 @@ export function CommonsInvitationView({
               <Text className="mt-2 text-sm leading-5 text-gray-600">
                 A steward of {commons.name} will review your request. We&apos;ll let you know when they do.
               </Text>
+              <StewardHelp />
             </>
           ) : (
             <>
@@ -320,6 +370,7 @@ export function CommonsInvitationView({
                         ? "This invitation was sent to your phone number, which we can't verify, so a steward will confirm it's you."
                         : `This invitation was sent to ${invitation.recipientHint ?? 'someone else'}. You're signed in with a different account, so a steward needs to confirm it's you.`}
                   </Text>
+                  {invitation.purpose !== 'APPLY' ? <StewardHelp color={THEME.blue} /> : null}
                 </View>
               ) : null}
 

@@ -42,8 +42,9 @@ export async function sendApplicationSubmittedNotification(params: {
   applicantEmail?: string;
   applicantName?: string;
   applicationId: string;
+  referenceCode?: string;
 }) {
-  const { coopId, coopName, applicantEmail, applicantName, applicationId } = params;
+  const { coopId, coopName, applicantEmail, applicantName, applicationId, referenceCode } = params;
 
   await sendSlackNotification({
     text: `📝 New Membership Application Submitted!`,
@@ -64,6 +65,11 @@ export async function sendApplicationSubmittedNotification(params: {
           {
             title: "Email",
             value: applicantEmail || "Not provided",
+            short: true,
+          },
+          {
+            title: "Reference",
+            value: referenceCode || "None",
             short: true,
           },
           {

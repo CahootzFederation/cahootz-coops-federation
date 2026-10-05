@@ -558,6 +558,13 @@ export const proposalRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Council vote not required for this proposal" });
       }
 
+      // Votes only count while the proposal is still open. Once it's decided
+      // (or withdrawn), a late vote must not change the recorded result.
+      const closedStatuses: string[] = ["APPROVED", "REJECTED", "FUNDED", "FAILED", "WITHDRAWN"];
+      if (closedStatuses.includes(proposal.status)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Voting on this proposal has closed." });
+      }
+
       // Upsert vote
       await ctx.db.proposalVote.upsert({
         where: { proposalId_voterWallet: { proposalId: input.proposalId, voterWallet: walletAddress } },

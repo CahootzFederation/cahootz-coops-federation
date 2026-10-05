@@ -34,6 +34,20 @@ export async function skipOnboardingWizard(
     name: "Continue",
     exact: true,
   });
+  if (mode === "if-shown") {
+    // Wait for the wizard's first step (or the feed, if onboarding is
+    // already done) before checking what to skip. A signed-in person who
+    // already saw the intro on this device starts at the profile form, so
+    // the first step isn't always the intro.
+    await expect(
+      introContinue
+        .or(page.getByRole("button", { name: "Do this later" }))
+        .or(page.getByRole("button", { name: "Skip for now" }))
+        .or(page.getByLabel("Open menu"))
+        .filter({ visible: true })
+        .first(),
+    ).toBeVisible();
+  }
   if (mode === "always") {
     await expect(introContinue).toBeVisible();
     await introContinue.click();

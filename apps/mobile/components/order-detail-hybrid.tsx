@@ -4,7 +4,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,6 +24,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { useCoin } from '@/contexts/platform-config-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 
 interface OrderDetailHybridProps {
   orderId: string;
@@ -49,15 +49,20 @@ export default function OrderDetailHybrid({ orderId }: OrderDetailHybridProps) {
   const coin = useCoin();
   const [transaction, setTransaction] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadTransaction();
   }, [orderId]);
 
   const loadTransaction = async () => {
-    if (!user?.id || !user?.walletAddress || !orderId) return;
+    if (!user?.id || !user?.walletAddress || !orderId) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
+      setLoadError(null);
       const result = await api.getCommerceTransaction({
         transactionId: orderId,
         userId: user.id,
@@ -65,8 +70,7 @@ export default function OrderDetailHybrid({ orderId }: OrderDetailHybridProps) {
       setTransaction(result);
     } catch (error) {
       console.error('Failed to load transaction:', error);
-      Alert.alert('Error', 'Failed to load order details');
-      router.back();
+      setLoadError(friendlyError(error, "We couldn't load this order."));
     } finally {
       setLoading(false);
     }
@@ -87,10 +91,24 @@ export default function OrderDetailHybrid({ orderId }: OrderDetailHybridProps) {
       <SafeAreaView className="flex-1 bg-slate-950">
         <View className="flex-1 items-center justify-center p-6">
           <AlertCircle size={48} color="#DC2626" />
-          <Text className="text-white text-lg font-semibold mt-4">Order Not Found</Text>
+          <Text className="text-white text-lg font-semibold mt-4 text-center">
+            {loadError || "We couldn't find this order."}
+          </Text>
+          {loadError ? (
+            <TouchableOpacity
+              onPress={loadTransaction}
+              accessibilityRole="button"
+              className="mt-6 bg-orange-600 px-6 rounded-xl items-center justify-center"
+              style={{ minHeight: 48 }}
+            >
+              <Text className="text-white font-semibold">Try again</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             onPress={() => router.back()}
-            className="mt-6 bg-orange-600 px-6 py-3 rounded-xl"
+            accessibilityRole="button"
+            className="mt-3 bg-gray-800 px-6 rounded-xl items-center justify-center"
+            style={{ minHeight: 48 }}
           >
             <Text className="text-white font-semibold">Go Back</Text>
           </TouchableOpacity>
@@ -223,14 +241,14 @@ export default function OrderDetailHybrid({ orderId }: OrderDetailHybridProps) {
               {scReward.status === 'PENDING' && (
                 <View className="mt-2 p-3 bg-amber-900/20 rounded-lg">
                   <Text className="text-amber-400 text-sm">
-                    Your {coin.symbol} reward is being processed on-chain. This may take a few minutes.
+                    Your {coin.symbol} reward is on the way. This can take a few minutes.
                   </Text>
                 </View>
               )}
               {scReward.status === 'FAILED' && (
                 <View className="mt-2 p-3 bg-red-900/20 rounded-lg">
                   <Text className="text-red-400 text-sm">
-                    The {coin.symbol} mint did not complete. This payment succeeded, but the reward may need follow-up.
+                    Your payment went through, but your {coin.symbol} reward wasn't added yet. Contact support if it doesn't show up soon.
                   </Text>
                 </View>
               )}

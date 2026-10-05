@@ -23,23 +23,34 @@ import {
 import { api } from '@/lib/api';
 import { useCart } from '@/contexts/cart-context';
 import { useCoin } from '@/contexts/platform-config-context';
+import { friendlyError } from '@/lib/friendly-error';
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
   const { addItem, totalItems } = useCart();
   const coin = useCoin();
 
   const loadProduct = useCallback(async () => {
-    if (!id) return;
+    if (!id) {
+      setLoadError("We couldn't find this product. Go back and pick it again.");
+      setLoading(false);
+      return;
+    }
     try {
+      setLoadError(null);
       const data = await api.getProduct(id);
+      if (!data) {
+        setLoadError("We couldn't find this product. It may have been removed.");
+      }
       setProduct(data);
     } catch (error) {
       console.error('Failed to load product:', error);
+      setLoadError(friendlyError(error, "We couldn't load this product."));
     } finally {
       setLoading(false);
     }
@@ -111,6 +122,35 @@ export default function ProductDetailScreen() {
     router.push(`/checkout?storeId=${product.store.id}`);
   };
 
+  if (!loading && !product) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
+        <View className="flex-row items-center px-5 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+          <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
+            <ArrowLeft size={24} color="#374151" />
+          </TouchableOpacity>
+          <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">Product</Text>
+        </View>
+        <View className="flex-1 items-center justify-center px-8">
+          <Text className="text-gray-700 dark:text-gray-300 text-lg text-center">
+            {loadError || "We couldn't load this product."}
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              setLoading(true);
+              loadProduct();
+            }}
+            accessibilityRole="button"
+            className="bg-primary px-8 py-3 rounded-xl mt-6 items-center justify-center"
+            style={{ minHeight: 48 }}
+          >
+            <Text className="text-white font-bold">Try again</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (loading || !product) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
@@ -128,7 +168,7 @@ export default function ProductDetailScreen() {
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900" edges={['top']}>
       {/* Header */}
       <View className="flex-row items-center justify-between px-5 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
         <Text className="text-lg font-semibold text-gray-900 dark:text-white flex-1 ml-4" numberOfLines={1}>
@@ -211,7 +251,7 @@ export default function ProductDetailScreen() {
             {product.store.isScVerified && (
               <View className="ml-2 flex-row items-center">
                 <BadgeCheck size={14} color="#FF6B00" />
-                <Text className="text-primary text-xs ml-1">SC Verified</Text>
+                <Text className="text-primary text-xs ml-1">Earns {coin.symbol} rewards</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -284,8 +324,8 @@ export default function ProductDetailScreen() {
                 </Text>
               </View>
               <Text className="text-primary dark:text-amber-300 text-sm">
-                When you purchase from this store, customers earn {coin.name} ({coin.symbol}) tokens which help
-                build community wealth and strengthen our commons economy.
+                When you buy from this store, you earn {coin.name} ({coin.symbol}) rewards. They help
+                build community wealth and strengthen your commons.
               </Text>
             </View>
           )}

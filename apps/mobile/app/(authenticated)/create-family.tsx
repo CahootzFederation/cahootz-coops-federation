@@ -7,6 +7,7 @@ import { ArrowLeft, Lock } from 'lucide-react-native';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -50,7 +51,8 @@ export default function CreateFamilyScreen() {
         params: { coopId: result.coopId },
       } as any);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start your family. Try again.');
+      console.error('Failed to create family commons:', err);
+      setError(friendlyError(err, "We couldn't start your family."));
     } finally {
       setSaving(false);
     }

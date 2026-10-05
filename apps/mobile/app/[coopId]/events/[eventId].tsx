@@ -16,8 +16,11 @@ import { MentionComposerInput } from '@/components/mention-composer-input';
 import { MentionText } from '@/components/mention-text';
 import { PersonLink } from '@/components/person-link';
 import { Text } from '@/components/ui/text';
+import { AiBadge } from '@/components/ai-badge';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type EventDetail, type EventRsvpStatus } from '@/lib/api';
+import { ApiError, friendlyError } from '@/lib/friendly-error';
+import { LoadError } from '@/components/load-error';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -73,6 +76,9 @@ export default function EventDetailScreen() {
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  // The event is gone or hidden, so "Try again" can't help.
+  const [eventGone, setEventGone] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [rsvpPending, setRsvpPending] = useState(false);
   const [reminderMuted, setReminderMuted] = useState(false);
   const [commentDraft, setCommentDraft] = useState('');
@@ -81,11 +87,14 @@ export default function EventDetailScreen() {
   useEffect(() => {
     let mounted = true;
     if (!eventId) {
-      setError('Event not found.');
+      setEventGone(true);
+      setError("We couldn't find this event.");
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
+    setError('');
+    setEventGone(false);
     api
       .fetchEventDetail(eventId, sessionToken)
       .then((result) => {
@@ -93,7 +102,9 @@ export default function EventDetailScreen() {
       })
       .catch((err) => {
         console.error('Failed to load event:', err);
-        if (mounted) setError(err instanceof Error ? err.message : 'Could not load this event.');
+        if (!mounted) return;
+        setEventGone(err instanceof ApiError && (err.code === 'NOT_FOUND' || err.code === 'FORBIDDEN'));
+        setError(friendlyError(err, "We couldn't load this event."));
       })
       .finally(() => {
         if (mounted) setIsLoading(false);
@@ -101,7 +112,7 @@ export default function EventDetailScreen() {
     return () => {
       mounted = false;
     };
-  }, [eventId, sessionToken]);
+  }, [eventId, sessionToken, reloadKey]);
 
   const isReminderHandoff = params.reminder === '1';
   const startsInMinutes = event ? minutesUntil(event.startAt) : null;
@@ -117,7 +128,8 @@ export default function EventDetailScreen() {
       const updated = await api.rsvpToEvent(event.id, status, sessionToken);
       setEvent((current) => (current ? { ...current, ...updated } : current));
     } catch (err) {
-      Alert.alert('Could not RSVP', err instanceof Error ? err.message : 'Please try again.');
+      console.error('Failed to RSVP:', err);
+      Alert.alert("Couldn't save your RSVP", friendlyError(err, "We couldn't save your RSVP."));
     } finally {
       setRsvpPending(false);
     }
@@ -131,7 +143,8 @@ export default function EventDetailScreen() {
       await api.muteEventReminder(event.id, nextMuted, sessionToken);
     } catch (err) {
       setReminderMuted(!nextMuted);
-      Alert.alert('Could not update reminder', err instanceof Error ? err.message : 'Please try again.');
+      console.error('Failed to update event reminder:', err);
+      Alert.alert("Couldn't change the reminder", friendlyError(err, "We couldn't change your reminder for this event."));
     }
   };
 
@@ -155,7 +168,8 @@ export default function EventDetailScreen() {
       );
       setCommentDraft('');
     } catch (err) {
-      Alert.alert('Could not comment', err instanceof Error ? err.message : 'Please try again.');
+      console.error('Failed to comment on event:', err);
+      Alert.alert("Couldn't post your comment", friendlyError(err, "We couldn't post your comment."));
     } finally {
       setIsCommenting(false);
     }
@@ -193,10 +207,12 @@ export default function EventDetailScreen() {
           </View>
         ) : null}
 
-        {!isLoading && error && !event ? (
+        {!isLoading && error && !event && !eventGone ? (
+          <LoadError message={error} onRetry={() => setReloadKey((key) => key + 1)} />
+        ) : !isLoading && error && !event ? (
           <View className="rounded-xl border border-red-200 bg-red-50 p-4">
-            <Text className="font-black text-red-700">Could not open event</Text>
-            <Text className="mt-1 text-sm text-red-700">{error}</Text>
+            <Text className="font-black text-red-700">We couldn&apos;t open this event</Text>
+            <Text className="mt-1 text-base text-red-700">{error}</Text>
           </View>
         ) : null}
 
@@ -323,9 +339,12 @@ export default function EventDetailScreen() {
                   ) : null}
                   {event.post.comments.map((comment) => (
                     <View key={comment.id} className="rounded-xl bg-stone-50 p-3">
-                      <PersonLink name={comment.author} handle={comment.authorHandle} className="self-start">
-                        <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
-                      </PersonLink>
+                      <View className="flex-row items-center gap-1.5">
+                        <PersonLink name={comment.author} handle={comment.authorHandle} className="self-start">
+                          <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
+                        </PersonLink>
+                        {comment.authorIsAi ? <AiBadge /> : null}
+                      </View>
                       {comment.body ? (
                         <MentionText
                           content={comment.body}

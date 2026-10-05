@@ -187,6 +187,11 @@ export default function ApplicationsPage() {
               <CardDescription className="text-base mt-2 text-gray-400">
                 {currentApp.email} • {currentApp.phone || 'No phone'}
               </CardDescription>
+              {application?.referenceCode && (
+                <p className="text-sm mt-1 text-gray-400">
+                  Reference: <span className="font-mono text-white">{application.referenceCode}</span>
+                </p>
+              )}
             </div>
             <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">
               PENDING

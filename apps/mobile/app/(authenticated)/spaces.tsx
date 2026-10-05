@@ -16,8 +16,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
+import { useCoin } from '@/contexts/platform-config-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 import { IconAvatar } from '@/components/icon-avatar';
+import { LoadError } from '@/components/load-error';
 import { EmojiColorPicker } from '@/components/emoji-color-picker';
 import {
   ArrowLeft,
@@ -60,8 +63,11 @@ export default function SpacesScreen() {
     mode?: string;
   }>();
   const { isLoading, isAuthenticated, sessionToken } = useAuth();
+  const coin = useCoin();
   const [groups, setGroups] = React.useState<PrivateGroupSummary[]>([]);
   const [isLoadingGroups, setIsLoadingGroups] = React.useState(true);
+  const [groupsError, setGroupsError] = React.useState<string | null>(null);
+  const [invitesError, setInvitesError] = React.useState<string | null>(null);
   const [name, setName] = React.useState('');
   const [purpose, setPurpose] = React.useState('');
   const [privacy, setPrivacy] = React.useState<'public' | 'private'>('public');
@@ -97,9 +103,13 @@ export default function SpacesScreen() {
     if (!sessionToken) return;
 
     setIsLoadingGroups(true);
+    setGroupsError(null);
     (coopId ? api.listVisibleCircles(sessionToken, coopId) : api.listMyGroups(sessionToken))
       .then(({ groups: next }) => setGroups(next))
-      .catch((error) => console.warn('Could not load groups:', error))
+      .catch((error) => {
+        console.warn('Could not load groups:', error);
+        setGroupsError(friendlyError(error, "We couldn't load your circles."));
+      })
       .finally(() => setIsLoadingGroups(false));
   }, [sessionToken, coopId]);
 
@@ -110,10 +120,14 @@ export default function SpacesScreen() {
   const loadInvites = React.useCallback(() => {
     if (!sessionToken) return;
 
+    setInvitesError(null);
     api
       .listMyCircleInvites(sessionToken, coopId)
       .then(({ invites: next }) => setInvites(next))
-      .catch((error) => console.warn('Could not load circle invitations:', error));
+      .catch((error) => {
+        console.warn('Could not load circle invitations:', error);
+        setInvitesError(friendlyError(error, "We couldn't check for circle invitations."));
+      });
   }, [sessionToken, coopId]);
 
   React.useEffect(() => {
@@ -145,8 +159,8 @@ export default function SpacesScreen() {
 
     if (requirements && !requirements.canCreate) {
       Alert.alert(
-        'Not enough SC',
-        `You need at least ${requirements.minScBalance} SC to create a circle (you have ${requirements.currentScBalance.toFixed(2)} SC).`,
+        `Not enough ${coin.symbol}`,
+        `You need at least ${requirements.minScBalance} ${coin.symbol} to create a circle. You have ${requirements.currentScBalance.toFixed(2)} ${coin.symbol}.`,
       );
       return;
     }
@@ -175,9 +189,10 @@ export default function SpacesScreen() {
         params: { coopId: coopId || 'cahootz', circleId: result.group.id },
       } as any);
     } catch (error) {
+      console.error('Failed to create circle:', error);
       Alert.alert(
-        'Could not create circle',
-        error instanceof Error ? error.message : 'Try again.',
+        "Couldn't create your circle",
+        friendlyError(error, "We couldn't create your circle."),
       );
     } finally {
       setIsSaving(false);
@@ -205,9 +220,13 @@ export default function SpacesScreen() {
         } as any);
       }
     } catch (error) {
+      console.error('Failed to respond to circle invitation:', error);
       Alert.alert(
-        accept ? 'Could not join circle' : 'Could not decline invitation',
-        error instanceof Error ? error.message : 'Try again.',
+        accept ? "Couldn't join the circle" : "Couldn't decline the invitation",
+        friendlyError(
+          error,
+          accept ? "We couldn't add you to this circle." : "We couldn't decline this invitation.",
+        ),
       );
     } finally {
       setRespondingInviteId(null);
@@ -346,6 +365,12 @@ export default function SpacesScreen() {
               </View>
             </View>
 
+            {invitesError ? (
+              <View className="mt-6">
+                <LoadError message={invitesError} onRetry={loadInvites} />
+              </View>
+            ) : null}
+
             {invites.length > 0 ? (
               <View className="mt-6">
                 <View className="flex-row items-center gap-2">
@@ -434,9 +459,11 @@ export default function SpacesScreen() {
                 <Text className="text-base font-black text-gray-950">
                   {coopId ? 'Circles in this common' : 'Your circles'}
                 </Text>
-                <Text className="mt-0.5 text-xs font-semibold text-gray-500">
-                  {groups.length} {groups.length === 1 ? 'circle' : 'circles'}
-                </Text>
+                {groupsError || isLoadingGroups ? null : (
+                  <Text className="mt-0.5 text-xs font-semibold text-gray-500">
+                    {groups.length} {groups.length === 1 ? 'circle' : 'circles'}
+                  </Text>
+                )}
               </View>
               <TouchableOpacity
                 onPress={() => setActiveView('create')}
@@ -462,6 +489,8 @@ export default function SpacesScreen() {
                     color={SPACES_THEME.primary}
                   />
                 </View>
+              ) : groupsError ? (
+                <LoadError message={groupsError} onRetry={loadGroups} />
               ) : groups.length === 0 ? (
                 <View className="rounded-3xl border border-dashed border-gray-300 bg-white p-5">
                   <Text className="text-base font-black text-gray-950">
@@ -726,8 +755,8 @@ export default function SpacesScreen() {
                   }}
                 >
                   {requirements.canCreate
-                    ? `You meet the ${requirements.minScBalance} SC requirement.`
-                    : `Creating a circle requires ${requirements.minScBalance} SC. Your balance is ${requirements.currentScBalance.toFixed(2)} SC.`}
+                    ? `You have the ${requirements.minScBalance} ${coin.symbol} needed to create a circle.`
+                    : `Creating a circle needs ${requirements.minScBalance} ${coin.symbol}. You have ${requirements.currentScBalance.toFixed(2)} ${coin.symbol}.`}
                 </Text>
               </View>
             ) : null}

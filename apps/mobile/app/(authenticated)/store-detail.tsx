@@ -28,6 +28,8 @@ import {
 } from 'lucide-react-native';
 import { api } from '@/lib/api';
 import { useCart } from '@/contexts/cart-context';
+import { useCoin } from '@/contexts/platform-config-context';
+import { friendlyError } from '@/lib/friendly-error';
 
 interface ProductData {
   id: string;
@@ -37,7 +39,6 @@ interface ProductData {
   imageUrl: string | null;
   priceUSD: number;
   compareAtPrice: number | null;
-  ucDiscountPrice: number | null;
   quantity: number | null;
   isFeatured: boolean;
   kind?: 'STANDARD' | 'FUNDING_BADGE';
@@ -45,14 +46,13 @@ interface ProductData {
     id: string;
     name: string;
     isScVerified: boolean;
-    acceptsUC: boolean;
-    ucDiscountPercent: number;
   };
 }
 
 export default function StoreDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { items: cartItems, addItem, updateQuantity, removeItem, totalItems } = useCart();
+  const coin = useCoin();
 
   const getCartQuantity = (productId: string) => {
     const item = cartItems.find(i => i.productId === productId);
@@ -64,6 +64,9 @@ export default function StoreDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [productCategories, setProductCategories] = useState<{ key: string; label: string }[]>([]);
+  // Load failures are kept apart from "no products" so they never look empty.
+  const [storeError, setStoreError] = useState<string | null>(null);
+  const [productsError, setProductsError] = useState<string | null>(null);
 
   const handleAddToCart = (product: ProductData) => {
     if (!store) return;
@@ -86,28 +89,44 @@ export default function StoreDetailScreen() {
   };
 
   const loadStore = useCallback(async () => {
-    if (!id) return;
+    if (!id) {
+      setStoreError("We couldn't find this store. Go back and pick it again.");
+      return;
+    }
     try {
+      setStoreError(null);
       const storeData = await api.getStore(id);
+      if (!storeData) {
+        setStoreError("We couldn't find this store. It may have closed.");
+      }
       setStore(storeData);
     } catch (error) {
       console.error('Failed to load store:', error);
+      setStoreError(friendlyError(error, "We couldn't load this store."));
     }
   }, [id]);
 
   const loadProducts = useCallback(async () => {
     if (!id) return;
     try {
+      setProductsError(null);
       const result = await api.getProducts({
         storeId: id,
         category: selectedCategory || undefined,
         limit: 50,
       });
-      setProducts(result.products);
+      setProducts(result?.products ?? []);
     } catch (error) {
       console.error('Failed to load products:', error);
+      setProductsError(friendlyError(error, "We couldn't load this store's products."));
     }
   }, [id, selectedCategory]);
+
+  const retryLoad = async () => {
+    setLoading(true);
+    await Promise.all([loadStore(), loadProducts()]);
+    setLoading(false);
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -144,6 +163,32 @@ export default function StoreDetailScreen() {
   const formatPrice = (price: number) => {
     return `$${price.toFixed(2)}`;
   };
+
+  if (!loading && !store) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
+        <View className="flex-row items-center px-5 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+          <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
+            <ArrowLeft size={24} color="#374151" />
+          </TouchableOpacity>
+          <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">Store</Text>
+        </View>
+        <View className="flex-1 items-center justify-center px-8">
+          <Text className="text-gray-700 dark:text-gray-300 text-lg text-center">
+            {storeError || "We couldn't load this store."}
+          </Text>
+          <TouchableOpacity
+            onPress={retryLoad}
+            accessibilityRole="button"
+            className="bg-primary px-8 py-3 rounded-xl mt-6 items-center justify-center"
+            style={{ minHeight: 48 }}
+          >
+            <Text className="text-white font-bold">Try again</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (loading || !store) {
     return (
@@ -185,6 +230,7 @@ export default function StoreDetailScreen() {
             <TouchableOpacity
               onPress={() => router.back()}
               className="absolute top-4 left-4 bg-black/30 p-2 rounded-full"
+              accessibilityLabel="Go back"
             >
               <ArrowLeft size={24} color="white" />
             </TouchableOpacity>
@@ -247,7 +293,7 @@ export default function StoreDetailScreen() {
               <View className="bg-secondary dark:bg-amber-900/30 px-3 py-2 rounded-full flex-row items-center">
                 <BadgeCheck size={16} color="#FF6B00" />
                 <Text className="text-primary dark:text-amber-300 font-semibold ml-1">
-                  SC Verified - Earns SC
+                  Earns {coin.symbol} rewards
                 </Text>
               </View>
             </View>
@@ -368,7 +414,19 @@ export default function StoreDetailScreen() {
           </ScrollView>
 
           {/* Products Grid */}
-          {products.length === 0 ? (
+          {productsError ? (
+            <View className="items-center py-12">
+              <Text className="text-gray-700 dark:text-gray-300 text-center">{productsError}</Text>
+              <TouchableOpacity
+                onPress={loadProducts}
+                accessibilityRole="button"
+                className="bg-primary px-6 rounded-xl mt-4 items-center justify-center"
+                style={{ minHeight: 48 }}
+              >
+                <Text className="text-white font-semibold">Try again</Text>
+              </TouchableOpacity>
+            </View>
+          ) : products.length === 0 ? (
             <View className="items-center py-12">
               <ShoppingBag size={48} color="#9CA3AF" />
               <Text className="text-gray-500 dark:text-gray-400 text-center mt-4">

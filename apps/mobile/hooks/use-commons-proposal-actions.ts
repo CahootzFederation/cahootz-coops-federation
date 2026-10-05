@@ -8,6 +8,8 @@ export type CommonsProposalActions = {
   actionableProposalIds: string[];
   canVote: boolean;
   loading: boolean;
+  /** True when the counts couldn't be loaded, so zero means "unknown", not "none". */
+  failed: boolean;
 };
 
 const EMPTY: CommonsProposalActions = {
@@ -16,6 +18,7 @@ const EMPTY: CommonsProposalActions = {
   actionableProposalIds: [],
   canVote: false,
   loading: false,
+  failed: false,
 };
 
 export function useCommonsProposalActions({
@@ -59,11 +62,12 @@ export function useCommonsProposalActions({
           actionableProposalIds: actionSummary?.actionableProposalIds ?? [],
           canVote: actionSummary?.canVote ?? false,
           loading: false,
+          failed: false,
         });
       })
       .catch((error) => {
         console.error('Failed to load proposal navigation actions:', error);
-        if (mounted) setState(EMPTY);
+        if (mounted) setState({ ...EMPTY, failed: true });
       });
 
     return () => {

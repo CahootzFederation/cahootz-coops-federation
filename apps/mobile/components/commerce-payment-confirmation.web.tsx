@@ -3,6 +3,7 @@ import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import { CreditCard, ShieldCheck } from 'lucide-react-native';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
+import { friendlyError } from '@/lib/friendly-error';
 
 const publishableKey = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
 const stripePromise = publishableKey ? loadStripe(publishableKey) : Promise.resolve(null);
@@ -38,54 +39,59 @@ function CommercePaymentForm({
     setProcessing(true);
     setLocalError('');
 
-    const { paymentIntent, error: retrieveError } = await stripe.retrievePaymentIntent(clientSecret);
-
-    if (paymentIntent?.status === 'succeeded') {
-      setProcessing(false);
-      onSuccess();
-      return;
-    }
-
-    if (paymentIntent?.status === 'processing') {
-      const message = 'Your payment is still processing. Wait a moment and check your order status before trying again.';
+    const fail = (message: string) => {
       setLocalError(message);
       onError(message);
       setProcessing(false);
-      return;
-    }
+    };
 
-    if (retrieveError) {
-      const message = retrieveError.message || 'Could not check payment status. Please try again.';
-      setLocalError(message);
-      onError(message);
-      setProcessing(false);
-      return;
-    }
+    try {
+      const { paymentIntent, error: retrieveError } = await stripe.retrievePaymentIntent(clientSecret);
 
-    const { error } = await stripe.confirmPayment({
-      elements,
-      confirmParams: {
-        return_url: typeof window !== 'undefined' ? window.location.href : undefined,
-      },
-      redirect: 'if_required',
-    });
-
-    if (error) {
-      if (error.payment_intent?.status === 'succeeded') {
+      if (paymentIntent?.status === 'succeeded') {
         setProcessing(false);
         onSuccess();
         return;
       }
 
-      const message = error.message || 'Payment failed. Please try again.';
-      setLocalError(message);
-      onError(message);
-      setProcessing(false);
-      return;
-    }
+      if (paymentIntent?.status === 'processing') {
+        fail('Your payment is still processing. Wait a moment and check your order status before trying again.');
+        return;
+      }
 
-    setProcessing(false);
-    onSuccess();
+      if (retrieveError) {
+        console.error('Stripe retrievePaymentIntent error:', retrieveError);
+        fail(friendlyError(retrieveError, "We couldn't check your payment."));
+        return;
+      }
+
+      const { error } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: typeof window !== 'undefined' ? window.location.href : undefined,
+        },
+        redirect: 'if_required',
+      });
+
+      if (error) {
+        if (error.payment_intent?.status === 'succeeded') {
+          setProcessing(false);
+          onSuccess();
+          return;
+        }
+
+        // Stripe's card messages are written for customers ("Your card was declined.").
+        console.error('Stripe confirmPayment error:', error);
+        fail(friendlyError(error, "Your payment didn't go through."));
+        return;
+      }
+
+      setProcessing(false);
+      onSuccess();
+    } catch (err) {
+      console.error('Payment confirmation failed:', err);
+      fail(friendlyError(err, "Your payment didn't go through."));
+    }
   };
 
   return (

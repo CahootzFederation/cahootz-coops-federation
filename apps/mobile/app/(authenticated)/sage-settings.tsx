@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react-native';
 
 import { PreferenceSwitch } from '@/components/preference-switch';
+import { SageIntro } from '@/components/sage-intro';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
@@ -44,6 +45,8 @@ export default function SageSettingsScreen() {
         </TouchableOpacity>
         <Text style={{ fontSize: 22, fontWeight: '800', color: '#1C1917' }}>Sage settings</Text>
       </View>
+
+      <SageIntro dismissible={false} />
 
       <View style={{ borderRadius: 14, borderWidth: 1, borderColor: '#E7E5E4', backgroundColor: '#FFFFFF', padding: 16, gap: 10 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>

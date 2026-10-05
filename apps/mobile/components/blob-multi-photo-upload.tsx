@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Image, Alert, ActivityIndicator, ScrollVi
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { getApiUrl, getCoopId } from '@/lib/config';
+import { friendlyError } from '@/lib/friendly-error';
 
 const API_BASE_URL = getApiUrl();
 
@@ -37,7 +38,7 @@ export default function BlobMultiPhotoUpload({
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please allow access to your media library');
+        Alert.alert('Allow photo access', 'To add photos, allow Cahootz to use your photos in Settings.');
         return;
       }
 
@@ -57,7 +58,7 @@ export default function BlobMultiPhotoUpload({
       }
     } catch (error) {
       console.error('Error picking photos:', error);
-      Alert.alert('Error', 'Failed to pick photos');
+      Alert.alert("Couldn't open your photos", "We couldn't open your photos. Please try again.");
     }
   };
 
@@ -135,7 +136,7 @@ export default function BlobMultiPhotoUpload({
             i === index ? { 
               ...p, 
               status: 'error' as const, 
-              error: error instanceof Error ? error.message : 'Upload failed' 
+              error: friendlyError(error, "We couldn't upload this photo.") 
             } : p
           ));
           throw error;
@@ -157,7 +158,7 @@ export default function BlobMultiPhotoUpload({
       );
     } catch (error) {
       console.error('Upload error:', error);
-      Alert.alert('Upload failed', 'Some photos failed to upload. Please try again.');
+      Alert.alert("Some photos didn't upload", "Some of your photos didn't upload. Please try again.");
     } finally {
       setIsUploading(false);
     }

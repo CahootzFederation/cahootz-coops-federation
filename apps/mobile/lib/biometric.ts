@@ -73,16 +73,23 @@ export async function getBiometricName(): Promise<string> {
   }
 }
 
+export type BiometricPaymentResult = {
+  success: boolean;
+  /** True when the member backed out (Cancel, or the system closed the prompt). Treat it as a no-op, not a failure. */
+  cancelled?: boolean;
+  /** Plain wording safe to show a member. */
+  error?: string;
+};
+
+const CANCEL_ERRORS = new Set(['user_cancel', 'system_cancel', 'app_cancel']);
+
 /**
  * Authenticate user with biometrics for payment confirmation
  * @param data - Payment amount string or full payment data with fee breakdown
  */
 export async function authenticateForPayment(
   data: string | PaymentConfirmationData
-): Promise<{
-  success: boolean;
-  error?: string;
-}> {
+): Promise<BiometricPaymentResult> {
   // Normalize input to PaymentConfirmationData
   const paymentData: PaymentConfirmationData = 
     typeof data === 'string' ? { amount: data } : data;
@@ -94,12 +101,12 @@ export async function authenticateForPayment(
     try {
       const confirmed = await paymentConfirmationService.confirm(paymentData);
       if (!confirmed) {
-        return { success: false, error: 'Payment cancelled' };
+        return { success: false, cancelled: true, error: 'Payment cancelled' };
       }
       return { success: true };
     } catch (error) {
       console.error('Payment confirmation error:', error);
-      return { success: false, error: 'Confirmation failed' };
+      return { success: false, error: "We couldn't confirm this payment. Please try again." };
     }
   }
 
@@ -111,12 +118,12 @@ export async function authenticateForPayment(
       try {
         const confirmed = await paymentConfirmationService.confirm(paymentData);
         if (!confirmed) {
-          return { success: false, error: 'Payment cancelled' };
+          return { success: false, cancelled: true, error: 'Payment cancelled' };
         }
         return { success: true };
       } catch (error) {
         console.error('Payment confirmation error:', error);
-        return { success: false, error: 'Confirmation failed' };
+        return { success: false, error: "We couldn't confirm this payment. Please try again." };
       }
     }
 
@@ -132,21 +139,29 @@ export async function authenticateForPayment(
     }
 
     // Handle specific error types
-    if (result.error === 'user_cancel') {
-      return { success: false, error: 'Authentication cancelled' };
+    if (CANCEL_ERRORS.has(result.error)) {
+      return { success: false, cancelled: true, error: 'Authentication cancelled' };
     }
 
     if (result.error === 'user_fallback') {
       // User chose to use passcode - device handles this
-      return { success: false, error: 'Use device passcode' };
+      return { success: false, error: 'Use your phone passcode to confirm this payment.' };
     }
 
-    return { success: false, error: result.error || 'Authentication failed' };
+    if (result.error === 'lockout') {
+      return {
+        success: false,
+        error: 'Face ID or Touch ID is locked after too many tries. Unlock your phone with your passcode, then try again.',
+      };
+    }
+
+    console.error('Biometric authentication failed:', result.error);
+    return { success: false, error: "We couldn't confirm it's you. Please try again." };
   } catch (error) {
     console.error('Biometric authentication error:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Authentication failed'
+      error: "We couldn't confirm it's you. Please try again.",
     };
   }
 }

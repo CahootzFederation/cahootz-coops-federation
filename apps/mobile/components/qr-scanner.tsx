@@ -38,11 +38,11 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
       onClose();
     } else {
       Alert.alert(
-        'Invalid QR Code',
-        'The scanned QR code does not contain a valid Ethereum address.',
+        "That code didn't work",
+        "This QR code isn't a wallet address. Try scanning a different code.",
         [
           {
-            text: 'Try Again',
+            text: 'Try again',
             onPress: () => setScanned(false),
           },
           {

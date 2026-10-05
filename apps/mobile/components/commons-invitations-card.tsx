@@ -4,14 +4,16 @@ import { router, useFocusEffect } from 'expo-router';
 import { ChevronRight, Mail } from 'lucide-react-native';
 
 import { IconAvatar } from '@/components/icon-avatar';
+import { LoadError } from '@/components/load-error';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsInvitationDetail } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 
 /**
  * Invitations waiting for the signed-in account (matched by its email or
  * phone), so a recipient finds theirs just by signing in - no link needed.
- * Renders nothing when there aren't any.
+ * Renders nothing when there aren't any, and a "Try again" box if the check failed.
  */
 export function CommonsInvitationsCard({
   onOpen,
@@ -21,25 +23,38 @@ export function CommonsInvitationsCard({
 }) {
   const { sessionToken } = useAuth();
   const [invitations, setInvitations] = useState<CommonsInvitationDetail[]>([]);
+  const [loadError, setLoadError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
       if (!sessionToken) {
         setInvitations([]);
+        setLoadError('');
         return;
       }
       let active = true;
       api
         .listMyCommonsInvitations(sessionToken)
         .then((result) => {
-          if (active) setInvitations(result.invitations);
+          if (!active) return;
+          setInvitations(result.invitations);
+          setLoadError('');
         })
-        .catch((error) => console.warn('Could not load commons invitations:', error));
+        .catch((error) => {
+          console.warn('Could not load commons invitations:', error);
+          // Say so, so a member doesn't miss an invitation without knowing.
+          if (active) setLoadError(friendlyError(error, "We couldn't check for invitations."));
+        });
       return () => {
         active = false;
       };
-    }, [sessionToken]),
+    }, [sessionToken, reloadKey]),
   );
+
+  if (loadError && invitations.length === 0) {
+    return <LoadError message={loadError} onRetry={() => setReloadKey((key) => key + 1)} />;
+  }
 
   if (invitations.length === 0) return null;
 

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 
 export default function EditProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -32,6 +33,9 @@ export default function EditProductScreen() {
   const [deleting, setDeleting] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [productCategories, setProductCategories] = useState<{ key: string; label: string }[]>([]);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
+  // Shown instead of a blank form when the product can't be loaded.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Form data
   const [formData, setFormData] = useState({
@@ -48,8 +52,13 @@ export default function EditProductScreen() {
   });
 
   const loadProduct = useCallback(async () => {
-    if (!id || !user?.walletAddress) return;
+    if (!id || !user?.walletAddress) {
+      setLoadError("We couldn't open this product. Go back and pick it again.");
+      setLoading(false);
+      return;
+    }
     try {
+      setLoadError(null);
       // Get my products and find this one
       const products = await api.getMyProducts(user.walletAddress, true);
       const product = products.find((p: any) => p.id === id);
@@ -67,10 +76,12 @@ export default function EditProductScreen() {
           allowBackorder: product.allowBackorder || false,
           isActive: product.isActive,
         });
+      } else {
+        setLoadError("We couldn't find this product in your store. It may have been deleted.");
       }
     } catch (error) {
       console.error('Failed to load product:', error);
-      Alert.alert('Error', 'Failed to load product');
+      setLoadError(friendlyError(error, "We couldn't load this product."));
     } finally {
       setLoading(false);
     }
@@ -81,17 +92,20 @@ export default function EditProductScreen() {
   }, [loadProduct]);
 
   // Load product categories on mount (exclude admin-only for regular users)
-  useEffect(() => {
-    const loadCategories = async () => {
-      try {
-        const categories = await api.getProductCategories(false);
-        setProductCategories(categories);
-      } catch (error) {
-        console.error('Failed to load product categories:', error);
-      }
-    };
-    loadCategories();
+  const loadCategories = useCallback(async () => {
+    try {
+      setCategoriesError(null);
+      const categories = await api.getProductCategories(false);
+      setProductCategories(categories);
+    } catch (error) {
+      console.error('Failed to load product categories:', error);
+      setCategoriesError(friendlyError(error, "We couldn't load the list of categories."));
+    }
   }, []);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
 
   const updateField = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -103,15 +117,15 @@ export default function EditProductScreen() {
 
   const validateForm = (): boolean => {
     if (!formData.name.trim()) {
-      Alert.alert('Required', 'Please enter a product name');
+      Alert.alert('Name needed', 'Enter a name for this product.');
       return false;
     }
     if (!formData.category) {
-      Alert.alert('Required', 'Please select a category');
+      Alert.alert('Category needed', 'Pick a category for this product.');
       return false;
     }
     if (!formData.priceUSD || parseFloat(formData.priceUSD) <= 0) {
-      Alert.alert('Required', 'Please enter a valid price');
+      Alert.alert('Price needed', 'Enter a price greater than $0.');
       return false;
     }
     return true;
@@ -119,7 +133,10 @@ export default function EditProductScreen() {
 
   const handleSave = async () => {
     if (!validateForm()) return;
-    if (!user?.walletAddress || !id) return;
+    if (!user?.walletAddress || !id) {
+      Alert.alert("Couldn't save your changes", 'Sign in again, then try again.');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -139,11 +156,11 @@ export default function EditProductScreen() {
       console.log('Product updated successfully');
       router.back();
       setTimeout(() => {
-        Alert.alert('Success', 'Product updated successfully!');
+        Alert.alert('Changes saved', 'Your product was updated.');
       }, 100);
     } catch (error: any) {
       console.error('Update product error:', error);
-      Alert.alert('Error', error.message || 'Failed to update product');
+      Alert.alert("Couldn't save your changes", friendlyError(error, "We couldn't save your changes."));
       setSaving(false);
     }
   };
@@ -167,7 +184,8 @@ export default function EditProductScreen() {
                 { text: 'OK', onPress: () => router.back() },
               ]);
             } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to delete product');
+              console.error('Delete product error:', error);
+              Alert.alert("Couldn't delete the product", friendlyError(error, "We couldn't delete this product."));
             } finally {
               setDeleting(false);
             }
@@ -188,6 +206,33 @@ export default function EditProductScreen() {
     );
   }
 
+  if (loadError) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
+        <View className="flex-row items-center px-5 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+          <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
+            <ArrowLeft size={24} color="#374151" />
+          </TouchableOpacity>
+          <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">Edit Product</Text>
+        </View>
+        <View className="flex-1 items-center justify-center px-8">
+          <Text className="text-gray-700 dark:text-gray-300 text-lg text-center">{loadError}</Text>
+          <TouchableOpacity
+            onPress={() => {
+              setLoading(true);
+              loadProduct();
+            }}
+            accessibilityRole="button"
+            className="bg-primary px-8 py-3 rounded-xl mt-6 items-center justify-center"
+            style={{ minHeight: 48 }}
+          >
+            <Text className="text-white font-bold">Try again</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900" edges={['top']}>
       <KeyboardAvoidingView
@@ -196,7 +241,7 @@ export default function EditProductScreen() {
       >
         {/* Header */}
         <View className="flex-row items-center justify-between px-5 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
             <ArrowLeft size={24} color="#374151" />
           </TouchableOpacity>
           <Text className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -264,7 +309,20 @@ export default function EditProductScreen() {
                 </Text>
                 <ChevronDown size={20} color="#9CA3AF" />
               </TouchableOpacity>
-              {showCategoryPicker && (
+              {showCategoryPicker && categoriesError && (
+                <View className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl mt-2 p-4">
+                  <Text className="text-gray-700 dark:text-gray-300">{categoriesError}</Text>
+                  <TouchableOpacity
+                    onPress={loadCategories}
+                    accessibilityRole="button"
+                    className="mt-2 self-start bg-gray-100 dark:bg-gray-700 px-4 rounded-xl items-center justify-center"
+                    style={{ minHeight: 44 }}
+                  >
+                    <Text className="text-gray-900 dark:text-white font-semibold">Try again</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {showCategoryPicker && !categoriesError && (
                 <View className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl mt-2 overflow-hidden max-h-48">
                   <ScrollView nestedScrollEnabled>
                     {productCategories.map((cat) => (

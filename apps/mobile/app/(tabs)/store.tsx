@@ -8,6 +8,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { useCart } from '@/contexts/cart-context';
 import { api, resolveCoopId } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 
 type ShopCommons = { id: string; name: string };
 const FALLBACK_COMMONS_ID = 'cahootz';
@@ -36,6 +37,8 @@ export default function StoreScreen() {
   const [query, setQuery] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
+  // Set when shops or products fail to load, so a failure never looks like an empty market.
+  const [loadError, setLoadError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!sessionToken) return;
@@ -60,9 +63,18 @@ export default function StoreScreen() {
   }, [params.coopId, sessionToken]);
 
   const load = React.useCallback(async () => {
+    let failure: unknown = null;
     const [storeResult, productResult, ownerResult, badgeResult] = await Promise.all([
-      api.getStores({ coopId, limit: 100 }).catch(() => ({ stores: [] })),
-      api.getProducts({ coopId, limit: 100 }).catch(() => ({ products: [] })),
+      api.getStores({ coopId, limit: 100 }).catch((error) => {
+        console.error('Failed to load shops:', error);
+        failure = failure ?? error;
+        return { stores: [] };
+      }),
+      api.getProducts({ coopId, limit: 100 }).catch((error) => {
+        console.error('Failed to load products:', error);
+        failure = failure ?? error;
+        return { products: [] };
+      }),
       user?.walletAddress ? api.getMyStore(user.walletAddress).catch(() => null) : Promise.resolve(null),
       user?.walletAddress ? api.getMyFundingBadges(user.walletAddress, coopId).catch(() => null) : Promise.resolve(null),
     ]);
@@ -70,6 +82,7 @@ export default function StoreScreen() {
     setProducts(productResult?.products ?? []);
     setMyStore(ownerResult);
     setOwnedTiers(new Set((badgeResult?.badges ?? []).filter((badge: any) => badge.status === 'ACTIVE').map((badge: any) => badge.tier)));
+    setLoadError(failure ? friendlyError(failure, "We couldn't load the shop.") : null);
   }, [coopId, user?.walletAddress]);
 
   React.useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [load]);
@@ -148,7 +161,13 @@ export default function StoreScreen() {
             <View className="h-14 w-14 items-center justify-center overflow-hidden rounded-2xl" style={{ backgroundColor: colors.orangeSoft }}>{store.imageUrl ? <Image source={{ uri: store.imageUrl }} className="h-full w-full" /> : <Store size={24} color={colors.orange} />}</View>
             <View className="ml-3 flex-1"><View className="flex-row items-center"><Text className="font-black" style={{ color: colors.ink }} numberOfLines={1}>{store.name}</Text>{store.isScVerified ? <BadgeCheck size={15} color={colors.forest} style={{ marginLeft: 5 }} /> : null}</View><Text className="mt-1 text-xs font-semibold" style={{ color: colors.muted }}>{store.productCount} products{store.city ? ` · ${store.city}` : ''}</Text></View><ChevronRight size={18} color={colors.muted} />
           </TouchableOpacity>)}
-          {(mode === 'products' ? filteredProducts : filteredStores).length === 0 ? <View className="items-center rounded-2xl border border-dashed bg-white p-8" style={{ borderColor: colors.line }}><ShoppingBag size={32} color="#B8AA98" /><Text className="mt-3 font-black" style={{ color: colors.ink }}>Nothing matched that search</Text><Text className="mt-1 text-center text-xs" style={{ color: colors.muted }}>Try a shop name, product, or category.</Text></View> : null}
+          {loadError ? <View className="mb-3 items-center rounded-2xl border bg-white p-6" style={{ borderColor: colors.line }}>
+            <Text className="text-center font-black" style={{ color: colors.ink }}>{loadError}</Text>
+            <TouchableOpacity accessibilityRole="button" onPress={() => { setLoading(true); load().finally(() => setLoading(false)); }} className="mt-4 items-center justify-center rounded-xl px-6" style={{ backgroundColor: colors.ink, minHeight: 48 }}>
+              <Text className="font-black text-white">Try again</Text>
+            </TouchableOpacity>
+          </View> : null}
+          {!loadError && (mode === 'products' ? filteredProducts : filteredStores).length === 0 ? <View className="items-center rounded-2xl border border-dashed bg-white p-8" style={{ borderColor: colors.line }}><ShoppingBag size={32} color="#B8AA98" />{normalizedQuery ? <><Text className="mt-3 font-black" style={{ color: colors.ink }}>Nothing matched that search</Text><Text className="mt-1 text-center text-xs" style={{ color: colors.muted }}>Try a shop name, product, or category.</Text></> : <><Text className="mt-3 font-black" style={{ color: colors.ink }}>Nothing for sale here yet</Text><Text className="mt-1 text-center text-xs" style={{ color: colors.muted }}>Check back soon, or open a shop of your own.</Text></>}</View> : null}
         </View>
       </ScrollView>
     </SafeAreaView>

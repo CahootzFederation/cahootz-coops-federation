@@ -13,6 +13,7 @@ import { toE164 } from "../lib/phone.js";
 import { sendApplicationAcceptedEmail, isEmailConfigured } from "../services/email-service.js";
 import { sendApplicationSubmittedNotification } from "../services/slack-notification-service.js";
 import { COMMONS_COOP_ID, ensureCommonsMembership } from "../lib/commons.js";
+import { createUniqueApplicationReference } from "../lib/application-reference.js";
 
 // Backend wallet is now stored in CoopConfig per-coop
 
@@ -68,6 +69,7 @@ export const applicationRouter = router({
       success: z.boolean(),
       message: z.string(),
       applicationId: z.string(),
+      referenceCode: z.string(),
       userId: z.string(),
     }))
     .mutation(async ({ input, ctx }) => {
@@ -111,6 +113,13 @@ export const applicationRouter = router({
         const hashedPassword = input.password
           ? await bcrypt.hash(input.password, 12)
           : undefined;
+
+        const referenceCode = await createUniqueApplicationReference(async (code) =>
+          !!(await context.db.application.findUnique({
+            where: { referenceCode: code },
+            select: { id: true },
+          })),
+        );
 
         // Create user and application in a transaction
         console.log('💾 Starting database transaction...');
@@ -170,6 +179,7 @@ export const applicationRouter = router({
             data: {
               userId: user.id,
               coopId: input.coopId,
+              referenceCode,
               status: "SUBMITTED",
               data: toJsonValue({
                 ...applicationData,
@@ -225,6 +235,7 @@ export const applicationRouter = router({
               applicantEmail: input.email,
               applicantName: `${input.firstName} ${input.lastName}`,
               applicationId: result.application.id,
+              referenceCode,
             });
           } catch (err) {
             console.error('Failed to send Slack notification:', err);
@@ -235,6 +246,7 @@ export const applicationRouter = router({
           success: true,
           message: "Application submitted successfully. You will be notified once your application is reviewed.",
           applicationId: result.application.id,
+          referenceCode: result.application.referenceCode ?? referenceCode,
           userId: result.user.id,
         };
         console.log('🎉 submitApplication - SUCCESS');

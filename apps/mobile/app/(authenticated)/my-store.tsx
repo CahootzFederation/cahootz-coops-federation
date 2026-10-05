@@ -29,6 +29,7 @@ import {
 import { useAuth } from '@/contexts/auth-context';
 import { useCoin } from '@/contexts/platform-config-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 
 interface ProductData {
   id: string;
@@ -55,10 +56,14 @@ export default function MyStoreScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [storeCategories, setStoreCategories] = useState<{ key: string; label: string }[]>([]);
+  // Load failures are kept apart from "no store" / "no products" so they never look empty.
+  const [storeError, setStoreError] = useState<string | null>(null);
+  const [productsError, setProductsError] = useState<string | null>(null);
 
   const loadStore = useCallback(async () => {
     if (!user?.walletAddress) return;
     try {
+      setStoreError(null);
       if (storeId) {
         // Load specific store from the list
         const storesData = await api.getMyStores(user.walletAddress);
@@ -71,18 +76,27 @@ export default function MyStoreScreen() {
       }
     } catch (error) {
       console.error('Failed to load store:', error);
+      setStoreError(friendlyError(error, "We couldn't load your store."));
     }
   }, [user?.walletAddress, storeId]);
 
   const loadProducts = useCallback(async () => {
     if (!user?.walletAddress) return;
     try {
+      setProductsError(null);
       const productsData = await api.getMyProducts(user.walletAddress, true, storeId);
-      setProducts(productsData);
+      setProducts(productsData ?? []);
     } catch (error) {
       console.error('Failed to load products:', error);
+      setProductsError(friendlyError(error, "We couldn't load your products."));
     }
   }, [user?.walletAddress, storeId]);
+
+  const retryLoad = async () => {
+    setLoading(true);
+    await Promise.all([loadStore(), loadProducts()]);
+    setLoading(false);
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -185,11 +199,37 @@ export default function MyStoreScreen() {
     );
   }
 
+  if (!store && storeError) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
+        <View className="flex-row items-center px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+          <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
+            <ArrowLeft size={24} color="#374151" />
+          </TouchableOpacity>
+          <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">
+            My Store
+          </Text>
+        </View>
+        <View className="flex-1 items-center justify-center px-8">
+          <Text className="text-gray-700 dark:text-gray-300 text-lg text-center">{storeError}</Text>
+          <TouchableOpacity
+            onPress={retryLoad}
+            accessibilityRole="button"
+            className="bg-primary px-8 py-3 rounded-xl mt-6 items-center justify-center"
+            style={{ minHeight: 48 }}
+          >
+            <Text className="text-white font-bold">Try again</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (!store) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
         <View className="flex-row items-center px-5 py-4 border-b border-gray-200 dark:border-gray-700">
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
             <ArrowLeft size={24} color="#374151" />
           </TouchableOpacity>
           <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">
@@ -223,7 +263,7 @@ export default function MyStoreScreen() {
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900" edges={['top']}>
       {/* Header */}
       <View className="flex-row items-center justify-between px-5 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
         <Text className="text-lg font-semibold text-gray-900 dark:text-white">My Store</Text>
@@ -269,13 +309,13 @@ export default function MyStoreScreen() {
                 {store.isScVerified && (
                   <View className="bg-white/20 px-3 py-1 rounded-full flex-row items-center">
                     <BadgeCheck size={14} color="white" />
-                    <Text className="text-white font-medium ml-1">SC Verified</Text>
+                    <Text className="text-white font-medium ml-1">Earns {coin.symbol} rewards</Text>
                   </View>
                 )}
                 {!store.isScVerified && store.scApplicationStatus === 'PENDING' && (
                   <View className="bg-white/20 px-3 py-1 rounded-full flex-row items-center">
                     <Clock size={14} color="white" />
-                    <Text className="text-white font-medium ml-1">SC Review Pending</Text>
+                    <Text className="text-white font-medium ml-1">{coin.symbol} rewards under review</Text>
                   </View>
                 )}
               </View>
@@ -399,7 +439,9 @@ export default function MyStoreScreen() {
                   className="bg-green-600 py-3 rounded-xl mt-4"
                 >
                   <Text className="text-center text-white font-semibold">
-                    {store.scApplicationStatus === 'REJECTED' ? 'Reapply for SC Verification' : 'Apply for SC Verification'}
+                    {store.scApplicationStatus === 'REJECTED'
+                      ? `Apply again to earn ${coin.symbol} rewards`
+                      : `Apply to earn ${coin.symbol} rewards`}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -474,7 +516,19 @@ export default function MyStoreScreen() {
               </TouchableOpacity>
             </View>
 
-            {products.length === 0 ? (
+            {productsError ? (
+              <View className="bg-white dark:bg-gray-800 rounded-xl p-6 items-center">
+                <Text className="text-gray-700 dark:text-gray-300 text-center">{productsError}</Text>
+                <TouchableOpacity
+                  onPress={loadProducts}
+                  accessibilityRole="button"
+                  className="bg-primary px-6 rounded-xl mt-4 items-center justify-center"
+                  style={{ minHeight: 48 }}
+                >
+                  <Text className="text-white font-semibold">Try again</Text>
+                </TouchableOpacity>
+              </View>
+            ) : products.length === 0 ? (
               <View className="bg-white dark:bg-gray-800 rounded-xl p-8 items-center">
                 <ShoppingBag size={48} color="#9CA3AF" />
                 <Text className="text-gray-500 dark:text-gray-400 text-center mt-4">

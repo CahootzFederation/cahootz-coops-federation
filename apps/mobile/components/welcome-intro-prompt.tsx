@@ -6,6 +6,7 @@ import { Hand } from 'lucide-react-native';
 import { PushPermissionPrimer } from '@/components/push-permission-primer';
 import { Text } from '@/components/ui/text';
 import { api, type WelcomeIntroStatus } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 import { canOfferPushPrimer } from '@/lib/push-primer';
 import { secureStorage } from '@/lib/secure-storage';
 
@@ -75,7 +76,8 @@ export function WelcomeIntroPrompt({
       setStage('posted');
       setShowPrimer(await canOfferPushPrimer());
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Could not post your intro. Please try again.');
+      console.error('Failed to post welcome intro:', caughtError);
+      setError(friendlyError(caughtError, "We couldn't post your intro."));
     } finally {
       setIsPosting(false);
     }

@@ -5,6 +5,7 @@ import { Elements, CardElement, useStripe, useElements } from '@stripe/react-str
 import { loadStripe } from '@stripe/stripe-js';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import { friendlyError } from '@/lib/friendly-error';
 
 const stripePromise = loadStripe(process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
 
@@ -21,29 +22,40 @@ function CardForm({ onSuccess, onCancel }: CardInputProps) {
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
-    if (!stripe || !elements || !user?.id) return;
+    if (!stripe || !elements) return;
+    if (!user?.id) {
+      setError('Sign in again to add a card.');
+      return;
+    }
 
     setAdding(true);
     setError(null);
 
     try {
-      const { clientSecret } = await api.createSetupIntent(user.id, user.walletAddress);
-
       const cardElement = elements.getElement(CardElement);
       if (!cardElement) {
-        throw new Error('Card element not found');
+        console.error('Stripe CardElement is missing');
+        setError("The card form didn't load. Close this screen and try again.");
+        return;
       }
+
+      const { clientSecret } = await api.createSetupIntent(user.id, user.walletAddress);
 
       const { setupIntent, error: stripeError } = await stripe.confirmCardSetup(clientSecret, {
         payment_method: { card: cardElement },
       });
 
       if (stripeError) {
-        throw new Error(stripeError.message);
+        // Stripe's card messages are written for customers ("Your card number is incomplete.").
+        console.error('Stripe card setup error:', stripeError);
+        setError(friendlyError(stripeError, "We couldn't add your card."));
+        return;
       }
 
       if (!setupIntent?.payment_method) {
-        throw new Error('Failed to create payment method');
+        console.error('Stripe setup intent has no payment method:', setupIntent);
+        setError("We couldn't add your card. Please try again.");
+        return;
       }
 
       const savedCard = await api.savePaymentMethod(
@@ -57,7 +69,7 @@ function CardForm({ onSuccess, onCancel }: CardInputProps) {
       onSuccess({ brand: savedCard.brand, last4: savedCard.last4 });
     } catch (err) {
       console.error('Error adding card:', err);
-      setError(err instanceof Error ? err.message : 'Failed to add card');
+      setError(friendlyError(err, "We couldn't add your card."));
     } finally {
       setAdding(false);
     }
@@ -67,7 +79,7 @@ function CardForm({ onSuccess, onCancel }: CardInputProps) {
     <View style={{ flex: 1, backgroundColor: 'white' }}>
       <View style={{ paddingTop: 56, paddingBottom: 16, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity onPress={onCancel} style={{ padding: 8, marginLeft: -8 }}>
+          <TouchableOpacity onPress={onCancel} style={{ padding: 8, marginLeft: -8 }} accessibilityLabel="Close">
             <X size={24} color="#111827" />
           </TouchableOpacity>
           <Text style={{ flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '600', color: '#111827', marginLeft: -32 }}>

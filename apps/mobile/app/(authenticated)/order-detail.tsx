@@ -26,6 +26,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, API_BASE_URL } from '@/lib/api';
 import OrderDetailHybrid from '@/components/order-detail-hybrid';
+import { friendlyError } from '@/lib/friendly-error';
 
 interface OrderItem {
   id: string;
@@ -104,6 +105,7 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
   const { user } = useAuth();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<FulfillmentStatus>('PROCESSING');
@@ -114,15 +116,18 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
   }, [orderId]);
 
   const loadOrder = async () => {
-    if (!user?.walletAddress || !orderId) return;
+    if (!user?.walletAddress || !orderId) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
+      setLoadError(null);
       const orderData = await api.getOrder(orderId, user.walletAddress);
       setOrder(orderData);
     } catch (error) {
       console.error('Failed to load order:', error);
-      Alert.alert('Error', 'Failed to load order details');
-      router.back();
+      setLoadError(friendlyError(error, "We couldn't load this order."));
     } finally {
       setLoading(false);
     }
@@ -133,7 +138,7 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
 
     // Validate tracking number for shipped status
     if (selectedStatus === 'SHIPPED' && !trackingNumber.trim()) {
-      Alert.alert('Tracking Required', 'Please enter a tracking number for shipped orders');
+      Alert.alert('Tracking number needed', 'Enter the tracking number from the shipping company.');
       return;
     }
 
@@ -151,10 +156,10 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
       setShowStatusModal(false);
       setTrackingNumber('');
       
-      Alert.alert('Success', 'Order status updated successfully. Customer has been notified.');
+      Alert.alert('Order updated', 'The order status was changed and the customer was told.');
     } catch (error: any) {
       console.error('Failed to update status:', error);
-      Alert.alert('Error', error.message || 'Failed to update order status');
+      Alert.alert("Couldn't update the order", friendlyError(error, "We couldn't change this order's status."));
     } finally {
       setUpdating(false);
     }
@@ -237,8 +242,26 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
   if (!order) {
     return (
       <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <Text className="text-gray-500">Order not found</Text>
+        <View className="flex-row items-center px-5 py-4 bg-white border-b border-gray-200">
+          <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
+            <ArrowLeft size={24} color="#374151" />
+          </TouchableOpacity>
+          <Text className="text-lg font-semibold text-gray-900 ml-4">Order</Text>
+        </View>
+        <View className="flex-1 items-center justify-center px-8">
+          <Text className="text-gray-700 text-lg text-center">
+            {loadError || "We couldn't find this order."}
+          </Text>
+          {loadError ? (
+            <TouchableOpacity
+              onPress={loadOrder}
+              accessibilityRole="button"
+              className="bg-primary px-8 py-3 rounded-xl mt-6 items-center justify-center"
+              style={{ minHeight: 48 }}
+            >
+              <Text className="text-white font-bold">Try again</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </SafeAreaView>
     );

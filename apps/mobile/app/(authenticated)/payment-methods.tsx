@@ -24,6 +24,8 @@ import {
 } from 'lucide-react-native';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import { useCoin } from '@/contexts/platform-config-context';
+import { friendlyError } from '@/lib/friendly-error';
 import CardInput from '@/components/stripe/CardInput';
 
 interface PaymentMethod {
@@ -58,10 +60,13 @@ const brandNames: Record<string, string> = {
 
 export default function PaymentMethodsScreen() {
   const { user } = useAuth();
+  const coin = useCoin();
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
+  const [methodsError, setMethodsError] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
   const [scBalance, setScBalance] = useState<string | null>(null);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
   const [copiedAddress, setCopiedAddress] = useState(false);
 
   // Modal states
@@ -73,6 +78,7 @@ export default function PaymentMethodsScreen() {
   // Modal data
   const [addedCard, setAddedCard] = useState<AddedCard | null>(null);
   const [cardToRemove, setCardToRemove] = useState<PaymentMethod | null>(null);
+  const [errorTitle, setErrorTitle] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
@@ -88,10 +94,12 @@ export default function PaymentMethodsScreen() {
     if (!user?.id) return;
 
     try {
+      setMethodsError(null);
       const result = await api.getPaymentMethods(user.id, user.walletAddress);
-      setMethods(result.methods);
+      setMethods(result?.methods ?? []);
     } catch (err) {
       console.error('Error loading payment methods:', err);
+      setMethodsError(friendlyError(err, "We couldn't load your cards."));
     } finally {
       setLoading(false);
     }
@@ -101,11 +109,19 @@ export default function PaymentMethodsScreen() {
     if (!user?.walletAddress) return;
 
     try {
+      setBalanceError(null);
       const result = await api.getTokenBalances(user.walletAddress);
       setScBalance(result.sc);
     } catch (err) {
       console.error('Error loading SC balance:', err);
+      setBalanceError(friendlyError(err, `We couldn't load your ${coin.name} balance.`));
     }
+  };
+
+  const showError = (title: string, message: string) => {
+    setErrorTitle(title);
+    setErrorMessage(message);
+    setShowErrorModal(true);
   };
 
   const handleCopyAddress = async () => {
@@ -139,9 +155,9 @@ export default function PaymentMethodsScreen() {
       setCardToRemove(null);
       loadMethods();
     } catch (err) {
+      console.error('Error removing card:', err);
       setShowConfirmRemoveModal(false);
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to remove card');
-      setShowErrorModal(true);
+      showError("Couldn't remove your card", friendlyError(err, "We couldn't remove your card."));
     } finally {
       setRemoving(false);
     }
@@ -154,8 +170,8 @@ export default function PaymentMethodsScreen() {
       await api.setDefaultPaymentMethod(user!.id, method.id, user!.walletAddress);
       loadMethods();
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to set default');
-      setShowErrorModal(true);
+      console.error('Error setting default card:', err);
+      showError("Couldn't change your default card", friendlyError(err, "We couldn't make this your default card."));
     }
   };
 
@@ -188,12 +204,26 @@ export default function PaymentMethodsScreen() {
                   <Coins size={22} color="#B45309" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-gray-500 text-xs uppercase font-semibold">SoulaaniCoin Balance</Text>
-                  <Text className="text-gray-900 text-2xl font-bold">
-                    {scBalance === null ? '—' : `${scBalance} SC`}
-                  </Text>
+                  <Text className="text-gray-500 text-xs uppercase font-semibold">{coin.name} balance</Text>
+                  {balanceError ? (
+                    <Text className="text-gray-700 text-sm mt-1">{balanceError}</Text>
+                  ) : (
+                    <Text className="text-gray-900 text-2xl font-bold">
+                      {scBalance === null ? '—' : `${scBalance} ${coin.symbol}`}
+                    </Text>
+                  )}
                 </View>
               </View>
+              {balanceError ? (
+                <TouchableOpacity
+                  onPress={loadBalance}
+                  accessibilityRole="button"
+                  className="mt-3 self-start bg-gray-100 px-4 rounded-xl items-center justify-center"
+                  style={{ minHeight: 44 }}
+                >
+                  <Text className="text-gray-900 font-semibold">Try again</Text>
+                </TouchableOpacity>
+              ) : null}
 
               {user?.walletAddress ? (
                 <TouchableOpacity
@@ -223,13 +253,25 @@ export default function PaymentMethodsScreen() {
 
             {/* Card List */}
             <Text className="text-gray-500 text-xs uppercase font-semibold mt-6 mb-2 px-1">Payment Methods</Text>
-            {methods.length === 0 ? (
+            {methodsError ? (
+              <View className="bg-white rounded-xl p-6 items-center">
+                <Text className="text-gray-700 text-center">{methodsError}</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setLoading(true);
+                    loadMethods();
+                  }}
+                  accessibilityRole="button"
+                  className="mt-4 bg-primary px-6 rounded-xl items-center justify-center"
+                  style={{ minHeight: 48 }}
+                >
+                  <Text className="text-white font-semibold">Try again</Text>
+                </TouchableOpacity>
+              </View>
+            ) : methods.length === 0 ? (
               <View className="bg-white rounded-xl p-8 items-center">
                 <CreditCard size={48} color="#9CA3AF" />
-                <Text className="text-gray-500 text-lg mt-4">No payment methods</Text>
-                <Text className="text-gray-400 text-center mt-2">
-                  Add a card to fund payments when your balance is low
-                </Text>
+                <Text className="text-gray-500 text-lg mt-4">No saved cards</Text>
               </View>
             ) : (
               <View className="bg-white rounded-xl overflow-hidden">
@@ -291,8 +333,8 @@ export default function PaymentMethodsScreen() {
             {/* Info */}
             <View className="mt-4 bg-secondary rounded-xl p-4">
               <Text className="text-amber-800 text-sm">
-                Your default card will be charged automatically when your balance is insufficient
-                for a payment. Tap a card to set it as default.
+                If a payment is more than your balance, your default card pays the rest. Tap a
+                card to make it your default.
               </Text>
             </View>
           </ScrollView>
@@ -414,8 +456,8 @@ export default function PaymentMethodsScreen() {
               <View className="w-16 h-16 rounded-full bg-red-100 items-center justify-center mb-4">
                 <AlertCircle size={32} color="#DC2626" />
               </View>
-              <Text className="text-xl font-semibold text-gray-900 mb-2">
-                Error
+              <Text className="text-xl font-semibold text-gray-900 mb-2 text-center">
+                {errorTitle || 'Something went wrong'}
               </Text>
               <Text className="text-gray-500 text-center mb-6">
                 {errorMessage}

@@ -33,6 +33,7 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 import { coopConfig } from '@/lib/coop-config';
 import { resolveBrandColor, withAlpha } from '@/lib/brand-colors';
 
@@ -360,7 +361,7 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
       setSubmitted(true);
     } catch (e: unknown) {
       console.warn('Proposal submission error:', e);
-      setError(e instanceof Error ? e.message : 'Could not submit this proposal.');
+      setError(friendlyError(e, "We couldn't submit your proposal."));
     } finally {
       setSubmitting(false);
     }

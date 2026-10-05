@@ -20,6 +20,7 @@ import {
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 
 interface Order {
   id: string;
@@ -43,6 +44,8 @@ export default function StoreOrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<FilterStatus>('ALL');
+  // Kept apart from "no orders" so a failed load never looks like an empty store.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadOrders = useCallback(async () => {
     if (!user?.walletAddress) return;
@@ -52,11 +55,20 @@ export default function StoreOrdersScreen() {
       const result = await api.getStoreOrders(user.walletAddress, options);
       console.log(`Loaded ${result.orders?.length || 0} orders`);
       setOrders(result.orders || []);
+      setLoadError(null);
     } catch (error) {
       console.error('Failed to load orders:', error);
+      // Don't leave another filter's orders on screen under this filter.
       setOrders([]);
+      setLoadError(friendlyError(error, "We couldn't load your store's orders."));
     }
   }, [user?.walletAddress, selectedStatus, storeId]);
+
+  const retryLoad = async () => {
+    setLoading(true);
+    await loadOrders();
+    setLoading(false);
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -140,7 +152,7 @@ export default function StoreOrdersScreen() {
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
       {/* Header */}
       <View className="flex-row items-center justify-between px-5 py-4 bg-white border-b border-gray-200">
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
         <Text className="text-lg font-semibold text-gray-900">Store Orders</Text>
@@ -186,7 +198,20 @@ export default function StoreOrdersScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View className="p-5">
-          {orders.length === 0 ? (
+          {loadError ? (
+            <View className="bg-white rounded-2xl p-6 items-center mb-3">
+              <Text className="text-gray-700 text-center">{loadError}</Text>
+              <TouchableOpacity
+                onPress={retryLoad}
+                accessibilityRole="button"
+                className="mt-4 bg-primary px-6 rounded-xl items-center justify-center"
+                style={{ minHeight: 48 }}
+              >
+                <Text className="text-white font-semibold">Try again</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          {loadError ? null : orders.length === 0 ? (
             <View className="bg-white rounded-2xl p-12 items-center">
               <Package size={64} color="#D1D5DB" />
               <Text className="text-gray-500 text-center mt-4 text-lg font-semibold">

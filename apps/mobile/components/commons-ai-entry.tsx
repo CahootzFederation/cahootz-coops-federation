@@ -31,13 +31,16 @@ import {
 } from '@/components/commons-media-viewer';
 import { EventCard, UpcomingEventsModule } from '@/components/event-card';
 import { WelcomeIntroPrompt } from '@/components/welcome-intro-prompt';
+import { LoadError } from '@/components/load-error';
 import { MentionComposerInput } from '@/components/mention-composer-input';
 import { MentionText } from '@/components/mention-text';
 import { PostTypeSelector } from '@/components/post-type-selector';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
+import { AiBadge } from '@/components/ai-badge';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 import { track } from '@/lib/analytics';
 import { useCommonsProposalActions } from '@/hooks/use-commons-proposal-actions';
 import { proposalDraftsHref, proposalHubHref } from '@/lib/proposal-navigation';
@@ -237,6 +240,11 @@ export default function CommonsAiEntry({
     feedCoopId === 'all' ? 'cahootz' : feedCoopId,
   );
   const [feedError, setFeedError] = useState('');
+  // True when feedError is a failed load that "Try again" can fix.
+  const [feedLoadFailed, setFeedLoadFailed] = useState(false);
+  const [feedLoading, setFeedLoading] = useState(true);
+  const [feedReloadKey, setFeedReloadKey] = useState(0);
+  const [loadMoreError, setLoadMoreError] = useState('');
   const [circleName, setCircleName] = useState<string | null>(null);
   const [circleIsMember, setCircleIsMember] = useState<boolean | null>(null);
   const [isJoiningCircle, setIsJoiningCircle] = useState(false);
@@ -432,6 +440,9 @@ export default function CommonsAiEntry({
     setCircleIsMember(null);
     setJoinCircleError('');
     setFeedError('');
+    setFeedLoadFailed(false);
+    setFeedLoading(true);
+    setLoadMoreError('');
     setComposerNotice(null);
     setCircleFeedAuthorized(!feedCircleId);
 
@@ -443,7 +454,7 @@ export default function CommonsAiEntry({
         if (feedCircleId && feedCircleId !== `general:${feedCoopId}` && !result.circleName) {
           setCircleFeedAuthorized(false);
           setFeedPosts([]);
-          setFeedError('This circle feed is not available yet. Please try again after the app service is updated.');
+          setFeedError("This circle isn't available yet. Update the app, then try again.");
           return;
         }
         setCircleName(result.circleName || null);
@@ -457,22 +468,25 @@ export default function CommonsAiEntry({
       })
       .catch((error) => {
         console.error('Failed to load Commons feed:', error);
-        if (mounted)
-          setFeedError(
-            'Could not load the Commons feed. Pull to refresh when the connection is back.',
-          );
+        if (!mounted) return;
+        setFeedLoadFailed(true);
+        setFeedError(friendlyError(error, "We couldn't load the posts."));
+      })
+      .finally(() => {
+        if (mounted) setFeedLoading(false);
       });
 
     return () => {
       mounted = false;
     };
-  }, [feedCoopId, feedCircleId, sessionToken]);
+  }, [feedCoopId, feedCircleId, sessionToken, feedReloadKey]);
 
   const loadMoreFeedPosts = async () => {
     if (!nextFeedCursor || isLoadingMoreFeed) return;
 
     const requestedFeedKey = activeFeedKeyRef.current;
     setIsLoadingMoreFeed(true);
+    setLoadMoreError('');
     try {
       const result = await api.listCommonsFeed(
         feedCoopId,
@@ -486,6 +500,9 @@ export default function CommonsAiEntry({
       }
     } catch (error) {
       console.error('Failed to load more Commons posts:', error);
+      if (activeFeedKeyRef.current === requestedFeedKey) {
+        setLoadMoreError(friendlyError(error, "We couldn't load more posts."));
+      }
     } finally {
       setIsLoadingMoreFeed(false);
     }
@@ -502,7 +519,8 @@ export default function CommonsAiEntry({
         .then((result) => setDrawerCircles(result.groups))
         .catch(() => {});
     } catch (error) {
-      setJoinCircleError(error instanceof Error ? error.message : 'Could not join this circle.');
+      console.error('Failed to join circle:', error);
+      setJoinCircleError(friendlyError(error, "We couldn't add you to this circle."));
     } finally {
       setIsJoiningCircle(false);
     }
@@ -518,7 +536,8 @@ export default function CommonsAiEntry({
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
     const isNearBottom =
       contentOffset.y + layoutMeasurement.height >= contentSize.height - 400;
-    if (isNearBottom) void loadMoreFeedPosts();
+    // After a failed load, wait for "Try again" instead of retrying on every scroll.
+    if (isNearBottom && !loadMoreError) void loadMoreFeedPosts();
   };
 
   const searchCoopId = isScopedFeed ? feedCoopId : DEFAULT_COMMONS_PROFILE.id;
@@ -840,8 +859,7 @@ export default function CommonsAiEntry({
           setFeedPosts((current) => current.filter((post) => post.id !== pendingPostId));
         }
         console.error('Failed to publish post:', error);
-        const message =
-          error instanceof Error ? error.message : 'Could not publish post.';
+        const message = friendlyError(error, "We couldn't post that.");
         setAuthError(message);
         setComposerNotice({ type: 'error', body: message });
       } finally {
@@ -1039,9 +1057,7 @@ export default function CommonsAiEntry({
       console.error('Commons suggestion failed:', error);
       setSuggestionStatus('error');
       setSuggestionMessage(
-        error instanceof Error
-          ? error.message
-          : 'Could not send the suggestion. Try again.',
+        friendlyError(error, "We couldn't send your suggestion."),
       );
     }
   };
@@ -1064,8 +1080,9 @@ export default function CommonsAiEntry({
         );
       } catch (error) {
         console.error('Failed to support post:', error);
-        setAuthError(
-          error instanceof Error ? error.message : 'Could not update support.',
+        Alert.alert(
+          "Couldn't save your support",
+          friendlyError(error, "We couldn't save your support for this post."),
         );
       }
     });
@@ -1087,9 +1104,10 @@ export default function CommonsAiEntry({
               current.filter((item) => item.id !== post.id),
             );
           } catch (error) {
+            console.error('Failed to delete post:', error);
             Alert.alert(
-              'Could not delete post',
-              error instanceof Error ? error.message : 'Please try again.',
+              "Couldn't delete your post",
+              friendlyError(error, "We couldn't delete your post."),
             );
           } finally {
             setDeletingPostId(null);
@@ -1129,9 +1147,10 @@ export default function CommonsAiEntry({
         setPinnedPost({ ...post, isPinned: true });
         setFeedPosts((current) => current.filter((item) => item.id !== post.id));
       } catch (error) {
+        console.error('Failed to pin post:', error);
         Alert.alert(
-          'Could not pin post',
-          error instanceof Error ? error.message : 'Please try again.',
+          "Couldn't pin the post",
+          friendlyError(error, "We couldn't pin this post."),
         );
       } finally {
         setPinningPostId(null);
@@ -1148,9 +1167,10 @@ export default function CommonsAiEntry({
         setPinnedPost(null);
         setFeedPosts((current) => mergeFeedPosts([{ ...post, isPinned: false }], current));
       } catch (error) {
+        console.error('Failed to unpin post:', error);
         Alert.alert(
-          'Could not unpin post',
-          error instanceof Error ? error.message : 'Please try again.',
+          "Couldn't unpin the post",
+          friendlyError(error, "We couldn't unpin this post."),
         );
       } finally {
         setPinningPostId(null);
@@ -1182,9 +1202,10 @@ export default function CommonsAiEntry({
             : current,
         );
       } catch (error) {
+        console.error('Failed to RSVP:', error);
         Alert.alert(
-          'Could not RSVP',
-          error instanceof Error ? error.message : 'Please try again.',
+          "Couldn't save your RSVP",
+          friendlyError(error, "We couldn't save your RSVP."),
         );
       } finally {
         setRsvpPendingEventId(null);
@@ -1218,9 +1239,7 @@ export default function CommonsAiEntry({
     } catch (error) {
       console.error('Request code failed:', error);
       setAuthError(
-        error instanceof Error
-          ? error.message
-          : 'Could not send a code. Try again.',
+        friendlyError(error, "We couldn't send a code. Check the email address and try again."),
       );
     } finally {
       setIsAuthBusy(false);
@@ -1263,14 +1282,12 @@ export default function CommonsAiEntry({
           await pendingAction(verifiedUser.sessionToken);
         }
       } else {
-        setAuthError('Invalid code.');
+        setAuthError("That code didn't work. Check the 6 digits and try again.");
       }
     } catch (error) {
       console.error('Verify code failed:', error);
       setAuthError(
-        error instanceof Error
-          ? error.message
-          : 'Could not verify the code. Try again.',
+        friendlyError(error, "We couldn't check that code. Check the 6 digits and try again."),
       );
     } finally {
       setIsAuthBusy(false);
@@ -1308,8 +1325,9 @@ export default function CommonsAiEntry({
         });
       } catch (error) {
         console.error('Failed to update follow:', error);
-        setAuthError(
-          error instanceof Error ? error.message : 'Could not update follow.',
+        Alert.alert(
+          "Couldn't update who you follow",
+          friendlyError(error, "We couldn't update who you follow."),
         );
       }
     });
@@ -1767,9 +1785,17 @@ export default function CommonsAiEntry({
             <WelcomeIntroPrompt groupId={feedCircleId} coopId={feedCoopId} sessionToken={sessionToken} />
           ) : null}
 
-          {feedError ? (
+          {feedError && feedLoadFailed ? (
+            <View className="mb-4">
+              <LoadError
+                message={feedError}
+                retrying={feedLoading}
+                onRetry={() => setFeedReloadKey((key) => key + 1)}
+              />
+            </View>
+          ) : feedError ? (
             <View className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4">
-              <Text className="text-sm font-semibold text-red-700">
+              <Text className="text-base font-semibold text-red-700">
                 {feedError}
               </Text>
             </View>
@@ -1827,7 +1853,11 @@ export default function CommonsAiEntry({
               scrollToPostedItem();
             }}
           >
-            {visiblePosts.length === 0 ? (
+            {visiblePosts.length === 0 && feedLoading && !feedError ? (
+              <View className="items-center py-8">
+                <ActivityIndicator size="small" color={SOCIAL_THEME.primary} />
+              </View>
+            ) : visiblePosts.length === 0 && !feedError ? (
               <View className="rounded-[28px] border border-dashed border-gray-300 bg-white p-5">
                 <Text className="text-base font-black text-gray-900">
                   Start the conversation
@@ -1903,6 +1933,7 @@ export default function CommonsAiEntry({
                             <Text className="text-sm font-black text-gray-950">
                               {post.author}
                             </Text>
+                            {post.authorIsAi ? <AiBadge /> : null}
                             {post.supporterBadge ? (
                               <View className="flex-row items-center rounded-full px-2 py-0.5" style={{ backgroundColor: `${post.supporterBadge.color}18` }}>
                                 <Award size={10} color={post.supporterBadge.color} />
@@ -2179,6 +2210,8 @@ export default function CommonsAiEntry({
               <View className="items-center py-4">
                 <ActivityIndicator size="small" color={SOCIAL_THEME.primary} />
               </View>
+            ) : loadMoreError ? (
+              <LoadError message={loadMoreError} onRetry={() => void loadMoreFeedPosts()} />
             ) : null}
           </View>
         </View>
@@ -2996,7 +3029,10 @@ export default function CommonsAiEntry({
                     placeholder="Email for follow-up"
                     placeholderTextColor={SOCIAL_THEME.muted}
                     keyboardType="email-address"
+                    autoComplete="email"
+                    textContentType="emailAddress"
                     autoCapitalize="none"
+                    autoCorrect={false}
                     className="h-12 rounded-xl border border-gray-200 px-4 text-base text-gray-900"
                     style={{ backgroundColor: SOCIAL_THEME.paper }}
                   />
@@ -3222,7 +3258,10 @@ export default function CommonsAiEntry({
                 placeholder="Email address"
                 placeholderTextColor={SOCIAL_THEME.muted}
                 keyboardType="email-address"
+                autoComplete="email"
+                textContentType="emailAddress"
                 autoCapitalize="none"
+                autoCorrect={false}
                 className="h-12 rounded-xl border border-stone-200 bg-stone-50 px-4 text-base text-gray-900"
               />
               {codeSent ? (

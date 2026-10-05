@@ -3,6 +3,7 @@ import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { ExternalLink, ShieldCheck } from 'lucide-react-native';
+import { friendlyError } from '@/lib/friendly-error';
 
 interface CommercePaymentConfirmationProps {
   clientSecret?: string | null;
@@ -43,16 +44,17 @@ export default function CommercePaymentConfirmation({
         }
 
         if (result.url.includes('/checkout/cancel')) {
-          setLocalError('Payment was canceled.');
+          setLocalError("You canceled the payment, so you weren't charged. Tap Pay to try again.");
           return;
         }
       }
 
       if (result.type === 'cancel' || result.type === 'dismiss') {
-        setLocalError('Checkout was closed before payment completed.');
+        setLocalError('You closed the payment page before paying. Tap Pay to try again.');
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not open Stripe Checkout.';
+      console.error('Could not open Stripe Checkout:', error);
+      const message = friendlyError(error, "We couldn't open the payment page.");
       setLocalError(message);
       onError(message);
     } finally {

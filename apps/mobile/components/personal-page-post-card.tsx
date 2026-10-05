@@ -6,6 +6,7 @@ import { CommonsMediaTile, FEED_MEDIA_TILE_SIZE } from '@/components/commons-med
 import { PersonLink } from '@/components/person-link';
 import { Text } from '@/components/ui/text';
 import { api, type CommonsPostMedia, type PersonalPageFeedPost } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 import { postTypeLabel, shouldShowPostType } from '@/lib/post-types';
 
 const THEME = {
@@ -53,6 +54,7 @@ export function PersonalPagePostCard({
       onChange({ ...post, support: Math.max(0, post.support + (result.supported ? 1 : -1)) });
     } catch (error) {
       console.error('Failed to like page post:', error);
+      Alert.alert("Couldn't save your like", friendlyError(error, "We couldn't save your like."));
     } finally {
       setIsLiking(false);
     }
@@ -68,7 +70,8 @@ export function PersonalPagePostCard({
       onChange({ ...post, replies: post.replies + 1, comments: [...post.comments, result.comment] });
       setCommentDraft('');
     } catch (error) {
-      Alert.alert('Could not add comment', error instanceof Error ? error.message : 'Please try again.');
+      console.error('Failed to add comment:', error);
+      Alert.alert("Couldn't post your comment", friendlyError(error, "We couldn't post your comment."));
     } finally {
       setIsCommenting(false);
     }
@@ -93,7 +96,8 @@ export function PersonalPagePostCard({
       setEditingCommentId(null);
       setEditDraft('');
     } catch (error) {
-      Alert.alert('Could not edit comment', error instanceof Error ? error.message : 'Please try again.');
+      console.error('Failed to edit comment:', error);
+      Alert.alert("Couldn't save your changes", friendlyError(error, "We couldn't save your changes to this comment."));
     } finally {
       setBusyCommentId(null);
     }
@@ -117,7 +121,8 @@ export function PersonalPagePostCard({
               comments: post.comments.filter((comment) => comment.id !== commentId),
             });
           } catch (error) {
-            Alert.alert('Could not delete comment', error instanceof Error ? error.message : 'Please try again.');
+            console.error('Failed to delete comment:', error);
+            Alert.alert("Couldn't delete the comment", friendlyError(error, "We couldn't delete this comment."));
           } finally {
             setBusyCommentId(null);
           }

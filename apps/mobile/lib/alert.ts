@@ -17,8 +17,7 @@ export const Alert = {
     buttons?: AlertButton[]
   ) => {
     // Determine toast type based on context
-    const isError = title.toLowerCase().includes('error') || 
-                    title.toLowerCase().includes('failed') ||
+    const isError = /error|failed|couldn['’]t|could not|didn['’]t|can['’]t|unable/i.test(title) ||
                     buttons?.some(b => b.style === 'destructive');
     
     const isSuccess = title.toLowerCase().includes('success') || 
@@ -32,8 +31,9 @@ export const Alert = {
       type,
       text1: title,
       text2: message,
+      // Errors stay until tapped, so slow readers don't lose them.
       visibilityTime: 5000,
-      autoHide: true,
+      autoHide: !isError,
       topOffset: 60,
       onPress: () => {
         Toast.hide();

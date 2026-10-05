@@ -21,8 +21,13 @@ import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
 
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
-import { getOrCreateAnonymousId, markAnonymousProfileIntroSeen } from '@/lib/anonymous-id';
+import {
+  getOrCreateAnonymousId,
+  hasSeenAnonymousProfileIntro,
+  markAnonymousProfileIntroSeen,
+} from '@/lib/anonymous-id';
 import { track } from '@/lib/analytics';
+import { friendlyError } from '@/lib/friendly-error';
 import { secureStorage } from '@/lib/secure-storage';
 
 const MIN_SELF_DESCRIPTION = 40;
@@ -91,7 +96,7 @@ const signalFields: {
   {
     name: 'interests',
     label: 'Interests',
-    helper: 'What do you want to hear about or connect around?',
+    helper: 'What do you want to hear about or connect around? Separate each one with a comma.',
     placeholder: 'music, housing, food, wellness, events',
     minItems: MIN_SIGNAL_ITEMS,
     maxItemLength: 80,
@@ -99,7 +104,7 @@ const signalFields: {
   {
     name: 'resourcesOffered',
     label: 'What you can offer',
-    helper: 'This can be skills, time, tools, space, rides, advice, or encouragement.',
+    helper: 'This can be skills, time, tools, space, rides, advice, or encouragement. Separate each one with a comma.',
     placeholder: 'childcare, rides, cooking, design help',
     minItems: MIN_SIGNAL_ITEMS,
     maxItemLength: 120,
@@ -107,7 +112,7 @@ const signalFields: {
   {
     name: 'resourcesNeeded',
     label: "What you're looking for",
-    helper: 'Share what would help you, your family, or something you are working on.',
+    helper: 'Share what would help you, your family, or something you are working on. Separate each one with a comma.',
     placeholder: 'job leads, event space, repair help, collaborators',
     minItems: MIN_SIGNAL_ITEMS,
     maxItemLength: 120,
@@ -137,6 +142,29 @@ function parseSignalList(value: string, maxItemLength = 120) {
 export default function ProfileOnboardingScreen() {
   const { user, sessionToken, isLoading, login, deferProfileOnboarding } = useAuth();
   const [wizardStep, setWizardStep] = useState<WizardStep>('intro');
+  // A signed-in person who already saw the intro on this device (for
+  // example a returning member who tapped "I already have an account")
+  // starts at the profile form instead of seeing the intro again. Decided
+  // once, before the first step renders, so the intro never flashes.
+  const [firstStepChosen, setFirstStepChosen] = useState(false);
+  const firstStepCheckStarted = useRef(false);
+
+  useEffect(() => {
+    if (isLoading || firstStepCheckStarted.current) return;
+    firstStepCheckStarted.current = true;
+
+    if (!user || !sessionToken) {
+      setFirstStepChosen(true);
+      return;
+    }
+
+    hasSeenAnonymousProfileIntro()
+      .then((seen) => {
+        if (seen) setWizardStep('profile');
+      })
+      .catch(() => {})
+      .finally(() => setFirstStepChosen(true));
+  }, [isLoading, user, sessionToken]);
 
   const { width } = useWindowDimensions();
   const introCarouselRef = useRef<ScrollView>(null);
@@ -210,6 +238,20 @@ export default function ProfileOnboardingScreen() {
   const canSubmit =
     introComplete && signalFields.every((field) => signalProgress[field.name].complete);
 
+  // Plain list of what still needs filling in, so "Start using Cahootz"
+  // can say why it can't continue yet instead of sitting greyed out.
+  const missingParts = useMemo(() => {
+    const parts: string[] = [];
+    const charsLeft = introField.minChars - selfDescription.trim().length;
+    if (charsLeft > 0) {
+      parts.push(`Write ${charsLeft} more ${charsLeft === 1 ? 'letter' : 'letters'} in "${introField.label}"`);
+    }
+    signalFields.forEach((field) => {
+      if (!signalProgress[field.name].complete) parts.push(`Add at least one thing to "${field.label}"`);
+    });
+    return parts;
+  }, [selfDescription, signalProgress]);
+
   const updateIntro = (value: string) => {
     setSelfDescription(value);
     setError('');
@@ -223,6 +265,13 @@ export default function ProfileOnboardingScreen() {
   const updateOptionalField = (name: OptionalFieldName, value: string) => {
     setOptionalValues((current) => ({ ...current, [name]: value }));
     setError('');
+  };
+
+  const handleSignInInstead = async () => {
+    track('onboarding_sign_in_chosen', { step: wizardStep });
+    // Remember the intro was seen first, or "/" sends them straight back here.
+    await markAnonymousProfileIntroSeen().catch(() => {});
+    router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
   };
 
   const handleSkip = async () => {
@@ -395,14 +444,10 @@ export default function ProfileOnboardingScreen() {
   const handleSubmit = async () => {
     if (isSaving) return;
 
-    if (!introComplete) {
-      setError('Your short intro needs a little more detail before you continue.');
-      return;
-    }
-
-    const missingSignalField = signalFields.find((field) => !signalProgress[field.name].complete);
-    if (missingSignalField) {
-      setError(`${missingSignalField.label} needs at least ${missingSignalField.minItems} item before you continue.`);
+    if (missingParts.length > 0) {
+      setError(
+        `Almost there. To continue:\n• ${missingParts.join('\n• ')}\n\nOr tap "Do this later" to skip for now.`,
+      );
       return;
     }
 
@@ -450,13 +495,13 @@ export default function ProfileOnboardingScreen() {
       setWizardStep('circles');
     } catch (err) {
       console.error('Profile onboarding save failed:', err);
-      setError(err instanceof Error ? err.message : 'Could not save your profile. Try again.');
+      setError(friendlyError(err, "We couldn't save your profile."));
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (isLoading) {
+  if (isLoading || !firstStepChosen) {
     return (
       <SafeAreaView style={styles.loadingScreen}>
         <ActivityIndicator color="#FF6B00" size="large" />
@@ -531,6 +576,15 @@ export default function ProfileOnboardingScreen() {
             <Text style={introStyles.submitText}>Continue</Text>
             <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.6} />
           </Pressable>
+          {!signedIn ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void handleSignInInstead()}
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>I already have an account</Text>
+            </Pressable>
+          ) : null}
         </View>
       </SafeAreaView>
     );
@@ -628,7 +682,9 @@ export default function ProfileOnboardingScreen() {
           <View style={styles.form}>
             <View style={styles.fieldBlock}>
               <View style={styles.fieldHeader}>
-                <Text style={styles.label}>{introField.label}</Text>
+                <Text style={styles.label}>
+                  {introField.label} <Text style={styles.requiredTag}>(required)</Text>
+                </Text>
                 <Text style={[styles.counter, introComplete && styles.counterComplete]}>
                   {introComplete ? 'Ready' : `${Math.max(introField.minChars - selfDescription.trim().length, 0)} more`}
                 </Text>
@@ -652,7 +708,9 @@ export default function ProfileOnboardingScreen() {
                 return (
                   <View key={field.name} style={styles.fieldBlock}>
                     <View style={styles.fieldHeader}>
-                      <Text style={styles.label}>{field.label}</Text>
+                      <Text style={styles.label}>
+                        {field.label} <Text style={styles.requiredTag}>(required)</Text>
+                      </Text>
                       <Text style={[styles.counter, progress.complete && styles.counterComplete]}>
                         {progress.complete ? `${progress.count} added` : 'Add one'}
                       </Text>
@@ -719,13 +777,18 @@ export default function ProfileOnboardingScreen() {
             </View>
           </View>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? (
+            <Text accessibilityRole="alert" style={styles.error}>
+              {error}
+            </Text>
+          ) : null}
 
           <Pressable
             accessibilityRole="button"
-            disabled={!canSubmit || isSaving}
+            accessibilityHint={canSubmit ? undefined : 'Shows what still needs filling in'}
+            disabled={isSaving}
             onPress={handleSubmit}
-            style={[styles.submitButton, (!canSubmit || isSaving) && styles.submitButtonDisabled]}
+            style={[styles.submitButton, isSaving && styles.submitButtonDisabled]}
           >
             {isSaving ? (
               <ActivityIndicator color="#FFFFFF" />
@@ -1031,6 +1094,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 24,
     fontWeight: '800',
+  },
+  requiredTag: {
+    color: '#475569',
+    fontSize: 14,
+    fontWeight: '600',
   },
   counter: {
     color: '#FF6B00',

@@ -69,7 +69,7 @@ export function PaymentConfirmationModal({
           <Text style={styles.message}>
             {hasFeeBreakdown
               ? 'Review the breakdown and confirm to proceed.'
-              : 'Click confirm to proceed with this payment.'}
+              : 'Tap Confirm to make this payment, or Cancel to go back.'}
           </Text>
 
           <View style={styles.buttonContainer}>
@@ -77,6 +77,7 @@ export function PaymentConfirmationModal({
               style={[styles.button, styles.cancelButton]}
               onPress={onCancel}
               activeOpacity={0.8}
+              accessibilityRole="button"
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
@@ -85,6 +86,7 @@ export function PaymentConfirmationModal({
               style={[styles.button, styles.confirmButton]}
               onPress={onConfirm}
               activeOpacity={0.8}
+              accessibilityRole="button"
             >
               <Text style={styles.confirmButtonText}>Confirm</Text>
             </TouchableOpacity>

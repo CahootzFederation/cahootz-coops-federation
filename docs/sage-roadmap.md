@@ -284,6 +284,11 @@ For every Sage behavior change:
 - 2026-10-03: Cost control uses both a dollar limit and a call-count limit.
 - 2026-10-04: Specialists (Cadence, Guardian, Bridge, Ledger) are read-only tools the one steward model calls, not separate agents.
 - 2026-10-04: New autonomous actions (follow-ups, routed alerts, introduction offers) go live within the monthly limit and safety checks. No conduct review or disciplinary action. Ledger reads proposal budgets only.
+- 2026-10-05: Members are told plainly who Sage is.
+  - The Sage screen shows a "Meet Sage" card (`apps/mobile/components/sage-intro.tsx`) until it's dismissed. It says Sage is an AI helper and not a person, what it does on its own (replies, reminders and alerts, checking back), and what always waits for a person (proposals, money, membership, group decisions). It also says Sage can make mistakes.
+  - Sage settings always shows the card, and the suggestion and alert pages carry a one-line version.
+  - This is copy only; no autonomy changed. If the Autonomy Boundaries change, update this card in the same change. Verified by `onboarding-usability.spec.ts` (TESTING.md journey 42).
+  - Sage's posts and comments in the feed, post page, and event comments carry an "AI helper" tag (`components/ai-badge.tsx`). The commons feed APIs now return `authorIsAi` from `User.isBot`. Verified in `sage-stewardship.spec.ts` (journey 33).
 
 ## Completed milestones
 

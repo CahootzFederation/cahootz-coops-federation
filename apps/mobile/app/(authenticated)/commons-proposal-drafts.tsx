@@ -6,7 +6,9 @@ import { ArrowLeft, FileText, Save, Send } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
+import { LoadError } from '@/components/load-error';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 import { proposalHubHref } from '@/lib/proposal-navigation';
 
 const PRIMARY = '#FF6B00';
@@ -34,7 +36,8 @@ export default function CommonsProposalDrafts() {
       await client.invalidateQueries({ queryKey: ['commons-proposal-drafts', sessionToken] });
       setMessage('Draft saved.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not save draft.');
+      console.error('Failed to save proposal draft:', error);
+      setMessage(friendlyError(error, "We couldn't save your draft."));
     } finally { setBusy(null); }
   }
 
@@ -49,7 +52,8 @@ export default function CommonsProposalDrafts() {
       await client.invalidateQueries({ queryKey: ['commons-proposal-drafts', sessionToken] });
       router.replace({ pathname: '/(tabs)/proposal-detail', params: { id: proposal.id, coopId } } as any);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not submit proposal.');
+      console.error('Failed to submit proposal draft:', error);
+      setMessage(friendlyError(error, "We couldn't submit your proposal."));
     } finally { setBusy(null); }
   }
 
@@ -66,6 +70,12 @@ export default function CommonsProposalDrafts() {
       {message ? <View accessibilityRole="alert" className="mb-4 rounded-2xl border border-orange-200 bg-orange-50 p-4"><Text className="font-semibold text-orange-900">{message}</Text></View> : null}
       {query.isLoading ? (
         <View className="items-center py-16"><ActivityIndicator color={PRIMARY} /><Text className="mt-3 font-semibold text-gray-500">Loading drafts…</Text></View>
+      ) : query.isError && drafts.length === 0 ? (
+        <LoadError
+          message={friendlyError(query.error, "We couldn't load your drafts.")}
+          retrying={query.isFetching}
+          onRetry={() => void query.refetch()}
+        />
       ) : drafts.length === 0 ? (
         <View className="rounded-[28px] border border-dashed border-stone-300 bg-white p-6">
           <View className="mb-4 h-14 w-14 items-center justify-center rounded-2xl bg-orange-50"><FileText size={25} color={PRIMARY} /></View>

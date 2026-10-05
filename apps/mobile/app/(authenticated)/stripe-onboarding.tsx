@@ -19,6 +19,7 @@ import {
 import { useAuth } from '@/contexts/auth-context';
 import { useCoin } from '@/contexts/platform-config-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 
 // Maps internal statuses to plain-English user-facing state
 function getStatusInfo(store: any): {
@@ -109,6 +110,7 @@ export default function StripeOnboardingScreen() {
   const coin = useCoin();
   const [store, setStore] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [onboardingUrl, setOnboardingUrl] = useState<string | null>(null);
@@ -128,19 +130,22 @@ export default function StripeOnboardingScreen() {
     }
   }, [user?.walletAddress, storeId]);
 
-  useEffect(() => {
-    async function init() {
-      try {
-        setLoading(true);
-        await loadStore();
-      } catch (error: any) {
-        Alert.alert('Error', error.message || 'Failed to load store');
-      } finally {
-        setLoading(false);
-      }
+  const init = useCallback(async () => {
+    try {
+      setLoading(true);
+      setLoadError(null);
+      await loadStore();
+    } catch (error: any) {
+      console.error('Failed to load store for payment setup:', error);
+      setLoadError(friendlyError(error, "We couldn't load your store's payment setup."));
+    } finally {
+      setLoading(false);
     }
-    void init();
   }, [loadStore]);
+
+  useEffect(() => {
+    void init();
+  }, [init]);
 
   const syncStatus = useCallback(async (quiet = false, businessIdOverride?: string) => {
     const businessId = businessIdOverride || store?.businessId;
@@ -169,7 +174,8 @@ export default function StripeOnboardingScreen() {
         Alert.alert('Still under review', 'Hang tight — this usually takes just a few minutes. Check back soon.');
       }
     } catch (error: any) {
-      if (!quiet) Alert.alert('Error', error.message || 'Failed to check status');
+      console.error('Failed to sync Stripe status:', error);
+      if (!quiet) Alert.alert("Couldn't check your status", friendlyError(error, "We couldn't check your payment setup."));
     } finally {
       setSyncing(false);
     }
@@ -189,7 +195,8 @@ export default function StripeOnboardingScreen() {
       setOnboardingUrl(result.onboardingUrl);
       setPendingBusinessId(result.businessId);
     } catch (error: any) {
-      Alert.alert('Setup Error', error.message || 'Failed to generate setup link');
+      console.error('Failed to create Stripe onboarding link:', error);
+      Alert.alert("Couldn't start payment setup", friendlyError(error, "We couldn't create your setup link."));
     } finally {
       setStarting(false);
     }
@@ -221,6 +228,30 @@ export default function StripeOnboardingScreen() {
       <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#FF6B00" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
+        <View className="flex-row items-center px-5 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+          <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
+            <ArrowLeft size={24} color="#374151" />
+          </TouchableOpacity>
+          <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">Payment Setup</Text>
+        </View>
+        <View className="flex-1 items-center justify-center px-8">
+          <Text className="text-gray-700 dark:text-gray-300 text-lg text-center">{loadError}</Text>
+          <TouchableOpacity
+            onPress={() => void init()}
+            accessibilityRole="button"
+            className="bg-primary px-8 py-3 rounded-xl mt-6 items-center justify-center"
+            style={{ minHeight: 48 }}
+          >
+            <Text className="text-white font-bold">Try again</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );

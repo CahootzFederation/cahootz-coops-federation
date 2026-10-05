@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Image, Alert, ActivityIndicator } from 'r
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { getApiUrl, getCoopId } from '@/lib/config';
+import { friendlyError } from '@/lib/friendly-error';
 
 const API_BASE_URL = getApiUrl();
 
@@ -30,7 +31,7 @@ export default function BlobPhotoUpload({
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please allow access to your media library');
+        Alert.alert('Allow photo access', 'To add a photo, allow Cahootz to use your photos in Settings.');
         return;
       }
 
@@ -46,7 +47,7 @@ export default function BlobPhotoUpload({
       }
     } catch (error) {
       console.error('Error picking photo:', error);
-      Alert.alert('Error', 'Failed to pick photo');
+      Alert.alert("Couldn't open your photos", "We couldn't open your photos. Please try again.");
     }
   };
 
@@ -54,7 +55,7 @@ export default function BlobPhotoUpload({
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please allow camera access');
+        Alert.alert('Allow camera access', 'To take a photo, allow Cahootz to use your camera in Settings.');
         return;
       }
 
@@ -69,7 +70,7 @@ export default function BlobPhotoUpload({
       }
     } catch (error) {
       console.error('Error taking photo:', error);
-      Alert.alert('Error', 'Failed to take photo');
+      Alert.alert("Couldn't open the camera", "We couldn't open the camera. Please try again.");
     }
   };
 
@@ -140,7 +141,7 @@ export default function BlobPhotoUpload({
       );
     } catch (error) {
       console.error('Upload error:', error);
-      Alert.alert('Upload failed', error instanceof Error ? error.message : 'Please try again');
+      Alert.alert("Couldn't upload your photo", friendlyError(error, "We couldn't upload your photo."));
     } finally {
       setIsUploading(false);
     }

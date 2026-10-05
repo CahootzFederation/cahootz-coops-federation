@@ -193,7 +193,7 @@ export default function NotificationScreen({
       if (destination) router.push(destination);
     },
     onError: () =>
-      setActionError("Could not update your alerts. Please try again."),
+      setActionError("We couldn't update your alerts. Please try again."),
   });
   const page = query.data?.pages[0];
   const notifications = query.data?.pages.flatMap((p) => p.notifications) || [];
@@ -373,10 +373,10 @@ export default function NotificationScreen({
           {query.isError && (
             <View style={s.card}>
               <Text accessibilityRole="alert" style={s.error}>
-                Could not load alerts. Please try again.
+                We couldn&apos;t load your alerts. Please try again.
               </Text>
               <AlertButton
-                label="Retry"
+                label="Try again"
                 onPress={() =>
                   void (query.isFetchNextPageError
                     ? query.fetchNextPage()

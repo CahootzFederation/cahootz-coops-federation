@@ -88,6 +88,8 @@ test("Sage comments on its own and a circle leader approves an editable proposal
     await member.page.reload();
     await expect(shown(member.page, commentText)).toBeVisible();
     await expect(shown(member.page, "Sage")).toBeVisible();
+    // Sage's comment is labeled as coming from an AI helper; B's post and A's comment are not.
+    await expect(member.page.getByLabel("AI helper, not a person").filter({ visible: true })).toHaveCount(1);
 
     // B, the post's author, is told Sage commented, and the alert opens the post.
     await member.page.getByLabel("Alerts", { exact: true }).locator("visible=true").first().click();

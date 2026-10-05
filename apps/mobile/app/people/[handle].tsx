@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   TouchableOpacity,
   View,
@@ -20,12 +21,14 @@ import {
   CommonsMediaTile,
   FEED_MEDIA_TILE_SIZE,
 } from '@/components/commons-media-viewer';
+import { LoadError } from '@/components/load-error';
 import { PersonAvatar } from '@/components/person-avatar';
 import { PersonalPagePostCard } from '@/components/personal-page-post-card';
 import { ProfileCommonsSection } from '@/components/profile-commons-section';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsPost, type PersonalPageFeedPost, type PersonalPageProfile } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 import { postTypeLabel, shouldShowPostType } from '@/lib/post-types';
 import { personDisplayHandle, personHandleFromName, postBelongsToHandle } from '@/lib/social-profile';
 
@@ -52,6 +55,7 @@ export default function PublicPersonPageScreen() {
   const [isFollowBusy, setIsFollowBusy] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -71,7 +75,7 @@ export default function PublicPersonPageScreen() {
       })
       .catch((caughtError) => {
         console.error('Could not load personal page:', caughtError);
-        if (mounted) setError(caughtError instanceof Error ? caughtError.message : 'Could not load this page.');
+        if (mounted) setError(friendlyError(caughtError, "We couldn't load this person's page."));
       })
       .finally(() => {
         if (mounted) setIsLoading(false);
@@ -80,7 +84,7 @@ export default function PublicPersonPageScreen() {
     return () => {
       mounted = false;
     };
-  }, [routeHandle, sessionToken]);
+  }, [routeHandle, sessionToken, reloadKey]);
 
   const profileName = useMemo(() => {
     return profile?.name || routeName || pagePosts[0]?.author || posts[0]?.author || routeHandle;
@@ -121,6 +125,10 @@ export default function PublicPersonPageScreen() {
       );
     } catch (caughtError) {
       console.error('Failed to update follow:', caughtError);
+      Alert.alert(
+        followsPerson ? "Couldn't unfollow" : "Couldn't follow",
+        friendlyError(caughtError, followsPerson ? "We couldn't unfollow this person." : "We couldn't follow this person."),
+      );
     } finally {
       setIsFollowBusy(false);
     }
@@ -256,9 +264,9 @@ export default function PublicPersonPageScreen() {
             </View>
           ) : null}
 
-          {error ? (
-            <View className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
-              <Text className="text-sm font-black text-red-700">{error}</Text>
+          {error && !isLoading ? (
+            <View className="mt-4">
+              <LoadError message={error} onRetry={() => setReloadKey((key) => key + 1)} />
             </View>
           ) : null}
 
@@ -270,7 +278,7 @@ export default function PublicPersonPageScreen() {
               </View>
             ) : null}
 
-            {!isLoading && pagePosts.length === 0 && posts.length === 0 ? (
+            {!isLoading && !error && pagePosts.length === 0 && posts.length === 0 ? (
               <View className="rounded-2xl border border-dashed border-gray-300 bg-white p-5">
                 <FileText size={18} color={THEME.primary} />
                 <Text className="mt-3 text-base font-black text-gray-950">No public posts yet</Text>

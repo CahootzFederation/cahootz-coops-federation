@@ -25,6 +25,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { useCoin } from '@/contexts/platform-config-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 
 const STATUS_CONFIG: Record<string, { color: string; bgColor: string; icon: any; label: string }> = {
   PENDING: { color: '#FF8A2A', bgColor: 'bg-secondary dark:bg-amber-900/30', icon: Clock, label: 'Pending' },
@@ -93,20 +94,20 @@ function OrderCard({ transaction, onPress }: OrderCardProps) {
                 <>
                   <CheckCircle size={14} color="#16A34A" />
                   <Text className="text-green-400 text-sm ml-1 font-semibold">
-                    +SC
+                    +{coin.symbol}
                   </Text>
                 </>
               )}
               {scReward.status === 'PENDING' && (
                 <>
                   <Clock size={14} color="#FF8A2A" />
-                  <Text className="text-amber-400 text-sm ml-1 font-semibold">SC Pending</Text>
+                  <Text className="text-amber-400 text-sm ml-1 font-semibold">{coin.symbol} on the way</Text>
                 </>
               )}
               {scReward.status === 'FAILED' && (
                 <>
                   <AlertCircle size={14} color="#DC2626" />
-                  <Text className="text-red-400 text-sm ml-1 font-semibold">{coin.symbol} Failed</Text>
+                  <Text className="text-red-400 text-sm ml-1 font-semibold">{coin.symbol} not added</Text>
                 </>
               )}
             </View>
@@ -122,9 +123,9 @@ function OrderCard({ transaction, onPress }: OrderCardProps) {
         <View className="mt-3 p-2 bg-amber-900/20 rounded-lg flex-row items-center">
           <AlertCircle size={14} color="#FF8A2A" />
           <Text className="text-amber-400 text-xs ml-2">
-            {scReward.status === 'PENDING' 
-              ? 'SC reward processing...' 
-              : 'SC reward failed - contact support'}
+            {scReward.status === 'PENDING'
+              ? `Your ${coin.symbol} reward is on the way.`
+              : `Your ${coin.symbol} reward wasn't added. Contact support for help.`}
           </Text>
         </View>
       )}
@@ -138,18 +139,25 @@ export default function OrdersListHybrid() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Kept apart from "no orders" so a failed load never looks like an empty history.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadTransactions = useCallback(async () => {
-    if (!user?.id || !user?.walletAddress) return;
+    if (!user?.id || !user?.walletAddress) {
+      setLoading(false);
+      return;
+    }
     try {
+      setLoadError(null);
       const result = await api.listCommerceTransactions({
         userId: user.id,
         customerId: user.id,
         limit: 50,
       }, user.walletAddress);
-      setTransactions(result.transactions);
+      setTransactions(result?.transactions ?? []);
     } catch (error) {
       console.error('Failed to load orders:', error);
+      setLoadError(friendlyError(error, "We couldn't load your orders."));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -182,6 +190,7 @@ export default function OrdersListHybrid() {
         <TouchableOpacity
           onPress={() => router.back()}
           className="w-10 h-10 items-center justify-center rounded-full bg-gray-800"
+          accessibilityLabel="Go back"
         >
           <ArrowLeft size={20} color="#fff" />
         </TouchableOpacity>
@@ -196,7 +205,22 @@ export default function OrdersListHybrid() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#f97316" />
         }
       >
-        {transactions.length === 0 ? (
+        {loadError && transactions.length === 0 ? (
+          <View className="flex-1 items-center justify-center py-20">
+            <Text className="text-gray-200 text-lg text-center px-6">{loadError}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                setLoading(true);
+                loadTransactions();
+              }}
+              accessibilityRole="button"
+              className="mt-6 bg-orange-600 px-6 rounded-xl items-center justify-center"
+              style={{ minHeight: 48 }}
+            >
+              <Text className="text-white font-semibold">Try again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : transactions.length === 0 ? (
           <View className="flex-1 items-center justify-center py-20">
             <ShoppingBag size={64} color="#4B5563" />
             <Text className="text-gray-400 text-lg font-semibold mt-4">No Orders Yet</Text>

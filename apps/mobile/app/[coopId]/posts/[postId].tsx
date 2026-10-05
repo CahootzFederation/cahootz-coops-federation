@@ -34,10 +34,13 @@ import {
   type CommonsMediaPreview,
 } from '@/components/commons-media-viewer';
 import { Text } from '@/components/ui/text';
+import { AiBadge } from '@/components/ai-badge';
 import { MentionText } from '@/components/mention-text';
 import { MentionComposerInput } from '@/components/mention-composer-input';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsPost, type CommonsProfile } from '@/lib/api';
+import { ApiError, friendlyError } from '@/lib/friendly-error';
+import { LoadError } from '@/components/load-error';
 import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
 import { SageDecisionTrails } from '@/components/sage-decision-trail';
 
@@ -65,6 +68,9 @@ export default function CommonsPostDetailScreen() {
   const [coop, setCoop] = useState<CommonsProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  // The post is gone or hidden, so "Try again" can't help.
+  const [postGone, setPostGone] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [commentDraft, setCommentDraft] = useState('');
   const [commentMedia, setCommentMedia] = useState<CommonsMediaPreview[]>([]);
   const [isCommenting, setIsCommenting] = useState(false);
@@ -83,7 +89,8 @@ export default function CommonsPostDetailScreen() {
     let mounted = true;
 
     if (!postId) {
-      setError('Post not found.');
+      setPostGone(true);
+      setError("We couldn't find this post.");
       setIsLoading(false);
       return () => {
         mounted = false;
@@ -92,6 +99,7 @@ export default function CommonsPostDetailScreen() {
 
     setIsLoading(true);
     setError('');
+    setPostGone(false);
     api
       .getCommonsPost({ coopId, postId }, sessionToken)
       .then((result) => {
@@ -102,7 +110,12 @@ export default function CommonsPostDetailScreen() {
       })
       .catch((caughtError) => {
         console.error('Failed to load commons post:', caughtError);
-        if (mounted) setError(caughtError instanceof Error ? caughtError.message : 'Could not load this post.');
+        if (!mounted) return;
+        setPostGone(
+          caughtError instanceof ApiError &&
+            (caughtError.code === 'NOT_FOUND' || caughtError.code === 'FORBIDDEN'),
+        );
+        setError(friendlyError(caughtError, "We couldn't load this post."));
       })
       .finally(() => {
         if (mounted) setIsLoading(false);
@@ -111,7 +124,7 @@ export default function CommonsPostDetailScreen() {
     return () => {
       mounted = false;
     };
-  }, [coopId, postId, sessionToken]);
+  }, [coopId, postId, sessionToken, reloadKey]);
 
   const supportPost = async () => {
     if (!post) return;
@@ -136,7 +149,7 @@ export default function CommonsPostDetailScreen() {
       );
     } catch (caughtError) {
       console.error('Failed to support post:', caughtError);
-      setError(caughtError instanceof Error ? caughtError.message : 'Could not update like.');
+      setError(friendlyError(caughtError, "We couldn't save your like."));
     }
   };
 
@@ -193,7 +206,7 @@ export default function CommonsPostDetailScreen() {
       setReplyTo(null);
     } catch (caughtError) {
       console.error('Failed to comment:', caughtError);
-      setError(caughtError instanceof Error ? caughtError.message : 'Could not add comment.');
+      setError(friendlyError(caughtError, "We couldn't post your comment."));
     } finally {
       setIsCommenting(false);
     }
@@ -211,7 +224,7 @@ export default function CommonsPostDetailScreen() {
       await api.joinPublicCircle(post.circleId, sessionToken);
       setCircleIsMember(true);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Could not join circle.');
+      setError(friendlyError(caughtError, "We couldn't add you to this circle."));
     } finally {
       setIsJoiningCircle(false);
     }
@@ -235,7 +248,7 @@ export default function CommonsPostDetailScreen() {
           : current
       );
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : 'Could not update your reaction.');
+      setError(friendlyError(caughtError, "We couldn't save your reaction."));
     } finally {
       setReactingCommentId(null);
     }
@@ -273,7 +286,7 @@ export default function CommonsPostDetailScreen() {
       setEditingCommentId(null);
       setEditDraft('');
     } catch (caughtError) {
-      Alert.alert('Could not edit comment', caughtError instanceof Error ? caughtError.message : 'Please try again.');
+      Alert.alert("Couldn't save your changes", friendlyError(caughtError, "We couldn't save your changes to this comment."));
     } finally {
       setBusyCommentId(null);
     }
@@ -301,7 +314,7 @@ export default function CommonsPostDetailScreen() {
                 : current
             );
           } catch (caughtError) {
-            Alert.alert('Could not delete comment', caughtError instanceof Error ? caughtError.message : 'Please try again.');
+            Alert.alert("Couldn't delete the comment", friendlyError(caughtError, "We couldn't delete this comment."));
           } finally {
             setBusyCommentId(null);
           }
@@ -378,7 +391,7 @@ export default function CommonsPostDetailScreen() {
             router.back();
           } catch (caughtError) {
             setIsDeleting(false);
-            Alert.alert('Could not delete post', caughtError instanceof Error ? caughtError.message : 'Please try again.');
+            Alert.alert("Couldn't delete your post", friendlyError(caughtError, "We couldn't delete your post."));
           }
         },
       },
@@ -442,10 +455,12 @@ export default function CommonsPostDetailScreen() {
           </View>
         ) : null}
 
-        {!isLoading && error && !post ? (
+        {!isLoading && error && !post && !postGone ? (
+          <LoadError message={error} onRetry={() => setReloadKey((key) => key + 1)} />
+        ) : !isLoading && error && !post ? (
           <View className="rounded-xl border border-red-200 bg-red-50 p-4">
-            <Text className="font-black text-red-700">Could not open post</Text>
-            <Text className="mt-1 text-sm text-red-700">{error}</Text>
+            <Text className="font-black text-red-700">We couldn&apos;t open this post</Text>
+            <Text className="mt-1 text-base text-red-700">{error}</Text>
           </View>
         ) : null}
 
@@ -468,6 +483,7 @@ export default function CommonsPostDetailScreen() {
               >
                 <View className="flex-row items-center gap-1.5">
                   <Text className="text-sm font-black text-gray-950" numberOfLines={1}>{post.author}</Text>
+                  {post.authorIsAi ? <AiBadge /> : null}
                   {post.supporterBadge ? <View className="flex-row items-center rounded-full px-2 py-0.5" style={{ backgroundColor: `${post.supporterBadge.color}18` }}><Award size={10} color={post.supporterBadge.color} /><Text className="ml-1 text-[9px] font-black" style={{ color: post.supporterBadge.color }}>{post.supporterBadge.shortName}</Text></View> : null}
                 </View>
                 <Text className="text-xs font-semibold text-stone-500" numberOfLines={1}>
@@ -566,6 +582,7 @@ export default function CommonsPostDetailScreen() {
                         >
                           <Text className="text-xs font-black text-stone-800">{comment.author}</Text>
                         </TouchableOpacity>
+                        {comment.authorIsAi ? <AiBadge /> : null}
                         {comment.supporterBadge ? <View className="flex-row items-center rounded-full px-2 py-0.5" style={{ backgroundColor: `${comment.supporterBadge.color}18` }}><Award size={9} color={comment.supporterBadge.color} /><Text className="ml-1 text-[8px] font-black" style={{ color: comment.supporterBadge.color }}>{comment.supporterBadge.shortName}</Text></View> : null}
                       </View>
                       {comment.authorId && comment.authorId === user?.id ? (

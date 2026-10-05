@@ -17,7 +17,9 @@ import {
 } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
+import { LoadError } from '@/components/load-error';
 import { api, type CommonsDirectoryItem, type ProposalSummary } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 import { useAuth } from '@/contexts/auth-context';
 import { useCommonsProposalActions } from '@/hooks/use-commons-proposal-actions';
 import { track } from '@/lib/analytics';
@@ -162,7 +164,7 @@ export default function ProposalsScreen() {
     } catch (loadError) {
       console.error('Failed to load proposals:', loadError);
       setProposals([]);
-      setError(loadError instanceof Error ? loadError.message : 'Could not load proposals.');
+      setError(friendlyError(loadError, "We couldn't load proposals."));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -319,7 +321,9 @@ export default function ProposalsScreen() {
                 <Text className="mt-0.5 text-sm text-gray-500">
                   {proposalActions.draftCount > 0
                     ? `${proposalActions.draftCount} ${proposalActions.draftCount === 1 ? 'draft' : 'drafts'} in this commons`
-                    : 'No saved drafts in this commons'}
+                    : proposalActions.failed
+                      ? 'Open to see your drafts'
+                      : 'No saved drafts in this commons'}
                 </Text>
               </View>
               <ChevronDown size={17} color="#78716C" style={{ transform: [{ rotate: '-90deg' }] }} />
@@ -345,16 +349,14 @@ export default function ProposalsScreen() {
             </TouchableOpacity>
           ) : null}
 
-          {error ? (
-            <View className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
-              <Text className="text-sm font-semibold text-red-700">{error}</Text>
-            </View>
-          ) : null}
-
           {loading ? (
             <View className="items-center py-16">
               <ActivityIndicator size="large" color={PRIMARY} />
               <Text className="mt-3 text-sm font-semibold text-gray-500">Loading proposals...</Text>
+            </View>
+          ) : error ? (
+            <View className="mt-5">
+              <LoadError message={error} onRetry={() => void loadProposals(false)} />
             </View>
           ) : visibleProposals.length === 0 ? (
             <View className="mt-5 rounded-[28px] border border-dashed border-stone-300 bg-white p-6">

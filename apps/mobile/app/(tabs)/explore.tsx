@@ -1,6 +1,6 @@
 import { ScrollView, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
-import { CreditCard, Plus, User, Wallet, History, Bell } from 'lucide-react-native';
+import { CreditCard, Wallet, History, Bell } from 'lucide-react-native';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 
@@ -16,29 +16,6 @@ export default function ExploreScreen() {
         <Text className="text-gray-500 mt-1">Manage your wallet and account settings</Text>
       </View>
 
-      <View className="mx-4 bg-gradient-to-r from-red-600 to-amber-600 rounded-2xl p-5 shadow-lg">
-        <View className="flex-row items-center justify-between">
-          <View className="flex-1 pr-3">
-            <Text className="text-white text-xl font-bold">Need to top up your wallet?</Text>
-            <Text className="text-white/80 text-sm mt-1">
-              Add funds instantly with your saved card.
-            </Text>
-          </View>
-          <View className="w-12 h-12 rounded-xl bg-white/20 items-center justify-center">
-            <Wallet size={22} color="#FFFFFF" />
-          </View>
-        </View>
-
-        <TouchableOpacity
-          onPress={() => router.push('/(authenticated)/fund-wallet')}
-          className="mt-4 bg-white rounded-xl py-3 px-4 flex-row items-center justify-center"
-          activeOpacity={0.85}
-        >
-          <Plus size={18} color="#FF6B00" />
-          <Text className="text-primary font-semibold ml-2">Add Money</Text>
-        </TouchableOpacity>
-      </View>
-
       <View className="mx-4 mt-4 mb-8 bg-white rounded-2xl border border-amber-100 overflow-hidden">
         <TouchableOpacity
           onPress={() => router.push('/(tabs)/wallet')}
@@ -50,7 +27,7 @@ export default function ExploreScreen() {
           </View>
           <View className="flex-1">
             <Text className="text-gray-900 font-semibold">Wallet</Text>
-            <Text className="text-gray-500 text-sm">Balance, address, and wallet actions</Text>
+            <Text className="text-gray-500 text-sm">Balance and wallet address</Text>
           </View>
           <Text className="text-gray-400 text-xl">›</Text>
         </TouchableOpacity>
@@ -65,7 +42,7 @@ export default function ExploreScreen() {
           </View>
           <View className="flex-1">
             <Text className="text-gray-900 font-semibold">Payment Methods</Text>
-            <Text className="text-gray-500 text-sm">Add or update cards for funding</Text>
+            <Text className="text-gray-500 text-sm">Your saved cards</Text>
           </View>
           <Text className="text-gray-400 text-xl">›</Text>
         </TouchableOpacity>

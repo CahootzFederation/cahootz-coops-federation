@@ -31,6 +31,8 @@ export type AnalyticsEvents = {
   onboarding_step_viewed: { step: OnboardingStep; signed_in: boolean };
   /** The person skipped a step ("Skip" on the profile form, "Skip for now" on circles). */
   onboarding_deferred: { step: OnboardingStep; signed_in: boolean };
+  /** A signed-out person tapped "I already have an account" in the welcome wizard. */
+  onboarding_sign_in_chosen: { step: OnboardingStep };
   /** The wizard was finished. `profile_completed` is false if the profile form was skipped. */
   onboarding_completed: {
     exit: 'welcome_lounge' | 'general' | 'skip' | 'invitation';

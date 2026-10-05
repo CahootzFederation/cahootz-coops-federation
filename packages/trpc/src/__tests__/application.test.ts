@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { appRouter } from '../routers/index.js';
 import type { Context } from '../context.js';
 import { sendApplicationSubmittedNotification } from '../services/slack-notification-service.js';
+import { APPLICATION_REFERENCE_PATTERN } from '../lib/application-reference.js';
 
 vi.mock('../services/slack-notification-service.js', () => ({
   sendApplicationSubmittedNotification: vi.fn().mockResolvedValue(undefined),
@@ -44,6 +45,14 @@ describe('Application Router - submitApplication', () => {
   it('should successfully submit a valid application', async () => {
     // Arrange - Mock that user doesn't exist
     mockPrismaClient.user.findUnique.mockResolvedValue(null);
+    const createApplication = vi.fn().mockImplementation(async ({ data }) => ({
+      id: 'app_456',
+      userId: 'user_123',
+      status: 'SUBMITTED',
+      referenceCode: data.referenceCode,
+      data: {},
+      createdAt: new Date(),
+    }));
     
     // Mock transaction to return created user and application
     mockPrismaClient.$transaction.mockImplementation(async (callback) => {
@@ -59,13 +68,7 @@ describe('Application Router - submitApplication', () => {
           }),
         },
         application: {
-          create: vi.fn().mockResolvedValue({
-            id: 'app_456',
-            userId: 'user_123',
-            status: 'SUBMITTED',
-            data: {},
-            createdAt: new Date(),
-          }),
+          create: createApplication,
         },
         userCoopMembership: {
           upsert: vi.fn().mockResolvedValue({
@@ -107,10 +110,13 @@ describe('Application Router - submitApplication', () => {
     const result = await caller.application.submitApplication(validApplicationData);
 
     // Assert
+    const savedReference = createApplication.mock.calls[0][0].data.referenceCode;
+    expect(savedReference).toMatch(APPLICATION_REFERENCE_PATTERN);
     expect(result).toEqual({
       success: true,
       message: 'Application submitted successfully. You will be notified once your application is reviewed.',
       applicationId: 'app_456',
+      referenceCode: savedReference,
       userId: 'user_123',
     });
     
@@ -135,6 +141,7 @@ describe('Application Router - submitApplication', () => {
       applicantEmail: 'deon@appi.com',
       applicantName: 'Deon Robinson',
       applicationId: 'app_456',
+      referenceCode: savedReference,
     });
   });
 
@@ -414,6 +421,7 @@ describe('Application Router - submitApplication', () => {
       data: {
         userId: 'user_789',
         coopId: 'soulaan',
+        referenceCode: expect.stringMatching(APPLICATION_REFERENCE_PATTERN),
         status: 'SUBMITTED',
         data: expect.objectContaining({
           email: 'applicant@example.com',

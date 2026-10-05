@@ -2,6 +2,7 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, ActivityInd
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { api } from '~/lib/api';
+import { friendlyError } from '~/lib/friendly-error';
 import { useAuth } from '@/contexts/auth-context';
 import { storeLocalWalletPrivateKey } from '@/lib/mobile-wallet';
 import QRCode from 'react-native-qrcode-svg';
@@ -19,12 +20,12 @@ export default function ExportWalletScreen() {
 
   const handleExport = async () => {
     if (!password.trim()) {
-      Alert.alert('Error', 'Please enter your password');
+      Alert.alert('Password needed', 'Enter your password to continue.');
       return;
     }
 
     if (!user?.id || !user.walletAddress) {
-      Alert.alert('Error', 'Wallet not found. Please sign in again.');
+      Alert.alert("Couldn't find your wallet", 'Sign out, sign in again, and then try again.');
       return;
     }
 
@@ -37,9 +38,12 @@ export default function ExportWalletScreen() {
         setPrivateKey(walletData.privateKey);
         setWalletAddress(walletData.address);
         setStep('display');
+      } else {
+        Alert.alert("Couldn't export your wallet", "We couldn't export your wallet. Please try again.");
       }
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to export wallet');
+      console.error('Export wallet failed:', err);
+      Alert.alert("Couldn't export your wallet", friendlyError(err, "We couldn't export your wallet."));
     } finally {
       setLoading(false);
     }

@@ -26,6 +26,7 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { friendlyError } from '@/lib/friendly-error';
 import BlobPhotoUpload from '@/components/blob-photo-upload';
 
 type Step = 'store' | 'owner' | 'review';
@@ -36,6 +37,7 @@ export default function ApplyStoreScreen() {
   const [loading, setLoading] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [storeCategories, setStoreCategories] = useState<{ key: string; label: string }[]>([]);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
 
   // Form data
   const [formData, setFormData] = useState({
@@ -65,37 +67,40 @@ export default function ApplyStoreScreen() {
 
   const currentStepIndex = steps.findIndex((s) => s.key === currentStep);
 
-  React.useEffect(() => {
-    const loadCategories = async () => {
-      try {
-        const categories = await api.getStoreCategories(false);
-        setStoreCategories(categories);
-      } catch (error) {
-        console.error('Failed to load store categories:', error);
-      }
-    };
-    loadCategories();
+  const loadCategories = React.useCallback(async () => {
+    try {
+      setCategoriesError(null);
+      const categories = await api.getStoreCategories(false);
+      setStoreCategories(categories);
+    } catch (error) {
+      console.error('Failed to load store categories:', error);
+      setCategoriesError(friendlyError(error, "We couldn't load the list of categories."));
+    }
   }, []);
+
+  React.useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
 
   const validateStep = (): boolean => {
     switch (currentStep) {
       case 'store':
         if (!formData.storeName.trim()) {
-          Alert.alert('Required', 'Please enter your store name');
+          Alert.alert('Store name needed', 'Enter a name for your store.');
           return false;
         }
         if (!formData.category) {
-          Alert.alert('Required', 'Please select a category');
+          Alert.alert('Category needed', 'Pick a category for your store.');
           return false;
         }
         if (!formData.storeDescription.trim() || formData.storeDescription.length < 10) {
-          Alert.alert('Required', 'Please describe what your store offers (at least 10 characters)');
+          Alert.alert('Tell us a bit more', 'Describe what your store offers in at least 10 letters.');
           return false;
         }
         return true;
       case 'owner':
         if (!formData.ownerName.trim() || !formData.ownerEmail.trim() || !formData.ownerPhone.trim()) {
-          Alert.alert('Required', 'Please enter all owner information');
+          Alert.alert('Details needed', 'Enter your name, email, and phone number.');
           return false;
         }
         return true;
@@ -121,7 +126,7 @@ export default function ApplyStoreScreen() {
 
   const handleSubmit = async () => {
     if (!user?.walletAddress) {
-      Alert.alert('Error', 'Please ensure you have a wallet address');
+      Alert.alert('Wallet not ready', "Your wallet isn't set up yet, so you can't apply right now. Please try again later.");
       return;
     }
 
@@ -145,8 +150,8 @@ export default function ApplyStoreScreen() {
       }, user.walletAddress);
 
       Alert.alert(
-        'Application Submitted',
-        'Your store application has been submitted. Complete Stripe Connect to activate your store.',
+        'Application sent',
+        'Next, set up payments with Stripe so your store can go live.',
         [{ text: 'Continue' }],
       );
 
@@ -155,7 +160,8 @@ export default function ApplyStoreScreen() {
         params: { storeId: result.storeId },
       });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to submit application');
+      console.error('Store application error:', error);
+      Alert.alert("Couldn't send your application", friendlyError(error, "We couldn't send your store application."));
     } finally {
       setLoading(false);
     }
@@ -193,7 +199,20 @@ export default function ApplyStoreScreen() {
           </Text>
           <ChevronDown size={20} color="#9CA3AF" />
         </TouchableOpacity>
-        {showCategoryPicker && (
+        {showCategoryPicker && categoriesError && (
+          <View className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl mt-2 p-4">
+            <Text className="text-gray-700 dark:text-gray-300">{categoriesError}</Text>
+            <TouchableOpacity
+              onPress={loadCategories}
+              accessibilityRole="button"
+              className="mt-2 self-start bg-gray-100 dark:bg-gray-700 px-4 rounded-xl items-center justify-center"
+              style={{ minHeight: 44 }}
+            >
+              <Text className="text-gray-900 dark:text-white font-semibold">Try again</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {showCategoryPicker && !categoriesError && (
           <View className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl mt-2 overflow-hidden">
             {storeCategories.map((cat) => (
               <TouchableOpacity
@@ -311,6 +330,8 @@ export default function ApplyStoreScreen() {
           className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-gray-900 dark:text-white"
           placeholder="Your full name"
           placeholderTextColor="#9CA3AF"
+          autoComplete="name"
+          textContentType="name"
           value={formData.ownerName}
           onChangeText={(v) => updateField('ownerName', v)}
         />
@@ -324,6 +345,9 @@ export default function ApplyStoreScreen() {
           placeholderTextColor="#9CA3AF"
           keyboardType="email-address"
           autoCapitalize="none"
+          autoComplete="email"
+          textContentType="emailAddress"
+          autoCorrect={false}
           value={formData.ownerEmail}
           onChangeText={(v) => updateField('ownerEmail', v)}
         />
@@ -336,6 +360,8 @@ export default function ApplyStoreScreen() {
           placeholder="(555) 555-5555"
           placeholderTextColor="#9CA3AF"
           keyboardType="phone-pad"
+          autoComplete="tel"
+          textContentType="telephoneNumber"
           value={formData.ownerPhone}
           onChangeText={(v) => updateField('ownerPhone', v)}
         />

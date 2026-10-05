@@ -70,6 +70,8 @@ export default function AppDrawer({
   const [directoryError, setDirectoryError] = useState('');
   const [directoryReloadKey, setDirectoryReloadKey] = useState(0);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  // Signing out means asking for a new email code to get back in, so it takes a second tap.
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const hasAccountSession = isAuthenticated && !!sessionToken;
   const accountName = user?.name?.trim() || user?.email?.split('@')[0] || 'member';
   const accountHandle =
@@ -152,6 +154,7 @@ export default function AppDrawer({
   };
 
   const handleSignOut = async () => {
+    setConfirmingSignOut(false);
     onClose();
     await logout();
     router.replace('/' as any);
@@ -418,10 +421,34 @@ export default function AppDrawer({
               })}
             </View>
 
-            {hasAccountSession ? (
+            {hasAccountSession && confirmingSignOut ? (
+              <View accessibilityRole="alert" className="gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
+                <Text className="text-base font-bold text-stone-900">Sign out of @{accountHandle}?</Text>
+                <Text className="text-base text-stone-700">
+                  To sign back in, you&apos;ll need a new code sent to your email.
+                </Text>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={() => void handleSignOut()}
+                  className="min-h-[48px] items-center justify-center rounded-xl bg-red-700"
+                  activeOpacity={0.8}
+                >
+                  <Text className="text-base font-bold text-white">Yes, sign out</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={() => setConfirmingSignOut(false)}
+                  className="min-h-[48px] items-center justify-center rounded-xl border border-stone-300 bg-white"
+                  activeOpacity={0.8}
+                >
+                  <Text className="text-base font-bold text-stone-800">Stay signed in</Text>
+                </TouchableOpacity>
+              </View>
+            ) : hasAccountSession ? (
               <TouchableOpacity
-                onPress={() => void handleSignOut()}
-                className="flex-row items-center justify-center gap-2 rounded-2xl bg-stone-100 py-3"
+                accessibilityRole="button"
+                onPress={() => setConfirmingSignOut(true)}
+                className="min-h-[48px] flex-row items-center justify-center gap-2 rounded-2xl bg-stone-100 py-3"
                 activeOpacity={0.8}
               >
                 <LogOut size={16} color="#DC2626" />

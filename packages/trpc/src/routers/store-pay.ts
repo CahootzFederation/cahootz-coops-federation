@@ -24,6 +24,53 @@ import {
   cancelPaymentRequest,
 } from "../services/store-pay-service.js";
 
+/** What the payer sees on their receipt right after paying a store. */
+const storePaymentReceiptOutput = z.object({
+  success: z.boolean(),
+  transferId: z.string(),
+  message: z.string(),
+  storeName: z.string(),
+  amount: z.number(),
+  fee: z.number(),
+  paidAt: z.string(),
+});
+
+/**
+ * The payer is always the account that owns the signed-in wallet. A
+ * client-sent userId is only cross-checked, never trusted.
+ */
+async function resolveSignedInPayer(ctx: unknown, claimedUserId?: string): Promise<string> {
+  const walletAddress = (ctx as { walletAddress?: string }).walletAddress;
+  const payer = walletAddress
+    ? await db.user.findFirst({
+        where: {
+          deletedAt: null,
+          OR: [
+            { walletAddress: { equals: walletAddress, mode: "insensitive" } },
+            { wallets: { some: { address: { equals: walletAddress, mode: "insensitive" } } } },
+          ],
+        },
+        select: { id: true },
+      })
+    : null;
+
+  if (!payer) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Please sign in again to pay this store.",
+    });
+  }
+
+  if (claimedUserId && claimedUserId !== payer.id) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "You can only pay from your own account.",
+    });
+  }
+
+  return payer.id;
+}
+
 export const storePayRouter = router({
   // ═══════════════════════════════════════════════════════════
   // STORE CODE MANAGEMENT
@@ -283,24 +330,24 @@ export const storePayRouter = router({
    */
   payRequest: authenticatedProcedure
     .input(z.object({
-      userId: z.string(),
+      // Optional and only cross-checked: the payer is always the account that
+      // owns the signed-in wallet, never a client-supplied id.
+      userId: z.string().optional(),
       token: z.string(),
       amount: z.number().positive().max(10000),
     }))
-    .output(z.object({
-      success: z.boolean(),
-      transferId: z.string(),
-      message: z.string(),
-    }))
-    .mutation(async ({ input }) => {
+    .output(storePaymentReceiptOutput)
+    .mutation(async ({ input, ctx }) => {
+      const payerId = await resolveSignedInPayer(ctx, input.userId);
+
       try {
         const result = await payRequest({
           token: input.token,
-          payerId: input.userId,
+          payerId,
           amount: input.amount,
         });
 
-        return result;
+        return { ...result, paidAt: result.paidAt.toISOString() };
       } catch (error) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -456,11 +503,7 @@ export const storePayRouter = router({
       amount: z.number().positive().max(10000),
       note: z.string().max(100).optional(),
     }))
-    .output(z.object({
-      success: z.boolean(),
-      transferId: z.string(),
-      message: z.string(),
-    }))
+    .output(storePaymentReceiptOutput)
     .mutation(async ({ input, ctx }) => {
       const coopId = input.coopId || (ctx as CoopScopedContext).coopId;
       if (!coopId) {
@@ -470,44 +513,18 @@ export const storePayRouter = router({
         });
       }
 
-      const walletAddress = (ctx as { walletAddress?: string }).walletAddress;
-      const payer = walletAddress
-        ? await db.user.findFirst({
-            where: {
-              deletedAt: null,
-              OR: [
-                { walletAddress: { equals: walletAddress, mode: "insensitive" } },
-                { wallets: { some: { address: { equals: walletAddress, mode: "insensitive" } } } },
-              ],
-            },
-            select: { id: true },
-          })
-        : null;
-
-      if (!payer) {
-        throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "Please sign in again to pay this store.",
-        });
-      }
-
-      if (input.userId && input.userId !== payer.id) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "You can only pay from your own account.",
-        });
-      }
+      const payerId = await resolveSignedInPayer(ctx, input.userId);
 
       try {
         const result = await payByStoreCode({
           storeCode: input.storeCode,
-          payerId: payer.id,
+          payerId,
           amount: input.amount,
           coopId,
           note: input.note,
         });
 
-        return result;
+        return { ...result, paidAt: result.paidAt.toISOString() };
       } catch (error) {
         throw new TRPCError({
           code: "BAD_REQUEST",

@@ -89,6 +89,28 @@ test.describe("onboarding usability", () => {
     await expect(page).not.toHaveURL(/profile-onboarding/);
   });
 
+  test("sign-in and the commons application hide the tab bar, and Back brings it back", async ({ page }) => {
+    const tabs = page.getByRole("tablist", { name: "Main navigation" });
+    await page.goto("/");
+    await page.getByRole("button", { name: "I already have an account" }).click();
+    await expect(page.getByPlaceholder("name@email.com")).toBeVisible();
+    // A stray tab tap here would throw away what the person typed.
+    await expect(tabs).toHaveCount(0);
+
+    await shown(page, "Join a Commons", { exact: true }).click();
+    await expect(shown(page, /Choose Your Commons/)).toBeVisible();
+    await expect(tabs).toHaveCount(0);
+
+    // The old intro splash cards are gone: Back from the commons list returns to sign-in.
+    await page.getByText("Back", { exact: true }).filter({ visible: true }).first().click();
+    await expect(page.getByPlaceholder("name@email.com")).toBeVisible();
+    await expect(shown(page, /Cooperative finance|Share vibes|AI proposal engine/)).toHaveCount(0);
+
+    // Back again leaves sign-in for the app, and the tabs return.
+    await page.getByText("Back", { exact: true }).filter({ visible: true }).first().click();
+    await expect(tabs).toBeVisible();
+  });
+
   test("Start using Cahootz says what's missing, and the message stays until the person edits", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: "Continue", exact: true }).click();

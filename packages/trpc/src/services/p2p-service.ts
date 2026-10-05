@@ -91,6 +91,7 @@ export async function sendToSoulaanUser(params: {
   transactionHash: string;
   fundingSource: 'BALANCE' | 'CARD';
   receiptId: string;
+  completedAt: Date;
 }> {
   const { senderId, recipientId, amountUSD, coopId, note, transferType = 'PERSONAL', transferMetadata } = params;
   const { amountUC } = createParityAmounts(amountUSD);
@@ -248,12 +249,13 @@ export async function sendToSoulaanUser(params: {
     );
 
     // Update transfer as completed
+    const completedAt = new Date();
     await db.p2PTransfer.update({
       where: { id: transfer.id },
       data: {
         status: 'COMPLETED',
         blockchainTxHash: txHash,
-        completedAt: new Date(),
+        completedAt,
       },
     });
 
@@ -281,6 +283,7 @@ export async function sendToSoulaanUser(params: {
       transactionHash: txHash,
       fundingSource,
       receiptId: receipt.id,
+      completedAt,
     };
   } catch (error) {
     console.error('   ❌ Transfer failed:', error);
@@ -696,5 +699,90 @@ export async function getTransferHistory(
   return {
     transfers: transfers.slice(0, limit),
     total,
+  };
+}
+
+/**
+ * Fee on a member payment. Member and store payments carry no fee today (a
+ * card top-up charges only the missing amount), so receipts show $0.00. One
+ * named value so a future fee has a single place to change.
+ */
+export const MEMBER_PAYMENT_FEE_USD = 0;
+
+export interface TransferReceipt {
+  id: string;
+  direction: 'sent' | 'received' | 'pending';
+  amount: number;
+  fee: number;
+  counterparty: string;
+  status: string;
+  transferType: TransferType;
+  storeName: string | null;
+  note: string | null;
+  createdAt: Date;
+  completedAt: Date | null;
+}
+
+function metadataString(metadata: unknown, key: string): string | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+/**
+ * One payment, for a receipt. Returns it only when `userId` (the signed-in
+ * caller, which the router resolves from their wallet) sent or received it.
+ * Someone else's payment and a missing one both return null.
+ */
+export async function getTransferForUser(
+  userId: string,
+  transferId: string,
+): Promise<TransferReceipt | null> {
+  const transfer = await db.p2PTransfer.findFirst({
+    where: { id: transferId, OR: [{ senderId: userId }, { recipientId: userId }] },
+    include: {
+      sender: { select: { name: true, phone: true } },
+      recipient: { select: { name: true, phone: true } },
+    },
+  });
+
+  if (transfer) {
+    const sent = transfer.senderId === userId;
+    const other = sent ? transfer.recipient : transfer.sender;
+    const transferType = (transfer.transferType || 'PERSONAL') as TransferType;
+    return {
+      id: transfer.id,
+      direction: sent ? 'sent' : 'received',
+      amount: transfer.amountUSD,
+      fee: MEMBER_PAYMENT_FEE_USD,
+      counterparty: other?.name || other?.phone || 'Unknown',
+      status: transfer.status,
+      transferType,
+      storeName: transferType === 'STORE' ? metadataString(transfer.transferMetadata, 'storeName') : null,
+      note: transfer.note || null,
+      createdAt: transfer.createdAt,
+      completedAt: transfer.completedAt,
+    };
+  }
+
+  // Money sent to someone who isn't a member yet. Only the sender can see it.
+  const pending = await db.pendingTransfer.findFirst({
+    where: { id: transferId, senderId: userId },
+  });
+  if (!pending) return null;
+
+  const transferType = (pending.transferType || 'PERSONAL') as TransferType;
+  return {
+    id: pending.id,
+    direction: 'pending',
+    amount: pending.amountUSD,
+    fee: MEMBER_PAYMENT_FEE_USD,
+    counterparty: pending.recipientPhone,
+    status: pending.status,
+    transferType,
+    storeName: transferType === 'STORE' ? metadataString(pending.transferMetadata, 'storeName') : null,
+    note: pending.note || null,
+    createdAt: pending.createdAt,
+    completedAt: pending.claimedAt,
   };
 }

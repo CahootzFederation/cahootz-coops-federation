@@ -195,7 +195,13 @@ export const MissingDataZ = z.object({
 export const ProposalOutputZ = z.object({
   id: z.string().min(1),
   createdAt: z.string().datetime(),
+  /** Last change to the proposal. For decided proposals this is roughly when it was decided. */
+  updatedAt: z.string().datetime().optional().nullable(),
   status: ProposalStatusZ,
+  /** The commons this proposal belongs to. */
+  coopId: z.string().optional().nullable(),
+  /** When voting closes (ISO). Set when the proposal becomes votable. */
+  votingEndsAt: z.string().datetime().optional().nullable(),
 
   title: z.string(),
   summary: z.string(),

@@ -10,6 +10,7 @@ import {
   sendToSoulaanUser,
   sendToNonUser,
   getTransferHistory,
+  getTransferForUser,
 } from "../services/p2p-service.js";
 import {
   createSetupIntent,
@@ -19,6 +20,43 @@ import {
 } from "../services/stripe-customer.js";
 import { toE164, normalizePhoneForSearch } from "../lib/phone.js";
 import { convertUSDToUC } from "../utils/currency-converter.js";
+
+/**
+ * The account that owns the signed-in wallet. Payment records are only ever
+ * read for this account; a client-sent userId is cross-checked, never trusted.
+ */
+async function resolveSignedInUserId(ctx: unknown, claimedUserId?: string): Promise<string> {
+  const context = ctx as Context & { walletAddress?: string };
+  const walletAddress = context.walletAddress;
+  const user = walletAddress
+    ? await context.db.user.findFirst({
+        where: {
+          deletedAt: null,
+          OR: [
+            { walletAddress: { equals: walletAddress, mode: "insensitive" } },
+            { wallets: { some: { address: { equals: walletAddress, mode: "insensitive" } } } },
+          ],
+        },
+        select: { id: true },
+      })
+    : null;
+
+  if (!user) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Please sign in again to see your payments.",
+    });
+  }
+
+  if (claimedUserId && claimedUserId !== user.id) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "You can only see your own payments.",
+    });
+  }
+
+  return user.id;
+}
 
 export const p2pRouter = router({
   /**
@@ -212,11 +250,14 @@ export const p2pRouter = router({
       })),
       total: z.number(),
     }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       console.log('\n🔷 p2p.getHistory - START');
 
+      // Only the signed-in member's own history, whatever userId was sent.
+      const userId = await resolveSignedInUserId(ctx, input.userId);
+
       try {
-        const result = await getTransferHistory(input.userId, input.limit, input.offset);
+        const result = await getTransferHistory(userId, input.limit, input.offset);
 
         return {
           transfers: result.transfers.map(t => ({
@@ -233,6 +274,46 @@ export const p2pRouter = router({
           cause: error,
         });
       }
+    }),
+
+  /**
+   * One payment, for its receipt. Read-only. Returns it only when the
+   * signed-in member (resolved from their wallet) sent or received it;
+   * anyone else gets NOT_FOUND, the same as for a missing payment.
+   */
+  getTransfer: authenticatedProcedure
+    .input(z.object({
+      transferId: z.string().min(1).max(64),
+    }))
+    .output(z.object({
+      id: z.string(),
+      direction: z.enum(['sent', 'received', 'pending']),
+      amount: z.number(),
+      fee: z.number(),
+      counterparty: z.string(),
+      status: z.string(),
+      transferType: z.enum(['PERSONAL', 'RENT', 'SERVICE', 'STORE']),
+      storeName: z.string().nullable(),
+      note: z.string().nullable(),
+      createdAt: z.string(),
+      completedAt: z.string().nullable(),
+    }))
+    .query(async ({ input, ctx }) => {
+      const userId = await resolveSignedInUserId(ctx);
+      const transfer = await getTransferForUser(userId, input.transferId);
+
+      if (!transfer) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "We couldn't find this payment.",
+        });
+      }
+
+      return {
+        ...transfer,
+        createdAt: transfer.createdAt.toISOString(),
+        completedAt: transfer.completedAt?.toISOString() ?? null,
+      };
     }),
 
   /**

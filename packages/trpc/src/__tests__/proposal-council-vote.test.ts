@@ -8,7 +8,7 @@ import { proposalRouter } from '../routers/proposal.js';
 
 const WALLET = '0x1234567890123456789012345678901234567890';
 
-function makeDb(status: string) {
+function makeDb(status: string, extra: Record<string, unknown> = {}) {
   return {
     proposal: {
       findUnique: vi.fn().mockResolvedValue({
@@ -16,6 +16,7 @@ function makeDb(status: string) {
         coopId: 'cahootz',
         councilRequired: true,
         status,
+        ...extra,
       }),
       update: vi.fn(),
     },
@@ -55,5 +56,28 @@ describe('proposal.councilVote', () => {
     const result = await caller(db).councilVote({ proposalId: 'prop_1', vote: 'AGAINST' });
     expect(db.proposalVote.upsert).toHaveBeenCalledTimes(1);
     expect(result.vote).toBe('AGAINST');
+  });
+
+  it('refuses a vote once the voting window has passed, without recording it', async () => {
+    const db = makeDb('VOTABLE', { votingEndsAt: new Date(Date.now() - 60_000) });
+    await expect(caller(db).councilVote({ proposalId: 'prop_1', vote: 'FOR' })).rejects.toThrow(
+      'Voting on this proposal has closed.',
+    );
+    expect(db.proposalVote.upsert).not.toHaveBeenCalled();
+  });
+
+  it('refuses a late vote on an older proposal with no stored end date, using its voting window', async () => {
+    const tenDaysAgo = new Date(Date.now() - 10 * 86_400_000);
+    const db = makeDb('VOTABLE', { votingEndsAt: null, votingWindowDays: 7, createdAt: tenDaysAgo, updatedAt: tenDaysAgo });
+    await expect(caller(db).councilVote({ proposalId: 'prop_1', vote: 'FOR' })).rejects.toThrow(
+      'Voting on this proposal has closed.',
+    );
+    expect(db.proposalVote.upsert).not.toHaveBeenCalled();
+  });
+
+  it('records a vote before the voting window ends', async () => {
+    const db = makeDb('VOTABLE', { votingEndsAt: new Date(Date.now() + 86_400_000) });
+    await caller(db).councilVote({ proposalId: 'prop_1', vote: 'FOR' });
+    expect(db.proposalVote.upsert).toHaveBeenCalledTimes(1);
   });
 });

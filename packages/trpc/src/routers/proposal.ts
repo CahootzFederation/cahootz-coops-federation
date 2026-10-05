@@ -21,7 +21,28 @@ function mergeFlagsWithText(original: CleansedText, rewritten: CleansedText): Cl
 
 /** When voting closes for a proposal that just became votable; null otherwise. Gives Sage real deadlines. */
 export function votingEndsAtFor(status: ProposalStatus, votingWindowDays: number, now = new Date()): Date | null {
-  return status === ProposalStatus.VOTABLE ? new Date(now.getTime() + Math.max(1, votingWindowDays) * 86_400_000) : null;
+  // String literal, not the Prisma enum, so this also runs where @repo/db is mocked.
+  return status === "VOTABLE" ? new Date(now.getTime() + Math.max(1, votingWindowDays) * 86_400_000) : null;
+}
+
+/**
+ * When voting closes for a proposal. Uses the stored `votingEndsAt`, which is
+ * set whenever the proposal becomes votable. Older votable proposals saved
+ * before that column existed fall back to their own voting window counted from
+ * their last change (the closest record we have of when they became votable).
+ */
+export function effectiveVotingEndsAt(record: {
+  status: string;
+  votingEndsAt?: Date | null;
+  votingWindowDays?: number | null;
+  updatedAt?: Date | null;
+  createdAt?: Date | null;
+}): Date | null {
+  if (record.votingEndsAt) return record.votingEndsAt;
+  if (record.status !== "VOTABLE") return null;
+  const becameVotable = record.updatedAt ?? record.createdAt;
+  if (!becameVotable) return null;
+  return votingEndsAtFor("VOTABLE" as ProposalStatus, record.votingWindowDays ?? 7, becameVotable);
 }
 
 /** Records a proposal-engine decision trail. Never affects the proposal: failures are logged only. */
@@ -562,6 +583,11 @@ export const proposalRouter = router({
       // (or withdrawn), a late vote must not change the recorded result.
       const closedStatuses: string[] = ["APPROVED", "REJECTED", "FUNDED", "FAILED", "WITHDRAWN"];
       if (closedStatuses.includes(proposal.status)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Voting on this proposal has closed." });
+      }
+      // The voting window has run out, even if nobody has marked it decided yet.
+      const votingEndsAt = effectiveVotingEndsAt(proposal);
+      if (votingEndsAt && votingEndsAt.getTime() <= Date.now()) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Voting on this proposal has closed." });
       }
 
@@ -1187,7 +1213,10 @@ function mapDbToOutput(dbRecord: any): ProposalOutput {
   return {
     id: dbRecord.id,
     createdAt: dbRecord.createdAt.toISOString(),
+    updatedAt: dbRecord.updatedAt ? dbRecord.updatedAt.toISOString() : null,
     status: dbRecord.status.toLowerCase(),
+    coopId: dbRecord.coopId ?? null,
+    votingEndsAt: effectiveVotingEndsAt(dbRecord)?.toISOString() ?? null,
     title: dbRecord.title,
     summary: dbRecord.summary,
     category: (dbRecord.categoryKey ?? dbRecord.category.toLowerCase()),

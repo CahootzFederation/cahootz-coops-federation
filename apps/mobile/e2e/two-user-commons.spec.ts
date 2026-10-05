@@ -18,6 +18,16 @@ test("signing out one user does not sign out the other user", async ({
     await userA.page
       .getByText(new RegExp(`Sign Out \\(@${USER_A_EMAIL.split("@")[0]}\\)`))
       .click();
+    // Signing out asks first; "Stay signed in" keeps the session.
+    await expect(userA.page.getByText(/To sign back in, you'll need a new code/)).toBeVisible();
+    await userA.page.getByRole("button", { name: "Stay signed in" }).click();
+    await expect(
+      userA.page.getByText(new RegExp(`Sign Out \\(@${USER_A_EMAIL.split("@")[0]}\\)`)),
+    ).toBeVisible();
+    await userA.page
+      .getByText(new RegExp(`Sign Out \\(@${USER_A_EMAIL.split("@")[0]}\\)`))
+      .click();
+    await userA.page.getByRole("button", { name: "Yes, sign out" }).click();
     await expect(userA.page.getByLabel("Open menu")).toBeVisible();
     await userA.page.getByLabel("Open menu").click();
     await expect(

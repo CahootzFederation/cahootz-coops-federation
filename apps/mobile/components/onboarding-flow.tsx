@@ -68,9 +68,15 @@ type OnboardingFlowProps = {
   onBack?: () => void;
 };
 
+// Step numbers: 0 browse commons, 1 commons details, 2-5 application,
+// 6 submitted, 7 sign in. (The old intro splash cards were removed; the
+// welcome wizard in app/profile-onboarding.tsx introduces the app now.)
+const BROWSE_STEP = 0;
+const LOGIN_STEP = 7;
+
 const getInitialStep = (initialStep: OnboardingFlowProps['initialStep']) => {
-  if (initialStep === 'browse') return 4;
-  if (initialStep === 'login') return 11;
+  if (initialStep === 'browse') return BROWSE_STEP;
+  if (initialStep === 'login') return LOGIN_STEP;
   return 0;
 };
 
@@ -179,41 +185,6 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
     dynamicAnswers: {},
   });
 
-  // Generic platform introduction screens
-  const splashScreens = [
-    {
-      title: 'Build more together.',
-      subtitle: 'Cooperative finance',
-      description:
-        'A shared home for your cooperative community, money, and decisions.',
-      icon: Heart,
-      bgColor: 'bg-primary',
-    },
-    {
-      title: 'Your community, connected',
-      subtitle: 'People, resources, and shared purpose',
-      description:
-        'A commons is owned and governed by its members. Your voice matters, your spending builds community wealth, and everyone shares in the success.',
-      icon: Users,
-      bgColor: 'bg-primary',
-    },
-    {
-      title: 'Money with meaning',
-      subtitle: 'Secure tools for collective prosperity',
-      description:
-        'By combining resources with others in your commons, you unlock better prices, support local businesses, and create jobs in your community.',
-      icon: TrendingUp,
-      bgColor: 'bg-primary',
-    },
-    {
-      title: 'The Social Commons Network',
-      subtitle: 'Connect. Share vibes. Co-own everything.',
-      description:
-        'Every commons has an AI proposal engine that helps members create, evaluate, and vote on projects. Make informed decisions backed by data and community wisdom.',
-      icon: Vote,
-      bgColor: 'bg-primary',
-    },
-  ];
 
   // Add icons to features from backend data - memoized to prevent infinite re-renders
   const coopsWithIcons = useMemo(() => {
@@ -464,11 +435,12 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
   };
 
   const goToLogin = () => {
-    setCurrentStep(splashScreens.length + 7);
+    setErrorMessage('');
+    setCurrentStep(LOGIN_STEP);
   };
 
   const goToBrowseCoops = () => {
-    setCurrentStep(splashScreens.length);
+    setCurrentStep(BROWSE_STEP);
   };
 
   const selectCoop = (coopId: string) => {
@@ -648,68 +620,6 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
     }
   };
 
-  const renderSplashScreen = (index: number) => {
-    const screen = splashScreens[index];
-    return (
-      <ScrollView className="flex-1 bg-background">
-        <View className="min-h-screen flex-1 items-center justify-center p-6">
-          <Card className={`${screen.bgColor} border-0 w-full max-w-sm shadow-lg`}>
-            <CardContent className="p-8">
-              <View className="flex items-center justify-center mb-6">
-                <Icon as={screen.icon} size={64} className="text-white" />
-              </View>
-              <Text className="text-2xl font-bold text-white mb-2 text-center">{screen.title}</Text>
-              <Text className="text-lg font-semibold text-white mb-4 text-center">{screen.subtitle}</Text>
-              <Text className="text-white text-sm leading-relaxed text-center">{screen.description}</Text>
-            </CardContent>
-          </Card>
-
-          {/* Progress Dots */}
-          <View className="flex flex-row gap-2 mt-8">
-            {splashScreens.map((_, i) => (
-              <View
-                key={i}
-                className={`h-2 rounded-full transition-all ${
-                  i === index ? 'bg-primary w-6' : 'bg-gray-300 w-2'
-                }`}
-              />
-            ))}
-          </View>
-
-          {/* Navigation */}
-          <View className="flex flex-row justify-between items-center w-full max-w-sm mt-8">
-            <Button
-              variant="ghost"
-              onPress={prevStep}
-              className={`${index === 0 ? 'opacity-0' : 'opacity-100'}`}
-              disabled={index === 0}
-            >
-              <Icon as={ChevronLeft} size={16} className="text-muted-foreground" />
-              <Text className="text-muted-foreground ml-1">Back</Text>
-            </Button>
-
-            <Button
-              onPress={index === splashScreens.length - 1 ? goToBrowseCoops : nextStep}
-              className="bg-primary"
-            >
-              <Text className="text-white font-semibold">
-                {index === splashScreens.length - 1 ? 'Browse Commons' : 'Next'}
-              </Text>
-              <Icon as={ChevronRight} size={16} className="text-white ml-1" />
-            </Button>
-          </View>
-
-          {/* Skip to Login */}
-          {index < splashScreens.length - 1 && (
-            <Button variant="ghost" onPress={goToLogin} className="mt-4">
-              <Text className="text-muted-foreground">Already a member? </Text>
-              <Text className="text-primary font-semibold">Sign In</Text>
-            </Button>
-          )}
-        </View>
-      </ScrollView>
-    );
-  };
 
   const renderWaitlistCard = () => (
     <Card className="bg-card border-border overflow-hidden">
@@ -888,7 +798,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
       <View className="bg-background border-t border-border p-6 pt-4">
         <View className="w-full max-w-md mx-auto">
           <View className="flex flex-row justify-between items-center">
-            <Button variant="ghost" onPress={prevStep}>
+            <Button variant="ghost" onPress={goToLogin}>
               <Icon as={ChevronLeft} size={16} className="text-muted-foreground" />
               <Text className="text-muted-foreground ml-1">Back</Text>
             </Button>
@@ -1429,11 +1339,13 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
           </View>
 
           {/* Community Message */}
-          <View className="items-center mt-6">
-            <Badge className={selectedCoop?.bgColor || 'bg-primary'}>
-              <Text className="text-white font-medium">{selectedCoop?.tagline || 'Building Community Wealth Together'}</Text>
-            </Badge>
-          </View>
+          {selectedCoop?.tagline ? (
+            <View className="items-center mt-6">
+              <Badge className={selectedCoop.bgColor || 'bg-primary'}>
+                <Text className="text-white font-medium">{selectedCoop.tagline}</Text>
+              </Badge>
+            </View>
+          ) : null}
         </View>
       </View>
     </ScrollView>
@@ -1574,32 +1486,23 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             </Button>
           </View>
 
-          {/* Community Notice */}
-          <View className="items-center mt-8">
-            <Badge className="bg-primary">
-              <Text className="text-white font-medium">Building Community Wealth Together</Text>
-            </Badge>
-          </View>
         </View>
       </View>
     </ScrollView>
   );
 
   // Determine which step to render
-  // Flow: Splash Screens → Browse Commons → Commons Details → Personal Info → Questions → Media Upload → Commitment → Success → Login
+  // Flow: Browse Commons → Commons Details → Personal Info → Questions → Media Upload → Commitment → Success → Login
   const renderCurrentStep = () => {
-    const splashEnd = splashScreens.length;
-    const browseCoopsStep = splashEnd;
-    const coopDetailsStep = splashEnd + 1;
-    const personalInfoStep = splashEnd + 2;
-    const questionsStep = splashEnd + 3;
-    const mediaUploadStep = splashEnd + 4;
-    const commitmentStep = splashEnd + 5;
-    const successStep = splashEnd + 6;
+    const browseCoopsStep = BROWSE_STEP;
+    const coopDetailsStep = BROWSE_STEP + 1;
+    const personalInfoStep = BROWSE_STEP + 2;
+    const questionsStep = BROWSE_STEP + 3;
+    const mediaUploadStep = BROWSE_STEP + 4;
+    const commitmentStep = BROWSE_STEP + 5;
+    const successStep = BROWSE_STEP + 6;
 
-    if (currentStep < splashEnd) {
-      return renderSplashScreen(currentStep);
-    } else if (currentStep === browseCoopsStep) {
+    if (currentStep === browseCoopsStep) {
       return renderBrowseCoops();
     } else if (currentStep === coopDetailsStep) {
       return renderCoopDetails();

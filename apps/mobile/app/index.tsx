@@ -69,7 +69,16 @@ export default function OnboardingScreen() {
   }
 
   if (entryMode === 'sign-in') {
-    return <OnboardingFlow initialStep="login" onBack={() => setEntryMode('commons')} />;
+    return (
+      <OnboardingFlow
+        initialStep="login"
+        onBack={() => {
+          setEntryMode('commons');
+          // Clear ?entry=sign-in so the tab bar (hidden during sign-in) comes back.
+          router.setParams({ entry: undefined } as any);
+        }}
+      />
+    );
   }
 
   // Same Circle View as the Commons tab - the root route ("/") is reached

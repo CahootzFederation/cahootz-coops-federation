@@ -14,6 +14,7 @@ import {
   HelpCircle,
   LogOut,
   QrCode,
+  ReceiptText,
   RotateCcw,
   Settings,
   Shield,
@@ -167,6 +168,12 @@ export default function AccountProfileScreen() {
       description: "Scan a store's QR code or type in its store code",
       icon: QrCode,
       href: '/(authenticated)/scan-pay',
+    },
+    {
+      label: 'Your payments',
+      description: 'Payments you made or received, with receipts',
+      icon: ReceiptText,
+      href: '/(authenticated)/history',
     },
     {
       label: 'Alerts',
@@ -377,8 +384,11 @@ export default function AccountProfileScreen() {
                   key={item.label}
                   onPress={item.onPress || (() => item.href && router.push(item.href as any))}
                   disabled={isDeletingAccount && item.label.startsWith('Deleting')}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.label}
+                  accessibilityHint={item.description}
                   className="flex-row items-center gap-3 px-4 py-4"
-                  style={{ borderBottomWidth: isLast ? 0 : 1, borderBottomColor: PROFILE_THEME.border }}
+                  style={{ minHeight: 56, borderBottomWidth: isLast ? 0 : 1, borderBottomColor: PROFILE_THEME.border }}
                   activeOpacity={0.75}
                 >
                   <View className="h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: item.destructive ? '#FEF2F2' : PROFILE_THEME.primarySoft }}>

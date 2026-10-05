@@ -417,7 +417,7 @@ export default function QuickPayScreen() {
             {!balanceError && amountNum > balance && (
               <View className="bg-yellow-50 rounded-xl p-3 mt-2">
                 <Text className="text-yellow-800 text-sm">
-                  This is more than your balance. If you have a default card saved, it pays the rest. If not, this payment won't go through.
+                  This is more than your balance. If you have a default card saved, it pays the rest. If not, this payment won&apos;t go through.
                 </Text>
               </View>
             )}

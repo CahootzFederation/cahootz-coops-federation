@@ -248,7 +248,7 @@ export default function OrderDetailHybrid({ orderId }: OrderDetailHybridProps) {
               {scReward.status === 'FAILED' && (
                 <View className="mt-2 p-3 bg-red-900/20 rounded-lg">
                   <Text className="text-red-400 text-sm">
-                    Your payment went through, but your {coin.symbol} reward wasn't added yet. Contact support if it doesn't show up soon.
+                    Your payment went through, but your {coin.symbol} reward wasn&apos;t added yet. Contact support if it doesn&apos;t show up soon.
                   </Text>
                 </View>
               )}

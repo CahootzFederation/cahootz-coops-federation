@@ -26,7 +26,7 @@ export default function CircleGalleryScreen() {
   const params = useLocalSearchParams<{ coopId?: string; circleId?: string }>();
   const coopId = params.coopId || 'cahootz';
   const circleId = params.circleId || '';
-  const { sessionToken } = useAuth();
+  const { sessionToken, isLoading: authLoading } = useAuth();
   const { width } = useWindowDimensions();
   const gridWidth = Math.min(width, MAX_GRID_WIDTH);
   const tileSize = Math.floor((gridWidth - GAP * (COLUMNS - 1)) / COLUMNS);
@@ -41,6 +41,8 @@ export default function CircleGalleryScreen() {
   const [selected, setSelected] = useState<CircleGalleryItem | null>(null);
 
   useEffect(() => {
+    // Wait for the saved session to load; asking without it is refused.
+    if (authLoading) return;
     let mounted = true;
     setIsLoading(true);
     setError(null);
@@ -62,7 +64,7 @@ export default function CircleGalleryScreen() {
     return () => {
       mounted = false;
     };
-  }, [coopId, circleId, sessionToken, reloadKey]);
+  }, [coopId, circleId, sessionToken, authLoading, reloadKey]);
 
   const loadMore = useCallback(async () => {
     if (!nextCursor || isLoadingMore) return;

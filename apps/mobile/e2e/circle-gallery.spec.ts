@@ -84,7 +84,9 @@ test("a circle member browses the circle's photos in its gallery", async ({
     await page.goto(`/${COOP_ID}/posts?circleId=${groupId}`);
     await page.getByLabel("Circle gallery").click();
     await expect(page.getByText("Gallery", { exact: true })).toBeVisible();
-    await expect(page.getByText(circleName).first()).toBeVisible();
+    await expect(
+      page.getByText(circleName).filter({ visible: true }),
+    ).toBeVisible();
     const tile = page.getByRole("button", { name: /^Open photo 1 from / });
     await expect(tile).toBeVisible();
 

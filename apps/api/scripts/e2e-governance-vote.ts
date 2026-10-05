@@ -3,9 +3,11 @@
  * (apps/mobile/e2e/governance-confirmations.spec.ts). Not part of the
  * product; only the Playwright spec calls it.
  *
- *   tsx --import ./dotenv.config.js scripts/e2e-governance-vote.ts seed <runId> <proposerEmail> [coopId]
+ *   tsx --import ./dotenv.config.js scripts/e2e-governance-vote.ts seed <runId> <proposerEmail> [coopId] [votingEndsAt]
  *     Creates an E2E proposal by a seeded test account that is open for a
  *     council vote (status VOTABLE, councilRequired, AI decision "advance").
+ *     Voting closes in 7 days unless an ISO `votingEndsAt` is given (a past
+ *     date seeds a proposal whose voting has closed).
  *     The full proposal engine is several web-searching model calls, too slow
  *     and costly for every run, so the fixture writes the row directly.
  *     Prints the proposal id and title.
@@ -45,8 +47,10 @@ function assertE2EProposalId(proposalId: string) {
   }
 }
 
-async function seed(runId: string, proposerEmail: string, coopId = "cahootz") {
+async function seed(runId: string, proposerEmail: string, coopId = "cahootz", votingEndsAtArg?: string) {
   if (!/^[a-z0-9-]+$/i.test(runId)) throw new Error(`Invalid run id ${runId}`);
+  const votingEndsAt = votingEndsAtArg ? new Date(votingEndsAtArg) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  if (Number.isNaN(votingEndsAt.getTime())) throw new Error(`Invalid votingEndsAt ${votingEndsAtArg}`);
   if (!proposerEmail.endsWith(TEST_EMAIL_SUFFIX)) throw new Error("Only seeded test accounts can propose");
   const proposer = await db.user.findUnique({
     where: { email: proposerEmail },
@@ -73,15 +77,15 @@ async function seed(runId: string, proposerEmail: string, coopId = "cahootz") {
       engineVersion: "proposal-engine@2.0.0",
       status: "VOTABLE",
       councilRequired: true,
-      votingEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      votingEndsAt,
       coopId,
       rawText: `Proposal Title: ${title}\nSummary: ${summary}\nBudget Requested: $12000`,
       decision: "advance",
       decisionReasons: [],
     },
-    select: { id: true, title: true },
+    select: { id: true, title: true, votingEndsAt: true },
   });
-  return { proposalId: proposal.id, title: proposal.title, coopId };
+  return { proposalId: proposal.id, title: proposal.title, coopId, votingEndsAt: proposal.votingEndsAt?.toISOString() ?? null };
 }
 
 async function status(proposalId: string) {
@@ -105,14 +109,14 @@ async function main() {
   const [command, first, second, third, ...rest] = process.argv.slice(2);
   const result =
     command === "seed" && first && second
-      ? await seed(first, second, third)
+      ? await seed(first, second, third || undefined, rest[0])
       : command === "status" && first
         ? await status(first)
         : command === "cleanup" && first
           ? await cleanup([first, second, third, ...rest].filter(Boolean) as string[])
           : (() => {
               throw new Error(
-                "Usage: e2e-governance-vote.ts seed <runId> <proposerEmail> [coopId] | status <proposalId> | cleanup <proposalId...>",
+                "Usage: e2e-governance-vote.ts seed <runId> <proposerEmail> [coopId] [votingEndsAt] | status <proposalId> | cleanup <proposalId...>",
               );
             })();
   console.log(`E2E_RESULT ${JSON.stringify(result)}`);

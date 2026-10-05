@@ -40,6 +40,7 @@ import { LoadError } from '@/components/load-error';
 import { ConfirmSheet } from '@/components/confirm-sheet';
 import { api } from '@/lib/api';
 import { ApiError, friendlyError } from '@/lib/friendly-error';
+import { votingDeadlineLine } from '@/lib/voting-deadline';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -408,6 +409,7 @@ export function ProposalDetailContent() {
   // Proposer + admin role checks
   const isProposer = user?.walletAddress && proposal.proposer?.wallet === user.walletAddress;
   const isAdmin = (user as any)?.roles?.includes('admin') || (user as any)?.role === 'admin';
+  const deadline = votingDeadlineLine(proposal);
   const canWithdraw = isProposer && (proposal.status === 'submitted' || proposal.status === 'votable');
   const canEdit = isProposer && (proposal.status === 'submitted' || proposal.status === 'votable');
   const councilRequired = proposal.councilRequired;
@@ -599,6 +601,12 @@ export function ProposalDetailContent() {
             </View>
 
             <Text className="text-charcoal-800 font-bold text-xl leading-tight mb-2">{proposal.title}</Text>
+            {deadline ? (
+              <View className="flex-row items-center gap-2 mb-3" testID="voting-deadline">
+                <Clock size={18} color="#1F2937" />
+                <Text className="flex-1 text-gray-900 font-semibold text-base">{deadline}</Text>
+              </View>
+            ) : null}
             <Text className="text-charcoal-600 text-sm leading-relaxed mb-3">{proposal.summary}</Text>
 
             {/* Proposer info */}

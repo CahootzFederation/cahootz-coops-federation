@@ -4,7 +4,7 @@
  */
 
 import { db, PaymentRequestStatus } from "@repo/db";
-import { sendToSoulaanUser } from "./p2p-service.js";
+import { sendToSoulaanUser, MEMBER_PAYMENT_FEE_USD } from "./p2p-service.js";
 import { awardStoreTransactionReward } from "./wallet-service.js";
 
 // ─────────────────────────────────────────────────────────
@@ -273,6 +273,11 @@ export interface PayRequestResult {
   success: boolean;
   transferId: string;
   message: string;
+  // Receipt details, shown to the payer right after paying.
+  storeName: string;
+  amount: number;
+  fee: number;
+  paidAt: Date;
 }
 
 /**
@@ -413,6 +418,10 @@ export async function payRequest(params: PayRequestParams): Promise<PayRequestRe
     success: true,
     transferId: transferResult.transferId,
     message: `Paid $${amount.toFixed(2)} to ${request.store.name}`,
+    storeName: request.store.name,
+    amount,
+    fee: MEMBER_PAYMENT_FEE_USD,
+    paidAt: transferResult.completedAt,
   };
 }
 
@@ -513,6 +522,10 @@ export async function payByStoreCode(params: PayByCodeParams): Promise<PayReques
     success: true,
     transferId: transferResult.transferId,
     message: `Paid $${amount.toFixed(2)} to ${store.name}`,
+    storeName: store.name,
+    amount,
+    fee: MEMBER_PAYMENT_FEE_USD,
+    paidAt: transferResult.completedAt,
   };
 }
 

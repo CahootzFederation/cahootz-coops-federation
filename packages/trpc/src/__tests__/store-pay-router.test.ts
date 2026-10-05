@@ -24,7 +24,7 @@ vi.mock('../services/store-pay-service.js', () => ({
 
 import { db } from '@repo/db';
 import { storePayRouter } from '../routers/store-pay.js';
-import { getStoreByShortCode, payByStoreCode } from '../services/store-pay-service.js';
+import { getStoreByShortCode, payByStoreCode, payRequest } from '../services/store-pay-service.js';
 
 const WALLET = '0x1234567890123456789012345678901234567890';
 const PAYER_ID = 'payer-1';
@@ -78,6 +78,7 @@ describe('storePay.payByStoreCode', () => {
     vi.mocked(db.user.findFirst).mockResolvedValue({ id: PAYER_ID, deletedAt: null } as any);
     vi.mocked(payByStoreCode).mockResolvedValue({
       success: true, transferId: 't-1', message: 'Paid $5.00 to E2E Shop',
+      storeName: 'E2E Shop', amount: 5, fee: 0, paidAt: new Date('2026-10-05T14:30:00.000Z'),
     });
   });
 
@@ -85,6 +86,10 @@ describe('storePay.payByStoreCode', () => {
     const result = await caller().payByStoreCode({ storeCode: 'SHOP', amount: 5, coopId: 'cahootz' });
 
     expect(result.success).toBe(true);
+    // Everything the payer's receipt shows.
+    expect(result).toMatchObject({
+      transferId: 't-1', storeName: 'E2E Shop', amount: 5, fee: 0, paidAt: '2026-10-05T14:30:00.000Z',
+    });
     expect(payByStoreCode).toHaveBeenCalledWith({
       storeCode: 'SHOP', payerId: PAYER_ID, amount: 5, coopId: 'cahootz', note: undefined,
     });
@@ -129,5 +134,40 @@ describe('storePay.payByStoreCode', () => {
     await expect(
       caller().payByStoreCode({ storeCode: 'SHOP', amount: 5, coopId: 'cahootz' }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: "You can't pay your own store" });
+  });
+});
+
+describe('storePay.payRequest', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(db.user.findFirst).mockResolvedValue({ id: PAYER_ID, deletedAt: null } as any);
+    vi.mocked(payRequest).mockResolvedValue({
+      success: true, transferId: 't-2', message: 'Paid $7.25 to E2E Shop',
+      storeName: 'E2E Shop', amount: 7.25, fee: 0, paidAt: new Date('2026-10-05T15:00:00.000Z'),
+    });
+  });
+
+  it('pays as the signed-in wallet owner without needing a userId, and returns the receipt', async () => {
+    const result = await caller().payRequest({ token: 'tok-1', amount: 7.25 });
+
+    expect(payRequest).toHaveBeenCalledWith({ token: 'tok-1', payerId: PAYER_ID, amount: 7.25 });
+    expect(result).toMatchObject({
+      transferId: 't-2', storeName: 'E2E Shop', amount: 7.25, fee: 0, paidAt: '2026-10-05T15:00:00.000Z',
+    });
+  });
+
+  it('never pays from a different account than the signed-in wallet', async () => {
+    await expect(
+      caller().payRequest({ token: 'tok-1', amount: 7.25, userId: 'someone-else' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(payRequest).not.toHaveBeenCalled();
+  });
+
+  it('refuses when the wallet does not belong to an account', async () => {
+    vi.mocked(db.user.findFirst).mockResolvedValue(null);
+    await expect(caller().payRequest({ token: 'tok-1', amount: 7.25 })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(payRequest).not.toHaveBeenCalled();
   });
 });

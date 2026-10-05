@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleEllipsis,
+  Clock,
   FileText,
   Menu,
   MessageCircle,
@@ -24,6 +25,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useCommonsProposalActions } from '@/hooks/use-commons-proposal-actions';
 import { track } from '@/lib/analytics';
 import { proposalDetailHref, proposalDraftsHref } from '@/lib/proposal-navigation';
+import { votingDeadlineShort } from '@/lib/voting-deadline';
 import { SubmitModal } from '../(authenticated)/proposals';
 
 const PRIMARY = '#FF6B00';
@@ -376,6 +378,7 @@ export default function ProposalsScreen() {
             <View className="mt-5 gap-3">
               {visibleProposals.map((proposal) => {
                 const budget = formatBudget(proposal);
+                const closing = votingDeadlineShort(proposal);
                 return (
                   <TouchableOpacity
                     key={proposal.id}
@@ -409,6 +412,12 @@ export default function ProposalsScreen() {
                         <Text className="mt-1 text-xs font-semibold text-gray-500" numberOfLines={1}>
                           {proposal.proposer?.displayName || 'Commons member'} · {timeAgo(proposal.createdAt)}
                         </Text>
+                        {closing ? (
+                          <View className="mt-2 flex-row items-center gap-1">
+                            <Clock size={14} color="#374151" />
+                            <Text className="text-sm font-bold text-gray-800">{closing}</Text>
+                          </View>
+                        ) : null}
                       </View>
                       {budget ? (
                         <View className="flex-row items-center gap-1 rounded-full bg-emerald-50 px-3 py-1.5">

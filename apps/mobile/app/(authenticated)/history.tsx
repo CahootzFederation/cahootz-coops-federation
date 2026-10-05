@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { router, Stack } from 'expo-router';
-import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Clock, Heart, Home, Briefcase, Store } from 'lucide-react-native';
+import { ArrowDownLeft, ArrowLeft, ArrowUpRight, ChevronRight, Clock, Heart, Home, Briefcase, Store } from 'lucide-react-native';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { friendlyError } from '@/lib/friendly-error';
@@ -165,8 +165,21 @@ export default function HistoryScreen() {
     const transferTypeConfig = tx.transferType ? TRANSFER_TYPE_CONFIG[tx.transferType] : null;
     const TransferIcon = transferTypeConfig?.icon;
 
+    const direction = tx.type === 'received' ? 'Received' : 'Paid';
+    const preposition = tx.type === 'received' ? 'from' : 'to';
+    const rowLabel = `${direction} $${tx.amount.toFixed(2)} ${preposition} ${tx.counterparty}, ${formatDate(tx.createdAt)}${
+      statusText ? `, ${statusText}` : ''
+    }. Opens the receipt.`;
+
     return (
-      <View className="flex-row items-center p-4 bg-white border-b border-gray-100">
+      <TouchableOpacity
+        onPress={() => openReceipt(tx.id)}
+        accessibilityRole="button"
+        accessibilityLabel={rowLabel}
+        activeOpacity={0.7}
+        className="flex-row items-center p-4 bg-white border-b border-gray-100"
+        style={{ minHeight: 64 }}
+      >
         <View
           className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${
             tx.type === 'received'
@@ -239,8 +252,13 @@ export default function HistoryScreen() {
         >
           {tx.type === 'received' ? '+' : '-'}${tx.amount.toFixed(2)}
         </Text>
-      </View>
+        <ChevronRight size={18} color="#9CA3AF" style={{ marginLeft: 6 }} />
+      </TouchableOpacity>
     );
+  };
+
+  const openReceipt = (id: string) => {
+    router.push({ pathname: '/(authenticated)/receipt', params: { id } } as any);
   };
 
   return (
@@ -265,6 +283,9 @@ export default function HistoryScreen() {
           <View className="flex-1">
             <Text className="text-2xl font-bold text-gray-900">History</Text>
             <Text className="text-sm text-gray-500 mt-1">Your recent transactions</Text>
+            {transactions.length > 0 ? (
+              <Text className="text-sm text-gray-500">Tap a payment to see its receipt.</Text>
+            ) : null}
           </View>
         </View>
 
@@ -280,7 +301,7 @@ export default function HistoryScreen() {
             <Text className="text-gray-600 text-center mt-2">{loadError}</Text>
             <TouchableOpacity
               onPress={retryLoad}
-              accessibilityRole="button"
+              accessibilityRole="button" accessibilityLabel="Try again"
               className="mt-6 bg-primary px-6 py-3 rounded-xl items-center justify-center"
               style={{ minHeight: 48 }}
             >
@@ -311,7 +332,7 @@ export default function HistoryScreen() {
                   <Text className="text-red-800">{loadError}</Text>
                   <TouchableOpacity
                     onPress={onRefresh}
-                    accessibilityRole="button"
+                    accessibilityRole="button" accessibilityLabel="Try again"
                     className="mt-2 self-start bg-white px-4 rounded-xl items-center justify-center border border-red-200"
                     style={{ minHeight: 44 }}
                   >
@@ -330,7 +351,7 @@ export default function HistoryScreen() {
                   <Text className="text-gray-600 text-center">{moreError}</Text>
                   <TouchableOpacity
                     onPress={retryMore}
-                    accessibilityRole="button"
+                    accessibilityRole="button" accessibilityLabel="Try again"
                     className="mt-2 bg-gray-900 px-6 rounded-xl items-center justify-center"
                     style={{ minHeight: 44 }}
                   >

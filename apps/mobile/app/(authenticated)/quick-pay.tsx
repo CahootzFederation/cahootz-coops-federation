@@ -17,7 +17,7 @@ import {
   Shield,
   Clock,
 } from 'lucide-react-native';
-import { api } from '@/lib/api';
+import { api, formatPaymentReference, formatReceiptDateTime } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { authenticateForPayment } from '@/lib/biometric';
 import { friendlyError } from '@/lib/friendly-error';
@@ -29,6 +29,29 @@ interface StoreInfo {
   imageUrl: string | null;
   isScVerified: boolean;
   acceptsQuickPay?: boolean;
+}
+
+/** What the success receipt shows right after paying. */
+interface PaidReceipt {
+  storeName: string;
+  amount: number;
+  fee: number;
+  paidAt: string;
+  transferId?: string;
+}
+
+function ReceiptLine({ label, value }: { label: string; value: string }) {
+  return (
+    <View
+      className="flex-row justify-between border-b border-gray-100 py-2"
+      style={{ minHeight: 40 }}
+      accessible
+      accessibilityLabel={`${label}: ${value}`}
+    >
+      <Text className="text-gray-600 text-base">{label}</Text>
+      <Text className="text-gray-900 text-base font-semibold flex-1 text-right ml-4">{value}</Text>
+    </View>
+  );
 }
 
 interface PaymentRequestInfo {
@@ -73,7 +96,7 @@ export default function QuickPayScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [paidReceipt, setPaidReceipt] = useState<PaidReceipt | null>(null);
 
   const loadTarget = () => {
     setError(null);
@@ -234,8 +257,14 @@ export default function QuickPayScreen() {
           );
 
       if (result?.success) {
-        const storeName = paymentRequest?.store.name || store?.name;
-        setSuccessMessage(`Paid $${amountNum.toFixed(2)} to ${storeName}`);
+        // Prefer what the server recorded; fall back to what the member just confirmed.
+        setPaidReceipt({
+          storeName: result.storeName || paymentRequest?.store.name || store?.name || 'the store',
+          amount: typeof result.amount === 'number' ? result.amount : amountNum,
+          fee: typeof result.fee === 'number' ? result.fee : 0,
+          paidAt: result.paidAt || new Date().toISOString(),
+          transferId: result.transferId,
+        });
         setShowSuccessModal(true);
         loadBalance();
       } else {
@@ -528,16 +557,47 @@ export default function QuickPayScreen() {
               <Text className="text-xl font-bold text-gray-900 text-center">
                 Payment Sent!
               </Text>
+              {paidReceipt && (
+                <Text className="text-gray-600 text-center mt-1">
+                  You paid ${paidReceipt.amount.toFixed(2)} to {paidReceipt.storeName}.
+                </Text>
+              )}
             </View>
-            <Text className="text-gray-600 text-center mb-6">{successMessage}</Text>
+            {paidReceipt && (
+              <View className="mb-6" accessibilityLabel="Your receipt">
+                <Text className="text-gray-900 text-lg font-semibold mb-1">Your receipt</Text>
+                <ReceiptLine label="Store" value={paidReceipt.storeName} />
+                <ReceiptLine label="Amount" value={`$${paidReceipt.amount.toFixed(2)}`} />
+                <ReceiptLine label="Fee" value={`$${paidReceipt.fee.toFixed(2)}`} />
+                <ReceiptLine label="Date and time" value={formatReceiptDateTime(paidReceipt.paidAt)} />
+                {paidReceipt.transferId ? (
+                  <ReceiptLine label="Reference" value={formatPaymentReference(paidReceipt.transferId)} />
+                ) : null}
+              </View>
+            )}
             <TouchableOpacity
               onPress={() => {
                 setShowSuccessModal(false);
                 router.back();
               }}
-              className="bg-green-600 py-3 rounded-xl items-center"
+              accessibilityRole="button"
+              accessibilityLabel="Done"
+              className="bg-green-600 py-3 rounded-xl items-center justify-center"
+              style={{ minHeight: 48 }}
             >
-              <Text className="text-white font-semibold">Done</Text>
+              <Text className="text-white font-semibold text-base">Done</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.replace('/(authenticated)/history' as any);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="View in History"
+              className="mt-3 border border-gray-300 py-3 rounded-xl items-center justify-center"
+              style={{ minHeight: 48 }}
+            >
+              <Text className="text-gray-900 font-semibold text-base">View in History</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -564,6 +624,7 @@ export default function QuickPayScreen() {
             <TouchableOpacity
               onPress={() => setShowErrorModal(false)}
               accessibilityRole="button"
+              accessibilityLabel="OK"
               className="bg-gray-900 py-3 rounded-xl items-center justify-center"
               style={{ minHeight: 48 }}
             >

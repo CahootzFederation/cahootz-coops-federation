@@ -1,4 +1,4 @@
-import { router, useSegments } from 'expo-router';
+import { router, useGlobalSearchParams, useSegments } from 'expo-router';
 import { Bell, LayoutGrid, Store, UserCircle } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,6 +27,7 @@ export function AppBottomNavigation() {
   const hasUnread = (unreadQuery.data?.count ?? 0) > 0;
 
   const screen: string = segments[segments.length - 1] || '';
+  const { entry } = useGlobalSearchParams<{ entry?: string | string[] }>();
   const active = screen === 'notifications' || screen === 'notification-settings'
     ? 'Alerts'
     : ['store', 'store-detail', 'cart', 'checkout'].includes(screen)
@@ -37,8 +38,10 @@ export function AppBottomNavigation() {
           ? 'Commons'
           : undefined;
 
-  // Onboarding is a focused, full-screen flow; the app's tabs appear once it's done.
+  // Onboarding, sign-in, and the commons application are focused, full-screen
+  // flows: a stray tab tap there would throw away what the person typed.
   if (screen === 'profile-onboarding') return null;
+  if (isSignInEntry(entry) && (screen === 'index' || screen === '' || screen === '(tabs)')) return null;
 
   return (
     <View accessibilityRole="tablist" accessibilityLabel="Main navigation" style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
@@ -87,3 +90,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 10, lineHeight: 14, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
   dot: { position: 'absolute', top: -2, right: -4, width: 8, height: 8, borderRadius: 4, backgroundColor: '#DC2626' },
 });
+
+function isSignInEntry(entry: string | string[] | undefined) {
+  return Array.isArray(entry) ? entry.includes('sign-in') : entry === 'sign-in';
+}

@@ -1,5 +1,6 @@
 import { View, Text, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
+import { router } from 'expo-router';
 import { api } from '~/lib/api';
 import { useAuth } from '~/contexts/auth-context';
 import { friendlyError } from '~/lib/friendly-error';
@@ -141,7 +142,7 @@ export default function HistoryScreen() {
             setLoading(true);
             loadHistory();
           }}
-          accessibilityRole="button"
+          accessibilityRole="button" accessibilityLabel="Try again"
           className="bg-primary px-6 py-3 rounded-lg items-center justify-center"
           style={{ minHeight: 48 }}
         >
@@ -166,7 +167,7 @@ export default function HistoryScreen() {
             <Text className="text-red-800">{error}</Text>
             <TouchableOpacity
               onPress={onRefresh}
-              accessibilityRole="button"
+              accessibilityRole="button" accessibilityLabel="Try again"
               className="mt-2 self-start bg-white px-4 rounded-xl items-center justify-center border border-red-200"
               style={{ minHeight: 44 }}
             >
@@ -189,9 +190,18 @@ export default function HistoryScreen() {
               const isSent = transfer.type === 'sent' || transfer.type === 'pending';
 
               return (
-                <View
+                <TouchableOpacity
                   key={transfer.id}
+                  onPress={() =>
+                    router.push({ pathname: '/(authenticated)/receipt', params: { id: transfer.id } } as any)
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={`${transfer.type === 'received' ? 'Received' : 'Paid'} $${transfer.amount.toFixed(2)} ${
+                    transfer.type === 'received' ? 'from' : 'to'
+                  } ${transfer.counterparty}, ${getStatusText(transfer.status)}. Opens the receipt.`}
+                  activeOpacity={0.7}
                   className="bg-white rounded-xl p-4 shadow-sm"
+                  style={{ minHeight: 44 }}
                 >
                   {/* Header: Icon, Name, Amount */}
                   <View className="flex-row items-center">
@@ -241,7 +251,7 @@ export default function HistoryScreen() {
                   <Text className="text-gray-400 text-xs mt-2">
                     {formatDate(transfer.createdAt)}
                   </Text>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>

@@ -118,6 +118,39 @@ export function createApiHeaders(
   return headers;
 }
 
+/** One payment as its receipt shows it (`p2p.getTransfer`). */
+export interface TransferReceipt {
+  id: string;
+  direction: 'sent' | 'received' | 'pending';
+  amount: number;
+  fee: number;
+  counterparty: string;
+  status: string;
+  transferType: 'PERSONAL' | 'RENT' | 'SERVICE' | 'STORE';
+  storeName: string | null;
+  note: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+/**
+ * A short, readable payment reference: the last 8 characters of the payment
+ * id in capitals, split in two ("K7QX-2M9P"). Easy to read out to support.
+ */
+export function formatPaymentReference(id: string): string {
+  const tail = id.replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase();
+  return tail.length > 4 ? `${tail.slice(0, 4)}-${tail.slice(4)}` : tail;
+}
+
+/** "Oct 5, 2026 at 2:30 PM" in the member's own time zone. */
+export function formatReceiptDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const day = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `${day} at ${time}`;
+}
+
 // Application submission types
 export interface ApplicationData {
   // Coop identification
@@ -642,7 +675,13 @@ export interface CoopConfigDetail {
 export interface ProposalSummary {
   id: string;
   createdAt: string;
+  /** Last change; roughly when a decided proposal was decided. */
+  updatedAt?: string | null;
   status: string;
+  /** The commons this proposal belongs to. */
+  coopId?: string | null;
+  /** When voting closes (ISO), once the proposal is open for voting. */
+  votingEndsAt?: string | null;
   title: string;
   summary: string;
   category: string;
@@ -2750,6 +2789,34 @@ export const api = {
     const result = await response.json();
     if (result.error) {
       throw apiError(result.error, 'Failed to get history');
+    }
+    if (!response.ok) {
+      throw httpError(response.status);
+    }
+
+    return result.result?.data;
+  },
+
+  /**
+   * One of the signed-in member's payments, for its receipt. The server only
+   * returns it to the person who sent or received it.
+   */
+  async getTransferReceipt(
+    transferId: string,
+    walletAddress?: string | null,
+  ): Promise<TransferReceipt> {
+    const input = encodeURIComponent(JSON.stringify({ transferId }));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/p2p.getTransfer?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(walletAddress),
+      },
+    );
+
+    const result = await response.json();
+    if (result.error) {
+      throw apiError(result.error, 'Failed to get payment');
     }
     if (!response.ok) {
       throw httpError(response.status);

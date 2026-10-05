@@ -35,7 +35,7 @@ export type AnalyticsEvents = {
   onboarding_sign_in_chosen: { step: OnboardingStep };
   /** The wizard was finished. `profile_completed` is false if the profile form was skipped. */
   onboarding_completed: {
-    exit: 'welcome_lounge' | 'general' | 'skip' | 'invitation';
+    exit: 'welcome_lounge' | 'general' | 'skip' | 'invitation' | 'family';
     profile_completed: boolean;
     signed_in: boolean;
   };

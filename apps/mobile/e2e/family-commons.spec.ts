@@ -112,7 +112,7 @@ test.describe("family commons", () => {
   test("a member starts a family and a new person they invite by email joins it from onboarding", async ({
     browser,
   }) => {
-    test.setTimeout(240_000);
+    test.setTimeout(480_000);
     const steward = await newSignedInPage(browser, USER_A_EMAIL);
     const outsider = await newSignedInPage(browser, USER_B_EMAIL);
     let newcomer: Awaited<ReturnType<typeof newcomerAtOnboardingChoices>> | undefined;
@@ -150,15 +150,21 @@ test.describe("family commons", () => {
       await expect(shown(outsider.page, "Start a family")).toBeVisible();
       await expect(shown(outsider.page, familyName, { exact: true })).toHaveCount(0);
 
-      // The invited person signs up. Onboarding's last step offers the family
-      // they were invited to, found just from their signed-in email,
-      // alongside the welcome lounge and General.
+      // The invited person signs up. Onboarding's last step leads with a
+      // button into the family they were invited to, by its name, found just
+      // from their signed-in email. The welcome lounge and General are still
+      // there, and the family isn't listed a second time as a plain invitation.
       newcomer = await newcomerAtOnboardingChoices(browser, invitedNewcomer);
       const onboarding = newcomer.page;
+      await expect(shown(onboarding, "Your family", { exact: true })).toBeVisible();
+      const joinFamily = onboarding.getByRole("button", { name: `Join ${familyName}` });
+      await expect(joinFamily).toBeVisible();
+      await expect(shown(onboarding, /invited you\. You'll see the family's rules before you join\./)).toBeVisible();
       await expect(onboarding.getByRole("button", { name: "Join a welcome lounge" })).toBeVisible();
       await expect(shown(onboarding, "Go to General")).toBeVisible();
       await expect(shown(onboarding, "Explore on my own")).toHaveCount(0);
-      await onboarding.getByLabel(`Open invitation to ${familyName}`).click();
+      await expect(onboarding.getByLabel(`Open invitation to ${familyName}`)).toHaveCount(0);
+      await joinFamily.click();
       await expect(
         shown(onboarding, new RegExp(`invited you to join ${familyName}`)),
       ).toBeVisible();
@@ -179,6 +185,15 @@ test.describe("family commons", () => {
 
       // Choosing their family still seated them in a welcome lounge.
       await expectSeatedInWelcomeLounge(onboarding);
+
+      // They put off their profile, so onboarding comes back on a new
+      // device. Now that they're in, it offers to go straight to the family.
+      await newcomer.context.close();
+      newcomer = await newcomerAtOnboardingChoices(browser, invitedNewcomer);
+      await expect(newcomer.page.getByRole("button", { name: `Join ${familyName}` })).toHaveCount(0);
+      await newcomer.page.getByRole("button", { name: `Go to ${familyName}` }).click();
+      await expect(newcomer.page).toHaveURL(new RegExp(`/${familyPath}/posts`));
+      await expect(shown(newcomer.page, WELCOME_POST)).toBeVisible();
 
       // User A sees the invitation as accepted, and the newcomer as a member.
       await steward.page.reload();

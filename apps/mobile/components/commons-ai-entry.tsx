@@ -1751,6 +1751,20 @@ export default function CommonsAiEntry({
               <ChevronDown size={13} color="#475569" />
             </TouchableOpacity>
           </View>
+          {feedCircleId && feedCircleId !== `general:${feedCoopId}` && circleIsMember !== null ? (
+            <TouchableOpacity
+              onPress={() =>
+                router.push({
+                  pathname: '/[coopId]/gallery',
+                  params: { coopId: feedCoopId, circleId: feedCircleId },
+                } as any)
+              }
+              className="h-9 w-9 items-center justify-center rounded-full bg-gray-50"
+              accessibilityLabel="Circle gallery"
+            >
+              <ImageIcon size={17} color={SOCIAL_THEME.primary} />
+            </TouchableOpacity>
+          ) : null}
           {feedCircleId && circleIsMember ? (
             <TouchableOpacity
               onPress={() =>

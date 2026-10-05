@@ -18,6 +18,7 @@ import { router } from 'expo-router';
 import { ArrowRight, HandHeart, Lightbulb, MessageCircle, MessagesSquare, UserCircle, Users } from 'lucide-react-native';
 
 import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
+import { OnboardingFamilyChoices, isFamilyInvitation } from '@/components/onboarding-family-choices';
 
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
@@ -309,7 +310,7 @@ export default function ProfileOnboardingScreen() {
   // handleSkip) already lets us navigate freely, so there's nothing more to persist here.
   const completeOnboarding = async (
     destination: { pathname: string; params?: Record<string, string> },
-    exit: 'welcome_lounge' | 'general' | 'skip' | 'invitation',
+    exit: 'welcome_lounge' | 'general' | 'skip' | 'invitation' | 'family',
   ) => {
     track('onboarding_completed', { exit, profile_completed: !!profileResult, signed_in: signedIn });
 
@@ -426,6 +427,13 @@ export default function ProfileOnboardingScreen() {
       { pathname: '/invitations/[invitationId]', params: { invitationId } },
       'invitation',
     );
+  };
+
+  // A family they already belong to (say, joined from a link before
+  // finishing onboarding): straight to its feed, not the Cahootz Commons.
+  const handleGoToFamily = async (coopId: string) => {
+    await seatInWelcomeLounge();
+    void completeOnboarding({ pathname: '/[coopId]/posts', params: { coopId } }, 'family');
   };
 
   const handleGoToGeneral = async () => {
@@ -604,11 +612,19 @@ export default function ProfileOnboardingScreen() {
           {error ? <Text style={circlesStyles.error}>{error}</Text> : null}
 
           {user && sessionToken ? (
-            <View style={{ marginBottom: 12 }}>
-              <CommonsInvitationsCard
-                onOpen={(invitation) => void handleOpenInvitation(invitation.invitationId!)}
+            <>
+              <OnboardingFamilyChoices
+                disabled={isJoiningWelcomeTable}
+                onGoToFamily={(coopId) => void handleGoToFamily(coopId)}
+                onOpenInvitation={(invitationId) => void handleOpenInvitation(invitationId)}
               />
-            </View>
+              <View style={{ marginBottom: 12 }}>
+                <CommonsInvitationsCard
+                  exclude={isFamilyInvitation}
+                  onOpen={(invitation) => void handleOpenInvitation(invitation.invitationId!)}
+                />
+              </View>
+            </>
           ) : null}
 
           <Pressable

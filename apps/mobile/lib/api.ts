@@ -270,6 +270,14 @@ export interface CommonsPostMedia {
   sizeBytes?: number | null;
 }
 
+export interface CircleGalleryItem extends CommonsPostMedia {
+  id: string;
+  createdAt: string;
+  postId: string;
+  postTitle: string;
+  author: string;
+}
+
 export type EventRsvpStatus = 'GOING' | 'MAYBE' | 'CANT_GO';
 export type EventRecurrenceFreq = 'DAILY' | 'WEEKLY' | 'MONTHLY';
 
@@ -910,6 +918,30 @@ export const api = {
       upcomingEvents: EventSummary[];
       nextCursor: string | null;
     }>(response, 'Failed to load Commons feed');
+  },
+
+  async listCircleMedia(
+    coopId: string,
+    circleId: string,
+    sessionToken?: string | null,
+    cursor?: string | null,
+  ) {
+    const input = encodeURIComponent(
+      JSON.stringify({ coopId, circleId, limit: 30, ...(cursor ? { cursor } : {}) }),
+    );
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.listCircleMedia?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
+
+    return readTrpcResult<{
+      circleName: string;
+      items: CircleGalleryItem[];
+      nextCursor: string | null;
+    }>(response, "Couldn't load this circle's photos and videos");
   },
 
   async searchCommons(

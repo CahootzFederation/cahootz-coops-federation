@@ -17,12 +17,16 @@ import { friendlyError } from '@/lib/friendly-error';
  */
 export function CommonsInvitationsCard({
   onOpen,
+  exclude,
 }: {
   /** Overrides navigation, e.g. to finish the onboarding wizard first. */
   onOpen?: (invitation: CommonsInvitationDetail) => void;
+  /** Leaves out invitations shown elsewhere on the screen. */
+  exclude?: (invitation: CommonsInvitationDetail) => boolean;
 }) {
   const { sessionToken } = useAuth();
-  const [invitations, setInvitations] = useState<CommonsInvitationDetail[]>([]);
+  const [allInvitations, setInvitations] = useState<CommonsInvitationDetail[]>([]);
+  const invitations = exclude ? allInvitations.filter((invitation) => !exclude(invitation)) : allInvitations;
   const [loadError, setLoadError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
 

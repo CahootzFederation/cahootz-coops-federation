@@ -1,3 +1,4 @@
+import type React from 'react';
 import { Modal, TouchableOpacity, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -86,9 +87,12 @@ export function CommonsMediaTile({
 export function CommonsMediaViewer({
   media,
   onClose,
+  footer,
 }: {
   media: CommonsMediaPreview | null;
   onClose: () => void;
+  // Optional caption or actions pinned to the bottom of the viewer.
+  footer?: React.ReactNode;
 }) {
   const uri = media ? mediaUri(media) : '';
 
@@ -113,6 +117,7 @@ export function CommonsMediaViewer({
             />
           )}
         </View>
+        {footer ? <View className="absolute bottom-0 left-0 right-0 px-4 pb-10">{footer}</View> : null}
       </View>
     </Modal>
   );

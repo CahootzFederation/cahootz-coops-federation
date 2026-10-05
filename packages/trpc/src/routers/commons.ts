@@ -1167,6 +1167,89 @@ export const commonsRouter = router({
       };
     }),
 
+  // Every photo and video posted in one circle, newest first, for the
+  // circle's gallery. Readable by exactly the people who can read the feed.
+  listCircleMedia: publicProcedure
+    .input(
+      z.object({
+        coopId: z.string().min(1).default(COMMONS_COOP_ID),
+        circleId: z.string().min(1),
+        limit: z.number().min(1).max(60).default(30),
+        cursor: z.string().optional(),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const context = ctx as Context;
+      if (input.circleId === generalCircleId(input.coopId)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Galleries are only available inside a circle.',
+        });
+      }
+      const accountUser = await resolveOptionalAccountUser(context);
+      if (!accountUser) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Join this circle to view its conversation.',
+        });
+      }
+      const circle = await requireCircleAccess(
+        context.db,
+        accountUser.id,
+        input.coopId,
+        input.circleId,
+      );
+      const canRead =
+        input.coopId === COMMONS_COOP_ID ||
+        (await hasActiveCommonsMembership(context.db, accountUser.id, input.coopId));
+      if (!canRead) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Join this commons to view its circles.',
+        });
+      }
+
+      const records = await context.db.commonsPostMedia.findMany({
+        where: { post: { coopId: input.coopId, circleId: input.circleId } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: input.limit + 1,
+        ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+        include: {
+          post: {
+            select: {
+              id: true,
+              title: true,
+              createdAt: true,
+              author: { select: { name: true, email: true, handle: true } },
+            },
+          },
+        },
+      });
+
+      const hasMore = records.length > input.limit;
+      const page = hasMore ? records.slice(0, input.limit) : records;
+      return {
+        circleName: circle.name as string,
+        items: page.map((item: any) => ({
+          id: item.id,
+          pathname: item.pathname,
+          url: item.url,
+          mediaType: item.mediaType as 'image' | 'video',
+          mimeType: item.mimeType,
+          fileName: item.fileName,
+          width: item.width,
+          height: item.height,
+          durationMs: item.durationMs,
+          sizeBytes: item.sizeBytes,
+          createdAt: item.createdAt.toISOString(),
+          postId: item.post.id,
+          postTitle: item.post.title,
+          author: displayName(item.post.author),
+        })),
+        nextCursor: hasMore ? page[page.length - 1].id : null,
+      };
+    }),
+
   search: publicProcedure
     .input(
       z.object({

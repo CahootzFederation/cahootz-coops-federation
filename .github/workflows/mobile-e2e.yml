@@ -125,7 +125,9 @@ jobs:
         run: |
           nohup pnpm -F @cahootz/api dev > /tmp/cahootz-api.log 2>&1 &
           echo $! > /tmp/cahootz-api.pid
-          nohup pnpm -F @cahootz/mobile dev > /tmp/cahootz-mobile.log 2>&1 &
+          # Metro holds the whole web bundle in memory for the full run; the default
+          # heap ran out partway through the suite and every later journey failed.
+          NODE_OPTIONS=--max-old-space-size=6144 nohup pnpm -F @cahootz/mobile dev > /tmp/cahootz-mobile.log 2>&1 &
           echo $! > /tmp/cahootz-mobile.pid
           nohup pnpm -F @cahootz/web dev --port 3000 > /tmp/cahootz-web.log 2>&1 &
           echo $! > /tmp/cahootz-web.pid

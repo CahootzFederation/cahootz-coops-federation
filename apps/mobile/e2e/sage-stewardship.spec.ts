@@ -93,7 +93,10 @@ test("Sage comments on its own and a circle leader approves an editable proposal
 
     // B, the post's author, is told Sage commented, and the alert opens the post.
     await member.page.getByLabel("Alerts", { exact: true }).locator("visible=true").first().click();
-    await shown(member.page, "Sage commented on your post").click();
+    // Other specs running alongside can also leave B "Sage commented on your post" alerts, so open
+    // the one whose body is this run's comment.
+    await expect(shown(member.page, "Sage commented on your post").first()).toBeVisible();
+    await shown(member.page, commentText).first().click();
     await expect(member.page).toHaveURL(new RegExp(`/posts/${postId}`));
     await expect(shown(member.page, commentText)).toBeVisible();
     // A, who commented on the post, is told too.

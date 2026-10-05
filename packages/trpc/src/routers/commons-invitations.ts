@@ -24,6 +24,7 @@ import {
   previewInvitationByToken,
   revokeInvitation,
 } from "../services/commons-invitations.js";
+import { suggestFamilyNames } from "../services/family-name-ideas.js";
 import { router } from "../trpc.js";
 import { resolveOptionalAccountUser } from "./commons.js";
 
@@ -53,6 +54,22 @@ export const commonsInvitationsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const context = ctx as AccountAuthenticatedContext;
       return createFamilyCommons(context.db, { user: context.accountUser, ...input });
+    }),
+
+  /**
+   * AI name ideas for the Start a family screen, from what the person has
+   * typed so far. Only returns names no commons uses yet.
+   */
+  suggestFamilyNames: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        currentName: z.string().trim().max(60).optional(),
+        description: z.string().trim().max(280).optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      return suggestFamilyNames(context.db, { userId: context.accountUser.id, ...input });
     }),
 
   /** What an invitation link shows before (and after) signing in. */

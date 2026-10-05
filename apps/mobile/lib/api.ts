@@ -1027,6 +1027,18 @@ export const api = {
     );
   },
 
+  async suggestFamilyNames(
+    data: { currentName?: string; description?: string },
+    sessionToken: string,
+  ) {
+    return postCommonsInvitations<{ names: string[] }>(
+      'suggestFamilyNames',
+      data,
+      sessionToken,
+      "Couldn't come up with ideas right now",
+    );
+  },
+
   async previewCommonsInvitation(token: string, sessionToken?: string | null) {
     const input = encodeURIComponent(JSON.stringify({ token }));
     const response = await fetch(

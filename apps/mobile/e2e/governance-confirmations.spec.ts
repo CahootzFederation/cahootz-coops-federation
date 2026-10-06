@@ -125,6 +125,92 @@ test.describe("governance confirmations", () => {
     }
   });
 
+  test("a steward makes a member a guide, whose family invitations then go out directly", async ({ browser }) => {
+    test.setTimeout(480_000);
+    const familyName = `E2E Family Guide ${runId}`;
+    // A throwaway address that never signs in; cleanup deletes the family's invitations.
+    const guideInvitee = `e2e-guide-${runId}@test.cahootz.local`;
+    const steward = await newSignedInPage(browser, USER_A_EMAIL);
+    const member = await newSignedInPage(browser, USER_B_EMAIL);
+
+    try {
+      await steward.page.goto("/commons");
+      await steward.page.getByRole("button", { name: "Start a family" }).click();
+      await steward.page.getByLabel("Family name").fill(familyName);
+      await shown(steward.page, "Skip for now and create the family", { exact: true }).click();
+      await expect(steward.page).toHaveURL(/commons-invites\?coopId=family-/);
+      const coopId = new URL(steward.page.url()).searchParams.get("coopId")!;
+
+      await steward.page.getByLabel("Their name").fill("E2E Guide Cousin");
+      await steward.page.getByLabel("Their email").fill(USER_B_EMAIL);
+      await shown(steward.page, "Send invitation", { exact: true }).click();
+      await expect(shown(steward.page, "Invitation sent.")).toBeVisible();
+
+      await member.page.goto("/");
+      await member.page.getByLabel(`Open invitation to ${familyName}`).click();
+      await member.page.getByRole("checkbox", { name: `I agree to ${familyName}'s rules` }).click();
+      await shown(member.page, `Join ${familyName}`, { exact: true }).click();
+      await expect(member.page).toHaveURL(/\/family-[^/]+\/posts\//);
+
+      // Before: an ordinary family member can only recommend someone.
+      await member.page.goto(`/commons-invites?coopId=${coopId}`);
+      await expect(shown(member.page, "Recommend someone", { exact: true })).toBeVisible();
+      await expect(shown(member.page, /^You're a guide here\./)).toHaveCount(0);
+
+      // "Make guide" asks first and says what B will and won't be able to do.
+      await steward.page.reload();
+      await expect(shown(steward.page, "Members", { exact: true })).toBeVisible();
+      await button(steward.page, "Make guide").click();
+      await expect(shown(steward.page, /^Make .+ a guide\?$/)).toBeVisible();
+      await expect(
+        shown(steward.page, /will be able to invite people directly, without waiting for a steward\. They won't be able to approve requests, change anyone's role, or remove members\./),
+      ).toBeVisible();
+      await expectTapTarget(button(steward.page, "Yes, make guide"));
+      await button(steward.page, "Yes, make guide").click();
+      await expect(button(steward.page, "Remove as guide")).toBeVisible();
+      await steward.page.reload();
+      await expect(button(steward.page, "Remove as guide")).toBeVisible();
+      await expect(shown(steward.page, "Guide", { exact: true })).toBeVisible();
+
+      // B, now a guide, opens the invite screen from the family's page.
+      await member.page.goto(`/commons/${coopId}`);
+      await shown(member.page, "Invite", { exact: true }).click();
+      await expect(member.page).toHaveURL(/commons-invites/);
+      await expect(shown(member.page, "Invite family", { exact: true })).toBeVisible();
+      await expect(shown(member.page, /^You're a guide here\./)).toBeVisible();
+      // Guides get no steward tools.
+      await expect(shown(member.page, "Members", { exact: true })).toHaveCount(0);
+      await expect(button(member.page, "Make steward")).toHaveCount(0);
+      await expect(shown(member.page, "Shareable link", { exact: true })).toHaveCount(0);
+
+      // B's invitation is sent, not held as a recommendation.
+      await member.page.getByLabel("Their name").fill("E2E Guide Invitee");
+      await member.page.getByLabel("Their email").fill(guideInvitee);
+      await shown(member.page, "Send invitation", { exact: true }).click();
+      await expect(shown(member.page, "Invitation sent.")).toBeVisible();
+      await member.page.reload();
+      await expect(shown(member.page, "E2E Guide Invitee", { exact: true })).toBeVisible();
+      await expect(shown(member.page, "Waiting for a steward", { exact: true })).toHaveCount(0);
+
+      // The steward sees it as a sent invitation with nothing to approve.
+      await steward.page.reload();
+      await expect(shown(steward.page, "E2E Guide Invitee", { exact: true })).toBeVisible();
+      await expect(shown(steward.page, "Recommendations to review", { exact: true })).toHaveCount(0);
+
+      // Removing the role puts B back to recommending.
+      await button(steward.page, "Remove as guide").click();
+      await expect(shown(steward.page, /^Remove .+ as a guide\?$/)).toBeVisible();
+      await button(steward.page, "Yes, remove as guide").click();
+      await expect(button(steward.page, "Make guide")).toBeVisible();
+      await member.page.reload();
+      await expect(shown(member.page, "Recommend someone", { exact: true })).toBeVisible();
+    } finally {
+      await steward.context.close();
+      await member.context.close();
+      fixture("e2e-family-commons.ts", "cleanup", familyName);
+    }
+  });
+
   test("a council vote asks for confirmation before it is cast", async ({ browser }) => {
     test.setTimeout(180_000);
     const { proposalId, title } = fixture("e2e-governance-vote.ts", "seed", `${runId}-vote`, USER_A_EMAIL);

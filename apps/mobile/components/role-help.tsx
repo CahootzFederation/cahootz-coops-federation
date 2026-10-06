@@ -23,6 +23,19 @@ export function stewardPowersFor(name: string) {
 }
 
 /**
+ * Guides are members with the "guide" role (`GUIDE_ROLE` in
+ * commons-membership.ts). Stewards assign it. A guide's family invitations
+ * go out without waiting for a steward; nothing else changes.
+ */
+export const GUIDE_EXPLANATION =
+  "Guides can invite people directly, without waiting for a steward. They can't approve requests, change anyone's role, or remove members.";
+
+/** What someone will be able to do once they're made a guide. */
+export function guidePowersFor(name: string) {
+  return `${name} will be able to invite people directly, without waiting for a steward. They won't be able to approve requests, change anyone's role, or remove members.`;
+}
+
+/**
  * A small "What's a steward?" link that opens a one-line explanation.
  * Put it next to the first place a screen uses the word "steward".
  */

@@ -9,6 +9,7 @@ import {
 import {
   removeCommonsMember,
   reviewCommonsApplication,
+  setCommonsGuide,
   setCommonsSteward,
   withdrawCommonsApplication,
 } from "../services/commons-membership.js";
@@ -266,5 +267,18 @@ export const commonsInvitationsRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "You're already a steward." });
       }
       return setCommonsSteward(context.db, { ...input, stewardId: context.accountUser.id });
+    }),
+
+  setGuide: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        coopId: coopIdSchema,
+        userId: z.string().min(1).max(64),
+        guide: z.boolean(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      return setCommonsGuide(context.db, { ...input, stewardId: context.accountUser.id });
     }),
 });

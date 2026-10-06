@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as Linking from 'expo-linking';
-import { ArrowLeft, Link2, Lock, Send, Shield, Target } from 'lucide-react-native';
+import { ArrowLeft, Compass, Link2, Lock, Send, Shield, Target } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
@@ -20,7 +20,7 @@ import { api, type CommonsInvitationOverview, type FamilySetupView } from '@/lib
 import { ApiError, friendlyError } from '@/lib/friendly-error';
 import { LoadError } from '@/components/load-error';
 import { ConfirmSheet } from '@/components/confirm-sheet';
-import { StewardHelp, stewardPowersFor } from '@/components/role-help';
+import { GUIDE_EXPLANATION, StewardHelp, guidePowersFor, stewardPowersFor } from '@/components/role-help';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -83,10 +83,10 @@ function SmallButton({
 /**
  * Invite people to a commons and, for stewards, everything that follows:
  * approve members' recommendations, review access requests, manage the
- * shareable request link, and manage members and stewards.
+ * shareable request link, and manage members, stewards and guides.
  *
  * What an invitation means depends on the commons: in an invite-only family
- * a steward's invitation lets that person join; in a normal commons every
+ * a steward's or guide's invitation lets that person join; in a normal commons every
  * invitation is only an invitation to apply.
  */
 export default function CommonsInvitesScreen() {
@@ -108,10 +108,15 @@ export default function CommonsInvitesScreen() {
   const [formError, setFormError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
-  // "Make steward" / "Remove as steward" waits for a confirmation that says what changes.
-  const [stewardChange, setStewardChange] = useState<{ id: string; name: string; makeSteward: boolean } | null>(null);
-  const [stewardChanging, setStewardChanging] = useState(false);
-  const [stewardError, setStewardError] = useState('');
+  // Making someone a steward or guide (or undoing it) waits for a confirmation that says what changes.
+  const [roleChange, setRoleChange] = useState<{
+    id: string;
+    name: string;
+    role: 'steward' | 'guide';
+    grant: boolean;
+  } | null>(null);
+  const [roleChanging, setRoleChanging] = useState(false);
+  const [roleError, setRoleError] = useState('');
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -206,20 +211,29 @@ export default function CommonsInvitesScreen() {
       setCopied(false);
     }, "We couldn't make a share link.");
 
-  const confirmStewardChange = async () => {
-    if (!stewardChange || !overview || !sessionToken) return;
-    setStewardChanging(true);
-    setStewardError('');
+  const confirmRoleChange = async () => {
+    if (!roleChange || !overview || !sessionToken) return;
+    setRoleChanging(true);
+    setRoleError('');
     try {
-      await api.setCommonsSteward(overview.commons.id, stewardChange.id, stewardChange.makeSteward, sessionToken);
-      setStewardChange(null);
+      if (roleChange.role === 'steward') {
+        await api.setCommonsSteward(overview.commons.id, roleChange.id, roleChange.grant, sessionToken);
+      } else {
+        await api.setCommonsGuide(overview.commons.id, roleChange.id, roleChange.grant, sessionToken);
+      }
+      setRoleChange(null);
       await load();
     } catch (err) {
-      console.error('Failed to change steward role:', err);
-      setStewardError(friendlyError(err, "We couldn't change this member's steward role."));
+      console.error('Failed to change member role:', err);
+      setRoleError(friendlyError(err, `We couldn't change this member's ${roleChange.role} role.`));
     } finally {
-      setStewardChanging(false);
+      setRoleChanging(false);
     }
+  };
+
+  const askRoleChange = (change: NonNullable<typeof roleChange>) => {
+    setRoleError('');
+    setRoleChange(change);
   };
 
   const goBack = () => {
@@ -257,12 +271,12 @@ export default function CommonsInvitesScreen() {
     );
   }
 
-  const { commons, isSteward } = overview;
+  const { commons, isSteward, isGuide, canInviteDirectly } = overview;
   const isFamily = commons.joinPolicy === 'INVITE_ONLY';
   const awaitingApproval = overview.invitations.filter((item) => item.status === 'PENDING_APPROVAL');
   const pending = overview.invitations.filter((item) => item.status === 'PENDING');
   const accepted = overview.invitations.filter((item) => item.status === 'ACCEPTED');
-  const sendLabel = !isFamily ? 'Invite to apply' : isSteward ? 'Send invitation' : 'Recommend';
+  const sendLabel = !isFamily ? 'Invite to apply' : canInviteDirectly ? 'Send invitation' : 'Recommend';
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
@@ -302,15 +316,20 @@ export default function CommonsInvitesScreen() {
 
         <View className="rounded-2xl border border-gray-200 bg-white p-4">
           <Text className="text-lg font-black text-gray-950">
-            {isFamily ? (isSteward ? 'Invite family' : 'Recommend someone') : 'Invite someone to apply'}
+            {isFamily ? (canInviteDirectly ? 'Invite family' : 'Recommend someone') : 'Invite someone to apply'}
           </Text>
           <Text className="mt-1 text-sm leading-5 text-gray-600">
             {!isFamily
               ? `Everyone applies to ${commons.name}. Your invitation is a recommendation; a steward still reviews their application.`
-              : isSteward
+              : canInviteDirectly
                 ? "They join as soon as they sign in with this email and accept. Phone invitations are confirmed by a steward, since phone numbers aren't verified."
                 : 'A steward reviews your recommendation before the invitation is sent.'}
           </Text>
+          {isGuide ? (
+            <Text className="mt-2 text-sm leading-5 text-gray-700">
+              You&apos;re a guide here. {GUIDE_EXPLANATION}
+            </Text>
+          ) : null}
           <StewardHelp />
 
           <View className="mt-3 flex-row rounded-xl border border-gray-200 p-1">
@@ -606,6 +625,11 @@ export default function CommonsInvitesScreen() {
                       <Shield size={11} color={THEME.green} />
                       <Text className="text-xs font-black" style={{ color: THEME.green }}>Steward</Text>
                     </View>
+                  ) : member.isGuide ? (
+                    <View className="flex-row items-center gap-1 rounded-full px-2 py-1" style={{ backgroundColor: THEME.primarySoft }}>
+                      <Compass size={11} color={THEME.primary} />
+                      <Text className="text-xs font-black" style={{ color: THEME.primary }}>Guide</Text>
+                    </View>
                   ) : null}
                 </View>
                 {member.isYou ? null : (
@@ -613,11 +637,19 @@ export default function CommonsInvitesScreen() {
                     <SmallButton
                       label={member.isSteward ? 'Remove as steward' : 'Make steward'}
                       disabled={busyId === member.id}
-                      onPress={() => {
-                        setStewardError('');
-                        setStewardChange({ id: member.id, name: personLabel(member), makeSteward: !member.isSteward });
-                      }}
+                      onPress={() =>
+                        askRoleChange({ id: member.id, name: personLabel(member), role: 'steward', grant: !member.isSteward })
+                      }
                     />
+                    {isFamily && !member.isSteward ? (
+                      <SmallButton
+                        label={member.isGuide ? 'Remove as guide' : 'Make guide'}
+                        disabled={busyId === member.id}
+                        onPress={() =>
+                          askRoleChange({ id: member.id, name: personLabel(member), role: 'guide', grant: !member.isGuide })
+                        }
+                      />
+                    ) : null}
                     {confirmRemoveId === member.id ? (
                       <>
                         <SmallButton
@@ -664,28 +696,36 @@ export default function CommonsInvitesScreen() {
       </ScrollView>
 
       <ConfirmSheet
-        visible={stewardChange !== null}
+        visible={roleChange !== null}
         title={
-          stewardChange?.makeSteward
-            ? `Make ${stewardChange.name} a steward?`
-            : `Remove ${stewardChange?.name ?? 'them'} as a steward?`
+          roleChange?.grant
+            ? `Make ${roleChange.name} a ${roleChange.role}?`
+            : `Remove ${roleChange?.name ?? 'them'} as a ${roleChange?.role ?? 'steward'}?`
         }
-        confirmLabel={stewardChange?.makeSteward ? 'Yes, make steward' : 'Yes, remove as steward'}
-        tone={stewardChange?.makeSteward ? 'primary' : 'danger'}
-        busy={stewardChanging}
-        error={stewardError}
-        onConfirm={() => void confirmStewardChange()}
+        confirmLabel={
+          roleChange?.grant ? `Yes, make ${roleChange.role}` : `Yes, remove as ${roleChange?.role ?? 'steward'}`
+        }
+        tone={roleChange?.grant ? 'primary' : 'danger'}
+        busy={roleChanging}
+        error={roleError}
+        onConfirm={() => void confirmRoleChange()}
         onCancel={() => {
-          setStewardChange(null);
-          setStewardError('');
+          setRoleChange(null);
+          setRoleError('');
         }}
       >
         <Text className="text-base leading-6 text-gray-800">
-          {stewardChange?.makeSteward
-            ? stewardPowersFor(stewardChange.name)
-            : `${stewardChange?.name ?? 'They'} will stay a member, but won't be able to approve people, manage invitations, or remove members.`}
+          {!roleChange
+            ? ''
+            : roleChange.role === 'steward'
+              ? roleChange.grant
+                ? stewardPowersFor(roleChange.name)
+                : `${roleChange.name} will stay a member, but won't be able to approve people, manage invitations, or remove members.`
+              : roleChange.grant
+                ? guidePowersFor(roleChange.name)
+                : `${roleChange.name} will stay a member. Their invitations will wait for a steward again.`}
         </Text>
-        {stewardChange?.makeSteward ? (
+        {roleChange?.grant ? (
           <Text className="text-sm leading-5 text-gray-600">You can change this later.</Text>
         ) : null}
       </ConfirmSheet>

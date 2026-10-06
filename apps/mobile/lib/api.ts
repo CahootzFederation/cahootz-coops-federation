@@ -634,6 +634,34 @@ export interface CommonsInvitationOverview {
   }[];
 }
 
+/** Answers from the guided Start a family steps (see packages/trpc/src/services/family-setup.ts). */
+export interface FamilySetupInput {
+  mission?: string;
+  goals: {
+    label: string;
+    detail?: string;
+    targetAmountUSD?: number;
+    targetMonths?: number;
+    /** Share of the priority, 1-100; every goal's share adds up to 100. */
+    priorityPercent?: number;
+  }[];
+  votingWindowDays: 3 | 7 | 14;
+  approval: 'MAJORITY' | 'TWO_THIRDS';
+  houseRules: string[];
+}
+
+/** A family's saved setup, for its stewards to edit. */
+export interface FamilySetupView {
+  coopId: string;
+  name: string;
+  setup: FamilySetupInput;
+  isSetUp: boolean;
+  /** Stewards can change it only while everyone in the family is a steward. */
+  canEdit: boolean;
+  nonStewards: number;
+  lockedReason: string | null;
+}
+
 export interface CommonsMissionGoal {
   key: string;
   label: string;
@@ -1093,7 +1121,7 @@ export const api = {
   },
 
   async createFamilyCommons(
-    data: { name: string; description?: string; iconEmoji?: string },
+    data: { name: string; description?: string; iconEmoji?: string; setup?: FamilySetupInput },
     sessionToken: string,
   ) {
     return postCommonsInvitations<{ coopId: string; welcomePostId: string }>(
@@ -1101,6 +1129,37 @@ export const api = {
       data,
       sessionToken,
       'Could not start your family',
+    );
+  },
+
+  /** The family agreement the guided setup would save; nothing is stored. */
+  async previewFamilyAgreement(
+    data: { name: string; setup: FamilySetupInput; coopId?: string },
+    sessionToken: string,
+  ) {
+    return postCommonsInvitations<{ charterText: string }>(
+      'previewFamilyAgreement',
+      data,
+      sessionToken,
+      "Couldn't show the agreement right now",
+    );
+  },
+
+  async getFamilySetup(coopId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commonsInvitations.familySetup?input=${input}`,
+      { method: 'GET', headers: createApiHeaders(null, sessionToken) },
+    );
+    return readTrpcResult<FamilySetupView>(response, "Couldn't load your family's setup");
+  },
+
+  async updateFamilySetup(data: { coopId: string; setup: FamilySetupInput }, sessionToken: string) {
+    return postCommonsInvitations<FamilySetupView & { changed: boolean }>(
+      'updateFamilySetup',
+      data,
+      sessionToken,
+      "Couldn't save your family's setup",
     );
   },
 

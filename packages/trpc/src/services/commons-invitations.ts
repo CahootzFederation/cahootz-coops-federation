@@ -41,6 +41,12 @@ import {
 } from "./commons-membership.js";
 import { memberAppLinkUrl, MEMBER_APP_NAME } from "./onboarding-drip-config.js";
 import { createNotificationAndPush } from "./push-notification-service.js";
+import {
+  familyCharter,
+  familyConfigFromSetup,
+  familySetupFromConfig,
+  type FamilySetupInput,
+} from "./family-setup.js";
 import { notifyCommonsMemberJoined } from "./member-join-notifications.js";
 import { sendCommonsInvitationSMS } from "./sms.js";
 
@@ -68,17 +74,6 @@ export function invitationAppLink(token: string) {
 
 export const FAMILY_PRIVACY_NOTICE =
   "This is a private family space. Only people a steward lets in can see who's here or anything posted, and nothing here shows up in Explore.";
-
-export function familyRules(name: string) {
-  return [
-    `# ${name} rules`,
-    "",
-    `1. ${name} is private. Don't share posts, photos, or names from here without asking the person first.`,
-    "2. Be kind. Disagree about ideas, not about people.",
-    "3. Stewards invite new family members and can remove anyone who breaks these rules.",
-    "4. Anyone can leave at any time.",
-  ].join("\n");
-}
 
 async function assertInvitationRateLimit(db: Db, inviterId: string) {
   const sent = await db.commonsInvitation.count({
@@ -1021,6 +1016,8 @@ export async function createFamilyCommons(
     description?: string;
     iconEmoji?: string;
     iconColor?: string;
+    /** The guided setup: goals, mission and the family agreement. */
+    setup?: FamilySetupInput;
   },
 ) {
   const createdBy = `user:${params.user.id}`;
@@ -1039,6 +1036,11 @@ export async function createFamilyCommons(
   const coopId = `family-${randomBytes(6).toString("hex")}`;
   const description = params.description?.trim() || `A private space for ${name}.`;
   const now = new Date();
+  const guided = familyConfigFromSetup({
+    name,
+    creatorName: publicName(params.user),
+    setup: params.setup,
+  });
 
   const result = await db.$transaction(async (tx) => {
     await assertCommonsNameAvailable(tx, name);
@@ -1050,17 +1052,19 @@ export async function createFamilyCommons(
         name,
         slug: coopId,
         description,
+        displayMission: guided.displayMission,
         iconEmoji: params.iconEmoji || "🏡",
         iconColor: params.iconColor || null,
         displayOrder: 999,
         isPrivate: true,
         joinPolicy: "INVITE_ONLY",
         applicationQuestions: [],
-        charterText: familyRules(name),
-        missionGoals: [
-          { key: "stay_connected", label: "Stay connected", priorityWeight: 0.5 },
-          { key: "support_each_other", label: "Support each other", priorityWeight: 0.5 },
-        ],
+        charterText: guided.charterText,
+        missionGoals: guided.missionGoals,
+        familySetup: guided.familySetup,
+        votingWindowDays: guided.votingWindowDays,
+        approvalThresholdPercent: guided.approvalThresholdPercent,
+        quorumPercent: guided.quorumPercent,
         structuralWeights: { feasibility: 0.4, risk: 0.35, accountability: 0.25 },
         scoreMix: { missionWeight: 0.6, structuralWeight: 0.4 },
         proposalCategories: [
@@ -1102,7 +1106,12 @@ export async function createFamilyCommons(
         action: "COMMONS_CREATED",
         resource: "CoopConfig",
         resourceId: coopId,
-        metadata: { joinPolicy: "INVITE_ONLY", kind: "FAMILY" },
+        metadata: {
+          joinPolicy: "INVITE_ONLY",
+          kind: "FAMILY",
+          goalCount: params.setup?.goals?.length ?? 0,
+          guidedSetup: Boolean(params.setup),
+        },
       }),
     });
 
@@ -1110,4 +1119,168 @@ export async function createFamilyCommons(
   });
 
   return result;
+}
+
+async function activeFamilyConfig(db: Db, coopId: string) {
+  const config = await db.coopConfig.findFirst({
+    where: { coopId, isActive: true },
+    orderBy: { version: "desc" },
+  });
+  if (!config || config.joinPolicy !== "INVITE_ONLY" || !coopId.startsWith("family-")) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Family not found." });
+  }
+  return config;
+}
+
+/**
+ * Stewards may change the family's goals and agreement only while every
+ * member is a steward. Once anyone else is in, it's a family decision.
+ */
+async function familySetupLock(db: Db, coopId: string) {
+  const members = await db.userCoopMembership.findMany({
+    where: { coopId, status: "ACTIVE", user: { isBot: false } },
+    select: { status: true, roles: true },
+  });
+  const nonStewards = members.filter((member) => !isStewardMembership(member)).length;
+  return {
+    canEdit: nonStewards === 0,
+    nonStewards,
+    lockedReason: nonStewards
+      ? `${nonStewards === 1 ? "1 person here isn't a steward" : `${nonStewards} people here aren't stewards`}, so changing the family's goals and agreement is now a family decision. Stewards can change them only while everyone in the family is a steward.`
+      : null,
+  };
+}
+
+async function familyCreatorName(db: Db, createdBy: string) {
+  const creatorId = createdBy.startsWith("user:") ? createdBy.slice("user:".length) : null;
+  const creator = creatorId
+    ? await db.user.findUnique({ where: { id: creatorId }, select: { name: true, handle: true } })
+    : null;
+  return publicName(creator);
+}
+
+/**
+ * The agreement a set of answers would produce. For an existing family (a
+ * steward editing it) it names the family's real creator and name.
+ */
+export async function previewFamilyAgreementText(
+  db: Db,
+  params: { user: AccountUser; name: string; setup: FamilySetupInput; coopId?: string },
+) {
+  if (!params.coopId) {
+    return familyCharter({ name: params.name, creatorName: publicName(params.user), setup: params.setup });
+  }
+  const config = await activeFamilyConfig(db, params.coopId);
+  await requireSteward(db, params.user.id, params.coopId);
+  return familyCharter({
+    name: config.name || params.name,
+    creatorName: await familyCreatorName(db, config.createdBy),
+    setup: params.setup,
+  });
+}
+
+/** A family's current goals, mission and agreement choices, for its stewards. */
+export async function getFamilySetup(db: Db, params: { coopId: string; user: AccountUser }) {
+  const config = await activeFamilyConfig(db, params.coopId);
+  await requireSteward(db, params.user.id, params.coopId);
+  const lock = await familySetupLock(db, params.coopId);
+  const setup = familySetupFromConfig(config);
+  return {
+    coopId: config.coopId,
+    name: config.name || "Family",
+    setup,
+    isSetUp: setup.goals.length > 0 || !!setup.mission,
+    ...lock,
+  };
+}
+
+/**
+ * Saves new answers for a family's goals, mission and agreement. Only a
+ * steward, and only while everyone in the family is a steward. Each change
+ * bumps the config version and is recorded in its audit trail.
+ */
+export async function updateFamilySetup(
+  db: Db,
+  params: { coopId: string; user: AccountUser; setup: FamilySetupInput },
+) {
+  const config = await activeFamilyConfig(db, params.coopId);
+  await requireSteward(db, params.user.id, params.coopId);
+
+  const name = config.name || "Family";
+  const guided = familyConfigFromSetup({
+    name,
+    creatorName: await familyCreatorName(db, config.createdBy),
+    setup: params.setup,
+  });
+  const fields = {
+    displayMission: guided.displayMission,
+    charterText: guided.charterText,
+    missionGoals: guided.missionGoals,
+    votingWindowDays: guided.votingWindowDays,
+    approvalThresholdPercent: guided.approvalThresholdPercent,
+    quorumPercent: guided.quorumPercent,
+    familySetup: guided.familySetup,
+  };
+  const diff = Object.entries(fields)
+    .map(([field, after]) => ({ field, before: (config as Record<string, unknown>)[field] ?? null, after }))
+    .filter(({ before, after }) => JSON.stringify(before) !== JSON.stringify(after));
+
+  await db.$transaction(async (tx) => {
+    // Checked inside the transaction so someone joining mid-save can't be skipped.
+    const lock = await familySetupLock(tx as Db, params.coopId);
+    if (!lock.canEdit) {
+      throw new TRPCError({ code: "FORBIDDEN", message: lock.lockedReason! });
+    }
+    if (!diff.length) return;
+    const last = await tx.coopConfigAudit.findFirst({
+      where: { coopConfigId: config.id, status: "APPLIED" },
+      orderBy: { sequence: "desc" },
+      select: { sequence: true },
+    });
+    const updated = await tx.coopConfig.updateMany({
+      where: { id: config.id, version: config.version },
+      data: { ...fields, version: config.version + 1 },
+    });
+    if (updated.count === 0) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "Someone else just changed the family's setup. Reload and try again.",
+      });
+    }
+    await tx.coopConfigAudit.create({
+      data: {
+        coopConfigId: config.id,
+        changedBy: `user:${params.user.id}`,
+        reason: "A steward updated the family's goals and agreement.",
+        diff: diff as Prisma.InputJsonValue,
+        sequence: (last?.sequence ?? 0) + 1,
+        status: "APPLIED",
+        section: "familySetup",
+      },
+    });
+    await tx.auditLog.create({
+      data: auditLogEntry({
+        actorId: params.user.id,
+        action: "FAMILY_SETUP_UPDATED",
+        resource: "CoopConfig",
+        resourceId: params.coopId,
+        metadata: { fields: diff.map(({ field }) => field), version: config.version + 1 },
+      }),
+    });
+  });
+
+  if (diff.length) {
+    void notifyStewards(
+      db,
+      params.coopId,
+      {
+        type: "FAMILY_SETUP_UPDATED",
+        title: `${publicName(params.user)} updated ${name}'s goals and agreement`,
+        body: "Open the family to see what changed.",
+      },
+      params.user.id,
+    );
+  }
+
+  return { changed: diff.length > 0, ...(await getFamilySetup(db, params)) };
 }

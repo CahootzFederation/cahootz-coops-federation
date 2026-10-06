@@ -28,7 +28,10 @@ export function notificationDestination(
       pathname: "/(authenticated)/commons-invites",
       params: { coopId: id("coopId") || notification.coopId },
     };
-  if (notification.type === "COMMONS_ACCESS_DECLINED")
+  if (
+    notification.type === "COMMONS_ACCESS_DECLINED" ||
+    notification.type === "FAMILY_SETUP_UPDATED"
+  )
     return {
       pathname: "/commons/[coopId]",
       params: { coopId: id("coopId") || notification.coopId },

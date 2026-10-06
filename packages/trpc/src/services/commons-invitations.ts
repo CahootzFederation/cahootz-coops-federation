@@ -17,6 +17,7 @@ import {
   normalizeInvitationPhone,
 } from "../lib/invitation-token.js";
 import {
+  canInviteDirectlyMembership,
   createMembership,
   effectiveInvitationStatus,
   findCommonsWelcomePost,
@@ -25,6 +26,7 @@ import {
   invitationContactMatch,
   invitationExpiry,
   invitationMatchesPolicy,
+  isGuideMembership,
   isStewardMembership,
   markInvitationExpired,
   MAX_FAMILIES_PER_DAY,
@@ -244,8 +246,9 @@ async function deliverInvitation(
  * A member invites someone by email or phone.
  *
  * - APPLICATION_REQUIRED: any member may send an APPLY referral.
- * - INVITE_ONLY: a steward's invitation is sent right away (DIRECT_JOIN); an
- *   ordinary member's is a recommendation that waits for a steward.
+ * - INVITE_ONLY: a steward's or guide's invitation is sent right away
+ *   (DIRECT_JOIN); an ordinary member's is a recommendation that waits for a
+ *   steward.
  */
 export async function createCommonsInvitation(
   db: Db,
@@ -261,7 +264,7 @@ export async function createCommonsInvitation(
   const policy = await requireCommonsPolicy(db, params.coopId);
   const purpose = getInvitationPurpose(policy.joinPolicy, true);
   const membership = await requireActiveMember(db, params.inviter.id, params.coopId);
-  const steward = isStewardMembership(membership);
+  const direct = canInviteDirectlyMembership(membership);
 
   const recipientEmailNormalized = params.email
     ? normalizeInvitationEmail(params.email)
@@ -322,7 +325,7 @@ export async function createCommonsInvitation(
 
   await assertInvitationRateLimit(db, params.inviter.id);
 
-  const needsApproval = policy.joinPolicy === "INVITE_ONLY" && !steward;
+  const needsApproval = policy.joinPolicy === "INVITE_ONLY" && !direct;
   const { token, tokenHash } = createInvitationToken();
   const now = new Date();
   const invitation = await db.$transaction(async (tx) => {
@@ -338,7 +341,7 @@ export async function createCommonsInvitation(
         tokenHash,
         status: needsApproval ? "PENDING_APPROVAL" : "PENDING",
         expiresAt: invitationExpiry(now),
-        ...(steward && policy.joinPolicy === "INVITE_ONLY"
+        ...(direct && policy.joinPolicy === "INVITE_ONLY"
           ? { approvedByUserId: params.inviter.id, approvedAt: now }
           : {}),
       },
@@ -359,7 +362,7 @@ export async function createCommonsInvitation(
 
   const inviterName = publicName(params.inviter);
   if (needsApproval) {
-    console.info("[commons-invite] Not sent yet: the inviter isn't a steward, so it waits for a steward's approval", {
+    console.info("[commons-invite] Not sent yet: the inviter isn't a steward or guide, so it waits for a steward's approval", {
       invitationId: invitation.id,
       coopId: params.coopId,
     });
@@ -871,6 +874,7 @@ export async function getInvitationOverview(
   const policy = await requireCommonsPolicy(db, params.coopId);
   const membership = await requireActiveMember(db, params.user.id, params.coopId);
   const steward = isStewardMembership(membership);
+  const guide = !steward && isGuideMembership(membership);
   const now = new Date();
   const recentCutoff = new Date(now.getTime() - 14 * DAY_MS);
 
@@ -949,8 +953,9 @@ export async function getInvitationOverview(
       isPrivate: policy.isPrivate,
     },
     isSteward: steward,
-    // Members of an invite-only commons recommend; stewards invite.
-    canInviteDirectly: policy.joinPolicy === "APPLICATION_REQUIRED" || steward,
+    isGuide: guide,
+    // Members of an invite-only commons recommend; stewards and guides invite.
+    canInviteDirectly: policy.joinPolicy === "APPLICATION_REQUIRED" || steward || guide,
     invitations: invitations.map((invitation) => ({
       id: invitation.id,
       purpose: invitation.purpose,
@@ -997,6 +1002,7 @@ export async function getInvitationOverview(
       name: member.user.name,
       handle: member.user.handle,
       isSteward: isStewardMembership(member),
+      isGuide: !isStewardMembership(member) && isGuideMembership(member),
       isYou: member.user.id === params.user.id,
     })),
   };

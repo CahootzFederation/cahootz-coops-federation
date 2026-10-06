@@ -24,6 +24,7 @@ import {
   invitationMatchesPolicy,
   removeCommonsMember,
   reviewCommonsApplication,
+  setCommonsGuide,
 } from "../services/commons-membership.js";
 
 const FAMILY = {
@@ -313,6 +314,19 @@ describe("createCommonsInvitation", () => {
     });
   });
 
+  it("sends a guide's family invitation right away", async () => {
+    const db = makeDb({ membership: { id: "m_a", status: "ACTIVE", roles: ["member", "guide"] } });
+    const result = await createCommonsInvitation(db, {
+      coopId: FAMILY.coopId,
+      inviter,
+      email: "cousin@example.com",
+    });
+    expect(result.status).toBe("PENDING");
+    expect(db.commonsInvitation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ purpose: "DIRECT_JOIN", status: "PENDING", approvedByUserId: "user_a" }),
+    });
+  });
+
   it("refuses non-members and the automatic Cahootz Commons", async () => {
     await expect(
       createCommonsInvitation(makeDb({ membership: null }), { coopId: FAMILY.coopId, inviter, email: "x@example.com" }),
@@ -378,5 +392,74 @@ describe("steward-only review and removal", () => {
     expect(db.groupMember.deleteMany).toHaveBeenCalledWith({
       where: { userId: "user_b", group: { coopId: FAMILY.coopId } },
     });
+  });
+});
+
+describe("guides", () => {
+  const steward = { id: "m_a", status: "ACTIVE", roles: ["member", "steward"] };
+
+  it("can't review requests", async () => {
+    const db = makeDb({ membership: { id: "m_a", status: "ACTIVE", roles: ["member", "guide"] } });
+    db.application.findUnique.mockResolvedValue({
+      id: "app_1",
+      userId: "user_b",
+      coopId: FAMILY.coopId,
+      status: "SUBMITTED",
+      invitationId: null,
+    });
+    await expect(
+      reviewCommonsApplication(db, { applicationId: "app_1", reviewerId: "user_a", decision: "APPROVE" }),
+    ).rejects.toThrow(/steward/);
+  });
+
+  it("lets a steward make a member a guide, and audits it", async () => {
+    const db = makeDb({
+      memberships: {
+        [`user_a:${FAMILY.coopId}`]: steward,
+        [`user_b:${FAMILY.coopId}`]: { id: "m_b", status: "ACTIVE", roles: ["member"] },
+      },
+    });
+    const result = await setCommonsGuide(db, { coopId: FAMILY.coopId, stewardId: "user_a", userId: "user_b", guide: true });
+    expect(result.roles).toEqual(["member", "guide"]);
+    expect(db.userCoopMembership.update).toHaveBeenCalledWith({ where: { id: "m_b" }, data: { roles: ["member", "guide"] } });
+    expect(db.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ actorId: "user_a", action: "COMMONS_GUIDE_GRANTED" }),
+    });
+  });
+
+  it("takes away only the guide role", async () => {
+    const db = makeDb({
+      memberships: {
+        [`user_a:${FAMILY.coopId}`]: steward,
+        [`user_b:${FAMILY.coopId}`]: { id: "m_b", status: "ACTIVE", roles: ["member", "guide", "treasurer"] },
+      },
+    });
+    const result = await setCommonsGuide(db, { coopId: FAMILY.coopId, stewardId: "user_a", userId: "user_b", guide: false });
+    expect(result.roles).toEqual(["member", "treasurer"]);
+  });
+
+  it("only lets a steward assign it", async () => {
+    const db = makeDb({
+      memberships: {
+        [`user_a:${FAMILY.coopId}`]: { id: "m_a", status: "ACTIVE", roles: ["member", "guide"] },
+        [`user_b:${FAMILY.coopId}`]: { id: "m_b", status: "ACTIVE", roles: ["member"] },
+      },
+    });
+    await expect(
+      setCommonsGuide(db, { coopId: FAMILY.coopId, stewardId: "user_a", userId: "user_b", guide: true }),
+    ).rejects.toThrow(/steward/);
+    expect(db.userCoopMembership.update).not.toHaveBeenCalled();
+  });
+
+  it("doesn't make a steward a guide", async () => {
+    const db = makeDb({
+      memberships: {
+        [`user_a:${FAMILY.coopId}`]: steward,
+        [`user_b:${FAMILY.coopId}`]: { id: "m_b", status: "ACTIVE", roles: ["member", "steward"] },
+      },
+    });
+    await expect(
+      setCommonsGuide(db, { coopId: FAMILY.coopId, stewardId: "user_a", userId: "user_b", guide: true }),
+    ).rejects.toThrow(/already invite/);
   });
 });

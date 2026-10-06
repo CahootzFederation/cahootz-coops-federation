@@ -597,6 +597,8 @@ export type AcceptCommonsInvitationResult =
 export interface CommonsInvitationOverview {
   commons: { id: string; name: string; joinPolicy: CommonsJoinPolicy; isPrivate: boolean };
   isSteward: boolean;
+  /** Can invite directly but not review, manage roles or remove anyone. */
+  isGuide: boolean;
   canInviteDirectly: boolean;
   invitations: {
     id: string;
@@ -627,6 +629,7 @@ export interface CommonsInvitationOverview {
     name: string | null;
     handle: string | null;
     isSteward: boolean;
+    isGuide: boolean;
     isYou: boolean;
   }[];
 }
@@ -1249,6 +1252,20 @@ export const api = {
       { coopId, userId, steward },
       sessionToken,
       'Could not change stewards',
+    );
+  },
+
+  async setCommonsGuide(
+    coopId: string,
+    userId: string,
+    guide: boolean,
+    sessionToken: string,
+  ) {
+    return postCommonsInvitations<{ roles: string[] }>(
+      'setGuide',
+      { coopId, userId, guide },
+      sessionToken,
+      'Could not change guides',
     );
   },
 

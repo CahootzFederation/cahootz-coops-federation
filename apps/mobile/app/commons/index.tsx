@@ -39,13 +39,24 @@ function statusTone(status: CommonsDirectoryItem['accessStatus'], commons?: Comm
 
 function CommonsCard({ commons }: { commons: CommonsDirectoryItem }) {
   const tone = statusTone(commons.accessStatus, commons);
+  const canBrowseCircles = commons.isMember || !commons.isLocked;
+
+  const openCommons = () => {
+    if (canBrowseCircles) {
+      router.replace({ pathname: '/(tabs)', params: { coopId: commons.id } } as any);
+      return;
+    }
+    router.push(`/commons/${commons.id}` as any);
+  };
 
   return (
     <TouchableOpacity
-      onPress={() => router.push(`/commons/${commons.id}` as any)}
+      onPress={openCommons}
       className="rounded-2xl border bg-white p-4"
       style={{ borderColor: commons.isMember ? THEME.primary : THEME.border }}
       activeOpacity={0.76}
+      accessibilityRole="button"
+      accessibilityLabel={canBrowseCircles ? `Open ${commons.name} circles` : `View ${commons.name} details`}
     >
       <View className="flex-row items-start gap-3">
         {commons.isLocked ? (
@@ -80,12 +91,12 @@ function CommonsCard({ commons }: { commons: CommonsDirectoryItem }) {
       <View className="mt-4 flex-row items-center justify-between border-t border-gray-100 pt-3">
         <View className="flex-row items-center gap-2">
           <Text className="text-sm font-bold" style={{ color: commons.canApply ? THEME.primary : THEME.muted }}>
-            {commons.canApply
-              ? 'View and apply'
-              : commons.isMember
-                ? commons.joinPolicy === 'INVITE_ONLY'
-                  ? 'Open family'
-                  : 'Open commons'
+            {canBrowseCircles
+              ? commons.isMember
+                ? 'View circles'
+                : 'Browse circles'
+              : commons.canApply
+                ? 'View and apply'
                 : 'View status'}
           </Text>
           {commons.isMember && (commons.circleCount || 0) > 0 ? (

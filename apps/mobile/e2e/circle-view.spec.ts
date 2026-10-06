@@ -12,7 +12,7 @@ const USER_B_EMAIL =
 // cover that navigation change plus the new welcome-lounge workflow, both
 // added in this change; see AGENTS.md's e2e-coverage requirement.
 
-test("Commons tab lands on Circle View, and the feed's back button returns to it", async ({
+test("Commons tab lands on Circle View, and a post board stays inside the tab", async ({
   browser,
 }) => {
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
@@ -21,18 +21,121 @@ test("Commons tab lands on Circle View, and the feed's back button returns to it
     await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
     await expect(page.getByText("General", { exact: true })).toBeVisible();
 
-    await page.getByText("General", { exact: true }).click();
+    const commonsSwitcher = page.getByLabel(/^Switch commons\. Currently /);
+    await expect(commonsSwitcher).toBeVisible();
+    const switcherLabel = await commonsSwitcher.getAttribute("aria-label");
+    const activeCommonsName = switcherLabel?.replace("Switch commons. Currently ", "");
+    expect(activeCommonsName).toBeTruthy();
+
+    await commonsSwitcher.click();
+    await expect(page.getByText("Switch commons", { exact: true })).toBeVisible();
+    await expect(page.getByLabel(`Current commons ${activeCommonsName}`)).toBeVisible();
+    await page.getByLabel("Close commons switcher").last().click();
+
+    await page.getByLabel("Open menu").click();
+    await page.getByText("Explore all Commons directory", { exact: true }).click();
+    await expect(page.getByText("Browse commons", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: `Open ${activeCommonsName} circles` }).click();
+    await expect(
+      page.getByLabel(`Switch commons. Currently ${activeCommonsName}`).filter({ visible: true }),
+    ).toBeVisible();
+    const visibleGeneral = page.getByText("General", { exact: true }).filter({ visible: true });
+    await expect(visibleGeneral).toBeVisible();
+
+    await visibleGeneral.click();
     await expect(
       page.getByRole("textbox", { name: "Share what's happening..." }),
     ).toBeVisible();
+    await expect(page.getByText("Post board", { exact: true })).toBeVisible();
+    await expect(page.getByText(/ · Commons$/, { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Back to Circle View")).toHaveCount(0);
+    await expect(page.getByLabel("Commons", { exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
 
-    await page.getByLabel("Back to Circle View").click();
+    for (const width of [320, 375, 414, 768]) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect(page.getByText("Post board", { exact: true })).toBeVisible();
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+    }
+
+    await page.reload();
+    await expect(page.getByLabel("Back to Circle View")).toHaveCount(0);
+
+    // The post board has its own header drawer. Its Commons rows must open
+    // Circle View rather than swapping one post board for another.
+    await page.getByLabel("Open menu").click();
+    await page.getByLabel(`View ${activeCommonsName} circles`).click();
     await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Share what's happening..." })).toHaveCount(0);
 
     // Tapping Commons again from Circle View should not push a second copy
     // of the screen or duplicate the bottom tab bar.
     await page.getByLabel("Commons", { exact: true }).click();
     await expect(page.getByLabel("Commons", { exact: true })).toHaveCount(1);
+  } finally {
+    await context.close();
+  }
+});
+
+// Regression: the auth redirect used to replace any signed-in "/" with a
+// bare "/(tabs)", dropping ?coopId, so every switch silently snapped back
+// to the default Commons. Switch to a *different* Commons from each entry
+// point and confirm it sticks, including across a reload.
+test("switching to another Commons shows its circles from the switcher, drawer, and directory", async ({
+  browser,
+}) => {
+  // A second Commons User A belongs to, from `pnpm -F @repo/db seed:e2e-marketplace`.
+  // Seeded rather than created here: starting a family is rate limited per day.
+  const otherCoopId = "e2e-market";
+  const otherName = "E2E Market Commons";
+  const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
+  const visible = (text: string) => page.getByText(text, { exact: true }).filter({ visible: true });
+  const currentCommons = (name: string) =>
+    page.getByLabel(`Switch commons. Currently ${name}`, { exact: true }).filter({ visible: true });
+
+  try {
+    const switcher = page.getByLabel(/^Switch commons\. Currently /).filter({ visible: true });
+    await expect(switcher).toBeVisible();
+
+    // 1. Header switcher. Read the starting Commons from the sheet: its rows
+    // only render once the directory has loaded, while the header briefly
+    // shows a fallback name until then.
+    await switcher.click();
+    const currentRow = page.getByLabel(/^Current commons /).filter({ visible: true });
+    await expect(currentRow).toBeVisible();
+    const startingName = (await currentRow.getAttribute("aria-label"))!.replace(
+      "Current commons ",
+      "",
+    );
+    expect(startingName).not.toBe(otherName);
+    await page.getByLabel(`View circles in ${otherName}`, { exact: true }).filter({ visible: true }).click();
+    await expect(currentCommons(otherName)).toBeVisible();
+    await expect(visible(`Choose a circle in ${otherName}`)).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`coopId=${otherCoopId}`));
+
+    await page.reload();
+    await expect(currentCommons(otherName)).toBeVisible();
+
+    // 2. Drawer: back to the starting Commons.
+    await page.getByLabel("Open menu").filter({ visible: true }).click();
+    await page
+      .getByLabel(`View ${startingName} circles`, { exact: true })
+      .filter({ visible: true })
+      .click();
+    await expect(currentCommons(startingName)).toBeVisible();
+    await expect(visible(`Choose a circle in ${startingName}`)).toBeVisible();
+
+    // 3. Commons directory.
+    await page.getByLabel("Open menu").filter({ visible: true }).click();
+    await page.getByText("Explore all Commons directory", { exact: true }).click();
+    await expect(page.getByText("Browse commons", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: `Open ${otherName} circles`, exact: true }).filter({ visible: true }).click();
+    await expect(currentCommons(otherName)).toBeVisible();
+    await expect(visible(`Choose a circle in ${otherName}`)).toBeVisible();
   } finally {
     await context.close();
   }
@@ -143,7 +246,7 @@ test("two signed-in members see Sage's introduction thread in their welcome loun
       }
     }
 
-    await pageA.getByLabel("Back to Circle View").click();
+    await pageA.getByLabel("Commons", { exact: true }).click();
     await expect(pageA.getByText(/^Welcome Lounge \d+$/)).toBeVisible();
   } finally {
     await Promise.all([contextA.close(), contextB.close()]);

@@ -337,6 +337,18 @@ export async function createWalletForUser(userId: string, client: DbClient | any
     return existingUser.walletAddress;
   }
 
+  // A wallet linked through the Wallet table (e.g. an external wallet) is
+  // still this user's wallet - point the legacy field at it rather than
+  // minting a second primary wallet.
+  const existingWallet = await getPrimaryWalletRecord(userId, client);
+  if (existingWallet) {
+    await client.user.update({
+      where: { id: userId },
+      data: { walletAddress: existingWallet.address },
+    });
+    return existingWallet.address;
+  }
+
   // Generate new wallet
   const wallet = createWallet();
 

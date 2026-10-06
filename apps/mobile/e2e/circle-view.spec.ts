@@ -72,6 +72,17 @@ test("Commons tab lands on Circle View, and a post board stays inside the tab", 
     await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Share what's happening..." })).toHaveCount(0);
 
+    // The sidebar's single Home button replaces the old Conversation and
+    // Circles rows, and returns to Circle View from the post board.
+    await visibleGeneral.click();
+    await expect(page.getByText("Post board", { exact: true })).toBeVisible();
+    await page.getByLabel("Open menu").filter({ visible: true }).click();
+    await expect(page.getByText("Conversation", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Circles", { exact: true })).toHaveCount(0);
+    await page.getByLabel(`Go home to ${activeCommonsName} circles`).filter({ visible: true }).click();
+    await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Share what's happening..." })).toHaveCount(0);
+
     // Tapping Commons again from Circle View should not push a second copy
     // of the screen or duplicate the bottom tab bar.
     await page.getByLabel("Commons", { exact: true }).click();

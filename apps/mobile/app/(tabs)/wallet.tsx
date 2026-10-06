@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 
 import AccountProfileScreen from '@/components/account-profile-screen';
 import { Text } from '@/components/ui/text';
+import { WalletGate } from '@/components/wallet-gate';
 import { useAuth } from '@/contexts/auth-context';
 
 export default function WalletScreen() {
@@ -26,5 +27,9 @@ export default function WalletScreen() {
     );
   }
 
-  return <AccountProfileScreen />;
+  return (
+    <WalletGate>
+      <AccountProfileScreen />
+    </WalletGate>
+  );
 }

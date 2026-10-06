@@ -28,7 +28,7 @@ test("Commons tab lands on Circle View, and a post board stays inside the tab", 
     expect(activeCommonsName).toBeTruthy();
 
     await commonsSwitcher.click();
-    await expect(page.getByText("Switch commons", { exact: true })).toBeVisible();
+    await expect(page.getByText("Choose a Commons to see its circles.", { exact: true })).toBeVisible();
     await expect(page.getByLabel(`Current commons ${activeCommonsName}`)).toBeVisible();
     await page.getByLabel("Close commons switcher").last().click();
 

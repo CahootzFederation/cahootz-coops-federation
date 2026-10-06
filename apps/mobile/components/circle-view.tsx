@@ -292,7 +292,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
           </Text>
           <View className="mt-0.5 flex-row items-center">
             <Text className="text-xs font-bold" style={{ color: THEME.primary }}>
-              Circle view
+              Switch commons
             </Text>
             <ChevronDown size={14} color={THEME.primary} />
           </View>

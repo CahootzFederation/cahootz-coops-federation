@@ -77,6 +77,7 @@ test("new alerts pop up while the app is open and open what they're about", asyn
   const circleName = `E2E Popup Circle ${runId}`;
   const mentionPost = `E2E popup mention ${runId}`;
   const quietPost = `E2E popup on alerts ${runId}`;
+  const burstPost = `E2E popup burst ${runId}`;
 
   const userA = await newSignedInPage(browser, USER_A_EMAIL);
   const userB = await newSignedInPage(browser, USER_B_EMAIL);
@@ -136,6 +137,28 @@ test("new alerts pop up while the app is open and open what they're about", asyn
     await expect(userA.page).toHaveURL(new RegExp(`/${COOP_ID}/posts/[^/?]+`));
     await expect(userA.page.getByText(mentionPost).first()).toBeVisible();
 
+    // A burst of mentions shares one card with the real count, which opens
+    // Alerts. B's burst is fixture setup (sent together so it lands in one check).
+    await openHomeAndSettle(userA.page);
+    for (const n of [1, 2, 3]) {
+      const sent = await trpcPost("commons.createPost", sessionTokenB!, {
+        coopId: COOP_ID,
+        circleId: groupId,
+        content: `@${memberA.handle} ${burstPost} ${n}`,
+      });
+      expect(sent?.error).toBeUndefined();
+    }
+    const burstPopup = userA.page.getByRole("button", {
+      name: /^New alerts: You were mentioned 3 times\. Latest: .+ mentioned you in a post\./,
+    });
+    await expect(burstPopup).toBeVisible({ timeout: 45_000 });
+    await expect(
+      userA.page.getByRole("button", { name: /^New alert:/ }),
+    ).toHaveCount(0);
+    await burstPopup.click();
+    await expect(userA.page).toHaveURL(/\/notifications/);
+    await expect(burstPopup).toHaveCount(0);
+
     // On the Alerts screen nothing pops up; the alert shows in the list.
     const alertsCheck = userA.page.waitForResponse(
       (res) => isPopupCheck(res.url()),
@@ -175,7 +198,11 @@ test("new alerts pop up while the app is open and open what they're about", asyn
       const posts: Array<{ id: string; body: string }> =
         feed?.result?.data?.posts ?? [];
       for (const post of posts) {
-        if (post.body.includes(mentionPost) || post.body.includes(quietPost)) {
+        if (
+          post.body.includes(mentionPost) ||
+          post.body.includes(quietPost) ||
+          post.body.includes(burstPost)
+        ) {
           await trpcPost("commons.deletePost", sessionTokenB, {
             postId: post.id,
           }).catch(() => {});

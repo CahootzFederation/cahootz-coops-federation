@@ -1,3 +1,4 @@
+import type { InAppAlertKind, InAppAlertQueue } from "@/lib/in-app-alerts";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -11,26 +12,36 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Notifications from "expo-notifications";
 import { router, usePathname } from "expo-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AtSign, Bell, MessageCircle, Sparkles, UserPlus, X } from "lucide-react-native";
-
-import type { AccountNotification } from "@repo/validators/notification";
 import { useAuth } from "@/contexts/auth-context";
-import { api } from "@/lib/api";
 import { track } from "@/lib/analytics";
-import { notificationDestination } from "@/lib/notification-navigation";
+import { api } from "@/lib/api";
 import {
+  alertCardText,
+  alertFromPush,
+  EMPTY_ALERT_QUEUE,
+  enqueueAlerts,
   IN_APP_ALERT_POLL_MS,
   IN_APP_ALERT_VISIBLE_MS,
-  alertFromPush,
-  enqueueAlerts,
-  inAppAlertKind,
+  nextAlertCard,
   shouldShowInAppAlert,
   takeNewAlerts,
-  type InAppAlertKind,
+  waitingLabel,
 } from "@/lib/in-app-alerts";
+import { notificationDestination } from "@/lib/notification-navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AtSign,
+  Bell,
+  MessageCircle,
+  Sparkles,
+  UserPlus,
+  X,
+} from "lucide-react-native";
 
-const KIND_STYLE: Record<InAppAlertKind, { icon: typeof Bell; color: string; background: string }> = {
+const KIND_STYLE: Record<
+  InAppAlertKind,
+  { icon: typeof Bell; color: string; background: string }
+> = {
   sage: { icon: Sparkles, color: "#C2410C", background: "#FFEDD5" },
   joined: { icon: UserPlus, color: "#047857", background: "#D1FAE5" },
   mention: { icon: AtSign, color: "#1D4ED8", background: "#DBEAFE" },
@@ -42,15 +53,18 @@ const KIND_STYLE: Record<InAppAlertKind, { icon: typeof Bell; color: string; bac
  * Pops up new alerts (mentions, circle posts, people joining, Sage
  * suggestions) while the app is open. Pushes that arrive in the foreground
  * show here instead of as a system banner; a short poll catches alerts for
- * people without push (or on web). Tapping opens what the alert is about.
+ * people without push (or on web). Tapping opens what the alert is about;
+ * a card grouping several alerts opens Alerts.
  */
 export function InAppAlertPopup() {
   const { sessionToken, isAuthenticated } = useAuth();
   const client = useQueryClient();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
-  const [queue, setQueue] = useState<AccountNotification[]>([]);
-  const [appActive, setAppActive] = useState(AppState.currentState !== "background");
+  const [queue, setQueue] = useState<InAppAlertQueue>(EMPTY_ALERT_QUEUE);
+  const [appActive, setAppActive] = useState(
+    AppState.currentState !== "background",
+  );
   const seen = useRef(new Set<string>());
   const checked = useRef(false);
   const slide = useRef(new Animated.Value(0)).current;
@@ -58,13 +72,16 @@ export function InAppAlertPopup() {
   const visible = shouldShowInAppAlert(pathname);
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
-  const current = visible ? queue[0] : undefined;
+  const current = visible ? queue.cards[0] : undefined;
+  // The card's identity (its first alert) and size: a card that grows stays put but restarts its timer.
+  const currentId = current?.alerts[0].id;
+  const currentSize = current?.alerts.length ?? 0;
 
   // A different account starts with a clean slate.
   useEffect(() => {
     seen.current = new Set();
     checked.current = false;
-    setQueue([]);
+    setQueue(EMPTY_ALERT_QUEUE);
   }, [sessionToken]);
 
   useEffect(() => {
@@ -75,13 +92,18 @@ export function InAppAlertPopup() {
   }, []);
 
   const refreshInbox = useCallback(() => {
-    void client.invalidateQueries({ queryKey: ["notifications", sessionToken] });
-    void client.invalidateQueries({ queryKey: ["unread-notifications-badge", sessionToken] });
+    void client.invalidateQueries({
+      queryKey: ["notifications", sessionToken],
+    });
+    void client.invalidateQueries({
+      queryKey: ["unread-notifications-badge", sessionToken],
+    });
   }, [client, sessionToken]);
 
   const latest = useQuery({
     queryKey: ["in-app-alerts", sessionToken],
-    queryFn: () => api.getNotifications(sessionToken!, { limit: 10, unreadOnly: true }),
+    queryFn: () =>
+      api.getNotifications(sessionToken!, { limit: 10, unreadOnly: true }),
     enabled: signedIn && appActive,
     retry: false,
     refetchInterval: signedIn && appActive ? IN_APP_ALERT_POLL_MS : false,
@@ -89,7 +111,11 @@ export function InAppAlertPopup() {
 
   useEffect(() => {
     if (!latest.data) return;
-    const fresh = takeNewAlerts(latest.data.notifications, seen.current, !checked.current);
+    const fresh = takeNewAlerts(
+      latest.data.notifications,
+      seen.current,
+      !checked.current,
+    );
     checked.current = true;
     if (!fresh.length) return;
     // While the Alerts screen is open the list itself updates; just note them as seen.
@@ -99,42 +125,69 @@ export function InAppAlertPopup() {
 
   // Opening Alerts shows everything waiting, so drop any queued popups.
   useEffect(() => {
-    if (!visible) setQueue([]);
+    if (!visible) setQueue(EMPTY_ALERT_QUEUE);
   }, [visible]);
 
   useEffect(() => {
     if (Platform.OS === "web" || !signedIn) return;
-    const subscription = Notifications.addNotificationReceivedListener((notification) => {
-      const alert = alertFromPush(notification.request.content);
-      refreshInbox();
-      if (!alert || seen.current.has(alert.id)) return;
-      seen.current.add(alert.id);
-      if (!visibleRef.current) return;
-      setQueue((items) => enqueueAlerts(items, [alert]));
-    });
+    const subscription = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        const alert = alertFromPush(notification.request.content);
+        refreshInbox();
+        if (!alert || seen.current.has(alert.id)) return;
+        seen.current.add(alert.id);
+        if (!visibleRef.current) return;
+        setQueue((items) => enqueueAlerts(items, [alert]));
+      },
+    );
     return () => subscription.remove();
   }, [signedIn, refreshInbox]);
 
   const dismiss = useCallback(() => {
-    Animated.timing(slide, { toValue: 0, duration: 180, useNativeDriver: Platform.OS !== "web" }).start(() =>
-      setQueue((items) => items.slice(1)),
-    );
+    Animated.timing(slide, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: Platform.OS !== "web",
+    }).start(() => setQueue(nextAlertCard));
   }, [slide]);
 
   useEffect(() => {
-    if (!current) return;
+    if (!currentId) return;
     slide.setValue(0);
-    Animated.spring(slide, { toValue: 1, useNativeDriver: Platform.OS !== "web", friction: 8 }).start();
+    Animated.spring(slide, {
+      toValue: 1,
+      useNativeDriver: Platform.OS !== "web",
+      friction: 8,
+    }).start();
+  }, [currentId, slide]);
+
+  useEffect(() => {
+    if (!currentId) return;
     const timer = setTimeout(dismiss, IN_APP_ALERT_VISIBLE_MS);
     return () => clearTimeout(timer);
-  }, [current, slide, dismiss]);
+  }, [currentId, currentSize, dismiss]);
 
   if (!signedIn || !current) return null;
 
+  // Opening Alerts clears the queue (see above), so nothing pops up there.
+  const openAlerts = () => router.push("/(tabs)/notifications");
+
   const open = () => {
-    const alert = current;
-    setQueue((items) => items.slice(1));
-    track("notification_opened", { channel: "in_app_popup", notification_type: alert.type || "unknown" });
+    const card = current;
+    if (card.alerts.length > 1) {
+      track("notification_opened", {
+        channel: "in_app_popup",
+        notification_type: `group:${card.kind}`,
+      });
+      openAlerts();
+      return;
+    }
+    const alert = card.alerts[0];
+    setQueue(nextAlertCard);
+    track("notification_opened", {
+      channel: "in_app_popup",
+      notification_type: alert.type || "unknown",
+    });
     void api
       .markNotificationAsRead(alert.id, sessionToken!)
       .catch(() => {})
@@ -142,9 +195,11 @@ export function InAppAlertPopup() {
     router.push(notificationDestination(alert) ?? "/(tabs)/notifications");
   };
 
-  const kind = KIND_STYLE[inAppAlertKind(current.type)];
+  const kind = KIND_STYLE[current.kind];
   const Icon = kind.icon;
-  const more = queue.length - 1;
+  const text = alertCardText(current);
+  const grouped = current.alerts.length > 1;
+  const more = waitingLabel(queue);
 
   return (
     <Animated.View
@@ -154,42 +209,64 @@ export function InAppAlertPopup() {
         { top: insets.top + 8 },
         {
           opacity: slide,
-          transform: [{ translateY: slide.interpolate({ inputRange: [0, 1], outputRange: [-24, 0] }) }],
+          transform: [
+            {
+              translateY: slide.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-24, 0],
+              }),
+            },
+          ],
         },
       ]}
     >
       <View style={styles.card} testID="in-app-alert">
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel={`New alert: ${current.title}. ${current.body}`}
-          accessibilityHint="Opens what this alert is about"
-          onPress={open}
-          style={styles.main}
-        >
-          <View style={[styles.icon, { backgroundColor: kind.background }]}>
-            <Icon size={18} color={kind.color} />
-          </View>
-          <View style={styles.copy}>
-            <Text style={styles.title} numberOfLines={1}>
-              {current.title}
-            </Text>
-            {current.body ? (
-              <Text style={styles.body} numberOfLines={2}>
-                {current.body}
+        <View style={styles.row}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={`${grouped ? "New alerts" : "New alert"}: ${text.title}. ${text.body}`}
+            accessibilityHint={
+              grouped ? "Opens Alerts" : "Opens what this alert is about"
+            }
+            onPress={open}
+            style={styles.main}
+          >
+            <View style={[styles.icon, { backgroundColor: kind.background }]}>
+              <Icon size={18} color={kind.color} />
+            </View>
+            <View style={styles.copy}>
+              <Text style={styles.title} numberOfLines={1}>
+                {text.title}
               </Text>
-            ) : null}
-            {more > 0 ? <Text style={styles.more}>+{more} more</Text> : null}
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="Dismiss alert"
-          onPress={dismiss}
-          hitSlop={10}
-          style={styles.close}
-        >
-          <X size={16} color="#64748B" />
-        </TouchableOpacity>
+              {text.body ? (
+                <Text style={styles.body} numberOfLines={2}>
+                  {text.body}
+                </Text>
+              ) : null}
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss alert"
+            onPress={dismiss}
+            hitSlop={10}
+            style={styles.close}
+          >
+            <X size={16} color="#64748B" />
+          </TouchableOpacity>
+        </View>
+        {/* Its own row, not inside the card's button, so screen readers can reach it. */}
+        {more ? (
+          <TouchableOpacity
+            accessibilityRole="link"
+            accessibilityLabel={`${more}. Open Alerts`}
+            onPress={openAlerts}
+            hitSlop={8}
+            style={styles.moreLink}
+          >
+            <Text style={styles.more}>{more}</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </Animated.View>
   );
@@ -207,8 +284,6 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 480,
-    flexDirection: "row",
-    alignItems: "center",
     borderRadius: 16,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
@@ -218,11 +293,31 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
   },
-  main: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12, padding: 12, minHeight: 56 },
-  icon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  row: { flexDirection: "row", alignItems: "center" },
+  main: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    minHeight: 56,
+  },
+  icon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   copy: { flex: 1, minWidth: 0 },
   title: { fontSize: 15, lineHeight: 20, fontWeight: "700", color: "#111827" },
   body: { fontSize: 13, lineHeight: 18, color: "#475569", marginTop: 1 },
-  more: { fontSize: 12, lineHeight: 16, color: "#94A3B8", marginTop: 2 },
+  moreLink: {
+    alignSelf: "flex-start",
+    marginLeft: 60,
+    marginTop: -6,
+    paddingBottom: 10,
+  },
+  more: { fontSize: 12, lineHeight: 16, fontWeight: "600", color: "#C2410C" },
   close: { padding: 12, alignSelf: "stretch", justifyContent: "center" },
 });

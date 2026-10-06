@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   description:
     "Privacy policy for the Cahootz Commons app for mobile devices, web browsers, and related services.",
   alternates: {
-    canonical: "https://cahootz.coop/privacy",
+    canonical: "https://cahootzcommons.com/privacy",
   },
 };
 

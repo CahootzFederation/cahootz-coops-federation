@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description:
     "Reach the Cahootz team about commons launches, business partnerships, support, or community-owned economy tools.",
   alternates: {
-    canonical: "https://cahootz.coop/contact",
+    canonical: "https://cahootzcommons.com/contact",
   },
 };
 

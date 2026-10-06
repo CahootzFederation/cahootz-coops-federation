@@ -14,7 +14,7 @@ import { Web3Provider } from "@/lib/web3-provider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://cahootz.coop"),
+  metadataBase: new URL("https://cahootzcommons.com"),
   title: "Cahootz | The App for Community-Owned Economies",
   description:
     "Join a commons, support local businesses, earn participation rewards, vote on proposals, and fund the tools your community needs.",
@@ -46,7 +46,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://cahootz.coop",
+    url: "https://cahootzcommons.com",
     siteName: "Cahootz",
     title: "Cahootz | The App for Community-Owned Economies",
     description:
@@ -59,7 +59,7 @@ export const metadata: Metadata = {
       "Join a commons, support local businesses, earn participation rewards, vote on proposals, and fund the tools your community needs.",
   },
   alternates: {
-    canonical: "https://cahootz.coop",
+    canonical: "https://cahootzcommons.com",
   },
   category: "finance",
   classification: "Business",
@@ -99,8 +99,8 @@ export default function RootLayout({
               name: "Cahootz",
               description:
                 "A platform for member-owned commons that connects applications, local marketplaces, governance, rewards, and shared community investment.",
-              url: "https://cahootz.coop",
-              logo: "https://cahootz.coop/cahootz-coops-mark.svg",
+              url: "https://cahootzcommons.com",
+              logo: "https://cahootzcommons.com/cahootz-coops-mark.svg",
               foundingDate: "2024",
               sameAs: [],
               contactPoint: {

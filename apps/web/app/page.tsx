@@ -44,7 +44,7 @@ export const metadata: Metadata = {
   title: "Cahootz | A place for your commons to move together",
   description:
     "Cahootz connects members, local businesses, and shared decisions, with a Commons AI Agent that helps coordinate the commons and evaluates proposals against community-set rules.",
-  alternates: { canonical: "https://cahootz.coop" },
+  alternates: { canonical: "https://cahootzcommons.com" },
 };
 
 const GITHUB_REPOSITORY_URL =

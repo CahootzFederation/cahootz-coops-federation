@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { getPublishedBlogPosts } from "@/lib/blog";
 
-const BASE = "https://cahootz.coop";
+const BASE = "https://cahootzcommons.com";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const posts = getPublishedBlogPosts();

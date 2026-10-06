@@ -23,10 +23,13 @@ const corsOrigins = [
 
   // Production domains
   "https://soulaan-api-production.up.railway.app",
+  "https://cahootzcommons.com",
+  "https://www.cahootzcommons.com",
   "https://www.soulaan.com",
   "https://soulaan.com",
   "https://soulaancoop.com",
   "https://www.soulaancoop.com",
+  // Previous Cahootz domains, kept while traffic moves to cahootzcommons.com
   "https://cahootzcoop.com",
   "https://cahootzcoops.com",
   "https://www.cahootzcoops.com",

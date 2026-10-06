@@ -39,6 +39,7 @@ import {
 } from "./commons-membership.js";
 import { memberAppLinkUrl, MEMBER_APP_NAME } from "./onboarding-drip-config.js";
 import { createNotificationAndPush } from "./push-notification-service.js";
+import { notifyCommonsMemberJoined } from "./member-join-notifications.js";
 import { sendCommonsInvitationSMS } from "./sms.js";
 
 type Db = Context["db"];
@@ -805,6 +806,11 @@ export async function acceptCommonsInvitation(
       body: "They accepted your invitation.",
       data: { coopId: invitation.coopId },
     }).catch((error) => console.error("Failed to notify inviter:", error));
+    void notifyCommonsMemberJoined(db, {
+      coopId: invitation.coopId,
+      userId: params.user.id,
+      exceptUserIds: [invitation.inviterId],
+    }).catch((error) => console.error("Failed to notify stewards of new member:", error));
 
     return {
       outcome: "JOINED",

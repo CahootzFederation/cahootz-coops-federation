@@ -36,6 +36,9 @@ async function sessionToken(page: Page) {
 test("members open each other's pages from posts and comments and see only the commons they may see", async ({
   browser,
 }) => {
+  // Two signed-in users, a post, a comment and several profile visits: this
+  // overran the 90s default in CI, like the other two-user journeys.
+  test.setTimeout(180_000);
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const postText = `E2E profile commons post ${runId}`;
   const commentText = `E2E profile commons reply ${runId}`;

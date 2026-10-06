@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   description:
     "Updates, product notes, and practical writing on community-owned economies, commons governance, and local commerce.",
   alternates: {
-    canonical: "https://cahootz.coop/blog",
+    canonical: "https://cahootzcommons.com/blog",
   },
 };
 

@@ -34,11 +34,11 @@ export async function generateMetadata({
     title: `${post.title} | Cahootz`,
     description: post.description,
     alternates: {
-      canonical: `https://cahootz.coop/blog/${post.slug}`,
+      canonical: `https://cahootzcommons.com/blog/${post.slug}`,
     },
     openGraph: {
       type: "article",
-      url: `https://cahootz.coop/blog/${post.slug}`,
+      url: `https://cahootzcommons.com/blog/${post.slug}`,
       title: post.title,
       description: post.description,
       publishedTime: post.publishedAt,
@@ -49,7 +49,7 @@ export async function generateMetadata({
         {
           url: post.image.startsWith("http")
             ? post.image
-            : `https://cahootz.coop${post.image}`,
+            : `https://cahootzcommons.com${post.image}`,
           alt: post.imageAlt,
         },
       ],
@@ -61,7 +61,7 @@ export async function generateMetadata({
       images: [
         post.image.startsWith("http")
           ? post.image
-          : `https://cahootz.coop${post.image}`,
+          : `https://cahootzcommons.com${post.image}`,
       ],
     },
   };
@@ -462,10 +462,10 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       name: "Cahootz",
       logo: {
         "@type": "ImageObject",
-        url: "https://cahootz.coop/placeholder-logo.png",
+        url: "https://cahootzcommons.com/placeholder-logo.png",
       },
     },
-    mainEntityOfPage: `https://cahootz.coop/blog/${post.slug}`,
+    mainEntityOfPage: `https://cahootzcommons.com/blog/${post.slug}`,
   };
 
   return (
@@ -530,7 +530,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
         <BlogComments
           slug={post.slug}
-          url={`https://cahootz.coop/blog/${post.slug}`}
+          url={`https://cahootzcommons.com/blog/${post.slug}`}
           title={post.title}
         />
 

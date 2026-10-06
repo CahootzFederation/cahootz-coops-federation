@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   description:
     "Terms and conditions for the Cahootz Commons app for mobile devices, web browsers, and related services.",
   alternates: {
-    canonical: "https://cahootz.coop/terms",
+    canonical: "https://cahootzcommons.com/terms",
   },
 };
 

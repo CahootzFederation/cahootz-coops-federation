@@ -533,7 +533,7 @@ async function fetchResearchResult(params: {
 > {
   const response = await fetch(params.source.url, {
     headers: {
-      "user-agent": "CahootzResearchBrain/1.0 (+https://cahootz.coop)",
+      "user-agent": "CahootzResearchBrain/1.0 (+https://cahootzcommons.com)",
       accept: "text/html,application/xhtml+xml,text/plain",
     },
     redirect: "follow",
@@ -1502,7 +1502,7 @@ async function fetchLinkPreview(url: string) {
 
   const response = await fetch(parsedUrl.toString(), {
     headers: {
-      "user-agent": "CahootzNewsletterBot/1.0 (+https://cahootz.coop)",
+      "user-agent": "CahootzNewsletterBot/1.0 (+https://cahootzcommons.com)",
       accept: "text/html,application/xhtml+xml",
     },
     redirect: "follow",

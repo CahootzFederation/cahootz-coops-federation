@@ -71,7 +71,7 @@ export default function AccessDenied() {
               <Button 
                 variant="outline" 
                 className="flex items-center justify-center"
-                onClick={() => window.open('https://cahootz.coop/get-started', '_blank')}
+                onClick={() => window.open('https://cahootzcommons.com/get-started', '_blank')}
               >
                 <ExternalLink className="mr-2 h-4 w-4" />
                 Learn How to Get SoulaaniCoin

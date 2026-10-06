@@ -33,7 +33,7 @@ test('proposals live in the active commons drawer instead of the main tab bar', 
     await expect(page.getByText('Turn conversations into decisions')).toBeVisible();
     await expect(page.getByText('Proposals & Votes', { exact: true }).first()).toBeVisible();
     await expect(page.getByLabel(`Continue proposal drafts in ${activeCommonsName}`)).toBeVisible();
-    await expect(page.getByLabel('Switch commons').getByText(activeCommonsName!)).toBeVisible();
+    await expect(page.getByLabel('Switch commons', { exact: true }).getByText(activeCommonsName!)).toBeVisible();
   } finally {
     await member.context.close();
   }

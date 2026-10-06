@@ -23,12 +23,15 @@ function redactPushError(value: string, secrets: string[]) {
     .slice(0, 1000);
 }
 
+// This only runs while the app is open. The app shows its own popup then
+// (components/in-app-alert-popup.tsx), so the system banner stays hidden;
+// the notification still lands in Notification Center.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowAlert: false,
     shouldPlaySound: false,
     shouldSetBadge: true,
-    shouldShowBanner: true,
+    shouldShowBanner: false,
     shouldShowList: true,
   }),
 });

@@ -207,4 +207,27 @@ describe("notification destinations", () => {
       ).toBe("/(authenticated)/history");
     },
   );
+  it("opens a new member's profile, or the circle they joined", () => {
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "COMMONS_MEMBER_JOINED",
+        data: { coopId: "family", memberHandle: "ana" },
+      }),
+    ).toEqual({ pathname: "/people/[handle]", params: { handle: "ana" } });
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "COMMONS_MEMBER_JOINED",
+        data: { coopId: "family", memberHandle: null },
+      }),
+    ).toEqual({ pathname: "/[coopId]/posts", params: { coopId: "family" } });
+    expect(
+      notificationDestination({
+        ...notification,
+        type: "CIRCLE_MEMBER_JOINED",
+        data: { coopId: "cahootz", circleId: "g1", memberHandle: "ana" },
+      }),
+    ).toEqual({ pathname: "/[coopId]/posts", params: { coopId: "cahootz", circleId: "g1" } });
+  });
 });

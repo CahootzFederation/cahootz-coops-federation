@@ -6,6 +6,7 @@ import type { Context } from "../context.js";
 import { auditLogEntry } from "../lib/audit.js";
 import { COMMONS_COOP_ID, ensureCommonsMembership } from "../lib/commons.js";
 import { createNotificationAndPush } from "./push-notification-service.js";
+import { notifyCommonsMemberJoined } from "./member-join-notifications.js";
 
 /**
  * Commons membership rules.
@@ -626,6 +627,14 @@ export async function reviewCommonsApplication(
         : "A steward declined your request to join.",
     data: { coopId: application.coopId, postId: welcomePostId },
   }).catch((error) => console.error("Failed to notify applicant:", error));
+  if (result.joined) {
+    // The reviewing steward already knows; tell the others.
+    void notifyCommonsMemberJoined(db, {
+      coopId: application.coopId,
+      userId: application.userId,
+      exceptUserIds: [params.reviewerId],
+    }).catch((error) => console.error("Failed to notify stewards of new member:", error));
+  }
 
   return { ...result, coopId: application.coopId, welcomePostId };
 }

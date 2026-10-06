@@ -24,6 +24,7 @@ import {
   sendDirectCircleMessage,
 } from '../services/direct-circles.js';
 import { createNotificationAndPush } from '../services/push-notification-service.js';
+import { notifyCircleMemberJoined } from '../services/member-join-notifications.js';
 import { touchCircleWindow } from '../services/circle-window.js';
 import { validateSCBalance } from '../services/sc-validation-service.js';
 import { enterChat, getChattingCounts, leaveChat, refreshChatPresence } from '../services/circle-presence.js';
@@ -685,6 +686,12 @@ export const groupsRouter = router({
         }),
       ]);
 
+      void notifyCircleMemberJoined(context.db, {
+        groupId: invite.groupId,
+        userId,
+        inviterId: invite.inviterId,
+      }).catch((error) => console.error('Failed to notify circle of new member:', error));
+
       return { groupId: invite.groupId, coopId: invite.group.coopId, accepted: true };
     }),
 
@@ -740,6 +747,10 @@ export const groupsRouter = router({
         });
       }
 
+      const alreadyMember = await context.db.groupMember.findUnique({
+        where: { groupId_userId: { groupId: group.id, userId } },
+        select: { id: true },
+      });
       await context.db.$transaction([
         context.db.groupMember.upsert({
           where: { groupId_userId: { groupId: group.id, userId } },
@@ -755,6 +766,10 @@ export const groupsRouter = router({
           }),
         }),
       ]);
+      if (!alreadyMember) {
+        void notifyCircleMemberJoined(context.db, { groupId: group.id, userId })
+          .catch((error) => console.error('Failed to notify circle of new member:', error));
+      }
 
       return { groupId: group.id, name: group.name };
     }),
@@ -797,6 +812,8 @@ export const groupsRouter = router({
             }),
           }),
         ]);
+        void notifyCircleMemberJoined(context.db, { groupId: group.id, userId })
+          .catch((error) => console.error('Failed to notify circle of new member:', error));
       }
       return { groupId: group.id, name: group.name, joined: true };
     }),

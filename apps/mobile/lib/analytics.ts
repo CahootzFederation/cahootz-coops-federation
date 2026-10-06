@@ -53,7 +53,7 @@ export type AnalyticsEvents = {
     status: 'granted' | 'provisional' | 'denied' | 'undetermined';
   };
   notification_opened: {
-    channel: 'push' | 'in_app';
+    channel: 'push' | 'in_app' | 'in_app_popup';
     /** Notification type enum, e.g. POST_COMMENT. 'unknown' for older pushes without it. */
     notification_type: string;
   };

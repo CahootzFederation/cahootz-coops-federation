@@ -5,8 +5,10 @@ import { router } from "expo-router";
 import { useAuth } from "@/contexts/auth-context";
 import { useQueryClient } from "@tanstack/react-query";
 import { track } from "@/lib/analytics";
+import { alertFromPush } from "@/lib/in-app-alerts";
+import { notificationDestination } from "@/lib/notification-navigation";
 
-/** Refresh the inbox on delivery and open it when a native notification is tapped. */
+/** Refresh the inbox on delivery; a tapped notification opens what it is about. */
 export function NotificationResponseHandler() {
   const { sessionToken } = useAuth();
   const client = useQueryClient();
@@ -17,6 +19,9 @@ export function NotificationResponseHandler() {
     const refresh = () => {
       void client.invalidateQueries({
         queryKey: ["notifications", sessionToken],
+      });
+      void client.invalidateQueries({
+        queryKey: ["unread-notifications-badge", sessionToken],
       });
     };
     const open = (response: Notifications.NotificationResponse | null) => {
@@ -33,7 +38,8 @@ export function NotificationResponseHandler() {
         notification_type: typeof notificationType === "string" ? notificationType : "unknown",
       });
       refresh();
-      router.push("/(tabs)/notifications");
+      const alert = alertFromPush(response.notification.request.content);
+      router.push((alert && notificationDestination(alert)) || "/(tabs)/notifications");
       void Notifications.clearLastNotificationResponseAsync().catch(() => {});
     };
     const delivery = Notifications.addNotificationReceivedListener(refresh);

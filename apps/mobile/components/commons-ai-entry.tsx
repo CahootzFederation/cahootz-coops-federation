@@ -68,7 +68,6 @@ import {
   personInitials,
 } from '@/lib/social-profile';
 import {
-  ArrowLeft,
   Award,
   Bookmark,
   CheckCircle2,
@@ -79,7 +78,6 @@ import {
   Heart,
   Image as ImageIcon,
   Info,
-  LayoutGrid,
   Lock,
   LogOut,
   Menu,
@@ -1347,6 +1345,11 @@ export default function CommonsAiEntry({
     }
   };
 
+  const goToCommonsCircleView = (coopId: string) => {
+    setDrawerOpen(false);
+    router.replace({ pathname: '/(tabs)', params: { coopId } } as any);
+  };
+
   const goToCircleFeed = (coopId: string, circleId: string) => {
     setDrawerOpen(false);
     router.push({
@@ -1702,55 +1705,42 @@ export default function CommonsAiEntry({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View
-        className="border-b border-gray-200 bg-white px-3 pb-2"
+        className="border-b border-gray-200 bg-white px-4 pb-3"
         style={{ paddingTop: insets.top + 12 }}
       >
-        <View className="flex-row items-center gap-2">
-          {router.canGoBack() ? (
-            <TouchableOpacity
-              onPress={() => router.back()}
-              className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
-              accessibilityLabel="Back to Circle View"
-            >
-              <ArrowLeft size={18} color="#1F2937" strokeWidth={2.6} />
-            </TouchableOpacity>
-          ) : null}
+        <View className="flex-row items-center gap-3">
           <TouchableOpacity
             onPress={() => setDrawerOpen(true)}
-            className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
+            className="h-11 w-11 items-center justify-center rounded-full"
+            style={{ backgroundColor: SOCIAL_THEME.primarySoft }}
             accessibilityLabel="Open menu"
           >
-            <Menu size={18} color="#1F2937" strokeWidth={2.6} />
+            <Menu size={20} color={SOCIAL_THEME.primary} strokeWidth={2.6} />
           </TouchableOpacity>
-          <View
-            className="h-9 w-9 items-center justify-center rounded-full"
-            style={{ backgroundColor: SOCIAL_THEME.primary }}
+          <TouchableOpacity
+            onPress={() => setDrawerOpen(true)}
+            className="min-w-0 flex-1"
+            activeOpacity={0.72}
+            accessibilityLabel="Open commons and circle navigation"
           >
-            <LayoutGrid size={17} color="#FFFFFF" strokeWidth={2.6} />
-          </View>
-          <View className="min-w-0 flex-1">
-            <Text
-              className="min-w-0 text-base font-black text-gray-950"
-              numberOfLines={1}
-            >
-              {headerCommonsName}
+            <Text className="text-lg font-black text-gray-950">
+              Post board
             </Text>
-            <TouchableOpacity
-              onPress={() => setDrawerOpen(true)}
-              className="mt-0.5 flex-row items-center"
-              activeOpacity={0.75}
-              accessibilityLabel="Open commons and circle navigation"
-            >
-              <Text className="text-xs font-semibold text-slate-600">
+            <View className="mt-0.5 min-w-0 flex-row items-center">
+              <Text
+                className="min-w-0 flex-shrink text-xs font-bold text-slate-600"
+                numberOfLines={1}
+              >
+                {headerCommonsName}
                 {feedCircleId
-                  ? `${commonsProfile.name} · Circle`
+                  ? ` · ${commonsProfile.name}`
                   : isScopedFeed
-                    ? 'General'
-                    : 'Switch commons'}
+                    ? ' · Commons'
+                    : ' · Switch commons'}
               </Text>
-              <ChevronDown size={13} color="#475569" />
-            </TouchableOpacity>
-          </View>
+              <ChevronDown size={14} color="#475569" />
+            </View>
+          </TouchableOpacity>
           {feedCircleId && feedCircleId !== `general:${feedCoopId}` && circleIsMember !== null ? (
             <TouchableOpacity
               onPress={() =>
@@ -1759,10 +1749,11 @@ export default function CommonsAiEntry({
                   params: { coopId: feedCoopId, circleId: feedCircleId },
                 } as any)
               }
-              className="h-9 w-9 items-center justify-center rounded-full bg-gray-50"
+              className="h-11 w-11 items-center justify-center rounded-full"
+              style={{ backgroundColor: SOCIAL_THEME.primarySoft }}
               accessibilityLabel="Circle gallery"
             >
-              <ImageIcon size={17} color={SOCIAL_THEME.primary} />
+              <ImageIcon size={18} color={SOCIAL_THEME.primary} />
             </TouchableOpacity>
           ) : null}
           {feedCircleId && circleIsMember ? (
@@ -1773,10 +1764,11 @@ export default function CommonsAiEntry({
                   params: { groupId: feedCircleId },
                 } as any)
               }
-              className="h-9 w-9 items-center justify-center rounded-full bg-gray-50"
+              className="h-11 w-11 items-center justify-center rounded-full"
+              style={{ backgroundColor: SOCIAL_THEME.primarySoft }}
               accessibilityLabel="Circle settings and members"
             >
-              <Settings2 size={17} color={SOCIAL_THEME.primary} />
+              <Settings2 size={18} color={SOCIAL_THEME.primary} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -2411,7 +2403,11 @@ export default function CommonsAiEntry({
                   return (
                     <View key={item.id}>
                       <TouchableOpacity
-                        onPress={() => goToDrawerItem(item.action)}
+                        onPress={() =>
+                          item.id === PERSONAL_PAGE_DESTINATION_ID
+                            ? goToDrawerItem(item.action)
+                            : goToCommonsCircleView(item.id)
+                        }
                         className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
                         style={
                           isActive
@@ -2419,6 +2415,11 @@ export default function CommonsAiEntry({
                             : undefined
                         }
                         activeOpacity={0.75}
+                        accessibilityLabel={
+                          item.id === PERSONAL_PAGE_DESTINATION_ID
+                            ? 'Open my personal page'
+                            : `View ${item.label} circles`
+                        }
                       >
                         <View
                           className="h-9 w-9 items-center justify-center rounded-xl"

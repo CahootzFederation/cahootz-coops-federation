@@ -27,14 +27,17 @@ export function AppBottomNavigation() {
   const hasUnread = (unreadQuery.data?.count ?? 0) > 0;
 
   const screen: string = segments[segments.length - 1] || '';
-  const { entry } = useGlobalSearchParams<{ entry?: string | string[] }>();
+  const { entry, coopId } = useGlobalSearchParams<{
+    entry?: string | string[];
+    coopId?: string | string[];
+  }>();
   const active = screen === 'notifications' || screen === 'notification-settings'
     ? 'Alerts'
     : ['store', 'store-detail', 'cart', 'checkout'].includes(screen)
         ? 'Shop'
       : ['wallet', 'profile', 'personal-page', 'export-wallet', 'withdraw'].includes(screen)
         ? 'You'
-        : screen === '(tabs)' || screen === 'index' || screen === ''
+        : screen === '(tabs)' || screen === 'index' || screen === '' || screen === 'posts'
           ? 'Commons'
           : undefined;
 
@@ -52,12 +55,18 @@ export function AppBottomNavigation() {
         const selected = active === label;
         const color = selected ? '#FF6B00' : '#64748B';
         const onPress = () => {
-          // The feed (app/[coopId]/posts.tsx) is only ever reached by
-          // pushing it on top of Circle View - tapping Commons from there
-          // should return to that same Circle View instance, not push a
-          // second one, so prefer popping the stack when that's available.
-          if (label === 'Commons' && screen === 'posts' && router.canGoBack()) {
-            router.back();
+          // A post board is a destination inside the Commons tab, not a
+          // detail screen stacked on top of Circle View. The tab always
+          // returns to Circle View for the same Commons directly.
+          if (label === 'Commons' && screen === 'posts') {
+            const activeCoopId = Array.isArray(coopId) ? coopId[0] : coopId;
+            router.replace({
+              pathname: href,
+              params: activeCoopId ? { coopId: activeCoopId } : undefined,
+            });
+            return;
+          }
+          if (label === 'Commons' && selected) {
             return;
           }
           router.navigate(href);

@@ -19,8 +19,9 @@ test('proposals live in the active commons drawer instead of the main tab bar', 
     await expect(mainNavigation.getByRole('tab', { name: 'Proposals' })).toHaveCount(0);
 
     await page.getByLabel('Open menu').click();
-    await expect(page.getByText('Conversation', { exact: true })).toBeVisible();
-    await expect(page.getByText('Circles', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Home', { exact: true })).toBeVisible();
+    await expect(page.getByText('Conversation', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Circles', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Drafts', { exact: true })).toBeVisible();
     await expect(page.getByText('About this commons', { exact: true })).toBeVisible();
     const drawerProposals = page.getByLabel(/^Open .+ proposals and votes$/);
@@ -48,6 +49,7 @@ test('signed-out visitors can browse proposals but see sign-in-aware actions', a
     await expect(page.getByText('Public commons', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Drafts', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Circles', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Home', { exact: true })).toBeVisible();
     await page.getByLabel(/^Open .+ proposals and votes$/).click();
     await expect(page.getByText('Sign in to propose', { exact: true })).toBeVisible();
     await page.getByText('Sign in to propose', { exact: true }).click();

@@ -19,6 +19,7 @@ import {
 
 import { Text } from '@/components/ui/text';
 import { LoadError } from '@/components/load-error';
+import { WalletGate } from '@/components/wallet-gate';
 import { api, type CommonsDirectoryItem, type ProposalSummary } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
 import { useAuth } from '@/contexts/auth-context';
@@ -86,6 +87,14 @@ function timeAgo(dateString: string) {
 }
 
 export default function ProposalsScreen() {
+  return (
+    <WalletGate>
+      <ProposalsHub />
+    </WalletGate>
+  );
+}
+
+function ProposalsHub() {
   const params = useLocalSearchParams<{ coopId?: string; submit?: string }>();
   const insets = useSafeAreaInsets();
   const { isAuthenticated, sessionToken, user } = useAuth();

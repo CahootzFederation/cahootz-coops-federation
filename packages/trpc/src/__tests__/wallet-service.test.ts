@@ -174,6 +174,38 @@ describe('Wallet Service', () => {
     });
   });
 
+  describe('createWalletForUser with an existing Wallet row', () => {
+    it('reuses the primary Wallet row instead of creating a second wallet', async () => {
+      const mockClient = {
+        user: {
+          findUnique: vi.fn().mockResolvedValue({
+            walletAddress: null,
+            encryptedPrivateKey: null,
+            walletCreatedAt: null,
+          }),
+          update: vi.fn().mockResolvedValue({}),
+        },
+        wallet: {
+          findFirst: vi.fn().mockResolvedValue({
+            id: 'wallet_1',
+            address: '0x00000000000000000000000000000000000000a1',
+            isPrimary: true,
+          }),
+          upsert: vi.fn(),
+        },
+      };
+
+      const address = await createWalletForUser('user_123', mockClient as any);
+
+      expect(address).toBe('0x00000000000000000000000000000000000000a1');
+      expect(mockClient.user.update).toHaveBeenCalledWith({
+        where: { id: 'user_123' },
+        data: { walletAddress: '0x00000000000000000000000000000000000000a1' },
+      });
+      expect(mockClient.wallet.upsert).not.toHaveBeenCalled();
+    });
+  });
+
   describe('external wallet linking', () => {
     it('creates a wallet-backed admin user and coop membership', async () => {
       const walletAddress = '0x1234567890123456789012345678901234567890';

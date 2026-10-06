@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { useGlobalSearchParams, usePathname, useRouter, useSegments } from 'expo-router';
 import { secureStorage } from '@/lib/secure-storage';
 import { setActiveCoopConfig, resetCoopConfig, type CoopConfig } from '@/lib/coop-config';
-import { onSessionExpired } from '@/lib/api';
+import { api, onSessionExpired } from '@/lib/api';
 import { registerForNativePushNotifications } from '@/lib/push-notifications';
 import { canAccessUpdateChannelDebug, clearUpdateChannelOverrideQuietly } from '@/lib/update-channel-debug';
 import { clearAnonymousProfileIntroSeen } from '@/lib/anonymous-id';
@@ -50,6 +50,9 @@ interface AuthContextType {
   isAuthenticated: boolean;
   sessionToken: string | null;
   login: (user: User) => Promise<void>;
+  // Creates the signed-in member's wallet if they don't have one yet and
+  // resolves to its address (null when signed out). Safe to call repeatedly.
+  ensureWallet: () => Promise<string | null>;
   logout: () => Promise<void>;
   deferProfileOnboarding: () => Promise<void>;
   resetProfileOnboarding: () => Promise<void>;
@@ -193,7 +196,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const login = async (userData: User) => {
+  // Every signed-in member gets a wallet before the screens that need it
+  // (sign-in, Proposals & Votes, You) show. The server call is idempotent;
+  // concurrent callers share one request.
+  const walletCreation = useRef<Promise<string> | null>(null);
+  const createWalletFor = (userId: string, token: string) => {
+    if (!walletCreation.current) {
+      walletCreation.current = api
+        .createWallet(userId, token)
+        .then((result: { address: string }) => result.address)
+        .finally(() => {
+          walletCreation.current = null;
+        });
+    }
+    return walletCreation.current;
+  };
+
+  const ensureWallet = async () => {
+    const current = userRef.current;
+    if (current?.walletAddress) return current.walletAddress;
+    const token = current?.sessionToken || sessionToken;
+    if (!current || !token) return null;
+    const walletAddress = await createWalletFor(current.id, token);
+    await login({ ...current, sessionToken: token, walletAddress });
+    return walletAddress;
+  };
+
+  const login = async (incomingUser: User) => {
+    let userData = incomingUser;
+    if (!userData.walletAddress && userData.sessionToken) {
+      try {
+        const walletAddress = await createWalletFor(userData.id, userData.sessionToken);
+        userData = { ...userData, walletAddress };
+      } catch (error) {
+        // Don't block sign-in; the Proposals and You screens retry.
+        console.warn('Wallet creation at sign-in failed:', error);
+      }
+    }
     try {
       // Store user data securely
       await secureStorage.setItem(
@@ -327,6 +366,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: !!user,
         sessionToken,
         login,
+        ensureWallet,
         logout,
         deferProfileOnboarding,
         resetProfileOnboarding,

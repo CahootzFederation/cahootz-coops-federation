@@ -22,7 +22,7 @@ import {
   RotateCcw,
   Scale,
   Store,
-  Users,
+  Home,
   UserCircle,
   Wrench,
   X,
@@ -309,37 +309,21 @@ export default function AppDrawer({
                 </Text>
                 <View className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
                   <TouchableOpacity
-                    onPress={() => goTo(`/${activeCommons.id}/posts`)}
+                    onPress={() => switchCommons(activeCommons.id)}
                     className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
                     activeOpacity={0.75}
-                    accessibilityLabel={`Open ${activeCommons.name} conversation`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Go home to ${activeCommons.name} circles`}
                   >
                     <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
-                      <MessageCircle size={17} color={THEME.primary} />
+                      <Home size={17} color={THEME.primary} />
                     </View>
                     <View className="min-w-0 flex-1">
-                      <Text className="text-sm font-black text-gray-900">Conversation</Text>
-                      <Text className="text-xs font-semibold text-stone-500">Posts and discussion</Text>
+                      <Text className="text-sm font-black text-gray-900">Home</Text>
+                      <Text className="text-xs font-semibold text-stone-500">Circle View</Text>
                     </View>
                     <ChevronRight size={15} color="#D6D3D1" />
                   </TouchableOpacity>
-                  {hasAccountSession ? (
-                    <TouchableOpacity
-                      onPress={() => goTo({ pathname: '/(authenticated)/spaces', params: { coopId: activeCommons.id, coopName: activeCommons.name } })}
-                      className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
-                      activeOpacity={0.75}
-                      accessibilityLabel={`Open ${activeCommons.name} circles`}
-                    >
-                      <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
-                        <Users size={17} color={THEME.primary} />
-                      </View>
-                      <View className="min-w-0 flex-1">
-                        <Text className="text-sm font-black text-gray-900">Circles</Text>
-                        <Text className="text-xs font-semibold text-stone-500">Focused member spaces</Text>
-                      </View>
-                      <ChevronRight size={15} color="#D6D3D1" />
-                    </TouchableOpacity>
-                  ) : null}
                   <TouchableOpacity
                     onPress={() => {
                       track('proposal_navigation_opened', {

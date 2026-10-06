@@ -148,6 +148,11 @@ export default function AppDrawer({
     router.push(href as any);
   };
 
+  const switchCommons = (coopId: string) => {
+    onClose();
+    router.replace({ pathname: '/(tabs)', params: { coopId } } as any);
+  };
+
   const openSignIn = () => {
     onClose();
     router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
@@ -219,10 +224,18 @@ export default function AppDrawer({
                 return (
                   <TouchableOpacity
                     key={item.id}
-                    onPress={() => goTo(item.action)}
+                    onPress={() =>
+                      item.id === PERSONAL_PAGE_DESTINATION_ID
+                        ? goTo(item.action)
+                        : switchCommons(item.id)
+                    }
                     className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
                     style={isActive ? { backgroundColor: THEME.primarySoft } : undefined}
                     activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      item.id === PERSONAL_PAGE_DESTINATION_ID ? undefined : `View ${item.label} circles`
+                    }
                   >
                     {'iconEmoji' in item ? (
                       <IconAvatar

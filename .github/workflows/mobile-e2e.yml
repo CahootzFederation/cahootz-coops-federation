@@ -33,7 +33,9 @@ jobs:
   mobile-e2e:
     name: Two-user mobile UI journeys
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Setup takes ~4 min and the suite ~14 min with no retries, so 20 min
+    # cancelled any run that needed a retry before it could report results.
+    timeout-minutes: 40
 
     services:
       postgres:

@@ -46,6 +46,9 @@ export function notificationDestination(
       pathname: "/(authenticated)/commons-proposal-drafts",
       params: { coopId: id("coopId") || notification.coopId },
     };
+  // Someone joined a commons you steward: their profile, to say hello.
+  if (notification.type === "COMMONS_MEMBER_JOINED" && id("memberHandle"))
+    return { pathname: "/people/[handle]", params: { handle: id("memberHandle")! } };
   if (notification.type.startsWith("PERSONAL_PAGE_"))
     return "/(authenticated)/personal-page";
   if (notification.type.startsWith("SAGE_SUGGESTION_") && id("actionId"))
@@ -111,7 +114,8 @@ export function notificationDestination(
   // welcome post to open: its feed.
   if (
     (notification.type === "COMMONS_ACCESS_APPROVED" ||
-      notification.type === "COMMONS_INVITATION_ACCEPTED") &&
+      notification.type === "COMMONS_INVITATION_ACCEPTED" ||
+      notification.type === "COMMONS_MEMBER_JOINED") &&
     id("coopId")
   )
     return { pathname: "/[coopId]/posts", params: { coopId: id("coopId")! } };

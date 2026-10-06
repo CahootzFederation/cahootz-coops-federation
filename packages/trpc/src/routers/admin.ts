@@ -8,6 +8,7 @@ import { router } from "../trpc.js";
 import Stripe from "stripe";
 import { sendApplicationAcceptedEmail, isEmailConfigured } from "../services/email-service.js";
 import { createNotificationAndPush } from "../services/push-notification-service.js";
+import { notifyCommonsMemberJoined } from "../services/member-join-notifications.js";
 import { getCommonsPolicy } from "../services/commons-membership.js";
 
 // Initialize Stripe (optional - only if key is configured)
@@ -333,6 +334,11 @@ export const adminRouter = router({
       const reviewer = (ctx as { walletAddress?: string }).walletAddress ?? 'unknown';
       await assertPortalReviewable(context, input.coopId);
 
+      const previous = await context.db.userCoopMembership.findUnique({
+        where: { userId_coopId: { userId: input.userId, coopId: input.coopId } },
+        select: { status: true },
+      });
+
       // Update the coop-scoped membership status
       const membership = await context.db.userCoopMembership.update({
         where: {
@@ -421,6 +427,11 @@ export const adminRouter = router({
             console.error('Failed to send application acceptance email:', emailError);
           }
         })();
+      }
+
+      if (input.status === 'ACTIVE' && previous?.status !== 'ACTIVE') {
+        void notifyCommonsMemberJoined(context.db, { coopId: input.coopId, userId: input.userId })
+          .catch((error) => console.error('Failed to notify stewards of new member:', error));
       }
 
       if (input.status === 'ACTIVE') {

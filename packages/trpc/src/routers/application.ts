@@ -14,6 +14,7 @@ import { sendApplicationAcceptedEmail, isEmailConfigured } from "../services/ema
 import { sendApplicationSubmittedNotification } from "../services/slack-notification-service.js";
 import { COMMONS_COOP_ID, ensureCommonsMembership } from "../lib/commons.js";
 import { createUniqueApplicationReference } from "../lib/application-reference.js";
+import { notifyCommonsMemberJoined } from "../services/member-join-notifications.js";
 
 // Backend wallet is now stored in CoopConfig per-coop
 
@@ -551,6 +552,9 @@ export const applicationRouter = router({
             }
           })();
         }
+
+        void notifyCommonsMemberJoined(context.db, { coopId: input.coopId, userId: input.userId })
+          .catch((error) => console.error("Failed to notify stewards of new member:", error));
 
         const response = {
           success: true,

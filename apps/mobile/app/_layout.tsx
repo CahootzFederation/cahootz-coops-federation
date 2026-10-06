@@ -14,6 +14,7 @@ import Toast from 'react-native-toast-message';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { NotificationResponseHandler } from '@/components/notification-response-handler';
+import { InAppAlertPopup } from '@/components/in-app-alert-popup';
 import { PendingInvitationResume } from '@/components/pending-invitation-resume';
 import { AnalyticsTracker } from '@/components/analytics-tracker';
 import { AuthProvider } from '@/contexts/auth-context';
@@ -156,6 +157,7 @@ export default Sentry.wrap(function RootLayout() {
                       <Stack screenOptions={{ headerShown: false }} />
                     </View>
                     <AppBottomNavigation />
+                    <InAppAlertPopup />
                   </View>
                   <StatusBar style="auto" />
                   <PortalHost />

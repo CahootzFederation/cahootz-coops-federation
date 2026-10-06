@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
-import { usePathname, useRouter, useSegments } from 'expo-router';
+import { useGlobalSearchParams, usePathname, useRouter, useSegments } from 'expo-router';
 import { secureStorage } from '@/lib/secure-storage';
 import { setActiveCoopConfig, resetCoopConfig, type CoopConfig } from '@/lib/coop-config';
 import { onSessionExpired } from '@/lib/api';
@@ -75,6 +75,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
+  const { coopId: coopIdParam } = useGlobalSearchParams<{ coopId?: string | string[] }>();
+  const activeCoopId = Array.isArray(coopIdParam) ? coopIdParam[0] : coopIdParam;
   const pushRegistrationAttempt = useRef<string | null>(null);
   const userRef = useRef(user);
   userRef.current = user;
@@ -121,7 +123,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const inAuthGroup = segments[0] === '(authenticated)';
     const inProfileOnboarding = segments[0] === 'profile-onboarding';
-    const atRoot = pathname === '/';
+    // Circle View (app/(tabs)/index.tsx) also lives at "/", so only the
+    // root screen (app/index.tsx, no segments) should be redirected.
+    // Otherwise every Commons switch (/?coopId=...) would be replaced by a
+    // bare "/(tabs)" and silently fall back to the default Commons.
+    const atRoot = pathname === '/' && segments[0] !== '(tabs)';
 
     if (!user && inAuthGroup) {
       // User is not logged in but in authenticated routes, redirect to onboarding
@@ -137,14 +143,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (user && atRoot) {
-      router.replace('/(tabs)' as any);
+      router.replace(
+        (activeCoopId ? { pathname: '/(tabs)', params: { coopId: activeCoopId } } : '/(tabs)') as any,
+      );
       return;
     }
 
     if (user?.profileOnboardingCompletedAt && inProfileOnboarding) {
       router.replace('/(tabs)' as any);
     }
-  }, [user, segments, isLoading, router, pathname, profileOnboardingDeferredUserId]);
+  }, [user, segments, isLoading, router, pathname, profileOnboardingDeferredUserId, activeCoopId]);
 
   const loadSession = async () => {
     try {

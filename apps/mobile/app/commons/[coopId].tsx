@@ -364,6 +364,7 @@ export default function CommonsDetailScreen() {
   // invite-only rather than offering an application it won't accept.
   const joinPolicy = directoryItem?.joinPolicy || (directoryItem ? 'APPLICATION_REQUIRED' : 'INVITE_ONLY');
   const inviteOnly = joinPolicy === 'INVITE_ONLY';
+  const isFamily = inviteOnly && !!coopId?.startsWith('family-');
   const accessTone = accessCopy(accessStatus, inviteOnly);
   const isMember = accessStatus === 'ACTIVE';
   const canApply = accessStatus === 'LOCKED' && joinPolicy === 'APPLICATION_REQUIRED';
@@ -883,6 +884,16 @@ export default function CommonsDetailScreen() {
                       params: { coopId },
                     })
                   }
+                  isFamily={isFamily}
+                  onEditFamilySetup={
+                    isFamily && directoryItem?.isSteward
+                      ? () =>
+                          router.push({
+                            pathname: '/(authenticated)/create-family',
+                            params: { coopId },
+                          } as any)
+                      : undefined
+                  }
                 />
               ) : null}
 
@@ -1106,6 +1117,8 @@ function OverviewTab({
   charterExpanded,
   onToggleCharter,
   onBrowseResources,
+  isFamily,
+  onEditFamilySetup,
 }: {
   config: CoopConfigDetail;
   stats: ActivityStats | null;
@@ -1113,6 +1126,9 @@ function OverviewTab({
   charterExpanded: boolean;
   onToggleCharter: () => void;
   onBrowseResources: () => void;
+  isFamily?: boolean;
+  /** A family steward's way into setting up or changing the goals and agreement. */
+  onEditFamilySetup?: () => void;
 }) {
   return (
     <>
@@ -1176,9 +1192,23 @@ function OverviewTab({
           </View>
         ) : (
           <Text className="mt-2 text-sm leading-5 text-gray-600">
-            No mission priorities have been published for this commons yet.
+            {isFamily
+              ? "Not set up yet. The family hasn't decided what it's building toward."
+              : 'No mission priorities have been published for this commons yet.'}
           </Text>
         )}
+        {onEditFamilySetup ? (
+          <TouchableOpacity
+            onPress={onEditFamilySetup}
+            accessibilityRole="button"
+            className="mt-3 self-start rounded-full border px-3 py-2"
+            style={{ borderColor: THEME.primary }}
+          >
+            <Text className="text-xs font-black" style={{ color: THEME.primary }}>
+              {config.missionGoals.length > 0 ? 'Edit goals and agreement' : 'Set up goals and agreement'}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">

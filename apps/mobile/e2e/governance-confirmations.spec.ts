@@ -63,9 +63,12 @@ test.describe("governance confirmations", () => {
       await steward.page.goto("/commons");
       await steward.page.getByRole("button", { name: "Start a family" }).click();
       await steward.page.getByLabel("Family name").fill(familyName);
-      await shown(steward.page, "Create family", { exact: true }).click();
+      // Skips the optional goals and agreement: they stay blank, to set up later.
+      await shown(steward.page, "Skip for now and create the family", { exact: true }).click();
       await expect(steward.page).toHaveURL(/commons-invites\?coopId=family-/);
       await expect(shown(steward.page, "Steward tools")).toBeVisible();
+      await expect(shown(steward.page, /^Not set up yet\. Add what the family is building toward/)).toBeVisible();
+      await expect(steward.page.getByRole("button", { name: "Set up goals and agreement" })).toBeVisible();
 
       // "What's a steward?" is a large tap target that opens a plain sentence.
       const help = button(steward.page, "What's a steward?");

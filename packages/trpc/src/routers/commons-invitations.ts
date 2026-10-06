@@ -23,8 +23,12 @@ import {
   listInvitationsForUser,
   previewInvitationByToken,
   revokeInvitation,
+  getFamilySetup,
+  previewFamilyAgreementText,
+  updateFamilySetup,
 } from "../services/commons-invitations.js";
 import { suggestFamilyNames } from "../services/family-name-ideas.js";
+import { familySetupSchema } from "../services/family-setup.js";
 import { router } from "../trpc.js";
 import { resolveOptionalAccountUser } from "./commons.js";
 
@@ -49,11 +53,31 @@ export const commonsInvitationsRouter = router({
           .string()
           .regex(/^#[0-9a-fA-F]{6}$/)
           .optional(),
+        setup: familySetupSchema.optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
       const context = ctx as AccountAuthenticatedContext;
       return createFamilyCommons(context.db, { user: context.accountUser, ...input });
+    }),
+
+  /**
+   * The family agreement the guided setup would save, so the creator can read
+   * it before starting the family. Nothing is stored.
+   */
+  previewFamilyAgreement: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        name: z.string().trim().min(2).max(60),
+        setup: familySetupSchema,
+        coopId: coopIdSchema.optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      return {
+        charterText: await previewFamilyAgreementText(context.db, { user: context.accountUser, ...input }),
+      };
     }),
 
   /**
@@ -160,6 +184,28 @@ export const commonsInvitationsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const context = ctx as AccountAuthenticatedContext;
       return createShareLink(context.db, { coopId: input.coopId, steward: context.accountUser });
+    }),
+
+  /**
+   * A family's goals, mission and agreement choices, for its stewards, and
+   * whether they may still change them (only while everyone is a steward).
+   */
+  familySetup: accountAuthenticatedProcedure
+    .input(z.object({ coopId: coopIdSchema }))
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      return getFamilySetup(context.db, { coopId: input.coopId, user: context.accountUser });
+    }),
+
+  updateFamilySetup: accountAuthenticatedProcedure
+    .input(z.object({ coopId: coopIdSchema, setup: familySetupSchema }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      return updateFamilySetup(context.db, {
+        coopId: input.coopId,
+        user: context.accountUser,
+        setup: input.setup,
+      });
     }),
 
   overview: accountAuthenticatedProcedure

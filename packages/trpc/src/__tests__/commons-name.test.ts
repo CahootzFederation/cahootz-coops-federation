@@ -86,4 +86,29 @@ describe("commons names", () => {
     await createFamilyCommons(db, { user: { id: "user_a" } as any, name: "  Big Mama's   House " });
     expect(tx.coopConfig.create.mock.calls[0][0].data.name).toBe("Big Mama's House");
   });
+
+  it("saves the guided setup's goals, mission, agreement and voting rules", async () => {
+    const tx = makeTx(null);
+    const db = { ...tx, $transaction: (fn: (tx: any) => Promise<unknown>) => fn(tx) };
+
+    await createFamilyCommons(db, {
+      user: { id: "user_a", name: "Tasha" } as any,
+      name: "The Hollis Table",
+      setup: {
+        mission: "Build things we all own.",
+        goals: [{ label: "Launch Hollis Catering", targetAmountUSD: 4000, targetMonths: 6 }],
+        votingWindowDays: 3,
+        approval: "TWO_THIRDS",
+      },
+    });
+    const data = tx.coopConfig.create.mock.calls[0][0].data;
+    expect(data).toMatchObject({
+      displayMission: "Build things we all own.",
+      votingWindowDays: 3,
+      approvalThresholdPercent: 67,
+      quorumPercent: 50,
+      missionGoals: [{ key: "launch_hollis_catering", label: "Launch Hollis Catering", priorityWeight: 1 }],
+    });
+    expect(data.charterText).toContain("Tasha started The Hollis Table and is its interim steward");
+  });
 });

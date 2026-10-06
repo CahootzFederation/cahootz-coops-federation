@@ -97,6 +97,8 @@ test.describe.configure({ mode: "serial" });
 test.describe("family commons", () => {
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const familyName = `E2E Family ${runId}`;
+  const customGoal = `E2E catering ${runId}`;
+  const houseRule = `E2E rule ${runId}: no business talk at Sunday dinner.`;
   // Brand-new accounts, created by signing in with them.
   const invitedNewcomer = `e2e-family-${runId}@test.cahootz.local`;
   const generalNewcomer = `e2e-general-${runId}@test.cahootz.local`;
@@ -118,23 +120,89 @@ test.describe("family commons", () => {
     let newcomer: Awaited<ReturnType<typeof newcomerAtOnboardingChoices>> | undefined;
 
     try {
-      // User A starts a private family from the commons directory.
+      // User A starts a private family from the commons directory, and the
+      // guided setup walks them through goals and the family agreement.
       await steward.page.goto("/commons");
       await steward.page.getByRole("button", { name: "Start a family" }).click();
       const nameField = steward.page.getByLabel("Family name").filter({ visible: true });
+      await expect(shown(steward.page, "Family · step 1 of 3")).toBeVisible();
 
-      // Names are unique across every commons, regardless of case.
+      // A name is required before moving on.
+      await shown(steward.page, "Next: make it concrete", { exact: true }).click();
+      await expect(shown(steward.page, "Give your family space a name.")).toBeVisible();
+
+      // Step 1: what the family will build together, from ideas or their own
+      // words. Names are unique across every commons, regardless of case; a
+      // taken name is caught when the family is created, which comes back here.
       await nameField.fill(MARKET_NAME.toLowerCase());
+      await steward.page.getByRole("checkbox", { name: "Keep the family home in the family" }).click();
+      await steward.page.getByLabel("Your own goal").fill(customGoal);
+      await steward.page.getByRole("button", { name: "Add goal" }).click();
+      await expect(steward.page.getByRole("checkbox", { name: customGoal })).toBeChecked();
+      await shown(steward.page, "Next: make it concrete", { exact: true }).click();
+
+      // Step 2: targets, timeframes and priority order.
+      await expect(shown(steward.page, "Family · step 2 of 3")).toBeVisible();
+      await steward.page.getByLabel("Target amount for Keep the family home in the family").fill("6000");
+      await steward.page.getByRole("button", { name: "Keep the family home in the family within 1 year" }).click();
+      await steward.page.getByLabel(`Target amount for ${customGoal}`).fill("4000");
+      await steward.page.getByRole("button", { name: `${customGoal} within 6 months` }).click();
+      await steward.page.getByRole("button", { name: `Move ${customGoal} up` }).click();
+      // $4,000 over 6 months plus $6,000 over 12.
+      await expect(shown(steward.page, "$1,167 a month")).toBeVisible();
+      await shown(steward.page, "Next: family agreement", { exact: true }).click();
+
+      // Step 3: the family agreement, previewed before anything is saved.
+      await expect(shown(steward.page, "Family · step 3 of 3")).toBeVisible();
+      await steward.page.getByLabel("Family mission").fill(`E2E mission ${runId}`);
+      await steward.page.getByRole("radio", { name: "3 days" }).click();
+      await steward.page.getByRole("radio", { name: "Two-thirds" }).click();
+      await steward.page.getByLabel("New house rule").fill(houseRule);
+      await steward.page.getByRole("button", { name: "Add rule" }).click();
+      await shown(steward.page, "Read the full agreement", { exact: true }).click();
+      await expect(shown(steward.page, new RegExp(`1\\. ${customGoal}: \\$4,000 within 6 months`))).toBeVisible();
+      await expect(shown(steward.page, /A family decision stays open for 3 days\./)).toBeVisible();
+      await expect(shown(steward.page, /it passes with two-thirds of the votes/)).toBeVisible();
+      await expect(shown(steward.page, /is its interim steward until the family elects its stewards/)).toBeVisible();
+
       await shown(steward.page, "Create family", { exact: true }).click();
       await expect(
         shown(steward.page, `The name "${MARKET_NAME.toLowerCase()}" is already taken. Try another one.`),
       ).toBeVisible();
+      await expect(shown(steward.page, "Family · step 1 of 3")).toBeVisible();
       await expect(steward.page).toHaveURL(/create-family/);
 
+      // Fixing the name keeps every other answer.
       await nameField.fill(familyName);
+      await shown(steward.page, "Next: make it concrete", { exact: true }).click();
+      await expect(steward.page.getByLabel(`Target amount for ${customGoal}`)).toHaveValue("4000");
+      await shown(steward.page, "Next: family agreement", { exact: true }).click();
+      await expect(steward.page.getByLabel("Family mission")).toHaveValue(`E2E mission ${runId}`);
       await shown(steward.page, "Create family", { exact: true }).click();
       await expect(steward.page).toHaveURL(/commons-invites\?coopId=family-/);
       familyPath = new URL(steward.page.url()).searchParams.get("coopId")!;
+      await expect(shown(steward.page, "Steward tools")).toBeVisible();
+
+      // While everyone in the family is a steward, a steward can change the
+      // setup later. The editor starts from the saved answers.
+      await expect(shown(steward.page, /^2 goals and a mission\. Votes stay open 3 days and pass with two-thirds\./)).toBeVisible();
+      await steward.page.getByRole("button", { name: "Edit goals and agreement" }).click();
+      await expect(shown(steward.page, "Family goals", { exact: true })).toBeVisible();
+      await expect(steward.page.getByRole("checkbox", { name: customGoal })).toBeChecked();
+      await shown(steward.page, "Next: make it concrete", { exact: true }).click();
+      const customTarget = steward.page.getByLabel(`Target amount for ${customGoal}`);
+      await expect(customTarget).toHaveValue("4000");
+      await customTarget.fill("5000");
+      await shown(steward.page, "Next: family agreement", { exact: true }).click();
+      await expect(steward.page.getByLabel("Family mission")).toHaveValue(`E2E mission ${runId}`);
+      await shown(steward.page, "Save changes", { exact: true }).click();
+      await expect(steward.page).toHaveURL(new RegExp(`/commons/${familyPath}`));
+      await shown(steward.page, "Read full charter →", { exact: true }).click();
+      await expect(shown(steward.page, new RegExp(`1\\. ${customGoal}: \\$5,000 within 6 months`))).toBeVisible();
+      await steward.page.reload();
+      await shown(steward.page, "Read full charter →", { exact: true }).click();
+      await expect(shown(steward.page, new RegExp(`${customGoal}: \\$5,000 within 6 months`))).toBeVisible();
+      await steward.page.goto(`/commons-invites?coopId=${familyPath}`);
       await expect(shown(steward.page, "Steward tools")).toBeVisible();
 
       // A steward's named invitation, bound to the newcomer's email.
@@ -169,6 +237,9 @@ test.describe("family commons", () => {
         shown(onboarding, new RegExp(`invited you to join ${familyName}`)),
       ).toBeVisible();
       await expect(shown(onboarding, /This is a private family space/)).toBeVisible();
+      // The agreement they accept is the one the steward set up.
+      await expect(shown(onboarding, new RegExp(`E2E mission ${runId}`))).toBeVisible();
+      await expect(shown(onboarding, new RegExp(`E2E rule ${runId}: no business talk`))).toBeVisible();
 
       // Joining needs the family's rules accepted first.
       await shown(onboarding, `Join ${familyName}`, { exact: true }).click();
@@ -201,6 +272,24 @@ test.describe("family commons", () => {
       await expect(shown(steward.page, "Joined", { exact: true })).toBeVisible();
       await expect(shown(steward.page, "No pending invitations.")).toBeVisible();
       await expect(shown(steward.page, "Remove", { exact: true })).toHaveCount(1);
+
+      // The family's page shows its goals, weighted in the order the steward set.
+      await steward.page.goto(`/commons/${familyPath}`);
+      await expect(shown(steward.page, "What we're building toward")).toBeVisible();
+      await expect(shown(steward.page, customGoal, { exact: true })).toBeVisible();
+      await expect(shown(steward.page, "Keep the family home in the family", { exact: true })).toBeVisible();
+      await expect(shown(steward.page, "67%")).toBeVisible();
+      await expect(shown(steward.page, "33%")).toBeVisible();
+
+      // Now that someone here isn't a steward, stewards can't change the
+      // setup on their own anymore.
+      await steward.page.getByRole("button", { name: "Edit goals and agreement" }).click();
+      await expect(shown(steward.page, "Stewards can't change this anymore")).toBeVisible();
+      await expect(shown(steward.page, /^1 person here isn't a steward, so changing the family's goals/)).toBeVisible();
+      await expect(shown(steward.page, "Save changes", { exact: true })).toHaveCount(0);
+      await steward.page.goto(`/commons-invites?coopId=${familyPath}`);
+      await expect(shown(steward.page, /^1 person here isn't a steward/)).toBeVisible();
+      await expect(steward.page.getByRole("button", { name: "Edit goals and agreement" })).toHaveCount(0);
     } finally {
       await steward.context.close();
       await outsider.context.close();

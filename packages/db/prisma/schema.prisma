@@ -417,6 +417,9 @@ model CoopConfig {
   // Governance configuration
   charterText               String @db.Text
   missionGoals              Json // [{ key auto-generated from label, label, priorityWeight, description? }]
+  // A family's guided-setup answers ({ mission, goals, votingWindowDays, approval, houseRules }),
+  // kept so its stewards can edit them. Null for other commons and families set up before it.
+  familySetup               Json?
   structuralWeights         Json // { feasibility, risk, accountability } — sum to 1
   scoreMix                  Json // { missionWeight, structuralWeight } — sum to 1
   screeningPassThreshold    Float  @default(0.6) // 0..1

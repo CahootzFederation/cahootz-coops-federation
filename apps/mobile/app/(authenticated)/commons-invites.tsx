@@ -12,11 +12,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as Linking from 'expo-linking';
-import { ArrowLeft, Link2, Lock, Send, Shield } from 'lucide-react-native';
+import { ArrowLeft, Link2, Lock, Send, Shield, Target } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
-import { api, type CommonsInvitationOverview } from '@/lib/api';
+import { api, type CommonsInvitationOverview, type FamilySetupView } from '@/lib/api';
 import { ApiError, friendlyError } from '@/lib/friendly-error';
 import { LoadError } from '@/components/load-error';
 import { ConfirmSheet } from '@/components/confirm-sheet';
@@ -93,6 +93,7 @@ export default function CommonsInvitesScreen() {
   const { coopId } = useLocalSearchParams<{ coopId?: string }>();
   const { sessionToken } = useAuth();
   const [overview, setOverview] = useState<CommonsInvitationOverview | null>(null);
+  const [familySetup, setFamilySetup] = useState<FamilySetupView | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -117,7 +118,14 @@ export default function CommonsInvitesScreen() {
   const load = useCallback(async () => {
     if (!coopId || !sessionToken) return;
     try {
-      setOverview(await api.getCommonsInvitationOverview(coopId, sessionToken));
+      const next = await api.getCommonsInvitationOverview(coopId, sessionToken);
+      setOverview(next);
+      // A family's stewards can set up or change its goals and agreement here.
+      setFamilySetup(
+        next.isSteward && next.commons.joinPolicy === 'INVITE_ONLY'
+          ? await api.getFamilySetup(coopId, sessionToken).catch(() => null)
+          : null,
+      );
       setError('');
       setNotAllowed(false);
     } catch (err) {
@@ -488,6 +496,37 @@ export default function CommonsInvitesScreen() {
                 </Text>
               </View>
             ))}
+          </Section>
+        ) : null}
+
+        {isSteward && isFamily && familySetup ? (
+          <Section title="Goals and agreement">
+            <View className="rounded-2xl border border-gray-200 bg-white p-4">
+              <View className="flex-row gap-2">
+                <Target size={18} color={THEME.primary} />
+                <Text className="min-w-0 flex-1 text-sm leading-5 text-gray-700">
+                  {familySetup.isSetUp
+                    ? `${familySetup.setup.goals.length} ${familySetup.setup.goals.length === 1 ? 'goal' : 'goals'}${familySetup.setup.mission ? ' and a mission' : ''}. Votes stay open ${familySetup.setup.votingWindowDays} days and pass with ${familySetup.setup.approval === 'TWO_THIRDS' ? 'two-thirds' : 'more than half'}.`
+                    : "Not set up yet. Add what the family is building toward and why, so every family proposal is weighed against it."}
+                </Text>
+              </View>
+              {familySetup.canEdit ? (
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({ pathname: '/(authenticated)/create-family', params: { coopId: commons.id } } as any)
+                  }
+                  accessibilityRole="button"
+                  className="mt-3 items-center rounded-xl py-3"
+                  style={{ backgroundColor: THEME.primary }}
+                >
+                  <Text className="font-black text-white">
+                    {familySetup.isSetUp ? 'Edit goals and agreement' : 'Set up goals and agreement'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <Text className="mt-3 text-xs leading-4 text-gray-500">{familySetup.lockedReason}</Text>
+              )}
+            </View>
           </Section>
         ) : null}
 

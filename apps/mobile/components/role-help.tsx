@@ -11,6 +11,8 @@ import { Text } from '@/components/ui/text';
  * packages/trpc/src/services/commons-membership.ts). Only they can review
  * join requests and applications, approve recommendations, cancel others'
  * invitations, make share links, make or remove stewards, and remove members.
+ * In a family they can also change its goals and agreement, but only while
+ * everyone in the family is a steward (`updateFamilySetup`).
  */
 export const STEWARD_EXPLANATION =
   'Stewards look after this commons. They approve or decline people who ask to join, manage invitations, and can make others stewards or remove members.';

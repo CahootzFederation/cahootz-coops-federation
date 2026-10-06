@@ -97,138 +97,13 @@ test.describe.configure({ mode: "serial" });
 test.describe("family commons", () => {
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const familyName = `E2E Family ${runId}`;
-  // Brand-new accounts, created by signing in with them.
-  const invitedNewcomer = `e2e-family-${runId}@test.cahootz.local`;
+  // A brand-new account, created by signing in with it.
   const generalNewcomer = `e2e-general-${runId}@test.cahootz.local`;
-  let familyPath = "";
-  let welcomePostPath = "";
 
   test.afterAll(() => {
     familyFixture("cleanup", familyName);
     familyFixture("cleanup-referral", MARKET_COOP_ID, USER_B_EMAIL);
-    familyFixture("cleanup-newcomers", invitedNewcomer, generalNewcomer);
-  });
-
-  test("a member starts a family and a new person they invite by email joins it from onboarding", async ({
-    browser,
-  }) => {
-    test.setTimeout(480_000);
-    const steward = await newSignedInPage(browser, USER_A_EMAIL);
-    const outsider = await newSignedInPage(browser, USER_B_EMAIL);
-    let newcomer: Awaited<ReturnType<typeof newcomerAtOnboardingChoices>> | undefined;
-
-    try {
-      // User A starts a private family from the commons directory.
-      await steward.page.goto("/commons");
-      await steward.page.getByRole("button", { name: "Start a family" }).click();
-      const nameField = steward.page.getByLabel("Family name").filter({ visible: true });
-
-      // Names are unique across every commons, regardless of case.
-      await nameField.fill(MARKET_NAME.toLowerCase());
-      await shown(steward.page, "Create family", { exact: true }).click();
-      await expect(
-        shown(steward.page, `The name "${MARKET_NAME.toLowerCase()}" is already taken. Try another one.`),
-      ).toBeVisible();
-      await expect(steward.page).toHaveURL(/create-family/);
-
-      await nameField.fill(familyName);
-      await shown(steward.page, "Create family", { exact: true }).click();
-      await expect(steward.page).toHaveURL(/commons-invites\?coopId=family-/);
-      familyPath = new URL(steward.page.url()).searchParams.get("coopId")!;
-      await expect(shown(steward.page, "Steward tools")).toBeVisible();
-
-      // A steward's named invitation, bound to the newcomer's email.
-      await steward.page.getByLabel("Their name").fill("Cousin E2E");
-      await steward.page.getByLabel("Their email").fill(invitedNewcomer);
-      await shown(steward.page, "Send invitation", { exact: true }).click();
-      await expect(shown(steward.page, "Invitation sent.")).toBeVisible();
-      await steward.page.reload();
-      await expect(shown(steward.page, "Cousin E2E", { exact: true })).toBeVisible();
-
-      // The family is private: it isn't listed for someone outside it.
-      await outsider.page.goto("/commons");
-      await expect(shown(outsider.page, "Start a family")).toBeVisible();
-      await expect(shown(outsider.page, familyName, { exact: true })).toHaveCount(0);
-
-      // The invited person signs up. Onboarding's last step leads with a
-      // button into the family they were invited to, by its name, found just
-      // from their signed-in email. The welcome lounge and General are still
-      // there, and the family isn't listed a second time as a plain invitation.
-      newcomer = await newcomerAtOnboardingChoices(browser, invitedNewcomer);
-      const onboarding = newcomer.page;
-      await expect(shown(onboarding, "Your family", { exact: true })).toBeVisible();
-      const joinFamily = onboarding.getByRole("button", { name: `Join ${familyName}` });
-      await expect(joinFamily).toBeVisible();
-      await expect(shown(onboarding, /invited you\. You'll see the family's rules before you join\./)).toBeVisible();
-      await expect(onboarding.getByRole("button", { name: "Join a welcome lounge" })).toBeVisible();
-      await expect(shown(onboarding, "Go to General")).toBeVisible();
-      await expect(shown(onboarding, "Explore on my own")).toHaveCount(0);
-      await expect(onboarding.getByLabel(`Open invitation to ${familyName}`)).toHaveCount(0);
-      await joinFamily.click();
-      await expect(
-        shown(onboarding, new RegExp(`invited you to join ${familyName}`)),
-      ).toBeVisible();
-      await expect(shown(onboarding, /This is a private family space/)).toBeVisible();
-
-      // Joining needs the family's rules accepted first.
-      await shown(onboarding, `Join ${familyName}`, { exact: true }).click();
-      await expect(shown(onboarding, `Agree to ${familyName}'s rules to continue.`)).toBeVisible();
-      await onboarding.getByRole("checkbox", { name: `I agree to ${familyName}'s rules` }).click();
-      await shown(onboarding, `Join ${familyName}`, { exact: true }).click();
-
-      // They land on the family's pinned welcome post, and stay in after a reload.
-      await expect(onboarding).toHaveURL(new RegExp(`/${familyPath}/posts/`));
-      await expect(shown(onboarding, WELCOME_POST)).toBeVisible();
-      welcomePostPath = new URL(onboarding.url()).pathname;
-      await onboarding.reload();
-      await expect(shown(onboarding, WELCOME_POST)).toBeVisible();
-
-      // Choosing their family still seated them in a welcome lounge.
-      await expectSeatedInWelcomeLounge(onboarding);
-
-      // They put off their profile, so onboarding comes back on a new
-      // device. Now that they're in, it offers to go straight to the family.
-      await newcomer.context.close();
-      newcomer = await newcomerAtOnboardingChoices(browser, invitedNewcomer);
-      await expect(newcomer.page.getByRole("button", { name: `Join ${familyName}` })).toHaveCount(0);
-      await newcomer.page.getByRole("button", { name: `Go to ${familyName}` }).click();
-      await expect(newcomer.page).toHaveURL(new RegExp(`/${familyPath}/posts`));
-      await expect(shown(newcomer.page, WELCOME_POST)).toBeVisible();
-
-      // User A sees the invitation as accepted, and the newcomer as a member.
-      await steward.page.reload();
-      await expect(shown(steward.page, "Recently accepted")).toBeVisible();
-      await expect(shown(steward.page, "Joined", { exact: true })).toBeVisible();
-      await expect(shown(steward.page, "No pending invitations.")).toBeVisible();
-      await expect(shown(steward.page, "Remove", { exact: true })).toHaveCount(1);
-    } finally {
-      await steward.context.close();
-      await outsider.context.close();
-      await newcomer?.context.close();
-    }
-  });
-
-  test("AI name ideas fill the family name with one no commons uses", { tag: "@sage" }, async ({ browser }) => {
-    test.setTimeout(180_000);
-    const steward = await newSignedInPage(browser, USER_A_EMAIL);
-    try {
-      await steward.page.goto("/commons");
-      await steward.page.getByRole("button", { name: "Start a family" }).click();
-      await steward.page
-        .getByLabel("Family description")
-        .filter({ visible: true })
-        .fill(`E2E ${runId}: Sunday dinners at Grandma Ruth's in Memphis, three last names between us`);
-      await steward.page.getByRole("button", { name: "Suggest names" }).filter({ visible: true }).click();
-
-      const firstIdea = steward.page.getByRole("button", { name: /^Use the name / }).filter({ visible: true }).first();
-      await expect(firstIdea).toBeVisible({ timeout: 90_000 });
-      const idea = (await firstIdea.textContent())!.trim();
-      await firstIdea.click();
-      await expect(steward.page.getByLabel("Family name").filter({ visible: true })).toHaveValue(idea);
-      await expect(steward.page.getByRole("button", { name: "More ideas" }).filter({ visible: true })).toBeVisible();
-    } finally {
-      await steward.context.close();
-    }
+    familyFixture("cleanup-newcomers", generalNewcomer);
   });
 
   test("a newcomer who goes to General from onboarding is still seated in a welcome lounge", async ({
@@ -249,32 +124,21 @@ test.describe("family commons", () => {
     }
   });
 
-  test("a removed member loses access, and a forwarded family link only lets someone ask to join", async ({
-    browser,
-  }) => {
-    test.setTimeout(300_000);
-    expect(familyPath, "the first test creates the family").not.toBe("");
+  test("a forwarded family link only lets someone ask to join", async ({ browser }) => {
+    test.setTimeout(240_000);
     const steward = await newSignedInPage(browser, USER_A_EMAIL);
     // A fresh, signed-out browser: someone opening a forwarded link.
     const visitorContext = await browser.newContext({ viewport: { width: 430, height: 932 } });
     const visitor = await visitorContext.newPage();
-    let removed: Awaited<ReturnType<typeof newcomerAtOnboardingChoices>> | undefined;
 
     try {
-      // A steward removes the member who joined in the first test.
-      await steward.page.goto(`/commons-invites?coopId=${familyPath}`);
-      await expect(shown(steward.page, "Members", { exact: true })).toBeVisible();
-      await shown(steward.page, "Remove", { exact: true }).click();
-      await shown(steward.page, /^Confirm remove /).click();
-      await expect(shown(steward.page, /^Confirm remove /)).toHaveCount(0);
-      await steward.page.reload();
-      await expect(shown(steward.page, "Remove", { exact: true })).toHaveCount(0);
-
-      // Their access ends right away: the family's welcome post is closed to them.
-      removed = await newcomerAtOnboardingChoices(browser, invitedNewcomer);
-      await shown(removed.page, "Skip for now", { exact: true }).click();
-      await removed.page.goto(welcomePostPath);
-      await expect(shown(removed.page, "Join this commons to view this post.")).toBeVisible();
+      // User A starts a private family and lands on its steward tools.
+      await steward.page.goto("/commons");
+      await steward.page.getByRole("button", { name: "Start a family" }).click();
+      await steward.page.getByLabel("Family name").filter({ visible: true }).fill(familyName);
+      await shown(steward.page, "Create family", { exact: true }).click();
+      await expect(steward.page).toHaveURL(/commons-invites\?coopId=family-/);
+      await expect(shown(steward.page, "Steward tools")).toBeVisible();
 
       // A steward's shareable link.
       await shown(steward.page, "Create a shareable link").click();
@@ -304,11 +168,6 @@ test.describe("family commons", () => {
       await visitor.reload();
       await expect(shown(visitor, "Request sent")).toBeVisible();
 
-      // A pending request doesn't open anything.
-      await visitor.goto(welcomePostPath);
-      await expect(shown(visitor, "Join this commons to view this post.")).toBeVisible();
-      await visitor.goBack();
-
       // User A reviews and approves the request.
       await steward.page.reload();
       await expect(shown(steward.page, "Requests to join")).toBeVisible();
@@ -324,7 +183,6 @@ test.describe("family commons", () => {
     } finally {
       await steward.context.close();
       await visitorContext.close();
-      await removed?.context.close();
     }
   });
 

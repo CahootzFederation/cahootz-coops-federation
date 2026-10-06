@@ -3,6 +3,7 @@ import { View, type TextStyle, type ViewStyle } from 'react-native';
 import MarkdownIt from 'markdown-it';
 import Markdown, { type ASTNode, type RenderRules } from 'react-native-markdown-display';
 import { Text } from '@/components/ui/text';
+import { openPersonPage } from '@/lib/person-navigation';
 
 const MENTION_RE = /\[@([a-zA-Z0-9_-]+)\]/g;
 
@@ -28,6 +29,40 @@ function mentionPlugin(md: MarkdownIt) {
 }
 
 const markdownItInstance = new MarkdownIt({ typographer: false, linkify: false }).use(mentionPlugin);
+
+/**
+ * Each coop's Sage bot is mentionable (`[@sage]` / `[@sage-<coopId>]`) but has
+ * no personal page, so its mentions stay highlighted without navigating.
+ */
+function isSageHandle(handle: string) {
+  const lower = handle.toLowerCase();
+  return lower === 'sage' || lower.startsWith('sage-');
+}
+
+function openMentionedPerson(handle: string) {
+  openPersonPage(handle, handle);
+}
+
+function MentionToken({
+  handle,
+  className,
+  onPressMention,
+}: {
+  handle: string;
+  className: string;
+  onPressMention: (handle: string) => void;
+}) {
+  const pressable = !(onPressMention === openMentionedPerson && isSageHandle(handle));
+  return (
+    <Text
+      className={className}
+      onPress={pressable ? () => onPressMention(handle) : undefined}
+      accessibilityRole={pressable ? 'link' : undefined}
+    >
+      @{handle}
+    </Text>
+  );
+}
 
 type FlatPart = string | { key: string; handle: string };
 
@@ -59,6 +94,7 @@ interface MentionTextProps {
    * nested rich-text tree, and a snippet preview doesn't need formatting.
    */
   numberOfLines?: number;
+  /** Defaults to opening the mentioned member's personal page. */
   onPressMention?: (handle: string) => void;
   mentionClassName?: string;
 }
@@ -78,19 +114,18 @@ export function MentionText({
   className,
   style,
   numberOfLines,
-  onPressMention,
+  onPressMention = openMentionedPerson,
   mentionClassName,
 }: MentionTextProps) {
   const rules: RenderRules = useMemo(
     () => ({
       mention: (node: ASTNode) => (
-        <Text
+        <MentionToken
           key={node.key}
+          handle={node.content}
           className={mentionClassName ?? DEFAULT_MENTION_CLASS}
-          onPress={onPressMention ? () => onPressMention(node.content) : undefined}
-        >
-          @{node.content}
-        </Text>
+          onPressMention={onPressMention}
+        />
       ),
     }),
     [mentionClassName, onPressMention],
@@ -103,13 +138,12 @@ export function MentionText({
       typeof part === 'string' ? (
         part
       ) : (
-        <Text
+        <MentionToken
           key={part.key}
+          handle={part.handle}
           className={mentionClassName ?? DEFAULT_MENTION_CLASS}
-          onPress={onPressMention ? () => onPressMention(part.handle) : undefined}
-        >
-          @{part.handle}
-        </Text>
+          onPressMention={onPressMention}
+        />
       ),
     );
     return (

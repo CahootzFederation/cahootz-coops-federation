@@ -17,7 +17,8 @@ import { createNotificationAndPush } from "./push-notification-service.js";
  *                         invitation is a referral ("Maya invited you to
  *                         apply"), never admission.
  *   INVITE_ONLY           Private family commons. A named invitation sent by
- *                         a steward to a verified email admits that person.
+ *                         a steward or guide to a verified email admits that
+ *                         person.
  *                         Shareable links and unverified contacts only let
  *                         someone request access for a steward to review.
  *
@@ -36,6 +37,12 @@ export type InvitationPurpose = "DIRECT_JOIN" | "APPLY" | "REQUEST_ACCESS";
 
 /** Per-commons membership roles that may invite directly and review requests. */
 export const STEWARD_ROLES = ["steward", "admin"];
+/**
+ * A guide may send invitations that go out directly (a family member's
+ * invitation would otherwise wait for a steward), but can't review requests,
+ * manage roles or remove anyone. Stewards assign it.
+ */
+export const GUIDE_ROLE = "guide";
 export const INVITATION_TTL_DAYS = 14;
 export const MAX_INVITATIONS_PER_DAY = 25;
 export const MAX_ACCESS_REQUESTS_PER_DAY = 10;
@@ -154,6 +161,19 @@ export function isStewardMembership(
     membership?.status === "ACTIVE" &&
     membership.roles.some((role) => STEWARD_ROLES.includes(role))
   );
+}
+
+export function isGuideMembership(
+  membership: { status: string; roles: string[] } | null | undefined,
+) {
+  return membership?.status === "ACTIVE" && membership.roles.includes(GUIDE_ROLE);
+}
+
+/** Stewards and guides send invitations without a steward's approval. */
+export function canInviteDirectlyMembership(
+  membership: { status: string; roles: string[] } | null | undefined,
+) {
+  return isStewardMembership(membership) || isGuideMembership(membership);
 }
 
 export async function requireActiveMember(
@@ -761,6 +781,52 @@ export async function setCommonsSteward(
       data: auditLogEntry({
         actorId: params.stewardId,
         action: params.steward ? "COMMONS_STEWARD_GRANTED" : "COMMONS_STEWARD_REVOKED",
+        resource: "UserCoopMembership",
+        resourceId: target.id,
+        metadata: { coopId: params.coopId, userId: params.userId, roles },
+      }),
+    });
+    return { roles };
+  });
+}
+
+/** A steward makes a member a guide, or takes the role away. */
+export async function setCommonsGuide(
+  db: Db,
+  params: { coopId: string; stewardId: string; userId: string; guide: boolean },
+) {
+  if (params.coopId === COMMONS_COOP_ID) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "The Cahootz Commons doesn't have guides.",
+    });
+  }
+  await requireSteward(db, params.stewardId, params.coopId);
+
+  return db.$transaction(async (tx) => {
+    const target = await getMembership(tx, params.userId, params.coopId);
+    if (target?.status !== "ACTIVE") {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Member not found." });
+    }
+    if (params.guide && isStewardMembership(target)) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Stewards can already invite people directly.",
+      });
+    }
+    const otherRoles = target.roles.filter((role) => role !== GUIDE_ROLE);
+    const roles = params.guide
+      ? [...new Set([...otherRoles, "member", GUIDE_ROLE])]
+      : [...new Set([...otherRoles, "member"])];
+
+    await tx.userCoopMembership.update({
+      where: { id: target.id },
+      data: { roles },
+    });
+    await tx.auditLog.create({
+      data: auditLogEntry({
+        actorId: params.stewardId,
+        action: params.guide ? "COMMONS_GUIDE_GRANTED" : "COMMONS_GUIDE_REVOKED",
         resource: "UserCoopMembership",
         resourceId: target.id,
         metadata: { coopId: params.coopId, userId: params.userId, roles },

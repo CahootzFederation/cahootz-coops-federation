@@ -150,6 +150,24 @@ test.describe("family commons", () => {
       await steward.page.getByRole("button", { name: `Move ${customGoal} up` }).click();
       // $4,000 over 6 months plus $6,000 over 12.
       await expect(shown(steward.page, "$1,167 a month")).toBeVisible();
+
+      // Priorities start from the order (the first goal highest) and can be
+      // set by hand, but only continue once they add up to 100%.
+      const customPriority = steward.page.getByLabel(`Priority for ${customGoal}`);
+      const homePriority = steward.page.getByLabel("Priority for Keep the family home in the family");
+      await expect(customPriority).toHaveValue("67");
+      await expect(homePriority).toHaveValue("33");
+      await expect(shown(steward.page, "Priorities add up to 100%")).toBeVisible();
+      await customPriority.fill("60");
+      await homePriority.fill("30");
+      await expect(shown(steward.page, "Priorities add up to 90% (needs to be 100%)")).toBeVisible();
+      await shown(steward.page, "Next: family agreement", { exact: true }).click();
+      await expect(
+        shown(steward.page, "Goal priorities add up to 90%. Make them add up to 100% to continue."),
+      ).toBeVisible();
+      await expect(shown(steward.page, "Family · step 2 of 3")).toBeVisible();
+      await homePriority.fill("40");
+      await expect(shown(steward.page, "Priorities add up to 100%")).toBeVisible();
       await shown(steward.page, "Next: family agreement", { exact: true }).click();
 
       // Step 3: the family agreement, previewed before anything is saved.
@@ -160,7 +178,7 @@ test.describe("family commons", () => {
       await steward.page.getByLabel("New house rule").fill(houseRule);
       await steward.page.getByRole("button", { name: "Add rule" }).click();
       await shown(steward.page, "Read the full agreement", { exact: true }).click();
-      await expect(shown(steward.page, new RegExp(`1\\. ${customGoal}: \\$4,000 within 6 months`))).toBeVisible();
+      await expect(shown(steward.page, new RegExp(`1\\. ${customGoal} \\(60%\\): \\$4,000 within 6 months`))).toBeVisible();
       await expect(shown(steward.page, /A family decision stays open for 3 days\./)).toBeVisible();
       await expect(shown(steward.page, /it passes with two-thirds of the votes/)).toBeVisible();
       await expect(shown(steward.page, /is its interim steward until the family elects its stewards/)).toBeVisible();
@@ -192,16 +210,17 @@ test.describe("family commons", () => {
       await shown(steward.page, "Next: make it concrete", { exact: true }).click();
       const customTarget = steward.page.getByLabel(`Target amount for ${customGoal}`);
       await expect(customTarget).toHaveValue("4000");
+      await expect(steward.page.getByLabel(`Priority for ${customGoal}`)).toHaveValue("60");
       await customTarget.fill("5000");
       await shown(steward.page, "Next: family agreement", { exact: true }).click();
       await expect(steward.page.getByLabel("Family mission")).toHaveValue(`E2E mission ${runId}`);
       await shown(steward.page, "Save changes", { exact: true }).click();
       await expect(steward.page).toHaveURL(new RegExp(`/commons/${familyPath}`));
       await shown(steward.page, "Read full charter →", { exact: true }).click();
-      await expect(shown(steward.page, new RegExp(`1\\. ${customGoal}: \\$5,000 within 6 months`))).toBeVisible();
+      await expect(shown(steward.page, new RegExp(`1\\. ${customGoal} \\(60%\\): \\$5,000 within 6 months`))).toBeVisible();
       await steward.page.reload();
       await shown(steward.page, "Read full charter →", { exact: true }).click();
-      await expect(shown(steward.page, new RegExp(`${customGoal}: \\$5,000 within 6 months`))).toBeVisible();
+      await expect(shown(steward.page, new RegExp(`${customGoal} \\(60%\\): \\$5,000 within 6 months`))).toBeVisible();
       await steward.page.goto(`/commons-invites?coopId=${familyPath}`);
       await expect(shown(steward.page, "Steward tools")).toBeVisible();
 
@@ -278,8 +297,8 @@ test.describe("family commons", () => {
       await expect(shown(steward.page, "What we're building toward")).toBeVisible();
       await expect(shown(steward.page, customGoal, { exact: true })).toBeVisible();
       await expect(shown(steward.page, "Keep the family home in the family", { exact: true })).toBeVisible();
-      await expect(shown(steward.page, "67%")).toBeVisible();
-      await expect(shown(steward.page, "33%")).toBeVisible();
+      await expect(shown(steward.page, "60%", { exact: true })).toBeVisible();
+      await expect(shown(steward.page, "40%", { exact: true })).toBeVisible();
 
       // Now that someone here isn't a steward, stewards can't change the
       // setup on their own anymore.

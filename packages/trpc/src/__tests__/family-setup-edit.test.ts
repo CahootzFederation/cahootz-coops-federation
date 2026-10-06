@@ -105,7 +105,7 @@ describe("editing a family's setup", () => {
       familySetup: SETUP,
     });
     expect(saved.data.missionGoals).toHaveLength(1);
-    expect(saved.data.charterText).toContain("1. Pay off the house: $6,000 within 1 year");
+    expect(saved.data.charterText).toContain("1. Pay off the house (100%): $6,000 within 1 year");
     expect(saved.data.charterText).toContain("Maya started Robinson Family");
     expect(saved.data.charterText).toContain("Call Grandma on Sundays.");
 

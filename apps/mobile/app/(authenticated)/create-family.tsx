@@ -48,10 +48,37 @@ const VOTING_WINDOWS = [3, 7, 14] as const;
 const MAX_GOALS = 6;
 const MAX_HOUSE_RULES = 5;
 
-type DraftGoal = { label: string; detail: string; amount: string; months?: number };
+type DraftGoal = { label: string; detail: string; amount: string; months?: number; percent: string };
 type Step = 1 | 2 | 3;
 
 const usd = (value: number) => `$${Math.round(value).toLocaleString('en-US')}`;
+const percentOf = (goal: DraftGoal) => {
+  const value = Number(goal.percent);
+  return Number.isInteger(value) ? value : 0;
+};
+
+/**
+ * The starting priority split, first goal highest, in whole percentages
+ * that add up to 100. Matches familyDefaultPriorityPercents on the server.
+ */
+function defaultPercents(count: number) {
+  if (count <= 0) return [];
+  const total = (count * (count + 1)) / 2;
+  const exact = Array.from({ length: count }, (_, index) => ((count - index) / total) * 100);
+  const percents = exact.map(Math.floor);
+  const order = exact
+    .map((value, index) => ({ index, remainder: value - Math.floor(value) }))
+    .sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+  const leftover = 100 - percents.reduce((sum, value) => sum + value, 0);
+  for (let i = 0; i < leftover; i += 1) percents[order[i].index] += 1;
+  return percents;
+}
+
+const withDefaultPercents = (goals: DraftGoal[]) => {
+  const percents = defaultPercents(goals.length);
+  return goals.map((goal, index) => ({ ...goal, percent: String(percents[index]) }));
+};
+
 const amountOf = (goal: DraftGoal) => {
   const value = Number(goal.amount.replace(/[^0-9.]/g, ''));
   return Number.isFinite(value) && value >= 1 ? Math.round(value) : undefined;
@@ -85,6 +112,8 @@ export default function CreateFamilyScreen() {
   const [ideasError, setIdeasError] = useState('');
 
   const [goals, setGoals] = useState<DraftGoal[]>([]);
+  // True once someone types their own split; until then it follows the order.
+  const [customSplit, setCustomSplit] = useState(false);
   const [customGoal, setCustomGoal] = useState('');
 
   const [mission, setMission] = useState('');
@@ -109,14 +138,16 @@ export default function CreateFamilyScreen() {
         if (cancelled) return;
         setName(view.name);
         setMission(view.setup.mission ?? '');
-        setGoals(
-          view.setup.goals.map((goal) => ({
-            label: goal.label,
-            detail: goal.detail ?? '',
-            amount: goal.targetAmountUSD ? String(goal.targetAmountUSD) : '',
-            months: goal.targetMonths,
-          })),
-        );
+        const saved = view.setup.goals.map((goal) => ({
+          label: goal.label,
+          detail: goal.detail ?? '',
+          amount: goal.targetAmountUSD ? String(goal.targetAmountUSD) : '',
+          months: goal.targetMonths,
+          percent: goal.priorityPercent ? String(goal.priorityPercent) : '',
+        }));
+        const hasSplit = saved.length > 0 && saved.every((goal) => goal.percent);
+        setGoals(hasSplit ? saved : withDefaultPercents(saved));
+        setCustomSplit(hasSplit);
         setVotingWindowDays(view.setup.votingWindowDays);
         setApproval(view.setup.approval);
         setHouseRules(view.setup.houseRules);
@@ -146,6 +177,7 @@ export default function CreateFamilyScreen() {
       detail: goal.detail.trim() || undefined,
       targetAmountUSD: amountOf(goal),
       targetMonths: goal.months,
+      priorityPercent: percentOf(goal) || undefined,
     })),
     votingWindowDays,
     approval,
@@ -191,19 +223,24 @@ export default function CreateFamilyScreen() {
   const hasGoal = (label: string) => goals.some((goal) => goal.label.toLowerCase() === label.toLowerCase());
   const toggleGoal = (label: string) => {
     touched();
+    // Adding or removing a goal starts the split over from the order.
+    setCustomSplit(false);
     setGoals((current) =>
-      hasGoal(label)
-        ? current.filter((goal) => goal.label.toLowerCase() !== label.toLowerCase())
-        : current.length >= MAX_GOALS
-          ? current
-          : [...current, { label, detail: '', amount: '' }],
+      withDefaultPercents(
+        hasGoal(label)
+          ? current.filter((goal) => goal.label.toLowerCase() !== label.toLowerCase())
+          : current.length >= MAX_GOALS
+            ? current
+            : [...current, { label, detail: '', amount: '', percent: '' }],
+      ),
     );
   };
   const addCustomGoal = () => {
     const label = customGoal.trim();
     if (label.length < 2 || hasGoal(label) || goals.length >= MAX_GOALS) return;
     touched();
-    setGoals((current) => [...current, { label, detail: '', amount: '' }]);
+    setCustomSplit(false);
+    setGoals((current) => withDefaultPercents([...current, { label, detail: '', amount: '', percent: '' }]));
     setCustomGoal('');
   };
   const updateGoal = (index: number, changes: Partial<DraftGoal>) => {
@@ -217,8 +254,31 @@ export default function CreateFamilyScreen() {
     setGoals((current) => {
       const next = [...current];
       [next[index], next[target]] = [next[target], next[index]];
-      return next;
+      // A split the family typed moves with its goals; the default follows the order.
+      return customSplit ? next : withDefaultPercents(next);
     });
+  };
+  const setPercent = (index: number, value: string) => {
+    setCustomSplit(true);
+    updateGoal(index, { percent: value.replace(/[^0-9]/g, '').slice(0, 3) });
+  };
+  const resetSplit = () => {
+    touched();
+    setCustomSplit(false);
+    setGoals((current) => withDefaultPercents(current));
+  };
+  const percentTotal = goals.reduce((sum, goal) => sum + percentOf(goal), 0);
+  const splitOk = goals.length === 0 || (percentTotal === 100 && goals.every((goal) => percentOf(goal) >= 1));
+  const nextFromGoals = () => {
+    if (!splitOk) {
+      setError(
+        percentTotal === 100
+          ? 'Give every goal at least 1%.'
+          : `Goal priorities add up to ${percentTotal}%. Make them add up to 100% to continue.`,
+      );
+      return;
+    }
+    goTo(3);
   };
 
   const monthlyPace = goals.reduce((sum, goal) => {
@@ -556,8 +616,9 @@ export default function CreateFamilyScreen() {
         {!blocked && step === 2 ? (
           <>
             <Text className="mb-3 text-sm leading-5 text-gray-700">
-              Give each goal a number and a timeframe if you know them. The order is the priority:
-              the first goal counts most when the family weighs a proposal. All of this is optional.
+              Give each goal a number and a timeframe if you know them. Each goal&apos;s priority
+              says how much it counts when the family weighs a proposal. It starts from the order,
+              first goal highest, and you can set your own as long as they add up to 100%.
             </Text>
 
             {goals.length === 0 ? (
@@ -601,6 +662,21 @@ export default function CreateFamilyScreen() {
                       >
                         <ArrowDown size={16} color={index === goals.length - 1 ? '#D1D5DB' : THEME.ink} />
                       </IconButton>
+                    </View>
+
+                    <Text className="mt-3 text-xs font-bold text-gray-600">Priority</Text>
+                    <View className="mt-1 flex-row items-center gap-2">
+                      <TextInput
+                        value={goal.percent}
+                        onChangeText={(value) => setPercent(index, value)}
+                        placeholder="0"
+                        placeholderTextColor={THEME.muted}
+                        keyboardType="number-pad"
+                        maxLength={3}
+                        accessibilityLabel={`Priority for ${goal.label}`}
+                        className="w-20 rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-bold text-gray-900"
+                      />
+                      <Text className="text-sm font-bold text-gray-700">%</Text>
                     </View>
 
                     <Text className="mt-3 text-xs font-bold text-gray-600">What it takes (optional)</Text>
@@ -652,6 +728,27 @@ export default function CreateFamilyScreen() {
                   </View>
                 ))}
 
+                <View
+                  className="flex-row items-center gap-3 rounded-2xl border bg-white p-4"
+                  style={{ borderColor: splitOk ? THEME.border : '#FCA5A5' }}
+                >
+                  <Text
+                    className="min-w-0 flex-1 text-sm font-black"
+                    style={{ color: splitOk ? THEME.ink : '#B91C1C' }}
+                    accessibilityLiveRegion="polite"
+                  >
+                    {`Priorities add up to ${percentTotal}%`}
+                    {splitOk ? '' : ' (needs to be 100%)'}
+                  </Text>
+                  {customSplit ? (
+                    <TouchableOpacity onPress={resetSplit} accessibilityRole="button">
+                      <Text className="text-xs font-black" style={{ color: THEME.primary }}>
+                        Reset by order
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+
                 {monthlyPace > 0 ? (
                   <View
                     className="flex-row gap-2.5 rounded-2xl border p-4"
@@ -671,7 +768,8 @@ export default function CreateFamilyScreen() {
               </View>
             )}
 
-            <PrimaryButton label="Next: family agreement" onPress={() => goTo(3)} />
+            {error ? <Text className="mt-4 text-sm font-semibold text-red-700">{error}</Text> : null}
+            <PrimaryButton label="Next: family agreement" onPress={nextFromGoals} />
           </>
         ) : null}
 

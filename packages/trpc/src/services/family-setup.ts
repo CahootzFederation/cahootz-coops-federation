@@ -29,6 +29,8 @@ export const familyGoalSchema = z.object({
   detail: z.string().trim().max(160).optional(),
   targetAmountUSD: z.number().int().positive().max(10_000_000).optional(),
   targetMonths: z.number().int().min(1).max(120).optional(),
+  /** How much this goal counts when a proposal is weighed. Every goal's share adds up to 100. */
+  priorityPercent: z.number().int().min(1).max(100).optional(),
 });
 
 export const familySetupSchema = z.object({
@@ -43,6 +45,14 @@ export const familySetupSchema = z.object({
     .default(7),
   approval: z.enum(["MAJORITY", "TWO_THIRDS"]).default("MAJORITY"),
   houseRules: z.array(z.string().trim().min(3).max(200)).max(FAMILY_MAX_HOUSE_RULES).default([]),
+}).superRefine((setup, ctx) => {
+  const percents = setup.goals.map((goal) => goal.priorityPercent);
+  if (percents.every((percent) => percent === undefined)) return;
+  if (percents.some((percent) => percent === undefined)) {
+    ctx.addIssue({ code: "custom", path: ["goals"], message: "Give every goal a priority percentage." });
+  } else if (percents.reduce((sum, percent) => sum! + percent!, 0) !== 100) {
+    ctx.addIssue({ code: "custom", path: ["goals"], message: "Goal priorities have to add up to 100%." });
+  }
 });
 
 export type FamilyGoalInput = z.infer<typeof familyGoalSchema>;
@@ -95,13 +105,39 @@ function goalKey(label: string) {
 }
 
 /**
- * The family's goals in the shape the proposal engine scores against. The
- * order is the priority: the first goal weighs the most. No goals means
- * none: the family hasn't set any yet.
+ * The starting priority split for goals in this order: the first counts the
+ * most. Whole percentages that always add up to exactly 100.
+ */
+export function familyDefaultPriorityPercents(count: number) {
+  if (count <= 0) return [];
+  const total = (count * (count + 1)) / 2;
+  const exact = Array.from({ length: count }, (_, index) => ((count - index) / total) * 100);
+  const percents = exact.map(Math.floor);
+  const byRemainder = exact
+    .map((value, index) => ({ index, remainder: value - Math.floor(value) }))
+    .sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+  const leftover = 100 - percents.reduce((sum, value) => sum + value, 0);
+  for (let i = 0; i < leftover; i += 1) percents[byRemainder[i].index] += 1;
+  return percents;
+}
+
+/** Each goal's share of the priority: the family's own split, or the order-based default. */
+function priorityPercents(goals: FamilyGoalInput[]) {
+  const custom = goals.map((goal) => goal.priorityPercent);
+  if (custom.every((percent): percent is number => percent !== undefined) && custom.reduce((a, b) => a + b, 0) === 100) {
+    return custom;
+  }
+  return familyDefaultPriorityPercents(goals.length);
+}
+
+/**
+ * The family's goals in the shape the proposal engine scores against, each
+ * weighted by its priority percentage (by default the first counts most).
+ * No goals means none: the family hasn't set any yet.
  */
 export function familyMissionGoals(goals: FamilyGoalInput[]) {
   if (!goals.length) return [];
-  const total = (goals.length * (goals.length + 1)) / 2;
+  const percents = priorityPercents(goals);
   const seen = new Map<string, number>();
   return goals.map((goal, index) => {
     const base = goalKey(goal.label);
@@ -111,7 +147,7 @@ export function familyMissionGoals(goals: FamilyGoalInput[]) {
     return {
       key: count === 1 ? base : `${base}_${count}`,
       label: goal.label,
-      priorityWeight: Math.round(((goals.length - index) / total) * 1000) / 1000,
+      priorityWeight: percents[index] / 100,
       ...(goal.detail || target
         ? { description: [target && `Target: ${target}.`, goal.detail].filter(Boolean).join(" ") }
         : {}),
@@ -137,11 +173,12 @@ export function familyCharter(params: {
   }
 
   if (setup.goals.length) {
-    lines.push("What we're building together, most important first");
+    const percents = priorityPercents(setup.goals);
+    lines.push("What we're building together, and how much each counts when we decide");
     setup.goals.forEach((goal, index) => {
       const target = familyGoalTarget(goal);
       const detail = [target, goal.detail].filter(Boolean).join(". ");
-      lines.push(`${index + 1}. ${goal.label}${detail ? `: ${detail}` : ""}`);
+      lines.push(`${index + 1}. ${goal.label} (${percents[index]}%)${detail ? `: ${detail}` : ""}`);
     });
     lines.push("");
   }
@@ -215,17 +252,26 @@ export function familySetupFromConfig(config: {
 
   const goals = (Array.isArray(config.missionGoals) ? config.missionGoals : [])
     .filter(
-      (goal): goal is { key?: string; label: string } =>
+      (goal): goal is { key?: string; label: string; priorityWeight?: number } =>
         !!goal && typeof goal === "object" && typeof (goal as { label?: unknown }).label === "string",
     )
     .filter((goal) => !LEGACY_PLACEHOLDER_GOAL_KEYS.has(goal.key ?? ""))
     .slice(0, FAMILY_MAX_GOALS)
-    .map((goal) => ({ label: goal.label.slice(0, 80) }))
+    .map((goal) => ({
+      label: goal.label.slice(0, 80),
+      percent: Math.round((goal.priorityWeight ?? 0) * 100),
+    }))
     .filter((goal) => goal.label.trim().length >= 2);
+  // Keep the saved split only when it is a usable one.
+  const keepPercents =
+    goals.every((goal) => goal.percent >= 1) && goals.reduce((sum, goal) => sum + goal.percent, 0) === 100;
 
   return familySetupSchema.parse({
     mission: config.displayMission?.slice(0, 280) || undefined,
-    goals,
+    goals: goals.map((goal) => ({
+      label: goal.label,
+      ...(keepPercents ? { priorityPercent: goal.percent } : {}),
+    })),
     votingWindowDays: (FAMILY_VOTING_WINDOWS as readonly number[]).includes(config.votingWindowDays)
       ? config.votingWindowDays
       : 7,

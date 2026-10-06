@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   familyCharter,
   familyConfigFromSetup,
+  familyDefaultPriorityPercents,
   familyMissionGoals,
   familyMonthlyPace,
   familySetupFromConfig,
@@ -25,9 +26,42 @@ describe("family setup", () => {
     ]);
     expect(goals[0].priorityWeight).toBeGreaterThan(goals[1].priorityWeight);
     expect(goals[1].priorityWeight).toBeGreaterThan(goals[2].priorityWeight);
-    expect(goals.reduce((sum, goal) => sum + goal.priorityWeight, 0)).toBeCloseTo(1, 2);
+    expect(goals.map((goal) => goal.priorityWeight)).toEqual([0.5, 0.33, 0.17]);
     expect(goals[0]).toMatchObject({ description: "Target: $6,000 within 1 year. Back taxes first" });
     expect(goals[2]).not.toHaveProperty("description");
+  });
+
+  it("splits the default priority into whole percentages that add up to 100", () => {
+    expect(familyDefaultPriorityPercents(1)).toEqual([100]);
+    expect(familyDefaultPriorityPercents(2)).toEqual([67, 33]);
+    expect(familyDefaultPriorityPercents(3)).toEqual([50, 33, 17]);
+    for (let count = 1; count <= 6; count += 1) {
+      const percents = familyDefaultPriorityPercents(count);
+      expect(percents.reduce((sum, value) => sum + value, 0)).toBe(100);
+      expect([...percents].sort((a, b) => b - a)).toEqual(percents);
+    }
+  });
+
+  it("uses the family's own priority percentages", () => {
+    const goals = familyMissionGoals([
+      { label: "Buy land", priorityPercent: 25 },
+      { label: "Start a business", priorityPercent: 75 },
+    ]);
+    expect(goals.map((goal) => goal.priorityWeight)).toEqual([0.25, 0.75]);
+  });
+
+  it("requires priority percentages on every goal that add up to 100", () => {
+    const parse = (percents: (number | undefined)[]) =>
+      familySetupSchema.safeParse({
+        goals: percents.map((priorityPercent, i) => ({ label: `Goal ${i}`, priorityPercent })),
+      });
+    expect(parse([60, 40]).success).toBe(true);
+    expect(parse([undefined, undefined]).success).toBe(true);
+    const short = parse([60, 30]);
+    expect(short.success).toBe(false);
+    expect(short.error?.issues[0].message).toBe("Goal priorities have to add up to 100%.");
+    expect(parse([60, undefined]).success).toBe(false);
+    expect(parse([100, 0]).success).toBe(false);
   });
 
   it("keeps duplicate goal keys unique", () => {
@@ -57,8 +91,8 @@ describe("family setup", () => {
     });
     expect(charter.split("\n")[0]).toBe("# The Hollis Table family agreement");
     expect(charter).toContain("Keep Mom's house and build a business we all own.");
-    expect(charter).toContain("1. Keep the house in the family: $6,000 within 1 year. Back taxes first");
-    expect(charter).toContain("3. Buy a rental\n");
+    expect(charter).toContain("1. Keep the house in the family (50%): $6,000 within 1 year. Back taxes first");
+    expect(charter).toContain("3. Buy a rental (17%)\n");
     expect(charter).toContain("Personal bills and loans stay between people");
     expect(charter).toContain("A family decision stays open for 3 days.");
     expect(charter).toContain("it passes with two-thirds of the votes");
@@ -122,7 +156,12 @@ describe("family setup", () => {
         votingWindowDays: 10,
         approvalThresholdPercent: 67,
       }),
-    ).toMatchObject({ mission: "Our why.", goals: [{ label: "Buy land" }], votingWindowDays: 7, approval: "TWO_THIRDS" });
+    ).toMatchObject({
+      mission: "Our why.",
+      goals: [{ label: "Buy land", priorityPercent: 100 }],
+      votingWindowDays: 7,
+      approval: "TWO_THIRDS",
+    });
   });
 
   it("rejects voting windows and lists outside the guided choices", () => {

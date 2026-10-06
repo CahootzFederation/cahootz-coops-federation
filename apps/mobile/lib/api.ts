@@ -637,7 +637,14 @@ export interface CommonsInvitationOverview {
 /** Answers from the guided Start a family steps (see packages/trpc/src/services/family-setup.ts). */
 export interface FamilySetupInput {
   mission?: string;
-  goals: { label: string; detail?: string; targetAmountUSD?: number; targetMonths?: number }[];
+  goals: {
+    label: string;
+    detail?: string;
+    targetAmountUSD?: number;
+    targetMonths?: number;
+    /** Share of the priority, 1-100; every goal's share adds up to 100. */
+    priorityPercent?: number;
+  }[];
   votingWindowDays: 3 | 7 | 14;
   approval: 'MAJORITY' | 'TWO_THIRDS';
   houseRules: string[];

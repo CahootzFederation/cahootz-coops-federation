@@ -1,0 +1,18 @@
+# Signs EMAIL in through the menu with the fixture one-time code, from a
+# freshly installed app.
+appId: com.cahootzcoops.mobile
+---
+- launchApp:
+    clearState: true
+- runFlow: skip-onboarding.yaml
+- tapOn: "Open menu"
+- tapOn: "Sign In"
+- tapOn: "name@email.com"
+- inputText: ${EMAIL}
+- hideKeyboard
+- tapOn: "Log in with code"
+- tapOn: "Enter 6-digit code"
+- inputText: ${LOGIN_CODE}
+- hideKeyboard
+- tapOn: "Verify & Sign In"
+- runFlow: skip-onboarding.yaml

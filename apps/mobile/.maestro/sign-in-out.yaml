@@ -1,0 +1,17 @@
+# A member signs in on Android with their email and code, sees their own
+# handle in the menu, and signs out again.
+# Pass EMAIL and LOGIN_CODE with -e (see TESTING.md).
+appId: com.cahootzcoops.mobile
+name: Sign in and out
+---
+- runFlow:
+    file: subflows/sign-in.yaml
+    env:
+      EMAIL: ${EMAIL}
+      LOGIN_CODE: ${LOGIN_CODE}
+- tapOn: "Open menu"
+- assertVisible: "Sign Out \\(@releaseclick1\\)"
+- tapOn: "Sign Out \\(@releaseclick1\\)"
+- tapOn: "Yes, sign out"
+- tapOn: "Open menu"
+- assertVisible: "Sign In"

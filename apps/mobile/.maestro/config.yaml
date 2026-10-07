@@ -1,0 +1,8 @@
+# Android smoke journeys for the native build (see TESTING.md, "Android E2E").
+# The Playwright suite in e2e/ covers app behavior on mobile web; these flows
+# cover what only a real Android build can break: launch, sign-in on the
+# native keyboard, the hardware back button and edge-to-edge layout.
+flows:
+  - "*.yaml"
+executionOrder:
+  continueOnFailure: false

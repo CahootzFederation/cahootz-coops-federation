@@ -1,0 +1,26 @@
+# Takes the skip path through the post-signup wizard when it shows (intro,
+# profile form, "find your way in"), like skipOnboardingWizard in e2e/support/auth.ts.
+appId: com.cahootzcoops.mobile
+---
+- extendedWaitUntil:
+    visible:
+      text: "Continue|Do this later|Skip for now|Open menu"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+- runFlow:
+    when:
+      visible: "Do this later"
+    commands:
+      - tapOn: "Do this later"
+- runFlow:
+    when:
+      visible: "Skip for now"
+    commands:
+      - tapOn: "Skip for now"
+- extendedWaitUntil:
+    visible: "Open menu"
+    timeout: 30000

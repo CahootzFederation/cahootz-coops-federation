@@ -1,0 +1,174 @@
+name: Mobile Android E2E
+
+# Native Android smoke journeys (apps/mobile/.maestro) on an emulator, against
+# a release APK built here and a local API. App behavior is covered by the
+# Playwright suite in mobile-e2e.yml; this catches what only a real Android
+# build breaks (launch, native keyboard, back button, edge-to-edge layout).
+# Building the APK and booting an emulator take a while, so this runs nightly
+# and on PRs that change the native build, not on every PR.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * *"
+  pull_request:
+    paths:
+      - ".github/workflows/mobile-android-e2e.yml"
+      - "apps/mobile/.maestro/**"
+      - "apps/mobile/app.json"
+      - "apps/mobile/app.config.js"
+      - "apps/mobile/eas.json"
+      - "apps/mobile/expo-plugins/**"
+      - "apps/mobile/package.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-android-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-e2e:
+    name: Android smoke journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cahootz_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cahootz_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      CI: "true"
+      NODE_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cahootz_e2e
+      SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      PORT: "3001"
+      WALLET_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      STRIPE_SECRET_KEY: sk_test_ci_placeholder
+      STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
+      STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
+      SLACK_WEBHOOK_URL: https://example.com/ci-placeholder
+      RESEND_API_KEY: re_ci_placeholder
+      RESEND_FROM_EMAIL: support@mail.cahootzcoops.com
+      SENTRY_DSN: https://public@example.com/1
+      SESSION_SECRET: ci-only-session-secret-0123456789abcdef0123456789
+      SKIP_BLOG_SYNC: "true"
+      # The emulator reaches the CI machine's localhost at 10.0.2.2.
+      EXPO_PUBLIC_API_BASE_URL: http://10.0.2.2:3001
+      EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
+      ANDROID_E2E: "1"
+      SENTRY_DISABLE_AUTO_UPLOAD: "true"
+      MAESTRO_VERSION: "2.10.0"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10.11.1"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build API workspace packages
+        run: pnpm --filter @repo/trpc... --fail-if-no-match build
+
+      - name: Prepare database
+        run: |
+          pnpm -F @repo/db exec prisma migrate deploy --schema prisma/schema.prisma
+          pnpm -F @repo/db exec tsx scripts/seed-coop-config.ts
+          pnpm -F @repo/db exec tsx scripts/seed-coop-display-info.ts
+          pnpm -F @repo/db exec ts-node --transpile-only scripts/seed-test-users.ts -- --coopId=cahootz --count=2 --prefix=releaseclick
+
+      - name: Start API
+        run: |
+          nohup pnpm -F @cahootz/api dev > /tmp/cahootz-api.log 2>&1 &
+
+      # Only the emulator's architecture is built, which roughly quarters the
+      # native compile.
+      - name: Build release APK
+        working-directory: apps/mobile
+        run: |
+          npx expo prebuild --platform android --clean --no-install
+          cd android
+          ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon
+
+      - name: Wait for API
+        shell: bash
+        run: |
+          for attempt in {1..60}; do
+            if curl --fail --silent http://localhost:3001/health/db >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/cahootz-api.log
+          exit 1
+
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Android smoke journeys
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_7
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: |
+            adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+            mkdir -p output/maestro
+            maestro test apps/mobile/.maestro --format junit --output output/maestro/report.xml --test-output-dir output/maestro -e EMAIL=releaseclick1@test.cahootz.local -e LOGIN_CODE=000000
+
+      - name: Collect server logs
+        if: ${{ always() }}
+        run: |
+          mkdir -p output/maestro
+          cp /tmp/cahootz-api.log output/maestro/api.log 2>/dev/null || true
+
+      - name: Upload Android E2E artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-android-e2e-artifacts
+          path: output/maestro/
+          if-no-files-found: ignore
+          retention-days: 14

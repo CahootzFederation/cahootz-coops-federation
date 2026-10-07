@@ -12,7 +12,7 @@ on:
           - preview
           - production
       platform:
-        description: Platform to update
+        description: Platform to update (iOS, Android, or both)
         required: true
         default: all
         type: choice
@@ -108,3 +108,13 @@ jobs:
           fi
 
           eas update "${args[@]}"
+
+          {
+            echo "### OTA update published"
+            echo
+            echo "| Channel | Platform | Rollout | Message |"
+            echo "| --- | --- | --- | --- |"
+            echo "| $UPDATE_CHANNEL | $UPDATE_PLATFORM | ${ROLLOUT_PERCENTAGE}% | $message |"
+            echo
+            echo "Only installed builds on the \`$UPDATE_CHANNEL\` channel with runtime version $(node -p "require('./app.json').expo.runtimeVersion") pick this up."
+          } >> "$GITHUB_STEP_SUMMARY"

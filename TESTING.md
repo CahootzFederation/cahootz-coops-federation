@@ -185,6 +185,24 @@ Each commons detail page in the platform admin has a **View all stores** link. T
 
 After the workflow has run once on GitHub, add **Two-user mobile UI journeys** as a required status check in the `main` branch protection rules so a failing E2E suite blocks merging.
 
+## Android E2E
+
+The Playwright journeys above test app behavior on mobile web, which is the same on iOS and Android. The Android smoke journeys in `apps/mobile/.maestro/` test what only a real Android build can break: launching, signing in on the native keyboard, the hardware back button, and the edge-to-edge layout. Each flow runs on a freshly installed app (`clearState`), and none of them create content.
+
+1. **Sign in and out** (`sign-in-out.yaml`): User A skips the onboarding wizard, signs in from the menu with their email and the fixture code, sees "Sign Out (@releaseclick1)", and signs out.
+2. **Feed composer, keyboard and back button** (`feed-keyboard-back.yaml`): User A opens General, types a draft, and still sees the Post button above the keyboard. The first hardware back press closes the keyboard and keeps the draft. The second returns to Circle View.
+
+The `Mobile Android E2E` workflow (`.github/workflows/mobile-android-e2e.yml`) runs nightly, on PRs that change the native build (`app.json`, `app.config.js`, `eas.json`, `expo-plugins/`, the mobile `package.json`, or the flows), and on demand. It seeds the same fixtures as `Mobile E2E`, starts the API, builds a release APK with `ANDROID_E2E=1`, boots an API 35 emulator, and runs Maestro. `ANDROID_E2E=1` adds `expo-plugins/with-android-e2e.js`, which allows plain http to the CI API (`http://10.0.2.2:3001`), and turns off OTA updates so the APK runs its own bundle. Store builds never set it. Reports, screenshots and the API log are uploaded as `mobile-android-e2e-artifacts`.
+
+To run the flows locally, install [Maestro](https://maestro.mobile.dev) and the Android SDK, start an emulator and the API, then build and install the E2E APK:
+
+```bash
+cd apps/mobile && ANDROID_E2E=1 EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3001 SENTRY_DISABLE_AUTO_UPLOAD=true npx expo run:android --variant release
+maestro test apps/mobile/.maestro -e EMAIL=releaseclick1@test.cahootz.local -e LOGIN_CODE=000000
+```
+
+The `android/` folder isn't committed. `expo prebuild` (or EAS, on every build) generates it from `app.json`, so native config always matches the app config.
+
 ## Automated journeys to add before release
 
 Implement these in priority order. Every multi-user scenario must use separate browser contexts or separate physical devices.

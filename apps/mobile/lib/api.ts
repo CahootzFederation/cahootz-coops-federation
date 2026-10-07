@@ -266,12 +266,21 @@ export interface CommonsComment {
   authorHandle?: string;
   /** Written by Sage (or another AI account), so the app labels it. */
   authorIsAi?: boolean;
+  /** How many members liked (❤️) this comment. */
   reactionCount?: number;
-  /** Whether the signed-in viewer has reacted to this comment. */
+  /** Whether the signed-in viewer has liked this comment. */
   viewerReacted?: boolean;
+  /** Every emoji reaction, the like included, in first-used order. */
+  reactions?: ReactionSummary[];
   body: string;
   supporterBadge?: SupporterBadge | null;
   media?: CommonsPostMedia[];
+}
+
+export interface ReactionSummary {
+  emoji: string;
+  count: number;
+  viewerReacted: boolean;
 }
 
 export interface WelcomeIntroStatus {
@@ -376,6 +385,8 @@ export interface CommonsPost {
   classification?: string;
   replies: number;
   support: number;
+  /** Emoji reactions other than the like (❤️, counted in `support`). */
+  reactions?: ReactionSummary[];
   pledges?: string;
   isPinned?: boolean;
   event?: EventSummary;
@@ -1962,17 +1973,40 @@ export const api = {
     );
   },
 
-  async toggleCommentReaction(commentId: string, sessionToken?: string | null) {
+  /** Toggles one emoji on a comment; the like (❤️) when no emoji is given. */
+  async toggleCommentReaction(commentId: string, sessionToken?: string | null, emoji?: string) {
     const response = await fetch(`${API_BASE_URL}/trpc/commons.toggleCommentReaction`, {
       method: 'POST',
       headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({ commentId }),
+      body: JSON.stringify(emoji ? { commentId, emoji } : { commentId }),
     });
 
-    return readTrpcResult<{ reacted: boolean; reactionCount: number }>(
+    return readTrpcResult<{
+      emoji: string;
+      reacted: boolean;
+      reactionCount: number;
+      viewerReacted?: boolean;
+      reactions?: ReactionSummary[];
+    }>(
       response,
       'Could not update your reaction',
     );
+  },
+
+  /** Toggles one emoji on a post; ❤️ is the post's like. */
+  async togglePostReaction(postId: string, emoji: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.togglePostReaction`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ postId, emoji }),
+    });
+
+    return readTrpcResult<{
+      emoji: string;
+      reacted: boolean;
+      support: number;
+      reactions: ReactionSummary[];
+    }>(response, 'Could not update your reaction');
   },
 
   async toggleCommonsSupport(postId: string, sessionToken?: string | null) {

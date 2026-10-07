@@ -26,6 +26,7 @@ describe("Sage reply templates", () => {
     const agent = createCommonsActionAgent() as unknown as { instructions: string };
     expect(agent.instructions).toContain('Template "Action plan"');
     expect(agent.instructions).toContain("follow through now");
+    expect(agent.instructions).toContain("don't start a second round of questions");
   });
 });
 

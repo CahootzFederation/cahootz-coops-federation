@@ -48,8 +48,9 @@ describe("Sage's comment tools", () => {
     search.mockResolvedValue([{ title: "Utility help", excerpt: "The county pays up to $300 toward a winter heating bill." }]);
     const { tools, checked } = toolsWith([]);
     await call(tools, "search_commons_documents", { query: "heating bill help", limit: 1 });
-    expect(search).toHaveBeenCalledWith(expect.objectContaining({ coopId: "harbor", scopeType: "commons", scopeId: "harbor" }));
-    expect(search).toHaveBeenCalledWith(expect.objectContaining({ coopId: "harbor", scopeType: "circle", scopeId: "circle-1" }));
+    // Never PRIVATE documents: what Sage finds can end up in a comment everyone reads.
+    expect(search).toHaveBeenCalledWith(expect.objectContaining({ coopId: "harbor", scopeType: "commons", scopeId: "harbor", visibilities: ["COMMONS", "PUBLIC"] }));
+    expect(search).toHaveBeenCalledWith(expect.objectContaining({ coopId: "harbor", scopeType: "circle", scopeId: "circle-1", visibilities: ["CIRCLE", "COMMONS", "PUBLIC"] }));
     expect(checked).toContain("The county pays up to $300 toward a winter heating bill.");
   });
 

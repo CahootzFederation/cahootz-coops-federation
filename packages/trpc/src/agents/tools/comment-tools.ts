@@ -1,6 +1,7 @@
 import { tool } from "@openai/agents";
 import { z } from "zod";
 
+import type { KnowledgeVisibility } from "@repo/db";
 import { searchKnowledgeBase } from "../../services/knowledge-base.js";
 import type { AgentToolContext } from "./context.js";
 
@@ -28,7 +29,12 @@ export function buildCommentTools(ctx: AgentToolContext & { circleId?: string | 
     parameters: z.object({ query: z.string().min(3).max(200), limit: z.number().int().min(1).max(5).default(3) }),
     errorFunction: null,
     execute: async ({ query, limit }) => {
-      const scopes = [{ scopeType: "commons", scopeId: ctx.coopId }, ...(ctx.circleId ? [{ scopeType: "circle", scopeId: ctx.circleId }] : [])];
+      // Results can end up in a comment everyone in the Commons (or circle) reads, so only documents
+      // already shared that widely: never PRIVATE ones.
+      const scopes = [
+        { scopeType: "commons", scopeId: ctx.coopId, visibilities: ["COMMONS", "PUBLIC"] as KnowledgeVisibility[] },
+        ...(ctx.circleId ? [{ scopeType: "circle", scopeId: ctx.circleId, visibilities: ["CIRCLE", "COMMONS", "PUBLIC"] as KnowledgeVisibility[] }] : []),
+      ];
       const results = (await Promise.all(scopes.map((scope) => searchKnowledgeBase({ coopId: ctx.coopId, ...scope, query, limit }).catch(() => [])))).flat().slice(0, limit);
       const found = results.map((row) => ({ title: String((row as { title?: unknown }).title ?? ""), excerpt: String((row as { excerpt?: unknown }).excerpt ?? "").slice(0, 800) }));
       for (const row of found) checked.push(row.title, row.excerpt);

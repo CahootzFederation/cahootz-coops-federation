@@ -240,6 +240,7 @@ Known limitations:
 - `checked` evidence isn't saved on the action, so an admin approving a queued reply can't re-verify a tool excerpt; they review the text themselves.
 - The circle trend agent's comments still have no evidence field. The relevance check there compares the comment with its target post and the stated reason.
 - The @mention/DM agent now helps with everyday decisions from the conversation, but has no structured evidence check (it is member-requested and already has the output safety check).
+- `search_commons_documents` reads `KnowledgeDocument`, but no mobile or web screen calls `knowledgeBase.uploadDocument` yet, so in practice it finds nothing until documents are added. It reads only COMMONS and PUBLIC documents (plus CIRCLE ones for a circle), never PRIVATE ones. The older `search_knowledge_base` agent tool still applies no visibility filter.
 - Not yet built: learning from how leaders edit suggested comments before approving them (see Next).
 
 ### P2 — Cost optimization and budget administration

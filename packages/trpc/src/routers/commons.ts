@@ -36,7 +36,13 @@ import {
 } from '../services/direct-circles.js';
 import { createNotificationAndPush } from '../services/push-notification-service.js';
 import { notifyCircleActivity } from '../services/circle-notifications.js';
-import { notifyNewCommentReaction } from '../services/comment-reactions.js';
+import { notifyNewCommentReaction, notifyNewPostReaction } from '../services/comment-reactions.js';
+import {
+  LIKE_EMOJI,
+  MAX_REACTIONS_PER_MEMBER,
+  reactionEmojiSchema,
+  summarizeReactions,
+} from '../services/emoji-reactions.js';
 import { recordWelcomeIntroActivity } from '../services/welcome-intros.js';
 import { FUNDING_BADGE_BY_TIER } from '../services/funding-badge-service.js';
 import { getSageAutonomyUsage } from '../services/sage-autonomy.js';
@@ -724,6 +730,51 @@ export function mapEventSummary(record: any, viewerId?: string) {
   };
 }
 
+// A comment's reactions: the like (❤️) count and the viewer's like, kept as
+// separate fields for older app builds, plus one chip per emoji.
+function mapCommentReactions(rows: Array<{ emoji: string; userId: string }>, viewerId?: string | null) {
+  const reactions = summarizeReactions(rows, viewerId);
+  const like = reactions.find((reaction) => reaction.emoji === LIKE_EMOJI);
+  return {
+    reactionCount: like?.count ?? 0,
+    viewerReacted: like?.viewerReacted ?? false,
+    reactions,
+  };
+}
+
+// Toggles a member's like (support) on a post and alerts the author to a
+// new like. Returns whether the post is now liked.
+async function togglePostSupport(
+  db: Context['db'],
+  post: { id: string; coopId: string; authorId: string },
+  userId: string,
+): Promise<boolean> {
+  const existing = await db.commonsPostSupport.findUnique({
+    where: { postId_userId: { postId: post.id, userId } },
+  });
+  if (existing) {
+    await db.commonsPostSupport.delete({ where: { id: existing.id } });
+    return false;
+  }
+
+  await db.commonsPostSupport.create({ data: { postId: post.id, userId } });
+
+  if (post.authorId && post.authorId !== userId) {
+    void createNotificationAndPush(db, {
+      userId: post.authorId,
+      coopId: post.coopId,
+      type: 'COMMONS_SUPPORT',
+      title: 'Someone liked your post',
+      body: 'A commons member liked what you shared.',
+      data: {
+        postId: post.id,
+        coopId: post.coopId,
+      },
+    });
+  }
+  return true;
+}
+
 function mapPostWithGroup(record: any, groupName: string, viewerId?: string) {
   return {
     id: record.id,
@@ -743,6 +794,8 @@ function mapPostWithGroup(record: any, groupName: string, viewerId?: string) {
     classification: record.classification ?? 'social',
     replies: record._count?.comments ?? record.comments?.length ?? 0,
     support: record._count?.supports ?? record.supports?.length ?? 0,
+    // Emoji reactions other than the like; only loaded on the post detail.
+    reactions: summarizeReactions(record.reactions ?? [], viewerId),
     pledges: undefined as string | undefined,
     isPinned: record.isPinned ?? false,
     event: record.event ? mapEventSummary(record.event, viewerId) : undefined,
@@ -766,8 +819,7 @@ function mapPostWithGroup(record: any, groupName: string, viewerId?: string) {
         author: displayName(comment.author),
         authorHandle: personHandle(comment.author),
         authorIsAi: !!comment.author?.isBot,
-        reactionCount: comment._count?.reactions ?? 0,
-        viewerReacted: (comment.reactions?.length ?? 0) > 0,
+        ...mapCommentReactions(comment.reactions ?? [], viewerId),
         supporterBadge: comment.supporterBadge ?? null,
         body: comment.content,
         media:
@@ -1984,14 +2036,18 @@ export const commonsRouter = router({
             include: {
               author: { select: { name: true, email: true, handle: true, isBot: true } },
               media: { orderBy: { order: 'asc' } },
-              _count: { select: { reactions: true } },
-              // Only the viewer's own reaction, to show whether they reacted.
+              // Oldest first, so chips keep the order each emoji was first used.
               reactions: {
-                where: { userId: accountUser?.id ?? '' },
-                select: { id: true },
-                take: 1,
+                select: { emoji: true, userId: true },
+                orderBy: { createdAt: 'asc' },
+                take: 500,
               },
             },
+          },
+          reactions: {
+            select: { emoji: true, userId: true },
+            orderBy: { createdAt: 'asc' },
+            take: 1000,
           },
           _count: { select: { comments: true, supports: true } },
         },
@@ -2034,7 +2090,7 @@ export const commonsRouter = router({
 
       return {
         coop,
-        post: mapPostWithGroup(post, coop.name),
+        post: mapPostWithGroup(post, coop.name, accountUser?.id),
         circleIsMember: isCirclePost ? circleMembership?.group.coopId === post.coopId : null,
       };
     }),
@@ -2959,6 +3015,7 @@ export const commonsRouter = router({
           authorIsAi: !!comment.author?.isBot,
           reactionCount: 0,
           viewerReacted: false,
+          reactions: [],
           body: comment.content,
           media:
             comment.media?.map((item: any) => ({
@@ -3069,13 +3126,15 @@ export const commonsRouter = router({
       return { success: true };
     }),
 
-  // A member's "like" on a comment - the comment-level counterpart of
-  // toggleSupport. A first reaction on a welcome lounge intro counts as a
+  // A member's emoji reaction on a comment, Slack-style: each emoji toggles
+  // on its own and "❤️" (the default, for older app builds) is the comment's
+  // like. A member's first reaction on a welcome lounge intro counts as a
   // response to it (see services/welcome-intros.ts).
   toggleCommentReaction: accountAuthenticatedProcedure
-    .input(z.object({ commentId: z.string().min(1) }))
+    .input(z.object({ commentId: z.string().min(1), emoji: reactionEmojiSchema.optional() }))
     .mutation(async ({ input, ctx }) => {
       const { accountUser } = ctx as AccountAuthenticatedContext;
+      const emoji = input.emoji ?? LIKE_EMOJI;
       const comment = await ctx.db.commonsComment.findUnique({
         where: { id: input.commentId },
         select: { id: true, authorId: true, author: { select: { isBot: true } }, post: true },
@@ -3086,18 +3145,26 @@ export const commonsRouter = router({
       await requireActiveCommonsMembership(ctx.db, accountUser.id, comment.post.coopId);
       await requirePostCircleMembership(ctx.db, accountUser.id, comment.post);
 
-      const existing = await ctx.db.commonsCommentReaction.findUnique({
-        where: { commentId_userId: { commentId: comment.id, userId: accountUser.id } },
+      const mine = await ctx.db.commonsCommentReaction.findMany({
+        where: { commentId: comment.id, userId: accountUser.id },
+        select: { id: true, emoji: true },
       });
+      const existing = mine.find((reaction) => reaction.emoji === emoji);
       let reacted: boolean;
       if (existing) {
         await ctx.db.commonsCommentReaction.delete({ where: { id: existing.id } });
         reacted = false;
       } else {
+        if (mine.length >= MAX_REACTIONS_PER_MEMBER) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `You can add up to ${MAX_REACTIONS_PER_MEMBER} reactions to one comment.`,
+          });
+        }
         let created = true;
         try {
           await ctx.db.commonsCommentReaction.create({
-            data: { commentId: comment.id, userId: accountUser.id },
+            data: { commentId: comment.id, userId: accountUser.id, emoji },
           });
         } catch (error) {
           // A double tap raced us - the reaction exists either way, and the
@@ -3106,22 +3173,93 @@ export const commonsRouter = router({
           created = false;
         }
         reacted = true;
-        if (created) {
-          // Intro's first response -> "reacted to your intro"; otherwise the
-          // comment author's "liked your comment" (never both).
+        // One alert per member per comment, not one per emoji. Intro's first
+        // response -> "reacted to your intro"; otherwise the comment author's
+        // "liked/reacted to your comment" (never both).
+        if (created && mine.length === 0) {
           await notifyNewCommentReaction(ctx.db, {
             comment,
             reactor: accountUser,
+            emoji,
           }).catch((error) =>
             console.error('Comment reaction notification failed', { commentId: comment.id, error }),
           );
         }
       }
 
-      const reactionCount = await ctx.db.commonsCommentReaction.count({
+      const rows = await ctx.db.commonsCommentReaction.findMany({
         where: { commentId: comment.id },
+        select: { emoji: true, userId: true },
+        orderBy: { createdAt: 'asc' },
+        take: 500,
       });
-      return { reacted, reactionCount };
+      return { emoji, reacted, ...mapCommentReactions(rows, accountUser.id) };
+    }),
+
+  // A member's emoji reaction on a post. "❤️" is the post's like, so it goes
+  // through the same support row (and alert) as toggleSupport.
+  togglePostReaction: accountAuthenticatedProcedure
+    .input(z.object({ postId: z.string().min(1), emoji: reactionEmojiSchema }))
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const post = await ctx.db.commonsPost.findUnique({ where: { id: input.postId } });
+      if (!post) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Post not found.' });
+      }
+      await requireActiveCommonsMembership(ctx.db, accountUser.id, post.coopId);
+      await requirePostCircleMembership(ctx.db, accountUser.id, post);
+
+      let reacted: boolean;
+      if (input.emoji === LIKE_EMOJI) {
+        reacted = await togglePostSupport(ctx.db, post, accountUser.id);
+      } else {
+        const mine = await ctx.db.commonsPostReaction.findMany({
+          where: { postId: post.id, userId: accountUser.id },
+          select: { id: true, emoji: true },
+        });
+        const existing = mine.find((reaction) => reaction.emoji === input.emoji);
+        if (existing) {
+          await ctx.db.commonsPostReaction.delete({ where: { id: existing.id } });
+          reacted = false;
+        } else {
+          if (mine.length >= MAX_REACTIONS_PER_MEMBER) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `You can add up to ${MAX_REACTIONS_PER_MEMBER} reactions to one post.`,
+            });
+          }
+          let created = true;
+          try {
+            await ctx.db.commonsPostReaction.create({
+              data: { postId: post.id, userId: accountUser.id, emoji: input.emoji },
+            });
+          } catch (error) {
+            if ((error as { code?: string } | undefined)?.code !== 'P2002') throw error;
+            created = false;
+          }
+          reacted = true;
+          // One alert per member per post, not one per emoji.
+          if (created && mine.length === 0) {
+            notifyNewPostReaction(ctx.db, { post, reactor: accountUser, emoji: input.emoji });
+          }
+        }
+      }
+
+      const [rows, support] = await Promise.all([
+        ctx.db.commonsPostReaction.findMany({
+          where: { postId: post.id },
+          select: { emoji: true, userId: true },
+          orderBy: { createdAt: 'asc' },
+          take: 1000,
+        }),
+        ctx.db.commonsPostSupport.count({ where: { postId: post.id } }),
+      ]);
+      return {
+        emoji: input.emoji,
+        reacted,
+        support,
+        reactions: summarizeReactions(rows, accountUser.id),
+      };
     }),
 
   toggleSupport: accountAuthenticatedProcedure
@@ -3141,38 +3279,7 @@ export const commonsRouter = router({
       await requireActiveCommonsMembership(ctx.db, accountUser.id, post.coopId);
       await requirePostCircleMembership(ctx.db, accountUser.id, post);
 
-      const existing = await ctx.db.commonsPostSupport.findUnique({
-        where: {
-          postId_userId: {
-            postId: input.postId,
-            userId: accountUser.id,
-          },
-        },
-      });
-
-      if (existing) {
-        await ctx.db.commonsPostSupport.delete({ where: { id: existing.id } });
-        return { supported: false };
-      }
-
-      await ctx.db.commonsPostSupport.create({
-        data: { postId: input.postId, userId: accountUser.id },
-      });
-
-      if (post.authorId && post.authorId !== accountUser.id) {
-        void createNotificationAndPush(ctx.db, {
-          userId: post.authorId,
-          coopId: post.coopId,
-          type: 'COMMONS_SUPPORT',
-          title: 'Someone liked your post',
-          body: 'A commons member liked what you shared.',
-          data: {
-            postId: post.id,
-            coopId: post.coopId,
-          },
-        });
-      }
-      return { supported: true };
+      return { supported: await togglePostSupport(ctx.db, post, accountUser.id) };
     }),
 
   // Legacy endpoint kept for older app builds; DMs now live in private

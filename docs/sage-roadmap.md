@@ -213,7 +213,7 @@ Status (2026-10-04): built and verified.
 
 Goal: Sage's comments help a group make better everyday decisions, from fixed cooperative values rather than the model's mainstream defaults.
 
-Status (2026-10-06): built and unit-tested. Journey 55 passed against the live model; the full mobile suite could not complete locally (see Verification).
+Status (2026-10-06): built and unit-tested. Journey 56 passed against the live model; the full mobile suite could not complete locally (see Verification).
 
 - **Core principles** (`services/sage-principles.ts`). Fixed platform rules, not Commons settings, written into the instructions of every Sage agent (Commons feed, circle trend, steward, ride match, @mention/DM reply). They put the group first, keep money inside the Commons when the cost is fair, build shared ownership, start from what members already have, don't assume access to cars, banks or credit, and never treat hardship as a personal failing. They also list mainstream advice Sage must not give: individual budgeting tips when a group option exists, credit-building or financial products, cheapest-is-best, and hardship as an individual problem. A Commons' charter adds to them and can't override them. `sage-principles.test.ts` fails if any Sage agent leaves them out.
 - **Decision-moment templates** next to Action plan (`sage-reply-templates.ts`): Where we are (agreed / still open), Trade-off (options laid out evenly, with the fact that decides it), Missing piece (specific facts and who can supply them), Before we decide (who's affected and hasn't been heard; groups, never names). New voice rules: don't take sides between members, and comment only when Sage adds a fact, structure or a missing voice. Sage may now also offer to "summarize where we've landed" and "check back with you on a date you pick", both of which it can already do.
@@ -228,14 +228,14 @@ Status (2026-10-06): built and unit-tested. Journey 55 passed against the live m
 Verification (2026-10-06, local stack, `gpt-5.6-luna` + `gpt-5-nano`):
 
 - `pnpm -F @repo/trpc test`: 71 files, 676 tests passed. `tsc` for `@repo/trpc` and `pnpm -F @cahootz/mobile type-check` passed.
-- `sage-decision-comments.spec.ts` (journey 55) passed on the final code and on an earlier run; it failed in runs made before the stay-quiet wording fix, and in runs cut short by the machine.
+- `sage-decision-comments.spec.ts` (journey 56) passed on the final code and on an earlier run; it failed in runs made before the stay-quiet wording fix, and in runs cut short by the machine.
 - Live relevance check: a charter quote about proposals in reply to "Can I borrow a ladder?" was judged off topic; the same quote in reply to buying a $3,000 van was judged on topic. About $0.0001 per check. The feed reply itself cost about $0.001.
 - The full `pnpm test:e2e:mobile` run did not complete. The machine's disk was 99% full (5.4 GB free) with load averages of 11-28; Metro took up to 120s per bundle and then crashed with "JavaScript heap out of memory" at 8 GB. Every failure was a page-load timeout, `ERR_ABORTED` or `ERR_CONNECTION_REFUSED` on :8081, not an assertion about Sage. Rerun the suite on a machine with free disk (or CI) before release.
 - The local `soulaancoop` database was missing `CoopConfig.familySetup` (from main's family-setup work), so every Sage run failed locally until that one nullable column was added with `prisma db execute`.
 
 Known limitations:
 
-- Whether Sage uses a decision template, and which one, is the live model's choice; journey 55 checks grounding and relevance, not the template.
+- Whether Sage uses a decision template, and which one, is the live model's choice; journey 56 checks grounding and relevance, not the template.
 - The charter-required keyword check is deliberately broad. A false match only means the reply needs a charter quote, but an everyday reply that mentions "vote" or "proposal" will be discarded unless it has one.
 - `checked` evidence isn't saved on the action, so an admin approving a queued reply can't re-verify a tool excerpt; they review the text themselves.
 - The circle trend agent's comments still have no evidence field. The relevance check there compares the comment with its target post and the stated reason.

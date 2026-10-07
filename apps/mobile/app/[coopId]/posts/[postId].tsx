@@ -43,6 +43,8 @@ import { ApiError, friendlyError } from '@/lib/friendly-error';
 import { LoadError } from '@/components/load-error';
 import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
 import { SageDecisionTrails } from '@/components/sage-decision-trail';
+import { ReactionBar } from '@/components/reaction-bar';
+import { LIKE_EMOJI } from '@/lib/emoji-catalog';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -153,6 +155,26 @@ export default function CommonsPostDetailScreen() {
     }
   };
 
+  const [isReactingToPost, setIsReactingToPost] = useState(false);
+  const togglePostReaction = async (emoji: string) => {
+    if (emoji === LIKE_EMOJI) {
+      await supportPost();
+      return;
+    }
+    if (!post || !sessionToken || isReactingToPost) return;
+    setIsReactingToPost(true);
+    try {
+      const result = await api.togglePostReaction(post.id, emoji, sessionToken);
+      setPost((current) =>
+        current ? { ...current, support: result.support, reactions: result.reactions } : current
+      );
+    } catch (caughtError) {
+      setError(friendlyError(caughtError, "We couldn't save your reaction."));
+    } finally {
+      setIsReactingToPost(false);
+    }
+  };
+
   const submitComment = async () => {
     const content = commentDraft.trim();
     if (!post || isCommenting) return;
@@ -230,18 +252,23 @@ export default function CommonsPostDetailScreen() {
     }
   };
 
-  const toggleCommentReaction = async (commentId: string) => {
+  const toggleCommentReaction = async (commentId: string, emoji?: string) => {
     if (!sessionToken || reactingCommentId) return;
     setReactingCommentId(commentId);
     try {
-      const result = await api.toggleCommentReaction(commentId, sessionToken);
+      const result = await api.toggleCommentReaction(commentId, sessionToken, emoji);
       setPost((current) =>
         current
           ? {
               ...current,
               comments: current.comments.map((comment) =>
                 comment.id === commentId
-                  ? { ...comment, viewerReacted: result.reacted, reactionCount: result.reactionCount }
+                  ? {
+                      ...comment,
+                      viewerReacted: result.viewerReacted ?? result.reacted,
+                      reactionCount: result.reactionCount,
+                      reactions: result.reactions ?? comment.reactions,
+                    }
                   : comment
               ),
             }
@@ -529,6 +556,17 @@ export default function CommonsPostDetailScreen() {
               </Text>
             </View>
 
+            {post.id ? (
+              <View className="mt-3">
+                <ReactionBar
+                  reactions={post.reactions ?? []}
+                  onToggle={(emoji) => void togglePostReaction(emoji)}
+                  disabled={!sessionToken || circleIsMember === false || isReactingToPost}
+                  targetLabel="this post"
+                />
+              </View>
+            ) : null}
+
             <View className="mt-4 flex-row border-y border-stone-100 py-2">
               <TouchableOpacity onPress={supportPost} disabled={circleIsMember === false} className="flex-1 flex-row items-center justify-center gap-2 py-2" style={{ opacity: circleIsMember === false ? 0.4 : 1 }}>
                 <CheckCircle2 size={16} color={THEME.primary} />
@@ -657,31 +695,38 @@ export default function CommonsPostDetailScreen() {
                       </View>
                     ) : null}
                     {comment.id ? (
-                      <View className="mt-2 flex-row items-center">
-                        <TouchableOpacity
-                          onPress={() => void toggleCommentReaction(comment.id)}
+                      <View className="mt-2">
+                        <ReactionBar
+                          reactions={comment.reactions ?? []}
+                          onToggle={(emoji) => void toggleCommentReaction(comment.id, emoji)}
                           disabled={!sessionToken || circleIsMember === false || reactingCommentId === comment.id}
-                          className="flex-row items-center gap-1 rounded-full px-2 py-1"
-                          style={{
-                            backgroundColor: comment.viewerReacted ? THEME.primarySoft : 'transparent',
-                            opacity: !sessionToken || circleIsMember === false ? 0.5 : 1,
-                          }}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: !!comment.viewerReacted }}
-                          accessibilityLabel={`${comment.viewerReacted ? 'Remove your like from' : 'Like'} ${comment.author}'s comment, ${comment.reactionCount ?? 0} ${(comment.reactionCount ?? 0) === 1 ? 'like' : 'likes'}`}
+                          targetLabel={`${comment.author}'s comment`}
                         >
-                          <Heart
-                            size={13}
-                            color={comment.viewerReacted ? THEME.primary : THEME.muted}
-                            fill={comment.viewerReacted ? THEME.primary : 'transparent'}
-                          />
-                          <Text
-                            className="text-[11px] font-bold"
-                            style={{ color: comment.viewerReacted ? THEME.primary : '#78716C' }}
+                          <TouchableOpacity
+                            onPress={() => void toggleCommentReaction(comment.id)}
+                            disabled={!sessionToken || circleIsMember === false || reactingCommentId === comment.id}
+                            className="flex-row items-center gap-1 rounded-full px-2 py-1"
+                            style={{
+                              backgroundColor: comment.viewerReacted ? THEME.primarySoft : 'transparent',
+                              opacity: !sessionToken || circleIsMember === false ? 0.5 : 1,
+                            }}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: !!comment.viewerReacted }}
+                            accessibilityLabel={`${comment.viewerReacted ? 'Remove your like from' : 'Like'} ${comment.author}'s comment, ${comment.reactionCount ?? 0} ${(comment.reactionCount ?? 0) === 1 ? 'like' : 'likes'}`}
                           >
-                            {comment.reactionCount ?? 0}
-                          </Text>
-                        </TouchableOpacity>
+                            <Heart
+                              size={13}
+                              color={comment.viewerReacted ? THEME.primary : THEME.muted}
+                              fill={comment.viewerReacted ? THEME.primary : 'transparent'}
+                            />
+                            <Text
+                              className="text-[11px] font-bold"
+                              style={{ color: comment.viewerReacted ? THEME.primary : '#78716C' }}
+                            >
+                              {comment.reactionCount ?? 0}
+                            </Text>
+                          </TouchableOpacity>
+                        </ReactionBar>
                       </View>
                     ) : null}
                   </View>

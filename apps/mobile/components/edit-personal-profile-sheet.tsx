@@ -13,6 +13,7 @@ import {
 import { CheckCircle2, Image as ImageIcon, Smile, X } from 'lucide-react-native';
 
 import { COLOR_OPTIONS, EMOJI_OPTIONS } from '@/components/emoji-color-picker';
+import { EmojiChoiceGrid } from '@/components/emoji-picker';
 import { PersonAvatar } from '@/components/person-avatar';
 import { Text } from '@/components/ui/text';
 import { api, type PersonalPageProfile } from '@/lib/api';
@@ -182,25 +183,14 @@ export function EditPersonalProfileSheet({
             {mode === 'emoji' ? (
               <>
                 <Text className="mb-2 text-xs font-black uppercase text-gray-500">Emoji</Text>
-                <View className="mb-4 flex-row flex-wrap gap-2">
-                  {EMOJI_OPTIONS.map((option) => {
-                    const selected = emoji === option;
-                    return (
-                      <TouchableOpacity
-                        key={option}
-                        onPress={() => setEmoji(option)}
-                        className="h-11 w-11 items-center justify-center rounded-xl border"
-                        style={{
-                          borderColor: selected ? PRIMARY : '#E5E7EB',
-                          backgroundColor: selected ? '#FFF7ED' : '#FFFFFF',
-                        }}
-                        accessibilityLabel={`Use emoji ${option}`}
-                        accessibilityState={{ selected }}
-                      >
-                        <Text style={{ fontSize: 20 }}>{option}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+                <View className="mb-4">
+                  <EmojiChoiceGrid
+                    options={EMOJI_OPTIONS}
+                    value={emoji}
+                    onChange={setEmoji}
+                    tileSize={44}
+                    pickerTitle="Choose your emoji"
+                  />
                 </View>
 
                 <Text className="mb-2 text-xs font-black uppercase text-gray-500">Color</Text>

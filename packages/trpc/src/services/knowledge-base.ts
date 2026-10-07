@@ -117,6 +117,8 @@ export interface SearchKnowledgeBaseParams {
   scopeType: string;
   scopeId: string;
   visibility?: KnowledgeVisibility;
+  /** Only documents with one of these visibilities (for example, never PRIVATE in a public reply). */
+  visibilities?: KnowledgeVisibility[];
   query: string;
   limit?: number;
 }
@@ -154,6 +156,7 @@ export async function searchKnowledgeBase(
       AND kd."scopeType" = ${params.scopeType}
       AND kd."scopeId" = ${params.scopeId}
       ${params.visibility ? Prisma.sql`AND kd."visibility" = ${params.visibility}::"KnowledgeVisibility"` : Prisma.empty}
+      ${params.visibilities ? Prisma.sql`AND kd."visibility"::text IN (${Prisma.join(params.visibilities.length ? params.visibilities : ["__none__"])})` : Prisma.empty}
     ORDER BY kc."embedding" <=> ${vectorLiteral}::vector
     LIMIT ${limit}
   `);

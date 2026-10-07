@@ -304,7 +304,7 @@ export default function SageSuggestionDetailScreen() {
                       style={{ borderWidth: 1, borderColor: THEME.border, borderRadius: 10, padding: 10 }}
                     />
                     <Text style={{ color: THEME.muted, fontSize: 13 }}>
-                      Sage won't contact them. Their details go only into the invitation.
+                      Sage won&apos;t contact them. Their details go only into the invitation.
                     </Text>
                   </View>
                 ) : null}

@@ -5,7 +5,8 @@ export default defineConfig({
   // Tests inside a file run in order, but files run side by side. Every spec
   // creates its own uniquely named E2E content, and each test gets its own
   // browser contexts (and so its own localStorage cart), so files don't
-  // interfere even though they share the two fixture accounts.
+  // interfere even though they share the two fixture accounts. Specs that
+  // flip an account-wide setting take turns through e2e/support/exclusive.ts.
   fullyParallel: false,
   workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 3,
   retries: process.env.CI ? 2 : 0,

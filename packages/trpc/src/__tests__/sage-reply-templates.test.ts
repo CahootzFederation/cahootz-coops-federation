@@ -78,3 +78,47 @@ describe("rendering a chosen template", () => {
     expect(renderTemplatedReply({ draftText: "plain", templateKey: "no-such-template", templateLead: "Lead.", templateSteps: ["Do it."], templateOffer: "I can help." }).text).toBe("plain");
   });
 });
+
+describe("decision-moment templates", () => {
+  it("are offered alongside the action plan, each with its own use", () => {
+    const text = sageReplyStyleInstructions();
+    for (const name of ["Where we are", "Trade-off", "Missing piece", "Before we decide"]) expect(text).toContain(`Template "${name}"`);
+    expect(SAGE_REPLY_TEMPLATES.map((template) => template.key)).toEqual(["action-plan", "where-we-are", "trade-off", "missing-piece", "before-we-decide"]);
+    expect(text).toContain("When members disagree with each other, don't pick a side");
+    expect(text).toContain("Stay quiet when members are already answering each other well; a question or choice nobody has answered yet is not that");
+  });
+
+  it("renders a trade-off evenly, from its parts", async () => {
+    const { renderTemplatedReply } = await import("../services/sage-reply-templates.js");
+    expect(renderTemplatedReply({
+      draftText: "fallback", templateKey: "trade-off", templateLead: "We're choosing between the library room and rotating homes.",
+      templateSteps: ["Library: free, but it closes at 7.", "Homes: we can stay late, but the same two families host."],
+      templateOffer: "How many of us need to leave before 7?",
+    }).text).toBe([
+      "We're choosing between the library room and rotating homes.",
+      "• Library: free, but it closes at 7.",
+      "• Homes: we can stay late, but the same two families host.",
+      "",
+      "How many of us need to leave before 7?",
+    ].join("\n"));
+  });
+
+  it("starts a missing-piece close with \"Once we have that,\" exactly once", async () => {
+    const { renderTemplatedReply } = await import("../services/sage-reply-templates.js");
+    const parts = { draftText: "fallback", templateKey: "missing-piece", templateLead: "We can't compare the vans yet.", templateSteps: ["You: each monthly payment."] };
+    expect(renderTemplatedReply({ ...parts, templateOffer: "I can summarize where we've landed." }).text.endsWith("Once we have that, I can summarize where we've landed.")).toBe(true);
+    expect(renderTemplatedReply({ ...parts, templateOffer: "Once we have that, I can summarize where we've landed." }).text.endsWith("\nOnce we have that, I can summarize where we've landed.")).toBe(true);
+  });
+});
+
+describe("follow-ups after a templated reply", () => {
+  it("treats only an action plan's bullets as asks; a trade-off's options are not tasks", async () => {
+    const { followUpExpectation } = await import("../services/sage-reply-templates.js");
+    expect(followUpExpectation({ templateKey: "action-plan", templateSteps: ["Reply with your delivery days.", "Post in the Commons."] }))
+      .toBe("Reply with your delivery days.; Post in the Commons.");
+    expect(followUpExpectation({ templateKey: "trade-off", templateSteps: ["Library: free, closes at 7.", "Homes: later, same hosts."] })).toBe("");
+    expect(followUpExpectation({ templateKey: "trade-off", templateSteps: ["Library: free."], followUpDays: 2, followUpExpect: "say how many need to leave by 7" }))
+      .toBe("say how many need to leave by 7");
+    expect(followUpExpectation({ templateKey: "", templateSteps: [], followUpDays: 0, followUpExpect: "" })).toBe("");
+  });
+});

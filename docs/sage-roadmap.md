@@ -1,6 +1,6 @@
 # Sage product roadmap
 
-Last updated: 2026-10-03
+Last updated: 2026-10-06
 
 ## North star
 
@@ -209,6 +209,38 @@ Status (2026-10-04): built and verified.
 - Tests: `sage-steward.test.ts` (8), `sage-introduction-execution.test.ts` (2), updated `agent-tools` and `knowledge-tools` tests, Playwright `sage-steward.spec.ts` (introduction journey).
 - Remaining: the live steward model's choices are not covered by an end-to-end test (the journey uses a fixed decision); its checks and tools are unit-tested.
 
+### P1 — Core principles and decision-quality comments (2026-10-06)
+
+Goal: Sage's comments help a group make better everyday decisions, from fixed cooperative values rather than the model's mainstream defaults.
+
+Status (2026-10-06): built and unit-tested. Journey 55 passed against the live model; the full mobile suite could not complete locally (see Verification).
+
+- **Core principles** (`services/sage-principles.ts`). Fixed platform rules, not Commons settings, written into the instructions of every Sage agent (Commons feed, circle trend, steward, ride match, @mention/DM reply). They put the group first, keep money inside the Commons when the cost is fair, build shared ownership, start from what members already have, don't assume access to cars, banks or credit, and never treat hardship as a personal failing. They also list mainstream advice Sage must not give: individual budgeting tips when a group option exists, credit-building or financial products, cheapest-is-best, and hardship as an individual problem. A Commons' charter adds to them and can't override them. `sage-principles.test.ts` fails if any Sage agent leaves them out.
+- **Decision-moment templates** next to Action plan (`sage-reply-templates.ts`): Where we are (agreed / still open), Trade-off (options laid out evenly, with the fact that decides it), Missing piece (specific facts and who can supply them), Before we decide (who's affected and hasn't been heard; groups, never names). New voice rules: don't take sides between members, and comment only when Sage adds a fact, structure or a missing voice. Sage may now also offer to "summarize where we've landed" and "check back with you on a date you pick", both of which it can already do.
+- **Wider grounding** (`services/sage-grounding.ts`). Every Commons feed action names `evidenceSource`: `charter`, `thread` (the member's own words), or `checked` (something a read-only tool returned in the same run). Code confirms the excerpt is really in that source. Replies about rules, votes, proposals, membership, discipline or the Commons' own money, plus charter corrections, mission-alignment replies and proposal drafts, still need a charter quote, enforced by a keyword check in code. The admin approval path follows the same rule; for other replies the approving admin is the human check.
+- **Relevance check.** A small, independent model (`gpt-5-nano`, no Sage memory or instructions, feature `sage-relevance-check`, counted toward the autonomy limit) checks that the reply and its evidence are on topic before Sage publishes on its own. It runs only when every other check has passed, including for a quote from the post itself, because a real quote can still sit under a reply that answers something else. Each check costs about $0.0001. If the check fails or can't run, nothing is published: a Commons reply is queued for review, and a circle comment goes to the circle leader. The check is recorded in the decision trail.
+- **Read-only tools for comment agents** (`agents/tools/comment-tools.ts`): `search_commons_documents` (this Commons, plus the circle for trend windows), `list_commons_resources` (published resources), and `count_members_offering` (counts only; under 2 is reported as "fewer than 2", and a skill or resource is named only when at least two members list it). They never return member names or ids, because results can end up in a public comment and introductions stay consent-first. Calls are capped by `maxTurns` (6 for the feed batch, 4 for a trend window) and recorded as trail evidence.
+- Tests: `sage-principles.test.ts` (3), `sage-grounding.test.ts` (7), `comment-tools.test.ts` (4), new cases in `sage-reply-templates.test.ts` (4, including that only Action plan bullets become a follow-up) and `sage-stewardship.test.ts` (an off-topic comment goes to the leader). The e2e Sage-suggestion fixture passes a fixed relevance judge so it stays deterministic.
+
+- Fixed while testing: a reply using any template turned its bullets into a follow-up task. For a Trade-off, that meant waiting for the member to "Library: free…". Only Action plan bullets are asks now (`followUpExpectation`). Also, the first version of the stay-quiet rule made Sage skip about 1 in 3 unanswered questions; it now says an unanswered question or choice is worth helping with. After the change, 5 of 5 live runs replied with an even trade-off.
+
+Verification (2026-10-06, local stack, `gpt-5.6-luna` + `gpt-5-nano`):
+
+- `pnpm -F @repo/trpc test`: 71 files, 676 tests passed. `tsc` for `@repo/trpc` and `pnpm -F @cahootz/mobile type-check` passed.
+- `sage-decision-comments.spec.ts` (journey 55) passed on the final code and on an earlier run; it failed in runs made before the stay-quiet wording fix, and in runs cut short by the machine.
+- Live relevance check: a charter quote about proposals in reply to "Can I borrow a ladder?" was judged off topic; the same quote in reply to buying a $3,000 van was judged on topic. About $0.0001 per check. The feed reply itself cost about $0.001.
+- The full `pnpm test:e2e:mobile` run did not complete. The machine's disk was 99% full (5.4 GB free) with load averages of 11-28; Metro took up to 120s per bundle and then crashed with "JavaScript heap out of memory" at 8 GB. Every failure was a page-load timeout, `ERR_ABORTED` or `ERR_CONNECTION_REFUSED` on :8081, not an assertion about Sage. Rerun the suite on a machine with free disk (or CI) before release.
+- The local `soulaancoop` database was missing `CoopConfig.familySetup` (from main's family-setup work), so every Sage run failed locally until that one nullable column was added with `prisma db execute`.
+
+Known limitations:
+
+- Whether Sage uses a decision template, and which one, is the live model's choice; journey 55 checks grounding and relevance, not the template.
+- The charter-required keyword check is deliberately broad. A false match only means the reply needs a charter quote, but an everyday reply that mentions "vote" or "proposal" will be discarded unless it has one.
+- `checked` evidence isn't saved on the action, so an admin approving a queued reply can't re-verify a tool excerpt; they review the text themselves.
+- The circle trend agent's comments still have no evidence field. The relevance check there compares the comment with its target post and the stated reason.
+- The @mention/DM agent now helps with everyday decisions from the conversation, but has no structured evidence check (it is member-requested and already has the output safety check).
+- Not yet built: learning from how leaders edit suggested comments before approving them (see Next).
+
 ### P2 — Cost optimization and budget administration
 
 Goal: measure value per useful outcome and prevent surprise spending.
@@ -290,6 +322,9 @@ For every Sage behavior change:
   - This is copy only; no autonomy changed. If the Autonomy Boundaries change, update this card in the same change. Verified by `onboarding-usability.spec.ts` (TESTING.md journey 42).
   - Sage's posts and comments in the feed, post page, and event comments carry an "AI helper" tag (`components/ai-badge.tsx`). The commons feed APIs now return `authorIsAi` from `User.isBot`. Verified in `sage-stewardship.spec.ts` (journey 33).
 
+- 2026-10-06: Sage's core principles are platform-wide and fixed in every Sage prompt; no Commons can change them. Sage must not fall back on mainstream US individual-finance advice.
+- 2026-10-06: Everyday decisions may be grounded on the thread or a checked source; rules, votes, membership, discipline and the Commons' money still require the charter. An independent relevance check gates autonomous publishing.
+
 ## Completed milestones
 
 Move verified work here with the completion date, linked files, and passing test commands. Do not list the current proactive-suggestion slice here until its mobile end-to-end gate passes.
@@ -298,4 +333,4 @@ Move verified work here with the completion date, linked files, and passing test
 
 - 2026-10-04 — P1 tasks and the wake-and-wait loop, responsibility routing, memory consolidation and retrieval, and the steward with specialist tools (remaining gaps listed in each P1 status). Files: `packages/db/prisma/migrations/20261005010000_sage_tasks_alerts`, `packages/trpc/src/services/{sage-tasks,sage-wake,sage-wake-work,sage-responsibility,sage-memory,sage-steward,sage-introductions}.ts`, `packages/trpc/src/agents/tools/specialist-tools.ts`, `apps/api/src/trigger/sage-wake.ts`, `apps/mobile/components/sage-following.tsx`, `apps/mobile/app/(authenticated)/sage/alert/[id].tsx`, the Commons AI actions page. Tests: `pnpm -F @repo/trpc test:run` (563 passed), `pnpm -F @repo/trpc build`, `pnpm -F @cahootz/mobile type-check`, mobile unit test `notification-navigation`, Playwright `sage-steward.spec.ts` (3 journeys) plus the existing Sage journeys.
 
-Next highest-priority incomplete item: P2 — Cost optimization and budget administration (Commons-admin control of limits, forecasts and pre-limit alerts), unless the remaining P1 gaps above are prioritized first.
+Next highest-priority incomplete item for comment quality: learn from leader edits. Store the before and after when a circle leader edits a suggested comment before approving it, and give Sage the last 2-3 edits from that Commons as bounded, scoped examples. Otherwise: P2 — Cost optimization and budget administration (Commons-admin control of limits, forecasts and pre-limit alerts), unless the remaining P1 gaps above are prioritized first.

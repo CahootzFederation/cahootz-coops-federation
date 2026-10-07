@@ -27,7 +27,30 @@ export interface SageReplyTemplate {
 }
 
 /** The only follow-up actions Sage may offer in a reply, because they're the only ones it can do. */
-export const SAGE_CAN_OFFER = ["draft a proposal for you to edit and submit", "ask a clarifying question", "suggest members to connect with"];
+export const SAGE_CAN_OFFER = [
+  "draft a proposal for you to edit and submit", "ask a clarifying question", "suggest members to connect with",
+  // A reply that summarizes the thread, and a SageTask follow-up (followUpDays), both exist today.
+  "summarize where we've landed", "check back with you on a date you pick",
+];
+
+/** Templates whose bullets are things the member is asked to do, so a reply using one is a follow-up.
+ * In the others the bullets are options, agreements or questions, not tasks. */
+export const TEMPLATES_THAT_ASK = new Set(["action-plan"]);
+
+/** What Sage waits for after a reply, or "" when the reply asks for nothing and needs no follow-up. */
+export function followUpExpectation(reply: { templateKey?: string; templateSteps?: string[]; followUpDays?: number; followUpExpect?: string }): string {
+  const steps = (reply.templateSteps ?? []).map((step) => step.trim()).filter(Boolean);
+  const asks = TEMPLATES_THAT_ASK.has(reply.templateKey ?? "") && steps.length > 0;
+  if (!(reply.followUpDays ?? 0) && !asks) return "";
+  return reply.followUpExpect?.trim() || (asks ? steps.join("; ") : "");
+}
+
+/** A position, 1-4 bullets, a blank line, then the closing line (optionally after a fixed prefix). */
+function bulletReply(lead: string, steps: string[], close: string, closePrefix = ""): string {
+  const closing = close.trim();
+  const prefixed = closePrefix && !closing.toLowerCase().startsWith(closePrefix.toLowerCase()) ? `${closePrefix}${closing}` : closing;
+  return [lead.trim(), ...steps.map((step) => `• ${step.trim().replace(/^[•\-*]\s*/, "")}`), "", prefixed].join("\n");
+}
 
 export const SAGE_REPLY_TEMPLATES: SageReplyTemplate[] = [
   {
@@ -58,12 +81,106 @@ export const SAGE_REPLY_TEMPLATES: SageReplyTemplate[] = [
       "Once you've done that, I can draft a small proposal so members can vote on funding it or on someone to organize the drivers.",
     ].join("\n"),
   },
+  {
+    key: "where-we-are",
+    name: "Where we are",
+    useWhen: "A thread has several replies and is going in circles, or people are talking past each other. Not for a single post with no replies.",
+    parts: {
+      lead: "One sentence naming the decision the thread is really about.",
+      steps: "2-3 bullets: what people already agree on (start with \"Agreed:\") and what is still open (start with \"Still open:\"). Use only what members said; no names.",
+      offer: "One question to the group that would settle the open point, or an offer starting with \"I can\".",
+    },
+    render: ({ lead, steps, offer }) => bulletReply(lead, steps, offer),
+    shape: [
+      "One sentence naming the decision.",
+      "2-3 bullets starting with \"•\": \"Agreed: ...\" and \"Still open: ...\", from what members said.",
+      "One question that would settle it, or \"I can ...\".",
+    ],
+    example: [
+      "This is really about whether we meet weekly or monthly.",
+      "• Agreed: we want the potluck to keep going, and Saturdays work best.",
+      "• Still open: weekly is a lot of hosting for the same few homes.",
+      "",
+      "Who would host at least once if we went weekly? If fewer than four, I can summarize where we've landed as monthly.",
+    ].join("\n"),
+  },
+  {
+    key: "trade-off",
+    name: "Trade-off",
+    useWhen: "Members are weighing two or three concrete options for the same decision. Lay the options out evenly; don't pick a side between members.",
+    parts: {
+      lead: "One sentence naming the choice in front of us.",
+      steps: "One bullet per option (2-3): the option, then what it costs or risks us, from the thread or a checked source.",
+      offer: "The one fact that would decide it, and who could supply it (a role, not a name), as a question.",
+    },
+    render: ({ lead, steps, offer }) => bulletReply(lead, steps, offer),
+    shape: [
+      "One sentence naming the choice.",
+      "One \"•\" bullet per option with what it costs or risks.",
+      "The fact that would decide it, as a question.",
+    ],
+    example: [
+      "We're choosing between the library room and rotating homes.",
+      "• Library: free and easy to reach by bus, but it closes at 7.",
+      "• Homes: we can stay late, but the same two families end up hosting.",
+      "",
+      "How many of us need to leave before 7? If most do, the library wins.",
+    ].join("\n"),
+  },
+  {
+    key: "missing-piece",
+    name: "Missing piece",
+    useWhen: "The group is about to decide, or is stuck, because a specific fact is missing (a cost, a date, a count, a rule).",
+    parts: {
+      lead: "One sentence: what we can't decide yet, and why.",
+      steps: "1-3 bullets, each one specific fact we need and who can likely supply it (a role or \"you\", not a name).",
+      offer: "What Sage will do once the facts are in, starting with \"I can\" and using only what Sage can offer.",
+    },
+    render: ({ lead, steps, offer }) => bulletReply(lead, steps, offer, "Once we have that, "),
+    shape: [
+      "One sentence: what we can't decide yet and why.",
+      "1-3 \"•\" bullets, each a specific missing fact and who can supply it.",
+      "\"Once we have that, I can ...\" with one thing Sage can offer.",
+    ],
+    example: [
+      "We can't compare the two vans until we know what each costs us a month.",
+      "• You: the monthly payment and insurance quote for each.",
+      "• Drivers: how many school runs a week each of you would take.",
+      "",
+      "Once we have that, I can summarize where we've landed so everyone can weigh in.",
+    ].join("\n"),
+  },
+  {
+    key: "before-we-decide",
+    name: "Before we decide",
+    useWhen: "A few people are settling something that affects others who haven't spoken in the thread (other families, a circle, people who'd pay or do the work).",
+    parts: {
+      lead: "One sentence: who this decision affects that we haven't heard from yet (a group, never a named person).",
+      steps: "1-3 bullets, each a question for the people affected.",
+      offer: "When Sage will check back or what it will do next, starting with \"I can\".",
+    },
+    render: ({ lead, steps, offer }) => bulletReply(lead, steps, offer),
+    shape: [
+      "One sentence on who's affected and not yet heard.",
+      "1-3 \"•\" bullets with questions for them.",
+      "\"I can ...\" with when Sage checks back or what it does next.",
+    ],
+    example: [
+      "Moving pickup to 3:30 changes things for every family on the route, and only two have weighed in.",
+      "• Does 3:30 work with your work schedule?",
+      "• If not, what's the latest time that does?",
+      "",
+      "I can check back with you on a date you pick and summarize the answers.",
+    ].join("\n"),
+  },
 ];
 
 /** Voice rules for every Sage reply, with or without a template. */
 export const SAGE_VOICE_RULES = [
   "Write as a trusted organizer in this Commons: say \"we\" and \"us\", speak to the member as \"you\", warm but brief. No greetings or sign-offs.",
-  "Lead with your position. Turn advice into something specific a person can do; ask the member you're replying to, not \"anyone\".",
+  "Lead with your position on facts and next steps. Turn advice into something specific a person can do; ask the member you're replying to, not \"anyone\".",
+  "When members disagree with each other, don't pick a side: lay out the options, what each costs or risks, and the fact that would decide it.",
+  "Comment only when you add something the thread lacks: a fact, structure (options, what's agreed, what's open), or a voice that hasn't been heard. Stay quiet when members are already answering each other well; a question or choice nobody has answered yet is not that, so help with it.",
   "Use plain words. No consultant terms such as leverage, optimize, stakeholders, synergy, pilot design, coverage or best practices.",
   `Only offer what Sage can do: ${SAGE_CAN_OFFER.join("; ")}. Never offer to organize, pay, schedule, recruit, contact people outside the app, or take any real-world action.`,
   "Keep it under about 80 words. No links and no @mentions.",

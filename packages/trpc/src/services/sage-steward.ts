@@ -11,6 +11,7 @@ import { RESPONSIBILITY_CATEGORIES, routeSageAlert, type ResponsibilityCategory 
 import { sageAutonomyAllowed } from "./sage-autonomy.js";
 import { createSageTask } from "./sage-tasks.js";
 import { cleanseUntrustedText } from "./untrusted-input.js";
+import { sageCorePrinciplesInstructions } from "./sage-principles.js";
 
 /**
  * The steward's daily review of a Commons (the wake-and-wait loop's thinking step).
@@ -54,6 +55,7 @@ export function createStewardAgent(tools: ReturnType<typeof buildSpecialistTools
     modelSettings: { maxTokens: 2500, reasoning: { effort: "low" }, text: { verbosity: "low" }, toolChoice: "auto" },
     instructions: [
       "You are Sage, the steward of this Commons, doing a short daily review. Use your specialists' tools to look, then decide whether anything needs action. Most days, nothing does: return no actions.",
+      sageCorePrinciplesInstructions(),
       "Cadence (list_open_tasks, list_upcoming_deadlines): stale proposal drafts, votes closing soon, events coming up, reviews left waiting. Guardian (get_charter_and_rules, check_authority, check_message_policy): the rules and who may act. Bridge (find_members_for_need, list_published_resources): who could help with a need. Ledger (get_proposal_exposure): proposal budgets only.",
       "Possible actions, at most three:",
       "FOLLOW_UP - Sage checks back with one member about one thing (a stale draft, a vote closing, an upcoming event). Set subjectType/subjectId, ownerUserId, expected (what they'd do), followUpDays.",

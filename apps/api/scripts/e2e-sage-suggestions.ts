@@ -28,6 +28,9 @@
 import { db } from "../../../packages/db/index.js";
 import { replayTrendWindow } from "../../../packages/trpc/src/services/sage-trend-agent.js";
 
+// The fixture tests approval and autonomous posting, not the model, so the relevance check is fixed too.
+const fixtureRelevanceJudge = async () => ({ relevant: true, reason: "E2E fixture: the comment is on topic." });
+
 const TEST_EMAIL_SUFFIX = "@test.cahootz.local";
 
 function assertSafeEnvironment() {
@@ -82,7 +85,7 @@ async function seed(runId: string, circleId: string, targetPostId: string) {
     title: `E2E ${runId} Sage comment`,
     body: `E2E ${runId}: Book the community room by Thursday; it fills up on weekends.`,
     reason: `E2E ${runId}: Three members asked where the cleanup should meet.`,
-  });
+  }, { relevanceJudge: fixtureRelevanceJudge });
   await replayTrendWindow(windowId(runId, "proposal"), {
     hasSuggestion: true,
     confidence: 0.9,

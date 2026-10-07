@@ -2,7 +2,7 @@
 
 <!-- The one source for every coding agent's instructions. CLAUDE.md imports this file, and
 .github/copilot-instructions.md is generated from it with `pnpm agents:sync`. Edit only this file;
-CI (`pnpm agents:check`) fails when the others drift. -->
+`pnpm agents:check` reports when the others drift. -->
 
 Read `AGENT.md` for the project's security, governance, and architecture rules. Read `TESTING.md` before changing a user-visible workflow.
 

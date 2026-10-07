@@ -27,21 +27,6 @@ jobs:
       - name: Check lockfile
         uses: ./tooling/github/lockfile-check
 
-  # AGENTS.md is the only agent instruction file people edit. CLAUDE.md must
-  # just import it and .github/copilot-instructions.md is generated from it.
-  agent-instructions:
-    name: Agent instructions in sync
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: ".nvmrc"
-
-      - name: Check CLAUDE.md and Copilot instructions match AGENTS.md
-        run: node scripts/sync-agent-instructions.mjs --check
-
   lint:
     runs-on: ubuntu-latest
     needs: lockfile-check

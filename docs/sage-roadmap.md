@@ -1,6 +1,6 @@
 # Sage product roadmap
 
-Last updated: 2026-10-03
+Last updated: 2026-10-07
 
 ## North star
 
@@ -289,6 +289,15 @@ For every Sage behavior change:
   - Sage settings always shows the card, and the suggestion and alert pages carry a one-line version.
   - This is copy only; no autonomy changed. If the Autonomy Boundaries change, update this card in the same change. Verified by `onboarding-usability.spec.ts` (TESTING.md journey 42).
   - Sage's posts and comments in the feed, post page, and event comments carry an "AI helper" tag (`components/ai-badge.tsx`). The commons feed APIs now return `authorIsAi` from `User.isBot`. Verified in `sage-stewardship.spec.ts` (journey 33).
+
+- 2026-10-07: A member's own offer becomes a listing or a shop (branch `claude/family-commons-storefront-27b379`). Prompted by a real family post ("I'm a master arborist 17 years experiecne let me and my team work for you!") that Sage silently dropped for four reasons: resource records also needed a word-for-word charter quote; the self-offer check was a phrase list ("I can", "I offer"…) that missed it; only PERSON resources got an invitation; and only a platform admin could list anything.
+  - The model now sets `selfOffer`; code still requires the offer to be the item's own author (a third party needs an exact @mention and stays PERSON-only), and the phrase list (now wider) is only a fallback. Money offers (FUNDING) are never invited. One invitation per member per Commons per 30 days, as before.
+  - `VERIFY_RESOURCE` and `LOG_RESOURCE` no longer need a charter quote: they publish nothing and claim no rule. Every reply, proposal and escalation still does. The decision trail records the exemption.
+  - The member's private card offers **List it for members**, **Open a shop** (the shop application prefilled from the offer, in a commons the member picks, defaulting to the one they posted in) and **Not now**. Sage posts nothing publicly about it (user decision).
+  - Listing is automatic when the member accepts, in every Commons (`CommonsAgentSetting.autoListResources`, default on, migration `20261008010000_resource_auto_list`). Stewards can turn it off on the Commons resources screen; accepted offers then wait in a steward review queue (`RESOURCE_REVIEW` alert, Approve / Don't list). Platform admins can still publish from the web page. All three paths share `publishCommonsResource`; a failed knowledge-base copy no longer blocks the listing.
+  - Fixed: the app sent shop applications without a commons, so the server refused every one ("You must be an active member of this commons to open a shop").
+  - Tests: `commons-actions-router.test.ts` (auto-list, steward-only toggle and review, removed members), `commons-action-agent.test.ts` (`resourceCandidate`, including the exact cousin sentence), Playwright `sage-self-offer.spec.ts` (TESTING.md journey 55). `replayCommonsPost` runs the feed agent's post-model path with a supplied model output for fixtures.
+  - Remaining: the live model's choice to emit `VERIFY_RESOURCE` with `selfOffer` isn't covered end to end (the journey uses a fixed output). Shop approval is still a platform-admin step, including for family shops.
 
 ## Completed milestones
 

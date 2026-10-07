@@ -1154,6 +1154,8 @@ enum CommonsActionFeedbackReason {
 model CommonsAgentSetting {
   coopId                   String    @id
   autoReply                Boolean   @default(true)
+  // A member's accepted offer is listed right away; stewards can turn this off to review first.
+  autoListResources        Boolean   @default(true)
   // Monthly cap on model work Sage starts on its own (UTC month). Member-requested AI is not counted.
   autonomyMonthlyUsdLimit  Decimal   @default(5) @db.Decimal(10, 2)
   autonomyMonthlyCallLimit Int       @default(2000)
@@ -1314,7 +1316,7 @@ model CommonsResource {
   sourceType      String
   sourceId        String
   candidateUserId String?
-  status          String    @default("CANDIDATE") // CANDIDATE | INVITED | ACCEPTED | DECLINED | VERIFIED | PUBLISHED
+  status          String    @default("CANDIDATE") // CANDIDATE | INVITED | ACCEPTED | DECLINED | VERIFIED | PUBLISHED | NOT_LISTED (a steward declined it)
   invitedAt       DateTime?
   respondedAt     DateTime?
   verifiedBy      String?

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CoopConfig } from "@repo/db";
-import { AUTO_REPLY_MIN_CONFIDENCE, COMMONS_ACTION_MODEL, charterSnapshotKey, createCommonsActionAgent, hasExactGrounding, mayAutoReply } from "../services/commons-action-agent.js";
+import { AUTO_REPLY_MIN_CONFIDENCE, COMMONS_ACTION_MODEL, charterSnapshotKey, createCommonsActionAgent, hasExactGrounding, mayAutoReply, resourceCandidate } from "../services/commons-action-agent.js";
 import { estimateAICost } from "../services/ai-cost.js";
 import { isPlaceholderCharter, starterCharter } from "../services/starter-charter.js";
 
@@ -52,6 +52,33 @@ describe("Commons action safeguards", () => {
     expect(text).toContain("Help members work together.");
     expect(text).toContain("Share tools");
     expect(text).toContain("does not establish voting, financial, membership, or disciplinary rules");
+  });
+});
+
+describe("who Sage may invite to list an offer", () => {
+  const cousin = "I'm a master arborist 17 years experiecne let me and my team work for you!";
+  const offer = { resourceKind: "SERVICE" as const, targetHandle: "", selfOffer: true };
+
+  it("invites the author of a self-offer the model flagged, whatever the wording", () => {
+    expect(resourceCandidate(offer, { content: cousin })).toEqual({ type: "SELF" });
+    expect(resourceCandidate({ ...offer, resourceKind: "SKILL" }, { content: "Licensed electrician here." })).toEqual({ type: "SELF" });
+  });
+
+  it("falls back to the wording when the model misses the flag", () => {
+    expect(resourceCandidate({ ...offer, selfOffer: false }, { content: cousin })).toEqual({ type: "SELF" });
+    expect(resourceCandidate({ ...offer, selfOffer: false }, { content: "Does anyone know a tree service?" })).toBeNull();
+  });
+
+  it("never invites anyone for a money offer", () => {
+    expect(resourceCandidate({ ...offer, resourceKind: "FUNDING" }, { content: "I have $500 I can lend." })).toBeNull();
+    expect(resourceCandidate({ ...offer, resourceKind: "" }, { content: cousin })).toBeNull();
+  });
+
+  it("invites someone else only by an exact @mention of a person", () => {
+    const mentioned = "[@treeguy] does great work";
+    expect(resourceCandidate({ resourceKind: "PERSON", targetHandle: "@treeguy", selfOffer: false }, { content: mentioned })).toEqual({ type: "MENTION", handle: "treeguy" });
+    expect(resourceCandidate({ resourceKind: "PERSON", targetHandle: "otherguy", selfOffer: false }, { content: mentioned })).toBeNull();
+    expect(resourceCandidate({ resourceKind: "SERVICE", targetHandle: "treeguy", selfOffer: true }, { content: mentioned })).toBeNull();
   });
 });
 

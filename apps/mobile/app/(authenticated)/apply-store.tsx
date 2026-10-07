@@ -12,7 +12,7 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import {
   ArrowLeft,
   Store,
@@ -25,14 +25,19 @@ import {
   X,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/auth-context';
-import { api } from '@/lib/api';
+import { api, type CommonsDirectoryItem } from '@/lib/api';
+import { getCoopId } from '@/lib/config';
 import { friendlyError } from '@/lib/friendly-error';
 import BlobPhotoUpload from '@/components/blob-photo-upload';
 
 type Step = 'store' | 'owner' | 'review';
 
 export default function ApplyStoreScreen() {
-  const { user } = useAuth();
+  const { user, sessionToken } = useAuth();
+  // Sage's offer card opens this prefilled from the member's own post, in the commons it came from.
+  const params = useLocalSearchParams<{ coopId?: string; name?: string; description?: string }>();
+  const [shopCoopId, setShopCoopId] = useState(params.coopId || getCoopId());
+  const [memberCommons, setMemberCommons] = useState<CommonsDirectoryItem[]>([]);
   const [currentStep, setCurrentStep] = useState<Step>('store');
   const [loading, setLoading] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
@@ -41,8 +46,8 @@ export default function ApplyStoreScreen() {
 
   // Form data
   const [formData, setFormData] = useState({
-    storeName: '',
-    storeDescription: '',
+    storeName: (params.name || '').slice(0, 100),
+    storeDescription: (params.description || '').slice(0, 1000),
     category: '',
     storeImageUrl: '',
     storeBannerUrl: '',
@@ -81,6 +86,15 @@ export default function ApplyStoreScreen() {
   React.useEffect(() => {
     loadCategories();
   }, [loadCategories]);
+
+  React.useEffect(() => {
+    if (!sessionToken) return;
+    api.listCommonsDirectory(sessionToken)
+      .then(({ coops }) => setMemberCommons(coops.filter((coop) => coop.isMember)))
+      .catch((error) => console.error('Failed to load your commons:', error));
+  }, [sessionToken]);
+
+  const shopCommonsName = memberCommons.find((coop) => coop.id === shopCoopId)?.name || shopCoopId;
 
   const validateStep = (): boolean => {
     switch (currentStep) {
@@ -147,7 +161,7 @@ export default function ApplyStoreScreen() {
         ownerEmail: formData.ownerEmail,
         ownerPhone: formData.ownerPhone,
         websiteUrl: websiteUrl || undefined,
-      }, user.walletAddress);
+      }, user.walletAddress, shopCoopId);
 
       Alert.alert(
         'Application sent',
@@ -176,6 +190,32 @@ export default function ApplyStoreScreen() {
       <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
         Store Information
       </Text>
+
+      {memberCommons.length > 1 && (
+        <View className="mb-4">
+          <Text className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Which commons is this shop for? *</Text>
+          <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+            {memberCommons.map((coop) => {
+              const selected = coop.id === shopCoopId;
+              return (
+                <TouchableOpacity
+                  key={coop.id}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected }}
+                  aria-checked={selected}
+                  accessibilityLabel={`Shop for ${coop.name}`}
+                  onPress={() => setShopCoopId(coop.id)}
+                  className={`px-4 py-2 rounded-full border ${selected ? 'bg-secondary border-primary dark:bg-amber-900/30' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700'}`}
+                  style={{ minHeight: 44, justifyContent: 'center' }}
+                >
+                  <Text className={selected ? 'text-primary dark:text-amber-400 font-semibold' : 'text-gray-700 dark:text-gray-300'}>{coop.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text className="text-xs text-gray-500 dark:text-gray-400 mt-1">Members of that commons can find and buy from your shop.</Text>
+        </View>
+      )}
 
       <View className="mb-4">
         <Text className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Store Name *</Text>
@@ -401,6 +441,7 @@ export default function ApplyStoreScreen() {
         <Text className="text-gray-500 dark:text-gray-400 text-sm">
           {getCategoryLabel(formData.category)}
         </Text>
+        <Text className="text-gray-500 dark:text-gray-400 text-sm">Shop in {shopCommonsName}</Text>
         <Text className="text-gray-600 dark:text-gray-300 text-sm mt-1">
           {formData.storeDescription}
         </Text>

@@ -48,8 +48,12 @@ const GOVERNANCE_TERMS = /\b(vote[sd]?|voting|quorum|proposals?|charter|bylaws?|
 /** Action types that interpret the charter, so their evidence must come from it. */
 export const CHARTER_ONLY_ACTIONS = new Set(["RESPOND_CHARTER_CORRECTION", "RESPOND_MISSION_ALIGNMENT", "MAKE_PROPOSAL"]);
 
+// Sage's own offers ("I can draft a proposal so members can vote on it") describe what Sage will do,
+// not what the rules say, so they don't count toward the check.
+const SAGE_OFFER = /[^.!?\n]*\bI can\b[^.!?\n]*[.!?]?/gi;
+
 export function needsCharterGrounding(type: string, draftText: string): boolean {
-  return CHARTER_ONLY_ACTIONS.has(type) || GOVERNANCE_TERMS.test(draftText);
+  return CHARTER_ONLY_ACTIONS.has(type) || GOVERNANCE_TERMS.test(draftText.replace(SAGE_OFFER, " "));
 }
 
 /** The deterministic grounding result for one action: which source is required and whether it holds. */

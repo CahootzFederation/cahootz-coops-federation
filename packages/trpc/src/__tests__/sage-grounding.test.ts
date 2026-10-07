@@ -12,7 +12,7 @@ const config = {
 const item = {
   sourceType: "commons_post" as const, sourceId: "post-1", sourcePostId: "post-1", sourceAuthorId: "user-1",
   createdAt: new Date("2026-10-06T10:00:00.000Z"), title: "Potluck spot",
-  content: "Library or rotating homes? The library is free but closes at 7, and homes mean the same two families host.",
+  content: "Library or rotating homes? The library is free but closes at 7, and homes mean the same two members host.",
   context: "", coopId: "harbor",
 };
 const tradeOff = {
@@ -41,6 +41,9 @@ describe("Sage evidence sources", () => {
     expect(needsCharterGrounding("ANSWER_QUESTION", "This needs a vote before we buy it.")).toBe(true);
     expect(needsCharterGrounding("ANSWER_QUESTION", "We could pay for it from the Commons' funds.")).toBe(true);
     expect(needsCharterGrounding("MAKE_PROPOSAL", "Let's get a van.")).toBe(true);
+    // Sage offering to draft a proposal isn't a claim about the rules.
+    expect(needsCharterGrounding("CLARIFY_NEED", "Sharing drivers keeps the work inside our Commons. Here's what we can do:\n• Reply with your delivery days.\n\nOnce you've done that, I can draft a small proposal so members can vote on it.")).toBe(false);
+    expect(needsCharterGrounding("CLARIFY_NEED", "That needs a vote first. Once you've done that, I can draft a proposal.")).toBe(true);
     expect(needsCharterGrounding("RESPOND_CHARTER_CORRECTION", "Anything.")).toBe(true);
   });
 

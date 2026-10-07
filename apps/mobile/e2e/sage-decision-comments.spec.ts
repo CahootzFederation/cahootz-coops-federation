@@ -44,7 +44,7 @@ test("Sage helps with an everyday decision, grounded on the thread and checked f
     // 1. Fixture: a member asks the Commons to choose between two options (the journey is Sage's reply).
     const created = await trpcPost("commons.createPost", token, {
       coopId: COOP_ID, title: `E2E ${runId} potluck spot`,
-      content: `E2E ${runId}: For our monthly potluck, should we use the library room or rotate between homes? The library is free but closes at 7. Rotating homes lets us stay late, but the same two families end up hosting every time.`,
+      content: `E2E ${runId}: For our monthly potluck, should we use the library room or rotate between homes? The library is free but closes at 7. Rotating homes lets us stay late, but the same two members end up hosting every time.`,
       tag: "Ask",
     });
     postId = created.post.id;

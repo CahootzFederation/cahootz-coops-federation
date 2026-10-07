@@ -122,7 +122,7 @@ export const SAGE_REPLY_TEMPLATES: SageReplyTemplate[] = [
     example: [
       "We're choosing between the library room and rotating homes.",
       "• Library: free and easy to reach by bus, but it closes at 7.",
-      "• Homes: we can stay late, but the same two families end up hosting.",
+      "• Homes: we can stay late, but the same two members end up hosting.",
       "",
       "How many of us need to leave before 7? If most do, the library wins.",
     ].join("\n"),
@@ -153,7 +153,7 @@ export const SAGE_REPLY_TEMPLATES: SageReplyTemplate[] = [
   {
     key: "before-we-decide",
     name: "Before we decide",
-    useWhen: "A few people are settling something that affects others who haven't spoken in the thread (other families, a circle, people who'd pay or do the work).",
+    useWhen: "A few people are settling something that affects others who haven't spoken in the thread (other members, a circle, people who'd pay or do the work).",
     parts: {
       lead: "One sentence: who this decision affects that we haven't heard from yet (a group, never a named person).",
       steps: "1-3 bullets, each a question for the people affected.",
@@ -166,7 +166,7 @@ export const SAGE_REPLY_TEMPLATES: SageReplyTemplate[] = [
       "\"I can ...\" with when Sage checks back or what it does next.",
     ],
     example: [
-      "Moving pickup to 3:30 changes things for every family on the route, and only two have weighed in.",
+      "Moving pickup to 3:30 changes things for every member on the route, and only two have weighed in.",
       "• Does 3:30 work with your work schedule?",
       "• If not, what's the latest time that does?",
       "",

@@ -34,7 +34,7 @@ describe("Sage's core principles", () => {
   it("are fixed platform rules that put the group first and rule out mainstream individual-finance advice", () => {
     const text = sageCorePrinciplesInstructions();
     expect(text).toContain("platform rules; a Commons' charter adds to them but never overrides them");
-    expect(text).toContain("what we can do together before suggesting what one person or family does alone");
+    expect(text).toContain("what the Commons can do together before suggesting what one member does alone");
     expect(text).toContain("Don't take sides between members");
     expect(text).toContain("credit-building");
     for (const principle of SAGE_CORE_PRINCIPLES) expect(text).toContain(principle);

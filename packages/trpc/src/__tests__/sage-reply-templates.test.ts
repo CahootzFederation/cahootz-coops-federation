@@ -92,12 +92,12 @@ describe("decision-moment templates", () => {
     const { renderTemplatedReply } = await import("../services/sage-reply-templates.js");
     expect(renderTemplatedReply({
       draftText: "fallback", templateKey: "trade-off", templateLead: "We're choosing between the library room and rotating homes.",
-      templateSteps: ["Library: free, but it closes at 7.", "Homes: we can stay late, but the same two families host."],
+      templateSteps: ["Library: free, but it closes at 7.", "Homes: we can stay late, but the same two members host."],
       templateOffer: "How many of us need to leave before 7?",
     }).text).toBe([
       "We're choosing between the library room and rotating homes.",
       "• Library: free, but it closes at 7.",
-      "• Homes: we can stay late, but the same two families host.",
+      "• Homes: we can stay late, but the same two members host.",
       "",
       "How many of us need to leave before 7?",
     ].join("\n"));

@@ -4,18 +4,32 @@ appId: com.cahootzcoops.mobile
 ---
 - extendedWaitUntil:
     visible:
-      text: "Continue|Do this later|Skip for now|Open menu"
+      text: "Continue|Build your profile|Skip for now|Open menu"
     timeout: 60000
 - runFlow:
     when:
       visible: "Continue"
     commands:
       - tapOn: "Continue"
+      - extendedWaitUntil:
+          visible:
+            text: "Build your profile|Skip for now|Open menu"
+          timeout: 30000
+# "Do this later" sits at the end of the profile form, below the fold, and
+# Maestro only sees what is on screen, so scroll down to it.
 - runFlow:
     when:
-      visible: "Do this later"
+      visible: "Build your profile"
     commands:
+      - scrollUntilVisible:
+          element: "Do this later"
+          direction: DOWN
+          timeout: 20000
       - tapOn: "Do this later"
+      - extendedWaitUntil:
+          visible:
+            text: "Skip for now|Open menu"
+          timeout: 30000
 - runFlow:
     when:
       visible: "Skip for now"

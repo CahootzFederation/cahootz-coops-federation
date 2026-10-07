@@ -10,7 +10,8 @@
  *     slow and costly for every run; its trail builder is unit-tested). Prints
  *     the proposal id, the proposer's wallet, and the Commons' Sage user id.
  *   tsx --import ./dotenv.config.js scripts/e2e-agent-trails.ts cleanup-post <postId>
- *     Deletes Sage's actions on an E2E post, with their proposal drafts, alerts and trails.
+ *     Deletes Sage's actions on an E2E post, with their proposal drafts, follow-up tasks, alerts, trails
+ *     and the Sage memory written from them (so one run's memory can't steer the next run's reply).
  *   tsx --import ./dotenv.config.js scripts/e2e-agent-trails.ts cleanup <proposalId|-> [dmGroupId] [postId]
  *     Deletes the E2E proposal with its comments, evaluations and trails; the
  *     test account's direct message with Sage and its trails; and trails for
@@ -139,16 +140,25 @@ async function cleanupPost(postId: string) {
   const actionIds = actions.map((action) => action.id);
   const drafts = await db.commonsProposalDraft.findMany({ where: { actionId: { in: actionIds } }, select: { id: true } });
   const draftIds = drafts.map((draft) => draft.id);
+  const tasks = await db.sageTask.findMany({ where: { coopId: COOP_ID, OR: [{ postId }, { sourceActionId: { in: actionIds } }] }, select: { id: true } });
+  const taskIds = tasks.map((task) => task.id);
+  const memories = await db.aIObservation.findMany({
+    where: { generatedByAgentKey: "sage-memory", sources: { some: { sourceId: { in: [...actionIds, ...taskIds] } } } },
+    select: { id: true },
+  });
   await db.$transaction([
     db.notification.deleteMany({ where: { OR: [
       { data: { path: ["postId"], equals: postId } },
       ...draftIds.map((id) => ({ data: { path: ["draftId"], equals: id } })),
+      ...taskIds.map((id) => ({ data: { path: ["taskId"], equals: id } })),
     ] } }),
+    db.aIObservation.deleteMany({ where: { id: { in: memories.map((memory) => memory.id) } } }),
+    db.sageTask.deleteMany({ where: { id: { in: taskIds } } }),
     db.commonsProposalDraft.deleteMany({ where: { id: { in: draftIds } } }),
     db.commonsAction.deleteMany({ where: { id: { in: actionIds } } }),
     db.sageDecisionTrail.deleteMany({ where: { relatedPostIds: { has: postId } } }),
   ]);
-  return { actions: actionIds.length, drafts: draftIds.length };
+  return { actions: actionIds.length, drafts: draftIds.length, tasks: taskIds.length, memories: memories.length };
 }
 
 async function main() {

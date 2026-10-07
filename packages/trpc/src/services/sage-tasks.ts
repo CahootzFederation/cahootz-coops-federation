@@ -171,7 +171,7 @@ export function reminderText(task: Pick<SageTask, "kind" | "expected" | "offer" 
   if (task.kind === "CHECK_OUTCOME") {
     return {
       title: task.attempts ? `Still waiting on: ${task.title}` : `How did it go? ${task.title}`,
-      body: (task.expected ?? task.title).slice(0, 280),
+      body: `Time to ${(task.expected ?? `report how "${task.title}" went`).replace(/\.$/, "")}. Open the proposal to answer; the result is shown there for everyone in the Commons.`.slice(0, 280),
     };
   }
   if (task.kind === "REVIEW_STALE_DRAFT") {

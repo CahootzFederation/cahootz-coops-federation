@@ -81,7 +81,7 @@ describe("starting outcome checks when a proposal is funded", () => {
       coopId: "harbor", kind: "CHECK_OUTCOME", ownerUserId: "author-1", subjectType: "proposal_kpi", subjectId: "kpi-1",
       dueAt: measureBy, nextWakeAt: measureBy, maxAttempts: 2, createdBy: "SYSTEM",
     });
-    expect(data.expected).toMatch(/^"Community fridge" aimed for at least 500 \(Meals served\)\. What was the result\?/);
+    expect(data.expected).toBe('report how "Meals served" went for "Community fridge" (goal: at least 500)');
   });
 
   it("does nothing for proposals that aren't approved or funded, or KPIs already dated", async () => {
@@ -109,7 +109,7 @@ describe("the outcome check in the wake loop", () => {
   it("asks the author privately with a link to the proposal, then reminds once a week later", async () => {
     const task = {
       id: "task-1", coopId: "harbor", circleId: null, kind: "CHECK_OUTCOME", status: "OPEN", title: "Meals served · Community fridge",
-      reason: "r", expected: "\"Community fridge\" aimed for at least 500 (Meals served). What was the result?", offer: null,
+      reason: "r", expected: "report how \"Meals served\" went for \"Community fridge\" (goal: at least 500)", offer: null,
       ownerUserId: "author-1", subjectType: "proposal_kpi", subjectId: "kpi-1", postId: null, sourceActionId: null,
       dueAt: NOW, nextWakeAt: NOW, attempts: 0, maxAttempts: 2, lastWokeAt: null, leaseUntil: null, outcome: null,
       createdBy: "SYSTEM", createdAt: NOW, updatedAt: NOW,
@@ -118,6 +118,7 @@ describe("the outcome check in the wake loop", () => {
     await expect(wakeTask(task as never, NOW)).resolves.toBe("REMINDED");
     expect(push).toHaveBeenCalledWith(db, expect.objectContaining({
       userId: "author-1", type: "SAGE_REMINDER", title: "How did it go? Meals served · Community fridge",
+      body: "Time to report how \"Meals served\" went for \"Community fridge\" (goal: at least 500). Open the proposal to answer; the result is shown there for everyone in the Commons.",
       data: { taskId: "task-1", coopId: "harbor", proposalId: "prop-1" },
     }));
     expect(db.sageTask.update.mock.calls[0]![0].data.nextWakeAt).toEqual(new Date(NOW.getTime() + 7 * DAY));

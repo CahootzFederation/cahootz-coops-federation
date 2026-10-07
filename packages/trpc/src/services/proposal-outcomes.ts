@@ -84,9 +84,10 @@ async function userIdForWallet(walletAddress: string): Promise<string | null> {
   return user?.id ?? null;
 }
 
-function checkQuestion(kpi: Pick<ProposalKPI, "name" | "target" | "unit" | "higherIsBetter">, proposalTitle: string): string {
+/** What Sage waits for, phrased to follow "Waiting for you to …" in the Following tab. */
+function checkExpected(kpi: Pick<ProposalKPI, "name" | "target" | "unit" | "higherIsBetter">, proposalTitle: string): string {
   const goal = `${kpi.higherIsBetter ? "at least" : "at most"} ${formatKpiValue(kpi.target, kpiUnitFromDb(kpi.unit))}`;
-  return `"${proposalTitle}" aimed for ${goal} (${kpi.name}). What was the result? Report it on the proposal page; it will be shown there with the proposal.`;
+  return `report how "${kpi.name}" went for "${proposalTitle}" (goal: ${goal})`;
 }
 
 /**
@@ -113,7 +114,7 @@ export async function startProposalOutcomeTracking(proposalId: string, now = new
     const result = await createSageTask({
       coopId: proposal.coopId, kind: "CHECK_OUTCOME", title: `${kpi.name} · ${proposal.title}`.slice(0, 160),
       reason: `"${proposal.title}" was ${proposal.status.toLowerCase()}. Sage asks its author how each goal turned out, so the Commons learns what works.`,
-      expected: checkQuestion(kpi, proposal.title),
+      expected: checkExpected(kpi, proposal.title),
       offer: "Sage will show the result on the proposal and remember it when a similar proposal comes up.",
       ownerUserId, subjectType: "proposal_kpi", subjectId: kpi.id, dueAt: measureBy, maxAttempts: OUTCOME_CHECK_MESSAGES,
       createdBy: "SYSTEM",

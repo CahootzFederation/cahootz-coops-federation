@@ -25,6 +25,11 @@ function shown(page: Page, text: string | RegExp, options?: { exact?: boolean })
   return page.getByText(text, options).filter({ visible: true });
 }
 
+async function openFollowing(page: Page) {
+  await page.goto("/sage");
+  await page.getByRole("tab", { name: "Following" }).locator("visible=true").first().click();
+}
+
 async function openProposal(page: Page, proposalId: string) {
   await page.goto(`/proposal-detail?id=${proposalId}&coopId=cahootz`);
   await expect(shown(page, "Goals and results", { exact: true }).or(shown(page, "How similar proposals went", { exact: true })).first()).toBeVisible({ timeout: 30_000 });
@@ -53,9 +58,13 @@ test("a funded proposal's author reports a result Sage asked for, and a later si
     await expect(author.page.getByTestId(`kpi-${meals.id}`).getByText(/^Sage asks the author for the result on /)).toBeVisible();
     await expect(author.page.getByLabel("Result for E2E meals served", { exact: true })).toHaveCount(0);
 
-    // 3. On the date, Sage asks the author privately: an alert that opens the proposal.
+    // 3. On the date, Sage asks the author privately: an alert that opens the proposal. The check is
+    //    also listed under Sage → Following.
     expect(fixture("due", seeded.proposalId)).toMatchObject({ kpis: 2, tasks: 2 });
     fixture("wake");
+    const mealsWaiting = `Waiting for you to report how "E2E meals served" went for "${seeded.title}" (goal: at least 500).`;
+    await openFollowing(author.page);
+    await expect(shown(author.page, mealsWaiting)).toBeVisible();
     await author.page.goto("/");
     await author.page.getByLabel("Alerts", { exact: true }).locator("visible=true").first().click();
     const ask = shown(author.page, `How did it go? E2E meals served · ${seeded.title}`);
@@ -73,6 +82,10 @@ test("a funded proposal's author reports a result Sage asked for, and a later si
     await author.page.reload();
     await expect(author.page.getByTestId(`kpi-${meals.id}`).getByText("Partly met", { exact: true })).toBeVisible();
     await expect(author.page.getByLabel("Result for E2E meals served", { exact: true })).toHaveCount(0);
+    // Answering closed that check; the other goal's check is still open.
+    await openFollowing(author.page);
+    await expect(shown(author.page, `Waiting for you to report how "E2E volunteers" went for "${seeded.title}" (goal: at least 10).`)).toBeVisible();
+    await expect(shown(author.page, mealsWaiting)).toHaveCount(0);
 
     // 5. Another member sees the result, labelled as the author's report, and can't report anything.
     await openProposal(member.page, seeded.proposalId);

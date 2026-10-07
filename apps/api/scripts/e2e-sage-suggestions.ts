@@ -14,6 +14,9 @@
  *   tsx --import ./dotenv.config.js scripts/e2e-sage-suggestions.ts repeat <runId> <circleId>
  *     After seed: replays a near-duplicate of the seeded proposal suggestion over a new window, which
  *     Sage skips as a repeat (recorded in the earlier suggestion's audit trail).
+ *   tsx --import ./dotenv.config.js scripts/e2e-sage-suggestions.ts seed-pending <runId> <circleId> <targetPostId>
+ *     Replays a Sage comment on <targetPostId> that isn't confident enough to post on its own, so it
+ *     waits for the circle leader's approval (the suggestion follow-up journey).
  *   tsx --import ./dotenv.config.js scripts/e2e-sage-suggestions.ts cleanup <runId> [circleId]
  *     Deletes those suggestions with their reviews, audit events, drafts,
  *     Sage comments, alerts and decision trails, and the circle's analysis
@@ -97,6 +100,27 @@ async function seed(runId: string, circleId: string, targetPostId: string) {
   return { commentActionId: byKind("comment"), proposalActionId: byKind("proposal") };
 }
 
+async function seedPending(runId: string, circleId: string, targetPostId: string) {
+  const group = await db.group.findUnique({ where: { id: circleId }, select: { coopId: true, name: true, leader: { select: { email: true } } } });
+  if (!group?.name.startsWith("E2E ") || !group.leader?.email?.endsWith(TEST_EMAIL_SUFFIX)) throw new Error("Only E2E circles led by a test account can be used");
+  const post = await db.commonsPost.findUnique({ where: { id: targetPostId }, select: { circleId: true } });
+  if (post?.circleId !== circleId) throw new Error("The target post must belong to the circle");
+  const closedAt = new Date();
+  await db.circleAgentWindow.upsert({
+    where: { id: windowId(runId, "pending") },
+    create: { id: windowId(runId, "pending"), groupId: circleId, coopId: group.coopId, openedAt: new Date(closedAt.getTime() - 60 * 60 * 1000), lastMessageAt: closedAt, closedAt, messageCount: 40, status: "CLOSED" },
+    update: {},
+  });
+  await replayTrendWindow(windowId(runId, "pending"), {
+    hasSuggestion: true, confidence: 0.65, capability: "comment_on_post", targetPostId,
+    title: `E2E ${runId} Answer the parking question`,
+    body: `E2E ${runId}: Park behind the library; the front lot closes at 6.`,
+    reason: `E2E ${runId}: Two members asked where to park and nobody answered.`,
+  });
+  const action = await db.commonsAction.findFirst({ where: { sourceId: windowId(runId, "pending") }, select: { id: true, status: true } });
+  return { actionId: action?.id ?? null, status: action?.status ?? null };
+}
+
 async function repeat(runId: string, circleId: string) {
   const group = await db.group.findUnique({ where: { id: circleId }, select: { coopId: true, name: true } });
   if (!group?.name.startsWith("E2E ")) throw new Error("Only E2E circles can be used");
@@ -116,7 +140,7 @@ async function repeat(runId: string, circleId: string) {
 }
 
 async function cleanup(runId: string, circleId?: string) {
-  const windowIds = [windowId(runId, "comment"), windowId(runId, "proposal"), windowId(runId, "repeat")];
+  const windowIds = [windowId(runId, "comment"), windowId(runId, "proposal"), windowId(runId, "repeat"), windowId(runId, "pending")];
   const circleWindowIds = circleId
     ? (await db.circleAgentWindow.findMany({ where: { groupId: circleId }, select: { id: true } })).map((window) => window.id)
     : [];
@@ -149,7 +173,13 @@ async function cleanup(runId: string, circleId?: string) {
     .map((result) => result!.resultEntityId!);
   const drafts = await db.commonsProposalDraft.findMany({ where: { actionId: { in: actionIds } }, select: { id: true } });
   const draftIds = drafts.map((draft) => draft.id);
+  // Sage's follow-ups on these suggestions, their reminders and trails.
+  const tasks = await db.sageTask.findMany({ where: { sourceActionId: { in: actionIds } }, select: { id: true } });
+  const taskIds = tasks.map((task) => task.id);
   await db.$transaction([
+    db.notification.deleteMany({ where: { OR: taskIds.map((id) => ({ data: { path: ["taskId"], equals: id } })) } }),
+    db.sageDecisionTrail.deleteMany({ where: { sourceId: { in: taskIds } } }),
+    db.sageTask.deleteMany({ where: { id: { in: taskIds } } }),
     db.notification.deleteMany({
       where: {
         OR: [
@@ -174,6 +204,8 @@ async function main() {
   const result =
     command === "seed" && first && second && third
       ? await seed(first, second, third)
+      : command === "seed-pending" && first && second && third
+        ? await seedPending(first, second, third)
       : command === "repeat" && first && second
         ? await repeat(first, second)
       : command === "cleanup" && first

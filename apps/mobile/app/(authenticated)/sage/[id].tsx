@@ -276,6 +276,12 @@ export default function SageSuggestionDetailScreen() {
                   </View>
                 ) : null}
 
+                {detail.suggestion.closesAt ? (
+                  <Text testID="sage-suggestion-closes" style={{ color: THEME.muted, fontSize: 13 }}>
+                    {`Sage reminds you once, and closes this on ${new Date(detail.suggestion.closesAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} if nobody answers.`}
+                  </Text>
+                ) : null}
+
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <TouchableOpacity
                     accessibilityRole="button"

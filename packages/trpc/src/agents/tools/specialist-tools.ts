@@ -75,7 +75,8 @@ export function buildCadenceTools(ctx: AgentToolContext, log?: SpecialistLog) {
         events: events.map((event) => ({ id: event.id, title: event.post?.title ?? "Event", startAt: event.startAt.toISOString(), circleId: event.circleId })),
         votesClosing: proposals.map((proposal) => ({ id: proposal.id, title: proposal.title, votingEndsAt: proposal.votingEndsAt?.toISOString() ?? null })),
         staleDrafts: staleDrafts.map((draft) => ({ id: draft.id, title: draft.title, authorId: draft.authorId, ageDays: Math.floor((now.getTime() - draft.createdAt.getTime()) / DAY_MS) })),
-        waitingReviews: waitingReviews.map((review) => ({ ...review, createdAt: review.createdAt.toISOString() })),
+        // Code already reminds once and closes these (sage-suggestion-follow-up.ts); the steward needn't follow them up.
+        waitingReviews: waitingReviews.map((review) => ({ ...review, createdAt: review.createdAt.toISOString(), sageRemindsAndClosesAutomatically: true })),
       };
     },
   });

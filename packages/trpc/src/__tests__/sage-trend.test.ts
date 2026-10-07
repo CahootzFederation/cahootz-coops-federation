@@ -30,14 +30,15 @@ describe("Sage suggestion escalation (generic, any reviewType/action type)", () 
     const review = { id: "review-1", userId: "leader-1", status: "PENDING", payloadHash: "hash-1", actionId: "action-1", reviewType: "APPROVE_SUGGESTION" };
     const action = { id: "action-1", payloadHash: "hash-1" };
     const db = accountSessionDb({
-      commonsActionReview: { findUnique: vi.fn().mockResolvedValue(review), update: vi.fn().mockResolvedValue({}) },
+      commonsActionReview: { findUnique: vi.fn().mockResolvedValue(review), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      sageTask: { findMany: vi.fn().mockResolvedValue([]) },
       commonsAction: { findUnique: vi.fn().mockResolvedValue(action) },
       commonsActionAudit: { create: vi.fn().mockResolvedValue({}) },
       $transaction: vi.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     });
     const caller = callerFor(db);
     await expect(caller.respondToReview({ reviewId: "review-1", response: "ESCALATE" })).resolves.toEqual({ success: true });
-    expect((db.commonsActionReview as { update: ReturnType<typeof vi.fn> }).update).toHaveBeenCalledWith({ where: { id: "review-1" }, data: { status: "ESCALATED", respondedAt: expect.any(Date) } });
+    expect((db.commonsActionReview as { updateMany: ReturnType<typeof vi.fn> }).updateMany).toHaveBeenCalledWith({ where: { id: "review-1", status: "PENDING" }, data: { status: "ESCALATED", respondedAt: expect.any(Date) } });
     expect((db.commonsActionAudit as { create: ReturnType<typeof vi.fn> }).create).toHaveBeenCalledWith({
       data: { actionId: "action-1", actorId: "leader-1", eventType: "ESCALATED_TO_ADMIN", metadata: { reviewType: "APPROVE_SUGGESTION" } },
     });
@@ -47,13 +48,34 @@ describe("Sage suggestion escalation (generic, any reviewType/action type)", () 
     const review = { id: "review-2", userId: "leader-1", status: "PENDING", payloadHash: "hash-2", actionId: "action-2", reviewType: "APPROVE_SUGGESTION" };
     const action = { id: "action-2", payloadHash: "hash-2", revision: 1 };
     const db = accountSessionDb({
-      commonsActionReview: { findUnique: vi.fn().mockResolvedValue(review), update: vi.fn().mockResolvedValue({}) },
+      commonsActionReview: { findUnique: vi.fn().mockResolvedValue(review), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      sageTask: { findMany: vi.fn().mockResolvedValue([]) },
       commonsAction: { findUnique: vi.fn().mockResolvedValue(action) },
       commonsActionAudit: { create: vi.fn().mockResolvedValue({}) },
     });
     const caller = callerFor(db);
     await expect(caller.respondToReview({ reviewId: "review-2", response: "APPROVE" })).resolves.toEqual({ success: true });
     expect(enqueueSageActionExecute).toHaveBeenCalledWith("action-2", 1);
+  });
+
+  it("refuses an answer when Sage closed the suggestion first, and doesn't run it", async () => {
+    const review = { id: "review-4", userId: "leader-1", status: "PENDING", payloadHash: "hash-4", actionId: "action-4", reviewType: "APPROVE_SUGGESTION" };
+    const db = accountSessionDb({
+      // Read as pending, but the wake loop expired it before the answer was claimed.
+      commonsActionReview: { findUnique: vi.fn().mockResolvedValue(review), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      commonsAction: { findUnique: vi.fn().mockResolvedValue({ id: "action-4", payloadHash: "hash-4", revision: 1 }) },
+      commonsActionAudit: { create: vi.fn().mockResolvedValue({}) },
+    });
+    await expect(callerFor(db).respondToReview({ reviewId: "review-4", response: "APPROVE" })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(enqueueSageActionExecute).not.toHaveBeenCalledWith("action-4", 1);
+    expect((db.commonsActionAudit as { create: ReturnType<typeof vi.fn> }).create).not.toHaveBeenCalled();
+  });
+
+  it("tells the member a closed suggestion can't be answered", async () => {
+    const review = { id: "review-5", userId: "leader-1", status: "EXPIRED", payloadHash: "hash-5", actionId: "action-5", reviewType: "APPROVE_SUGGESTION" };
+    const db = accountSessionDb({ commonsActionReview: { findUnique: vi.fn().mockResolvedValue(review) } });
+    await expect(callerFor(db).respondToReview({ reviewId: "review-5", response: "APPROVE" }))
+      .rejects.toMatchObject({ code: "CONFLICT", message: "Sage closed this suggestion, so it can't be answered anymore" });
   });
 });
 

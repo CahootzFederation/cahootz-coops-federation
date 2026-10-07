@@ -3,6 +3,7 @@ import { Modal, ScrollView, TouchableOpacity, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { CheckCircle2, X } from 'lucide-react-native';
 import { IconAvatar } from '@/components/icon-avatar';
+import { EmojiChoiceGrid } from '@/components/emoji-picker';
 
 export const EMOJI_OPTIONS = [
   '🏠', '🤝', '🌱', '🎨', '📚', '💡', '🛠️', '💰',
@@ -63,32 +64,24 @@ export function EmojiColorPicker({
             <Text className="mb-2 text-xs font-black uppercase text-gray-500">
               Emoji
             </Text>
-            <View className="mb-5 flex-row flex-wrap gap-2">
-              {emoji ? (
-                <TouchableOpacity
-                  onPress={() => setEmoji(null)}
-                  className="h-12 w-12 items-center justify-center rounded-xl border border-dashed border-gray-300"
-                  accessibilityLabel="Clear emoji, use initial instead"
-                >
-                  <Text className="text-xs font-bold text-gray-500">None</Text>
-                </TouchableOpacity>
-              ) : null}
-              {EMOJI_OPTIONS.map((option) => {
-                const selected = emoji === option;
-                return (
-                  <TouchableOpacity
-                    key={option}
-                    onPress={() => setEmoji(option)}
-                    className="h-12 w-12 items-center justify-center rounded-xl border"
-                    style={{
-                      borderColor: selected ? '#FF6B00' : '#E5E7EB',
-                      backgroundColor: selected ? '#FFF7ED' : '#FFFFFF',
-                    }}
-                  >
-                    <Text style={{ fontSize: 22 }}>{option}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <View className="mb-5">
+              <EmojiChoiceGrid
+                options={EMOJI_OPTIONS}
+                value={emoji}
+                onChange={setEmoji}
+                pickerTitle="Choose an icon"
+                leading={
+                  emoji ? (
+                    <TouchableOpacity
+                      onPress={() => setEmoji(null)}
+                      className="h-12 w-12 items-center justify-center rounded-xl border border-dashed border-gray-300"
+                      accessibilityLabel="Clear emoji, use initial instead"
+                    >
+                      <Text className="text-xs font-bold text-gray-500">None</Text>
+                    </TouchableOpacity>
+                  ) : null
+                }
+              />
             </View>
 
             <Text className="mb-2 text-xs font-black uppercase text-gray-500">

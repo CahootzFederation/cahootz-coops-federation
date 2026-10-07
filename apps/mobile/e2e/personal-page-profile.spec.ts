@@ -72,7 +72,14 @@ test("a member adds a bio and emoji avatar to their page and another member sees
 
     // Switch to an emoji avatar instead, then write the bio and save.
     await userA.page.getByRole("button", { name: "Use emoji", exact: true }).click();
-    await userA.page.getByLabel("Use emoji 🌻").click();
+    // Pick one that isn't among the suggestions from the full emoji picker.
+    await userA.page.getByRole("button", { name: "More emoji", exact: true }).click();
+    const picker = userA.page.getByTestId("emoji-picker");
+    await expect(picker.getByRole("tab", { name: "Flags" })).toBeVisible();
+    await picker.getByRole("textbox", { name: "Search emoji" }).fill("giraffe");
+    await picker.getByRole("button", { name: "giraffe", exact: true }).click();
+    await expect(picker).toBeHidden();
+    await expect(userA.page.getByLabel("Use emoji 🦒")).toHaveAttribute("aria-selected", "true");
     // exact: the "Add a bio" button behind the sheet also contains "bio".
     await userA.page
       .getByRole("textbox", { name: "Bio", exact: true })
@@ -81,17 +88,17 @@ test("a member adds a bio and emoji avatar to their page and another member sees
 
     await expect(userA.page.getByRole("button", { name: "Save profile" })).toBeHidden();
     await expect(userA.page.getByText(bioText, { exact: true })).toBeVisible();
-    await expect(userA.page.getByText("🌻", { exact: true }).first()).toBeVisible();
+    await expect(userA.page.getByText("🦒", { exact: true }).first()).toBeVisible();
     await expect(userA.page.getByRole("button", { name: "Edit profile", exact: true })).toBeVisible();
 
     await userA.page.reload();
     await expect(userA.page.getByText(bioText, { exact: true })).toBeVisible();
-    await expect(userA.page.getByText("🌻", { exact: true }).first()).toBeVisible();
+    await expect(userA.page.getByText("🦒", { exact: true }).first()).toBeVisible();
 
     // User B opens A's public page in a separate session.
     await userB.page.goto(`/people/${original.handle}`);
     await expect(userB.page.getByText(bioText, { exact: true })).toBeVisible();
-    await expect(userB.page.getByText("🌻", { exact: true }).first()).toBeVisible();
+    await expect(userB.page.getByText("🦒", { exact: true }).first()).toBeVisible();
   } finally {
     const sessionToken = await userA.page.evaluate(() =>
       window.localStorage.getItem("cahootz.sessionToken"),

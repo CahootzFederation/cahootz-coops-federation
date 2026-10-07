@@ -10,6 +10,7 @@ vi.mock("../services/welcome-intros.js", () => ({
 import {
   COMMONS_COMMENT_LIKE_NOTIFICATION,
   notifyNewCommentReaction,
+  notifyNewPostReaction,
 } from "../services/comment-reactions.js";
 import { createNotificationAndPush } from "../services/push-notification-service.js";
 import { recordWelcomeIntroReaction } from "../services/welcome-intros.js";
@@ -67,5 +68,36 @@ describe("notifyNewCommentReaction", () => {
     introReaction.mockResolvedValue(false);
     expect(await notifyNewCommentReaction(db, { comment, reactor })).toBe("like");
     expect(push).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("emoji reactions", () => {
+  it("names the emoji for a reaction other than the like", async () => {
+    expect(await notifyNewCommentReaction(db, { comment, reactor, emoji: "🎉" })).toBe("like");
+    expect(push).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        type: COMMONS_COMMENT_LIKE_NOTIFICATION,
+        title: "Someone reacted to your comment",
+        body: "A commons member reacted 🎉 to what you said.",
+      }),
+    );
+  });
+
+  it("alerts a post's author to a reaction, but not for their own post or a bot", () => {
+    const post = { id: "post_1", coopId: "coop_1", authorId: "author_1" };
+    expect(notifyNewPostReaction(db, { post, reactor: { id: "author_1" }, emoji: "🔥" })).toBe(false);
+    expect(notifyNewPostReaction(db, { post, reactor: { id: "bot", isBot: true }, emoji: "🔥" })).toBe(false);
+    expect(push).not.toHaveBeenCalled();
+
+    expect(notifyNewPostReaction(db, { post, reactor: { id: "reactor_1" }, emoji: "🔥" })).toBe(true);
+    expect(push).toHaveBeenCalledWith(db, {
+      userId: "author_1",
+      coopId: "coop_1",
+      type: "COMMONS_SUPPORT",
+      title: "Someone reacted to your post",
+      body: "A commons member reacted 🔥 to what you shared.",
+      data: { postId: "post_1", coopId: "coop_1" },
+    });
   });
 });

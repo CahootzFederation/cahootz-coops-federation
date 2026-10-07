@@ -98,6 +98,7 @@ model User {
   welcomeTableConfigsGuiding WelcomeTableConfig[]      @relation("WelcomeTableGuide")
   welcomeIntros              WelcomeIntro[]
   commonsCommentReactions    CommonsCommentReaction[]
+  commonsPostReactions       CommonsPostReaction[]
   circleChatPresence         CircleChatPresence[]
   eventsCreated              Event[]                   @relation("EventCreatedBy")
   eventHosting               EventHost[]
@@ -1001,10 +1002,11 @@ model CommonsPost {
   pinnedById String?
   pinnedBy   User?     @relation("CommonsPostPinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
 
-  media    CommonsPostMedia[]
-  comments CommonsComment[]
-  supports CommonsPostSupport[]
-  event    Event?
+  media     CommonsPostMedia[]
+  comments  CommonsComment[]
+  supports  CommonsPostSupport[]
+  reactions CommonsPostReaction[]
+  event     Event?
 
   @@index([coopId, createdAt])
   @@index([coopId, circleId, createdAt])
@@ -1525,17 +1527,37 @@ model CommonsPostSupport {
   @@schema("public")
 }
 
-// A member's "like" on a commons comment - the comment-level counterpart of
-// CommonsPostSupport (one per member per comment, toggled).
+// A member's emoji reaction on a commons post, other than the "like" (❤️),
+// which stays a CommonsPostSupport row so feed ranking and supporter counts
+// are unchanged. One row per member per emoji, toggled.
+model CommonsPostReaction {
+  id        String      @id @default(cuid())
+  postId    String
+  post      CommonsPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime    @default(now())
+
+  @@unique([postId, userId, emoji])
+  @@index([postId])
+  @@index([userId, createdAt])
+  @@schema("public")
+}
+
+// A member's emoji reaction on a commons comment, Slack-style: one row per
+// member per emoji, toggled. "❤️" is the comment's "like" (the comment-level
+// counterpart of CommonsPostSupport).
 model CommonsCommentReaction {
   id        String         @id @default(cuid())
   commentId String
   comment   CommonsComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
   userId    String
   user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String         @default("❤️")
   createdAt DateTime       @default(now())
 
-  @@unique([commentId, userId])
+  @@unique([commentId, userId, emoji])
   @@index([commentId])
   @@index([userId, createdAt])
   @@schema("public")

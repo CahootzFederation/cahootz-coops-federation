@@ -1,8 +1,7 @@
 # Repository agent instructions
 
-<!-- The one source for every coding agent's instructions. CLAUDE.md imports this file, and
-.github/copilot-instructions.md is generated from it with `pnpm agents:sync`. Edit only this file;
-`pnpm agents:check` reports when the others drift. -->
+<!-- The one source for every coding agent's instructions. CLAUDE.md imports this file. Copy any
+change into .github/copilot-instructions.md too, since Copilot doesn't follow imports. -->
 
 Read `AGENT.md` for the project's security, governance, and architecture rules. Read `TESTING.md` before changing a user-visible workflow.
 

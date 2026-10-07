@@ -28,8 +28,6 @@
     "update-contract-artifacts": "bash scripts/update-contract-artifacts.sh",
     "check:versions": "node scripts/check-package-versions.mjs",
     "check:trigger-build": "node --experimental-strip-types scripts/check-trigger-build.mjs",
-    "agents:sync": "node scripts/sync-agent-instructions.mjs",
-    "agents:check": "node scripts/sync-agent-instructions.mjs --check",
     "dev": "turbo watch dev --continue",
     "dev:api": "pnpm -F @repo/trpc build && pnpm -F @cahootz/api dev",
     "dev:api:full": "pnpm -F @cahootz/api dev:full",

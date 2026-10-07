@@ -1,4 +1,4 @@
-<!-- Generated from AGENTS.md by `pnpm agents:sync`. Do not edit; change AGENTS.md instead. -->
+<!-- A copy of AGENTS.md for Copilot. Change AGENTS.md first, then copy the change here. -->
 
 # Repository agent instructions
 

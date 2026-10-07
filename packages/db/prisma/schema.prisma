@@ -1415,6 +1415,26 @@ model SageWakeCycle {
 
 // An alert Sage routed to the person responsible for something (a circle leader, a Commons admin, a
 // treasury or support contact). Recipients are resolved in code from roles, never chosen by the model.
+// A person who isn't a member, named in a family's feed post or comment (e.g. "Aunt Denise"). Sage counts
+// these so it can ask whether to invite someone who keeps coming up. Only the name as written is kept,
+// never contact details; rows are purged after 60 days.
+model SagePersonMention {
+  id            String   @id @default(cuid())
+  coopId        String
+  nameKey       String // normalized: "denise", or "rel:grandma:<memberId>" when only a relation was used
+  displayName   String
+  relation      String?
+  mentionedById String
+  sourceType    String
+  sourceId      String
+  createdAt     DateTime @default(now())
+
+  @@unique([sourceType, sourceId, nameKey])
+  @@index([coopId, nameKey, createdAt])
+  @@index([createdAt])
+  @@schema("public")
+}
+
 model SageAlert {
   id              String    @id @default(cuid())
   coopId          String

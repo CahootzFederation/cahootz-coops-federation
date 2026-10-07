@@ -11,6 +11,7 @@ import { describeSageAuditEvent } from "../services/sage-audit-descriptions.js";
 import { presentTrails } from "../services/sage-decision-trail.js";
 import { dismissSageTask } from "../services/sage-tasks.js";
 import { askIntroductionHelper } from "../services/sage-introductions.js";
+import { PERSON_INVITE_REVIEW, invitePersonFromReview } from "../services/sage-person-mentions.js";
 import { acknowledgeSageAlert, rerouteSageAlert } from "../services/sage-responsibility.js";
 import { router } from "../trpc.js";
 
@@ -377,6 +378,13 @@ export const sageRouter = router({
           context.db.commonsActionAudit.create({ data: { actionId: action.id, actorId: userId, eventType: "ESCALATED_TO_ADMIN", metadata: { reviewType: review.reviewType } } }),
         ]);
         return { success: true };
+      }
+
+      // Saying yes to inviting someone needs their contact details; the invitation is created before the
+      // review is marked answered, so a bad phone number or email leaves the question open to fix.
+      if (review.reviewType === PERSON_INVITE_REVIEW) {
+        const invited = await invitePersonFromReview(context.db, { action, review, user: context.accountUser, input: input.payload });
+        return { success: true, invitation: invited };
       }
 
       await context.db.commonsActionReview.update({ where: { id: review.id }, data: { status: "APPROVED", respondedAt: new Date() } });

@@ -32,6 +32,8 @@ async function trpcPost(path: string, sessionToken: string, body: unknown) {
 // A's comment from the quick reactions, alongside a like. User A sees both
 // after reload and joins B's 🎉, which then counts 2 for both of them.
 test("two members react to a post and a comment with emoji", async ({ browser }) => {
+  // Two signed-in contexts, two fixtures and four reloads outrun the 90s default.
+  test.setTimeout(180_000);
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const author = await newSignedInPage(browser, USER_A_EMAIL);
   const reactor = await newSignedInPage(browser, USER_B_EMAIL);

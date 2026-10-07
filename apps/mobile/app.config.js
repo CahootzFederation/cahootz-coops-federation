@@ -12,7 +12,7 @@ function googleServicesFile() {
   return fs.existsSync(file) ? file : undefined;
 }
 
-// The Android E2E build (.github/workflows/mobile-android-e2e.yml) talks to a
+// The Android E2E build (.github/workflows/mobile-native-e2e.yml) talks to a
 // local API over http and must run its own bundle, not an OTA update.
 const isAndroidE2E = process.env.ANDROID_E2E === "1";
 

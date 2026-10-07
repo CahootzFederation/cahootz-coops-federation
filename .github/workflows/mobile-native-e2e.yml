@@ -1,0 +1,357 @@
+name: Mobile Native E2E
+
+# Native smoke journeys (apps/mobile/.maestro) on an iOS simulator and an
+# Android emulator, against release builds made here and a local API. The same
+# flows run on both platforms, so a feature that works on one and not the other
+# fails here. App behavior is covered by the Playwright suite in mobile-e2e.yml;
+# this catches what only a real native build breaks (launch, native keyboard,
+# back navigation, safe areas and edge-to-edge layout).
+#
+# Native builds are slow (and macOS minutes cost more), so on PRs the suites
+# only run when the change touches the native build or platform-specific code.
+# "Native E2E required" always reports, so it can be a required check.
+# Production store builds and production OTA updates call this workflow and
+# don't start unless both platforms pass.
+on:
+  workflow_dispatch:
+  workflow_call:
+  schedule:
+    - cron: "0 7 * * *"
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-native-e2e-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CI: "true"
+  NODE_ENV: development
+  PORT: "3001"
+  WALLET_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  STRIPE_SECRET_KEY: sk_test_ci_placeholder
+  STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
+  STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
+  SLACK_WEBHOOK_URL: https://example.com/ci-placeholder
+  RESEND_API_KEY: re_ci_placeholder
+  RESEND_FROM_EMAIL: support@mail.cahootzcoops.com
+  SENTRY_DSN: https://public@example.com/1
+  SESSION_SECRET: ci-only-session-secret-0123456789abcdef0123456789
+  SKIP_BLOG_SYNC: "true"
+  EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
+  SENTRY_DISABLE_AUTO_UPLOAD: "true"
+  MAESTRO_VERSION: "2.10.0"
+  E2E_EMAIL: releaseclick1@test.cahootz.local
+  E2E_LOGIN_CODE: "000000"
+
+jobs:
+  changes:
+    name: Check for native changes
+    runs-on: ubuntu-latest
+    outputs:
+      native: ${{ steps.diff.outputs.native }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Diff against the base branch
+        id: diff
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "native=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Native build config, the flows themselves, platform-specific files...
+          native_paths='^(\.github/workflows/mobile-native-e2e\.yml|apps/mobile/(\.maestro/|ios/|expo-plugins/|app\.json$|app\.config\.js$|eas\.json$|package\.json$)|.*\.(ios|android)\.(ts|tsx)$)'
+          # ...or mobile code whose diff adds/removes platform-specific behavior.
+          platform_code='Platform\.(OS|select)|KeyboardAvoidingView|BackHandler|onRequestClose|SafeArea|expo-(camera|image-picker|notifications|local-authentication)'
+          if git diff --name-only "$BASE_SHA"...HEAD | grep -qE "$native_paths" \
+            || git diff "$BASE_SHA"...HEAD -- apps/mobile/app apps/mobile/components apps/mobile/lib apps/mobile/hooks apps/mobile/contexts | grep -E '^[+-][^+-]' | grep -qE "$platform_code"; then
+            echo "native=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "native=false" >> "$GITHUB_OUTPUT"
+            echo "No native or platform-specific changes; the native suites are skipped." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  android:
+    name: Android smoke journeys
+    needs: changes
+    if: ${{ needs.changes.outputs.native == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cahootz_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cahootz_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cahootz_e2e
+      SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      # The emulator reaches the CI machine's localhost at 10.0.2.2.
+      EXPO_PUBLIC_API_BASE_URL: http://10.0.2.2:3001
+      ANDROID_E2E: "1"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10.11.1"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build API workspace packages
+        run: pnpm --filter @repo/trpc... --fail-if-no-match build
+
+      - name: Prepare database
+        run: |
+          pnpm -F @repo/db exec prisma migrate deploy --schema prisma/schema.prisma
+          pnpm -F @repo/db exec tsx scripts/seed-coop-config.ts
+          pnpm -F @repo/db exec tsx scripts/seed-coop-display-info.ts
+          pnpm -F @repo/db exec ts-node --transpile-only scripts/seed-test-users.ts -- --coopId=cahootz --count=2 --prefix=releaseclick
+
+      - name: Start API
+        run: |
+          nohup pnpm -F @cahootz/api dev > /tmp/cahootz-api.log 2>&1 &
+
+      # Only the emulator's architecture is built, which roughly quarters the
+      # native compile.
+      - name: Build release APK
+        working-directory: apps/mobile
+        run: |
+          npx expo prebuild --platform android --clean --no-install
+          cd android
+          ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon
+
+      - name: Wait for API
+        shell: bash
+        run: |
+          for attempt in {1..60}; do
+            if curl --fail --silent http://localhost:3001/health/db >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/cahootz-api.log
+          exit 1
+
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run smoke journeys on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_7
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: |
+            adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+            mkdir -p output/maestro/android
+            maestro test apps/mobile/.maestro --format junit --output output/maestro/android/report.xml --test-output-dir output/maestro/android -e EMAIL="$E2E_EMAIL" -e LOGIN_CODE="$E2E_LOGIN_CODE"
+
+      - name: Collect server logs
+        if: ${{ always() }}
+        run: |
+          mkdir -p output/maestro/android
+          cp /tmp/cahootz-api.log output/maestro/android/api.log 2>/dev/null || true
+
+      - name: Upload Android artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-native-e2e-android
+          path: output/maestro/android/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  ios:
+    name: iOS smoke journeys
+    needs: changes
+    if: ${{ needs.changes.outputs.native == 'true' }}
+    runs-on: macos-26
+    timeout-minutes: 90
+
+    env:
+      # Service containers don't run on macOS runners, so Postgres comes from
+      # Homebrew (see "Start Postgres").
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cahootz_e2e
+      SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      # The simulator shares the Mac's localhost; Info.plist allows local http.
+      EXPO_PUBLIC_API_BASE_URL: http://localhost:3001
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10.11.1"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Set up Java (for Maestro)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Start Postgres
+        run: |
+          brew install postgresql@17 pgvector
+          brew services start postgresql@17
+          export PATH="$(brew --prefix postgresql@17)/bin:$PATH"
+          for attempt in {1..30}; do pg_isready -h localhost && break; sleep 2; done
+          psql -h localhost -d postgres -c "CREATE ROLE postgres WITH LOGIN SUPERUSER PASSWORD 'postgres';" || true
+          createdb -h localhost -U postgres cahootz_e2e
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build API workspace packages
+        run: pnpm --filter @repo/trpc... --fail-if-no-match build
+
+      - name: Prepare database
+        run: |
+          pnpm -F @repo/db exec prisma migrate deploy --schema prisma/schema.prisma
+          pnpm -F @repo/db exec tsx scripts/seed-coop-config.ts
+          pnpm -F @repo/db exec tsx scripts/seed-coop-display-info.ts
+          pnpm -F @repo/db exec ts-node --transpile-only scripts/seed-test-users.ts -- --coopId=cahootz --count=2 --prefix=releaseclick
+
+      - name: Start API
+        run: |
+          nohup pnpm -F @cahootz/api dev > /tmp/cahootz-api.log 2>&1 &
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: apps/mobile/ios/Pods
+          key: pods-${{ runner.os }}-${{ hashFiles('apps/mobile/ios/Podfile.lock') }}
+
+      # The E2E app runs its own bundle: OTA updates are turned off in this
+      # copy only (the committed Expo.plist is untouched).
+      - name: Build release app for the simulator
+        working-directory: apps/mobile/ios
+        # bash here means -eo pipefail, so a failed xcodebuild isn't hidden by tail.
+        shell: bash
+        run: |
+          plutil -replace EXUpdatesEnabled -bool NO CahootzCoop/Supporting/Expo.plist
+          pod install
+          xcodebuild -workspace CahootzCoop.xcworkspace -scheme CahootzCoop -configuration Release \
+            -sdk iphonesimulator -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO | tail -50
+
+      - name: Wait for API
+        shell: bash
+        run: |
+          for attempt in {1..60}; do
+            if curl --fail --silent http://localhost:3001/health/db >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/cahootz-api.log
+          exit 1
+
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Run smoke journeys on iOS
+        run: |
+          device=$(xcrun simctl list devices available -j | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const all=Object.values(JSON.parse(d).devices).flat();const p=all.find(x=>/^iPhone \d+$/.test(x.name))||all.find(x=>x.name.startsWith("iPhone"));console.log(p.udid)})')
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device" -b
+          xcrun simctl install "$device" apps/mobile/ios/build/Build/Products/Release-iphonesimulator/CahootzCoop.app
+          mkdir -p output/maestro/ios
+          maestro --device "$device" test apps/mobile/.maestro --format junit --output output/maestro/ios/report.xml --test-output-dir output/maestro/ios -e EMAIL="$E2E_EMAIL" -e LOGIN_CODE="$E2E_LOGIN_CODE"
+
+      - name: Collect server logs
+        if: ${{ always() }}
+        run: |
+          mkdir -p output/maestro/ios
+          cp /tmp/cahootz-api.log output/maestro/ios/api.log 2>/dev/null || true
+
+      - name: Upload iOS artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-native-e2e-ios
+          path: output/maestro/ios/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # The one check to mark as required on main, and what release workflows wait
+  # on. Passes when both platforms passed, or both were skipped because the PR
+  # has no native changes. Fails if either platform failed or was cancelled.
+  required:
+    name: Native E2E required
+    needs: [changes, android, ios]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check both platforms
+        shell: bash
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          NATIVE: ${{ needs.changes.outputs.native }}
+          ANDROID: ${{ needs.android.result }}
+          IOS: ${{ needs.ios.result }}
+        run: |
+          echo "changes: $CHANGES (native: $NATIVE), android: $ANDROID, ios: $IOS"
+          if [ "$CHANGES" != "success" ]; then exit 1; fi
+          if [ "$NATIVE" != "true" ]; then exit 0; fi
+          if [ "$ANDROID" = "success" ] && [ "$IOS" = "success" ]; then exit 0; fi
+          echo "::error::The native smoke journeys must pass on both iOS and Android."
+          exit 1

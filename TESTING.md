@@ -185,23 +185,41 @@ Each commons detail page in the platform admin has a **View all stores** link. T
 
 The workflow starts on every PR. Its `Check for app changes` job skips the suite when nothing it covers changed (the API, the mobile app, `packages/db`, `packages/trpc`, the root `package.json` or the lockfile), and the `Mobile E2E required` job reports the result either way: it passes when the suite passed or was skipped, and fails when the suite failed or was cancelled. Make **Mobile E2E required**, not "Two-user mobile UI journeys", the required status check on `main`. A required check that is skipped by a path filter never reports, so it would block every docs-only PR.
 
-## Android E2E
+## Native E2E (iOS and Android)
 
-The Playwright journeys above test app behavior on mobile web, which is the same on iOS and Android. The Android smoke journeys in `apps/mobile/.maestro/` test what only a real Android build can break: launching, signing in on the native keyboard, the hardware back button, and the edge-to-edge layout. Each flow runs on a freshly installed app (`clearState`), and none of them create content.
+The Playwright journeys above test app behavior on mobile web, which is the same code on both platforms. The native smoke journeys in `apps/mobile/.maestro/` run **the same flows on an iOS simulator and an Android emulator**, so a feature that works on one platform and not the other fails. They test what only a real native build can break: launching, signing in on the native keyboard, keyboard insets, back navigation, and the safe-area and edge-to-edge layout. Each flow starts on a freshly installed app (`clearState`), and none of them create content. Steps that differ by platform go in `runFlow` blocks with `when: platform: Android` or `iOS`.
 
 1. **Sign in and out** (`sign-in-out.yaml`): User A skips the onboarding wizard, signs in from the menu with their email and the fixture code, sees "Sign Out (@releaseclick1)", and signs out.
-2. **Feed composer, keyboard and back button** (`feed-keyboard-back.yaml`): User A opens General, types a draft, and still sees the Post button above the keyboard. The first hardware back press closes the keyboard and keeps the draft. The second returns to Circle View.
+2. **Feed composer and keyboard** (`feed-keyboard.yaml`): User A opens General, types a draft, and still sees the Post button above the keyboard. The keyboard closes with the hardware back button on Android and the dismiss gesture on iOS, the draft is kept, and the Commons tab returns to Circle View. Opening a circle replaces Circle View instead of pushing on top of it, so there's no screen behind the feed. On Android, a second back press from the feed leaves the app.
 
-The `Mobile Android E2E` workflow (`.github/workflows/mobile-android-e2e.yml`) runs nightly, on PRs that change the native build (`app.json`, `app.config.js`, `eas.json`, `expo-plugins/`, the mobile `package.json`, or the flows), and on demand. It seeds the same fixtures as `Mobile E2E`, starts the API, builds a release APK with `ANDROID_E2E=1`, boots an API 35 emulator, and runs Maestro. `ANDROID_E2E=1` adds `expo-plugins/with-android-e2e.js`, which allows plain http to the CI API (`http://10.0.2.2:3001`), and turns off OTA updates so the APK runs its own bundle. Store builds never set it. Reports, screenshots and the API log are uploaded as `mobile-android-e2e-artifacts`.
+The `Mobile Native E2E` workflow (`.github/workflows/mobile-native-e2e.yml`) runs:
 
-To run the flows locally, install [Maestro](https://maestro.mobile.dev) and the Android SDK, start an emulator and the API, then build and install the E2E APK:
+- on every PR. A `Check for native changes` job skips both suites unless the PR touches the native build (`ios/`, `app.json`, `app.config.js`, `eas.json`, `expo-plugins/`, the mobile `package.json`), the flows, a `.ios.tsx`/`.android.tsx` file, or mobile code whose diff adds or removes platform-specific behavior (`Platform.OS`/`Platform.select`, `KeyboardAvoidingView`, `BackHandler`, `onRequestClose`, safe areas, or the camera, image picker, notifications or biometrics modules).
+- nightly and on demand.
+- **before every production release.** `Mobile EAS Build and Submit` (production profile) and `Mobile EAS Update` (production channel) call it first and don't start unless both platforms pass, whichever platform is being shipped.
+
+**Native E2E required** passes when both platforms passed, or both were skipped because nothing native changed. It fails if either platform failed. Make it a required status check on `main`, next to **Mobile E2E required**.
+
+- **Android job** (Ubuntu): seeds the same fixtures as `Mobile E2E`, starts the API, builds a release x86_64 APK with `ANDROID_E2E=1`, boots an API 35 emulator and runs Maestro. `ANDROID_E2E=1` adds `expo-plugins/with-android-e2e.js`, which allows plain http to the CI API (`http://10.0.2.2:3001`), and turns off OTA updates so the APK runs its own bundle. Store builds never set it.
+- **iOS job** (`macos-26`): installs Postgres 17 and pgvector with Homebrew (macOS runners can't run service containers), seeds the same fixtures, starts the API, turns off OTA updates in that run's copy of `Expo.plist`, builds the committed `ios/` project in Release for the simulator, and runs Maestro on an iPhone simulator. The simulator reaches the API at `http://localhost:3001`; `Info.plist` already allows local networking.
+
+Reports, screenshots and API logs are uploaded as `mobile-native-e2e-android` and `mobile-native-e2e-ios`. macOS runner minutes cost about ten times Linux minutes, which is why PRs only run these suites when native code changes.
+
+To run the flows locally, install [Maestro](https://maestro.mobile.dev) and start the API. Then build and install the app on a simulator or emulator, and run the flows:
+
+```bash
+cd apps/mobile && SENTRY_DISABLE_AUTO_UPLOAD=true EXPO_PUBLIC_API_BASE_URL=http://localhost:3001 npx expo run:ios --configuration Release
+```
 
 ```bash
 cd apps/mobile && ANDROID_E2E=1 EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3001 SENTRY_DISABLE_AUTO_UPLOAD=true npx expo run:android --variant release
+```
+
+```bash
 maestro test apps/mobile/.maestro -e EMAIL=releaseclick1@test.cahootz.local -e LOGIN_CODE=000000
 ```
 
-The `android/` folder isn't committed. `expo prebuild` (or EAS, on every build) generates it from `app.json`, so native config always matches the app config.
+The `android/` folder isn't committed: `expo prebuild` (or EAS, on every build) generates it from `app.json`. `ios/` is committed, so iOS native changes must be made there as well as in `app.json`.
 
 ## Automated journeys to add before release
 

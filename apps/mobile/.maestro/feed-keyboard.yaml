@@ -1,0 +1,35 @@
+# A signed-in member opens the General feed, types in the composer and can
+# still see the Post button above the keyboard (keyboard insets on both
+# platforms, edge-to-edge on Android). The keyboard closes with the hardware
+# back button on Android and the dismiss gesture on iOS, the draft survives,
+# and the Commons tab returns to Circle View on both. (Opening a circle
+# replaces Circle View rather than pushing on top of it, so there is no
+# screen behind the feed to go back to.) Nothing is posted.
+# Pass EMAIL and LOGIN_CODE with -e (see TESTING.md).
+appId: com.cahootzcoops.mobile
+name: Feed composer and keyboard
+---
+- runFlow:
+    file: subflows/sign-in.yaml
+    env:
+      EMAIL: ${EMAIL}
+      LOGIN_CODE: ${LOGIN_CODE}
+- tapOn: "General"
+- tapOn: "Share what's happening..."
+- inputText: "E2E native draft"
+- assertVisible: "Post"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - pressKey: Back
+      - assertVisible: "E2E native draft"
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - hideKeyboard
+      - assertVisible: "E2E native draft"
+- tapOn: "Commons"
+- assertVisible: "General"
+- assertVisible: "Open menu"

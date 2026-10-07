@@ -6,6 +6,9 @@ name: Mobile EAS Build and Submit
 # Promote Android releases to closed/open testing or production from the Play
 # Console.
 #
+# Production runs first call mobile-native-e2e.yml and stop unless the smoke
+# journeys pass on both iOS and Android.
+#
 # Android: Google only accepts the very first upload of an app through the
 # Play Console. Upload the first production .aab by hand, then use "submit"
 # here. Submitting also needs the Play service account key stored in EAS
@@ -49,8 +52,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Production builds and store submissions only go ahead when the native
+  # smoke journeys pass on both iOS and Android, whichever platform is being
+  # shipped, so the two apps can't drift apart.
+  native-e2e:
+    name: Native E2E (iOS and Android)
+    if: ${{ inputs.profile == 'production' }}
+    uses: ./.github/workflows/mobile-native-e2e.yml
+
   build:
     name: ${{ inputs.action }} (${{ inputs.platform }}, ${{ inputs.profile }})
+    needs: native-e2e
+    # Runs when the gate passed, or was skipped because this isn't production.
+    if: ${{ !cancelled() && (needs.native-e2e.result == 'success' || needs.native-e2e.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

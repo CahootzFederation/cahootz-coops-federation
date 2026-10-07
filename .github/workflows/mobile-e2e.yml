@@ -2,15 +2,10 @@ name: Mobile E2E
 
 on:
   workflow_dispatch:
+  # Every PR starts this workflow so "Mobile E2E required" always reports
+  # (a required check that never starts blocks the merge forever). The
+  # changes job decides whether the suite itself needs to run.
   pull_request:
-    paths:
-      - ".github/workflows/mobile-e2e.yml"
-      - "apps/api/**"
-      - "apps/mobile/**"
-      - "packages/db/**"
-      - "packages/trpc/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
   push:
     branches: ["main"]
     paths:
@@ -30,8 +25,38 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  changes:
+    name: Check for app changes
+    runs-on: ubuntu-latest
+    outputs:
+      e2e: ${{ steps.diff.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Diff against the base branch
+        id: diff
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "e2e=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Keep in step with the push paths above.
+          if git diff --name-only "$BASE_SHA"...HEAD | grep -qE '^(\.github/workflows/mobile-e2e\.yml|apps/api/|apps/mobile/|packages/db/|packages/trpc/|package\.json$|pnpm-lock\.yaml$)'; then
+            echo "e2e=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "e2e=false" >> "$GITHUB_OUTPUT"
+            echo "No app changes; the E2E suite is skipped." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   mobile-e2e:
     name: Two-user mobile UI journeys
+    needs: changes
+    if: ${{ needs.changes.outputs.e2e == 'true' }}
     runs-on: ubuntu-latest
     # Setup takes ~4 min and the suite ~14 min with no retries, so 20 min
     # cancelled any run that needed a retry before it could report results.
@@ -208,3 +233,23 @@ jobs:
           path: output/playwright/
           if-no-files-found: ignore
           retention-days: 14
+
+  # The one check to mark as required on main. It passes when the suite
+  # passed or was skipped because nothing it covers changed, and fails when
+  # the suite failed, was cancelled, or the change check itself broke.
+  required:
+    name: Mobile E2E required
+    needs: [changes, mobile-e2e]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the E2E result
+        shell: bash
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          E2E: ${{ needs.mobile-e2e.result }}
+        run: |
+          echo "changes: $CHANGES, mobile-e2e: $E2E"
+          if [ "$CHANGES" != "success" ]; then exit 1; fi
+          if [ "$E2E" = "success" ] || [ "$E2E" = "skipped" ]; then exit 0; fi
+          exit 1

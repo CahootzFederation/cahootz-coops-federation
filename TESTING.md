@@ -183,7 +183,7 @@ Official funding shops now inherit the platform's shared Stripe connected accoun
 
 Each commons detail page in the platform admin has a **View all stores** link. The store directory includes the official badge store and every member-owned store, including pending or payment-incomplete shops that are not public yet. Each store detail page reports public/payment readiness, the effective Stripe account, order and sales totals, and its complete product catalog. In the mobile marketplace, the official badge store also appears in the normal **All shops** list and opens through the same store-detail experience as a member shop.
 
-After the workflow has run once on GitHub, add **Two-user mobile UI journeys** as a required status check in the `main` branch protection rules so a failing E2E suite blocks merging.
+The workflow starts on every PR. Its `Check for app changes` job skips the suite when nothing it covers changed (the API, the mobile app, `packages/db`, `packages/trpc`, the root `package.json` or the lockfile), and the `Mobile E2E required` job reports the result either way: it passes when the suite passed or was skipped, and fails when the suite failed or was cancelled. Make **Mobile E2E required**, not "Two-user mobile UI journeys", the required status check on `main`. A required check that is skipped by a path filter never reports, so it would block every docs-only PR.
 
 ## Android E2E
 

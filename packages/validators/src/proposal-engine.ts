@@ -12,7 +12,7 @@ import {
   MissingSeverityZ,
   EvaluationZ,
 } from "./proposal.js";
-import type { KPIz } from "./proposal.js";
+import { KPIz, type PriorOutcome } from "./proposal.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -162,6 +162,33 @@ function normalizeCurrency(val: unknown): "UC" | "USD" | "mixed" {
   return "USD";
 }
 
+export interface ProcessProposalOptions {
+  /** Looks up results of similar past proposals (scoped memory) once the title and summary are extracted. */
+  priorOutcomes?: (about: { title: string; summary: string; category: string }) => Promise<PriorOutcome[]>;
+}
+
+/** Validates the KPI agent's answer: at most 3, measure dates clamped to 7–365 days, duplicates dropped. */
+export function normalizeKpis(raw: unknown): z.infer<typeof KPIz>[] {
+  const list = (raw as { kpis?: unknown } | null)?.kpis;
+  if (!Array.isArray(list)) return [];
+  const seen = new Set<string>();
+  const kpis: z.infer<typeof KPIz>[] = [];
+  for (const item of list) {
+    const days = Math.round(Number((item as { measureAfterDays?: unknown })?.measureAfterDays));
+    const parsed = KPIz.safeParse({
+      ...(item as object),
+      measureAfterDays: Number.isFinite(days) ? Math.min(365, Math.max(7, days)) : 90,
+    });
+    if (!parsed.success) continue;
+    const key = parsed.data.name.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kpis.push({ ...parsed.data, name: parsed.data.name.trim() });
+    if (kpis.length === 3) break;
+  }
+  return kpis;
+}
+
 /**
  * ProposalEngine: Multi-agent orchestration using @openai/agents
  *
@@ -175,13 +202,20 @@ function normalizeCurrency(val: unknown): "UC" | "USD" | "mixed" {
 export class ProposalEngine {
   private readonly version = "proposal-engine@2.0.0";
 
-  async processProposal(input: ProposalInput, config?: CoopConfigData): Promise<ProposalOutput> {
+  async processProposal(input: ProposalInput, config?: CoopConfigData, options: ProcessProposalOptions = {}): Promise<ProposalOutput> {
     const validated = ProposalInputZ.parse(input);
 
     const extractedFields = await this.runExtractionAgent(validated, config);
 
-    const [rawEval, governance, _kpis, checks] = await Promise.all([
-      this.runEvaluationAgent(validated, extractedFields, config),
+    // Results of similar past proposals, from the caller's scoped memory. A lookup failure never blocks review.
+    const priorOutcomes = options.priorOutcomes
+      ? await options.priorOutcomes({
+          title: String(extractedFields.title ?? ""), summary: String(extractedFields.summary ?? ""), category: String(extractedFields.category ?? ""),
+        }).catch(() => [] as PriorOutcome[])
+      : [];
+
+    const [rawEval, governance, kpis, checks] = await Promise.all([
+      this.runEvaluationAgent(validated, extractedFields, config, priorOutcomes),
       this.runGovernanceAgent(validated, extractedFields, config),
       this.runKPIAgent(validated, extractedFields),
       this.runComplianceChecks(validated, extractedFields, config),
@@ -223,6 +257,8 @@ export class ProposalEngine {
       decision,
       decisionReasons: reasons,
       missing_data,
+      kpis,
+      priorOutcomes,
     };
 
     return ProposalOutputZ.parse(enhancedOutput);
@@ -555,6 +591,7 @@ export class ProposalEngine {
     input: ProposalInput,
     extractedFields: any,
     config?: CoopConfigData,
+    priorOutcomes: PriorOutcome[] = [],
   ): Promise<{
     structural_scores: {
       goal_mapping_valid: boolean;
@@ -609,6 +646,15 @@ export class ProposalEngine {
           const description = c.description ? `: ${c.description}` : "";
           return `- ${c.key} (${c.label})${description}`;
         }).join("\n")
+      : "";
+
+    // Member-reported results of similar past proposals. Records of what members said happened, not facts.
+    const priorOutcomeContext = priorOutcomes.length > 0
+      ? [
+          "RESULTS OF SIMILAR PAST PROPOSALS IN THIS CO-OP (reported by their authors, not verified):",
+          ...priorOutcomes.map(o => `- ${o.text}`),
+          "Use these when judging feasibility and risk. If this proposal repeats a plan that missed its targets, say what it does differently or flag that it doesn't. Name the past proposal when you rely on it.",
+        ].join("\n")
       : "";
 
     const exclusionList = config?.sectorExclusions ?? [];
@@ -757,6 +803,7 @@ export class ProposalEngine {
         "",
         categoryContext,
         exclusionContext,
+        priorOutcomeContext,
         "",
         "Also provide:",
         "- violations: short plain sentences for any policy violations. Empty array if none.",
@@ -862,31 +909,49 @@ export class ProposalEngine {
     };
   }
 
+  /**
+   * Up to 3 measurable KPIs with a target and when to measure them. They are stored with the proposal
+   * so Sage can ask the author how it went once the date arrives. A failed or empty answer yields no
+   * KPIs rather than invented ones.
+   */
   private async runKPIAgent(input: ProposalInput, extractedFields: any): Promise<z.infer<typeof KPIz>[]> {
+    const KPIListZ = z.object({
+      kpis: z.array(z.object({
+        name: z.string().min(2).max(80),
+        target: z.number().nonnegative(),
+        unit: z.enum(["USD", "UC", "jobs", "percent", "count"]),
+        higherIsBetter: z.boolean(),
+        measureAfterDays: z.number().int(),
+      })).max(3),
+    });
     const agent = new Agent({
       name: "KPI Agent",
       instructions: [
-        "Propose up to 3 concrete KPIs for the proposal.",
-        "Each KPI should have a short name, numeric target, and unit among USD|UC|jobs|percent|count.",
-        "Use web_search for realistic targets.",
-        "Return ONLY a JSON array of KPIs (max 3).",
+        "Propose up to 3 concrete KPIs for the proposal that its author could honestly measure and report.",
+        "Each KPI has a short plain name (e.g. 'Meals served'), a numeric target, and a unit among USD|UC|jobs|percent|count.",
+        "higherIsBetter is false only for things meant to go down (costs, wait times).",
+        "measureAfterDays is when the result can first be judged after funding (7 to 365 days).",
+        "Use web_search for realistic targets. Base targets on what the proposal itself promises when it states numbers.",
+        "Return an empty list if nothing in the proposal can be measured.",
       ].join("\n"),
       model: "gpt-5.2",
+      outputType: KPIListZ,
       tools: [webSearchTool()],
       modelSettings: { toolChoice: "auto" },
     });
 
-    await run(agent, [
-      `Title: ${extractedFields.title}`,
-      `Summary: ${extractedFields.summary}`,
-      `Category: ${extractedFields.category}`,
-      `Budget: ${extractedFields.budget?.currency} ${extractedFields.budget?.amountRequested}`,
-    ].join("\n"));
-
-    return [
-      { name: "export_revenue", target: 100_000, unit: "USD" as const },
-      { name: "jobs_created", target: 5, unit: "jobs" as const },
-    ];
+    try {
+      const result = await run(agent, [
+        `Title: ${extractedFields.title}`,
+        `Summary: ${extractedFields.summary}`,
+        `Category: ${extractedFields.category}`,
+        `Budget: ${extractedFields.budget?.currency} ${extractedFields.budget?.amountRequested}`,
+      ].join("\n")) as unknown as { finalOutput?: unknown; output?: unknown };
+      return normalizeKpis(result.finalOutput ?? result.output);
+    } catch (error) {
+      console.error("KPI agent failed; the proposal is saved without KPIs", error);
+      return [];
+    }
   }
 
   private async runAlternativeAgent(

@@ -20,10 +20,14 @@ export const STALE_DRAFT_DAYS = 7;
 const LEASE_MS = 10 * 60 * 1000;
 const DAY_MS = 86_400_000;
 const REMINDER_GRACE_DAYS = 3;
+/** Owners get a week to answer an outcome check before the one reminder, and a week after it. */
+const OUTCOME_GRACE_DAYS = 7;
 const WAKE_BATCH = 50;
 
-export type SageTaskKind = "FOLLOW_UP" | "REVIEW_STALE_DRAFT" | "DEADLINE_REMINDER";
-export type SageTaskSubject = "commons_post" | "proposal_draft" | "proposal" | "event";
+export type SageTaskKind = "FOLLOW_UP" | "REVIEW_STALE_DRAFT" | "DEADLINE_REMINDER" | "CHECK_OUTCOME";
+export type SageTaskSubject = "commons_post" | "proposal_draft" | "proposal" | "event" | "proposal_kpi";
+/** Outcome checks run on a KPI's own measure date, which can be months away. */
+export const OUTCOME_CHECK_MAX_DAYS = 366;
 
 export interface CreateTaskInput {
   coopId: string;
@@ -39,6 +43,10 @@ export interface CreateTaskInput {
   postId?: string | null;
   sourceActionId?: string | null;
   dueInDays?: number;
+  /** A fixed date instead of dueInDays. Only outcome checks use it; clamped to now..366 days. */
+  dueAt?: Date;
+  /** Messages Sage may send before it stops (default 1). */
+  maxAttempts?: number;
   createdBy?: "SAGE" | "SYSTEM";
 }
 
@@ -72,7 +80,9 @@ export async function createSageTask(input: CreateTaskInput, now = new Date()): 
   });
   if (dismissed) return { created: false, reason: "The member dismissed this recently" };
 
-  const dueAt = new Date(now.getTime() + clampFollowUpDays(input.dueInDays) * DAY_MS);
+  const dueAt = input.dueAt && input.kind === "CHECK_OUTCOME"
+    ? new Date(Math.min(Math.max(input.dueAt.getTime(), now.getTime()), now.getTime() + OUTCOME_CHECK_MAX_DAYS * DAY_MS))
+    : new Date(now.getTime() + clampFollowUpDays(input.dueInDays) * DAY_MS);
   const task = await db.sageTask.create({
     data: {
       coopId: input.coopId, circleId: input.circleId ?? null, kind: input.kind,
@@ -81,6 +91,7 @@ export async function createSageTask(input: CreateTaskInput, now = new Date()): 
       ownerUserId: input.ownerUserId, subjectType: input.subjectType, subjectId: input.subjectId,
       postId: input.postId ?? null, sourceActionId: input.sourceActionId ?? null,
       dueAt, nextWakeAt: dueAt, createdBy: input.createdBy ?? "SAGE",
+      maxAttempts: Math.min(3, Math.max(1, input.maxAttempts ?? 1)),
       events: { create: { eventType: "CREATED", detail: input.reason.slice(0, 500) } },
     },
     select: { id: true },
@@ -133,6 +144,17 @@ export async function checkTaskOutcome(task: Pick<SageTask, "kind" | "subjectTyp
     if (proposal.votingEndsAt && proposal.votingEndsAt <= now) return { resolved: true, moot: true, outcome: "The voting window closed" };
     return { resolved: false };
   }
+  if (task.subjectType === "proposal_kpi") {
+    const kpi = await db.proposalKPI.findUnique({
+      where: { id: task.subjectId }, select: { outcome: true, proposal: { select: { status: true } } },
+    });
+    if (!kpi) return { resolved: true, moot: true, outcome: "The proposal or its goal was removed" };
+    if (kpi.outcome) return { resolved: true, outcome: `Result recorded: ${OUTCOME_WORDS[kpi.outcome] ?? kpi.outcome.toLowerCase()}` };
+    if (!["APPROVED", "FUNDED"].includes(kpi.proposal.status)) {
+      return { resolved: true, moot: true, outcome: `The proposal is now ${kpi.proposal.status.toLowerCase()}` };
+    }
+    return { resolved: false };
+  }
   if (task.subjectType === "event") {
     const event = await db.event.findUnique({ where: { id: task.subjectId }, select: { startAt: true } });
     if (!event) return { resolved: true, moot: true, outcome: "The event was removed" };
@@ -142,8 +164,16 @@ export async function checkTaskOutcome(task: Pick<SageTask, "kind" | "subjectTyp
   return { resolved: false };
 }
 
+export const OUTCOME_WORDS: Record<string, string> = { MET: "met", PARTLY_MET: "partly met", MISSED: "missed", NO_REPORT: "no report" };
+
 /** A gentle reminder in Sage's voice, built from the task itself - no model call. */
-export function reminderText(task: Pick<SageTask, "kind" | "expected" | "offer" | "title">): { title: string; body: string } {
+export function reminderText(task: Pick<SageTask, "kind" | "expected" | "offer" | "title"> & { attempts?: number }): { title: string; body: string } {
+  if (task.kind === "CHECK_OUTCOME") {
+    return {
+      title: task.attempts ? `Still waiting on: ${task.title}` : `How did it go? ${task.title}`,
+      body: (task.expected ?? task.title).slice(0, 280),
+    };
+  }
   if (task.kind === "REVIEW_STALE_DRAFT") {
     return { title: "Your proposal draft is waiting", body: `"${task.title}" is still a draft. Edit and submit it when it's ready, or dismiss this if you've moved on.` };
   }
@@ -199,21 +229,27 @@ export async function wakeTask(task: SageTask, now = new Date()): Promise<"DONE"
     }
     if (task.ownerUserId) {
       const text = reminderText(task);
+      // An outcome check opens the proposal, where the owner reports the result.
+      const proposalId = task.subjectType === "proposal_kpi"
+        ? (await db.proposalKPI.findUnique({ where: { id: task.subjectId }, select: { proposalId: true } }))?.proposalId
+        : undefined;
       await createNotificationAndPush(db, {
         userId: task.ownerUserId, coopId: task.coopId, type: "SAGE_REMINDER", title: text.title, body: text.body,
-        data: { taskId: task.id, coopId: task.coopId, ...(task.postId ? { postId: task.postId } : {}) },
+        data: { taskId: task.id, coopId: task.coopId, ...(task.postId ? { postId: task.postId } : {}), ...(proposalId ? { proposalId } : {}) },
       }).catch((error) => console.error("Could not send Sage reminder", error));
     }
-    const nextWakeAt = new Date(now.getTime() + REMINDER_GRACE_DAYS * DAY_MS);
+    const nextWakeAt = new Date(now.getTime() + (task.kind === "CHECK_OUTCOME" ? OUTCOME_GRACE_DAYS : REMINDER_GRACE_DAYS) * DAY_MS);
     await db.sageTask.update({
       where: { id: task.id },
       data: {
         attempts: { increment: 1 }, nextWakeAt, leaseUntil: null, lastWokeAt: now,
-        events: { create: { eventType: "REMINDED", detail: "Sent one reminder" } },
+        events: { create: { eventType: "REMINDED", detail: task.kind === "CHECK_OUTCOME" && !task.attempts ? "Asked the owner for the result" : "Sent one reminder" } },
       },
     });
-    await trail.taken("Sent one gentle reminder", "PASS")
-      .result("Waiting for a response", "INFO", `Sage checks once more around ${nextWakeAt.toISOString().slice(0, 10)}, then stops.`)
+    await trail.taken(task.kind === "CHECK_OUTCOME" && !task.attempts ? "Asked the owner for the result, privately" : "Sent one gentle reminder", "PASS")
+      .result("Waiting for a response", "INFO", task.attempts + 1 < task.maxAttempts
+        ? `Sage checks again around ${nextWakeAt.toISOString().slice(0, 10)}.`
+        : `Sage checks once more around ${nextWakeAt.toISOString().slice(0, 10)}, then stops.`)
       .setOutcome("Sent a reminder").save();
     return "REMINDED";
   } catch (error) {

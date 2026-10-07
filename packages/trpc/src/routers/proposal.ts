@@ -13,6 +13,23 @@ import {
 } from "../services/proposal-trails.js";
 import type { DecisionTrail } from "../services/sage-decision-trail.js";
 import { cleanseUntrustedText, isSteeringAttempt, mergeFlags, type CleansedText } from "../services/untrusted-input.js";
+import {
+  findPriorProposalOutcomes, kpiRows, kpiUnitFromDb, OutcomeReportError, reportKpiOutcome, startProposalOutcomeTracking,
+} from "../services/proposal-outcomes.js";
+
+/** Engine options: look up results of similar past proposals in this Commons from Sage's scoped memory. */
+function priorOutcomeLookup(coopId: string, excludeProposalId?: string) {
+  return {
+    priorOutcomes: (about: { title: string; summary: string }) =>
+      findPriorProposalOutcomes({ coopId, about, excludeProposalId }),
+  };
+}
+
+/** Starts Sage's outcome checks once a proposal is approved or funded. Never blocks the caller. */
+async function trackOutcomesIfDecided(proposalId: string, status: string) {
+  if (status !== "APPROVED" && status !== "FUNDED") return;
+  await startProposalOutcomeTracking(proposalId).catch((error) => console.error("Could not start proposal outcome checks", error));
+}
 
 /** Flags from both the original and the rewritten text, with the rewritten text as what the engine reads. */
 function mergeFlagsWithText(original: CleansedText, rewritten: CleansedText): CleansedText {
@@ -230,7 +247,7 @@ export const proposalRouter = router({
       let aiError: unknown = null;
       const engineStart = Date.now();
       try {
-        processedProposal = await withCostedProposalRun(coopId, "proposal-engine", () => proposalEngine.processProposal({ ...input, text: proposalInputCheck.text }, configData));
+        processedProposal = await withCostedProposalRun(coopId, "proposal-engine", () => proposalEngine.processProposal({ ...input, text: proposalInputCheck.text }, configData, priorOutcomeLookup(coopId)));
         await recordAIEvaluation({
           agentKey: "proposal-engine",
           agentName: "Proposal Engine",
@@ -361,6 +378,8 @@ export const proposalRouter = router({
           decision: processedProposal.decision,
           decisionReasons: processedProposal.decisionReasons ?? [],
           missingData: processedProposal.missing_data ?? undefined,
+          priorOutcomes: processedProposal.priorOutcomes?.length ? processedProposal.priorOutcomes : undefined,
+          ...(processedProposal.kpis?.length ? { kpis: { createMany: { data: kpiRows(processedProposal.kpis) } } } : {}),
           auditChecks: {
             createMany: {
               data: processedProposal.audit.checks.map((check: any) => ({
@@ -376,6 +395,7 @@ export const proposalRouter = router({
           auditChecks: true,
         },
       });
+      await trackOutcomesIfDecided(savedProposal.id, finalStatus);
 
       // Fetch complete proposal
       const completeProposal = await ctx.db.proposal.findUnique({
@@ -500,11 +520,9 @@ export const proposalRouter = router({
         updateData.withdrawnBy = adminWallet;
       }
 
-      const updated = await ctx.db.proposal.update({
-        where: { id: input.id },
-        data: updateData,
-        include: { kpis: true, auditChecks: true }
-      });
+      await ctx.db.proposal.update({ where: { id: input.id }, data: updateData });
+      await trackOutcomesIfDecided(input.id, newStatus);
+      const updated = await ctx.db.proposal.findUnique({ where: { id: input.id }, include: { kpis: true, auditChecks: true } });
 
       return mapDbToOutput(updated);
     }),
@@ -622,6 +640,7 @@ export const proposalRouter = router({
             data: { status: ProposalStatus.APPROVED },
           });
           newStatus = "approved";
+          await trackOutcomesIfDecided(input.proposalId, ProposalStatus.APPROVED);
         } else if (againstCount > forCount) {
           await ctx.db.proposal.update({
             where: { id: input.proposalId },
@@ -788,7 +807,7 @@ export const proposalRouter = router({
         coopId,
       };
 
-      const processedProposal = await withCostedProposalRun(coopId, "proposal-engine", () => proposalEngine.processProposal(proposalInput, configData))
+      const processedProposal = await withCostedProposalRun(coopId, "proposal-engine", () => proposalEngine.processProposal(proposalInput, configData, priorOutcomeLookup(coopId, input.proposalId)))
         .catch(async (error: unknown) => {
           await saveProposalTrail(() => buildProposalEngineFailureTrail(
             { coopId, proposalId: input.proposalId, trigger: "PROPOSAL_RESUBMITTED", rawText: input.text }, error,
@@ -821,6 +840,8 @@ export const proposalRouter = router({
 
       // Delete old audit checks and rebuild
       await ctx.db.proposalAuditCheck.deleteMany({ where: { proposalId: input.proposalId } });
+      // Only submitted or votable proposals are re-reviewed, so no KPI has a result yet.
+      await ctx.db.proposalKPI.deleteMany({ where: { proposalId: input.proposalId } });
 
       const updated = await ctx.db.proposal.update({
         where: { id: input.proposalId },
@@ -847,6 +868,8 @@ export const proposalRouter = router({
           decision: processedProposal.decision,
           decisionReasons: processedProposal.decisionReasons ?? [],
           missingData: processedProposal.missing_data ?? undefined,
+          priorOutcomes: processedProposal.priorOutcomes ?? [],
+          ...(processedProposal.kpis?.length ? { kpis: { createMany: { data: kpiRows(processedProposal.kpis) } } } : {}),
           auditChecks: {
             createMany: {
               data: processedProposal.audit.checks.map((check: any) => ({
@@ -859,6 +882,8 @@ export const proposalRouter = router({
         },
         include: { kpis: true, auditChecks: true },
       });
+
+      await trackOutcomesIfDecided(input.proposalId, finalStatus);
 
       // Save revision snapshot for this resubmission
       const revCount = await ctx.db.proposalRevision.count({ where: { proposalId: input.proposalId } });
@@ -965,7 +990,7 @@ export const proposalRouter = router({
         coopId,
       };
 
-      const processedProposal = await withCostedProposalRun(coopId, "proposal-engine", () => proposalEngine.processProposal(proposalInput, configData))
+      const processedProposal = await withCostedProposalRun(coopId, "proposal-engine", () => proposalEngine.processProposal(proposalInput, configData, priorOutcomeLookup(coopId, input.proposalId)))
         .catch(async (error: unknown) => {
           await saveProposalTrail(() => buildProposalEngineFailureTrail(
             { coopId, proposalId: input.proposalId, trigger: "PROPOSAL_ALTERNATIVE_APPLIED", rawText: rewrittenText }, error,
@@ -997,6 +1022,8 @@ export const proposalRouter = router({
       }
 
       await ctx.db.proposalAuditCheck.deleteMany({ where: { proposalId: input.proposalId } });
+      // Only submitted or votable proposals are re-reviewed, so no KPI has a result yet.
+      await ctx.db.proposalKPI.deleteMany({ where: { proposalId: input.proposalId } });
 
       const updated = await ctx.db.proposal.update({
         where: { id: input.proposalId },
@@ -1023,6 +1050,8 @@ export const proposalRouter = router({
           decision: processedProposal.decision,
           decisionReasons: processedProposal.decisionReasons ?? [],
           missingData: processedProposal.missing_data ?? undefined,
+          priorOutcomes: processedProposal.priorOutcomes ?? [],
+          ...(processedProposal.kpis?.length ? { kpis: { createMany: { data: kpiRows(processedProposal.kpis) } } } : {}),
           auditChecks: {
             createMany: {
               data: processedProposal.audit.checks.map((check: any) => ({
@@ -1036,6 +1065,8 @@ export const proposalRouter = router({
         include: { kpis: true, auditChecks: true },
       });
 
+      await trackOutcomesIfDecided(input.proposalId, finalStatus);
+
       // Save revision snapshot for this alternative application
       const revCount = await ctx.db.proposalRevision.count({ where: { proposalId: input.proposalId } });
       await saveRevision(ctx.db, input.proposalId, revCount + 1, processedProposal, finalStatus, rewrittenText, configData);
@@ -1047,6 +1078,32 @@ export const proposalRouter = router({
       }));
 
       return mapDbToOutput(updated);
+    }),
+
+  /**
+   * The proposal's author reports how one of its goals turned out, once its measure date has passed.
+   * `actualValue` null means they couldn't measure it. Code decides met / partly met / missed; the
+   * result is shown on the proposal and remembered for similar proposals later.
+   */
+  reportKpiOutcome: authenticatedProcedure
+    .input(z.object({
+      kpiId: z.string().min(1),
+      actualValue: z.number().nonnegative().finite().nullable(),
+      note: z.string().max(500).optional(),
+    }))
+    .output(ProposalOutputZ)
+    .mutation(async ({ input, ctx }) => {
+      const { walletAddress } = ctx as AuthenticatedContext;
+      const userId = await userIdForWallet(ctx.db, walletAddress);
+      if (!userId) throw new TRPCError({ code: "FORBIDDEN", message: "Only the proposal's author can report its results." });
+      try {
+        const kpi = await reportKpiOutcome({ kpiId: input.kpiId, userId, actualValue: input.actualValue, note: input.note });
+        const proposal = await ctx.db.proposal.findUnique({ where: { id: kpi.proposalId }, include: { kpis: true, auditChecks: true } });
+        return mapDbToOutput(proposal);
+      } catch (error) {
+        if (error instanceof OutcomeReportError) throw new TRPCError({ code: error.code, message: error.message });
+        throw error;
+      }
     }),
 
   /**
@@ -1272,5 +1329,20 @@ function mapDbToOutput(dbRecord: any): ProposalOutput {
     missing_data: dbRecord.missingData ?? [],
     councilRequired: dbRecord.councilRequired ?? false,
     rawText: dbRecord.rawText ?? undefined,
+    kpis: (dbRecord.kpis ?? []).map((kpi: any) => ({
+      id: kpi.id,
+      name: kpi.name,
+      target: kpi.target,
+      unit: kpiUnitFromDb(kpi.unit),
+      higherIsBetter: kpi.higherIsBetter ?? true,
+      measureAfterDays: kpi.measureAfterDays ?? 90,
+      measureBy: kpi.measureBy ? kpi.measureBy.toISOString() : null,
+      outcome: kpi.outcome ?? null,
+      actualValue: kpi.actualValue ?? null,
+      outcomeNote: kpi.outcomeNote ?? null,
+      verification: kpi.verification ?? null,
+      outcomeRecordedAt: kpi.outcomeRecordedAt ? kpi.outcomeRecordedAt.toISOString() : null,
+    })),
+    priorOutcomes: Array.isArray(dbRecord.priorOutcomes) ? dbRecord.priorOutcomes : [],
   };
 }

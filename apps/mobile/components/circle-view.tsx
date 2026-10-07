@@ -14,7 +14,7 @@ import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
 import { LoadError } from '@/components/load-error';
 import { friendlyError } from '@/lib/friendly-error';
 import { IconAvatar } from '@/components/icon-avatar';
-import { CheckCircle2, ChevronDown, Compass, Menu, MessageCircle, Settings2, LogIn, X } from 'lucide-react-native';
+import { CheckCircle2, ChevronDown, Compass, Image as ImageIcon, Menu, MessageCircle, Settings2, LogIn, X } from 'lucide-react-native';
 
 const THEME = {
   ink: '#111827',
@@ -158,6 +158,10 @@ export default function CircleView({ coopId }: { coopId: string }) {
     router.push({ pathname: '/(authenticated)/spaces', params: { coopId } } as any);
   };
 
+  const openGallery = () => {
+    router.push({ pathname: '/[coopId]/gallery', params: { coopId } } as any);
+  };
+
   const switchCommons = (nextCoopId: string) => {
     setSwitcherOpen(false);
     if (nextCoopId === coopId) return;
@@ -298,15 +302,26 @@ export default function CircleView({ coopId }: { coopId: string }) {
           </View>
         </TouchableOpacity>
         {sessionToken ? (
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Manage circles"
-            onPress={openManageCircles}
-            className="h-11 w-11 items-center justify-center rounded-full"
-            style={{ backgroundColor: THEME.primarySoft }}
-          >
-            <Settings2 size={18} color={THEME.primary} />
-          </TouchableOpacity>
+          <View className="flex-row gap-2">
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Commons gallery"
+              onPress={openGallery}
+              className="h-11 w-11 items-center justify-center rounded-full"
+              style={{ backgroundColor: THEME.primarySoft }}
+            >
+              <ImageIcon size={18} color={THEME.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Manage circles"
+              onPress={openManageCircles}
+              className="h-11 w-11 items-center justify-center rounded-full"
+              style={{ backgroundColor: THEME.primarySoft }}
+            >
+              <Settings2 size={18} color={THEME.primary} />
+            </TouchableOpacity>
+          </View>
         ) : (
           <View className="h-11 w-11" />
         )}

@@ -1167,50 +1167,64 @@ export const commonsRouter = router({
       };
     }),
 
-  // Every photo and video posted in one circle, newest first, for the
-  // circle's gallery. Readable by exactly the people who can read the feed.
-  listCircleMedia: publicProcedure
+  // Every photo and video posted publicly in a commons - its General feed
+  // and its public circles - newest first, for the commons gallery. Private
+  // and invite-only circles and direct messages are never included.
+  listCommonsMedia: publicProcedure
     .input(
       z.object({
         coopId: z.string().min(1).default(COMMONS_COOP_ID),
-        circleId: z.string().min(1),
         limit: z.number().min(1).max(60).default(30),
         cursor: z.string().optional(),
       }),
     )
     .query(async ({ input, ctx }) => {
       const context = ctx as Context;
-      if (input.circleId === generalCircleId(input.coopId)) {
+      if (input.coopId === 'all') {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Galleries are only available inside a circle.',
+          message: 'Choose a commons to see its gallery.',
         });
       }
+      const coop = await loadCoopSummary(context.db, input.coopId);
       const accountUser = await resolveOptionalAccountUser(context);
       if (!accountUser) {
         throw new TRPCError({
           code: 'FORBIDDEN',
-          message: 'Join this circle to view its conversation.',
+          message: 'Sign in to see this commons gallery.',
         });
       }
-      const circle = await requireCircleAccess(
-        context.db,
-        accountUser.id,
-        input.coopId,
-        input.circleId,
-      );
       const canRead =
         input.coopId === COMMONS_COOP_ID ||
         (await hasActiveCommonsMembership(context.db, accountUser.id, input.coopId));
       if (!canRead) {
         throw new TRPCError({
           code: 'FORBIDDEN',
-          message: 'Join this commons to view its circles.',
+          message: 'Join this commons to see its gallery.',
         });
       }
 
+      const publicCircles = await context.db.group.findMany({
+        where: { coopId: input.coopId, privacy: 'public', kind: { not: DIRECT_KIND } },
+        select: { id: true, name: true },
+      });
+      const circleNameById = new Map<string, string>(
+        publicCircles.map((circle: any) => [circle.id, circle.name]),
+      );
+
       const records = await context.db.commonsPostMedia.findMany({
-        where: { post: { coopId: input.coopId, circleId: input.circleId } },
+        where: {
+          post: {
+            coopId: input.coopId,
+            OR: [
+              { circleId: null },
+              { circleId: generalCircleId(input.coopId) },
+              ...(publicCircles.length
+                ? [{ circleId: { in: publicCircles.map((circle: any) => circle.id) } }]
+                : []),
+            ],
+          },
+        },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: input.limit + 1,
         ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
@@ -1219,7 +1233,7 @@ export const commonsRouter = router({
             select: {
               id: true,
               title: true,
-              createdAt: true,
+              circleId: true,
               author: { select: { name: true, email: true, handle: true } },
             },
           },
@@ -1229,7 +1243,7 @@ export const commonsRouter = router({
       const hasMore = records.length > input.limit;
       const page = hasMore ? records.slice(0, input.limit) : records;
       return {
-        circleName: circle.name as string,
+        commonsName: coop.name as string,
         items: page.map((item: any) => ({
           id: item.id,
           pathname: item.pathname,
@@ -1245,6 +1259,8 @@ export const commonsRouter = router({
           postId: item.post.id,
           postTitle: item.post.title,
           author: displayName(item.post.author),
+          // null for the General feed, otherwise the public circle's name.
+          circleName: (item.post.circleId && circleNameById.get(item.post.circleId)) || null,
         })),
         nextCursor: hasMore ? page[page.length - 1].id : null,
       };

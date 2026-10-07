@@ -135,6 +135,7 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
     },
     group: {
       findUnique: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
       ...overrides.group,
     },
     session: {
@@ -285,8 +286,8 @@ describe('commonsRouter', () => {
     expect(db.commonsPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { coopId: 'cahootz', circleId: 'public-circle' } }));
   });
 
-  describe('listCircleMedia', () => {
-    const mediaRecord = (id: string) => ({
+  describe('listCommonsMedia', () => {
+    const mediaRecord = (id: string, circleId: string | null) => ({
       id,
       pathname: `commons/${id}.jpg`,
       url: `https://blob.example/${id}.jpg`,
@@ -301,83 +302,91 @@ describe('commonsRouter', () => {
       post: {
         id: `post_${id}`,
         title: 'Garden day',
-        createdAt: new Date('2026-10-01T12:00:00Z'),
+        circleId,
         author: { name: 'Alice', email: 'alice@example.com', handle: 'alice' },
       },
     });
 
-    it('lists only media posted in the requested circle, newest first', async () => {
+    it('lists media from the General feed and public circles only, newest first', async () => {
       const db = makeDb({
-        groupMember: {
-          findUnique: vi.fn().mockResolvedValue({ group: { coopId: 'cahootz', name: 'Garden Crew' } }),
+        group: {
+          findMany: vi.fn().mockResolvedValue([{ id: 'public_1', name: 'Open Garden' }]),
         },
         commonsPostMedia: {
-          findMany: vi.fn().mockResolvedValue([mediaRecord('m1'), mediaRecord('m2'), mediaRecord('m3')]),
+          findMany: vi.fn().mockResolvedValue([
+            mediaRecord('m1', 'public_1'),
+            mediaRecord('m2', 'general:cahootz'),
+            mediaRecord('m3', null),
+          ]),
         },
       });
 
-      const result = await callerFor(db, { 'x-session-token': 'token_1' }).listCircleMedia({
+      const result = await callerFor(db, { 'x-session-token': 'token_1' }).listCommonsMedia({
         coopId: 'cahootz',
-        circleId: 'group_1',
         limit: 2,
       });
 
+      expect(db.group.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { coopId: 'cahootz', privacy: 'public', kind: { not: 'DIRECT' } },
+        }),
+      );
       expect(db.commonsPostMedia.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { post: { coopId: 'cahootz', circleId: 'group_1' } },
+          where: {
+            post: {
+              coopId: 'cahootz',
+              OR: [
+                { circleId: null },
+                { circleId: 'general:cahootz' },
+                { circleId: { in: ['public_1'] } },
+              ],
+            },
+          },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take: 3,
         }),
       );
-      expect(result.circleName).toBe('Garden Crew');
-      expect(result.items.map((item) => item.id)).toEqual(['m1', 'm2']);
-      expect(result.items[0]).toMatchObject({ postId: 'post_m1', postTitle: 'Garden day', author: 'Alice' });
+      expect(result.commonsName).toBe('Cahootz Commons');
+      expect(result.items.map((item: { id: string }) => item.id)).toEqual(['m1', 'm2']);
+      expect(result.items[0]).toMatchObject({ postId: 'post_m1', author: 'Alice', circleName: 'Open Garden' });
+      expect(result.items[1]).toMatchObject({ circleName: null });
       expect(result.nextCursor).toBe('m2');
     });
 
-    it('lets a commons member browse an unjoined public circle gallery', async () => {
-      const db = makeDb({
-        group: { findUnique: vi.fn().mockResolvedValue({ coopId: 'cahootz', name: 'Open Garden', privacy: 'public' }) },
-      });
+    it('only searches the General feed when the commons has no public circles', async () => {
+      const db = makeDb();
 
-      const result = await callerFor(db, { 'x-session-token': 'token_1' }).listCircleMedia({
-        coopId: 'cahootz',
-        circleId: 'public-circle',
-      });
+      const result = await callerFor(db, { 'x-session-token': 'token_1' }).listCommonsMedia({ coopId: 'cahootz' });
 
-      expect(result).toEqual({ circleName: 'Open Garden', items: [], nextCursor: null });
-    });
-
-    it('hides a private circle gallery from non-members', async () => {
-      const db = makeDb({
-        group: { findUnique: vi.fn().mockResolvedValue({ coopId: 'cahootz', name: 'Secret', privacy: 'private' }) },
-      });
-
-      await expect(
-        callerFor(db, { 'x-session-token': 'token_1' }).listCircleMedia({ coopId: 'cahootz', circleId: 'group_1' }),
-      ).rejects.toThrow('Join this circle');
-      expect(db.commonsPostMedia.findMany).not.toHaveBeenCalled();
+      expect(db.commonsPostMedia.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            post: {
+              coopId: 'cahootz',
+              OR: [{ circleId: null }, { circleId: 'general:cahootz' }],
+            },
+          },
+        }),
+      );
+      expect(result.items).toEqual([]);
+      expect(result.nextCursor).toBeNull();
     });
 
     it('requires a signed-in account', async () => {
       const db = makeDb();
 
-      await expect(
-        callerFor(db).listCircleMedia({ coopId: 'cahootz', circleId: 'group_1' }),
-      ).rejects.toThrow('Join this circle');
+      await expect(callerFor(db).listCommonsMedia({ coopId: 'cahootz' })).rejects.toThrow('Sign in');
       expect(db.commonsPostMedia.findMany).not.toHaveBeenCalled();
     });
 
     it('requires commons membership outside the default commons', async () => {
       const db = makeDb({
-        groupMember: {
-          findUnique: vi.fn().mockResolvedValue({ group: { coopId: 'artists', name: 'Painters' } }),
-        },
         userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null) },
       });
 
       await expect(
-        callerFor(db, { 'x-session-token': 'token_1' }).listCircleMedia({ coopId: 'artists', circleId: 'group_1' }),
+        callerFor(db, { 'x-session-token': 'token_1' }).listCommonsMedia({ coopId: 'artists' }),
       ).rejects.toThrow('Join this commons');
       expect(db.commonsPostMedia.findMany).not.toHaveBeenCalled();
     });

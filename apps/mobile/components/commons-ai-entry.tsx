@@ -1742,17 +1742,17 @@ export default function CommonsAiEntry({
               <ChevronDown size={14} color="#475569" />
             </View>
           </TouchableOpacity>
-          {feedCircleId && feedCircleId !== `general:${feedCoopId}` && circleIsMember !== null ? (
+          {isScopedFeed && sessionToken && (!feedCircleId || feedCircleId === `general:${feedCoopId}`) ? (
             <TouchableOpacity
               onPress={() =>
                 router.push({
                   pathname: '/[coopId]/gallery',
-                  params: { coopId: feedCoopId, circleId: feedCircleId },
+                  params: { coopId: feedCoopId },
                 } as any)
               }
               className="h-11 w-11 items-center justify-center rounded-full"
               style={{ backgroundColor: SOCIAL_THEME.primarySoft }}
-              accessibilityLabel="Circle gallery"
+              accessibilityLabel="Commons gallery"
             >
               <ImageIcon size={18} color={SOCIAL_THEME.primary} />
             </TouchableOpacity>

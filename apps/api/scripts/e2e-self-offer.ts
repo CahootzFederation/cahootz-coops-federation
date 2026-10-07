@@ -61,6 +61,8 @@ async function offer(coopId: string, memberEmail: string, title: string) {
   const { actionIds } = await replayCommonsPost(post.id, [{
     type: "VERIFY_RESOURCE", summary: "Offers tree care and removal with a crew.",
     resourceKind: "SERVICE", resourceTitle: title, selfOffer: true,
+    // The offer itself is the evidence: an exact quote from the member's post.
+    evidence: "let me and my team work for you", evidenceSource: "thread",
   }]);
   const resource = await db.commonsResource.findFirst({ where: { actionId: { in: actionIds } }, select: { id: true, status: true } });
   return { postId: post.id, resourceId: resource?.id ?? null, status: resource?.status ?? null };

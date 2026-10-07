@@ -4,8 +4,8 @@ const db = vi.hoisted(() => ({
   aICostEvent: { aggregate: vi.fn() },
   commonsAgentSetting: { findUnique: vi.fn() },
   commonsAction: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), upsert: vi.fn() },
-  commonsActionParticipant: { findMany: vi.fn() },
-  commonsActionReview: { findFirst: vi.fn() },
+  commonsActionParticipant: { findMany: vi.fn(), upsert: vi.fn() },
+  commonsActionReview: { findFirst: vi.fn(), create: vi.fn() },
   commonsActionAudit: { create: vi.fn() },
   commonsPost: { findUnique: vi.fn(), findMany: vi.fn() },
   commonsComment: { findFirst: vi.fn(), create: vi.fn(), delete: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
@@ -240,6 +240,19 @@ describe("Autonomous Sage comments", () => {
     await expect(publishSageCommentAutonomously("action-9")).resolves.toEqual({ published: false, reason: "Sage has already commented on this post" });
     expect(db.commonsComment.delete).toHaveBeenCalledWith({ where: { id: "comment-9" } });
     expect(db.commonsAction.update).toHaveBeenLastCalledWith({ where: { id: "action-9" }, data: { status: "FAILED" } });
+  });
+
+  it("sends an off-topic comment to the circle leader instead of posting it", async () => {
+    db.commonsAction.findMany.mockResolvedValue([]);
+    db.commonsAction.upsert.mockResolvedValue({ id: "action-10", status: "PENDING" });
+    db.commonsActionReview.findFirst.mockResolvedValue(null);
+    db.commonsPost.findUnique.mockResolvedValue({ title: "Ladder", content: "Can I borrow a ladder this weekend?" });
+    const judge = vi.fn().mockResolvedValue({ relevant: false, reason: "The comment is about proposals, not the ladder." });
+    await createTrendSuggestion("harbor", "circle-1", "leader-1", "window-3", "hash-3", { ...comment, confidence: 0.9, body: "Proposals need a vote." },
+      { autoReply: true, relevanceJudge: judge });
+    expect(judge).toHaveBeenCalledWith({ post: "Ladder\nCan I borrow a ladder this weekend?", reply: "Proposals need a vote.", evidence: "r" });
+    expect(db.commonsComment.create).not.toHaveBeenCalled();
+    expect(db.commonsActionReview.create).toHaveBeenCalledWith({ data: expect.objectContaining({ actionId: "action-10", userId: "leader-1", reviewType: "APPROVE_SUGGESTION" }) });
   });
 
   it("does nothing for an action that is no longer pending", async () => {

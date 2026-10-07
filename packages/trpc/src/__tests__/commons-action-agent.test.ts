@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { CoopConfig } from "@repo/db";
-import { AUTO_REPLY_MIN_CONFIDENCE, COMMONS_ACTION_MODEL, charterSnapshotKey, createCommonsActionAgent, hasExactGrounding, mayAutoReply, resourceCandidate } from "../services/commons-action-agent.js";
+import { AUTO_REPLY_MIN_CONFIDENCE, COMMONS_ACTION_MODEL, charterOnlyEvidenceRule, charterSnapshotKey, createCommonsActionAgent, hasExactGrounding, mayAutoReply, resourceCandidate } from "../services/commons-action-agent.js";
+import { CHARTER_ONLY_ACTIONS } from "../services/sage-grounding.js";
+import { SAGE_FOLLOW_THROUGH_RULE } from "../services/sage-reply-templates.js";
 import { estimateAICost } from "../services/ai-cost.js";
 import { isPlaceholderCharter, starterCharter } from "../services/starter-charter.js";
 
@@ -23,6 +25,20 @@ describe("Commons action safeguards", () => {
     expect(hasExactGrounding("Make equipment available", config)).toBe(true);
     expect(hasExactGrounding("Members must pay a $50 fee", config)).toBe(false);
     expect(hasExactGrounding("tools", config)).toBe(false);
+  });
+
+  // A follow-through proposal built from a member's details used to quote those details as evidence, and
+  // the grounding check then discarded every draft. The prompt must name each charter-only action type.
+  it("tells the model which actions must quote the charter, and where a member's details go", () => {
+    const instructions = String(createCommonsActionAgent().instructions);
+    expect(instructions).toContain(charterOnlyEvidenceRule());
+    for (const type of CHARTER_ONLY_ACTIONS) expect(charterOnlyEvidenceRule()).toContain(type);
+    expect(charterOnlyEvidenceRule()).toMatch(/details in draftText, never in evidence/);
+    expect(SAGE_FOLLOW_THROUGH_RULE).toMatch(/evidence is still the charter or goal passage/);
+    // An unanswered question gets help, and a proposal waits for the details it needs.
+    expect(instructions).toMatch(/A question to the Commons, or a post asking the group to choose between options, with no answer yet, is useful/);
+    expect(instructions).toMatch(/gives none of the details a proposal needs yet/);
+    expect(instructions).toMatch(/Once a member shares details after Sage offered, draft it from what they gave/);
   });
 
   it("auto-replies only within 48 hours and avoids Sage loops", () => {

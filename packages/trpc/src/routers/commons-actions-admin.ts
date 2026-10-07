@@ -3,6 +3,7 @@ import { z } from "zod";
 import { commonsPlatformAdminProcedure } from "../procedures/commons-platform-admin.js";
 import { charterSnapshotKey, hasExactGrounding, REPLY_ACTIONS, scanCommons } from "../services/commons-action-agent.js";
 import { publishCommonsResource } from "../services/commons-resources.js";
+import { needsCharterGrounding } from "../services/sage-grounding.js";
 import { createNotificationAndPush } from "../services/push-notification-service.js";
 import { FINAL_REVIEW_TYPE_BY_ACTION_TYPE } from "../services/commons-action-tools.js";
 import { closeCircleWindowNow } from "../services/circle-window.js";
@@ -247,8 +248,12 @@ export const commonsActionsAdminRouter = router({
     if (action.type === "VERIFY_RESOURCE" || action.type === "LOG_RESOURCE") conflict("Verify and publish the resource from the resource list");
     if (REPLY_ACTIONS.has(action.type)) {
       const config = await ctx.db.coopConfig.findFirst({ where: { coopId, isActive: true }, orderBy: { version: "desc" } });
-      if (!config || charterSnapshotKey(config) !== action.charterConfigId || !hasExactGrounding(action.evidence || "", config) || !action.draftText) {
-        conflict("Reply needs a current charter or goal citation");
+      // A reply about rules, money or membership still needs a current charter quote. Anything else
+      // may rest on the thread or a checked source; the admin approving it is the human check.
+      const charterRequired = needsCharterGrounding(action.type, action.draftText || "");
+      if (!config || charterSnapshotKey(config) !== action.charterConfigId || !action.draftText || !action.evidence
+        || (charterRequired && !hasExactGrounding(action.evidence, config))) {
+        conflict(charterRequired ? "Reply needs a current charter or goal citation" : "Reply needs evidence and the current charter version");
       }
       const existingReply = await ctx.db.commonsAction.findFirst({ where: {
         sourceType: action.sourceType, sourceId: action.sourceId, publishedCommentId: { not: null },

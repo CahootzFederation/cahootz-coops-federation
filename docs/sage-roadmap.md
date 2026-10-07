@@ -178,7 +178,7 @@ Suggestion follow-through (2026-10-07, `sage-suggestion-follow-up.ts`). A sugges
 - Privacy: these tasks' trails are admin-only, and they aren't consolidated into memory (the suggestion's own outcome already is, with ride matches and introductions excluded).
 - Closing only dismisses. Nothing is published, decided or spent, and no reviewer changes.
 - The "Meet Sage" card's "What Sage can do on its own" now adds "close its own suggestions when nobody answers or they no longer apply".
-- Tests: `sage-suggestion-follow-up.test.ts` (19), new cases in `sage-tasks.test.ts` and `sage-trend.test.ts`; Playwright `sage-suggestion-follow-up.spec.ts` (2 journeys, TESTING.md journey 55).
+- Tests: `sage-suggestion-follow-up.test.ts` (19), new cases in `sage-tasks.test.ts` and `sage-trend.test.ts`; Playwright `sage-suggestion-follow-up.spec.ts` (2 journeys, TESTING.md journey 56).
 - Remaining: "no longer applies" covers only the deterministic cases above; Sage doesn't notice when a conversation moved on or someone did the thing another way. A closed suggestion isn't re-offered to a new circle leader. Admin-queued Commons reply suggestions (no member review) are unchanged and still wait for a platform admin. The sweep reads at most 200 waiting reviews per Commons per cycle, oldest first.
 
 ### P1 — Memory consolidation and retrieval

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowDown, ArrowLeft, ArrowUp, Check, Lock, Plus, Sparkles, X } from 'lucide-react-native';
 
+import { EmojiChoiceGrid } from '@/components/emoji-picker';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type FamilySetupInput } from '@/lib/api';
@@ -520,23 +521,14 @@ export default function CreateFamilyScreen() {
               />
 
               <Text className="mt-4 text-sm font-black text-gray-900">Icon</Text>
-              <View className="mt-2 flex-row flex-wrap gap-2">
-                {ICONS.map((icon) => (
-                  <TouchableOpacity
-                    key={icon}
-                    onPress={() => setIconEmoji(icon)}
-                    accessibilityLabel={`Use ${icon} icon`}
-                    accessibilityState={{ selected: iconEmoji === icon }}
-                    aria-selected={iconEmoji === icon}
-                    className="h-12 w-12 items-center justify-center rounded-xl border"
-                    style={{
-                      borderColor: iconEmoji === icon ? THEME.primary : THEME.border,
-                      backgroundColor: iconEmoji === icon ? THEME.primarySoft : '#FFFFFF',
-                    }}
-                  >
-                    <Text style={{ fontSize: 22, lineHeight: 28 }}>{icon}</Text>
-                  </TouchableOpacity>
-                ))}
+              <View className="mt-2">
+                <EmojiChoiceGrid
+                  options={ICONS}
+                  value={iconEmoji}
+                  onChange={setIconEmoji}
+                  pickerTitle="Choose a family icon"
+                  labelFor={(icon) => `Use ${icon} icon`}
+                />
               </View>
             </View>
             </>

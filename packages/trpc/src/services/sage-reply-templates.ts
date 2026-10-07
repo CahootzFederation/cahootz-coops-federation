@@ -211,7 +211,7 @@ export function sageReplyStyleInstructions(options: { structured?: boolean; temp
 
 /** How Sage follows through on something it offered earlier in the same thread. */
 export const SAGE_FOLLOW_THROUGH_RULE =
-  "The thread may include Sage's own earlier comments. If Sage offered to do something once a member provided information, and this item provides it, follow through now (for example, include MAKE_PROPOSAL with a draft built from the details they gave). Don't ask again for information they already gave. Don't say a draft was created; the member is notified when it's ready.";
+  "The thread may include Sage's own earlier comments. If Sage offered to do something once a member provided information, and this item provides it, follow through now (for example, include MAKE_PROPOSAL with a draft built from the details they gave; its evidence is still the charter or goal passage the proposal serves, not the member's words). Don't ask again for information they already gave. Don't say a draft was created; the member is notified when it's ready.";
 
 /**
  * The reply text: the chosen template rendered from its parts when the model picked a known template

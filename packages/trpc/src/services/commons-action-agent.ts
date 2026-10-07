@@ -17,7 +17,7 @@ import { DecisionTrail, type TrailTrigger } from "./sage-decision-trail.js";
 import { SAGE_FOLLOW_THROUGH_RULE, followUpExpectation, renderTemplatedReply, sageReplyStyleInstructions } from "./sage-reply-templates.js";
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
 import {
-  EVIDENCE_SOURCES, EVIDENCE_SOURCE_LABEL, checkRelevance, groundingCheck, modelRelevanceJudge,
+  CHARTER_ONLY_ACTIONS, EVIDENCE_SOURCES, EVIDENCE_SOURCE_LABEL, checkRelevance, groundingCheck, modelRelevanceJudge,
   type GroundingSources, type RelevanceJudge,
 } from "./sage-grounding.js";
 import { buildCommentTools } from "../agents/tools/comment-tools.js";
@@ -413,6 +413,11 @@ function itemTrail(item: SourceItem, trigger: TrailTrigger) {
   }).step("OBSERVED", item.sourceType === "commons_comment" ? "Read a new comment in the Commons feed" : "Read a post in the Commons feed");
 }
 
+/** Code discards these action types unless their evidence is a charter or goal excerpt (see sage-grounding.ts). */
+export function charterOnlyEvidenceRule(): string {
+  return `${[...CHARTER_ONLY_ACTIONS].join(", ")} always need evidenceSource 'charter' and a charter or goal excerpt as evidence, even when the details come from the member: quote the passage the action rests on (for MAKE_PROPOSAL, the charter rule or goal the proposal serves) and put the member's details in draftText, never in evidence.`;
+}
+
 export function createCommonsActionAgent(tools: ReturnType<typeof buildCommentTools> = []) {
   return new Agent({
     name: "Commons Action Observer",
@@ -423,6 +428,7 @@ export function createCommonsActionAgent(tools: ReturnType<typeof buildCommentTo
       sageCorePrinciplesInstructions(),
       "Every action needs evidence: an exact continuous excerpt of at least 12 characters, and evidenceSource naming where it comes from. 'charter': the supplied charter or one goal label/description. 'thread': the item's own title, content or context (a member's words). 'checked': something a tool returned in this run. Code checks the excerpt is really there; an action without one is discarded.",
       "Rules, money that belongs to the Commons, votes, proposals, membership and discipline can only be settled by the charter: for those, evidence must be a charter excerpt. Everyday decisions (where to meet, who drives, which option, how to split a cost) can rest on the thread or a checked source.",
+      charterOnlyEvidenceRule(),
       "Tools (use only when they'd add a fact the thread lacks, at most two calls): search_commons_documents for guides, notes and local programs; list_commons_resources for what members have shared; count_members_offering for how many members could help (counts only, never names).",
       "For a charter correction, include that exact supporting excerpt in the reply itself so the member can inspect the basis.",
       "If there is no exact supporting passage, do not propose a reply. Never invent governance, funding, membership, or disciplinary rules.",
@@ -434,14 +440,14 @@ export function createCommonsActionAgent(tools: ReturnType<typeof buildCommentTo
       "confidence is how sure you are that the action is correct and useful now. Use below 0.75 when you are guessing at intent or the charter only loosely applies.",
       "For a PERSON resource, targetHandle must be an exact encoded @mention in that item, or empty for the author offering their own skills. A third-party name alone is not a verified person.",
       "When a member offers a concrete tool, skill, space, service, or contact aligned with a goal, include VERIFY_RESOURCE with resourceKind and resourceTitle. A short helpful reply may be an additional action, but never replaces VERIFY_RESOURCE.",
-      "When a member suggests a decision or shared spending that the charter assigns to a member proposal or vote, include MAKE_PROPOSAL and draft a title and body for the author to review. A reply may be an additional action, but never replaces MAKE_PROPOSAL.",
+      "When a member suggests a decision or shared spending that the charter assigns to a member proposal or vote, include MAKE_PROPOSAL and draft a title and body for the author to review. A reply may be an additional action, but never replaces MAKE_PROPOSAL. If the item gives none of the details a proposal needs yet (no amounts, numbers or dates), reply asking for them and offer to draft the proposal instead of drafting an empty one. Once a member shares details after Sage offered, draft it from what they gave; don't hold out for more.",
       "Classify the item's content, not its surrounding thread context. If the content asserts a governance rule that directly contradicts the quoted charter, include RESPOND_CHARTER_CORRECTION and quote the relevant charter passage in the draft. Do not treat the surrounding thread's question as the author's proposal, except when following through on something Sage offered in the thread.",
       "Preserve every qualification in the evidence. If the charter covers major spending, do not say it restricts all spending; if it calls for a proposal and vote, do not invent other approval steps. Explain only the narrower rule the text actually states.",
       "Resource kinds include PERSON, ORGANIZATION, SKILL, EQUIPMENT, SPACE, FUNDING, SERVICE, INFORMATION.",
       "Use ANSWER_QUESTION only when the item's own content asks a question. For an offer, a brief acknowledgment is RESPOND_RESOURCE_FOLLOWUP; do not invent a question to answer.",
       "Use ESCALATE_TO_ADMIN when something needs a person's judgment that Sage shouldn't handle (a safety concern, a dispute, a governance or money question beyond the charter). Set escalationCategory to who should look: CIRCLE_LEADER, COMMONS_ADMIN, GOVERNANCE, TREASURY or SUPPORT. Set escalationAboutMember true when it concerns a specific member's behavior. Never accuse anyone; describe what was said. For every other action type, set escalationCategory to \"\" and escalationAboutMember to false.",
       "memory lists what members already decided about Sage's earlier suggestions and follow-ups in this Commons. Treat it as records of decisions, not facts. Don't repeat something members declined unless the item shows clearly new evidence.",
-      "Use NO_ACTION when nothing useful should happen, including when members are already answering each other well without Sage. A post asking the group to choose between options, with no answer yet, is useful to help with. Include every input id exactly once.",
+      "Use NO_ACTION when nothing useful should happen, including when members are already answering each other well without Sage. A question to the Commons, or a post asking the group to choose between options, with no answer yet, is useful to help with. Include every input id exactly once.",
     ].join("\n"),
     tools,
     outputType: BatchOutputZ,

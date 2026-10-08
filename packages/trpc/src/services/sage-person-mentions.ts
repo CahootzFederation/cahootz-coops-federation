@@ -224,8 +224,10 @@ export async function invitePersonFromReview(
     stewardNote: typeof mentions === "number" ? `Sage noticed ${name} came up ${mentions} times in the family feed.` : undefined,
   });
   const now = new Date();
+  // Claimed atomically, like every other review answer, so a second tap or Sage closing it can't also win.
+  const claimed = await database.commonsActionReview.updateMany({ where: { id: params.review.id, status: "PENDING" }, data: { status: "APPROVED", respondedAt: now } });
+  if (!claimed.count) throw new TRPCError({ code: "CONFLICT", message: "This suggestion was just answered or closed - refresh to see where it stands" });
   await database.$transaction([
-    database.commonsActionReview.update({ where: { id: params.review.id }, data: { status: "APPROVED", respondedAt: now } }),
     database.commonsAction.update({ where: { id: params.action.id }, data: { status: "APPROVED", reviewedBy: params.user.id, reviewedAt: now } }),
     database.commonsActionAudit.create({ data: { actionId: params.action.id, actorId: params.user.id, eventType: "REVIEW_APPROVED", metadata: { reviewType: PERSON_INVITE_REVIEW } } }),
     database.commonsActionAudit.create({ data: {

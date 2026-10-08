@@ -4,7 +4,7 @@ const db = vi.hoisted(() => ({
   coopConfig: { findFirst: vi.fn() },
   sagePersonMention: { findMany: vi.fn(), createMany: vi.fn(), deleteMany: vi.fn() },
   commonsAction: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
-  commonsActionReview: { findFirst: vi.fn(), update: vi.fn() },
+  commonsActionReview: { findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   commonsActionAudit: { create: vi.fn() },
   userCoopMembership: { findMany: vi.fn(), findUnique: vi.fn() },
   commonsInvitation: { findMany: vi.fn() },
@@ -149,6 +149,7 @@ describe("saying yes", () => {
   beforeEach(() => {
     db.userCoopMembership.findUnique.mockResolvedValue({ id: "m", status: "ACTIVE", roles: ["member"] });
     db.$transaction.mockResolvedValue([]);
+    db.commonsActionReview.updateMany.mockResolvedValue({ count: 1 });
     createInvitation.mockResolvedValue({ invitationId: "inv-1", status: "PENDING_APPROVAL", alreadyInvited: false, channels: [] });
   });
 
@@ -164,10 +165,18 @@ describe("saying yes", () => {
     }) });
   });
 
+  it("claims the question atomically, so a second answer loses", async () => {
+    db.commonsActionReview.updateMany.mockResolvedValueOnce({ count: 0 });
+    await expect(invitePersonFromReview(db as never, { action, review: { id: "r1" }, user, input: { name: "Denise", email: "d@example.com" } })).rejects.toThrow("just answered");
+    expect(db.commonsActionReview.updateMany).toHaveBeenCalledWith({ where: { id: "r1", status: "PENDING" }, data: expect.objectContaining({ status: "APPROVED" }) });
+    expect(db.$transaction).not.toHaveBeenCalled();
+  });
+
   it("leaves the question open when the details are wrong", async () => {
     await expect(invitePersonFromReview(db as never, { action, review: { id: "r1" }, user, input: { name: "" } })).rejects.toThrow("Add their name.");
     createInvitation.mockRejectedValueOnce(new Error("Enter a valid phone number."));
     await expect(invitePersonFromReview(db as never, { action, review: { id: "r1" }, user, input: { name: "Denise", phone: "x" } })).rejects.toThrow("valid phone");
+    expect(db.commonsActionReview.updateMany).not.toHaveBeenCalled();
     expect(db.$transaction).not.toHaveBeenCalled();
   });
 });

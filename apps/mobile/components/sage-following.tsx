@@ -64,7 +64,16 @@ export function SageFollowing({ sessionToken, coopId = 'cahootz' }: { sessionTok
               {task.offer ? ` After that: ${task.offer.replace(/^I can/i, 'Sage can')}` : ''}
             </Text>
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
-              {task.postId ? (
+              {task.actionId ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open the suggestion ${task.title}`}
+                  onPress={() => router.push({ pathname: '/(authenticated)/sage/[id]', params: { id: task.actionId } } as any)}
+                  style={{ borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: THEME.primary }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Open</Text>
+                </TouchableOpacity>
+              ) : task.postId ? (
                 <TouchableOpacity
                   accessibilityRole="button"
                   accessibilityLabel={`Open the discussion for ${task.title}`}

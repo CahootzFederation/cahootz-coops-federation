@@ -10,6 +10,12 @@
  *   wake
  *     Runs one wake-and-wait cycle for the cahootz Commons (tasks only; the
  *     steward's model-backed daily review is not part of this command).
+ *   suggestion-sweep
+ *     Runs the wake cycle's suggestion follow-up step (start follow-ups, close
+ *     suggestions that no longer apply or went unanswered), then one wake cycle.
+ *   age-suggestion <actionId> <runId>
+ *     Makes an E2E suggestion's waiting answers look old enough for Sage's
+ *     reminder, and makes any follow-up on it due now, so the next sweep acts.
  *   alert <circleId> <runId>
  *     Routes an alert about the circle to its leader (CIRCLE_LEADER), twice, to
  *     show the second is deduplicated. Prints both results.
@@ -30,6 +36,7 @@ import { createIntroductionSuggestion } from "../../../packages/trpc/src/service
 import { consolidateSageMemory } from "../../../packages/trpc/src/services/sage-memory.js";
 import { routeSageAlert } from "../../../packages/trpc/src/services/sage-responsibility.js";
 import { runStewardReview } from "../../../packages/trpc/src/services/sage-steward.js";
+import { followUpOnSuggestions, SUGGESTION_REMIND_AFTER_DAYS } from "../../../packages/trpc/src/services/sage-suggestion-follow-up.js";
 import { createSageTask, runSageWakeCycle } from "../../../packages/trpc/src/services/sage-tasks.js";
 
 const TEST_EMAIL_SUFFIX = "@test.cahootz.local";
@@ -79,6 +86,22 @@ async function followUp(ownerEmail: string, postId: string, title: string, due: 
   }
   const task = result.taskId ? await db.sageTask.findUnique({ where: { id: result.taskId }, select: { title: true, createdBy: true } }) : null;
   return { ...result, title: task?.title ?? null, createdBy: task?.createdBy ?? null };
+}
+
+async function suggestionSweep() {
+  const sweep = await followUpOnSuggestions(COOP_ID);
+  const wake = await runSageWakeCycle(COOP_ID, "MANUAL");
+  return { sweep, wake };
+}
+
+async function ageSuggestion(actionId: string, runId: string) {
+  assertRunId(runId);
+  const action = await db.commonsAction.findFirst({ where: { id: actionId, coopId: COOP_ID, summary: { contains: `E2E ${runId}` } }, select: { id: true } });
+  if (!action) throw new Error("Only this run's E2E suggestion can be aged");
+  const askedAt = new Date(Date.now() - (SUGGESTION_REMIND_AFTER_DAYS * DAY_MS + 60_000));
+  const reviews = await db.commonsActionReview.updateMany({ where: { actionId, status: "PENDING" }, data: { createdAt: askedAt } });
+  const tasks = await db.sageTask.updateMany({ where: { sourceActionId: actionId, status: "OPEN" }, data: { nextWakeAt: new Date(Date.now() - 60_000) } });
+  return { reviews: reviews.count, tasks: tasks.count };
 }
 
 async function alert(circleId: string, runId: string) {
@@ -145,6 +168,10 @@ async function cleanup(runId: string, taskIdsArg: string | undefined, circleId: 
   if (ids.length) await db.sageTask.deleteMany({ where: { id: { in: ids } } });
   if (alertIds.length) await db.sageAlert.deleteMany({ where: { id: { in: alertIds } } });
   if (action) {
+    const followUps = await db.sageTask.findMany({ where: { sourceActionId: action.id }, select: { id: true } });
+    for (const { id } of followUps) await db.notification.deleteMany({ where: { data: { path: ["taskId"], equals: id } } });
+    await db.sageDecisionTrail.deleteMany({ where: { sourceId: { in: followUps.map((task) => task.id) } } });
+    await db.sageTask.deleteMany({ where: { id: { in: followUps.map((task) => task.id) } } });
     const introCircles = await db.group.findMany({ where: { coopId: COOP_ID, name: "Introduction", purpose: { contains: `E2E ${runId}` } }, select: { id: true } });
     for (const circle of introCircles) {
       await db.groupMember.deleteMany({ where: { groupId: circle.id } });
@@ -163,6 +190,10 @@ async function main() {
     ? await followUp(first, second, third, fourth === "--due")
     : command === "wake"
       ? await runSageWakeCycle(COOP_ID, "MANUAL")
+      : command === "suggestion-sweep"
+        ? await suggestionSweep()
+      : command === "age-suggestion" && first && second
+        ? await ageSuggestion(first, second)
       : command === "alert" && first && second
         ? await alert(first, second)
         : command === "introduce" && first && second && third
@@ -172,7 +203,7 @@ async function main() {
             : command === "cleanup" && first
               ? await cleanup(first, second, third, fourth, fifth)
               : null;
-  if (!result) throw new Error("Usage: e2e-sage-steward.ts follow-up|wake|alert|introduce|steward-review|cleanup ...");
+  if (!result) throw new Error("Usage: e2e-sage-steward.ts follow-up|wake|suggestion-sweep|age-suggestion|alert|introduce|steward-review|cleanup ...");
   console.log(`E2E_RESULT ${JSON.stringify(result)}`);
 }
 

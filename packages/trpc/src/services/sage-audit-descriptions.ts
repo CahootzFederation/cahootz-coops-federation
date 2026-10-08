@@ -25,6 +25,10 @@ export function describeSageAuditEvent(eventType: string, metadata: unknown): st
     case "AUTO_PUBLISHED": return "Sage commented on its own";
     case "DUPLICATE_SKIPPED": return "Sage noticed this again and didn't suggest it twice";
     case "ACTION_REFUSED": return "Sage stopped because this was outside what it may do here";
+    case "AUTO_CLOSED": {
+      const reason = metadata && typeof metadata === "object" ? (metadata as { reason?: unknown }).reason : undefined;
+      return typeof reason === "string" ? `Sage closed this: ${reason.charAt(0).toLowerCase()}${reason.slice(1)}` : "Sage closed this";
+    }
     default: return "Update";
   }
 }

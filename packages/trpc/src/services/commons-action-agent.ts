@@ -76,13 +76,15 @@ const ActionOutputZ = z.object({
   // specific member, which always goes privately to a Commons admin.
   escalationCategory: z.enum(["", "CIRCLE_LEADER", "COMMONS_ADMIN", "GOVERNANCE", "TREASURY", "SUPPORT"]),
   escalationAboutMember: z.boolean(),
+  // True when the item's author is offering their own skill, service, business, equipment or space.
+  selfOffer: z.boolean(),
 });
 const BatchOutputZ = z.object({
   items: z.array(z.object({ id: z.string(), actions: z.array(ActionOutputZ).max(5) })),
 });
 type ActionOutput = z.infer<typeof ActionOutputZ>;
 /** The parts of an action the reply rules look at; template fields are already rendered into draftText. */
-type ReplyDraft = Omit<ActionOutput, "evidenceSource" | "templateKey" | "templateLead" | "templateSteps" | "templateOffer" | "followUpDays" | "followUpExpect" | "escalationCategory" | "escalationAboutMember">
+type ReplyDraft = Omit<ActionOutput, "evidenceSource" | "templateKey" | "templateLead" | "templateSteps" | "templateOffer" | "followUpDays" | "followUpExpect" | "escalationCategory" | "escalationAboutMember" | "selfOffer">
   & { evidenceSource?: ActionOutput["evidenceSource"] };
 
 export interface SourceItem {
@@ -254,34 +256,54 @@ async function claimScan(item: SourceItem, charterConfigId: string) {
   }
 }
 
-async function invitePerson(resourceId: string, item: SourceItem, action: ActionOutput): Promise<string> {
+// A backup for when the model doesn't flag a self-offer; the model's flag is the main signal.
+const SELF_OFFER_PATTERN = /\b(i can|i offer|i have|i do|i am available|i'm available|happy to help|let me|hire me|work for you|my (skills|space|equipment|service|services|team|crew|company|business|shop)|years'? (of )?experience)\b/i;
+// Money offers aren't listed as resources; a loan or gift to one member is not a Commons resource.
+const SELF_OFFER_KINDS = new Set(["PERSON", "ORGANIZATION", "SKILL", "EQUIPMENT", "SPACE", "SERVICE", "INFORMATION"]);
+
+/**
+ * Who Sage may ask to be listed: an exact @mention of a person, or the item's own author offering
+ * their own work. A name alone never identifies someone.
+ */
+export function resourceCandidate(action: Pick<ActionOutput, "resourceKind" | "targetHandle" | "selfOffer">, item: Pick<SourceItem, "content">):
+  { type: "MENTION"; handle: string } | { type: "SELF" } | null {
+  const kind = action.resourceKind.toUpperCase();
   const handle = action.targetHandle.replace(/^@/, "").trim();
-  const exactMention = handle && extractEncodedMentionHandles(item.content).some((value) => value.toLowerCase() === handle.toLowerCase());
-  const selfOffer = /\b(i can|i offer|i have|i am available|i'm available|my (skills|space|equipment|service)|happy to help)\b/i.test(item.content);
-  const target = exactMention
-    ? await db.user.findFirst({ where: { handle: { equals: handle, mode: "insensitive" }, isBot: false, deletedAt: null }, select: { id: true } })
-    : !handle && selfOffer ? await db.user.findFirst({ where: { id: item.sourceAuthorId, isBot: false }, select: { id: true } }) : null;
-  if (!target) return "No eligible person: they must be @mentioned, or the author offering their own skills";
+  if (handle) {
+    const exact = kind === "PERSON" && extractEncodedMentionHandles(item.content).some((value) => value.toLowerCase() === handle.toLowerCase());
+    return exact ? { type: "MENTION", handle } : null;
+  }
+  return SELF_OFFER_KINDS.has(kind) && (action.selfOffer || SELF_OFFER_PATTERN.test(item.content)) ? { type: "SELF" } : null;
+}
+
+async function inviteToList(resourceId: string, item: SourceItem, action: ActionOutput): Promise<string> {
+  const candidate = resourceCandidate(action, item);
+  const target = candidate?.type === "MENTION"
+    ? await db.user.findFirst({ where: { handle: { equals: candidate.handle, mode: "insensitive" }, isBot: false, deletedAt: null }, select: { id: true } })
+    : candidate?.type === "SELF" ? await db.user.findFirst({ where: { id: item.sourceAuthorId, isBot: false }, select: { id: true } }) : null;
+  if (!target) return "No eligible person: they must be @mentioned, or the author offering their own work";
   const member = await db.userCoopMembership.findUnique({ where: { userId_coopId: { userId: target.id, coopId: item.coopId } }, select: { status: true } });
   if (member?.status !== "ACTIVE") return "Not invited: not an active member of this Commons";
   const resource = await db.commonsResource.findUnique({ where: { id: resourceId } });
   if (!resource) return "Not invited: the resource record is missing";
   const duplicate = await db.commonsResource.findFirst({ where: {
     id: { not: resourceId }, coopId: item.coopId, candidateUserId: target.id,
-    kind: "PERSON",
     invitedAt: { gte: new Date(Date.now() - 30 * 86400000) },
     status: { in: ["INVITED", "ACCEPTED", "VERIFIED", "PUBLISHED"] },
   }, select: { id: true } });
   if (duplicate) return "Not invited: already invited in the last 30 days";
   const updated = await db.commonsResource.updateMany({ where: { id: resourceId, invitedAt: null }, data: { candidateUserId: target.id, status: "INVITED", invitedAt: new Date() } });
   if (!updated.count) return "Not invited: an invitation was already sent";
+  const self = candidate?.type === "SELF";
   await createNotificationAndPush(db, {
     userId: target.id, coopId: item.coopId, type: "RESOURCE_INVITATION",
-    title: "Would you like to be listed as a resource?",
-    body: action.resourceTitle || "A Commons member suggested your skills as a resource.",
+    title: self ? "Want to offer this to your Commons?" : "Would you like to be listed as a resource?",
+    body: self
+      ? `${resource.title}. You can list it for members, open a shop, or both.`
+      : action.resourceTitle || "A Commons member suggested your skills as a resource.",
     data: { resourceId, coopId: item.coopId },
   });
-  return "Invited them to be listed as a resource";
+  return self ? "Invited the author to list their offer or open a shop" : "Invited them to be listed as a resource";
 }
 
 const ACTION_LABEL: Record<string, string> = {
@@ -387,10 +409,10 @@ async function saveActions(item: SourceItem, actions: ActionOutput[], config: Co
         },
         update: {},
       });
-      trail.taken(`Flagged a ${resource.kind.toLowerCase()} resource for platform admin verification`, "PASS");
-      if (resource.kind === "PERSON" && !resource.invitedAt && resource.status === "CANDIDATE") {
+      trail.taken(`Recorded a ${resource.kind.toLowerCase()} resource offer`, "PASS");
+      if (!resource.invitedAt && resource.status === "CANDIDATE" && resourceCandidate(action, item)) {
         // Who was invited is private until they accept, so this step is admin-only.
-        trail.taken(await invitePerson(resource.id, item, action), "INFO", undefined, true);
+        trail.taken(await inviteToList(resource.id, item, action), "INFO", undefined, true);
       }
     }
     if (action.type === "MAKE_PROPOSAL") {
@@ -530,7 +552,8 @@ export function createCommonsActionAgent(tools: ReturnType<typeof buildCommentTo
       "When a reply asks the member to do or share something specific, set followUpDays (1-14) to when Sage should check back and followUpExpect to what you're waiting for, phrased as what the member does (for example \"share your delivery days and costs\"). Otherwise set followUpDays to 0 and followUpExpect to \"\".",
       "confidence is how sure you are that the action is correct and useful now. Use below 0.75 when you are guessing at intent or the charter only loosely applies.",
       "For a PERSON resource, targetHandle must be an exact encoded @mention in that item, or empty for the author offering their own skills. A third-party name alone is not a verified person.",
-      "When a member offers a concrete tool, skill, space, service, or contact aligned with a goal, include VERIFY_RESOURCE with resourceKind and resourceTitle. A short helpful reply may be an additional action, but never replaces VERIFY_RESOURCE.",
+      "Set selfOffer true when the item's author offers their own skill, trade, service, business, equipment or space to members (for example \"I'm a licensed electrician, let me know if you need work done\"). Use the kind that fits the offer (usually SERVICE or SKILL), leave targetHandle empty, and write resourceTitle as a short listing title such as \"Tree care and removal (master arborist, 17 years)\". Set selfOffer false for everything else.",
+      "When a member offers a concrete tool, skill, space, service, business, or contact members could use, include VERIFY_RESOURCE with resourceKind and resourceTitle; its evidence is the offer quoted exactly from the item, with evidenceSource 'thread'. A short helpful reply may be an additional action, but never replaces VERIFY_RESOURCE.",
       "When a member suggests a decision or shared spending that the charter assigns to a member proposal or vote, include MAKE_PROPOSAL and draft a title and body for the author to review. A reply may be an additional action, but never replaces MAKE_PROPOSAL. If the item gives none of the details a proposal needs yet (no amounts, numbers or dates), reply asking for them and offer to draft the proposal instead of drafting an empty one. Once a member shares details after Sage offered, draft it from what they gave; don't hold out for more.",
       "Classify the item's content, not its surrounding thread context. If the content asserts a governance rule that directly contradicts the quoted charter, include RESPOND_CHARTER_CORRECTION and quote the relevant charter passage in the draft. Do not treat the surrounding thread's question as the author's proposal, except when following through on something Sage offered in the thread.",
       "Preserve every qualification in the evidence. If the charter covers major spending, do not say it restricts all spending; if it calls for a proposal and vote, do not invent other approval steps. Explain only the narrower rule the text actually states.",
@@ -685,6 +708,33 @@ function commentItem(comment: { id: string; postId: string; authorId: string; co
   return { sourceType: "commons_comment", sourceId: comment.id, sourcePostId: comment.postId, sourceAuthorId: comment.authorId,
     createdAt: comment.createdAt, title: comment.post.title, content: comment.content,
     context: comment.post.content, coopId: comment.post.coopId };
+}
+
+/**
+ * Runs everything after the model on a Commons post, with a supplied model output: the same policy
+ * checks, records, invitations and decision trail. For fixtures and replayable evaluations; it makes
+ * no model call and isn't counted against the autonomy limit.
+ */
+export async function replayCommonsPost(postId: string, actions: Array<Partial<ActionOutput> & Pick<ActionOutput, "type" | "summary">>): Promise<{ actionIds: string[] }> {
+  const post = await db.commonsPost.findUnique({ where: { id: postId } });
+  if (!post) throw new Error(`No post ${postId}`);
+  const raw = await db.coopConfig.findFirst({ where: { coopId: post.coopId, isActive: true }, orderBy: { version: "desc" } });
+  if (!raw) throw new Error(`No active Commons config for ${post.coopId}`);
+  const config = await ensureActiveCharter(raw);
+  const item = postItem(post);
+  const full = actions.map((action) => ActionOutputZ.parse({
+    evidence: "", evidenceSource: "", confidence: 0.9, draftText: "", resourceKind: "", resourceTitle: "", targetHandle: "",
+    templateKey: "", templateLead: "", templateSteps: [], templateOffer: "", followUpDays: 0, followUpExpect: "",
+    escalationCategory: "", escalationAboutMember: false, selfOffer: false, ...action,
+  }));
+  const contentHash = createHash("sha256").update(`replay:${item.title}:${item.content}`).digest("hex");
+  const trail = itemTrail(item, "ADMIN_SCAN").step("EVIDENCE", "Replayed with a supplied model output");
+  // Auto-reply is off here, so the relevance check never runs; the stub keeps replays free of model calls.
+  const noJudge: RelevanceJudge = async () => ({ relevant: false, reason: "Replays don't call the relevance model" });
+  await saveActions(item, full, config, false, contentHash, charterSnapshotKey(config), trail, [], groundingSources(config, item), noJudge);
+  await trail.save();
+  const rows = await db.commonsAction.findMany({ where: { sourceType: item.sourceType, sourceId: item.sourceId, contentHash }, select: { id: true } });
+  return { actionIds: rows.map((row) => row.id) };
 }
 
 export async function processCommonsActionContent(sourceType: SourceItem["sourceType"], sourceId: string): Promise<{ processed: number }> {

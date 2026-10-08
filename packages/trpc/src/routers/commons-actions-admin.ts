@@ -2,8 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { commonsPlatformAdminProcedure } from "../procedures/commons-platform-admin.js";
 import { charterSnapshotKey, hasExactGrounding, REPLY_ACTIONS, scanCommons } from "../services/commons-action-agent.js";
+import { publishCommonsResource } from "../services/commons-resources.js";
 import { needsCharterGrounding } from "../services/sage-grounding.js";
-import { ingestDocument } from "../services/knowledge-base.js";
 import { createNotificationAndPush } from "../services/push-notification-service.js";
 import { FINAL_REVIEW_TYPE_BY_ACTION_TYPE } from "../services/commons-action-tools.js";
 import { closeCircleWindowNow } from "../services/circle-window.js";
@@ -212,25 +212,7 @@ export const commonsActionsAdminRouter = router({
     if (input.command === "publish-resource") {
       const resource = await ctx.db.commonsResource.findFirst({ where: { id: input.resourceId, coopId } });
       if (!resource) throw new TRPCError({ code: "NOT_FOUND", message: "Resource not found" });
-      if (resource.kind === "PERSON" && resource.status !== "ACCEPTED") conflict("The person must accept the invitation first");
-      if (resource.status === "PUBLISHED") return { resource };
-      if (resource.status === "DECLINED") conflict("The invitation was declined");
-      const duplicate = await ctx.db.commonsResource.findFirst({ where: { id: { not: resource.id }, coopId,
-        kind: resource.kind, title: { equals: resource.title, mode: "insensitive" }, status: "PUBLISHED" }, select: { id: true } });
-      if (duplicate) conflict("A resource with this title and kind is already published");
-      const author = await ctx.db.commonsAction.findUnique({ where: { id: resource.actionId }, select: { sourceAuthorId: true } });
-      if (!author) conflict("Source action missing");
-      const { document } = await ingestDocument({
-        documentId: `commons-resource:${resource.id}`,
-        coopId, scopeType: "commons", scopeId: coopId, type: "OTHER", visibility: "COMMONS",
-        title: resource.title, content: resource.description, uploadedById: author.sourceAuthorId,
-        metadata: { commonsResourceId: resource.id, sourceType: resource.sourceType, sourceId: resource.sourceId },
-      });
-      const updated = await ctx.db.commonsResource.update({ where: { id: resource.id }, data: {
-        status: "PUBLISHED", verifiedBy: actor, verifiedAt: new Date(), publishedAt: new Date(), knowledgeDocId: document.id,
-      } });
-      await ctx.db.commonsAction.update({ where: { id: resource.actionId }, data: { status: "APPROVED", reviewedBy: actor, reviewedAt: new Date() } });
-      return { resource: updated };
+      return { resource: await publishCommonsResource(ctx.db, resource, actor) };
     }
     const action = await ctx.db.commonsAction.findFirst({ where: { id: input.actionId, coopId } });
     if (!action) throw new TRPCError({ code: "NOT_FOUND", message: "Action not found" });

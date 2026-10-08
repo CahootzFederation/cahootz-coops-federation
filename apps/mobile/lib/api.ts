@@ -3618,10 +3618,12 @@ export const api = {
       businessLicenseCID?: string;
     },
     walletAddress: string,
+    coopId: string,
   ) {
     const response = await fetch(`${API_BASE_URL}/trpc/store.applyForStore`, {
       method: 'POST',
-      headers: createApiHeaders(walletAddress),
+      // The shop belongs to the commons the member picked.
+      headers: { ...createApiHeaders(walletAddress), 'X-Coop-Id': coopId },
       body: JSON.stringify(data),
     });
 
@@ -4419,7 +4421,7 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.myResourceInvitations`, {
       headers: createApiHeaders(null, sessionToken),
     });
-    return readTrpcResult<Array<{ id: string; coopId: string; kind: string; title: string; description: string; invitedAt: string | null }>>(
+    return readTrpcResult<Array<{ id: string; coopId: string; coopName: string; kind: string; title: string; description: string; invitedAt: string | null }>>(
       response, 'Could not load resource invitations',
     );
   },
@@ -4439,7 +4441,41 @@ export const api = {
       method: 'POST', headers: createApiHeaders(null, sessionToken),
       body: JSON.stringify({ resourceId, accept }),
     });
-    return readTrpcResult<{ accepted: boolean }>(response, 'Could not respond to invitation');
+    return readTrpcResult<{ accepted: boolean; listed: boolean }>(response, 'Could not respond to invitation');
+  },
+
+  async getResourceSettings(coopId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.resourceSettings?input=${input}`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<{ autoListResources: boolean; isSteward: boolean }>(response, 'Could not load listing settings');
+  },
+
+  async setResourceAutoList(coopId: string, enabled: boolean, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.setResourceAutoList`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ coopId, enabled }),
+    });
+    return readTrpcResult<{ autoListResources: boolean }>(response, 'Could not change the listing setting');
+  },
+
+  async getResourcesAwaitingReview(coopId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.resourcesAwaitingReview?input=${input}`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<Array<{ id: string; kind: string; title: string; description: string; respondedAt: string | null }>>(
+      response, 'Could not load listings waiting for review',
+    );
+  },
+
+  async reviewResource(resourceId: string, publish: boolean, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.reviewResource`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ resourceId, publish }),
+    });
+    return readTrpcResult<{ listed: boolean }>(response, 'Could not review this listing');
   },
 
   async getCommonsProposalDrafts(sessionToken: string) {

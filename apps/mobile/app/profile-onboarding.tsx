@@ -315,7 +315,10 @@ export default function ProfileOnboardingScreen() {
     track('onboarding_completed', { exit, profile_completed: !!profileResult, signed_in: signedIn });
 
     if (!user || !sessionToken) {
-      void markAnonymousProfileIntroSeen();
+      // Wait for the flag to be stored before leaving: "/" reads it right
+      // away, and on iOS and Android secure storage is slower than the
+      // navigation, so it would send the visitor straight back to the intro.
+      await markAnonymousProfileIntroSeen().catch(() => {});
       router.replace('/' as any);
       return;
     }
@@ -342,7 +345,8 @@ export default function ProfileOnboardingScreen() {
     if (!user || !sessionToken) {
       // Joining a table is an account action - send anonymous visitors to
       // sign in rather than silently failing the API call.
-      void markAnonymousProfileIntroSeen();
+      // Stored before leaving, or "/" sends them straight back here.
+      await markAnonymousProfileIntroSeen().catch(() => {});
       router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
       return;
     }

@@ -60,8 +60,9 @@ describe("Sage suggestion review flow", () => {
     const review = { id: "review-1", userId: "maya", status: "PENDING", payloadHash: "hash-1", actionId: "action-1", reviewType: "PROVIDE_CONTEXT" };
     const action = { id: "action-1", payloadHash: "hash-1" };
     const db = accountSessionDb({
-      commonsActionReview: { findUnique: vi.fn().mockResolvedValue(review), update: vi.fn().mockResolvedValue({}) },
+      commonsActionReview: { findUnique: vi.fn().mockResolvedValue(review), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
       commonsAction: { findUnique: vi.fn().mockResolvedValue(action), update: vi.fn().mockResolvedValue({}) },
+      sageTask: { findMany: vi.fn().mockResolvedValue([]) },
       commonsActionAudit: { create: vi.fn().mockResolvedValue({}) },
       $transaction: vi.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     });

@@ -10,8 +10,17 @@ name: Sign in and out
       EMAIL: ${EMAIL}
       LOGIN_CODE: ${LOGIN_CODE}
 - tapOn: "Open menu"
-- assertVisible: "Sign Out \\(@releaseclick1\\)"
+# Sign Out and its confirmation sit at the bottom of the menu, below the fold
+# on a phone; Maestro can only tap what's on screen.
+- scrollUntilVisible:
+    element: "Sign Out \\(@releaseclick1\\)"
+    direction: DOWN
+    timeout: 20000
 - tapOn: "Sign Out \\(@releaseclick1\\)"
+- scrollUntilVisible:
+    element: "Yes, sign out"
+    direction: DOWN
+    timeout: 20000
 - tapOn: "Yes, sign out"
 - tapOn: "Open menu"
 - assertVisible: "Sign In"

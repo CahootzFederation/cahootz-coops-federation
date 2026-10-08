@@ -97,6 +97,52 @@ export interface SourceItem {
   content: string;
   context: string;
   coopId: string;
+  /** Set by code when this comment answers what Sage asked this member earlier in the thread. */
+  followThrough?: FollowThrough;
+}
+
+/** What Sage asked a member earlier in a thread, and the post it was about. */
+export interface FollowThrough {
+  sageReply: string;
+  postTitle: string;
+  postContent: string;
+}
+
+const PROPOSAL_OFFER = /\bproposals?\b/i;
+const COST_ASK = /\b(?:pays?|paying|paid|costs?|spend\w*|budget|price[sd]?|fees?)\b/i;
+const CONCRETE_DETAIL = /\d/;
+
+/**
+ * Whether a member's reply is the answer Sage was waiting for: Sage offered a proposal or asked what
+ * something costs, and the reply gives concrete details (a number, amount or date). Decided by code so
+ * Sage follows through every time instead of whenever the model happens to.
+ */
+export function answersSageAsk(sageReply: string, memberReply: string): boolean {
+  return CONCRETE_DETAIL.test(memberReply) && (PROPOSAL_OFFER.test(sageReply) || COST_ASK.test(sageReply));
+}
+
+/**
+ * The draft Sage writes when it follows through and the model didn't give a grounded one: the post and
+ * the member's own details, quoted, plus what they still need to decide. It states no rules, so it
+ * needs no charter quote; it's private to the author, who edits it before anything is submitted.
+ */
+export function followThroughDraft(followThrough: Pick<FollowThrough, "postTitle" | "postContent">, memberReply: string): { title: string; body: string } {
+  return {
+    title: followThrough.postTitle.trim().slice(0, 160) || "Proposal draft",
+    body: [
+      followThrough.postContent.trim(),
+      "",
+      "Details shared in the thread:",
+      memberReply.trim(),
+      "",
+      "Before you submit: say what you're asking members to approve, what it would cost the Commons, and who would organize it.",
+    ].join("\n").slice(0, 4000),
+  };
+}
+
+/** A reply that would ask the member for more, which Sage doesn't send once they've answered its ask. */
+export function asksAgain(action: Pick<ActionOutput, "type" | "templateKey" | "templateSteps" | "followUpDays" | "followUpExpect">): boolean {
+  return action.type === "CLARIFY_NEED" || followUpExpectation(action) !== "";
 }
 
 function textHash(item: SourceItem): string {
@@ -270,7 +316,8 @@ const ACTION_LABEL: Record<string, string> = {
 async function saveActions(item: SourceItem, actions: ActionOutput[], config: CoopConfig, autoReply: boolean, contentHash: string, charterKey: string, trail: DecisionTrail, inputFlags: InputFlag[], sources: GroundingSources, judge: RelevanceJudge) {
   const sage = await ensureSageBotUser(db, item.coopId);
   const proposed = actions.filter((action) => action.type !== "NO_ACTION");
-  if (!proposed.length) {
+  let drafted = false;
+  if (!proposed.length && !item.followThrough) {
     trail.step("CONSIDERED", "Nothing worth doing", { outcome: "INFO" });
     trail.taken("Did nothing", "INFO");
   }
@@ -287,6 +334,10 @@ async function saveActions(item: SourceItem, actions: ActionOutput[], config: Co
         action.resourceTitle && `Resource: ${action.resourceTitle}`,
       ].filter(Boolean).join("\n"),
     });
+    if (item.followThrough && REPLY_ACTIONS.has(action.type) && asksAgain(action)) {
+      trail.taken("Held: the member already answered what Sage asked, so Sage follows through instead of asking again", "INFO");
+      continue;
+    }
     const grounding = groundingCheck(action, sources);
     const evidenceValid = trail.policy(grounding.label, grounding.grounded, action.evidence ? `"${action.evidence}"` : "No quote given", adminOnly);
     if (!evidenceValid) {
@@ -365,25 +416,61 @@ async function saveActions(item: SourceItem, actions: ActionOutput[], config: Co
       }
     }
     if (action.type === "MAKE_PROPOSAL") {
-      const existingDraft = await db.commonsProposalDraft.findUnique({ where: { actionId: row.id }, select: { id: true } });
-      if (!existingDraft) {
-        const draft = await db.commonsProposalDraft.create({ data: {
-          actionId: row.id, coopId: item.coopId, authorId: item.sourceAuthorId,
-          title: action.summary.slice(0, 160), body: action.draftText || action.summary,
-        } });
-        await db.commonsAction.update({ where: { id: row.id }, data: { status: "APPROVED" } });
-        await createNotificationAndPush(db, {
-          userId: item.sourceAuthorId, coopId: item.coopId, type: "PROPOSAL_DRAFT_READY",
-          title: "A proposal draft is ready", body: "Review and edit this Commons suggestion before you submit it.",
-          data: { draftId: draft.id, coopId: item.coopId },
-        }).catch((error) => console.error("Could not notify proposal author", error));
-        trail.taken("Created an editable proposal draft for the author", "PASS");
-      } else {
-        trail.taken("The proposal draft already existed", "INFO");
-      }
+      await createProposalDraft(item, row.id, action.summary, action.draftText || action.summary, trail);
+      drafted = true;
     }
     if (action.type === "ESCALATE_TO_ADMIN") await escalate(item, action, row.id, trail);
   }
+  if (item.followThrough && !drafted) {
+    // Sage said it would help once the member shared details, and they did. The model's grounded draft
+    // is preferred; without one, Sage drafts from the member's own words rather than going quiet.
+    if (isSteeringAttempt(inputFlags)) {
+      trail.taken("Didn't draft from the reply: it contains instructions aimed at Sage", "INFO");
+      return;
+    }
+    const draft = followThroughDraft(item.followThrough, item.content);
+    const row = await db.commonsAction.upsert({
+      where: { sourceType_sourceId_contentHash_charterConfigId_position: {
+        sourceType: item.sourceType, sourceId: item.sourceId, contentHash, charterConfigId: charterKey, position: FOLLOW_THROUGH_POSITION,
+      } },
+      create: {
+        coopId: item.coopId, sourceType: item.sourceType, sourceId: item.sourceId,
+        sourcePostId: item.sourcePostId, sourceAuthorId: item.sourceAuthorId,
+        contentHash, position: FOLLOW_THROUGH_POSITION, type: "MAKE_PROPOSAL",
+        summary: "Draft a proposal from the details the member shared", evidence: "", confidence: 1,
+        draftText: draft.body, generatedDraftText: draft.body, charterConfigId: charterKey,
+        sourceTextSnapshot: item.content.slice(0, 2200), contextSnapshot: item.context.slice(0, THREAD_CONTEXT_CHARS),
+        charterSnapshot: config.charterText.slice(0, 8000),
+        goalsSnapshot: JSON.parse(JSON.stringify(missionGoals(config).slice(0, 20))) as Prisma.InputJsonValue,
+        status: "PENDING",
+      },
+      update: {},
+    });
+    trail.linkAction(row.id);
+    trail.policy("The member answered what Sage asked for in this thread", true, item.followThrough.sageReply.slice(0, 600));
+    await createProposalDraft(item, row.id, draft.title, draft.body, trail);
+  }
+}
+
+// Positions 0-4 are the model's actions; the follow-through draft Sage makes itself comes after them.
+const FOLLOW_THROUGH_POSITION = 5;
+
+async function createProposalDraft(item: SourceItem, actionId: string, title: string, body: string, trail: DecisionTrail) {
+  const existingDraft = await db.commonsProposalDraft.findUnique({ where: { actionId }, select: { id: true } });
+  if (existingDraft) {
+    trail.taken("The proposal draft already existed", "INFO");
+    return;
+  }
+  const draft = await db.commonsProposalDraft.create({ data: {
+    actionId, coopId: item.coopId, authorId: item.sourceAuthorId, title: title.slice(0, 160), body,
+  } });
+  await db.commonsAction.update({ where: { id: actionId }, data: { status: "APPROVED" } });
+  await createNotificationAndPush(db, {
+    userId: item.sourceAuthorId, coopId: item.coopId, type: "PROPOSAL_DRAFT_READY",
+    title: "A proposal draft is ready", body: "Review and edit this Commons suggestion before you submit it.",
+    data: { draftId: draft.id, coopId: item.coopId },
+  }).catch((error) => console.error("Could not notify proposal author", error));
+  trail.taken("Created an editable proposal draft for the author", "PASS");
 }
 
 /**
@@ -440,6 +527,9 @@ export function charterOnlyEvidenceRule(): string {
   return `${[...CHARTER_ONLY_ACTIONS].join(", ")} always need evidenceSource 'charter' and a charter or goal excerpt as evidence, even when the details come from the member: quote the passage the action rests on (for MAKE_PROPOSAL, the charter rule or goal the proposal serves) and put the member's details in draftText, never in evidence.`;
 }
 
+/** Items code marked as answering Sage's earlier ask (see withFollowThrough). */
+export const FOLLOW_THROUGH_ITEM_RULE = "An item with answersSage: true is the member giving the details Sage asked them for in the thread. Include MAKE_PROPOSAL drafted from those details. Don't reply asking for more; code holds such a reply.";
+
 export function createCommonsActionAgent(tools: ReturnType<typeof buildCommentTools> = []) {
   return new Agent({
     name: "Commons Action Observer",
@@ -458,6 +548,7 @@ export function createCommonsActionAgent(tools: ReturnType<typeof buildCommentTo
       "How to write reply drafts:",
       sageReplyStyleInstructions({ structured: true }),
       SAGE_FOLLOW_THROUGH_RULE,
+      FOLLOW_THROUGH_ITEM_RULE,
       "When a reply asks the member to do or share something specific, set followUpDays (1-14) to when Sage should check back and followUpExpect to what you're waiting for, phrased as what the member does (for example \"share your delivery days and costs\"). Otherwise set followUpDays to 0 and followUpExpect to \"\".",
       "confidence is how sure you are that the action is correct and useful now. Use below 0.75 when you are guessing at intent or the charter only loosely applies.",
       "For a PERSON resource, targetHandle must be an exact encoded @mention in that item, or empty for the author offering their own skills. A third-party name alone is not a verified person.",
@@ -483,7 +574,10 @@ export function commonsActionPrompt(config: CoopConfig, items: SourceItem[], mem
     charter: config.charterText.slice(0, 8000),
     goals: missionGoals(config).slice(0, 20),
     memory,
-    items: items.map((item) => ({ id: item.sourceId, type: item.sourceType, title: item.title.slice(0, 160), content: item.content.slice(0, 2200), context: item.context.slice(0, THREAD_CONTEXT_CHARS) })),
+    items: items.map((item) => ({
+      id: item.sourceId, type: item.sourceType, title: item.title.slice(0, 160), content: item.content.slice(0, 2200), context: item.context.slice(0, THREAD_CONTEXT_CHARS),
+      ...(item.followThrough ? { answersSage: true } : {}),
+    })),
   });
 }
 
@@ -564,8 +658,30 @@ export async function withThreadContext(items: SourceItem[]): Promise<SourceItem
   }));
 }
 
+/**
+ * Marks a comment that answers what Sage asked its author earlier in the thread (see answersSageAsk),
+ * unless Sage already drafted a proposal for them from this thread. Code makes this call, not the model.
+ */
+export async function withFollowThrough(items: SourceItem[]): Promise<SourceItem[]> {
+  return Promise.all(items.map(async (item) => {
+    if (item.sourceType !== "commons_comment") return item;
+    const asked = await db.commonsAction.findFirst({
+      where: { sourcePostId: item.sourcePostId, sourceAuthorId: item.sourceAuthorId, publishedCommentId: { not: null }, createdAt: { lt: item.createdAt } },
+      orderBy: { createdAt: "desc" }, select: { draftText: true },
+    });
+    if (!asked?.draftText || !answersSageAsk(asked.draftText, item.content)) return item;
+    const threadActions = await db.commonsAction.findMany({ where: { sourcePostId: item.sourcePostId }, select: { id: true } });
+    const drafted = await db.commonsProposalDraft.findFirst({
+      where: { authorId: item.sourceAuthorId, actionId: { in: threadActions.map((action) => action.id) } }, select: { id: true },
+    });
+    if (drafted) return item;
+    // Before withThreadContext, a comment's context is still its post's text.
+    return { ...item, followThrough: { sageReply: asked.draftText, postTitle: item.title, postContent: item.context } };
+  }));
+}
+
 async function processItems(rawItems: SourceItem[], config: CoopConfig, autoReply: boolean, trigger: TrailTrigger, judge: RelevanceJudge = modelRelevanceJudge(config.coopId)): Promise<number> {
-  const items = await withThreadContext(rawItems);
+  const items = await withThreadContext(await withFollowThrough(rawItems));
   let count = 0;
   for (let offset = 0; offset < items.length; offset += BATCH_SIZE) {
     if (!(await sageAutonomyAllowed(config.coopId))) {

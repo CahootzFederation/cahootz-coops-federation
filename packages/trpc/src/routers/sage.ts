@@ -12,6 +12,7 @@ import { presentTrails } from "../services/sage-decision-trail.js";
 import { dismissSageTask } from "../services/sage-tasks.js";
 import { askIntroductionHelper } from "../services/sage-introductions.js";
 import { acknowledgeSageAlert, rerouteSageAlert } from "../services/sage-responsibility.js";
+import { SUGGESTION_TASK_SUBJECT, resolveSuggestionReviewTask } from "../services/sage-suggestion-follow-up.js";
 import { router } from "../trpc.js";
 
 const TERMINAL_STATUSES = ["APPROVED", "DISMISSED", "FAILED"] as const;
@@ -209,6 +210,8 @@ export const sageRouter = router({
         id: task.id, kind: task.kind, status: task.status, title: task.title, reason: task.reason,
         expected: task.expected, offer: task.offer, postId: task.postId, subjectType: task.subjectType, subjectId: task.subjectId,
         nextWakeAt: task.nextWakeAt.toISOString(), attempts: task.attempts, outcome: task.outcome, updatedAt: task.updatedAt.toISOString(),
+        // A suggestion follow-up opens the suggestion itself.
+        actionId: task.subjectType === SUGGESTION_TASK_SUBJECT ? task.sourceActionId : null,
       });
       return { open: open.map(view), closed: closed.map(view) };
     }),
@@ -353,6 +356,7 @@ export const sageRouter = router({
       const userId = context.accountUser.id;
       const review = await context.db.commonsActionReview.findUnique({ where: { id: input.reviewId } });
       if (!review || review.userId !== userId) throw new TRPCError({ code: "NOT_FOUND", message: "Review not found" });
+      if (review.status === "EXPIRED") conflict("Sage closed this suggestion, so it can't be answered anymore");
       if (review.status !== "PENDING") conflict("This review has already been answered");
       const action = await context.db.commonsAction.findUnique({ where: { id: review.actionId } });
       if (!action) throw new TRPCError({ code: "NOT_FOUND", message: "Suggestion not found" });
@@ -361,9 +365,15 @@ export const sageRouter = router({
         conflict("This suggestion changed since you were asked — refresh to see the current version");
       }
 
+      // Claimed atomically, so an answer and Sage closing the suggestion at the same moment can't both win.
+      const answered = { DECLINE: "DECLINED", ESCALATE: "ESCALATED", APPROVE: "APPROVED" }[input.response];
+      const claimed = await context.db.commonsActionReview.updateMany({ where: { id: review.id, status: "PENDING" }, data: { status: answered, respondedAt: new Date() } });
+      if (!claimed.count) conflict("This suggestion was just answered or closed - refresh to see where it stands");
+      const followUpOutcome = { DECLINE: "You declined it", ESCALATE: "You sent it to an admin", APPROVE: "You approved it" }[input.response];
+      await resolveSuggestionReviewTask(review.id, followUpOutcome, context.db).catch((error) => console.error("Could not close the suggestion follow-up", error));
+
       if (input.response === "DECLINE") {
         await context.db.$transaction([
-          context.db.commonsActionReview.update({ where: { id: review.id }, data: { status: "DECLINED", respondedAt: new Date() } }),
           context.db.commonsAction.update({ where: { id: action.id }, data: { status: "DISMISSED" } }),
           context.db.commonsActionAudit.create({ data: { actionId: action.id, actorId: userId, eventType: "REVIEW_DECLINED", metadata: { reviewType: review.reviewType } } }),
         ]);
@@ -372,14 +382,10 @@ export const sageRouter = router({
 
       // Generic across every reviewType and action type - not terminal, so an admin can still resolve it.
       if (input.response === "ESCALATE") {
-        await context.db.$transaction([
-          context.db.commonsActionReview.update({ where: { id: review.id }, data: { status: "ESCALATED", respondedAt: new Date() } }),
-          context.db.commonsActionAudit.create({ data: { actionId: action.id, actorId: userId, eventType: "ESCALATED_TO_ADMIN", metadata: { reviewType: review.reviewType } } }),
-        ]);
+        await context.db.commonsActionAudit.create({ data: { actionId: action.id, actorId: userId, eventType: "ESCALATED_TO_ADMIN", metadata: { reviewType: review.reviewType } } });
         return { success: true };
       }
 
-      await context.db.commonsActionReview.update({ where: { id: review.id }, data: { status: "APPROVED", respondedAt: new Date() } });
       await context.db.commonsActionAudit.create({ data: { actionId: action.id, actorId: userId, eventType: "REVIEW_APPROVED", metadata: { reviewType: review.reviewType } } });
 
       if (review.reviewType === "PROVIDE_CONTEXT") {

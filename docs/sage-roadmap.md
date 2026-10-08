@@ -169,6 +169,18 @@ Status (2026-10-04): built and verified, except the items listed as remaining.
 - Tests: `sage-tasks.test.ts` (14), Playwright `sage-steward.spec.ts` (follow-up journey; in the local run Sage also started its own follow-up from a live reply).
 - Remaining: reminders are notifications only (Sage never posts a public reminder comment); proposal and draft status changes are picked up by the 15-minute sweep, not an immediate event wake; accepted suggestions other than replies, comments and stale drafts don't yet create a task automatically.
 
+Suggestion follow-through (2026-10-07, `sage-suggestion-follow-up.ts`). A suggestion that waits on someone's answer no longer sits forever.
+- Who is notified: everyone Sage asks already got a `SAGE_SUGGESTION_NEEDS_YOU` alert when the suggestion was made (circle leader approvals, ride-match details and consent, both sides of an introduction). Those alerts, the new reminder and the closed alert now follow the member's **Community** push setting, like Sage's other alerts, instead of "Other".
+- Each wake cycle (every 15 minutes) gives every unanswered review one `REVIEW_SUGGESTION` task. Three days after Sage asked, it sends one `SAGE_SUGGESTION_REMINDER` that opens the suggestion. Four days later, if there's still no answer, Sage closes it: the action becomes `DISMISSED`, the unanswered reviews `EXPIRED`, and the timeline says "Sage closed this: nobody answered after Sage's reminder". If the member dismissed the follow-up, or the review predates this change and is already a week old, it closes at 7 days with no reminder.
+- Each cycle also closes a waiting suggestion right away when it no longer applies, judged from app data only (no model call): someone it involves left the Commons; the circle was deleted, or has a new leader (for a leader approval); the person asked left the circle; the ride-match message, or the post Sage would comment on, was deleted; Sage already commented on that post; a suggested event time has passed; the leader already has a near-identical proposal draft.
+- People who already said yes (for example the first side of an introduction) get an inbox-only `SAGE_SUGGESTION_CLOSED` alert. The follow-up appears under **Following** with an Open button.
+- Answering and closing can't both win: `respondToReview` claims the review with a conditional update, and an answer to a closed suggestion is refused with "Sage closed this suggestion, so it can't be answered anymore".
+- Privacy: these tasks' trails are admin-only, and they aren't consolidated into memory (the suggestion's own outcome already is, with ride matches and introductions excluded).
+- Closing only dismisses. Nothing is published, decided or spent, and no reviewer changes.
+- The "Meet Sage" card's "What Sage can do on its own" now adds "close its own suggestions when nobody answers or they no longer apply".
+- Tests: `sage-suggestion-follow-up.test.ts` (19), new cases in `sage-tasks.test.ts` and `sage-trend.test.ts`; Playwright `sage-suggestion-follow-up.spec.ts` (2 journeys, TESTING.md journey 57).
+- Remaining: "no longer applies" covers only the deterministic cases above; Sage doesn't notice when a conversation moved on or someone did the thing another way. A closed suggestion isn't re-offered to a new circle leader. Admin-queued Commons reply suggestions (no member review) are unchanged and still wait for a platform admin. The sweep reads at most 200 waiting reviews per Commons per cycle, oldest first.
+
 ### P1 — Memory consolidation and retrieval
 
 Goal: give Sage useful long-term continuity without unbounded prompts or privacy leakage.
@@ -332,7 +344,7 @@ For every Sage behavior change:
   - The member's private card offers **List it for members**, **Open a shop** (the shop application prefilled from the offer, in a commons the member picks, defaulting to the one they posted in) and **Not now**. Sage posts nothing publicly about it (user decision).
   - Listing is automatic when the member accepts, in every Commons (`CommonsAgentSetting.autoListResources`, default on, migration `20261008010000_resource_auto_list`). Stewards can turn it off on the Commons resources screen; accepted offers then wait in a steward review queue (`RESOURCE_REVIEW` alert, Approve / Don't list). Platform admins can still publish from the web page. All three paths share `publishCommonsResource`; a failed knowledge-base copy no longer blocks the listing.
   - Fixed: the app sent shop applications without a commons, so the server refused every one ("You must be an active member of this commons to open a shop").
-  - Tests: `commons-actions-router.test.ts` (auto-list, steward-only toggle and review, removed members), `commons-action-agent.test.ts` (`resourceCandidate`, including the exact cousin sentence), Playwright `sage-self-offer.spec.ts` (TESTING.md journey 57). `replayCommonsPost` runs the feed agent's post-model path with a supplied model output for fixtures.
+  - Tests: `commons-actions-router.test.ts` (auto-list, steward-only toggle and review, removed members), `commons-action-agent.test.ts` (`resourceCandidate`, including the exact cousin sentence), Playwright `sage-self-offer.spec.ts` (TESTING.md journey 58). `replayCommonsPost` runs the feed agent's post-model path with a supplied model output for fixtures.
   - Remaining: the live model's choice to emit `VERIFY_RESOURCE` with `selfOffer` isn't covered end to end (the journey uses a fixed output). Shop approval is still a platform-admin step, including for family shops.
 
 ## Completed milestones

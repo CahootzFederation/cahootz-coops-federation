@@ -68,7 +68,9 @@ export async function consolidateSageMemory(coopId: string, now = new Date()): P
       orderBy: { updatedAt: "asc" }, take: 200,
     }),
     db.sageTask.findMany({
-      where: { coopId, status: { in: ["DONE", "ABANDONED", "DISMISSED"] }, updatedAt: { gte: since } },
+      // Suggestion follow-ups aren't remembered separately: the suggestion's own outcome is (above), with
+      // personal kinds (ride matches, introductions) excluded, which a task's title alone can't tell.
+      where: { coopId, status: { in: ["DONE", "ABANDONED", "DISMISSED"] }, updatedAt: { gte: since }, subjectType: { not: "suggestion_review" } },
       select: { id: true, title: true, status: true, outcome: true, circleId: true, updatedAt: true },
       orderBy: { updatedAt: "asc" }, take: 200,
     }),

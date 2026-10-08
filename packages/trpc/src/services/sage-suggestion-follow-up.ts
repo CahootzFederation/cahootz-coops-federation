@@ -144,14 +144,8 @@ export async function checkSuggestionReview(task: { id: string; subjectId: strin
 export function suggestionReminderText(title: string): { title: string; body: string } {
   return {
     title: "Sage is still waiting on you",
-    body: `"${title.slice(0, 120)}" needs your answer. Sage will close it in ${SUGGESTION_GRACE_DAYS} days if nobody answers.`,
+    body: `"${title.slice(0, 120)}" needs your answer.`,
   };
-}
-
-/** When a waiting suggestion closes if nobody answers, for the suggestion page. */
-export function suggestionClosesAt(review: Pick<CommonsActionReview, "createdAt">, task: { nextWakeAt: Date; attempts: number } | null): Date {
-  if (!task) return new Date(review.createdAt.getTime() + SUGGESTION_CLOSE_AFTER_DAYS * DAY_MS);
-  return task.attempts > 0 ? task.nextWakeAt : new Date(task.nextWakeAt.getTime() + SUGGESTION_GRACE_DAYS * DAY_MS);
 }
 
 /**

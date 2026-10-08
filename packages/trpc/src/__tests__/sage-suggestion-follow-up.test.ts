@@ -24,7 +24,7 @@ vi.mock("@repo/db", () => ({ db }));
 vi.mock("../services/push-notification-service.js", () => ({ createNotificationAndPush: push }));
 
 const {
-  suggestionNoLongerApplies, closeSuggestion, checkSuggestionReview, followUpOnSuggestions, suggestionClosesAt, resolveSuggestionReviewTask,
+  suggestionNoLongerApplies, closeSuggestion, checkSuggestionReview, followUpOnSuggestions, resolveSuggestionReviewTask,
   SUGGESTION_REMIND_AFTER_DAYS, SUGGESTION_CLOSE_AFTER_DAYS,
 } = await import("../services/sage-suggestion-follow-up.js");
 
@@ -172,15 +172,6 @@ describe("each wake cycle's sweep", () => {
     db.commonsPost.findUnique.mockResolvedValue(null);
     await expect(followUpOnSuggestions("harbor", NOW)).resolves.toEqual({ scheduled: 0, closed: 1 });
     expect(db.commonsAction.updateMany).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("telling the member when it closes", () => {
-  it("is a week after Sage asked before the follow-up exists, then follows the follow-up's schedule", () => {
-    const createdAt = new Date(NOW.getTime() - DAY);
-    expect(suggestionClosesAt({ createdAt }, null)).toEqual(new Date(createdAt.getTime() + 7 * DAY));
-    expect(suggestionClosesAt({ createdAt }, { nextWakeAt: new Date(NOW.getTime() + 2 * DAY), attempts: 0 })).toEqual(new Date(NOW.getTime() + 6 * DAY));
-    expect(suggestionClosesAt({ createdAt }, { nextWakeAt: new Date(NOW.getTime() + 4 * DAY), attempts: 1 })).toEqual(new Date(NOW.getTime() + 4 * DAY));
   });
 });
 

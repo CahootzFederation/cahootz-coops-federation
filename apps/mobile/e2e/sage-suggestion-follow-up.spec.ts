@@ -63,23 +63,21 @@ test("Sage reminds once about an unanswered suggestion, then closes it and tells
     expect(intro.created, JSON.stringify(intro)).toBe(true);
     actionId = intro.actionId;
 
-    // 1. A sees when Sage will close the suggestion, and accepts.
+    // 1. A accepts.
     await need.page.goto(`/sage/${actionId}`);
-    await expect(shown(need.page, /^Sage reminds you once, and closes this on .+ if nobody answers\.$/)).toBeVisible();
     await need.page.getByRole("button", { name: "Approve" }).click();
 
-    // 2. B is asked, and is told the same.
+    // 2. B is asked.
     await expect(async () => {
       await helper.page.goto(`/sage/${actionId}`);
       await expect(helper.page.getByRole("button", { name: "Approve" })).toBeVisible({ timeout: 3_000 });
     }).toPass(SERVER_POLL);
-    await expect(shown(helper.page, /^Sage reminds you once, and closes this on/)).toBeVisible();
 
     // 3. Days pass without an answer: B gets one reminder, and repeated wakes don't send another.
     steward("age-suggestion", actionId, runId);
     steward("suggestion-sweep");
     steward("suggestion-sweep");
-    const reminderBody = new RegExp(`E2E ${runId} help setting up bookkeeping.*needs your answer\\. Sage will close it in 4 days`);
+    const reminderBody = new RegExp(`E2E ${runId} help setting up bookkeeping.*needs your answer`);
     await expect(async () => {
       await openAlerts(helper.page);
       await expect(helper.page.getByText(reminderBody).locator("visible=true")).toHaveCount(1, { timeout: 3_000 });
@@ -145,10 +143,9 @@ test("Sage closes a suggestion as soon as it no longer applies", async ({ browse
     seeded = true;
     expect(seed.status, JSON.stringify(seed)).toBe("PENDING");
 
-    // 1. The leader is asked to approve Sage's comment, and told when Sage will close it.
+    // 1. The leader is asked to approve Sage's comment.
     await leader.page.goto(`/sage/${seed.actionId}`);
     await expect(leader.page.getByRole("button", { name: "Approve" })).toBeVisible();
-    await expect(shown(leader.page, /^Sage reminds you once, and closes this on/)).toBeVisible();
 
     // 2. The member deletes the post (through the API: React Native Web can't show the confirm dialog).
     await trpcPost("commons.deletePost", memberToken, { postId });

@@ -12,7 +12,7 @@ import { presentTrails } from "../services/sage-decision-trail.js";
 import { dismissSageTask } from "../services/sage-tasks.js";
 import { askIntroductionHelper } from "../services/sage-introductions.js";
 import { acknowledgeSageAlert, rerouteSageAlert } from "../services/sage-responsibility.js";
-import { SUGGESTION_TASK_SUBJECT, resolveSuggestionReviewTask, suggestionClosesAt } from "../services/sage-suggestion-follow-up.js";
+import { SUGGESTION_TASK_SUBJECT, resolveSuggestionReviewTask } from "../services/sage-suggestion-follow-up.js";
 import { router } from "../trpc.js";
 
 const TERMINAL_STATUSES = ["APPROVED", "DISMISSED", "FAILED"] as const;
@@ -318,10 +318,6 @@ export const sageRouter = router({
       const suggestionReview = myReviews.find((review) => review.reviewType === "APPROVE_SUGGESTION");
       const reason = (suggestionReview?.presentationData as { reason?: unknown } | null)?.reason
         ?? (action.type === "SUGGEST_ACTION" ? action.evidence : null);
-      const pending = action.status === "PENDING" ? myReviews.find((review) => review.status === "PENDING") : undefined;
-      const followUp = pending
-        ? await context.db.sageTask.findFirst({ where: { subjectType: SUGGESTION_TASK_SUBJECT, subjectId: pending.id, status: "OPEN" }, select: { nextWakeAt: true, attempts: true } })
-        : null;
       const resultEvent = [...auditEvents].reverse().find((event) => event.eventType === "ACTION_EXECUTED");
       const result = resultEvent?.metadata as { resultEntityType?: unknown; resultEntityId?: unknown } | null;
       return {
@@ -336,8 +332,6 @@ export const sageRouter = router({
           // The subject's own raw message excerpt is only shown to the subject, never to a helper/candidate.
           evidence: participant.role === "SUBJECT" ? action.sourceTextSnapshot : null,
           role: participant.role,
-          // When Sage closes this if the member doesn't answer.
-          closesAt: pending ? suggestionClosesAt(pending, followUp).toISOString() : null,
         },
         context: context_,
         reviews: myReviews.map((review) => ({

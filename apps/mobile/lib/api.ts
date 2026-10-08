@@ -4600,8 +4600,6 @@ export const api = {
         proposedText: string | null;
         reason: string | null;
         result: { entityType: string; entityId: string } | null;
-        /** When Sage closes this if the member doesn't answer; null when nothing is waiting on them. */
-        closesAt: string | null;
       };
       context: {
         circle: { id: string; name: string };

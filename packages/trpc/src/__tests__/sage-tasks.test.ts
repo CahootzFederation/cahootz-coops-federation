@@ -145,7 +145,7 @@ describe("waking a suggestion follow-up", () => {
     await expect(wakeTask(suggestionTask(), NOW)).resolves.toBe("REMINDED");
     expect(push).toHaveBeenCalledWith(db, expect.objectContaining({
       userId: "member-1", type: "SAGE_SUGGESTION_REMINDER", title: "Sage is still waiting on you",
-      body: "\"Fund a shared tool library\" needs your answer. Sage will close it in 4 days if nobody answers.",
+      body: "\"Fund a shared tool library\" needs your answer.",
       data: { taskId: "task-1", coopId: "harbor", actionId: "action-1" },
     }));
     expect(db.sageTask.update).toHaveBeenCalledWith({ where: { id: "task-1" }, data: expect.objectContaining({ nextWakeAt: new Date(NOW.getTime() + 4 * DAY) }) });

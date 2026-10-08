@@ -330,6 +330,11 @@ jobs:
           </dict>
           </plist>
           PLIST
+          # Sign everything nested first (frameworks, dylibs, plugins): a signed
+          # app won't load unsigned code, and the launch fails with "spawn
+          # failed, error=162: Codesigning issue".
+          find "$app" -depth \( -name "*.framework" -o -name "*.dylib" -o -name "*.appex" -o -name "*.xctest" \) -print0 \
+            | xargs -0 -I{} codesign --force --sign - --timestamp=none "{}"
           codesign --force --sign - --entitlements "$RUNNER_TEMP/e2e.entitlements" --timestamp=none "$app"
           codesign -d --entitlements - "$app"
 

@@ -92,7 +92,7 @@ Known limitations:
 - Decision trails have no retention limit yet; add a purge (for example after 180 days) before high volume. A trail stores the model's stated reason, not its hidden reasoning.
 - A trail showed a reply grounded on an exact but irrelevant charter quote (a ladder request answered with a line about proposals). Exact-quote grounding doesn't check relevance; an independent relevance check belongs with P2 oversight.
 - Not yet traced: community observer, Commons assistant and recommender, proposal-engine playground and test runs, newsletter agents, knowledge base.
-- Found while tracing proposals (not changed here): the proposal engine computes KPIs and then discards them; `proposal.testEngine` is a public procedure that runs the paid engine; proposal and comment-evaluation reads are public; `authenticatedProcedure` trusts the `x-wallet-address` header without a signature.
+- Found while tracing proposals (not changed here): ~~the proposal engine computes KPIs and then discards them~~ (fixed 2026-10-07, see the proposal outcome loop below); `proposal.testEngine` is a public procedure that runs the paid engine; proposal and comment-evaluation reads are public; `authenticatedProcedure` trusts the `x-wallet-address` header without a signature.
 - Memory: see the P1 memory status below for what consolidation does and doesn't cover.
 
 ## Prioritized plan
@@ -179,7 +179,7 @@ Suggestion follow-through (2026-10-07, `sage-suggestion-follow-up.ts`). A sugges
 - Privacy: these tasks' trails are admin-only, and they aren't consolidated into memory (the suggestion's own outcome already is, with ride matches and introductions excluded).
 - Closing only dismisses. Nothing is published, decided or spent, and no reviewer changes.
 - The "Meet Sage" card's "What Sage can do on its own" now adds "close its own suggestions when nobody answers or they no longer apply".
-- Tests: `sage-suggestion-follow-up.test.ts` (19), new cases in `sage-tasks.test.ts` and `sage-trend.test.ts`; Playwright `sage-suggestion-follow-up.spec.ts` (2 journeys, TESTING.md journey 57).
+- Tests: `sage-suggestion-follow-up.test.ts` (19), new cases in `sage-tasks.test.ts` and `sage-trend.test.ts`; Playwright `sage-suggestion-follow-up.spec.ts` (2 journeys, TESTING.md journey 58).
 - Remaining: "no longer applies" covers only the deterministic cases above; Sage doesn't notice when a conversation moved on or someone did the thing another way. A closed suggestion isn't re-offered to a new circle leader. Admin-queued Commons reply suggestions (no member review) are unchanged and still wait for a platform admin. The sweep reads at most 200 waiting reviews per Commons per cycle, oldest first.
 
 ### P1 — Memory consolidation and retrieval
@@ -258,6 +258,28 @@ Known limitations:
 - `search_commons_documents` reads `KnowledgeDocument`, but no mobile or web screen calls `knowledgeBase.uploadDocument` yet, so in practice it finds nothing until documents are added. It reads only COMMONS and PUBLIC documents (plus CIRCLE ones for a circle), never PRIVATE ones. The older `search_knowledge_base` agent tool still applies no visibility filter.
 - Not yet built: learning from how leaders edit suggested comments before approving them (see Next).
 
+### P1 — Proposal outcome loop
+
+Goal: close the learning loop on funded proposals, so members and Sage learn whether decisions worked.
+
+Status (2026-10-07): built and verified, except the items listed as remaining.
+
+- KPIs are kept. The engine's KPI agent used to run (with web search) and then return two hardcoded KPIs that were never saved. It now returns up to 3 structured KPIs (name, target, unit, higher-is-better, days after approval to measure, clamped to 7–365), validated in code (`normalizeKpis`), and the proposal router saves them as `ProposalKPI` rows on create, resubmit and apply-alternative. A failed KPI agent gives no KPIs, never invented ones. Migration `20261008010000_proposal_outcomes`.
+- When a proposal becomes approved or funded (AI auto-approval, council vote, admin status change, re-review), `startProposalOutcomeTracking` gives each KPI its measure date and creates a `CHECK_OUTCOME` `SageTask` owned by the proposal's author, due on that date. The wake loop's new "proposal outcomes" step (`scheduleProposalOutcomeChecks`, no model calls) also starts checks for approved or funded proposals any path missed.
+- On the date, the wake loop privately asks the author (a `SAGE_REMINDER` alert that opens the proposal; never a public post), reminds once a week later, then stops. A dismissed or unanswered check, or a goal nobody follows 30 days after its date, is recorded as **no report**.
+- The author reports on the proposal page (`proposal.reportKpiOutcome`), only after the measure date. Code, not the model or the author, decides **met** (at the target), **partly met** (at least half way; for goals meant to go down, at most 1.5× the target) or **missed** from the number; "Couldn't measure it" records no report. Each result stores its sources (owner report, proposal, Sage task), `verification` (`OWNER_REPORTED` or `NONE`), is audited (`PROPOSAL_KPI_OUTCOME_REPORTED`) and closes the check.
+- Memory: each proposal's results become one `proposal_outcome` `AIObservation` (Commons scope, member-visible like proposals, confidence 0.6 when author-reported, 360-day expiry, sources). A newer report replaces the proposal's earlier memory. The author's note is cleansed and dropped if it tries to steer the AI. Outcome checks are left out of the generic `sage_follow_up` memory.
+- Use: during review the engine calls `findPriorProposalOutcomes` once title and summary are extracted. `retrieveSageMemory` now takes `types` and `minRelevance`; the lookup reads only this Commons' `proposal_outcome` memory with title overlap of at least 0.5, at most 3 items and 1,200 characters, excluding the proposal itself, and audits the read. The results go to the structural scorer ("reported by their authors, not verified") and are saved on the proposal (`Proposal.priorOutcomes`), recorded as evidence in its decision trail, and shown on the proposal page as **How similar proposals went**. The Commons action agent and steward already read Commons memory, so relevant outcomes reach them through their existing retrieval.
+- Mobile: the proposal page's **Goals and results** card shows each goal, its measure date, the result with a Met / Partly met / Missed / No report badge, "Reported by the proposal's author. Not checked by anyone else.", and the author's report form when due.
+- Sage only asks, records and informs: it never votes, spends, changes a proposal's status, or tells members how to vote. No new model calls; the KPI agent already ran on every review.
+- Tests: `proposal-engine-kpis.test.ts` (5), `proposal-outcomes.test.ts` (16), `proposal-outcome-router.test.ts` (5), Playwright `proposal-outcome.spec.ts` (TESTING.md journey 58).
+- Remaining:
+  - Results are the author's word. Proposals aren't linked to spending, store sales, events or attendance, so nothing is verified from app data yet; results are labelled as author-reported everywhere and kept at confidence 0.6. Linking a proposal to the records that would prove its KPIs, or a second member confirming a result, is the next step.
+  - KPIs come from the model. Members can't edit or add them, and an author can't report early or correct a result from the app (the API accepts a later report, which replaces the earlier one).
+  - Similarity is word overlap on titles, not meaning; a related proposal with different wording can be missed.
+  - The E2E journey funds the proposal and creates the related proposal through fixtures running the real services, because council and admin decisions need an on-chain admin role and the live engine is several web-searching model calls.
+  - Status changes made outside the proposal router (none exist today) are picked up by the wake loop's sweep, up to 15 minutes later.
+
 ### P2 — Cost optimization and budget administration
 
 Goal: measure value per useful outcome and prevent surprise spending.
@@ -332,6 +354,7 @@ For every Sage behavior change:
 - 2026-10-03: Memory is bounded and source-linked; generated observations are not treated as truth.
 - 2026-10-03: Cost control uses both a dollar limit and a call-count limit.
 - 2026-10-04: Specialists (Cadence, Guardian, Bridge, Ledger) are read-only tools the one steward model calls, not separate agents.
+- 2026-10-07: Proposal outcomes are asked of the author privately, decided by code from the reported number, labelled as unverified, and shared Commons-wide like the proposal itself. Sage never ranks or recommends a vote from them.
 - 2026-10-04: New autonomous actions (follow-ups, routed alerts, introduction offers) go live within the monthly limit and safety checks. No conduct review or disciplinary action. Ledger reads proposal budgets only.
 - 2026-10-05: Members are told plainly who Sage is.
   - The Sage screen shows a "Meet Sage" card (`apps/mobile/components/sage-intro.tsx`) until it's dismissed. It says Sage is an AI helper and not a person, what it does on its own (replies, reminders and alerts, checking back), and what always waits for a person (proposals, money, membership, group decisions). It also says Sage can make mistakes.
@@ -350,4 +373,8 @@ Move verified work here with the completion date, linked files, and passing test
 
 - 2026-10-04 — P1 tasks and the wake-and-wait loop, responsibility routing, memory consolidation and retrieval, and the steward with specialist tools (remaining gaps listed in each P1 status). Files: `packages/db/prisma/migrations/20261005010000_sage_tasks_alerts`, `packages/trpc/src/services/{sage-tasks,sage-wake,sage-wake-work,sage-responsibility,sage-memory,sage-steward,sage-introductions}.ts`, `packages/trpc/src/agents/tools/specialist-tools.ts`, `apps/api/src/trigger/sage-wake.ts`, `apps/mobile/components/sage-following.tsx`, `apps/mobile/app/(authenticated)/sage/alert/[id].tsx`, the Commons AI actions page. Tests: `pnpm -F @repo/trpc test:run` (563 passed), `pnpm -F @repo/trpc build`, `pnpm -F @cahootz/mobile type-check`, mobile unit test `notification-navigation`, Playwright `sage-steward.spec.ts` (3 journeys) plus the existing Sage journeys.
 
+- 2026-10-07 — P1 proposal outcome loop: KPIs kept, outcome checks on funding, private author reports with code-decided results, `proposal_outcome` memory cited by later similar proposals (remaining gaps in its status). Files: `packages/db/prisma/migrations/20261008010000_proposal_outcomes`, `packages/validators/src/{proposal,proposal-engine}.ts`, `packages/trpc/src/services/{proposal-outcomes,sage-tasks,sage-memory,sage-wake-work,proposal-trails}.ts`, `packages/trpc/src/routers/proposal.ts`, `apps/mobile/components/proposal-results.tsx`, `apps/mobile/app/(authenticated)/proposal-detail.tsx`, `apps/api/scripts/e2e-proposal-outcome.ts`. Tests: `pnpm -F @repo/trpc test`, `pnpm -F @repo/validators test`, `pnpm -F @cahootz/mobile type-check`, Playwright `proposal-outcome.spec.ts`.
+
 Next highest-priority incomplete item for comment quality: learn from leader edits. Store the before and after when a circle leader edits a suggested comment before approving it, and give Sage the last 2-3 edits from that Commons as bounded, scoped examples. Otherwise: P2 — Cost optimization and budget administration (Commons-admin control of limits, forecasts and pre-limit alerts), unless the remaining P1 gaps above are prioritized first.
+
+Next highest-priority incomplete item: P2 — Cost optimization and budget administration (Commons-admin control of limits, forecasts and pre-limit alerts), unless the remaining P1 gaps above are prioritized first.

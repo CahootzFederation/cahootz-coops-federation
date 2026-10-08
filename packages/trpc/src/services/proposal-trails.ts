@@ -78,6 +78,11 @@ export function buildProposalEngineTrail(output: ProposalOutput, context: Propos
     detail: `Structural gate ${percent(context.thresholds.structuralGate)} · mission minimum ${percent(context.thresholds.missionMinThreshold)} · strong goal ${percent(context.thresholds.strongGoalThreshold)}`,
   });
 
+  if (output.priorOutcomes?.length) {
+    trail.step("EVIDENCE", `Results of ${output.priorOutcomes.length} similar past ${output.priorOutcomes.length === 1 ? "proposal" : "proposals"} from Sage's memory (reported by their authors, not verified)`, {
+      detail: output.priorOutcomes.map((item) => item.text).join("\n"),
+    });
+  }
   if (context.rewrite) {
     trail.step("CONSIDERED", `Rewrote the proposal around the alternative "${context.rewrite.label}"`, { outcome: "INFO", detail: context.rewrite.rationale });
   }
@@ -109,6 +114,12 @@ export function buildProposalEngineTrail(output: ProposalOutput, context: Propos
   }
   for (const alternative of output.alternatives) {
     trail.step("CONSIDERED", `Alternative: ${alternative.label}`, { outcome: "INFO", detail: alternative.rationale });
+  }
+  if (output.kpis?.length) {
+    trail.step("CONSIDERED", `${output.kpis.length} measurable ${output.kpis.length === 1 ? "goal" : "goals"} to check after approval`, {
+      outcome: "INFO",
+      detail: output.kpis.map((kpi) => `${kpi.name}: ${kpi.higherIsBetter === false ? "at most" : "at least"} ${kpi.target} ${kpi.unit}, measured ${kpi.measureAfterDays} days after approval`).join("\n"),
+    });
   }
   trail.step("CONSIDERED", `Voting rules: ${output.governance.quorumPercent}% quorum, ${output.governance.approvalThresholdPercent}% approval, ${output.governance.votingWindowDays}-day vote`, { outcome: "INFO" });
 

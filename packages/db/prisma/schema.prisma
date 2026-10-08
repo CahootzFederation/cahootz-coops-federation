@@ -730,6 +730,9 @@ model Proposal {
 
   // Governance additions
   councilRequired Boolean   @default(false)
+  // Results of similar past proposals in this Commons that Sage's memory surfaced when this one was
+  // reviewed: [{ text, sourceIds, ageDays }]. Member-reported outcomes, not verified facts.
+  priorOutcomes   Json?
   withdrawnAt     DateTime?
   withdrawnBy     String? // wallet address
 
@@ -834,9 +837,26 @@ model ProposalKPI {
   name       String
   target     Float
   unit       KPIUnit
+  // True when more is better (revenue, jobs); false for things meant to go down (costs, wait times).
+  higherIsBetter   Boolean   @default(true)
+  // How long after approval to measure. measureBy is set from it when the proposal is approved or funded.
+  measureAfterDays Int       @default(90)
+  measureBy        DateTime?
+
+  // The recorded result. Code decides the label from the reported value and the target.
+  outcome           String? // MET | PARTLY_MET | MISSED | NO_REPORT
+  actualValue       Float?
+  outcomeNote       String?   @db.Text
+  verification      String? // OWNER_REPORTED | NONE
+  outcomeSources    Json? // [{ type, id }]
+  outcomeRecordedAt DateTime?
+  reportedById      String?
+  createdAt         DateTime  @default(now())
 
   proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
 
+  @@index([proposalId])
+  @@index([measureBy, outcome])
   @@schema("public")
 }
 
@@ -1357,14 +1377,14 @@ model SageTask {
   id             String          @id @default(cuid())
   coopId         String
   circleId       String?
-  kind           String // FOLLOW_UP | DEADLINE_REMINDER | REVIEW_STALE_DRAFT
+  kind           String // FOLLOW_UP | DEADLINE_REMINDER | REVIEW_STALE_DRAFT | CHECK_OUTCOME
   status         String          @default("OPEN") // OPEN | DONE | DISMISSED | ABANDONED | FAILED
   title          String
   reason         String          @db.Text
   expected       String?         @db.Text // what Sage is waiting for
   offer          String?         @db.Text // what Sage will do once it arrives
   ownerUserId    String? // whom Sage is waiting on
-  subjectType    String // commons_post | proposal | proposal_draft | event
+  subjectType    String // commons_post | proposal | proposal_draft | event | proposal_kpi
   subjectId      String
   postId         String? // the discussion a reminder points to
   sourceActionId String?

@@ -1,8 +1,10 @@
 /**
  * Work each wake cycle does for a Commons after its due tasks: following up on waiting suggestions
- * (closing ones that no longer apply or went unanswered), expiring routed alerts, keeping memory
- * current, and the steward's review. Each step is isolated so one failure doesn't stop the others.
+ * (closing ones that no longer apply or went unanswered), expiring routed alerts, starting and closing
+ * proposal outcome checks, keeping memory current, and the steward's review. Each step is isolated so
+ * one failure doesn't stop the others.
  */
+import { scheduleProposalOutcomeChecks } from "./proposal-outcomes.js";
 import { expireSageAlerts } from "./sage-responsibility.js";
 import { maintainSageMemory } from "./sage-memory.js";
 import { runStewardReview } from "./sage-steward.js";
@@ -13,6 +15,8 @@ type Step = { name: string; run: (coopId: string, now: Date) => Promise<unknown>
 const steps: Step[] = [
   { name: "follow up on suggestions", run: followUpOnSuggestions },
   { name: "expire alerts", run: expireSageAlerts },
+  // No model calls: dates, data and notifications only.
+  { name: "proposal outcomes", run: scheduleProposalOutcomeChecks },
   { name: "maintain memory", run: maintainSageMemory },
   // At most once a day per Commons (the steward checks its own last run), and only within the monthly limit.
   { name: "steward review", run: (coopId, now) => runStewardReview(coopId, now) },

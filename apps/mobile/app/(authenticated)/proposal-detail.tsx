@@ -36,6 +36,7 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { SageDecisionTrails } from '@/components/sage-decision-trail';
+import { PriorProposalOutcomes, ProposalResults } from '@/components/proposal-results';
 import { LoadError } from '@/components/load-error';
 import { ConfirmSheet } from '@/components/confirm-sheet';
 import { api } from '@/lib/api';
@@ -719,6 +720,18 @@ export function ProposalDetailContent() {
               ))}
             </View>
           </View>
+
+          {/* ── Goals and results (KPIs; the author reports results once each is due) ── */}
+          <ProposalResults
+            kpis={proposal.kpis ?? []}
+            status={proposal.status}
+            isProposer={!!isProposer}
+            walletAddress={user?.walletAddress}
+            onUpdated={(updated) => { if (updated) setProposal(updated); }}
+          />
+
+          {/* ── Results of similar past proposals from Sage's memory ── */}
+          <PriorProposalOutcomes items={proposal.priorOutcomes ?? []} />
 
           {/* ── AI Review ── */}
           <View className="bg-white rounded-2xl overflow-hidden" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>

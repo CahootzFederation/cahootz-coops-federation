@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CoopConfig } from "@repo/db";
-import { AUTO_REPLY_MIN_CONFIDENCE, COMMONS_ACTION_MODEL, charterOnlyEvidenceRule, charterSnapshotKey, createCommonsActionAgent, hasExactGrounding, mayAutoReply } from "../services/commons-action-agent.js";
+import { AUTO_REPLY_MIN_CONFIDENCE, COMMONS_ACTION_MODEL, FOLLOW_THROUGH_ITEM_RULE, answersSageAsk, asksAgain, charterOnlyEvidenceRule, commonsActionPrompt, followThroughDraft, charterSnapshotKey, createCommonsActionAgent, hasExactGrounding, mayAutoReply } from "../services/commons-action-agent.js";
 import { CHARTER_ONLY_ACTIONS } from "../services/sage-grounding.js";
 import { SAGE_FOLLOW_THROUGH_RULE } from "../services/sage-reply-templates.js";
 import { estimateAICost } from "../services/ai-cost.js";
@@ -68,6 +68,48 @@ describe("Commons action safeguards", () => {
     expect(text).toContain("Help members work together.");
     expect(text).toContain("Share tools");
     expect(text).toContain("does not establish voting, financial, membership, or disciplinary rules");
+  });
+});
+
+// Sage's first replies to the same shared-drivers post in the CI runs where the follow-through journey
+// failed. Only some offered a proposal, and every time the model asked again instead of drafting.
+const SAGE_ASKS = [
+  "Shared delivery drivers could help us keep this work inside the Commons. Here's what we can do:\n• Share your delivery days, rough weekly stops, and current costs.\n\nOnce you've done that, I can draft a concrete proposal for members to review.",
+  "We can't assess shared drivers yet because the deliveries, workload, and costs are not specified.\n• You: share what each business pays now for delivery driving.\n\nOnce we have that, I can help compare the shared option with the current setup.",
+  "Shared delivery could keep costs and work within the Commons. Here's what we can do:\n• Share what you currently pay and any timing requirements.\n\nOnce you've done that, I can summarize the options.",
+  "Sharing drivers could keep this work and cost inside the Commons. What delivery days, routes, number of stops, current costs, and participating businesses should we compare?",
+];
+const DETAILS = "We deliver Mon/Wed/Fri, about 40 stops a week downtown, and pay a part-time driver $650 a month.";
+
+describe("Sage follow-through", () => {
+  it("treats a member's concrete details as the answer to Sage's ask, however Sage worded it", () => {
+    for (const ask of SAGE_ASKS) expect(answersSageAsk(ask, DETAILS)).toBe(true);
+    // No concrete details yet: Sage doesn't draft from "sounds good".
+    expect(answersSageAsk(SAGE_ASKS[0], "Sounds good, I'll get back to you.")).toBe(false);
+    // An ask about something other than a proposal or a cost isn't a proposal matter.
+    expect(answersSageAsk("Book the community room by Thursday; it fills up on weekends.", "Booked it for Thursday at 6.")).toBe(false);
+  });
+
+  it("drafts from the post and the member's own words, without stating rules", () => {
+    const draft = followThroughDraft({ postTitle: "Shared drivers", postContent: "Could we share delivery drivers?" }, DETAILS);
+    expect(draft.title).toBe("Shared drivers");
+    expect(draft.body).toContain("Could we share delivery drivers?");
+    expect(draft.body).toContain(DETAILS);
+    expect(draft.body).not.toMatch(/charter|vote|quorum/i);
+  });
+
+  it("holds a reply that asks the member again, but not a plain acknowledgment", () => {
+    const base = { templateKey: "", templateSteps: [], followUpDays: 0, followUpExpect: "" };
+    expect(asksAgain({ ...base, type: "CLARIFY_NEED" })).toBe(true);
+    expect(asksAgain({ ...base, type: "ANSWER_QUESTION", followUpDays: 3, followUpExpect: "share the other shops' costs" })).toBe(true);
+    expect(asksAgain({ ...base, type: "ANSWER_QUESTION", templateKey: "action-plan", templateSteps: ["Share your routes"] })).toBe(true);
+    expect(asksAgain({ ...base, type: "RESPOND_RESOURCE_FOLLOWUP" })).toBe(false);
+  });
+
+  it("tells the model which items answer Sage's ask", () => {
+    expect(String(createCommonsActionAgent().instructions)).toContain(FOLLOW_THROUGH_ITEM_RULE);
+    const marked = { ...item, sourceType: "commons_comment" as const, followThrough: { sageReply: SAGE_ASKS[0], postTitle: "Tools", postContent: "" } };
+    expect(JSON.parse(commonsActionPrompt(config, [marked, item])).items.map((entry: { answersSage?: boolean }) => entry.answersSage)).toEqual([true, undefined]);
   });
 });
 

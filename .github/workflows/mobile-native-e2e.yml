@@ -150,13 +150,18 @@ jobs:
           nohup pnpm -F @cahootz/api dev > /tmp/cahootz-api.log 2>&1 &
 
       # Only the emulator's architecture is built, which roughly quarters the
-      # native compile.
+      # native compile. Release lint (lintVital*) is skipped: it isn't needed
+      # to run the app, and on the first run it failed and left Gradle hanging
+      # until the job timed out. The step timeout makes any future hang fail fast.
       - name: Build release APK
         working-directory: apps/mobile
+        timeout-minutes: 35
         run: |
           npx expo prebuild --platform android --clean --no-install
           cd android
-          ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon
+          ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon \
+            -x lintVitalAnalyzeRelease -x lintVitalReportRelease -x lintVitalRelease \
+            -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g"
 
       - name: Wait for API
         shell: bash
@@ -290,6 +295,34 @@ jobs:
           xcodebuild -workspace CahootzCoop.xcworkspace -scheme CahootzCoop -configuration Release \
             -sdk iphonesimulator -destination "generic/platform=iOS Simulator" \
             -derivedDataPath build CODE_SIGNING_ALLOWED=NO | tail -50
+
+      # The build above is unsigned, and an unsigned app gets no keychain on the
+      # simulator: every expo-secure-store call fails with -34018 ("a required
+      # entitlement isn't present"), so nothing the app stores survives (the
+      # first run looped back to the welcome intro because of this). Ad-hoc
+      # sign it with the app's identifier and keychain group, as a signed
+      # store or EAS build has. The team ID is the one in eas.json.
+      - name: Sign the simulator app for keychain access
+        working-directory: apps/mobile/ios
+        shell: bash
+        run: |
+          app=build/Build/Products/Release-iphonesimulator/CahootzCoop.app
+          cat > "$RUNNER_TEMP/e2e.entitlements" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>application-identifier</key>
+            <string>9GTZ7ZJYMX.com.cahootzcoops.mobile</string>
+            <key>keychain-access-groups</key>
+            <array>
+              <string>9GTZ7ZJYMX.com.cahootzcoops.mobile</string>
+            </array>
+          </dict>
+          </plist>
+          PLIST
+          codesign --force --sign - --entitlements "$RUNNER_TEMP/e2e.entitlements" --timestamp=none "$app"
+          codesign -d --entitlements - "$app"
 
       - name: Wait for API
         shell: bash

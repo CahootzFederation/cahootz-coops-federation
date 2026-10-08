@@ -356,13 +356,29 @@ jobs:
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
       - name: Run smoke journeys on iOS
+        shell: bash
         run: |
           device=$(xcrun simctl list devices available -j | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const all=Object.values(JSON.parse(d).devices).flat();const p=all.find(x=>/^iPhone \d+$/.test(x.name))||all.find(x=>x.name.startsWith("iPhone"));console.log(p.udid)})')
           xcrun simctl boot "$device"
           xcrun simctl bootstatus "$device" -b
           xcrun simctl install "$device" apps/mobile/ios/build/Build/Products/Release-iphonesimulator/CahootzCoop.app
           mkdir -p output/maestro/ios
-          maestro --device "$device" test apps/mobile/.maestro --format junit --output output/maestro/ios/report.xml --test-output-dir output/maestro/ios -e EMAIL="$E2E_EMAIL" -e LOGIN_CODE="$E2E_LOGIN_CODE"
+          # Maestro's iOS driver (an XCTest runner) sometimes hangs while
+          # starting on a hosted Mac, before any flow runs. Only for that
+          # failure, reboot the simulator and try once more; a failing flow
+          # is never retried.
+          for attempt in 1 2; do
+            set +e
+            maestro --device "$device" test apps/mobile/.maestro --format junit --output output/maestro/ios/report.xml --test-output-dir output/maestro/ios -e EMAIL="$E2E_EMAIL" -e LOGIN_CODE="$E2E_LOGIN_CODE" 2>&1 | tee /tmp/maestro-ios.log
+            status=${PIPESTATUS[0]}
+            set -e
+            if [ "$status" -eq 0 ]; then exit 0; fi
+            if [ "$attempt" -eq 2 ] || ! grep -q "iOS driver not ready in time" /tmp/maestro-ios.log; then exit "$status"; fi
+            echo "::warning::Maestro's iOS driver didn't start; rebooting the simulator and retrying once."
+            xcrun simctl shutdown "$device"
+            xcrun simctl boot "$device"
+            xcrun simctl bootstatus "$device" -b
+          done
 
       - name: Collect server logs
         if: ${{ always() }}

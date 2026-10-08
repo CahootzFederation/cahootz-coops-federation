@@ -16,7 +16,19 @@ appId: com.cahootzcoops.mobile
 - tapOn: "Sign In"
 - tapOn: "name@email.com"
 - inputText: ${EMAIL}
-- hideKeyboard
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+# Maestro can't hide the iOS keyboard here ("Couldn't hide the keyboard");
+# tapping the heading, plain text inside the screen's scroll view, closes it
+# the way a person would.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: "Sign in"
 - tapOn: "Log in with code"
 # A native "Code Sent" alert (React Native's Alert, which does nothing on
 # web, so Playwright never sees it) covers the code field on iOS and Android.
@@ -26,6 +38,18 @@ appId: com.cahootzcoops.mobile
 - tapOn: "OK"
 - tapOn: "Enter 6-digit code"
 - inputText: ${LOGIN_CODE}
-- hideKeyboard
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+# Maestro can't hide the iOS keyboard here ("Couldn't hide the keyboard");
+# tapping the heading, plain text inside the screen's scroll view, closes it
+# the way a person would.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: "Sign in"
 - tapOn: "Verify & Sign In"
 - runFlow: skip-onboarding.yaml

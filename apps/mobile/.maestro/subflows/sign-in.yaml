@@ -11,6 +11,12 @@ appId: com.cahootzcoops.mobile
 - inputText: ${EMAIL}
 - hideKeyboard
 - tapOn: "Log in with code"
+# A native "Code Sent" alert (React Native's Alert, which does nothing on
+# web, so Playwright never sees it) covers the code field on iOS and Android.
+- extendedWaitUntil:
+    visible: "Code Sent"
+    timeout: 30000
+- tapOn: "OK"
 - tapOn: "Enter 6-digit code"
 - inputText: ${LOGIN_CODE}
 - hideKeyboard

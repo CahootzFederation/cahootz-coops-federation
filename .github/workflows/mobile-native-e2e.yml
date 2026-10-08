@@ -43,6 +43,9 @@ env:
   EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
   SENTRY_DISABLE_AUTO_UPLOAD: "true"
   MAESTRO_VERSION: "2.10.0"
+  # Maestro's iOS driver (an XCTest runner) can take minutes to start on a
+  # cold macOS runner; the default timeout failed a run before any flow started.
+  MAESTRO_DRIVER_STARTUP_TIMEOUT: "240000"
   E2E_EMAIL: releaseclick1@test.cahootz.local
   E2E_LOGIN_CODE: "000000"
 
@@ -196,6 +199,12 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
+            # A freshly booted CI emulator's launcher often freezes, and its
+            # "isn't responding" system dialog then covers the app. Hide
+            # system error dialogs and let the launcher settle first.
+            adb shell settings put global hide_error_dialogs 1
+            adb shell input keyevent KEYCODE_HOME
+            sleep 20
             adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
             mkdir -p output/maestro/android
             maestro test apps/mobile/.maestro --format junit --output output/maestro/android/report.xml --test-output-dir output/maestro/android -e EMAIL="$E2E_EMAIL" -e LOGIN_CODE="$E2E_LOGIN_CODE"

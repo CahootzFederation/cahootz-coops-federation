@@ -4,6 +4,13 @@ appId: com.cahootzcoops.mobile
 ---
 - launchApp:
     clearState: true
+# A CI emulator can show a system "isn't responding" dialog for its own
+# launcher over the app; wait it out rather than fail.
+- runFlow:
+    when:
+      visible: "isn't responding"
+    commands:
+      - tapOn: "Wait"
 - runFlow: skip-onboarding.yaml
 - tapOn: "Open menu"
 - tapOn: "Sign In"

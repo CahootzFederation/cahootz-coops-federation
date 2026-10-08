@@ -68,8 +68,10 @@ export async function consolidateSageMemory(coopId: string, now = new Date()): P
       orderBy: { updatedAt: "asc" }, take: 200,
     }),
     db.sageTask.findMany({
+      // Suggestion follow-ups aren't remembered separately: the suggestion's own outcome is (above), with
+      // personal kinds (ride matches, introductions) excluded, which a task's title alone can't tell.
       // Outcome checks are remembered per proposal, as proposal_outcome (proposal-outcomes.ts).
-      where: { coopId, status: { in: ["DONE", "ABANDONED", "DISMISSED"] }, updatedAt: { gte: since }, kind: { not: "CHECK_OUTCOME" } },
+      where: { coopId, status: { in: ["DONE", "ABANDONED", "DISMISSED"] }, updatedAt: { gte: since }, subjectType: { notIn: ["suggestion_review", "proposal_kpi"] } },
       select: { id: true, title: true, status: true, outcome: true, circleId: true, updatedAt: true },
       orderBy: { updatedAt: "asc" }, take: 200,
     }),

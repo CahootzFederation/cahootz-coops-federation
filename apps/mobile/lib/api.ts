@@ -762,6 +762,8 @@ export interface SageTaskView {
   attempts: number;
   outcome: string | null;
   updatedAt: string;
+  /** Set when Sage is waiting for the member's answer to a suggestion; opens that suggestion. */
+  actionId: string | null;
 }
 
 export interface SageAlertView {

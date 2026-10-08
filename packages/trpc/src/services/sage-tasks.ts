@@ -2,6 +2,9 @@ import { db, type SageTask } from "@repo/db";
 
 import { createNotificationAndPush } from "./push-notification-service.js";
 import { DecisionTrail } from "./sage-decision-trail.js";
+import {
+  SUGGESTION_GRACE_DAYS, SUGGESTION_TASK_KIND, SUGGESTION_TASK_SUBJECT, checkSuggestionReview, closeSuggestion, suggestionReminderText,
+} from "./sage-suggestion-follow-up.js";
 
 /**
  * Sage's task ledger and the wake-and-wait loop (Cadence).
@@ -24,6 +27,7 @@ const REMINDER_GRACE_DAYS = 3;
 const OUTCOME_GRACE_DAYS = 7;
 const WAKE_BATCH = 50;
 
+// REVIEW_SUGGESTION / suggestion_review tasks are created by sage-suggestion-follow-up.ts, not createSageTask.
 export type SageTaskKind = "FOLLOW_UP" | "REVIEW_STALE_DRAFT" | "DEADLINE_REMINDER" | "CHECK_OUTCOME";
 export type SageTaskSubject = "commons_post" | "proposal_draft" | "proposal" | "event" | "proposal_kpi";
 /** Outcome checks run on a KPI's own measure date, which can be months away. */
@@ -110,7 +114,8 @@ export interface TaskCheck {
 }
 
 /** Decides from app data alone whether what Sage was waiting for has happened. */
-export async function checkTaskOutcome(task: Pick<SageTask, "kind" | "subjectType" | "subjectId" | "ownerUserId" | "postId" | "createdAt">, now = new Date()): Promise<TaskCheck> {
+export async function checkTaskOutcome(task: Pick<SageTask, "id" | "kind" | "subjectType" | "subjectId" | "ownerUserId" | "postId" | "createdAt">, now = new Date()): Promise<TaskCheck> {
+  if (task.subjectType === SUGGESTION_TASK_SUBJECT) return checkSuggestionReview(task, now);
   if (task.subjectType === "commons_post") {
     const postId = task.postId ?? task.subjectId;
     const post = await db.commonsPost.findUnique({ where: { id: postId }, select: { id: true } });
@@ -174,6 +179,7 @@ export function reminderText(task: Pick<SageTask, "kind" | "expected" | "offer" 
       body: `Time to ${(task.expected ?? `report how "${task.title}" went`).replace(/\.$/, "")}. Open the proposal to answer; the result is shown there for everyone in the Commons.`.slice(0, 280),
     };
   }
+  if (task.kind === SUGGESTION_TASK_KIND) return suggestionReminderText(task.title);
   if (task.kind === "REVIEW_STALE_DRAFT") {
     return { title: "Your proposal draft is waiting", body: `"${task.title}" is still a draft. Edit and submit it when it's ready, or dismiss this if you've moved on.` };
   }
@@ -187,7 +193,9 @@ export function reminderText(task: Pick<SageTask, "kind" | "expected" | "offer" 
 
 // ── The wake loop ────────────────────────────────────────────────────────────
 
-async function taskTrailVisibility(task: SageTask): Promise<{ visibility: "COMMONS_MEMBERS" | "CIRCLE"; circleId: string | null; relatedPostIds: string[] }> {
+async function taskTrailVisibility(task: SageTask): Promise<{ visibility: "COMMONS_MEMBERS" | "CIRCLE" | "ADMINS"; circleId: string | null; relatedPostIds: string[] }> {
+  // Suggestions are visible only to the people in them (an introduction or ride match names a need), so their trails are admin-only.
+  if (task.subjectType === SUGGESTION_TASK_SUBJECT) return { visibility: "ADMINS", circleId: task.circleId, relatedPostIds: [] };
   if (!task.postId) return { visibility: task.circleId ? "CIRCLE" : "COMMONS_MEMBERS", circleId: task.circleId, relatedPostIds: [] };
   const post = await db.commonsPost.findUnique({ where: { id: task.postId }, select: { circleId: true, coopId: true } });
   const isCircle = !!post?.circleId && post.circleId !== `general:${post.coopId}`;
@@ -221,7 +229,15 @@ export async function wakeTask(task: SageTask, now = new Date()): Promise<"DONE"
     }
     const canRemind = trail.policy(`Under the reminder limit (${task.maxAttempts})`, task.attempts < task.maxAttempts,
       `${task.attempts} sent so far`);
+    const isSuggestion = task.subjectType === SUGGESTION_TASK_SUBJECT;
     if (!canRemind) {
+      if (isSuggestion && task.sourceActionId) {
+        await finishTask(task, "ABANDONED", "Nobody answered after a reminder, so Sage closed the suggestion", "ABANDONED");
+        await closeSuggestion(task.sourceActionId, "Nobody answered after Sage's reminder", "NO_RESPONSE", { skipTaskId: task.id });
+        await trail.taken("Closed the suggestion: nobody answered after a reminder", "INFO")
+          .result("Closed", "INFO", "None. The suggestion was dismissed; nothing was published or decided.").setOutcome("Suggestion closed after one reminder").save();
+        return "ABANDONED";
+      }
       await finishTask(task, "ABANDONED", "No response after a reminder", "ABANDONED");
       await trail.taken("Stopped following: no response after a reminder", "INFO")
         .result("Stopped", "INFO", "None. Sage doesn't keep reminding.").setOutcome("Follow-up stopped after one reminder").save();
@@ -234,11 +250,16 @@ export async function wakeTask(task: SageTask, now = new Date()): Promise<"DONE"
         ? (await db.proposalKPI.findUnique({ where: { id: task.subjectId }, select: { proposalId: true } }))?.proposalId
         : undefined;
       await createNotificationAndPush(db, {
-        userId: task.ownerUserId, coopId: task.coopId, type: "SAGE_REMINDER", title: text.title, body: text.body,
-        data: { taskId: task.id, coopId: task.coopId, ...(task.postId ? { postId: task.postId } : {}), ...(proposalId ? { proposalId } : {}) },
+        userId: task.ownerUserId, coopId: task.coopId, type: isSuggestion ? "SAGE_SUGGESTION_REMINDER" : "SAGE_REMINDER", title: text.title, body: text.body,
+        data: {
+          taskId: task.id, coopId: task.coopId,
+          ...(isSuggestion && task.sourceActionId ? { actionId: task.sourceActionId } : task.postId ? { postId: task.postId } : {}),
+          ...(proposalId ? { proposalId } : {}),
+        },
       }).catch((error) => console.error("Could not send Sage reminder", error));
     }
-    const nextWakeAt = new Date(now.getTime() + (task.kind === "CHECK_OUTCOME" ? OUTCOME_GRACE_DAYS : REMINDER_GRACE_DAYS) * DAY_MS);
+    const graceDays = isSuggestion ? SUGGESTION_GRACE_DAYS : task.kind === "CHECK_OUTCOME" ? OUTCOME_GRACE_DAYS : REMINDER_GRACE_DAYS;
+    const nextWakeAt = new Date(now.getTime() + graceDays * DAY_MS);
     await db.sageTask.update({
       where: { id: task.id },
       data: {
@@ -249,7 +270,7 @@ export async function wakeTask(task: SageTask, now = new Date()): Promise<"DONE"
     await trail.taken(task.kind === "CHECK_OUTCOME" && !task.attempts ? "Asked the owner for the result, privately" : "Sent one gentle reminder", "PASS")
       .result("Waiting for a response", "INFO", task.attempts + 1 < task.maxAttempts
         ? `Sage checks again around ${nextWakeAt.toISOString().slice(0, 10)}.`
-        : `Sage checks once more around ${nextWakeAt.toISOString().slice(0, 10)}, then stops.`)
+        : `Sage checks once more around ${nextWakeAt.toISOString().slice(0, 10)}, then ${isSuggestion ? "closes the suggestion if nobody answers" : "stops"}.`)
       .setOutcome("Sent a reminder").save();
     return "REMINDED";
   } catch (error) {

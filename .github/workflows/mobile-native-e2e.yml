@@ -42,7 +42,7 @@ env:
   SKIP_BLOG_SYNC: "true"
   EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
   SENTRY_DISABLE_AUTO_UPLOAD: "true"
-  MAESTRO_VERSION: "2.10.0"
+  MAESTRO_VERSION: "2.11.0"
   # Maestro's iOS driver (an XCTest runner) can take minutes to start on a
   # cold macOS runner; the default timeout failed a run before any flow started.
   MAESTRO_DRIVER_STARTUP_TIMEOUT: "240000"
@@ -336,26 +336,46 @@ jobs:
       - name: Run smoke journeys on iOS
         shell: bash
         run: |
-          device=$(xcrun simctl list devices available -j | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const all=Object.values(JSON.parse(d).devices).flat();const p=all.find(x=>/^iPhone \d+$/.test(x.name))||all.find(x=>x.name.startsWith("iPhone"));console.log(p.udid)})')
+          # Prefer an iPhone on an iOS 18 runtime when the image has one: the
+          # iOS 26 simulator is heavier, and on a hosted Mac running Postgres
+          # and the API alongside it, its services have crashed while Maestro
+          # installed its driver ("Mach error -308 (ipc/mig) server died").
+          device=$(xcrun simctl list devices available -j | node -e '
+            let d = "";
+            process.stdin.on("data", (c) => (d += c)).on("end", () => {
+              const runtimes = Object.entries(JSON.parse(d).devices)
+                .filter(([rt]) => /SimRuntime\.iOS-/.test(rt))
+                .map(([rt, devices]) => ({ major: Number(rt.match(/iOS-(\d+)/)[1]), devices }))
+                .sort((a, b) => (a.major === 18 ? -1 : b.major === 18 ? 1 : b.major - a.major));
+              for (const { major, devices } of runtimes) {
+                const phone = devices.find((x) => /^iPhone \d+( Pro)?$/.test(x.name)) || devices.find((x) => x.name.startsWith("iPhone"));
+                if (phone) { console.error(`Using ${phone.name} (iOS ${major})`); console.log(phone.udid); return; }
+              }
+              process.exit(1);
+            });
+          ')
           xcrun simctl boot "$device"
           xcrun simctl bootstatus "$device" -b
           xcrun simctl install "$device" apps/mobile/ios/build/Build/Products/Release-iphonesimulator/CahootzCoop.app
           mkdir -p output/maestro/ios
           # Maestro's iOS driver (an XCTest runner) sometimes hangs while
           # starting on a hosted Mac, before any flow runs. Only for that
-          # failure, reboot the simulator and try once more; a failing flow
-          # is never retried.
-          for attempt in 1 2; do
+          # failure, erase the simulator and try again (up to three runs); a
+          # failing flow is never retried.
+          for attempt in 1 2 3; do
             set +e
             maestro --device "$device" test apps/mobile/.maestro --format junit --output output/maestro/ios/report.xml --test-output-dir output/maestro/ios -e EMAIL="$E2E_EMAIL" -e LOGIN_CODE="$E2E_LOGIN_CODE" 2>&1 | tee /tmp/maestro-ios.log
             status=${PIPESTATUS[0]}
             set -e
             if [ "$status" -eq 0 ]; then exit 0; fi
-            if [ "$attempt" -eq 2 ] || ! grep -q "iOS driver not ready in time" /tmp/maestro-ios.log; then exit "$status"; fi
-            echo "::warning::Maestro's iOS driver didn't start; rebooting the simulator and retrying once."
+            if [ "$attempt" -eq 3 ] || ! grep -q "iOS driver not ready in time" /tmp/maestro-ios.log; then exit "$status"; fi
+            echo "::warning::Maestro's iOS driver didn't start (attempt $attempt); erasing the simulator and trying again."
+            vm_stat | head -5
             xcrun simctl shutdown "$device"
+            xcrun simctl erase "$device"
             xcrun simctl boot "$device"
             xcrun simctl bootstatus "$device" -b
+            xcrun simctl install "$device" apps/mobile/ios/build/Build/Products/Release-iphonesimulator/CahootzCoop.app
           done
 
       - name: Collect server logs

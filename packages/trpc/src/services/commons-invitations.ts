@@ -254,6 +254,8 @@ export async function createCommonsInvitation(
     phone?: string;
     recipientName?: string;
     message?: string;
+    /** Context for the stewards' approval alert only (e.g. why Sage suggested this person); never sent to the invitee. */
+    stewardNote?: string;
   },
 ) {
   const policy = await requireCommonsPolicy(db, params.coopId);
@@ -367,7 +369,7 @@ export async function createCommonsInvitation(
       {
         type: "COMMONS_RECOMMENDATION",
         title: `${inviterName} wants to invite ${invitation.recipientName || "someone"}`,
-        body: `Approve it to send the invitation to ${policy.name ?? "your commons"}.`,
+        body: `${params.stewardNote ? `${params.stewardNote} ` : ""}Approve it to send the invitation to ${policy.name ?? "your commons"}.`,
         data: { invitationId: invitation.id },
       },
       params.inviter.id,

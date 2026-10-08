@@ -83,6 +83,7 @@ function labelForReviewType(reviewType: string, capability: string | null) {
   if (reviewType === 'CONSENT_TO_SHARE') return 'Confirm what to share';
   if (reviewType === 'ACCEPT_MATCH') return 'A member could use your help';
   if (reviewType === 'ACCEPT_INTRODUCTION') return 'Sage can introduce you';
+  if (reviewType === 'INVITE_PERSON') return 'Someone keeps coming up';
   if (reviewType === 'APPROVE_SUGGESTION') {
     if (capability === 'comment_on_post') return 'Sage recommends commenting';
     if (capability === 'draft_proposal') return 'Sage recommends a proposal';
@@ -108,6 +109,10 @@ export default function SageSuggestionDetailScreen() {
   const [area, setArea] = React.useState('');
   const [timeWindow, setTimeWindow] = React.useState('');
   const [shareScope, setShareScope] = React.useState('');
+  const [inviteName, setInviteName] = React.useState('');
+  const [invitePhone, setInvitePhone] = React.useState('');
+  const [inviteEmail, setInviteEmail] = React.useState('');
+  const [notice, setNotice] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (isLoading || (isAuthenticated && sessionToken)) return;
@@ -130,14 +135,34 @@ export default function SageSuggestionDetailScreen() {
   }, [load]);
 
   const pendingReview: ReviewRow | undefined = detail?.reviews.find((review) => review.status === 'PENDING');
+  const isInvite = pendingReview?.reviewType === 'INVITE_PERSON';
+
+  // Start the name field with how the family has been referring to them.
+  const suggestedName = isInvite && typeof pendingReview?.presentationData?.name === 'string' ? (pendingReview.presentationData.name as string) : '';
+  React.useEffect(() => {
+    if (suggestedName) setInviteName((current) => current || suggestedName);
+  }, [suggestedName]);
 
   const respond = async (response: 'APPROVE' | 'DECLINE' | 'ESCALATE') => {
     if (!sessionToken || !pendingReview || isResponding) return;
     setIsResponding(true);
     setError(null);
     try {
-      const payload = pendingReview.reviewType === 'PROVIDE_CONTEXT' ? { area, timeWindow, shareScope } : undefined;
-      await api.respondToSageReview(pendingReview.id, response, sessionToken, payload);
+      if (isInvite && response === 'APPROVE' && !invitePhone.trim() && !inviteEmail.trim()) {
+        setError('Add a phone number or email so the invitation can reach them.');
+        return;
+      }
+      const payload = pendingReview.reviewType === 'PROVIDE_CONTEXT'
+        ? { area, timeWindow, shareScope }
+        : isInvite && response === 'APPROVE' ? { name: inviteName, phone: invitePhone, email: inviteEmail } : undefined;
+      const result = await api.respondToSageReview(pendingReview.id, response, sessionToken, payload);
+      if (result.invitation) {
+        setNotice(result.invitation.alreadyInvited
+          ? 'They already have an invitation waiting.'
+          : result.invitation.sentDirectly
+            ? 'Invitation sent. They decide whether to join.'
+            : 'Sent to a steward. They can send the invitation with one tap.');
+      }
       load();
     } catch (err) {
       setError(friendlyError(err, "We couldn't send your answer."));
@@ -250,6 +275,40 @@ export default function SageSuggestionDetailScreen() {
                   <Text style={{ color: THEME.muted, fontSize: 13 }}>{approvalConsequence(detail.suggestion.capability)}</Text>
                 ) : null}
 
+                {isInvite ? (
+                  <View style={{ gap: 8 }}>
+                    <TextInput
+                      accessibilityLabel="Their name"
+                      placeholder="Their name"
+                      value={inviteName}
+                      onChangeText={setInviteName}
+                      style={{ borderWidth: 1, borderColor: THEME.border, borderRadius: 10, padding: 10 }}
+                    />
+                    <TextInput
+                      accessibilityLabel="Their phone number"
+                      placeholder="Phone number"
+                      keyboardType="phone-pad"
+                      autoComplete="tel"
+                      value={invitePhone}
+                      onChangeText={setInvitePhone}
+                      style={{ borderWidth: 1, borderColor: THEME.border, borderRadius: 10, padding: 10 }}
+                    />
+                    <TextInput
+                      accessibilityLabel="Their email"
+                      placeholder="Email (optional if you added a phone)"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoComplete="email"
+                      value={inviteEmail}
+                      onChangeText={setInviteEmail}
+                      style={{ borderWidth: 1, borderColor: THEME.border, borderRadius: 10, padding: 10 }}
+                    />
+                    <Text style={{ color: THEME.muted, fontSize: 13 }}>
+                      Sage won&apos;t contact them. Their details go only into the invitation.
+                    </Text>
+                  </View>
+                ) : null}
+
                 {pendingReview.reviewType === 'PROVIDE_CONTEXT' ? (
                   <View style={{ gap: 8 }}>
                     <TextInput
@@ -280,34 +339,38 @@ export default function SageSuggestionDetailScreen() {
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <TouchableOpacity
                     accessibilityRole="button"
-                    accessibilityLabel="Approve"
+                    accessibilityLabel={isInvite ? 'Send invite' : 'Approve'}
                     disabled={isResponding}
                     onPress={() => respond('APPROVE')}
                     style={{ flex: 1, backgroundColor: THEME.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center', opacity: isResponding ? 0.6 : 1 }}
                   >
-                    <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Approve</Text>
+                    <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>{isInvite ? 'Send invite' : 'Approve'}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     accessibilityRole="button"
-                    accessibilityLabel="Decline"
+                    accessibilityLabel={isInvite ? 'Not now' : 'Decline'}
                     disabled={isResponding}
                     onPress={() => respond('DECLINE')}
                     style={{ flex: 1, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: THEME.border, borderRadius: 10, paddingVertical: 12, alignItems: 'center', opacity: isResponding ? 0.6 : 1 }}
                   >
-                    <Text style={{ color: THEME.ink, fontWeight: '700' }}>Decline</Text>
+                    <Text style={{ color: THEME.ink, fontWeight: '700' }}>{isInvite ? 'Not now' : 'Decline'}</Text>
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel="Ask an admin"
-                  disabled={isResponding}
-                  onPress={() => respond('ESCALATE')}
-                  style={{ alignItems: 'center', paddingVertical: 8, opacity: isResponding ? 0.6 : 1 }}
-                >
-                  <Text style={{ color: THEME.muted, fontSize: 13, fontWeight: '600' }}>Not sure? Ask an admin to take a look</Text>
-                </TouchableOpacity>
+                {isInvite ? null : (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Ask an admin"
+                    disabled={isResponding}
+                    onPress={() => respond('ESCALATE')}
+                    style={{ alignItems: 'center', paddingVertical: 8, opacity: isResponding ? 0.6 : 1 }}
+                  >
+                    <Text style={{ color: THEME.muted, fontSize: 13, fontWeight: '600' }}>Not sure? Ask an admin to take a look</Text>
+                  </TouchableOpacity>
+                )}
                 {error ? <Text style={{ color: THEME.danger }}>{error}</Text> : null}
               </View>
+            ) : notice ? (
+              <Text style={{ color: THEME.ink, fontWeight: '600' }}>{notice}</Text>
             ) : (
               <Text style={{ color: THEME.muted }}>Nothing to review on this suggestion right now.</Text>
             )}

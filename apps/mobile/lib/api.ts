@@ -4622,7 +4622,11 @@ export const api = {
       headers: createApiHeaders(null, sessionToken),
       body: JSON.stringify({ reviewId, response: response_, ...(payload ? { payload } : {}) }),
     });
-    return readTrpcResult<{ success: boolean }>(response, 'Could not send your response');
+    return readTrpcResult<{
+      success: boolean;
+      // Only for Sage's "Should we invite them?" question.
+      invitation?: { invitationStatus: string; alreadyInvited: boolean; sentDirectly: boolean };
+    }>(response, 'Could not send your response');
   },
 
   async listSageTasks(sessionToken: string, coopId = 'cahootz') {

@@ -258,6 +258,17 @@ Known limitations:
 - `search_commons_documents` reads `KnowledgeDocument`, but no mobile or web screen calls `knowledgeBase.uploadDocument` yet, so in practice it finds nothing until documents are added. It reads only COMMONS and PUBLIC documents (plus CIRCLE ones for a circle), never PRIVATE ones. The older `search_knowledge_base` agent tool still applies no visibility filter.
 - Not yet built: learning from how leaders edit suggested comments before approving them (see Next).
 
+### P1 — Families: "Should we invite them?"
+
+Status (2026-10-07): built and verified, except the items listed as remaining.
+
+- When a family's posts and comments keep naming someone who isn't a member ("Aunt Denise", "cousin Ray"), Sage asks the member who mentions them most whether to invite them and collects a phone number or email. A steward's or guide's answer sends the invitation right away; anyone else's becomes a recommendation, and the stewards' alert ("Sage noticed Denise came up 4 times in the family feed.") opens Steward tools, where **Approve and send** delivers it.
+- No new model call. The Commons action agent, which already reads each General-feed post and comment, also returns up to 3 `people` per item, only when the prompt says `family: true`. Everything after that is code (`sage-person-mentions.ts`): family commons only (`joinPolicy` INVITE_ONLY), skipped for content flagged as steering, a key per person (a proper name is shared across members; a bare "Grandma" counts only within one member's mentions), 3 mentions in 30 days, not when a member's name or handle matches or an invitation already names them, one ask per name per 90 days whatever the answer, and at most one open ask per member per week.
+- The answer goes through the normal `createCommonsInvitation` path (membership, contact validation, dedupe, the daily invite limit). Bad details leave the question open. Sage never contacts the person and never stores contact details itself. Only names are kept (`SagePersonMention`, migration `20261008010000_sage_person_mentions`), purged after 60 days by the wake loop. Who was named is admin-only in decision trails.
+- Members answer on the existing suggestion screen (`sage/[id].tsx`): name (pre-filled), phone, email, **Send invite** or **Not now**.
+- Tests: `sage-person-mentions.test.ts` (17), `pnpm -F @repo/trpc test` (73 files, 705 passed after merging main), `pnpm -F @cahootz/mobile type-check` and unit tests (94), Playwright `sage-person-invite.spec.ts` (TESTING.md journey 58) against a local stack with the migration applied. A live `gpt-5.6-luna` call on a family post ("Aunt Denise … Cousin Ray too") returned both people with relations; the same post with `family: false` returned none.
+- Remaining: circle conversations (the trend agent) and DMs aren't read for names; DMs never will be. A name typed differently ("Aunt Dee" vs "Denise") counts as two people. The steward's recommendation card doesn't yet say Sage suggested it; only the alert does. The member decides; nobody asks the named person's consent before their name is noted, though only the name as written in a family post is kept.
+
 ### P2 — Cost optimization and budget administration
 
 Goal: measure value per useful outcome and prevent surprise spending.
@@ -338,6 +349,7 @@ For every Sage behavior change:
   - Sage settings always shows the card, and the suggestion and alert pages carry a one-line version.
   - This is copy only; no autonomy changed. If the Autonomy Boundaries change, update this card in the same change. Verified by `onboarding-usability.spec.ts` (TESTING.md journey 42).
   - Sage's posts and comments in the feed, post page, and event comments carry an "AI helper" tag (`components/ai-badge.tsx`). The commons feed APIs now return `authorIsAi` from `User.isBot`. Verified in `sage-stewardship.spec.ts` (journey 33).
+- 2026-10-07: Sage may ask a family member whether to invite someone the family keeps mentioning. It asks the member who mentions them most, in families only; a steward approves members' invitations with one tap. Sage never contacts the person.
 
 - 2026-10-06: Sage's core principles are platform-wide and fixed in every Sage prompt; no Commons can change them. Sage must not fall back on mainstream US individual-finance advice.
 - 2026-10-06: Everyday decisions may be grounded on the thread or a checked source; rules, votes, membership, discipline and the Commons' money still require the charter. An independent relevance check gates autonomous publishing.

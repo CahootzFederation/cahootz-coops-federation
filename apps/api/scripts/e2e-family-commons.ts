@@ -5,7 +5,8 @@
  *
  *   tsx --import ./dotenv.config.js scripts/e2e-family-commons.ts cleanup <familyName>
  *     Deletes the named "E2E Family ..." commons (created by a seeded test
- *     account) with its memberships, invitations, requests, posts and alerts.
+ *     account) with its memberships, invitations, requests, posts, alerts,
+ *     and Sage's suggestions, noted mentions and decision trails there.
  *   tsx --import ./dotenv.config.js scripts/e2e-family-commons.ts cleanup-referral <coopId> <inviteeEmail>
  *     Removes the apply-referral fixture state from a normal commons: the
  *     test invitations, the invitee's application and pending membership.
@@ -52,6 +53,11 @@ async function cleanupFamily(familyName: string) {
   if (coopIds.length === 0) return { deleted: 0 };
 
   await db.$transaction([
+    // What Sage noticed or suggested in the family (its reviews and audit events cascade).
+    db.commonsAction.deleteMany({ where: { coopId: { in: coopIds } } }),
+    db.sagePersonMention.deleteMany({ where: { coopId: { in: coopIds } } }),
+    db.sageDecisionTrail.deleteMany({ where: { coopId: { in: coopIds } } }),
+    db.commonsContentScan.deleteMany({ where: { coopId: { in: coopIds } } }),
     db.application.deleteMany({ where: { coopId: { in: coopIds } } }),
     db.commonsInvitation.deleteMany({ where: { coopId: { in: coopIds } } }),
     db.commonsComment.deleteMany({ where: { post: { coopId: { in: coopIds } } } }),

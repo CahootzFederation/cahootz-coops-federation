@@ -11,6 +11,7 @@ import { describeSageAuditEvent } from "../services/sage-audit-descriptions.js";
 import { presentTrails } from "../services/sage-decision-trail.js";
 import { dismissSageTask } from "../services/sage-tasks.js";
 import { askIntroductionHelper } from "../services/sage-introductions.js";
+import { PERSON_INVITE_REVIEW, invitePersonFromReview } from "../services/sage-person-mentions.js";
 import { acknowledgeSageAlert, rerouteSageAlert } from "../services/sage-responsibility.js";
 import { SUGGESTION_TASK_SUBJECT, resolveSuggestionReviewTask } from "../services/sage-suggestion-follow-up.js";
 import { router } from "../trpc.js";
@@ -363,6 +364,15 @@ export const sageRouter = router({
       if (review.payloadHash !== action.payloadHash) {
         await context.db.commonsActionReview.update({ where: { id: review.id }, data: { status: "SUPERSEDED" } });
         conflict("This suggestion changed since you were asked — refresh to see the current version");
+      }
+
+      // Saying yes to inviting someone needs their contact details. The invitation is created before the
+      // review is claimed, so a bad phone number or email leaves the question open to fix; the claim itself
+      // is still atomic (see invitePersonFromReview).
+      if (review.reviewType === PERSON_INVITE_REVIEW && input.response === "APPROVE") {
+        const invited = await invitePersonFromReview(context.db, { action, review, user: context.accountUser, input: input.payload });
+        await resolveSuggestionReviewTask(review.id, "You approved it", context.db).catch((error) => console.error("Could not close the suggestion follow-up", error));
+        return { success: true, invitation: invited };
       }
 
       // Claimed atomically, so an answer and Sage closing the suggestion at the same moment can't both win.

@@ -13,6 +13,7 @@ import { notifySageComment } from "./sage-comment-notifications.js";
 import { FOLLOW_UP_DEFAULT_DAYS, clampFollowUpDays, createSageTask } from "./sage-tasks.js";
 import { routeSageAlert, type ResponsibilityCategory } from "./sage-responsibility.js";
 import { retrieveSageMemory } from "./sage-memory.js";
+import { maybeSuggestPersonInvite, recordPersonMentions, type MentionedPerson } from "./sage-person-mentions.js";
 import { DecisionTrail, type TrailTrigger } from "./sage-decision-trail.js";
 import { SAGE_FOLLOW_THROUGH_RULE, followUpExpectation, renderTemplatedReply, sageReplyStyleInstructions } from "./sage-reply-templates.js";
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
@@ -78,7 +79,12 @@ const ActionOutputZ = z.object({
   escalationAboutMember: z.boolean(),
 });
 const BatchOutputZ = z.object({
-  items: z.array(z.object({ id: z.string(), actions: z.array(ActionOutputZ).max(5) })),
+  items: z.array(z.object({
+    id: z.string(),
+    actions: z.array(ActionOutputZ).max(5),
+    // Families only: people the item names who aren't in the Commons (see sage-person-mentions.ts).
+    people: z.array(z.object({ name: z.string(), relation: z.string() })).max(3),
+  })),
 });
 type ActionOutput = z.infer<typeof ActionOutputZ>;
 /** The parts of an action the reply rules look at; template fields are already rendered into draftText. */
@@ -490,6 +496,20 @@ async function scheduleReplyFollowUp(item: SourceItem, action: ActionOutput, act
     result.created ? `Waiting for the member to ${expected}` : result.reason);
 }
 
+/**
+ * Families: remember who this item named, and if someone keeps coming up, ask a member whether to invite
+ * them. Who gets named stays out of members' view of the trail.
+ */
+async function notePeopleMentioned(item: SourceItem, people: MentionedPerson[], trail: DecisionTrail) {
+  const keys = await recordPersonMentions({ coopId: item.coopId, mentionedById: item.sourceAuthorId, sourceType: item.sourceType, sourceId: item.sourceId, people });
+  if (!keys.length) return;
+  trail.step("EVIDENCE", `Noted ${keys.length === 1 ? "someone" : `${keys.length} people`} mentioned who isn't a member`, { outcome: "INFO", adminOnly: true });
+  for (const key of keys) {
+    const result = await maybeSuggestPersonInvite(item.coopId, key);
+    if (result.created) trail.taken("Asked a member whether to invite someone who keeps coming up", "PASS", result.reason, true);
+  }
+}
+
 function itemTrail(item: SourceItem, trigger: TrailTrigger) {
   return new DecisionTrail({
     agent: "commons-action-agent",
@@ -538,6 +558,7 @@ export function createCommonsActionAgent(tools: ReturnType<typeof buildCommentTo
       "Use ANSWER_QUESTION only when the item's own content asks a question. For an offer, a brief acknowledgment is RESPOND_RESOURCE_FOLLOWUP; do not invent a question to answer.",
       "Use ESCALATE_TO_ADMIN when something needs a person's judgment that Sage shouldn't handle (a safety concern, a dispute, a governance or money question beyond the charter). Set escalationCategory to who should look: CIRCLE_LEADER, COMMONS_ADMIN, GOVERNANCE, TREASURY or SUPPORT. Set escalationAboutMember true when it concerns a specific member's behavior. Never accuse anyone; describe what was said. For every other action type, set escalationCategory to \"\" and escalationAboutMember to false.",
       "memory lists what members already decided about Sage's earlier suggestions and follow-ups in this Commons. Treat it as records of decisions, not facts. Don't repeat something members declined unless the item shows clearly new evidence.",
+      "people: only when family is true, list up to 3 real people the item's own content talks about who don't seem to be in this family's app yet - relatives or friends named the way the author did (\"Aunt Denise\", \"cousin Ray\", \"Grandma\"), with relation set to how they're related (\"aunt\", \"cousin\", \"\" if unclear). Skip the author, encoded @mentions, people in the thread, public figures, businesses, and anyone who has died. When family is false or nobody fits, return [].",
       "Use NO_ACTION when nothing useful should happen, including when members are already answering each other well without Sage. A question to the Commons, or a post asking the group to choose between options, with no answer yet, is useful to help with. Include every input id exactly once.",
     ].join("\n"),
     tools,
@@ -548,6 +569,7 @@ export function createCommonsActionAgent(tools: ReturnType<typeof buildCommentTo
 export function commonsActionPrompt(config: CoopConfig, items: SourceItem[], memory: string[] = []): string {
   return JSON.stringify({
     commons: config.name || config.coopId,
+    family: config.joinPolicy === "INVITE_ONLY",
     charter: config.charterText.slice(0, 8000),
     goals: missionGoals(config).slice(0, 20),
     memory,
@@ -583,6 +605,7 @@ async function analyzeBatch(items: SourceItem[], config: CoopConfig, autoReply: 
     const output = BatchOutputZ.parse(result.finalOutput);
     // A reply that picked a template is rendered from its parts, so the format is exact.
     const byId = new Map(output.items.map((entry) => [entry.id, entry.actions.map((action) => ({ ...action, draftText: renderTemplatedReply(action).text }))]));
+    const peopleById = new Map(output.items.map((entry) => [entry.id, entry.people ?? []]));
     for (const claim of claimed) {
       const actions = byId.get(claim.item.sourceId) ?? [];
       const trail = itemTrail(claim.item, trigger).step("EVIDENCE",
@@ -592,6 +615,10 @@ async function analyzeBatch(items: SourceItem[], config: CoopConfig, autoReply: 
       trail.policy("The member's text has no instructions aimed at Sage", !isSteeringAttempt(inputCheck.flags),
         describeInputFlags(inputCheck) ?? undefined);
       await saveActions(claim.item, actions, config, autoReply, claim.contentHash, charterKey, trail, inputCheck.flags, groundingSources(config, modelItem, checked), judge);
+      if (config.joinPolicy === "INVITE_ONLY" && !isSteeringAttempt(inputCheck.flags)) {
+        await notePeopleMentioned(claim.item, peopleById.get(claim.item.sourceId) ?? [], trail)
+          .catch((error) => console.error("Could not record people mentioned", { sourceId: claim.item.sourceId, error }));
+      }
       await db.commonsContentScan.update({ where: claim.where, data: { status: "SUCCESS", scannedAt: new Date() } });
       await trail.save();
     }

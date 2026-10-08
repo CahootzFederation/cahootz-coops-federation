@@ -294,6 +294,15 @@ jobs:
 
       # The E2E app runs its own bundle: OTA updates are turned off in this
       # copy only (the committed Expo.plist is untouched).
+      #
+      # Signing: an unsigned simulator app gets no keychain, so every
+      # expo-secure-store call fails with -34018 and nothing the app stores
+      # survives. Re-signing it afterwards with codesign doesn't work either:
+      # the simulator refuses an ad-hoc signature that claims a team's app ID
+      # ("spawn failed, error=162: Codesigning issue"). So let Xcode sign it
+      # the way `expo run:ios` does for a simulator: ad-hoc, with the team from
+      # eas.json, which puts the app ID and keychain group in the simulated
+      # entitlements the simulator accepts. No certificate or profile needed.
       - name: Build release app for the simulator
         working-directory: apps/mobile/ios
         # bash here means -eo pipefail, so a failed xcodebuild isn't hidden by tail.
@@ -303,40 +312,9 @@ jobs:
           pod install
           xcodebuild -workspace CahootzCoop.xcworkspace -scheme CahootzCoop -configuration Release \
             -sdk iphonesimulator -destination "generic/platform=iOS Simulator" \
-            -derivedDataPath build CODE_SIGNING_ALLOWED=NO | tail -50
-
-      # The build above is unsigned, and an unsigned app gets no keychain on the
-      # simulator: every expo-secure-store call fails with -34018 ("a required
-      # entitlement isn't present"), so nothing the app stores survives (the
-      # first run looped back to the welcome intro because of this). Ad-hoc
-      # sign it with the app's identifier and keychain group, as a signed
-      # store or EAS build has. The team ID is the one in eas.json.
-      - name: Sign the simulator app for keychain access
-        working-directory: apps/mobile/ios
-        shell: bash
-        run: |
-          app=build/Build/Products/Release-iphonesimulator/CahootzCoop.app
-          cat > "$RUNNER_TEMP/e2e.entitlements" <<'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>application-identifier</key>
-            <string>9GTZ7ZJYMX.com.cahootzcoops.mobile</string>
-            <key>keychain-access-groups</key>
-            <array>
-              <string>9GTZ7ZJYMX.com.cahootzcoops.mobile</string>
-            </array>
-          </dict>
-          </plist>
-          PLIST
-          # Sign everything nested first (frameworks, dylibs, plugins): a signed
-          # app won't load unsigned code, and the launch fails with "spawn
-          # failed, error=162: Codesigning issue".
-          find "$app" -depth \( -name "*.framework" -o -name "*.dylib" -o -name "*.appex" -o -name "*.xctest" \) -print0 \
-            | xargs -0 -I{} codesign --force --sign - --timestamp=none "{}"
-          codesign --force --sign - --entitlements "$RUNNER_TEMP/e2e.entitlements" --timestamp=none "$app"
-          codesign -d --entitlements - "$app"
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=9GTZ7ZJYMX PROVISIONING_PROFILE_SPECIFIER= \
+            | tail -50
 
       - name: Wait for API
         shell: bash

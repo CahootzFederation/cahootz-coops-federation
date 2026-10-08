@@ -276,6 +276,7 @@ export default function SageSuggestionDetailScreen() {
                   </View>
                 ) : null}
 
+
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <TouchableOpacity
                     accessibilityRole="button"

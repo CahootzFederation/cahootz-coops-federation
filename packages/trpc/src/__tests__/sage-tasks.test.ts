@@ -16,6 +16,10 @@ const db = vi.hoisted(() => ({
 const push = vi.hoisted(() => vi.fn().mockResolvedValue({ id: "n1" }));
 vi.mock("@repo/db", () => ({ db }));
 vi.mock("../services/push-notification-service.js", () => ({ createNotificationAndPush: push }));
+const suggestions = vi.hoisted(() => ({ checkSuggestionReview: vi.fn(), closeSuggestion: vi.fn().mockResolvedValue(true) }));
+vi.mock("../services/sage-suggestion-follow-up.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../services/sage-suggestion-follow-up.js")>()), ...suggestions,
+}));
 
 const tasks = await import("../services/sage-tasks.js");
 const { createSageTask, clampFollowUpDays, checkTaskOutcome, wakeTask, claimDueTasks, reminderText, runSageWakeCycle, dismissSageTask } = tasks;
@@ -126,6 +130,40 @@ describe("waking a task", () => {
     await expect(wakeTask(task({ attempts: 1 }), NOW)).resolves.toBe("ABANDONED");
     expect(push).not.toHaveBeenCalled();
     expect(db.sageTask.update).toHaveBeenCalledWith({ where: { id: "task-1" }, data: expect.objectContaining({ status: "ABANDONED" }) });
+    expect(suggestions.closeSuggestion).not.toHaveBeenCalled();
+  });
+});
+
+describe("waking a suggestion follow-up", () => {
+  const suggestionTask = (overrides: Record<string, unknown> = {}) => task({
+    kind: "REVIEW_SUGGESTION", subjectType: "suggestion_review", subjectId: "review-1", sourceActionId: "action-1", postId: null,
+    circleId: "circle-1", title: "Fund a shared tool library", expected: "answer Sage's suggestion", offer: null, ...overrides,
+  });
+
+  it("reminds once with a link to the suggestion, then waits until it would close", async () => {
+    suggestions.checkSuggestionReview.mockResolvedValueOnce({ resolved: false });
+    await expect(wakeTask(suggestionTask(), NOW)).resolves.toBe("REMINDED");
+    expect(push).toHaveBeenCalledWith(db, expect.objectContaining({
+      userId: "member-1", type: "SAGE_SUGGESTION_REMINDER", title: "Sage is still waiting on you",
+      body: "\"Fund a shared tool library\" needs your answer.",
+      data: { taskId: "task-1", coopId: "harbor", actionId: "action-1" },
+    }));
+    expect(db.sageTask.update).toHaveBeenCalledWith({ where: { id: "task-1" }, data: expect.objectContaining({ nextWakeAt: new Date(NOW.getTime() + 4 * DAY) }) });
+    // Suggestions are private to the people in them, so the trail is admin-only.
+    expect(db.sageDecisionTrail.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ visibility: "ADMINS" }) }));
+  });
+
+  it("closes the suggestion when nobody answered after the reminder", async () => {
+    suggestions.checkSuggestionReview.mockResolvedValueOnce({ resolved: false });
+    await expect(wakeTask(suggestionTask({ attempts: 1 }), NOW)).resolves.toBe("ABANDONED");
+    expect(push).not.toHaveBeenCalled();
+    expect(suggestions.closeSuggestion).toHaveBeenCalledWith("action-1", "Nobody answered after Sage's reminder", "NO_RESPONSE", { skipTaskId: "task-1" });
+  });
+
+  it("closes the follow-up without a reminder once the member answered", async () => {
+    suggestions.checkSuggestionReview.mockResolvedValueOnce({ resolved: true, outcome: "You approved it" });
+    await expect(wakeTask(suggestionTask(), NOW)).resolves.toBe("DONE");
+    expect(push).not.toHaveBeenCalled();
   });
 });
 

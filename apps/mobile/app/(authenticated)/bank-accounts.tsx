@@ -248,7 +248,15 @@ export default function BankAccountsScreen() {
         )}
 
         {/* Add Account Modal */}
-        <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
+        <Modal
+          visible={showAddModal}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => {
+            setShowAddModal(false);
+            resetForm();
+          }}
+        >
           <View className="flex-1 bg-white">
             {/* Modal Header */}
             <View className="pt-14 pb-4 px-4 border-b border-gray-100">

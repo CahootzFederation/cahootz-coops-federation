@@ -341,7 +341,7 @@ export default function PaymentMethodsScreen() {
         )}
 
         {/* Add Card Modal */}
-        <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
+        <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowAddModal(false)}>
           <CardInput
             onSuccess={handleAddSuccess}
             onCancel={() => setShowAddModal(false)}
@@ -349,7 +349,7 @@ export default function PaymentMethodsScreen() {
         </Modal>
 
         {/* Success Modal */}
-        <Modal visible={showSuccessModal} animationType="fade" transparent>
+        <Modal visible={showSuccessModal} animationType="fade" transparent onRequestClose={() => setShowSuccessModal(false)}>
           <View className="flex-1 bg-black/50 items-center justify-center p-6">
             <View className="bg-white rounded-2xl p-6 w-full max-w-sm items-center">
               <View className="w-16 h-16 rounded-full bg-green-100 items-center justify-center mb-4">
@@ -375,7 +375,15 @@ export default function PaymentMethodsScreen() {
         </Modal>
 
         {/* Confirm Remove Modal */}
-        <Modal visible={showConfirmRemoveModal} animationType="fade" transparent>
+        <Modal
+          visible={showConfirmRemoveModal}
+          animationType="fade"
+          transparent
+          onRequestClose={() => {
+            setShowConfirmRemoveModal(false);
+            setCardToRemove(null);
+          }}
+        >
           <View className="flex-1 bg-black/50 items-center justify-center p-6">
             <View className="bg-white rounded-2xl p-6 w-full max-w-sm">
               <View className="flex-row justify-between items-center mb-4">
@@ -450,7 +458,15 @@ export default function PaymentMethodsScreen() {
         </Modal>
 
         {/* Error Modal */}
-        <Modal visible={showErrorModal} animationType="fade" transparent>
+        <Modal
+          visible={showErrorModal}
+          animationType="fade"
+          transparent
+          onRequestClose={() => {
+            setShowErrorModal(false);
+            setErrorMessage('');
+          }}
+        >
           <View className="flex-1 bg-black/50 items-center justify-center p-6">
             <View className="bg-white rounded-2xl p-6 w-full max-w-sm items-center">
               <View className="w-16 h-16 rounded-full bg-red-100 items-center justify-center mb-4">

@@ -1669,7 +1669,10 @@ export default function CommonsAiEntry({
               placeholderTextColor={SOCIAL_THEME.muted}
               multiline
               className="max-h-20 min-h-8 flex-1 text-left text-sm text-gray-900"
-              style={{ textAlignVertical: 'top' }}
+              // Android adds ~10dp of padding above and below the text by
+              // default; in this 32px pill that scrolls a one-line draft half
+              // out of view once the keyboard closes. iOS has no such padding.
+              style={{ textAlignVertical: 'top', paddingVertical: 6, includeFontPadding: false }}
             />
             <TouchableOpacity
               onPress={() => void pickPostMedia()}

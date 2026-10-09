@@ -1,0 +1,55 @@
+# Signs EMAIL in through the menu with the fixture one-time code, from a
+# freshly installed app.
+appId: com.cahootzcoops.mobile
+---
+- launchApp:
+    clearState: true
+# A CI emulator can show a system "isn't responding" dialog for its own
+# launcher over the app; wait it out rather than fail.
+- runFlow:
+    when:
+      visible: "isn't responding"
+    commands:
+      - tapOn: "Wait"
+- runFlow: skip-onboarding.yaml
+- tapOn: "Open menu"
+- tapOn: "Sign In"
+- tapOn: "name@email.com"
+- inputText: ${EMAIL}
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+# Maestro can't hide the iOS keyboard here ("Couldn't hide the keyboard");
+# tapping the heading, plain text inside the screen's scroll view, closes it
+# the way a person would.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: "Sign in"
+- tapOn: "Log in with code"
+# A native "Code Sent" alert (React Native's Alert, which does nothing on
+# web, so Playwright never sees it) covers the code field on iOS and Android.
+- extendedWaitUntil:
+    visible: "Code Sent"
+    timeout: 30000
+- tapOn: "OK"
+- tapOn: "Enter 6-digit code"
+- inputText: ${LOGIN_CODE}
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+# Maestro can't hide the iOS keyboard here ("Couldn't hide the keyboard");
+# tapping the heading, plain text inside the screen's scroll view, closes it
+# the way a person would.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: "Sign in"
+- tapOn: "Verify & Sign In"
+- runFlow: skip-onboarding.yaml

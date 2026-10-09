@@ -1,0 +1,26 @@
+# A member signs in on iOS or Android with their email and code, sees their own
+# handle in the menu, and signs out again.
+# Pass EMAIL and LOGIN_CODE with -e (see TESTING.md).
+appId: com.cahootzcoops.mobile
+name: Sign in and out
+---
+- runFlow:
+    file: subflows/sign-in.yaml
+    env:
+      EMAIL: ${EMAIL}
+      LOGIN_CODE: ${LOGIN_CODE}
+- tapOn: "Open menu"
+# Sign Out and its confirmation sit at the bottom of the menu, below the fold
+# on a phone; Maestro can only tap what's on screen.
+- scrollUntilVisible:
+    element: "Sign Out \\(@releaseclick1\\)"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Sign Out \\(@releaseclick1\\)"
+- scrollUntilVisible:
+    element: "Yes, sign out"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Yes, sign out"
+- tapOn: "Open menu"
+- assertVisible: "Sign In"

@@ -12,7 +12,7 @@ on:
           - preview
           - production
       platform:
-        description: Platform to update
+        description: Platform to update (iOS, Android, or both)
         required: true
         default: all
         type: choice
@@ -49,8 +49,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # A production OTA update reaches every installed iOS and Android app at
+  # once, so it only goes out when the native smoke journeys pass on both.
+  native-e2e:
+    name: Native E2E (iOS and Android)
+    if: ${{ inputs.channel == 'production' }}
+    uses: ./.github/workflows/mobile-native-e2e.yml
+
   update:
     name: Publish ${{ inputs.channel }} OTA update
+    needs: native-e2e
+    # Runs when the gate passed, or was skipped because this is the preview channel.
+    if: ${{ !cancelled() && (needs.native-e2e.result == 'success' || needs.native-e2e.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -108,3 +118,13 @@ jobs:
           fi
 
           eas update "${args[@]}"
+
+          {
+            echo "### OTA update published"
+            echo
+            echo "| Channel | Platform | Rollout | Message |"
+            echo "| --- | --- | --- | --- |"
+            echo "| $UPDATE_CHANNEL | $UPDATE_PLATFORM | ${ROLLOUT_PERCENTAGE}% | $message |"
+            echo
+            echo "Only installed builds on the \`$UPDATE_CHANNEL\` channel with runtime version $(node -p "require('./app.json').expo.runtimeVersion") pick this up."
+          } >> "$GITHUB_STEP_SUMMARY"

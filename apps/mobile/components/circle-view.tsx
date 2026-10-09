@@ -440,10 +440,14 @@ function CircleCardView({
 }) {
   const palette = circleColorFromKey(colorKey);
   const background = iconColor || palette.background;
+  const statusText = joinLabel ? 'Join' : chattingCount > 0 ? `${chattingCount} chatting` : 'Join now';
+  // Without a label, iOS VoiceOver reads the avatar letter too ("G, General").
+  const accessibilityLabel = hideStatus ? name : `${name}, ${statusText}`;
 
   return (
     <TouchableOpacity
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       onPress={onPress}
       className="items-center"
       style={{ width: '47%' }}
@@ -485,7 +489,7 @@ function CircleCardView({
             className="text-center text-xs font-semibold"
             style={{ color: !joinLabel && chattingCount > 0 ? '#16A34A' : THEME.primary }}
           >
-            {joinLabel ? 'Join' : chattingCount > 0 ? `${chattingCount} chatting` : 'Join now'}
+            {statusText}
           </Text>
         </View>
       )}

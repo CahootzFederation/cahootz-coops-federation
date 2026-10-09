@@ -1,0 +1,8 @@
+# Native smoke journeys, run on both iOS and Android (see TESTING.md, "Native E2E").
+# The Playwright suite in e2e/ covers app behavior on mobile web; these flows
+# cover what only a real native build can break: launch, sign-in on the
+# native keyboard, back navigation and safe-area/edge-to-edge layout.
+flows:
+  - "*.yaml"
+executionOrder:
+  continueOnFailure: false

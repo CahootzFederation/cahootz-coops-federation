@@ -1,0 +1,40 @@
+# Takes the skip path through the post-signup wizard when it shows (intro,
+# profile form, "find your way in"), like skipOnboardingWizard in e2e/support/auth.ts.
+appId: com.cahootzcoops.mobile
+---
+- extendedWaitUntil:
+    visible:
+      text: "Continue|Build your profile|Skip for now|Open menu"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+      - extendedWaitUntil:
+          visible:
+            text: "Build your profile|Skip for now|Open menu"
+          timeout: 30000
+# "Do this later" sits at the end of the profile form, below the fold, and
+# Maestro only sees what is on screen, so scroll down to it.
+- runFlow:
+    when:
+      visible: "Build your profile"
+    commands:
+      - scrollUntilVisible:
+          element: "Do this later"
+          direction: DOWN
+          timeout: 20000
+      - tapOn: "Do this later"
+      - extendedWaitUntil:
+          visible:
+            text: "Skip for now|Open menu"
+          timeout: 30000
+- runFlow:
+    when:
+      visible: "Skip for now"
+    commands:
+      - tapOn: "Skip for now"
+- extendedWaitUntil:
+    visible: "Open menu"
+    timeout: 30000

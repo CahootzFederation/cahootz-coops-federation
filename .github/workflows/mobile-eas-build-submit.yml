@@ -1,19 +1,32 @@
 name: Mobile EAS Build and Submit
 
+# Builds the member app on EAS and, if asked, sends it to the stores:
+# iOS goes to TestFlight (App Store Connect), Android to the Play Store
+# internal testing track as a draft (submit.production in apps/mobile/eas.json).
+# Promote Android releases to closed/open testing or production from the Play
+# Console.
+#
+# Production runs first call mobile-native-e2e.yml and stop unless the smoke
+# journeys pass on both iOS and Android.
+#
+# Android: Google only accepts the very first upload of an app through the
+# Play Console. Upload the first production .aab by hand, then use "submit"
+# here. Submitting also needs the Play service account key stored in EAS
+# (`eas credentials`, Android > Google Service Account).
 on:
   workflow_dispatch:
     inputs:
-      profile:
-        description: EAS build profile to use
+      action:
+        description: What to do
         required: true
-        default: production
+        default: build
         type: choice
         options:
-          - development
-          - preview
-          - production
+          - build
+          - build and submit
+          - submit latest build
       platform:
-        description: Platform to build
+        description: Platform
         required: true
         default: ios
         type: choice
@@ -21,11 +34,15 @@ on:
           - ios
           - android
           - all
-      submit:
-        description: Submit the iOS production build after it completes
+      profile:
+        description: EAS build profile (submitting needs production)
         required: true
-        default: false
-        type: boolean
+        default: production
+        type: choice
+        options:
+          - development
+          - preview
+          - production
 
 permissions:
   contents: read
@@ -35,12 +52,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Production builds and store submissions only go ahead when the native
+  # smoke journeys pass on both iOS and Android, whichever platform is being
+  # shipped, so the two apps can't drift apart.
+  native-e2e:
+    name: Native E2E (iOS and Android)
+    if: ${{ inputs.profile == 'production' }}
+    uses: ./.github/workflows/mobile-native-e2e.yml
+
   build:
-    name: Start EAS build
+    name: ${{ inputs.action }} (${{ inputs.platform }}, ${{ inputs.profile }})
+    needs: native-e2e
+    # Runs when the gate passed, or was skipped because this isn't production.
+    if: ${{ !cancelled() && (needs.native-e2e.result == 'success' || needs.native-e2e.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate inputs
+        shell: bash
+        env:
+          ACTION: ${{ inputs.action }}
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          if [ "$ACTION" != "build" ] && [ "$PROFILE" != "production" ]; then
+            echo "::error::Only production builds go to the stores. Preview builds are an iOS simulator app and an Android APK for testers."
+            exit 1
+          fi
+          if [ "$ACTION" != "build" ] && [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "::error::Store submissions must come from main."
+            exit 1
+          fi
+
+      # Submitting reads the app config too, which loads the Expo config plugins.
       - name: Setup repo
         uses: ./tooling/github/setup
 
@@ -51,30 +95,69 @@ jobs:
           packager: pnpm
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Validate submit profile
-        if: ${{ inputs.submit && inputs.profile != 'production' }}
-        shell: bash
-        run: |
-          echo "::error::Auto-submit is configured for the production profile only."
-          exit 1
-
-      - name: Validate submit platform
-        if: ${{ inputs.submit && inputs.platform != 'ios' }}
-        shell: bash
-        run: |
-          echo "::error::Auto-submit currently supports iOS only. Add submit.production.android in apps/mobile/eas.json before submitting Android builds from CI."
-          exit 1
-
       - name: Start build
-        if: ${{ !inputs.submit }}
+        if: ${{ inputs.action != 'submit latest build' }}
         working-directory: apps/mobile
         env:
           EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL || secrets.EXPO_PUBLIC_API_BASE_URL }}
-        run: eas build --profile "${{ inputs.profile }}" --platform "${{ inputs.platform }}" --non-interactive --no-wait
+          ACTION: ${{ inputs.action }}
+          PLATFORM: ${{ inputs.platform }}
+          PROFILE: ${{ inputs.profile }}
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      - name: Start build and submit
-        if: ${{ inputs.submit }}
+          args=(--profile "$PROFILE" --platform "$PLATFORM" --non-interactive --no-wait --json)
+          if [ "$ACTION" = "build and submit" ]; then
+            args+=(--auto-submit)
+          fi
+
+          eas build "${args[@]}" > builds.json
+
+          {
+            echo "### EAS builds started"
+            echo
+            echo "| Platform | Profile | Build |"
+            echo "| --- | --- | --- |"
+            jq -r '.[] | "| \(.platform) | '"$PROFILE"' | [\(.id)](https://expo.dev/accounts/\(.project.ownerAccount.name // "cahootz-coop")/projects/\(.project.slug // "cahootz-coop")/builds/\(.id)) |"' builds.json
+            echo
+            if [ "$ACTION" = "build and submit" ]; then
+              echo "Each build is sent to the store when it finishes: iOS to TestFlight, Android to the Play Store internal track as a draft."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Submit latest build
+        if: ${{ inputs.action == 'submit latest build' }}
         working-directory: apps/mobile
         env:
-          EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL || secrets.EXPO_PUBLIC_API_BASE_URL }}
-        run: eas build --profile "${{ inputs.profile }}" --platform "${{ inputs.platform }}" --auto-submit --non-interactive --no-wait
+          PLATFORM: ${{ inputs.platform }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # --latest would pick the newest build of any profile (a preview APK
+          # included), so look up the newest finished production build per platform.
+          if [ "$PLATFORM" = "all" ]; then platforms=(ios android); else platforms=("$PLATFORM"); fi
+
+          {
+            echo "### Store submissions started"
+            echo
+            echo "| Platform | Build | Store |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for platform in "${platforms[@]}"; do
+            build_id=$(eas build:list --platform "$platform" --build-profile production --status finished --limit 1 --json --non-interactive | jq -r '.[0].id // empty')
+            if [ -z "$build_id" ]; then
+              echo "::error::No finished production $platform build to submit. Run this workflow with \"build and submit\" instead."
+              exit 1
+            fi
+
+            eas submit --platform "$platform" --profile production --id "$build_id" --non-interactive --no-wait
+
+            if [ "$platform" = "ios" ]; then store="TestFlight"; else store="Play Store internal track (draft)"; fi
+            echo "| $platform | [$build_id](https://expo.dev/accounts/cahootz-coop/projects/cahootz-coop/builds/$build_id) | $store |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "Follow them at https://expo.dev/accounts/cahootz-coop/projects/cahootz-coop/submissions." >> "$GITHUB_STEP_SUMMARY"

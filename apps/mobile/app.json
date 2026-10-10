@@ -5,7 +5,6 @@
     "version": "1.1.5",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "newArchEnabled": true,
     "scheme": "commons",
     "userInterfaceStyle": "automatic",
     "splash": {
@@ -58,6 +57,10 @@
     "plugins": [
       "expo-router",
       "expo-localization",
+      "expo-image",
+      "expo-secure-store",
+      "expo-video",
+      "expo-web-browser",
       "@react-native-community/datetimepicker",
       "./expo-plugins/with-excluded-archs.js",
       "./expo-plugins/with-modify-gradle.js",

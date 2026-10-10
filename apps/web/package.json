@@ -83,7 +83,7 @@
     "react-day-picker": "8.10.1",
     "react-dom": "catalog:react19",
     "react-hook-form": "^7.57.0",
-    "react-native": "0.81.5",
+    "react-native": "0.83.10",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
     "siwe": "^3.0.0",

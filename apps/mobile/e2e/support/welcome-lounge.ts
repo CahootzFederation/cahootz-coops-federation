@@ -51,6 +51,45 @@ export async function leaveWelcomeLounges(sessionToken: string) {
 }
 
 /**
+ * Marks only stale welcome-journey alerts as read. The fixture accounts are
+ * shared across workers, so clearing the whole inbox can erase an alert that
+ * an unrelated notification journey has just created.
+ */
+export async function markWelcomeNotificationsAsRead(
+  sessionToken: string,
+  lounge: { groupId: string; postId: string | null },
+) {
+  const welcomeTypes = new Set([
+    "WELCOME_LOUNGE_JOIN",
+    "WELCOME_INTRO_REPLY",
+    "WELCOME_INTRO_UNANSWERED",
+    "WELCOME_INTRO_UNANSWERED_ADMIN",
+    "COMMONS_COMMENT_LIKE",
+  ]);
+  const { notifications } = await trpc(
+    "GET",
+    "notification.getNotifications",
+    sessionToken,
+    { unreadOnly: true, limit: 50 },
+  );
+  for (const notification of notifications) {
+    if (!welcomeTypes.has(notification.type)) continue;
+    const data = notification.data as
+      | { groupId?: string; postId?: string }
+      | null;
+    if (
+      data?.groupId !== lounge.groupId &&
+      (!lounge.postId || data?.postId !== lounge.postId)
+    ) {
+      continue;
+    }
+    await trpc("POST", "notification.markAsRead", sessionToken, {
+      notificationId: notification.id,
+    });
+  }
+}
+
+/**
  * Cleanup: remove this viewer's reactions on, then delete, the comments on
  * `postId` whose text contains `runId` (deleting a comment also cascades
  * its reactions and intro record; un-reacting first covers comments the
@@ -83,8 +122,8 @@ export async function cleanUpRunComments(
 
 /**
  * Fixture setup shared by the intro journeys: unseat both accounts, seat the
- * member in the open lounge, and clear both inboxes so the alerts under test
- * are the only unread ones. Returns the member's lounge.
+ * member in the open lounge, and clear stale welcome alerts. Returns the
+ * member's lounge.
  */
 export async function seatMemberInOpenLounge(
   memberToken: string,
@@ -95,8 +134,18 @@ export async function seatMemberInOpenLounge(
   const lounge = await trpc("POST", "groups.assignWelcomeTable", memberToken, {
     coopId: "cahootz",
   });
-  await trpc("POST", "notification.markAllAsRead", memberToken, {});
-  await trpc("POST", "notification.markAllAsRead", newcomerToken, {});
+  const status = await trpc(
+    "GET",
+    "groups.getWelcomeIntroStatus",
+    memberToken,
+    { groupId: lounge.groupId },
+  );
+  const alertScope = {
+    groupId: lounge.groupId as string,
+    postId: (status.welcomePostId as string | null) ?? null,
+  };
+  await markWelcomeNotificationsAsRead(memberToken, alertScope);
+  await markWelcomeNotificationsAsRead(newcomerToken, alertScope);
   return lounge as { groupId: string; name: string };
 }
 

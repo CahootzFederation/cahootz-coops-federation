@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
+import { withExclusiveAccountSetting } from "./support/exclusive";
 
 // Sage's wake-and-wait loop, routed alerts, consent-first introductions and memory. Fixtures run the
 // real service code (apps/api/scripts/e2e-sage-steward.ts); nothing here calls a live model, but
@@ -179,9 +180,11 @@ test("a routed alert reaches the circle leader with evidence, and Not for me pas
     expect(routed.second).toMatchObject({ status: "DEDUPED" });
 
     // 1. The leader gets exactly one alert and opens it.
-    await leader.page.goto("/");
-    await leader.page.getByLabel("Alerts", { exact: true }).locator("visible=true").first().click();
-    await expect(leader.page.getByText(title).locator("visible=true")).toHaveCount(1);
+    await expect(async () => {
+      await leader.page.goto("/");
+      await leader.page.getByLabel("Alerts", { exact: true }).locator("visible=true").first().click();
+      await expect(leader.page.getByText(title).locator("visible=true")).toHaveCount(1, { timeout: 3_000 });
+    }).toPass(SERVER_POLL);
     await shown(leader.page, title).click();
     await expect(leader.page).toHaveURL(/\/sage\/alert\//);
     await expect(shown(leader.page, "What Sage saw")).toBeVisible();
@@ -215,8 +218,7 @@ test("a routed alert reaches the circle leader with evidence, and Not for me pas
 
 // Bridge's introduction is consent-first: the member with the need is asked first, the helper only after,
 // and a private Introduction circle for just the two of them exists only once both say yes.
-test("an introduction needs both members' consent before Sage makes a private circle", async ({ browser }) => {
-  test.setTimeout(180_000);
+test("an introduction needs both members' consent before Sage makes a private circle", async ({ browser }) => withExclusiveAccountSetting("sage-introductions", async () => {
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const need = await newSignedInPage(browser, USER_A_EMAIL);
   const helper = await newSignedInPage(browser, USER_B_EMAIL);
@@ -262,4 +264,4 @@ test("an introduction needs both members' consent before Sage makes a private ci
     await need.context.close();
     await helper.context.close();
   }
-});
+}, 180_000));

@@ -210,6 +210,7 @@ export default function CommonsAiEntry({
   const activeFeedKeyRef = useRef('');
   activeFeedKeyRef.current = `${feedCoopId}:${feedCircleId || 'general'}`;
   const {
+    isLoading: authLoading,
     isAuthenticated,
     login,
     logout,
@@ -428,6 +429,15 @@ export default function CommonsAiEntry({
 
   useEffect(() => {
     let mounted = true;
+
+    // A full reload mounts the route before the persisted session is restored.
+    // Wait so a private circle feed is never requested without its token.
+    if (authLoading) {
+      return () => {
+        mounted = false;
+      };
+    }
+
     scrollToPostIdRef.current = null;
     postedItemLayoutRef.current = null;
     feedListOffsetYRef.current = null;
@@ -478,7 +488,7 @@ export default function CommonsAiEntry({
     return () => {
       mounted = false;
     };
-  }, [feedCoopId, feedCircleId, sessionToken, feedReloadKey]);
+  }, [authLoading, feedCoopId, feedCircleId, sessionToken, feedReloadKey]);
 
   const loadMoreFeedPosts = async () => {
     if (!nextFeedCursor || isLoadingMoreFeed) return;

@@ -46,6 +46,32 @@ export const KPIz = z.object({
   name: z.string().min(2),
   target: z.number().nonnegative(),
   unit: z.enum(["USD", "UC", "jobs", "percent", "count"]),
+  /** False for things meant to go down (costs, wait times). */
+  higherIsBetter: z.boolean().default(true),
+  /** Days after approval to measure the result. */
+  measureAfterDays: z.number().int().min(7).max(365).default(90),
+});
+
+/** The recorded result of a KPI. Code picks MET / PARTLY_MET / MISSED from the value and the target. */
+export const KPIOutcomeZ = z.enum(["MET", "PARTLY_MET", "MISSED", "NO_REPORT"]);
+
+/** A proposal's KPI as stored, with when it is measured and what happened. */
+export const ProposalKPIOutputZ = KPIz.extend({
+  id: z.string().optional(),
+  measureBy: z.string().datetime().optional().nullable(),
+  outcome: KPIOutcomeZ.optional().nullable(),
+  actualValue: z.number().optional().nullable(),
+  outcomeNote: z.string().optional().nullable(),
+  /** OWNER_REPORTED: the proposal's author reported it; nobody has checked it. NONE: no report. */
+  verification: z.enum(["OWNER_REPORTED", "NONE"]).optional().nullable(),
+  outcomeRecordedAt: z.string().datetime().optional().nullable(),
+});
+
+/** A similar past proposal's result that Sage's memory surfaced while reviewing this one. */
+export const PriorOutcomeZ = z.object({
+  text: z.string(),
+  sourceIds: z.array(z.string()).default([]),
+  ageDays: z.number().int().nonnegative(),
 });
 
 // ── INPUT ─────────────────────────────────────────────
@@ -226,6 +252,10 @@ export const ProposalOutputZ = z.object({
   missing_data: z.array(MissingDataZ).default([]),
   councilRequired: z.boolean().default(false),
   rawText: z.string().optional().nullable(),
+  /** What the proposal aims to achieve, and once measured, what happened. */
+  kpis: z.array(ProposalKPIOutputZ).default([]),
+  /** Results of similar past proposals in this Commons, from Sage's memory. Member-reported, not verified. */
+  priorOutcomes: z.array(PriorOutcomeZ).default([]),
 });
 
 
@@ -469,6 +499,9 @@ export type ProposalInput = z.infer<typeof ProposalInputZ>;
 export type ProposalOutput = z.infer<typeof ProposalOutputZ>;
 export type ProposerRole = z.infer<typeof ProposerRoleZ>;
 export type ProposalStatus = z.infer<typeof ProposalStatusZ>;
+export type ProposalKPI = z.infer<typeof KPIz>;
+export type KPIOutcome = z.infer<typeof KPIOutcomeZ>;
+export type PriorOutcome = z.infer<typeof PriorOutcomeZ>;
 export type ProposalCategory = z.infer<typeof ProposalCategoryZ>;
 export type Governance = z.infer<typeof GovernanceZ>;
 export type Audit = z.infer<typeof AuditZ>;

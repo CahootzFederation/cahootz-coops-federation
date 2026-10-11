@@ -4949,6 +4949,27 @@ export const api = {
   },
 
   /**
+   * The proposal's author reports how one of its goals turned out. `actualValue` null means they
+   * couldn't measure it. Returns the updated proposal.
+   */
+  async reportKpiOutcome(
+    kpiId: string,
+    actualValue: number | null,
+    note: string | undefined,
+    walletAddress: string,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/proposal.reportKpiOutcome`, {
+      method: 'POST',
+      headers: createApiHeaders(walletAddress),
+      body: JSON.stringify({ kpiId, actualValue, ...(note ? { note } : {}) }),
+    });
+    const result = await response.json();
+    if (result.error)
+      throw apiError(result.error, 'Failed to report the result');
+    return result.result?.data;
+  },
+
+  /**
    * Cast a council vote on a proposal (admin only)
    */
   async councilVote(

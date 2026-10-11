@@ -70,7 +70,8 @@ export async function consolidateSageMemory(coopId: string, now = new Date()): P
     db.sageTask.findMany({
       // Suggestion follow-ups aren't remembered separately: the suggestion's own outcome is (above), with
       // personal kinds (ride matches, introductions) excluded, which a task's title alone can't tell.
-      where: { coopId, status: { in: ["DONE", "ABANDONED", "DISMISSED"] }, updatedAt: { gte: since }, subjectType: { not: "suggestion_review" } },
+      // Outcome checks are remembered per proposal, as proposal_outcome (proposal-outcomes.ts).
+      where: { coopId, status: { in: ["DONE", "ABANDONED", "DISMISSED"] }, updatedAt: { gte: since }, subjectType: { notIn: ["suggestion_review", "proposal_kpi"] } },
       select: { id: true, title: true, status: true, outcome: true, circleId: true, updatedAt: true },
       orderBy: { updatedAt: "asc" }, take: 200,
     }),
@@ -141,6 +142,10 @@ export interface MemoryLine {
  */
 export async function retrieveSageMemory(input: {
   coopId: string; circleId?: string | null; about?: string; purpose: string; maxItems?: number; maxChars?: number; now?: Date;
+  /** Only these memory types (e.g. "proposal_outcome"). */
+  types?: string[];
+  /** Drop items whose relevance to `about` is below this (0..1). */
+  minRelevance?: number;
 }): Promise<MemoryLine[]> {
   const now = input.now ?? new Date();
   const scopes = [
@@ -150,6 +155,7 @@ export async function retrieveSageMemory(input: {
   const rows = await db.aIObservation.findMany({
     where: {
       status: "ACTIVE", generatedByAgentKey: AGENT_KEY,
+      ...(input.types?.length ? { type: { in: input.types } } : {}),
       OR: scopes.map((scope) => ({ scopeType: scope.scopeType, scopeId: scope.scopeId, ...("visibility" in scope ? { visibility: scope.visibility } : {}) })),
       AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }],
     },
@@ -161,8 +167,8 @@ export async function retrieveSageMemory(input: {
     const title = (row.details as { title?: unknown } | null)?.title;
     const relevance = input.about ? overlap(typeof title === "string" ? title : row.summary, input.about) : 0;
     const recency = 1 / (1 + ageDays / 30);
-    return { row, ageDays, score: relevance * 2 + recency + (row.scopeType === "circle" ? 0.25 : 0) };
-  }).sort((a, b) => b.score - a.score);
+    return { row, ageDays, relevance, score: relevance * 2 + recency + (row.scopeType === "circle" ? 0.25 : 0) };
+  }).filter((item) => input.minRelevance === undefined || item.relevance >= input.minRelevance).sort((a, b) => b.score - a.score);
 
   const maxItems = input.maxItems ?? 8;
   const maxChars = input.maxChars ?? 1500;

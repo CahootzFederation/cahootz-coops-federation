@@ -74,6 +74,10 @@ The model recommends actions. Deterministic code enforces authorization, permiss
 Sage memory must be durable, scoped, bounded, and auditable.
 
 - Reuse existing `CommonsAction`, `CommonsActionReview`, `CommonsActionAudit`, and `AIObservation` records where appropriate.
+- `AIObservation` is the canonical table for Sage's generated narrative memory. Do not introduce a generic `Note`, `SageNote`, or `CommonsAgentMemory` table for information that fits its sourced observation model.
+- Use `AIObservation.scopeType` and `scopeId` to distinguish Commons, circle, member, and proposal memory; pair them with the narrowest correct `visibility`. Member memory must use `PRIVATE_TO_AUTHOR_SCOPE`, and Commons-specific member context must retain an enforceable Commons boundary rather than relying only on prose.
+- A check-in or conversation is a source interaction, not itself a memory row. Preserve the interaction in its owning conversation/workflow record and promote only durable, useful outcomes, confirmed preferences, corrections, or patterns into `AIObservation` with source references.
+- Use `KnowledgeDocument` for member- or Commons-authored reference material and `AIEvaluation` for raw agent execution traces. Neither replaces `AIObservation`, and `AIObservation` must not be treated as authoritative application state.
 - Remember outcomes and corrections, not unlimited conversation transcripts.
 - Never treat an AI-generated memory as verified truth.
 - Store source references, confidence, visibility, expiry, and verification state.

@@ -53,6 +53,7 @@ export const notificationCategoryTypes: Record<
     "COMMONS_ACCESS_DECLINED",
     "COMMONS_MEMBER_JOINED",
     "CIRCLE_MEMBER_JOINED",
+    "DIRECT_MESSAGE",
   ],
   governance: [
     "PROPOSAL_CREATED",

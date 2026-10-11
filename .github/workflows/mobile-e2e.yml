@@ -129,7 +129,7 @@ jobs:
           echo $! > /tmp/cahootz-api.pid
           # Metro holds the whole web bundle in memory for the full run; the default
           # heap ran out partway through the suite and every later journey failed.
-          NODE_OPTIONS=--max-old-space-size=6144 nohup pnpm -F @cahootz/mobile dev > /tmp/cahootz-mobile.log 2>&1 &
+          NODE_OPTIONS=--max-old-space-size=6144 nohup setsid pnpm -F @cahootz/mobile dev > /tmp/cahootz-mobile.log 2>&1 &
           echo $! > /tmp/cahootz-mobile.pid
           nohup pnpm -F @cahootz/web dev --port 3000 > /tmp/cahootz-web.log 2>&1 &
           echo $! > /tmp/cahootz-web.pid
@@ -183,8 +183,48 @@ jobs:
           fi
           time curl --fail --silent --output /dev/null --max-time 300 "http://localhost:8081${bundle_path}"
 
-      - name: Run two-user UI tests
-        run: pnpm test:e2e:mobile
+      - name: Run non-Sage UI tests
+        run: pnpm -F @cahootz/mobile test:e2e:fast
+
+      # Metro retains compiled bundles and eventually exhausts its heap during the
+      # complete suite. Restart it between the deterministic and live-model groups
+      # while preserving Playwright's saved browser sessions in e2e/.auth.
+      - name: Restart mobile web app before Sage journeys
+        shell: bash
+        run: |
+          kill -- -"$(cat /tmp/cahootz-mobile.pid)" || true
+          for attempt in {1..30}; do
+            if ! curl --silent http://localhost:8081 >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "Mobile web app did not stop cleanly"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          NODE_OPTIONS=--max-old-space-size=6144 nohup setsid pnpm -F @cahootz/mobile dev > /tmp/cahootz-mobile-sage.log 2>&1 &
+          echo $! > /tmp/cahootz-mobile.pid
+
+          for attempt in {1..60}; do
+            if curl --fail --silent http://localhost:8081 >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              cat /tmp/cahootz-mobile-sage.log
+              exit 1
+            fi
+            sleep 2
+          done
+
+          bundle_path=$(curl --fail --silent http://localhost:8081 | grep -o 'src="/[^"]*\.bundle[^"]*"' | head -1 | sed 's/^src="//; s/"$//')
+          if [ -n "$bundle_path" ]; then
+            time curl --fail --silent --output /dev/null --max-time 300 "http://localhost:8081${bundle_path}"
+          fi
+
+      - name: Run Sage UI tests
+        run: pnpm -F @cahootz/mobile exec playwright test --grep @sage --no-deps
 
       - name: Collect server logs
         if: ${{ always() }}
@@ -195,6 +235,9 @@ jobs:
           fi
           if [ -f /tmp/cahootz-mobile.log ]; then
             cp /tmp/cahootz-mobile.log output/playwright/server-logs/mobile.log
+          fi
+          if [ -f /tmp/cahootz-mobile-sage.log ]; then
+            cp /tmp/cahootz-mobile-sage.log output/playwright/server-logs/mobile-sage.log
           fi
           if [ -f /tmp/cahootz-web.log ]; then
             cp /tmp/cahootz-web.log output/playwright/server-logs/web.log

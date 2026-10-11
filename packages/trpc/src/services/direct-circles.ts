@@ -229,7 +229,7 @@ export async function sendDirectCircleMessage(
   if (isSageUser(other)) {
     await replyAsSage(db, { group, sender, sage: other, message });
   } else if (!other.isBot) {
-    void createNotificationAndPush(db, {
+    await createNotificationAndPush(db, {
       userId: other.id,
       coopId: group.coopId,
       type: 'DIRECT_MESSAGE',

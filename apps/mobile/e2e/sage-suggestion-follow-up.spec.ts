@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
+import { withExclusiveAccountSetting } from "./support/exclusive";
 
 // Sage follows through on suggestions that wait on someone: it says when it will close them, reminds
 // the person once, closes the suggestion when nobody answers, and closes it right away when it no
@@ -51,8 +52,7 @@ async function openAlerts(page: Page) {
 // Two people: A accepts an introduction, B is asked and never answers. B is told when Sage will close
 // it, gets exactly one reminder that opens the suggestion, and then Sage closes it. A, who said yes and
 // was waiting, is told it won't go ahead.
-test("Sage reminds once about an unanswered suggestion, then closes it and tells whoever was waiting", async ({ browser }) => {
-  test.setTimeout(240_000);
+test("Sage reminds once about an unanswered suggestion, then closes it and tells whoever was waiting", async ({ browser }) => withExclusiveAccountSetting("sage-introductions", async () => {
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const need = await newSignedInPage(browser, USER_A_EMAIL);
   const helper = await newSignedInPage(browser, USER_B_EMAIL);
@@ -113,7 +113,7 @@ test("Sage reminds once about an unanswered suggestion, then closes it and tells
     await need.context.close();
     await helper.context.close();
   }
-});
+}, 240_000));
 
 // A circle leader is asked to approve a Sage comment on a member's post. When the member deletes the
 // post, Sage closes the suggestion at its next check instead of waiting or reminding the leader.

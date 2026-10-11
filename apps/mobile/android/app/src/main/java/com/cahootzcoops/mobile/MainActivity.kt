@@ -1,4 +1,4 @@
-package com.cahootzcoop.mobile
+package com.cahootzcoops.mobile
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

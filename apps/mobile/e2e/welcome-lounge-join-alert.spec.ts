@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { newSignedInPage } from "./support/auth";
+import { withExclusiveAccountSetting } from "./support/exclusive";
+import { markWelcomeNotificationsAsRead } from "./support/welcome-lounge";
 
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 const USER_A_EMAIL =
@@ -55,7 +57,7 @@ async function leaveWelcomeLounges(sessionToken: string) {
 // other lounge member gets an alert that opens that thread.
 test("a newcomer joining a welcome lounge triggers Sage's @everyone alert for the rest of the lounge", async ({
   browser,
-}) => {
+}) => withExclusiveAccountSetting("welcome-lounge-membership", async () => {
   const [member, newcomer] = await Promise.all([
     newSignedInPage(browser, USER_A_EMAIL),
     newSignedInPage(browser, USER_B_EMAIL),
@@ -76,7 +78,16 @@ test("a newcomer joining a welcome lounge triggers Sage's @everyone alert for th
       memberToken,
       { coopId: "cahootz" },
     );
-    await trpc("POST", "notification.markAllAsRead", memberToken, {});
+    const welcomeStatus = await trpc(
+      "GET",
+      "groups.getWelcomeIntroStatus",
+      memberToken,
+      { groupId: memberLounge.groupId },
+    );
+    await markWelcomeNotificationsAsRead(memberToken, {
+      groupId: memberLounge.groupId,
+      postId: welcomeStatus.welcomePostId,
+    });
 
     // User B joins through the real UI.
     await newcomer.page.reload();
@@ -129,4 +140,4 @@ test("a newcomer joining a welcome lounge triggers Sage's @everyone alert for th
   } finally {
     await Promise.all([member.context.close(), newcomer.context.close()]);
   }
-});
+}));

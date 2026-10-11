@@ -216,7 +216,10 @@ async function ensureActiveCharter(config: CoopConfig): Promise<CoopConfig> {
   if (!isPlaceholderCharter(config.charterText, config.coopId)) return config;
   const goals = missionGoals(config);
   const text = starterCharter(config.name || config.coopId, goals, config.displayMission);
-  const updated = await db.coopConfig.update({ where: { id: config.id }, data: { charterText: text } });
+  const updated = await db.coopConfig.update({
+    where: { id: config.id },
+    data: { charterText: text, version: { increment: 1 } },
+  });
   await db.coopConfigAudit.create({
     data: {
       coopConfigId: config.id, changedBy: "system/commons-action-agent",
@@ -225,6 +228,8 @@ async function ensureActiveCharter(config: CoopConfig): Promise<CoopConfig> {
       section: "charterText", status: "APPLIED",
     },
   });
+  const { enqueueCommunityMemoryReconsideration } = await import("./sage-dispatch.js");
+  await enqueueCommunityMemoryReconsideration(updated.coopId, updated.version);
   return updated;
 }
 

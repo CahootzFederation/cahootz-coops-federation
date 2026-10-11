@@ -10,6 +10,7 @@ import { COMMONS_COOP_ID, ensureCommonsMembership } from '../lib/commons.js';
 import { encodeMentions } from '../lib/mentions.js';
 import { createNotificationAndPush } from './push-notification-service.js';
 import { traceSageReply } from './sage-reply-trails.js';
+import { handlePrivateCheckinSignal } from './sage-private-signals.js';
 
 // A direct message is a private circle with exactly two members. It reuses
 // circle membership for access control and GroupComment for messages, but
@@ -182,6 +183,8 @@ export async function sendDirectCircleMessage(
     group: { id: string; coopId: string; directKey: string | null };
     sender: { id: string; name: string | null; email: string };
     content: string;
+    /** Stable internal key for scheduled/system messages. Never accepted from the public router. */
+    systemKey?: string;
   },
 ) {
   const { group, sender } = input;
@@ -204,7 +207,7 @@ export async function sendDirectCircleMessage(
 
   const message = await db.$transaction(async (tx) => {
     const created = await tx.groupComment.create({
-      data: { groupId: group.id, authorId: sender.id, content },
+      data: { groupId: group.id, authorId: sender.id, content, systemKey: input.systemKey },
     });
     await tx.group.update({ where: { id: group.id }, data: { lastActivityAt: now } });
     await tx.groupMember.update({
@@ -217,7 +220,7 @@ export async function sendDirectCircleMessage(
         action: 'DIRECT_MESSAGE_SENT',
         resource: 'GroupComment',
         resourceId: created.id,
-        metadata: { groupId: group.id },
+        metadata: { groupId: group.id, ...(input.systemKey ? { systemKey: input.systemKey } : {}) },
       }),
     });
     return created;
@@ -245,11 +248,24 @@ async function replyAsSage(
     group: { id: string; coopId: string };
     sender: { id: string; name: string | null; email: string };
     sage: { id: string };
-    message: { id: string; content: string };
+    message: { id: string; content: string; createdAt: Date };
   },
 ) {
   const { group, sender, sage, message } = input;
   try {
+    const privateSignal = await handlePrivateCheckinSignal({
+      groupId: group.id,
+      coopId: group.coopId,
+      userId: sender.id,
+      messageId: message.id,
+      content: message.content,
+      createdAt: message.createdAt,
+    });
+    if (privateSignal.safetyReply) {
+      await db.groupComment.create({ data: { groupId: group.id, authorId: sage.id, content: privateSignal.safetyReply } });
+      await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
+      return;
+    }
     const agent = getAgent('sage-commons-reply');
     if (!agent) return;
     const prior = await db.groupComment.findMany({
@@ -266,8 +282,9 @@ async function replyAsSage(
       { message: message.content, threadContext, threadCount: prior.length },
       (cleanMessage, thread) => agent.run({ coopId: group.coopId, message: cleanMessage, threadContext: thread }),
       async (reply) => {
+        const content = privateSignal.consentQuestion ? `${reply}\n\n${privateSignal.consentQuestion}` : reply;
         await db.groupComment.create({
-          data: { groupId: group.id, authorId: sage.id, content: reply },
+          data: { groupId: group.id, authorId: sage.id, content },
         });
         await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
       },

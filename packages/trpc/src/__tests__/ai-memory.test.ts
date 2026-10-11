@@ -88,6 +88,22 @@ describe("ai-memory service", () => {
       expect(result[0].visibility).toBe("PUBLIC");
     });
 
+    it("never exposes Sage-internal hypotheses through the general memory gateway", async () => {
+      mockDb.aIObservation.findMany.mockResolvedValue([
+        observationRow({ visibility: "SAGE_INTERNAL" }),
+      ]);
+
+      const result = await queryObservations({
+        scopeType: "commons",
+        scopeId: "cahootz",
+        requestingUserId: "admin_1",
+        coopId: "cahootz",
+      });
+
+      expect(result).toEqual([]);
+      expect(mockDb.adminRole.findFirst).not.toHaveBeenCalled();
+    });
+
     it("filters the base query to ACTIVE, non-expired rows for the given scope", async () => {
       await queryObservations({
         scopeType: "commons",

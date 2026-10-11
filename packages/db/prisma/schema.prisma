@@ -922,6 +922,7 @@ model AIEvaluation {
 // suggestions/interpretations, not truth — distinct from AIEvaluation above,
 // which is a write-only debug trace of raw agent input/output). ────────────
 enum AIObservationVisibility {
+  SAGE_INTERNAL // visible only to trusted server-side Sage workflows
   PRIVATE_TO_AUTHOR_SCOPE // only the specific user/admin whose scope this is (rare)
   CIRCLE // members of scopeId when scopeType = "circle"
   COMMONS_ADMINS // admins of scopeId when scopeType = "commons"
@@ -932,7 +933,9 @@ enum AIObservationVisibility {
 }
 
 enum AIObservationStatus {
+  CANDIDATE
   ACTIVE
+  UNSUPPORTED
   SUPERSEDED
   DISMISSED
   EXPIRED
@@ -949,6 +952,7 @@ model AIObservation {
   summary             String                  @db.Text
   details             Json?
   sources             AIObservationSource[]
+  originatedActions   CommonsAction[]
   visibility          AIObservationVisibility @default(COMMONS_ADMINS)
   status              AIObservationStatus     @default(ACTIVE)
   expiresAt           DateTime?
@@ -957,12 +961,14 @@ model AIObservation {
   verifiedBy          User?                   @relation("AIObservationVerifier", fields: [verifiedById], references: [id])
   verifiedAt          DateTime?
   generatedByAgentKey String? // matches AgentDefinition.key in agents/registry.ts
+  systemKey           String?                 @unique // stable idempotency/version key for derived observations
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
 
   @@index([scopeType, scopeId, status])
   @@index([status, expiresAt])
   @@index([generatedByAgentKey, createdAt])
+  @@index([scopeType, scopeId, generatedByAgentKey, createdAt])
   @@schema("public")
 }
 
@@ -1190,45 +1196,48 @@ model CommonsContentScan {
 }
 
 model CommonsAction {
-  id                 String                     @id @default(cuid())
-  coopId             String
-  sourceType         String
-  sourceId           String
-  sourcePostId       String
-  sourceAuthorId     String
-  contentHash        String
-  position           Int
-  type               CommonsActionType
-  status             CommonsActionStatus        @default(PENDING)
-  summary            String                     @db.Text
-  evidence           String?                    @db.Text
-  confidence         Float
-  draftText          String?                    @db.Text
-  generatedDraftText String?                    @db.Text
-  sourceTextSnapshot String?                    @db.Text
-  contextSnapshot    String?                    @db.Text
-  charterSnapshot    String?                    @db.Text
-  goalsSnapshot      Json?
-  charterConfigId    String
-  publishedCommentId String?
-  replySourceKey     String?                    @unique
-  reviewedBy         String?
-  reviewedAt         DateTime?
-  circleId           String?
-  payload            Json?
-  payloadHash        String?
-  revision           Int                        @default(1)
-  createdAt          DateTime                   @default(now())
-  updatedAt          DateTime                   @updatedAt
-  feedback           CommonsActionFeedback?
-  participants       CommonsActionParticipant[]
-  reviews            CommonsActionReview[]
-  auditEvents        CommonsActionAudit[]
+  id                  String                     @id @default(cuid())
+  coopId              String
+  sourceType          String
+  sourceId            String
+  sourcePostId        String
+  sourceAuthorId      String
+  contentHash         String
+  position            Int
+  type                CommonsActionType
+  status              CommonsActionStatus        @default(PENDING)
+  summary             String                     @db.Text
+  evidence            String?                    @db.Text
+  confidence          Float
+  draftText           String?                    @db.Text
+  generatedDraftText  String?                    @db.Text
+  sourceTextSnapshot  String?                    @db.Text
+  contextSnapshot     String?                    @db.Text
+  charterSnapshot     String?                    @db.Text
+  goalsSnapshot       Json?
+  charterConfigId     String
+  originObservationId String? // internal hypothesis that motivated this reviewable action
+  originObservation   AIObservation?             @relation(fields: [originObservationId], references: [id], onDelete: Restrict)
+  publishedCommentId  String?
+  replySourceKey      String?                    @unique
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  circleId            String?
+  payload             Json?
+  payloadHash         String?
+  revision            Int                        @default(1)
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  feedback            CommonsActionFeedback?
+  participants        CommonsActionParticipant[]
+  reviews             CommonsActionReview[]
+  auditEvents         CommonsActionAudit[]
 
   @@unique([sourceType, sourceId, contentHash, charterConfigId, position])
   @@index([coopId, status, createdAt])
   @@index([sourceType, sourceId])
   @@index([circleId, status])
+  @@index([originObservationId, status])
   @@schema("public")
 }
 
@@ -1809,6 +1818,7 @@ model GroupComment {
   content   String   @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  systemKey String?  @unique // internal idempotency key for scheduled/system-authored messages
 
   @@index([groupId, createdAt])
   @@index([authorId, createdAt])

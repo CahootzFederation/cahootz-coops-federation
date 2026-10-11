@@ -129,6 +129,42 @@ Narrative memory may retain context and patterns. Each memory needs a Commons sc
 references, visibility, verification state, creation time, and review or expiration time.
 An agent's earlier statement is never evidence for the same claim.
 
+### Weekly outreach and community hypotheses
+
+Sage may send one warm private check-in per member per ISO week. A stable hash assigns the
+weekday; a member in several Commons rotates through one explicitly named Commons context so
+their answer is not silently attributed to every community. Delivery uses the existing Sage
+DM, inbox alert, push notification, and mobile deep link. The key
+`sage-weekly:<userId>:<isoWeek>` makes retries idempotent.
+
+Private replies are classified for safety before any memory extraction. Sensitive medical,
+legal, financial, relationship, identity, abuse, or crisis details are aggregation-ineligible.
+Urgent disclosures stay in the private safety path, which is disabled until policy and legal
+review. Remembering a generalized personal theme requires consent; anonymous Commons
+aggregation requires separate explicit consent. Exact disclosure text never enters an
+aggregation prompt or a Commons observation.
+
+Commons patterns use `AIObservation`, not a parallel notes table. Every derived insight begins
+as `CANDIDATE` with `SAGE_INTERNAL` visibility. Promotion requires at least 10 active human
+members; the greater of 5 people or 20 percent of active members; multiple evidence dates; two
+consolidation passes; valid consent; and no unresolved correlated burst. Each person counts once
+per theme and window. Similar timing, wording, linked activity, or one-circle concentration is
+treated as correlation, never proof of malicious coordination, and blocks automatic promotion.
+Derived observations are never evidence for another derived observation.
+
+Goal-aligned observations preserve the exact active config ID and version, charter hash, and
+goal keys and snapshots. The memory gateway rejects a version mismatch. A config change queues
+immediate reconsideration: the older observation remains historical and is superseded by a new
+candidate, retained only as a general-wellbeing theme, or made `UNSUPPORTED`. Insufficient
+support is not contradiction: only affirmative contrary evidence produces `DISMISSED`.
+
+An `ACTIVE` hypothesis may motivate a reviewable `CommonsAction` through
+`originObservationId`; publication, proposals, money, introductions, and governance still use
+their existing human gates. Thirty- and ninety-day reviews distinguish action completion,
+feedback, and signal movement and label the result `HELPFUL`, `NOT_HELPFUL`, `INCONCLUSIVE`, or
+`NO_ACTION`. They record association, never causation. Source IDs remain available for audit but
+are excluded from member- and Commons-facing retrieval.
+
 ## Financial intelligence
 
 Build a deterministic `buildCommonsFinancialSnapshot(coopId)` service that calculates:

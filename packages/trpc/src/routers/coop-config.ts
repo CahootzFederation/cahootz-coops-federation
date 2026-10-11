@@ -8,6 +8,7 @@ import { linkExternalWalletToUser } from "../services/wallet-service.js";
 import { isPlaceholderCharter, starterCharter } from "../services/starter-charter.js";
 import { ensureCommonsFundingStore } from "../services/funding-badge-service.js";
 import { assertCommonsNameAvailable, cleanCommonsName } from "../lib/commons-name.js";
+import { enqueueCommunityMemoryReconsideration } from "../services/sage-dispatch.js";
 
 type MissionGoalConfig = {
   key: string;
@@ -655,6 +656,8 @@ export const coopConfigRouter = router({
         }),
       ]);
 
+      await enqueueCommunityMemoryReconsideration(coopId, updatedConfig.version);
+
       return mapDbToConfigOutput(updatedConfig);
     }),
 
@@ -807,6 +810,8 @@ export const coopConfigRouter = router({
           },
         }),
       ]);
+
+      await enqueueCommunityMemoryReconsideration(input.coopId, updatedConfig.version);
 
       return mapDbToConfigOutput(updatedConfig);
     }),
@@ -1017,6 +1022,8 @@ export const coopConfigRouter = router({
         });
         return config;
       });
+
+      await enqueueCommunityMemoryReconsideration(input.coopId, updatedConfig.version);
 
       return mapDbToConfigOutput(updatedConfig);
     }),

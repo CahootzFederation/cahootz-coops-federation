@@ -45,7 +45,7 @@ export function shouldShowInAppAlert(pathname: string) {
 export function alertFromPush(content: {
   title: string | null;
   body: string | null;
-  data: Record<string, unknown> | null | undefined;
+  data?: Record<string, unknown> | null;
 }): AccountNotification | null {
   const data = content.data ?? {};
   const id = typeof data.notificationId === "string" ? data.notificationId : null;

@@ -62,7 +62,7 @@ export default function CommonsPostDetailScreen() {
   const postId = params.postId || '';
   // Set by alerts that point at one comment (e.g. "replied to your intro").
   const focusCommentId = params.commentId || '';
-  const { user, sessionToken } = useAuth();
+  const { user, sessionToken, isLoading: authLoading } = useAuth();
 
   const [post, setPost] = useState<CommonsPost | null>(null);
   const [circleIsMember, setCircleIsMember] = useState<boolean | null>(null);
@@ -89,6 +89,16 @@ export default function CommonsPostDetailScreen() {
 
   useEffect(() => {
     let mounted = true;
+
+    // A direct navigation or browser reload mounts this route before the
+    // persisted session has finished restoring. Waiting prevents an initial
+    // unauthenticated request from flashing a false 403 (and, in development,
+    // leaving Expo's error overlay over an otherwise recovered screen).
+    if (authLoading) {
+      return () => {
+        mounted = false;
+      };
+    }
 
     if (!postId) {
       setPostGone(true);
@@ -126,7 +136,7 @@ export default function CommonsPostDetailScreen() {
     return () => {
       mounted = false;
     };
-  }, [coopId, postId, sessionToken, reloadKey]);
+  }, [authLoading, coopId, postId, sessionToken, reloadKey]);
 
   const supportPost = async () => {
     if (!post) return;

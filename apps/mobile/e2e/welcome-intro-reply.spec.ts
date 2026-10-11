@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { USER_A_EMAIL, USER_B_EMAIL, newSignedInPage } from "./support/auth";
+import { withExclusiveAccountSetting } from "./support/exclusive";
 import {
   cleanUpRunComments,
   dismissPushPrimer,
@@ -21,7 +22,7 @@ import {
 // thread with their intro highlighted.
 test("a newcomer's welcome lounge intro gets a reply alert that opens the intro", async ({
   browser,
-}) => {
+}) => withExclusiveAccountSetting("welcome-lounge-membership", async () => {
   const runId = `E2E-${Date.now().toString(36)}`;
   const introText = `${runId} intro: here to meet neighbors and swap garden tips`;
   const replyText = `${runId} welcome aboard, glad you're here`;
@@ -96,14 +97,14 @@ test("a newcomer's welcome lounge intro gets a reply alert that opens the intro"
     await leaveWelcomeLounges(newcomerToken).catch(() => undefined);
     await Promise.all([member.context.close(), newcomer.context.close()]);
   }
-});
+}));
 
 // A reaction counts as a response to an intro: another member likes the
 // newcomer's intro from the welcome thread, and the newcomer gets a one-time
 // "reacted to your intro" alert that opens the intro.
 test("liking a newcomer's welcome lounge intro sends them a reaction alert", async ({
   browser,
-}) => {
+}) => withExclusiveAccountSetting("welcome-lounge-membership", async () => {
   const runId = `E2E-${Date.now().toString(36)}`;
   const introText = `${runId} intro: new in town, looking for a running group`;
 
@@ -201,4 +202,4 @@ test("liking a newcomer's welcome lounge intro sends them a reaction alert", asy
     await leaveWelcomeLounges(newcomerToken).catch(() => undefined);
     await Promise.all([member.context.close(), newcomer.context.close()]);
   }
-});
+}));

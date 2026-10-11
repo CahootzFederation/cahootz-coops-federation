@@ -1419,11 +1419,11 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                 )}
 
                 {/* Error Message */}
-                {loginError && (
+                {loginError ? (
                   <View className="bg-red-50 border border-red-200 rounded-lg p-3">
                     <Text className="text-red-700 text-sm">{loginError}</Text>
                   </View>
-                )}
+                ) : null}
 
                 {/* Submit Button */}
                 {!codeSent ? (

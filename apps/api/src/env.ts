@@ -43,7 +43,7 @@ export const env = createEnv({
     SLACK_WEBHOOK_URL: z.string().url(),
     RESEND_API_KEY: z.string().startsWith("re_"),
     RESEND_FROM_EMAIL: z.string().email().default("support@mail.cahootzcoops.com"),
-    SENTRY_DSN: z.string().url(),
+    SENTRY_DSN: z.string().url().optional(),
     EMAIL_TEST_TOKEN: z.string().min(16).optional(),
     MEMBER_APP_LINK_URL: z.string().url().optional(),
     PLATFORM_ADMIN_WALLETS: z.string().optional(),

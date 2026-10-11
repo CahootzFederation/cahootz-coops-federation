@@ -337,10 +337,17 @@ administrators may monitor operational health but do not silently gain Commons g
 Extend the existing `CommonsAction`, participant, review, feedback, audit, and notification
 models where their semantics fit. Add separate durable records where needed:
 
+`AIObservation` is the canonical store for Sage's generated narrative memory. Reuse its
+scope, visibility, source, confidence, status, verification, review, and expiry fields rather
+than adding a generic `Note`, `SageNote`, or `CommonsAgentMemory` table. A check-in or
+conversation remains in its owning interaction record; only durable outcomes, confirmed
+preferences, corrections, and useful patterns are promoted into `AIObservation`. Use
+`KnowledgeDocument` for authored reference material and `AIEvaluation` for raw execution
+traces. Authoritative organizational facts remain in their normalized domain tables.
+
 - `CommonsAgentCycle`: lease, wake reason, status, cost, timestamps, result summary
 - `CommonsAgentTask`: objective, assignee, priority, state, dependencies, due/review time
 - `CommonsAgentObservation`: typed need, opportunity, risk, or pattern with evidence
-- `CommonsAgentMemory`: sourced, scoped, visibility-controlled, expiring narrative memory
 - `CommonsCommitment`: owner, promise, source, due date, status, and escalation
 - `CommonsConductCase`: confidential allegation and lifecycle
 - `CommonsConductEvidence`: immutable evidence reference and access classification

@@ -1,6 +1,6 @@
 # Sage product roadmap
 
-Last updated: 2026-10-07
+Last updated: 2026-10-11
 
 ## North star
 
@@ -341,6 +341,7 @@ For every Sage behavior change:
 
 - 2026-10-06: Sage's core principles are platform-wide and fixed in every Sage prompt; no Commons can change them. Sage must not fall back on mainstream US individual-finance advice.
 - 2026-10-06: Everyday decisions may be grounded on the thread or a checked source; rules, votes, membership, discipline and the Commons' money still require the charter. An independent relevance check gates autonomous publishing.
+- 2026-10-11: `AIObservation` is the canonical store for Sage's generated narrative memory. Check-ins and conversations remain source interactions; only durable outcomes, confirmed preferences, corrections, and useful patterns become sourced, scoped observations. Do not add a parallel generic Notes or Sage-memory table unless `AIObservation` demonstrably cannot represent the required semantics.
 
 ## Completed milestones
 

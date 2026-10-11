@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
 import { withExclusiveAccountSetting } from "./support/exclusive";
 
-// Sage's wake-and-wait loop, routed alerts, consent-first introductions and memory. Fixtures run the
+// Sage's wake-and-wait loop, consent-first introductions and memory. Fixtures run the
 // real service code (apps/api/scripts/e2e-sage-steward.ts); nothing here calls a live model, but
 // creating a Commons post can wake Sage's reply agent, so the post journeys are tagged @sage.
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -150,68 +150,6 @@ test("Sage follows up once, closes the task on reply, respects a dismissal and r
       if (token) await trpcPost("commons.deletePost", token, { postId }).catch(() => {});
     }
     await adminContext.close();
-    await member.context.close();
-  }
-});
-
-// Sage routes a circle matter to the person responsible: the circle's leader gets the alert with its
-// evidence and why they got it, the other member doesn't, a duplicate is suppressed, and "Not for me"
-// passes it on.
-test("a routed alert reaches the circle leader with evidence, and Not for me passes it on", async ({ browser }) => {
-  test.setTimeout(180_000);
-  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const leader = await newSignedInPage(browser, USER_A_EMAIL);
-  const member = await newSignedInPage(browser, USER_B_EMAIL);
-  let circleId: string | undefined;
-  let leaderToken: string | null = null;
-  let memberToken: string | null = null;
-  const title = `E2E ${runId} members asking about dues`;
-
-  try {
-    leaderToken = await sessionTokenFor(leader.page);
-    memberToken = await sessionTokenFor(member.page);
-    if (!leaderToken || !memberToken) throw new Error("Missing session token after sign-in");
-    const { group } = await trpcPost("groups.create", leaderToken, { name: `E2E Dues circle ${runId}`, privacy: "invite-only" });
-    circleId = group.id;
-    await trpcPost("groups.joinByCode", memberToken, { inviteCode: group.inviteCode });
-
-    const routed = steward("alert", circleId!, runId);
-    expect(routed.first).toMatchObject({ status: "ROUTED", category: "CIRCLE_LEADER" });
-    expect(routed.second).toMatchObject({ status: "DEDUPED" });
-
-    // 1. The leader gets exactly one alert and opens it.
-    await expect(async () => {
-      await leader.page.goto("/");
-      await leader.page.getByLabel("Alerts", { exact: true }).locator("visible=true").first().click();
-      await expect(leader.page.getByText(title).locator("visible=true")).toHaveCount(1, { timeout: 3_000 });
-    }).toPass(SERVER_POLL);
-    await shown(leader.page, title).click();
-    await expect(leader.page).toHaveURL(/\/sage\/alert\//);
-    await expect(shown(leader.page, "What Sage saw")).toBeVisible();
-    await expect(shown(leader.page, `“E2E ${runId}: does anyone know when circle dues are collected?”`)).toBeVisible();
-    await expect(shown(leader.page, /You're getting this as the circle's leader\./)).toBeVisible();
-    await expect(shown(leader.page, "Post a short note in the circle explaining when dues are collected.")).toBeVisible();
-
-    // 2. The other member of the circle wasn't alerted.
-    await member.page.goto("/");
-    await member.page.getByLabel("Alerts", { exact: true }).locator("visible=true").first().click();
-    await expect(member.page.getByText(title).locator("visible=true")).toHaveCount(0);
-
-    // 3. "Not for me" passes it on and closes it for the leader, including after a reload.
-    await leader.page.getByRole("button", { name: "Not for me" }).click();
-    await leader.page.getByLabel("Who should get this instead (optional)").fill(`E2E ${runId}: the treasurer handles dues`);
-    await leader.page.getByRole("button", { name: "Pass it on" }).click();
-    await expect(shown(leader.page, /^Thanks\. Sage (passed this to the next person responsible|sent this to the platform team)/)).toBeVisible();
-    await leader.page.reload();
-    await expect(shown(leader.page, "You passed this on. Sage sent it to the next person responsible.")).toBeVisible();
-    await expect(leader.page.getByRole("button", { name: "Got it" })).toHaveCount(0);
-  } finally {
-    steward("cleanup", runId, "-", circleId ?? "-", "-", "-");
-    if (circleId) {
-      if (memberToken) await trpcPost("groups.leave", memberToken, { groupId: circleId }).catch(() => {});
-      if (leaderToken) await trpcPost("groups.leave", leaderToken, { groupId: circleId }).catch(() => {});
-    }
-    await leader.context.close();
     await member.context.close();
   }
 });

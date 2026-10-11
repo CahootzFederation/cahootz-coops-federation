@@ -3,8 +3,9 @@ import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { View } from 'react-native';
+import { AppMetrics, AppMetricsRoot } from 'expo-observe';
 import { AppBottomNavigation } from '@/components/app-bottom-navigation';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
@@ -17,7 +18,7 @@ import { NotificationResponseHandler } from '@/components/notification-response-
 import { InAppAlertPopup } from '@/components/in-app-alert-popup';
 import { PendingInvitationResume } from '@/components/pending-invitation-resume';
 import { AnalyticsTracker } from '@/components/analytics-tracker';
-import { AuthProvider } from '@/contexts/auth-context';
+import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { CartProvider } from '@/contexts/cart-context';
 import { PlatformConfigProvider } from '@/contexts/platform-config-context';
 import { PaymentConfirmationProvider } from '@/components/payment-confirmation-provider';
@@ -119,7 +120,21 @@ const queryClient = new QueryClient({
   },
 });
 
-export default Sentry.wrap(function RootLayout() {
+function ObserveInteractiveMarker() {
+  const { isLoading } = useAuth();
+  const hasMarkedInteractive = useRef(false);
+
+  useEffect(() => {
+    if (!isLoading && !hasMarkedInteractive.current) {
+      hasMarkedInteractive.current = true;
+      AppMetrics.markInteractive();
+    }
+  }, [isLoading]);
+
+  return null;
+}
+
+function RootLayout() {
   const colorScheme = useColorScheme();
 
   // Handle deep links
@@ -146,6 +161,7 @@ export default Sentry.wrap(function RootLayout() {
         <StripeWrapper>
           <PlatformConfigProvider>
           <AuthProvider>
+            <ObserveInteractiveMarker />
             <AnalyticsTracker />
             <NotificationResponseHandler />
             <PendingInvitationResume />
@@ -171,4 +187,6 @@ export default Sentry.wrap(function RootLayout() {
       </QueryClientProvider>
     </SafeAreaProvider>
   );
-});
+}
+
+export default AppMetricsRoot.wrap(Sentry.wrap(RootLayout));

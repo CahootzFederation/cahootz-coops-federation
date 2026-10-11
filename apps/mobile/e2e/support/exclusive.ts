@@ -24,7 +24,14 @@ function isAlive(pid: number) {
  * body, including its cleanup, so specs that touch the same setting take turns. Time spent waiting is
  * added to the test's timeout.
  */
-export async function withExclusiveAccountSetting<T>(name: string, fn: () => Promise<T>): Promise<T> {
+export async function withExclusiveAccountSetting<T>(
+  name: string,
+  fn: () => Promise<T>,
+  bodyTimeoutMs = test.info().timeout,
+): Promise<T> {
+  // Extend before polling. Extending only after the lock is acquired lets
+  // Playwright's original timeout interrupt a test while it is still waiting.
+  test.info().setTimeout(bodyTimeoutMs + MAX_WAIT_MS);
   // Keyed by API so suites from other worktrees (with their own API and database) don't wait on this one.
   const scope = (process.env.E2E_API_BASE_URL || "http://localhost:3001").replace(/[^a-z0-9]+/gi, "-");
   const lockDir = path.join(os.tmpdir(), `cahootz-e2e-${scope}-${name}.lock`);
@@ -50,7 +57,7 @@ export async function withExclusiveAccountSetting<T>(name: string, fn: () => Pro
   }
 
   const waited = Date.now() - started;
-  if (waited > 0) test.info().setTimeout(test.info().timeout + waited);
+  test.info().setTimeout(bodyTimeoutMs + waited);
   try {
     return await fn();
   } finally {

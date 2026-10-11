@@ -52,3 +52,17 @@ export async function enqueueSageActionExecute(actionId: string, revision: numbe
     idempotencyKeyTTL: "24h",
   });
 }
+
+/** Re-evaluate Commons hypotheses immediately after the charter/config version changes. */
+export async function enqueueCommunityMemoryReconsideration(coopId: string, configVersion: number): Promise<void> {
+  if (useLocalFallback()) {
+    const { consolidateCommonsMemory } = await import("./sage-community-memory.js");
+    await consolidateCommonsMemory(coopId);
+    return;
+  }
+  const { tasks } = await import("@trigger.dev/sdk");
+  await tasks.trigger("sage-community-memory-consolidate", { coopId }, {
+    idempotencyKey: `sage-community-memory-config:${coopId}:${configVersion}`,
+    idempotencyKeyTTL: "24h",
+  });
+}

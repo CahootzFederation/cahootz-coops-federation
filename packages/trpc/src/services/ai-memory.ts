@@ -15,7 +15,9 @@ export interface RecordObservationParams {
   summary: string;
   details?: unknown;
   sources?: RecordObservationSource[];
-  visibility?: "PRIVATE_TO_AUTHOR_SCOPE" | "CIRCLE" | "COMMONS_ADMINS" | "COMMONS_MEMBERS" | "PUBLIC";
+  visibility?: "SAGE_INTERNAL" | "PRIVATE_TO_AUTHOR_SCOPE" | "CIRCLE" | "COMMONS_ADMINS" | "COMMONS_MEMBERS" | "PUBLIC";
+  status?: "CANDIDATE" | "ACTIVE" | "UNSUPPORTED" | "SUPERSEDED" | "DISMISSED" | "EXPIRED";
+  systemKey?: string;
   expiresAt?: Date;
   reviewAt?: Date;
   generatedByAgentKey?: string;
@@ -37,6 +39,8 @@ export async function recordObservation(params: RecordObservationParams) {
       summary: params.summary,
       details: params.details as Prisma.InputJsonValue,
       visibility: params.visibility ?? "COMMONS_ADMINS",
+      status: params.status ?? "ACTIVE",
+      systemKey: params.systemKey,
       expiresAt: params.expiresAt,
       reviewAt: params.reviewAt,
       generatedByAgentKey: params.generatedByAgentKey,
@@ -138,6 +142,8 @@ export async function queryObservations(
     switch (visibility) {
       case "PUBLIC":
         return true;
+      case "SAGE_INTERNAL":
+        return false;
       case "COMMONS_MEMBERS":
         return commonsMember;
       case "COMMONS_ADMINS":

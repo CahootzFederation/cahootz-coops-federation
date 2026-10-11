@@ -14,15 +14,19 @@ import tseslint from "typescript-eslint";
 export const restrictEnvAccess = tseslint.config(
   { ignores: ["**/env.ts"] },
   {
-    files: ["**/*.js", "**/*.ts", "**/*.tsx"],
+    files: ["**/*.js", "**/*.cjs", "**/*.mjs", "**/*.ts", "**/*.tsx"],
     rules: {
-      "no-restricted-properties": [
+      "no-restricted-syntax": [
         "error",
         {
-          object: "process",
-          property: "env",
+          selector: "MemberExpression[object.name='process'][property.name='env']",
           message:
-            "Use `import { env } from '~/env'` instead to ensure validated types.",
+            "Import the typed `env` object from this app's env module instead.",
+        },
+        {
+          selector: "MemberExpression[object.name='process'][property.value='env']",
+          message:
+            "Import the typed `env` object from this app's env module instead.",
         },
       ],
       "no-restricted-imports": [
@@ -31,7 +35,7 @@ export const restrictEnvAccess = tseslint.config(
           name: "process",
           importNames: ["env"],
           message:
-            "Use `import { env } from '~/env'` instead to ensure validated types.",
+            "Import the typed `env` object from this app's env module instead.",
         },
       ],
     },

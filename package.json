@@ -25,6 +25,7 @@
     "db:backfill-funding-stores": "dotenv -e packages/db/.env -- tsx scripts/backfill-commons-funding-stores.ts",
     "db:deploy-setup": "pnpm db:migrate-prod && pnpm db:seed-coops && pnpm db:seed-demo-coop",
     "update-env": "bash scripts/update-all-env-files.sh",
+    "validate-env": "node scripts/check-env-coverage.mjs && pnpm -F @cahootz/api validate-env && pnpm -F @cahootz/web validate-env",
     "update-contract-artifacts": "bash scripts/update-contract-artifacts.sh",
     "check:versions": "node scripts/check-package-versions.mjs",
     "check:trigger-build": "node --experimental-strip-types scripts/check-trigger-build.mjs",

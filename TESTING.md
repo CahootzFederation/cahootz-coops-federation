@@ -149,7 +149,7 @@ Journeys 11-13 require the `Event`/`EventHost`/`EventRSVP`/`EventReminder` table
 
 The post-signup wizard used by every sign-in helper now has three steps (intro, profile, and a "find your way in" step offering a welcome lounge) - `e2e/support/auth.ts` is the single place that clicks through all three, so a future wizard change only needs updating there. A signed-in person who already saw the intro on that device starts at the profile step, so after a sign-in the helper waits for whichever step appears first.
 
-Metro (the mobile web server) keeps the whole bundle in memory for the full run, and its default heap runs out partway through the suite ("JavaScript heap out of memory", then every later journey fails with `ERR_CONNECTION_REFUSED`). CI starts it with `NODE_OPTIONS=--max-old-space-size=6144`; do the same locally for long runs.
+Metro (the mobile web server) keeps compiled bundles in memory and can exhaust its heap during one long run ("JavaScript heap out of memory", then every later journey fails with `ERR_CONNECTION_REFUSED`). CI runs the non-Sage journeys first, restarts Metro to release that heap, and then runs the `@sage` journeys with the saved authenticated sessions. Both Metro processes use `NODE_OPTIONS=--max-old-space-size=6144`; use the same heap limit locally for long runs.
 
 Playwright wipes its shared `outputDir` (`output/playwright/test-results`) at the start of every run. When running specs side by side (for example from several worktrees or agents), give each run its own `--output <dir>`, or one run's cleanup can break another's trace files with `ENOENT`.
 

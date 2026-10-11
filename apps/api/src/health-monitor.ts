@@ -4,6 +4,7 @@
  */
 
 import { sendApiHealthNotification } from "@repo/trpc/services/slack-notification-service";
+import { env } from "./env.js";
 
 interface HealthStatus {
   lastCheck: Date;
@@ -21,20 +22,10 @@ const status: HealthStatus = {
 const startedAt = Date.now();
 let healthCheckInProgress = false;
 
-function readPositiveInt(value: string | undefined, fallback: number) {
-  if (!value) return fallback;
-
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 // Only send notifications if status changes or every N failures
-const NOTIFICATION_COOLDOWN_MS = readPositiveInt(
-  process.env.HEALTHCHECK_NOTIFICATION_COOLDOWN_MS,
-  5 * 60 * 1000,
-);
-const MAX_FAILURES_BEFORE_ALERT = readPositiveInt(process.env.HEALTHCHECK_FAILURES_BEFORE_ALERT, 3);
-const STARTUP_GRACE_MS = readPositiveInt(process.env.HEALTHCHECK_STARTUP_GRACE_MS, 2 * 60 * 1000);
+const NOTIFICATION_COOLDOWN_MS = env.HEALTHCHECK_NOTIFICATION_COOLDOWN_MS;
+const MAX_FAILURES_BEFORE_ALERT = env.HEALTHCHECK_FAILURES_BEFORE_ALERT;
+const STARTUP_GRACE_MS = env.HEALTHCHECK_STARTUP_GRACE_MS;
 
 /**
  * Check database health
@@ -74,7 +65,7 @@ async function sendHealthNotificationIfNeeded(isHealthy: boolean, error?: string
         status: isHealthy ? "up" : "down",
         service: "database",
         error: error,
-        environment: process.env.NODE_ENV || "unknown",
+        environment: env.NODE_ENV,
       });
       
       status.lastNotificationSent = now;

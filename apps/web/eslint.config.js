@@ -11,4 +11,10 @@ export default [
   ...reactConfig,
   ...nextjsConfig,
   ...restrictEnvAccess,
+  {
+    files: ["jest.setup.js"],
+    rules: {
+      "no-restricted-syntax": "off",
+    },
+  },
 ];

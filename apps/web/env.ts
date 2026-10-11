@@ -14,7 +14,9 @@ export const env = createEnv({
    * This way you can ensure the app isn't built with invalid env vars.
    */
   server: {
-
+    DATABASE_URL: z.string().min(1),
+    PLATFORM_ADMIN_WALLETS: z.string().optional(),
+    PLATFORM_ADMIN_EMAILS: z.string().optional(),
     SLACK_WEBHOOK_URL: z.string().url().optional(),
     RESEND_API_KEY: z.string().startsWith("re_").optional(),
     RESEND_FROM_EMAIL: z.string().min(3).default("support@mail.cahootzcoops.com"),
@@ -30,6 +32,18 @@ export const env = createEnv({
    */
   client: {
     NEXT_PUBLIC_API_URL: z.string().url().optional(),
+    NEXT_PUBLIC_COOP_ID: z.string().min(1).optional(),
+    NEXT_PUBLIC_CHAIN_ID: z.coerce.number().int().positive().optional(),
+    NEXT_PUBLIC_CHAIN_NAME: z.string().min(1).optional(),
+    NEXT_PUBLIC_RPC_URL: z.string().url().optional(),
+    NEXT_PUBLIC_SOULAANI_COIN_ADDRESS: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/)
+      .optional(),
+    NEXT_PUBLIC_TREASURY_SAFE_ADDRESS: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/)
+      .optional(),
     NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
     NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID: z.string(),
     NEXT_PUBLIC_DOMAIN: z.string().optional(),
@@ -43,6 +57,9 @@ export const env = createEnv({
    */
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
+    DATABASE_URL: process.env.DATABASE_URL,
+    PLATFORM_ADMIN_WALLETS: process.env.PLATFORM_ADMIN_WALLETS,
+    PLATFORM_ADMIN_EMAILS: process.env.PLATFORM_ADMIN_EMAILS,
     SLACK_WEBHOOK_URL: process.env.SLACK_WEBHOOK_URL,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
@@ -51,6 +68,14 @@ export const env = createEnv({
     NOTION_BLOG_DATABASE_ID: process.env.NOTION_BLOG_DATABASE_ID,
     SKIP_BLOG_SYNC: process.env.SKIP_BLOG_SYNC,
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NEXT_PUBLIC_COOP_ID: process.env.NEXT_PUBLIC_COOP_ID,
+    NEXT_PUBLIC_CHAIN_ID: process.env.NEXT_PUBLIC_CHAIN_ID,
+    NEXT_PUBLIC_CHAIN_NAME: process.env.NEXT_PUBLIC_CHAIN_NAME,
+    NEXT_PUBLIC_RPC_URL: process.env.NEXT_PUBLIC_RPC_URL,
+    NEXT_PUBLIC_SOULAANI_COIN_ADDRESS:
+      process.env.NEXT_PUBLIC_SOULAANI_COIN_ADDRESS,
+    NEXT_PUBLIC_TREASURY_SAFE_ADDRESS:
+      process.env.NEXT_PUBLIC_TREASURY_SAFE_ADDRESS,
     NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
     NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID,
     NEXT_PUBLIC_DOMAIN: process.env.NEXT_PUBLIC_DOMAIN,

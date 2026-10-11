@@ -5,9 +5,10 @@
   "description": "",
   "scripts": {
     "validate-env": "tsx --import ./dotenv.config.js src/env.ts",
-    "build": "rm -rf ./dist && tsup",
+    "build": "pnpm run validate-env && rm -rf ./dist && tsup",
     "dev": "nodemon --watch src --ext ts --exec tsx --import ./dotenv.config.js src/index.ts",
     "dev:full": "concurrently --names \"api,stripe\" --prefix-colors \"cyan,yellow\" \"pnpm dev\" \"pnpm stripe:listen\"",
+    "lint": "eslint src",
     "stripe:listen": "stripe listen --forward-to localhost:3001/webhooks/stripe",
     "tsc": "tsc --noEmit",
     "start": "node --import ./dotenv.config.js dist/index.js"

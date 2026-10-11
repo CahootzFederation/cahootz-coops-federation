@@ -1,3 +1,4 @@
+import { env } from "./env.js";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import cors from "cors";
 import { trpcExpress } from "@repo/trpc/server";
@@ -7,7 +8,6 @@ import express from "express";
 import os from "os";
 import { fileURLToPath } from "url";
 import { resolve } from "path";
-import { env } from "./env.js";
 import { getHealthStatus, startHealthMonitoring } from "./health-monitor.js";
 import { startLocalSageWakeLoop } from "@repo/trpc/services/sage-wake";
 
@@ -224,7 +224,7 @@ app.post("/dev/newsletter-agent/run", async (req: Request, res: Response) => {
     return res.status(404).json({ success: false, message: "Not found" });
   }
 
-  const configuredToken = process.env.DEV_AGENT_TOKEN;
+  const configuredToken = env.DEV_AGENT_TOKEN;
   const providedToken = req.headers["x-dev-agent-token"];
   if (configuredToken && providedToken !== configuredToken) {
     return res.status(403).json({
@@ -258,7 +258,7 @@ app.post("/dev/newsletter-agent/run", async (req: Request, res: Response) => {
   const devWalletAddress =
     typeof walletAddress === "string" && walletAddress.trim()
       ? walletAddress.trim()
-      : process.env.DEV_AGENT_WALLET_ADDRESS;
+      : env.DEV_AGENT_WALLET_ADDRESS;
 
   if (!devWalletAddress) {
     return res.status(400).json({
@@ -394,14 +394,14 @@ const server = app.listen(port, async () => {
   const dbConnected = await testDatabaseConnection();
 
   // Send startup notifications to Slack (production only)
-  if (process.env.NODE_ENV === 'production') {
+  if (env.NODE_ENV === 'production') {
     try {
       const { sendApiStartupNotification, sendApiHealthNotification } = await import("@repo/trpc/services/slack-notification-service");
 
       await sendApiStartupNotification({
         service: "api",
         port: port,
-        environment: process.env.NODE_ENV,
+        environment: env.NODE_ENV,
       });
 
       if (dbConnected) {
@@ -409,7 +409,7 @@ const server = app.listen(port, async () => {
           status: "up",
           service: "api",
           uptime: 0,
-          environment: process.env.NODE_ENV,
+          environment: env.NODE_ENV,
         });
       }
     } catch (error) {

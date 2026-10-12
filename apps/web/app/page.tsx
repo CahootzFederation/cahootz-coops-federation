@@ -9,9 +9,18 @@ import { TreasuryContributionCalculator } from "@/components/treasury-contributi
 import { WaitlistSignupForm } from "@/components/waitlist-signup-form";
 import { env } from "@/env";
 import { getFeaturedBlogPosts } from "@/lib/blog";
-import { ArrowDownRight, ArrowRight, Github, MoveUpRight } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowRight,
+  Github,
+  MoveUpRight,
+  Smartphone,
+} from "lucide-react";
 
 import "./landing.css";
+
+const APP_STORE_URL =
+  "https://apps.apple.com/us/app/cahootz-commons/id6772781102";
 
 interface CoopOption {
   coopId: string;
@@ -156,6 +165,14 @@ export default async function HomePage() {
               <div className="hero-actions">
                 <a className="button button-primary" href="#join">
                   Find your commons <ArrowRight size={18} />
+                </a>
+                <a
+                  className="button button-secondary"
+                  href={APP_STORE_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Smartphone size={18} /> Download on the App Store
                 </a>
                 <a className="text-link" href="#how-it-works">
                   See how it works <ArrowDownRight size={18} />

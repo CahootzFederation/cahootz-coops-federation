@@ -112,7 +112,7 @@ const faqs = [
   },
   {
     q: "Who is Sage?",
-    a: "Sage is your community's helper inside the app. It connects people who can help each other and keeps good ideas moving. People still make the decisions.",
+    a: "Sage is the AI helper built into every commons. It connects people who can help each other and keeps good ideas moving. People still make the decisions.",
   },
   {
     q: "Do I need to own a business to join?",
@@ -287,6 +287,13 @@ export default async function HomePage() {
             <div>
               <p className="eyebrow">MEET SAGE</p>
               <h2>Someone always looking out for you.</h2>
+              <p className="sage-intro">
+                Sage is the AI helper built into every commons. Think of it as
+                the friend who knows everyone: it pays attention to what people
+                need and what they can offer, connects the right people, and
+                answers your questions about how your community works. You can
+                message Sage anytime, like any other member.
+              </p>
             </div>
             <div>
               <ul className="sage-list">

@@ -104,7 +104,7 @@ const faqs = [
   },
   {
     q: "How do I join?",
-    a: "Get an invite from someone already in, or apply to a commons below. Then download the app and sign in with your phone number.",
+    a: "Get an invite from someone already in, or apply to a commons below. Then download the app and join.",
   },
   {
     q: "Is there an Android app?",
@@ -334,9 +334,9 @@ export default async function HomePage() {
               </li>
               <li>
                 <span>02</span>
-                <strong>Sign in with your phone.</strong>
+                <strong>Download the app.</strong>
                 <p>
-                  Download Cahootz Commons and sign in with your phone number.
+                  Get Cahootz Commons free on the App Store.
                 </p>
               </li>
               <li>

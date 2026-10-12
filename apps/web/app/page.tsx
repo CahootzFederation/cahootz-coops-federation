@@ -76,26 +76,23 @@ const GITHUB_REPOSITORY_URL =
 const pathways = [
   {
     index: "01",
-    label: "Find your people",
-    title: "A home for the conversation and the work.",
-    body: "Post to your commons, react with any emoji, @mention a neighbor, and talk in smaller circles. Families get a private commons with shared goals.",
-    details: ["Commons feed", "Circles", "Family commons"],
+    label: "Belong",
+    title: "Know the people around you.",
+    body: "See what your neighbors, family, and friends are up to, celebrate each other's wins, and jump into the conversations that matter to you. It feels like the group chat, the town square, and the kitchen table in one place.",
     className: "pathway-community",
   },
   {
     index: "02",
-    label: "Keep it local",
-    title: "Make the local economy visible.",
-    body: "Discover businesses in your network, explore what they offer, and make purchases through the member app. Participation connects the people doing business to the people building the commons.",
-    details: ["Stores and products", "Payments", "Member rewards"],
+    label: "Show up",
+    title: "Help each other without having to ask twice.",
+    body: "Need a hand moving, a recommendation, or someone to watch the kids? Ask once and the people who can help will see it. When you can help, you'll know.",
     className: "pathway-commerce",
   },
   {
     index: "03",
-    label: "Decide together",
-    title: "Turn a shared need into a shared decision.",
-    body: "When a need becomes a plan, members propose it, talk it through, and vote. Sage reviews each proposal against your commons' charter and shows its reasons. Larger requests always go to a council vote.",
-    details: ["Proposals", "Discussion", "Voting"],
+    label: "Build",
+    title: "Make things happen together.",
+    body: "Spend with the businesses your people run, pool ideas into plans, and watch your community get stronger because you're part of it.",
     className: "pathway-governance",
   },
 ];
@@ -103,31 +100,23 @@ const pathways = [
 const faqs = [
   {
     q: "What is a commons?",
-    a: "A commons is a community that shares a purpose: a neighborhood, a family, a congregation, a club, or a co-op. Each commons sets its own membership rules, charter, and goals.",
+    a: "A commons is your community on Cahootz: a neighborhood, a family, a congregation, a club, or a co-op. Each one sets its own way of doing things.",
   },
   {
     q: "How do I join?",
-    a: "Most people join through an invite from a member or guide. Download the app, sign in with your phone number, and you land in the commons and circles you were invited to. You can also apply to a live commons below.",
+    a: "Get an invite from someone already in, or apply to a commons below. Then download the app and sign in with your phone number.",
   },
   {
     q: "Is there an Android app?",
-    a: "Not yet. Cahootz Commons is on iPhone today and Android is in preparation. Join the interest list below and we will tell you when it is ready.",
+    a: "Not yet. Cahootz Commons is on iPhone today and Android is coming. Join the interest list below and we'll tell you when it's ready.",
   },
   {
-    q: "What is Sage?",
-    a: "Sage is your commons' helper. It answers questions from your commons' own charter, introduces members who can help each other when both agree, notices needs and offers in the feed, and follows up so things don't slip.",
-  },
-  {
-    q: "What won't Sage do?",
-    a: "Sage never votes, spends money, changes membership or roles, or amends a charter on its own. Those need the right people to approve them. Each commons sets limits on Sage's monthly AI spending, and private circles stay private.",
-  },
-  {
-    q: "Does Sage make decisions for members?",
-    a: "Only small ones, within limits the commons sets. Sage reviews proposals for mission fit, feasibility, and risk and shows its scores and reasons. It can approve a qualifying request below the commons' automatic approval limit or ask for changes; larger requests go to a council vote. Sage can still be wrong or reflect bias, so the reasons stay visible.",
+    q: "Who is Sage?",
+    a: "Sage is your community's helper inside the app. It connects people who can help each other and keeps good ideas moving. People still make the decisions.",
   },
   {
     q: "Do I need to own a business to join?",
-    a: "No. Members can take part in circles, support local businesses, and help decide what the commons does. Businesses have a separate interest form below.",
+    a: "No. Most members just want to stay close to their people. If you do run a business, there's a separate form below.",
   },
 ];
 
@@ -175,12 +164,13 @@ export default async function HomePage() {
                 The app for the communities you actually belong to
               </p>
               <h1 id="hero-title">
-                Your people, <span>all in one place.</span>
+                A community is more powerful when it can{" "}
+                <span>move together.</span>
               </h1>
               <p className="hero-description">
-                Join your commons, talk in circles, plan with your family, and
-                let Sage introduce you to the members who can help, or who
-                need you.
+                Stay close to the people who matter, find help when you need
+                it, and be the help someone else is looking for. Cahootz is
+                where your community comes together, every day.
               </p>
               <div className="hero-actions">
                 <AppStoreButton />
@@ -214,13 +204,13 @@ export default async function HomePage() {
               </div>
               <div className="map-node map-members">
                 <span className="node-kicker">FEED</span>
-                <strong>Posts & reactions</strong>
-                <small>Share, mention, react</small>
+                <strong>Stay close</strong>
+                <small>See what your people are up to</small>
               </div>
               <div className="map-node map-spaces">
                 <span className="node-kicker">CIRCLES</span>
-                <strong>Circles & families</strong>
-                <small>Smaller rooms for your people</small>
+                <strong>Get help</strong>
+                <small>Ask once, the right people see it</small>
               </div>
               <div className="map-node map-business">
                 <span className="node-kicker">ECONOMY</span>
@@ -230,7 +220,7 @@ export default async function HomePage() {
               <div className="map-node map-decisions">
                 <span className="node-kicker">SAGE</span>
                 <strong>Sage</strong>
-                <small>Introductions & follow-ups</small>
+                <small>Looking out for you</small>
               </div>
             </div>
           </div>
@@ -249,9 +239,9 @@ export default async function HomePage() {
               Do something together.
             </h2>
             <p>
-              A commons becomes real through everyday participation. Cahootz
-              connects the conversations, commerce, and decisions that usually
-              happen in separate places.
+              Life is better when you're not doing it alone. Cahootz keeps you
+              close to your people, so the asks, the offers, the good news, and
+              the plans all land in the same place.
             </p>
           </div>
         </section>
@@ -272,12 +262,7 @@ export default async function HomePage() {
               <div className="pathway-main">
                 <h3>{pathway.title}</h3>
                 <p>{pathway.body}</p>
-                <div className="pathway-tags">
-                  {pathway.details.map((detail) => (
-                    <span key={detail}>{detail}</span>
-                  ))}
-                </div>
-                {pathway.index === "02" && (
+                {pathway.index === "03" && (
                   <a className="text-link pathway-link" href="#business-form">
                     Bring your business into the commons{" "}
                     <ArrowRight size={17} />
@@ -292,7 +277,7 @@ export default async function HomePage() {
             </article>
           ))}
           <div className="section-cta">
-            <span>See your commons in the app.</span>
+            <span>Your people are already there.</span>
             <AppStoreButton />
           </div>
         </section>
@@ -301,44 +286,24 @@ export default async function HomePage() {
           <div className="landing-shell decision-inner">
             <div>
               <p className="eyebrow">MEET SAGE</p>
-              <h2>A helper that knows your commons.</h2>
-              <div className="sage-limits">
-                <strong>What Sage won&apos;t do</strong>
-                <p>
-                  Sage never votes, spends money, changes who is a member, or
-                  amends your charter on its own. People decide. Each commons
-                  caps what Sage can spend on AI each month, and private
-                  circles stay private.
-                </p>
-              </div>
+              <h2>Someone always looking out for you.</h2>
             </div>
             <div>
               <ul className="sage-list">
                 <li>
-                  <strong>Introduces people who can help each other.</strong>{" "}
-                  Someone needs a ride Saturday and someone else is driving.
-                  Sage asks the person with the need first and only connects
-                  you when both of you agree.
+                  <strong>The right people find each other.</strong> When
+                  someone posts that they can fix bikes or need a babysitter,
+                  Sage can list it as a resource so the right people find it.
                 </li>
                 <li>
-                  <strong>Notices needs and offers.</strong> When someone
-                  posts that they can fix bikes or need a babysitter, Sage
-                  can list it as a resource so the right people find it.
+                  <strong>Nothing falls through the cracks.</strong> Good
+                  ideas and open asks get a nudge, so they turn into plans
+                  instead of getting buried.
                 </li>
                 <li>
-                  <strong>Answers from your own charter.</strong> Ask how
-                  your commons does things and Sage answers from your
-                  commons&apos; rules, not generic advice.
-                </li>
-                <li>
-                  <strong>Follows up.</strong> Sage checks back on
-                  suggestions nobody answered, so good ideas don&apos;t slip.
-                </li>
-                <li>
-                  <strong>Shows its reasons.</strong> When members propose
-                  a plan, Sage reviews it against the charter and shows its
-                  scores and reasons. Larger requests always go to a council
-                  vote.
+                  <strong>Answers when you&apos;re new.</strong> Ask how your
+                  community does things and get an answer right away, without
+                  feeling like you&apos;re bothering anyone.
                 </li>
               </ul>
               <AppStoreButton>Meet Sage in the app</AppStoreButton>
@@ -364,7 +329,7 @@ export default async function HomePage() {
                 <strong>Get an invite.</strong>
                 <p>
                   A member or guide invites you, or you apply to a commons
-                  below. Family commons invites are approved by a steward.
+                  below.
                 </p>
               </li>
               <li>
@@ -372,7 +337,6 @@ export default async function HomePage() {
                 <strong>Sign in with your phone.</strong>
                 <p>
                   Download Cahootz Commons and sign in with your phone number.
-                  No password to remember.
                 </p>
               </li>
               <li>

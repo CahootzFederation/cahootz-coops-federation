@@ -48,7 +48,7 @@ export default function StoreScreen() {
         if (!mounted) return;
         const active = result.coops
           .filter((item) => item.accessStatus === 'ACTIVE')
-          .map((item) => ({ id: item.id, name: item.shortName || item.name }));
+          .map((item) => ({ id: item.id, name: item.name || item.shortName }));
         setCommons(active);
         setCoopId((current) =>
           params.coopId && active.some((item) => item.id === params.coopId)
@@ -128,12 +128,8 @@ export default function StoreScreen() {
               </TouchableOpacity>
             </View>
           </View>
-          {myStore ? <TouchableOpacity onPress={() => router.push('/my-stores' as any)} className="mt-4 flex-row items-center rounded-2xl border bg-white p-3" style={{ borderColor: colors.line }}>
-            <View className="h-9 w-9 items-center justify-center rounded-xl" style={{ backgroundColor: colors.orangeSoft }}><Store size={18} color={colors.orange} /></View>
-            <View className="ml-3 flex-1"><Text className="text-sm font-black" style={{ color: colors.ink }}>{myStore.name}</Text><Text className="mt-0.5 text-xs font-semibold" style={{ color: colors.muted }}>{myStore.status === 'APPROVED' ? 'Live and accepting orders' : myStore.application?.status === 'APPROVED' ? 'Approved · finish payment setup' : 'Application under commons review'}</Text></View>
-            <ChevronRight size={18} color={colors.muted} />
-          </TouchableOpacity> : null}
-          {commons.length > 1 ? <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-4" contentContainerStyle={{ gap: 8 }}>
+          {/* Which commons you're shopping sits right under the title. */}
+          {commons.length > 1 ? <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-3" contentContainerStyle={{ gap: 8 }}>
             {commons.map((item) => {
               const selected = item.id === coopId;
               return <TouchableOpacity key={item.id} accessibilityRole="button" accessibilityLabel={`Shop ${item.name}`} accessibilityState={{ selected }} onPress={() => setCoopId(item.id)} className="rounded-full border px-4 py-2" style={{ backgroundColor: selected ? colors.ink : '#FFFFFF', borderColor: selected ? colors.ink : colors.line }}>
@@ -141,6 +137,11 @@ export default function StoreScreen() {
               </TouchableOpacity>;
             })}
           </ScrollView> : null}
+          {myStore ? <TouchableOpacity onPress={() => router.push('/my-stores' as any)} className="mt-4 flex-row items-center rounded-2xl border bg-white p-3" style={{ borderColor: colors.line }}>
+            <View className="h-9 w-9 items-center justify-center rounded-xl" style={{ backgroundColor: colors.orangeSoft }}><Store size={18} color={colors.orange} /></View>
+            <View className="ml-3 flex-1"><Text className="text-sm font-black" style={{ color: colors.ink }}>{myStore.name}</Text><Text className="mt-0.5 text-xs font-semibold" style={{ color: colors.muted }}>{myStore.status === 'APPROVED' ? 'Live and accepting orders' : myStore.application?.status === 'APPROVED' ? 'Approved · finish payment setup' : 'Application under commons review'}</Text></View>
+            <ChevronRight size={18} color={colors.muted} />
+          </TouchableOpacity> : null}
         </View>
 
         <View className="mx-4 mt-2 flex-row items-center rounded-2xl border bg-white px-3" style={{ borderColor: colors.line }}><Search size={19} color={colors.muted} /><TextInput accessibilityLabel="Search marketplace" value={query} onChangeText={setQuery} placeholder="Search products and commons shops" placeholderTextColor="#A6998A" className="h-12 flex-1 px-3 text-sm" style={{ color: colors.ink }} /></View>

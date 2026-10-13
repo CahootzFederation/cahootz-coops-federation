@@ -400,6 +400,14 @@ export interface SearchPerson {
   handle: string;
 }
 
+/** An active person in a Commons. Bot accounts such as Sage are never listed. */
+export interface CommonsMember {
+  id: string;
+  name: string;
+  handle: string;
+  isSteward: boolean;
+}
+
 export interface PrivateGroupSummary {
   id: string;
   name: string;
@@ -1390,8 +1398,17 @@ export const api = {
     coopId: string,
     sessionToken?: string | null,
     limit = 8,
+    options: { offset?: number; sort?: 'recent' | 'name'; search?: string } = {},
   ) {
-    const input = encodeURIComponent(JSON.stringify({ coopId, limit }));
+    const input = encodeURIComponent(
+      JSON.stringify({
+        coopId,
+        limit,
+        offset: options.offset,
+        sort: options.sort,
+        search: options.search?.trim() || undefined,
+      }),
+    );
     const response = await fetch(
       `${API_BASE_URL}/trpc/commons.listMembers?input=${input}`,
       {
@@ -1402,7 +1419,8 @@ export const api = {
 
     return readTrpcResult<{
       totalCount: number;
-      members: { id: string; name: string; handle: string }[];
+      hasMore: boolean;
+      members: CommonsMember[];
     }>(response, 'Failed to load commons members');
   },
 

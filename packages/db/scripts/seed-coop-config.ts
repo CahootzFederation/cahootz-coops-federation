@@ -113,6 +113,8 @@ async function seedCoopConfig() {
       coopId,
       version: 1,
       isActive: true,
+      name: "Cahootz",
+      slug: "cahootz",
       charterText,
       missionGoals,
       structuralWeights,

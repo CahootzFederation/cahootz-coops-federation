@@ -42,8 +42,8 @@ test("Sage posts anonymously for a member after their yes and relays a reply pri
     const { postId } = fixture("post", USER_A_EMAIL, runId);
     expect(postId).toBeTruthy();
     await memberB.page.goto(`/${COOP_ID}/posts/${postId}`);
-    await expect(memberB.page.getByText(`E2E ${runId} weekly shifts wanted`).first()).toBeVisible({ timeout: 60_000 });
-    await expect(memberB.page.getByText(`E2E ${runId}: A member with hospitality experience`).first()).toBeVisible();
+    // The post page shows the body (not the title), from Sage, with no name.
+    await expect(memberB.page.getByText(`E2E ${runId}: A member with hospitality experience`, { exact: false }).first()).toBeVisible({ timeout: 60_000 });
     await memberB.page.getByPlaceholder("Write a comment...").locator("visible=true").first().fill(`E2E ${runId}: my restaurant is hiring weekend shifts`);
     await memberB.page.getByLabel("Send comment").locator("visible=true").first().click();
 

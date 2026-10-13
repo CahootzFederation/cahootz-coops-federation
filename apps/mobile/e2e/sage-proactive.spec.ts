@@ -68,8 +68,8 @@ test("Sage keeps a promise, brings a quiet need to a likely helper, and thanks a
         let shout: { postId: string | null; title: string | null } = { postId: null, title: null };
         await expect.poll(() => (shout = fixture("shoutout", runId, since)).postId, { timeout: 60_000 }).toBeTruthy();
         await memberA.page.goto(`/${COOP_ID}/posts/${shout.postId}`);
-        await expect(memberA.page.getByText(`Thank you, ${intro.helperName}`).first()).toBeVisible({ timeout: 60_000 });
-        await expect(memberA.page.getByText(/for showing up for another member through Sage/).first()).toBeVisible();
+        // The post page shows the body, not the title.
+        await expect(memberA.page.getByText(`Shout-out to ${intro.helperName} for showing up for another member through Sage`, { exact: false }).first()).toBeVisible({ timeout: 60_000 });
         await expect(memberA.page.getByText(/ride to the clinic/)).toHaveCount(0);
       } finally {
         fixture("cleanup", USER_A_EMAIL, USER_B_EMAIL, runId, since);

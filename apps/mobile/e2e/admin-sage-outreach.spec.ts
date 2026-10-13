@@ -10,6 +10,13 @@ const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const ADMIN_BASE_URL = process.env.E2E_ADMIN_BASE_URL || "http://localhost:3000";
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || "e2e-admin@test.cahootz.local";
 
+// The playground lists its agents after a fetch, which can take a while on a cold dev server.
+async function openSageCheckIn(page: import("@playwright/test").Page) {
+  const entry = page.getByRole("button", { name: "Sage Weekly Check-in" });
+  await expect(entry).toBeVisible({ timeout: 60_000 });
+  await entry.click();
+}
+
 function fixture(...args: string[]) {
   const output = execFileSync(
     "pnpm",
@@ -42,7 +49,7 @@ test("a platform admin sends a Sage check-in to a member from the Agent Playgrou
     await expect(admin).toHaveURL(/\/portal\/admin(?!\/login)/);
 
     await admin.getByRole("link", { name: "Agent Playground" }).click();
-    await admin.getByRole("button", { name: "Sage Weekly Check-in" }).click();
+    await openSageCheckIn(admin);
     await expect(admin.getByRole("heading", { name: "Sage Weekly Check-in" })).toBeVisible({ timeout: 60_000 });
 
     await admin.getByLabel("Find a member").fill(USER_B_EMAIL);
@@ -56,7 +63,7 @@ test("a platform admin sends a Sage check-in to a member from the Agent Playgrou
     const row = admin.locator("tbody tr", { hasText: USER_B_EMAIL });
     await expect(row).toContainText("manual");
     await admin.reload();
-    await admin.getByRole("button", { name: "Sage Weekly Check-in" }).click();
+    await openSageCheckIn(admin);
     await expect(row).toContainText("manual", { timeout: 60_000 });
 
     // The member gets it in their existing Sage conversation.

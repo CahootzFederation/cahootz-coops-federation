@@ -172,6 +172,14 @@ export default function ProfileOnboardingScreen() {
   const [introCarouselIndex, setIntroCarouselIndex] = useState(0);
   const introCardWidth = Math.max(width - 40, 280);
 
+  // Seeing the intro once is enough: record it as soon as it's shown, so
+  // whichever way someone leaves (Continue, sign in, app close) they don't
+  // get the intro again after logging in.
+  useEffect(() => {
+    if (!firstStepChosen || wizardStep !== 'intro') return;
+    void markAnonymousProfileIntroSeen().catch(() => {});
+  }, [firstStepChosen, wizardStep]);
+
   useEffect(() => {
     if (wizardStep !== 'intro') return;
 

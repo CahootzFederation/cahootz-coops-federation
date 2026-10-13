@@ -89,6 +89,26 @@ test.describe("onboarding usability", () => {
     await expect(page).not.toHaveURL(/profile-onboarding/);
   });
 
+  test("someone who tapped Continue past the intro doesn't see it again after signing in", async ({ page }) => {
+    await page.goto("/");
+    await expect(page).toHaveURL(/profile-onboarding/);
+    await expect(shown(page, "A community app for everyday help and action")).toBeVisible();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(shown(page, "Build your profile")).toBeVisible();
+
+    // Leave the wizard and sign in from the start screen instead.
+    await page.goto("/?entry=sign-in");
+    await expect(page).not.toHaveURL(/profile-onboarding/);
+    await page.getByPlaceholder("name@email.com").fill(USER_A_EMAIL);
+    await page.getByRole("button", { name: "Log in with code" }).click();
+    await page.getByPlaceholder("Enter 6-digit code").fill(TEST_CODE);
+    await page.getByRole("button", { name: "Verify & Sign In" }).click();
+
+    await expect(page).toHaveURL(/profile-onboarding/);
+    await expect(shown(page, "Build your profile")).toBeVisible();
+    await expect(shown(page, "A community app for everyday help and action")).toHaveCount(0);
+  });
+
   test("sign-in and the commons application hide the tab bar, and Back brings it back", async ({ page }) => {
     const tabs = page.getByRole("tablist", { name: "Main navigation" });
     await page.goto("/");

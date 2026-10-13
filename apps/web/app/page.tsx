@@ -203,12 +203,12 @@ export default async function HomePage() {
                 <span>People working together</span>
               </div>
               <div className="map-node map-members">
-                <span className="node-kicker">FEED</span>
+                <span className="node-kicker">CONNECT</span>
                 <strong>Stay close</strong>
                 <small>See what your people are up to</small>
               </div>
               <div className="map-node map-spaces">
-                <span className="node-kicker">CIRCLES</span>
+                <span className="node-kicker">SUPPORT</span>
                 <strong>Get help</strong>
                 <small>Ask once, the right people see it</small>
               </div>

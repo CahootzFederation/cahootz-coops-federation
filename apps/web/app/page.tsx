@@ -218,7 +218,7 @@ export default async function HomePage() {
                 <small>Buy and build nearby</small>
               </div>
               <div className="map-node map-decisions">
-                <span className="node-kicker">AI HELPER</span>
+                <span className="node-kicker">MATCHMAKER</span>
                 <strong>Sage</strong>
                 <small>Connects you with people who can help</small>
               </div>

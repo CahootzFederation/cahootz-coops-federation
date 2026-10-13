@@ -80,6 +80,7 @@ test.describe("onboarding usability", () => {
     await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
 
     await page.getByRole("button", { name: "Do this later" }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await page.getByRole("button", { name: "Skip for now" }).click();
     await expect(page.getByLabel("Open menu").filter({ visible: true })).toBeVisible();
 

@@ -62,6 +62,12 @@
       "expo-video",
       "expo-web-browser",
       "@react-native-community/datetimepicker",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Cahootz Commons opens your contacts only when you choose someone to invite."
+        }
+      ],
       "./expo-plugins/with-excluded-archs.js",
       "./expo-plugins/with-modify-gradle.js",
       [

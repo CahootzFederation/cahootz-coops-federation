@@ -28,6 +28,9 @@ async function cleanup(email: string) {
     db.notification.deleteMany({ where: { type: "DIRECT_MESSAGE", createdAt: { gte: comment.createdAt }, data: { path: ["groupId"], equals: comment.groupId } } }),
     // The check-in and the follow-up conversation the spec adds after it.
     db.groupComment.deleteMany({ where: { groupId: comment.groupId, createdAt: { gte: comment.createdAt } } }),
+    // Sage's decision trails for those replies. Left behind, they show in this shared account's Sage
+    // conversation and make other journeys (agent-decision-trails) see a trail before their own reply exists.
+    db.sageDecisionTrail.deleteMany({ where: { circleId: comment.groupId, agent: "sage-reply", createdAt: { gte: comment.createdAt } } }),
   ]);
   return { deleted: 1 };
 }

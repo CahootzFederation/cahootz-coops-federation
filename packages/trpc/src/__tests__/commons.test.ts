@@ -1004,6 +1004,93 @@ describe('commonsRouter', () => {
     });
   });
 
+  describe('listMembers', () => {
+    it('never lists or counts Sage or other bot accounts', async () => {
+      const findMany = vi.fn().mockResolvedValue([
+        {
+          roles: ['member', 'steward'],
+          user: { id: 'u_2', name: 'Maya', email: 'maya@example.com', handle: 'maya' },
+        },
+      ]);
+      const count = vi.fn().mockResolvedValue(1);
+      const db = makeDb({ userCoopMembership: { findMany, count } });
+
+      const result = await callerFor(db, { 'x-session-token': 'token_1' }).listMembers({
+        coopId: 'artists',
+      });
+
+      const expectedWhere = {
+        coopId: 'artists',
+        status: 'ACTIVE',
+        user: { isBot: false, deletedAt: null },
+      };
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expectedWhere,
+          orderBy: { joinedAt: 'desc' },
+          skip: 0,
+          take: 8,
+        }),
+      );
+      expect(count).toHaveBeenCalledWith({ where: expectedWhere });
+      expect(result).toEqual({
+        totalCount: 1,
+        hasMore: false,
+        members: [{ id: 'u_2', name: 'Maya', handle: 'maya', isSteward: true }],
+      });
+    });
+
+    it('pages the full list by name and searches name or handle', async () => {
+      const findMany = vi.fn().mockResolvedValue([
+        { roles: ['member'], user: { id: 'u_3', name: 'Jo', email: 'jo@example.com', handle: 'jo' } },
+      ]);
+      const count = vi.fn().mockResolvedValue(60);
+      const db = makeDb({ userCoopMembership: { findMany, count } });
+
+      const result = await callerFor(db, { 'x-session-token': 'token_1' }).listMembers({
+        coopId: 'artists',
+        limit: 50,
+        offset: 50,
+        sort: 'name',
+        search: '  jo ',
+      });
+
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            coopId: 'artists',
+            status: 'ACTIVE',
+            user: {
+              isBot: false,
+              deletedAt: null,
+              OR: [
+                { name: { contains: 'jo', mode: 'insensitive' } },
+                { handle: { contains: 'jo', mode: 'insensitive' } },
+              ],
+            },
+          },
+          orderBy: [{ user: { name: 'asc' } }, { joinedAt: 'asc' }, { id: 'asc' }],
+          skip: 50,
+          take: 50,
+        }),
+      );
+      expect(result.hasMore).toBe(true);
+      expect(result.members[0]).toEqual({ id: 'u_3', name: 'Jo', handle: 'jo', isSteward: false });
+    });
+
+    it('hides the member list from people outside the commons', async () => {
+      const findMany = vi.fn();
+      const db = makeDb({
+        userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null), findMany, count: vi.fn() },
+      });
+
+      await expect(
+        callerFor(db, { 'x-session-token': 'token_1' }).listMembers({ coopId: 'artists' }),
+      ).rejects.toThrow();
+      expect(findMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getAISpending', () => {
     it("sums this month's AI spend by member-readable category", async () => {
       const groupBy = vi.fn().mockResolvedValue([

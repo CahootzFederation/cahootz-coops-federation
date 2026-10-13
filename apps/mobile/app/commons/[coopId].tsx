@@ -2,6 +2,7 @@ import type {
   ApplicationQuestion,
   CommonsAccessStatus,
   CommonsDirectoryItem,
+  CommonsMember,
   CoopConfigDetail,
   PrivateGroupSummary,
   ProposalSummary,
@@ -103,7 +104,7 @@ type AISpending = {
 
 type MembersPreview = {
   totalCount: number;
-  members: { id: string; name: string; handle: string }[];
+  members: CommonsMember[];
 };
 
 type InfoTab = 'overview' | 'community' | 'governance';
@@ -902,6 +903,12 @@ export default function CommonsDetailScreen() {
                   membersPreview={membersPreview}
                   isSteward={!!directoryItem?.isSteward}
                   circles={circles}
+                  onSeeAllMembers={() =>
+                    router.push({
+                      pathname: '/(authenticated)/commons-members',
+                      params: { coopId, coopName: name },
+                    } as any)
+                  }
                   onOpenCircle={(circle) =>
                     router.push(
                       `/${coopId}/posts?circleId=${circle.id}` as any,
@@ -1383,21 +1390,34 @@ function CommunityTab({
   membersPreview,
   isSteward,
   circles,
+  onSeeAllMembers,
   onOpenCircle,
   onSeeAllCircles,
 }: {
   membersPreview: MembersPreview | null;
   isSteward: boolean;
   circles: PrivateGroupSummary[];
+  onSeeAllMembers: () => void;
   onOpenCircle: (circle: PrivateGroupSummary) => void;
   onSeeAllCircles: () => void;
 }) {
   return (
     <>
       <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
-        <View className="mb-3 flex-row items-center gap-2">
-          <Users size={19} color={THEME.primary} />
-          <Text className="text-lg font-black text-gray-950">People</Text>
+        <View className="mb-3 flex-row items-center justify-between">
+          <View className="flex-row items-center gap-2">
+            <Users size={19} color={THEME.primary} />
+            <Text className="text-lg font-black text-gray-950">People</Text>
+          </View>
+          <TouchableOpacity
+            onPress={onSeeAllMembers}
+            accessibilityRole="button"
+            accessibilityLabel="See all members"
+          >
+            <Text className="text-sm font-black" style={{ color: THEME.primary }}>
+              See all
+            </Text>
+          </TouchableOpacity>
         </View>
         {membersPreview ? (
           <>
@@ -1417,9 +1437,12 @@ function CommunityTab({
                 </PersonLink>
               ))}
             </View>
-            <Text className="mt-3 text-sm font-bold text-gray-500">
-              {membersPreview.totalCount} members
-            </Text>
+            <TouchableOpacity onPress={onSeeAllMembers} activeOpacity={0.72}>
+              <Text className="mt-3 text-sm font-bold text-gray-500">
+                {membersPreview.totalCount}{' '}
+                {membersPreview.totalCount === 1 ? 'member' : 'members'}
+              </Text>
+            </TouchableOpacity>
           </>
         ) : (
           <ActivityIndicator color={THEME.primary} />

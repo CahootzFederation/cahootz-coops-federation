@@ -1567,8 +1567,9 @@ export const commonsRouter = router({
 
       const [activeMembers, discussionsThisMonth, openVotes] =
         await Promise.all([
+          // Sage's membership is for mentions; it isn't a member.
           context.db.userCoopMembership.count({
-            where: { coopId: input.coopId, status: 'ACTIVE' },
+            where: { coopId: input.coopId, status: 'ACTIVE', user: { isBot: false } },
           }),
           context.db.groupComment.count({
             where: {
@@ -1659,9 +1660,22 @@ export const commonsRouter = router({
       };
     }),
 
-  /** A preview slice of active members for the info page's People row. */
+  /**
+   * Active people in a Commons, for the info page's People row (recent
+   * joiners) and the full member list (by name, searchable, paged). Sage and
+   * other bot accounts hold a membership so they resolve in mentions, but
+   * they aren't people, so they're never listed or counted here.
+   */
   listMembers: accountAuthenticatedProcedure
-    .input(z.object({ coopId: z.string().min(1), limit: z.number().min(1).max(50).default(8) }))
+    .input(
+      z.object({
+        coopId: z.string().min(1),
+        limit: z.number().min(1).max(100).default(8),
+        offset: z.number().int().min(0).default(0),
+        sort: z.enum(['recent', 'name']).default('recent'),
+        search: z.string().trim().max(80).optional(),
+      }),
+    )
     .query(async ({ input, ctx }) => {
       const context = ctx as AccountAuthenticatedContext;
       await requireActiveCommonsMembership(
@@ -1670,24 +1684,46 @@ export const commonsRouter = router({
         input.coopId,
       );
 
+      const userFilter: Prisma.UserWhereInput = { isBot: false, deletedAt: null };
+      if (input.search) {
+        userFilter.OR = [
+          { name: { contains: input.search, mode: 'insensitive' } },
+          { handle: { contains: input.search, mode: 'insensitive' } },
+        ];
+      }
+      const where: Prisma.UserCoopMembershipWhereInput = {
+        coopId: input.coopId,
+        status: 'ACTIVE',
+        user: userFilter,
+      };
+
       const [memberships, totalCount] = await Promise.all([
         context.db.userCoopMembership.findMany({
-          where: { coopId: input.coopId, status: 'ACTIVE' },
-          orderBy: { joinedAt: 'desc' },
+          where,
+          orderBy:
+            input.sort === 'name'
+              ? [{ user: { name: 'asc' } }, { joinedAt: 'asc' }, { id: 'asc' }]
+              : { joinedAt: 'desc' },
+          skip: input.offset,
           take: input.limit,
-          select: { user: { select: { id: true, name: true, email: true, handle: true } } },
+          select: {
+            roles: true,
+            user: { select: { id: true, name: true, email: true, handle: true } },
+          },
         }),
-        context.db.userCoopMembership.count({
-          where: { coopId: input.coopId, status: 'ACTIVE' },
-        }),
+        context.db.userCoopMembership.count({ where }),
       ]);
 
       return {
         totalCount,
-        members: memberships.map(({ user }: any) => ({
+        hasMore: input.offset + memberships.length < totalCount,
+        members: memberships.map(({ user, roles }: any) => ({
           id: user.id,
           name: displayName(user),
           handle: personHandle(user),
+          isSteward: ((roles as string[] | undefined) || []).some((role) =>
+            STEWARD_ROLES.includes(role),
+          ),
         })),
       };
     }),

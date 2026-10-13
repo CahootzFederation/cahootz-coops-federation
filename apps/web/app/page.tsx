@@ -218,9 +218,9 @@ export default async function HomePage() {
                 <small>Buy and build nearby</small>
               </div>
               <div className="map-node map-decisions">
-                <span className="node-kicker">SAGE</span>
+                <span className="node-kicker">AI HELPER</span>
                 <strong>Sage</strong>
-                <small>Looking out for you</small>
+                <small>Connects you with people who can help</small>
               </div>
             </div>
           </div>
@@ -288,11 +288,8 @@ export default async function HomePage() {
               <p className="eyebrow">MEET SAGE</p>
               <h2>Someone always looking out for you.</h2>
               <p className="sage-intro">
-                Sage is the AI helper built into every commons. Think of it as
-                the friend who knows everyone: it pays attention to what people
-                need and what they can offer, connects the right people, and
-                answers your questions about how your community works. You can
-                message Sage anytime, like any other member.
+                Sage is your community&apos;s AI helper. Ask it anything, and it
+                connects you with people who can help.
               </p>
             </div>
             <div>

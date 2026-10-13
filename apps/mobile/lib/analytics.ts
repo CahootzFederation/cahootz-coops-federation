@@ -16,7 +16,7 @@
  */
 import type { PostHog } from 'posthog-react-native';
 
-export type OnboardingStep = 'intro' | 'profile' | 'circles';
+export type OnboardingStep = 'intro' | 'profile' | 'invite' | 'circles';
 
 export type AnalyticsEvents = {
   app_opened: {
@@ -31,6 +31,12 @@ export type AnalyticsEvents = {
   onboarding_step_viewed: { step: OnboardingStep; signed_in: boolean };
   /** The person skipped a step ("Skip" on the profile form, "Skip for now" on circles). */
   onboarding_deferred: { step: OnboardingStep; signed_in: boolean };
+  /** Tapped an invite-from-contacts card. `picker` is false where it falls back to sharing a message. */
+  contact_invite_started: { source: string; picker: boolean };
+  /** Started texting the contacts chosen in the invite checklist. Counts only, never names or numbers. */
+  contact_invite_batch_started: { source: string; count: number };
+  /** Finished (or stopped) texting chosen contacts. */
+  contact_invite_batch_finished: { source: string; sent: number; total: number };
   /** A signed-out person tapped "I already have an account" in the welcome wizard. */
   onboarding_sign_in_chosen: { step: OnboardingStep };
   /** The wizard was finished. `profile_completed` is false if the profile form was skipped. */

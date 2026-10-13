@@ -31,6 +31,9 @@ Leave the key unset in local development, CI and the Playwright suite. With no k
 | `app_opened` | `components/analytics-tracker.tsx`: on launch, after the saved session loads, and when the app returns from the background | `source` (`cold_start` / `foreground`), `is_first_open`, `signed_in`, `days_since_signup` (signed in only) |
 | `$screen` | same component, on every route change | route pattern |
 | `onboarding_step_viewed` | `app/profile-onboarding.tsx` | `step` (`intro` / `profile` / `circles`), `signed_in` |
+| `contact_invite_started` | Tapped the invite-from-contacts card | `source`, `picker` |
+| `contact_invite_batch_started` | Started texting the contacts chosen in the invite checklist | `source`, `count` |
+| `contact_invite_batch_finished` | Finished or stopped texting them | `source`, `sent`, `total` |
 | `onboarding_deferred` | "Skip" on the profile form, "Skip for now" on the circles step | `step`, `signed_in` |
 | `onboarding_completed` | the wizard finished, however the person left it | `exit` (`welcome_lounge` / `general` / `skip` / `invitation`), `profile_completed`, `signed_in` |
 | `welcome_lounge_joined` | onboarding circles step, Circle View's "Join a welcome lounge" card | `source` (`onboarding` / `circle_view`), `auto_joined` |

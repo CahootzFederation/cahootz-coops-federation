@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Modal, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
@@ -70,6 +70,10 @@ export default function AppDrawer({
   const [directoryError, setDirectoryError] = useState('');
   const [directoryReloadKey, setDirectoryReloadKey] = useState(0);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  // iOS can't present a modal over another one, so the admin panel opens
+  // only after the drawer's modal has finished dismissing.
+  const openAdminAfterDismiss = useRef(false);
+  const previewWelcomeAfterDismiss = useRef(false);
   // Signing out means asking for a new email code to get back in, so it takes a second tap.
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const hasAccountSession = isAuthenticated && !!sessionToken;
@@ -165,15 +169,40 @@ export default function AppDrawer({
     router.replace('/' as any);
   };
 
+  const openAdminPanel = () => {
+    if (Platform.OS === 'ios') {
+      openAdminAfterDismiss.current = true;
+      onClose();
+    } else {
+      setAdminPanelOpen(true);
+    }
+  };
+
+  // Same iOS rule: signing out and routing while the admin panel is still
+  // dismissing gets dropped, so on iOS this runs from the panel's onDismiss.
   const handlePreviewWelcomeScreen = async () => {
     setAdminPanelOpen(false);
     onClose();
+    if (Platform.OS === 'ios') {
+      previewWelcomeAfterDismiss.current = true;
+      return;
+    }
     await previewWelcomeScreen();
   };
 
   return (
     <>
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={onClose}
+        onDismiss={() => {
+          if (!openAdminAfterDismiss.current) return;
+          openAdminAfterDismiss.current = false;
+          setAdminPanelOpen(true);
+        }}
+      >
       <View className="flex-1 flex-row bg-black/35">
         <View className="w-4/5 bg-white pt-14">
           <View className="border-b border-stone-200 px-4 pb-3">
@@ -465,7 +494,7 @@ export default function AppDrawer({
 
             {__DEV__ && (
               <TouchableOpacity
-                onPress={() => setAdminPanelOpen(true)}
+                onPress={openAdminPanel}
                 className="mt-2 flex-row items-center justify-center gap-2 rounded-2xl bg-stone-100 py-3"
                 activeOpacity={0.8}
               >
@@ -487,6 +516,11 @@ export default function AppDrawer({
           transparent
           animationType="fade"
           onRequestClose={() => setAdminPanelOpen(false)}
+          onDismiss={() => {
+            if (!previewWelcomeAfterDismiss.current) return;
+            previewWelcomeAfterDismiss.current = false;
+            void previewWelcomeScreen();
+          }}
         >
           <View className="flex-1 flex-row bg-black/35">
             <View className="w-4/5 bg-white pt-14">

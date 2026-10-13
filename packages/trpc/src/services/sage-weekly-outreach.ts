@@ -11,10 +11,10 @@ import { directKeyFor, openDirectCircle, sendDirectCircleMessage } from "./direc
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
 import { cleanseUntrustedText } from "./untrusted-input.js";
 
-export const WEEKLY_OUTREACH_FLAG = "sage_weekly_outreach";
 export const WEEKLY_OUTREACH_AGENT = "sage-weekly-outreach";
 export const WEEKLY_OUTREACH_BATCH = 100;
 export const WEEKLY_OUTREACH_HOUR_UTC = 18;
+export const WEEKLY_OUTREACH_SCHEDULE_VERSION = "v1";
 const RECENT_CONVERSATION_DAYS = 7;
 const RECOVERY_HOURS = 48;
 const DAY_MS = 86_400_000;
@@ -51,10 +51,11 @@ export function assignedOutreachAt(userId: string, now: Date, scheduleVersion = 
   return scheduled;
 }
 
-export function outreachIsDue(input: { userId: string; now: Date; enabledAt: Date; scheduleVersion?: string }) {
+/** Due from the member's assigned time for 48 hours. `notBefore` skips slots before a cutoff (tests, recovery). */
+export function outreachIsDue(input: { userId: string; now: Date; notBefore?: Date; scheduleVersion?: string }) {
   const scheduledAt = assignedOutreachAt(input.userId, input.now, input.scheduleVersion);
   const age = input.now.getTime() - scheduledAt.getTime();
-  return scheduledAt >= input.enabledAt && age >= 0 && age <= RECOVERY_HOURS * 3_600_000;
+  return (!input.notBefore || scheduledAt >= input.notBefore) && age >= 0 && age <= RECOVERY_HOURS * 3_600_000;
 }
 
 function firstName(name: string | null, email: string) {
@@ -150,7 +151,6 @@ function isUniqueViolation(error: unknown) {
 }
 
 export interface WeeklyOutreachSummary {
-  enabled: boolean;
   considered: number;
   due: number;
   sent: number;
@@ -162,8 +162,7 @@ export interface WeeklyOutreachSummary {
 export async function runWeeklySageOutreach(options: {
   now?: Date;
   userIds?: string[];
-  enabled?: boolean;
-  enabledAt?: Date;
+  notBefore?: Date;
   scheduleVersion?: string;
   limit?: number;
   /** Internal test/recovery controls; never accepted by a public API. */
@@ -171,15 +170,8 @@ export async function runWeeklySageOutreach(options: {
   generateWithModel?: boolean;
 } = {}): Promise<WeeklyOutreachSummary> {
   const now = options.now ?? new Date();
-  const flag = options.enabled === undefined
-    ? await db.featureFlag.findUnique({ where: { key: WEEKLY_OUTREACH_FLAG } })
-    : null;
-  const enabled = options.enabled ?? flag?.enabled ?? false;
-  const summary: WeeklyOutreachSummary = { enabled, considered: 0, due: 0, sent: 0, recent: 0, duplicate: 0, failed: 0 };
-  if (!enabled) return summary;
-  const metadata = (flag?.metadata ?? {}) as { enabledAt?: string; scheduleVersion?: string };
-  const enabledAt = options.enabledAt ?? (metadata.enabledAt ? new Date(metadata.enabledAt) : flag?.updatedAt ?? now);
-  const scheduleVersion = options.scheduleVersion ?? metadata.scheduleVersion ?? "v1";
+  const summary: WeeklyOutreachSummary = { considered: 0, due: 0, sent: 0, recent: 0, duplicate: 0, failed: 0 };
+  const scheduleVersion = options.scheduleVersion ?? WEEKLY_OUTREACH_SCHEDULE_VERSION;
   const members: Array<{ id: string; name: string | null; email: string }> = [];
   let cursor: string | undefined;
   const maximum = options.limit ?? Number.POSITIVE_INFINITY;
@@ -205,7 +197,7 @@ export async function runWeeklySageOutreach(options: {
   const sage = await ensureSageBotUser(db, COMMONS_COOP_ID);
   const recentSince = new Date(now.getTime() - RECENT_CONVERSATION_DAYS * DAY_MS);
   for (const user of members) {
-    if (!outreachIsDue({ userId: user.id, now, enabledAt, scheduleVersion })) continue;
+    if (!outreachIsDue({ userId: user.id, now, notBefore: options.notBefore, scheduleVersion })) continue;
     summary.due++;
     const systemKey = `sage-weekly:${user.id}:${isoWeekKey(now)}`;
     try {

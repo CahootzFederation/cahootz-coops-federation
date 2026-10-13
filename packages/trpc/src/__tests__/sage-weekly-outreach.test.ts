@@ -20,17 +20,17 @@ describe("Sage weekly outreach scheduling", () => {
   it("is due after the assigned time and supports a bounded recovery window", () => {
     const week = new Date("2026-10-12T00:00:00Z");
     const scheduled = assignedOutreachAt("member-1", week, "v1");
-    expect(outreachIsDue({ userId: "member-1", now: new Date(scheduled.getTime() + 60_000), enabledAt: new Date("2026-01-01"), scheduleVersion: "v1" })).toBe(true);
-    expect(outreachIsDue({ userId: "member-1", now: new Date(scheduled.getTime() + 49 * 3_600_000), enabledAt: new Date("2026-01-01"), scheduleVersion: "v1" })).toBe(false);
+    expect(outreachIsDue({ userId: "member-1", now: new Date(scheduled.getTime() + 60_000), scheduleVersion: "v1" })).toBe(true);
+    expect(outreachIsDue({ userId: "member-1", now: new Date(scheduled.getTime() + 49 * 3_600_000), scheduleVersion: "v1" })).toBe(false);
   });
 
-  it("does not backfill an assignment from before the feature was enabled", () => {
+  it("skips an assignment before an explicit cutoff", () => {
     const week = new Date("2026-10-12T00:00:00Z");
     const scheduled = assignedOutreachAt("member-2", week, "v1");
     expect(outreachIsDue({
       userId: "member-2",
       now: new Date(scheduled.getTime() + 60_000),
-      enabledAt: new Date(scheduled.getTime() + 1),
+      notBefore: new Date(scheduled.getTime() + 1),
       scheduleVersion: "v1",
     })).toBe(false);
   });

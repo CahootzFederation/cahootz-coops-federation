@@ -112,7 +112,7 @@ const faqs = [
   },
   {
     q: "Who is Sage?",
-    a: "Sage is the AI community guide built into every commons. It connects people who can help each other and keeps good ideas moving. People still make the decisions.",
+    a: "Sage is the AI Community Guide built into every commons. It connects people who can help each other and keeps good ideas moving. People still make the decisions.",
   },
   {
     q: "Do I need to own a business to join?",
@@ -218,7 +218,7 @@ export default async function HomePage() {
                 <small>Buy and build nearby</small>
               </div>
               <div className="map-node map-decisions">
-                <span className="node-kicker">COMMUNITY GUIDE</span>
+                <span className="node-kicker">AI COMMUNITY GUIDE</span>
                 <strong>Sage</strong>
                 <small>Connects you with people who can help</small>
               </div>
@@ -288,7 +288,7 @@ export default async function HomePage() {
               <p className="eyebrow">MEET SAGE</p>
               <h2>Someone always looking out for you.</h2>
               <p className="sage-intro">
-                Sage is your AI community guide. Ask it anything, and it
+                Sage is your AI Community Guide. Ask it anything, and it
                 connects you with people who can help.
               </p>
             </div>

@@ -27,7 +27,7 @@ const WAKE_BATCH = 50;
 
 // REVIEW_SUGGESTION / suggestion_review tasks are created by sage-suggestion-follow-up.ts, not createSageTask.
 export type SageTaskKind = "FOLLOW_UP" | "REVIEW_STALE_DRAFT" | "DEADLINE_REMINDER";
-export type SageTaskSubject = "commons_post" | "proposal_draft" | "proposal" | "event";
+export type SageTaskSubject = "commons_post" | "proposal_draft" | "proposal" | "event" | "member_post";
 
 export interface CreateTaskInput {
   coopId: string;
@@ -125,6 +125,14 @@ export async function checkTaskOutcome(task: Pick<SageTask, "id" | "kind" | "sub
     }
     return { resolved: false };
   }
+  if (task.subjectType === "member_post") {
+    // A post Sage made for a member: done once anyone other than Sage answers it.
+    const postId = task.postId ?? task.subjectId;
+    const post = await db.commonsPost.findUnique({ where: { id: postId }, select: { authorId: true } });
+    if (!post) return { resolved: true, moot: true, outcome: "The post was deleted" };
+    const reply = await db.commonsComment.findFirst({ where: { postId, authorId: { not: post.authorId }, author: { isBot: false } }, select: { id: true } });
+    return reply ? { resolved: true, outcome: "Someone replied to the post" } : { resolved: false };
+  }
   if (task.subjectType === "proposal_draft") {
     const draft = await db.commonsProposalDraft.findUnique({ where: { id: task.subjectId }, select: { submittedAt: true } });
     if (!draft) return { resolved: true, moot: true, outcome: "The draft was deleted" };
@@ -213,7 +221,11 @@ export async function wakeTask(task: SageTask, now = new Date()): Promise<"DONE"
         .result("Stopped", "INFO", "None. Sage doesn't keep reminding.").setOutcome("Follow-up stopped after one reminder").save();
       return "ABANDONED";
     }
-    if (task.ownerUserId) {
+    if (task.subjectType === "member_post") {
+      // The member asked Sage privately, so the nudge goes to that conversation, not a public push.
+      const { remindAboutMemberPost } = await import("./sage-member-actions.js");
+      await remindAboutMemberPost(task).catch((error) => console.error("Could not send the member post reminder", error));
+    } else if (task.ownerUserId) {
       const text = reminderText(task);
       await createNotificationAndPush(db, {
         userId: task.ownerUserId, coopId: task.coopId, type: isSuggestion ? "SAGE_SUGGESTION_REMINDER" : "SAGE_REMINDER", title: text.title, body: text.body,

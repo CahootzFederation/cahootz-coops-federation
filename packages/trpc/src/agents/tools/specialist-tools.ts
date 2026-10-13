@@ -139,26 +139,32 @@ export function buildGuardianTools(ctx: AgentToolContext, log?: SpecialistLog) {
 
 // ── Bridge: needs, skills, resources ──────────────────────────────────────────
 
+/** Active members of ctx.coopId whose listed skills, resources or interests match a need, best first. */
+export async function findMembersForNeed(ctx: AgentToolContext, need: string, excludeUserId: string | null, limit: number) {
+  const wanted = needWords(need);
+  if (!wanted.length) return [];
+  const members = await ctx.db.userCoopMembership.findMany({
+    where: { coopId: ctx.coopId, status: "ACTIVE", user: { isBot: false, deletedAt: null }, ...(excludeUserId ? { userId: { not: excludeUserId } } : {}) },
+    select: { userId: true, user: { select: { name: true, skills: true, resourcesOffered: true, interests: true } } }, take: 500,
+  });
+  return members.map((member) => {
+    const offered = [...member.user.skills, ...member.user.resourcesOffered, ...member.user.interests];
+    const matched = offered.filter((entry) => needWords(entry).some((word) => wanted.some((want) => word.startsWith(want.slice(0, 5)) || want.startsWith(word.slice(0, 5)))));
+    return { userId: member.userId, name: member.user.name, matched, score: matched.length };
+  }).filter((member) => member.score > 0).sort((a, b) => b.score - a.score).slice(0, limit)
+    .map(({ score: _score, ...member }) => member);
+}
+
 export function buildBridgeTools(ctx: AgentToolContext, log?: SpecialistLog) {
-  const findMembersForNeed = tool({
+  const findMembersForNeedTool = tool({
     name: "find_members_for_need",
     description: "Bridge: active members of this Commons whose listed skills, resources or interests match a need. Returns ids and safe profile fields only. Introductions always ask both people first.",
     parameters: z.object({ need: z.string().min(3).max(300), excludeUserId: z.string().nullable().default(null), limit: z.number().int().min(1).max(10).default(5) }),
     errorFunction: null,
     execute: async ({ need, excludeUserId, limit }) => {
-      const wanted = needWords(need);
-      if (!wanted.length) return [];
-      const members = await ctx.db.userCoopMembership.findMany({
-        where: { coopId: ctx.coopId, status: "ACTIVE", user: { isBot: false, deletedAt: null }, ...(excludeUserId ? { userId: { not: excludeUserId } } : {}) },
-        select: { userId: true, user: { select: { name: true, skills: true, resourcesOffered: true, interests: true } } }, take: 500,
-      });
-      const scored = members.map((member) => {
-        const offered = [...member.user.skills, ...member.user.resourcesOffered, ...member.user.interests];
-        const matched = offered.filter((entry) => needWords(entry).some((word) => wanted.some((want) => word.startsWith(want.slice(0, 5)) || want.startsWith(word.slice(0, 5)))));
-        return { userId: member.userId, name: member.user.name, matched, score: matched.length };
-      }).filter((member) => member.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+      const scored = await findMembersForNeed(ctx, need, excludeUserId, limit);
       log?.("Bridge", `${scored.length} members match "${need.slice(0, 60)}"`, scored.map((member) => `${member.name ?? "A member"}: ${member.matched.join(", ")}`).join("\n") || undefined);
-      return scored.map(({ score: _score, ...member }) => member);
+      return scored;
     },
   });
 
@@ -176,7 +182,7 @@ export function buildBridgeTools(ctx: AgentToolContext, log?: SpecialistLog) {
       return resources;
     },
   });
-  return [findMembersForNeed, listPublishedResources];
+  return [findMembersForNeedTool, listPublishedResources];
 }
 
 // ── Ledger (limited): proposal budgets only ───────────────────────────────────

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { newSignedInPage, USER_A_EMAIL } from "./support/auth";
+import { withExclusiveAccountSetting } from "./support/exclusive";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 
@@ -14,7 +15,8 @@ function fixture(command: "seed" | "cleanup" | "followup") {
   return JSON.parse(line.slice("E2E_RESULT ".length)) as { content?: string | null };
 }
 
-test("Sage's weekly check-in arrives through the existing private-message inbox", async ({ browser }) => {
+// Takes turns with sage-member-post.spec.ts, which also uses A's Sage conversation.
+test("Sage's weekly check-in arrives through the existing private-message inbox", async ({ browser }) => withExclusiveAccountSetting("user-a-sage-conversation", async () => {
   const member = await newSignedInPage(browser, USER_A_EMAIL);
   try {
     const seeded = fixture("seed");
@@ -57,4 +59,4 @@ test("Sage's weekly check-in arrives through the existing private-message inbox"
     fixture("cleanup");
     await member.context.close();
   }
-});
+}));

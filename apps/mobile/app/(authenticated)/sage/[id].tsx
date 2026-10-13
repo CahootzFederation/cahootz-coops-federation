@@ -86,6 +86,7 @@ function labelForReviewType(reviewType: string, capability: string | null) {
   if (reviewType === 'APPROVE_SUGGESTION') {
     if (capability === 'comment_on_post') return 'Sage recommends commenting';
     if (capability === 'draft_proposal') return 'Sage recommends a proposal';
+    if (capability === 'post_for_member') return 'Sage can post this for you';
     return 'Sage has an idea';
   }
   return 'Confirm details';
@@ -95,6 +96,7 @@ function labelForReviewType(reviewType: string, capability: string | null) {
 function approvalConsequence(capability: string | null) {
   if (capability === 'comment_on_post') return 'Approving posts this comment as Sage on that post. It will not speak for you.';
   if (capability === 'draft_proposal') return 'Approving saves an editable draft for you. Nothing is submitted until you submit it.';
+  if (capability === 'post_for_member') return 'Approving posts this in your Commons from Sage, without your name. Sage tells you privately when someone replies.';
   return null;
 }
 

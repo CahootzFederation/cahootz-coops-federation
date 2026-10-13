@@ -6,6 +6,9 @@ import { ensureSageBotUser } from "../lib/bot.js";
 import { generateInviteCode } from "../lib/invite-code.js";
 import { createNotificationAndPush } from "./push-notification-service.js";
 import { notifySageComment } from "./sage-comment-notifications.js";
+import { MEMBER_POST_FOLLOW_UP_DAYS, MEMBER_POST_SOURCE, MEMBER_POST_TAGS, mentionsMember } from "./sage-member-actions.js";
+import { createSageTask } from "./sage-tasks.js";
+import { checkSageOutput } from "./untrusted-input.js";
 
 interface ToolContext {
   action: CommonsAction;
@@ -207,6 +210,52 @@ async function createPrivateCircle(ctx: ToolContext): Promise<ToolResult> {
   return { resultEntityType: "Group", resultEntityId: group.id };
 }
 
+/**
+ * A post Sage makes for a member who asked for help in a private conversation and said yes to the exact
+ * text. Posted from Sage's account without the member's name; the post records the action so replies
+ * can be relayed to the member. Re-checks the member, the text and anonymity at execution time, then
+ * tells the member in the conversation and schedules Sage's check on whether anyone answered.
+ */
+async function postForMember(ctx: ToolContext): Promise<ToolResult> {
+  const memberId = subjectUserId(ctx);
+  const payload = ctx.action.payload as { title?: unknown; body?: unknown; tag?: unknown; conversationGroupId?: unknown } | null;
+  const title = typeof payload?.title === "string" ? payload.title.slice(0, 120) : "";
+  const body = typeof payload?.body === "string" ? payload.body.slice(0, 1500) : "";
+  const tag = MEMBER_POST_TAGS.find((allowed) => allowed === payload?.tag) ?? "Ask";
+  const conversationGroupId = typeof payload?.conversationGroupId === "string" ? payload.conversationGroupId : null;
+  if (!title || !body || !conversationGroupId) throw new ToolRefusal("The post is missing its text or conversation");
+  const membership = await db.userCoopMembership.findUnique({ where: { userId_coopId: { userId: memberId, coopId: ctx.action.coopId } }, select: { status: true } });
+  if (membership?.status !== "ACTIVE") throw new ToolRefusal("The member is no longer active in this Commons");
+  const member = await db.user.findUnique({ where: { id: memberId }, select: { id: true, name: true, email: true, handle: true } });
+  if (!member || mentionsMember(`${title}\n${body}`, member)) throw new ToolRefusal("The post would identify the member");
+  if (!checkSageOutput(`${title}\n${body}`).ok) throw new ToolRefusal("The post failed Sage's output check");
+
+  const sage = await ensureSageBotUser(db, ctx.action.coopId);
+  const post = await db.commonsPost.create({
+    data: {
+      coopId: ctx.action.coopId, circleId: generalCircleId(ctx.action.coopId), authorId: sage.id,
+      title, content: body, tag, classification: "sage_member_post", classificationConfidence: 1,
+      classificationSignals: { version: 1, source: MEMBER_POST_SOURCE, actionId: ctx.action.id },
+    },
+  });
+  await createSageTask({
+    coopId: ctx.action.coopId, kind: "FOLLOW_UP", title: `Replies to: ${title}`,
+    reason: "Sage posted this for a member and checks whether anyone answered.",
+    expected: "Someone replies to the post", ownerUserId: memberId, subjectType: "member_post", subjectId: post.id,
+    postId: post.id, sourceActionId: ctx.action.id, dueInDays: MEMBER_POST_FOLLOW_UP_DAYS,
+  }).catch((error) => console.error("Could not schedule the member post follow-up", error));
+  const group = await db.group.findUnique({ where: { id: conversationGroupId }, select: { id: true, coopId: true, directKey: true } });
+  if (group) {
+    const { sendDirectCircleMessage } = await import("./direct-circles.js");
+    const conversationSage = await ensureSageBotUser(db, group.coopId);
+    await sendDirectCircleMessage(db, {
+      group, sender: conversationSage,
+      content: "It's posted, without your name. I'll tell you here when someone replies, and I'll check back in a few days either way.",
+    }).catch((error) => console.error("Could not tell the member their post is up", error));
+  }
+  return { resultEntityType: "CommonsPost", resultEntityId: post.id };
+}
+
 const TOOL_REGISTRY: Record<string, (ctx: ToolContext) => Promise<ToolResult>> = {
   create_private_circle: createPrivateCircle,
   create_event: createEvent,
@@ -214,12 +263,13 @@ const TOOL_REGISTRY: Record<string, (ctx: ToolContext) => Promise<ToolResult>> =
   create_commons_post: createCommonsPost,
   comment_on_post: commentOnPost,
   draft_proposal: draftProposal,
+  post_for_member: postForMember,
 };
 
 // Tools whose result announces itself: Sage-authored posts and comments are visible in the feed, and a
 // proposal draft sends its own "draft is ready" alert. A generic "your suggestion is done" alert on top
 // of those would be redundant noise.
-const SELF_ANNOUNCING_TOOL_KEYS = new Set(["create_circle_post", "create_commons_post", "comment_on_post", "draft_proposal"]);
+const SELF_ANNOUNCING_TOOL_KEYS = new Set(["create_circle_post", "create_commons_post", "comment_on_post", "draft_proposal", "post_for_member"]);
 
 const TOOL_KEY_BY_ACTION_TYPE: Partial<Record<CommonsAction["type"], string>> = {
   RIDE_MATCH_PROPOSAL: "create_private_circle",

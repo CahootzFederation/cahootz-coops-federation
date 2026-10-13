@@ -159,6 +159,14 @@ body {
 .button-primary:hover {
   background: var(--color-accent-deep);
 }
+.button-secondary {
+  border: 2px solid var(--color-ink);
+  color: var(--color-ink);
+}
+.button-secondary:hover {
+  background: var(--color-ink);
+  color: var(--color-light);
+}
 .text-link {
   display: inline-flex;
   align-items: center;

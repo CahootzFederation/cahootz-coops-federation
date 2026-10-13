@@ -380,6 +380,7 @@ const SageCommonsReplyInputZ = z.object({
   coopId: z.string().min(1).describe("Which Commons' charter/mission to ground the reply in"),
   message: z.string().min(1).describe("The message that mentioned or was sent to Sage"),
   threadContext: z.string().optional().describe("Prior thread/comment/DM history, oldest-first, for continuity"),
+  channel: z.enum(["mention", "dm"]).optional().describe("Direct messages to Sage use a cheaper model than public @mentions"),
 });
 
 const SageCommonsReplyOutputZ = z.object({
@@ -393,12 +394,21 @@ const SageCommonsReplyOutputZ = z.object({
   }).optional(),
 });
 
+/** A member reaching out to Sage directly is a short, private chat, so it uses the cheapest model. */
+export const SAGE_DM_MODEL = "gpt-5-nano";
+
+export function sageReplyModel(channel: "mention" | "dm" | undefined) {
+  if (channel === "dm") return process.env.SAGE_DM_MODEL || SAGE_DM_MODEL;
+  return process.env.COMMONS_AI_MODEL || "gpt-5.2";
+}
+
 export const SAGE_REPLY_FALLBACK = "I don't have a grounded answer for that in this Commons' charter right now.";
 
 async function runSageCommonsReply(
   input: z.infer<typeof SageCommonsReplyInputZ>
 ): Promise<z.infer<typeof SageCommonsReplyOutputZ>> {
   const { db } = await import("@repo/db");
+  const model = sageReplyModel(input.channel);
 
   const coopConfig = await db.coopConfig.findFirst({
     where: { coopId: input.coopId, isActive: true },
@@ -419,7 +429,7 @@ async function runSageCommonsReply(
 
   const agent = new Agent({
     name: "Sage",
-    model: process.env.COMMONS_AI_MODEL || "gpt-5.2",
+    model,
     instructions: [
       `You are Sage, the AI assistant for "${commonsName}", a specific Commons (cooperative community) inside the Cahootz platform.`,
       "You were @-mentioned or messaged directly inside this Commons' social feed or DMs. Reply in a natural, concise, conversational tone appropriate for a social feed reply - not a long essay.",
@@ -444,7 +454,7 @@ async function runSageCommonsReply(
   ].filter(Boolean).join("\n\n");
 
   const runResult = await run(agent, prompt);
-  await recordAgentResultCost({ coopId: input.coopId, feature: "sage-reply", model: process.env.COMMONS_AI_MODEL || "gpt-5.2", result: runResult }).catch(console.error);
+  await recordAgentResultCost({ coopId: input.coopId, feature: "sage-reply", model, result: runResult }).catch(console.error);
   const result = runResult as unknown as {
     finalOutput?: string;
     output?: string;
@@ -455,7 +465,7 @@ async function runSageCommonsReply(
     reply: modelReply || SAGE_REPLY_FALLBACK,
     grounding: {
       charterChars: charterText?.length ?? 0, missionGoalCount: missionGoals.length,
-      model: process.env.COMMONS_AI_MODEL || "gpt-5.2", usedFallback: !modelReply,
+      model, usedFallback: !modelReply,
     },
   };
 }

@@ -26,7 +26,8 @@ async function cleanup(email: string) {
   if (!comment) return { deleted: 0 };
   await db.$transaction([
     db.notification.deleteMany({ where: { type: "DIRECT_MESSAGE", createdAt: { gte: comment.createdAt }, data: { path: ["groupId"], equals: comment.groupId } } }),
-    db.groupComment.delete({ where: { id: comment.id } }),
+    // The check-in and the follow-up conversation the spec adds after it.
+    db.groupComment.deleteMany({ where: { groupId: comment.groupId, createdAt: { gte: comment.createdAt } } }),
   ]);
   return { deleted: 1 };
 }
@@ -35,7 +36,7 @@ async function seed(email: string) {
   await cleanup(email);
   const { user, now, systemKey } = await target(email);
   const summary = await runWeeklySageOutreach({
-    now, userIds: [user.id], enabled: true, enabledAt: new Date("2026-01-01T00:00:00Z"),
+    now, userIds: [user.id],
     ignoreRecentConversation: true, generateWithModel: false,
   });
   await new Promise((resolve) => setTimeout(resolve, 500));
@@ -44,12 +45,25 @@ async function seed(email: string) {
   return { ...summary, ...comment };
 }
 
+/** Sage's latest reply after the check-in, so the spec can assert it is visible in the conversation. */
+async function followup(email: string) {
+  const { systemKey } = await target(email);
+  const comment = await db.groupComment.findUnique({ where: { systemKey }, select: { groupId: true, authorId: true, createdAt: true } });
+  if (!comment) throw new Error("No check-in to follow up on");
+  const reply = await db.groupComment.findFirst({
+    where: { groupId: comment.groupId, authorId: comment.authorId, createdAt: { gt: comment.createdAt } },
+    orderBy: { createdAt: "desc" }, select: { content: true },
+  });
+  return { content: reply?.content ?? null };
+}
+
 async function main() {
   const [command, email] = process.argv.slice(2);
-  if (!email) throw new Error("Usage: e2e-sage-weekly-outreach.ts seed|cleanup <test-email>");
+  if (!email) throw new Error("Usage: e2e-sage-weekly-outreach.ts seed|cleanup|followup <test-email>");
   assertSafeEnvironment(email);
-  const result = command === "seed" ? await seed(email) : command === "cleanup" ? await cleanup(email) : null;
-  if (!result) throw new Error("Usage: e2e-sage-weekly-outreach.ts seed|cleanup <test-email>");
+  const result = command === "seed" ? await seed(email) : command === "cleanup" ? await cleanup(email)
+    : command === "followup" ? await followup(email) : null;
+  if (!result) throw new Error("Usage: e2e-sage-weekly-outreach.ts seed|cleanup|followup <test-email>");
   console.log(`E2E_RESULT ${JSON.stringify(result)}`);
 }
 

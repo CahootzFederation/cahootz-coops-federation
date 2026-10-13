@@ -1,7 +1,7 @@
 import { logger, schedules, task, tasks } from "@trigger.dev/sdk";
 import { db } from "../../../../packages/db/index.js";
 
-import { COMMUNITY_MEMORY_FLAG, consolidateCommonsMemory } from "../../../../packages/trpc/src/services/sage-community-memory.js";
+import { consolidateCommonsMemory } from "../../../../packages/trpc/src/services/sage-community-memory.js";
 
 export const sageCommunityMemoryConsolidate = task({
   id: "sage-community-memory-consolidate",
@@ -17,8 +17,6 @@ export const sageCommunityMemorySweep = schedules.task({
   cron: "30 4 * * *",
   maxDuration: 1800,
   run: async () => {
-    const enabled = (await db.featureFlag.findUnique({ where: { key: COMMUNITY_MEMORY_FLAG }, select: { enabled: true } }))?.enabled ?? false;
-    if (!enabled) return { enabled: false, commons: 0 };
     const configs = await db.coopConfig.findMany({
       where: { isActive: true, isDemo: false }, select: { coopId: true }, distinct: ["coopId"],
     });
@@ -28,7 +26,7 @@ export const sageCommunityMemorySweep = schedules.task({
         idempotencyKeyTTL: "24h",
       });
     }
-    const summary = { enabled: true, commons: configs.length };
+    const summary = { commons: configs.length };
     logger.info("Sage community memory sweep completed", { ...summary });
     return summary;
   },

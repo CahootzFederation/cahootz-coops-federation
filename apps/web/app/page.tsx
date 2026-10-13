@@ -64,7 +64,7 @@ async function getActiveCoops(): Promise<CoopOption[]> {
 }
 
 export const metadata: Metadata = {
-  title: "Cahootz Commons | Your people, all in one place",
+  title: "Cahootz | A place for communities to move together",
   description:
     "Cahootz Commons is the iPhone app for the communities you belong to. Post and react in your commons, talk in circles, organize your family, and let Sage introduce you to the members who can help.",
   alternates: { canonical: "https://cahootzcommons.com" },
@@ -524,7 +524,7 @@ export default async function HomePage() {
               />
               <span>Cahootz</span>
             </Link>
-            <p>Your people, all in one place.</p>
+            <p>A place for communities to move together.</p>
           </div>
           <div className="footer-links">
             <Link href="/blog">Journal</Link>

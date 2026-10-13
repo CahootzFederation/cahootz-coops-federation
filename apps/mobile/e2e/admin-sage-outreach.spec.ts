@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 import { newSignedInPage, USER_B_EMAIL } from "./support/auth";
+import { withExclusiveAccountSetting } from "./support/exclusive";
 
 // Drives the web platform admin portal (E2E_ADMIN_BASE_URL), like admin-commons-ai.spec.ts. The admin
 // email must be on PLATFORM_ADMIN_EMAILS for both the web app and the API.
@@ -23,7 +24,8 @@ function fixture(...args: string[]) {
 // A platform admin opens Sage Weekly Check-in in the Agent Playground, finds a member and sends them a
 // check-in now. The member sees it in their Sage conversation, and the admin's history shows it as manual.
 // User B is the target because sage-weekly-outreach.spec.ts uses User A's Sage conversation.
-test("a platform admin sends a Sage check-in to a member from the Agent Playground", async ({ browser }) => {
+// Takes turns with sage-proactive.spec.ts, which also uses B's Sage conversation.
+test("a platform admin sends a Sage check-in to a member from the Agent Playground", async ({ browser }) => withExclusiveAccountSetting("user-b-sage-conversation", async () => {
   test.setTimeout(240_000);
   const adminContext = await browser.newContext();
   const admin = await adminContext.newPage();
@@ -68,4 +70,4 @@ test("a platform admin sends a Sage check-in to a member from the Agent Playgrou
     await adminContext.close();
     await member.context.close();
   }
-});
+}));

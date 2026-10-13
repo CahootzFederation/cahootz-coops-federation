@@ -38,6 +38,13 @@ export function confirmationAnswer(content: string): "YES" | "NO" | null {
   return null;
 }
 
+// What Sage says after a plain yes or no, per kind of ask. A post announces itself once it's up.
+const ANSWER_TEXT: Record<string, { yes?: string; no: string }> = {
+  post_for_member: { no: "Okay, I won't post it." },
+  thank_helper: { yes: "Thank you for telling me. I'll pass on your thanks.", no: "Thanks for letting me know." },
+  share_win: { yes: "Thank you. I'll share it in the Commons.", no: "No problem, I won't share it." },
+};
+
 type Member = { id: string; name: string | null; email: string; handle?: string | null };
 
 /** True if the text would identify the member: their name, handle or email. Posts stay anonymous. */
@@ -65,9 +72,12 @@ export async function memberCommons(userId: string): Promise<Array<{ coopId: str
 }
 
 /** Retires earlier unanswered asks in the conversation, so a "yes" only ever answers the newest one. */
-async function supersedePendingAsks(userId: string, conversationGroupId: string) {
+async function supersedePendingAsks(userId: string, conversationGroupId: string, keepActionId?: string) {
   const pending = await db.commonsActionReview.findMany({
-    where: { userId, status: "PENDING", presentationData: { path: ["conversationGroupId"], equals: conversationGroupId } },
+    where: {
+      userId, status: "PENDING", presentationData: { path: ["conversationGroupId"], equals: conversationGroupId },
+      ...(keepActionId ? { actionId: { not: keepActionId } } : {}),
+    },
     select: { id: true, actionId: true },
   });
   for (const review of pending) {
@@ -171,7 +181,7 @@ export async function handleConversationConfirmation(input: {
   const review = await db.commonsActionReview.findFirst({
     where: {
       userId: input.memberId, status: "PENDING", reviewType: { in: ["APPROVE_SUGGESTION", "ACCEPT_INTRODUCTION"] },
-      createdAt: { gte: new Date(now.getTime() - ASK_TTL_MS) },
+      updatedAt: { gte: new Date(now.getTime() - ASK_TTL_MS) },
       presentationData: { path: ["conversationGroupId"], equals: input.conversationGroupId },
     },
     orderBy: { updatedAt: "desc" },
@@ -189,16 +199,23 @@ export async function handleConversationConfirmation(input: {
     where: { id: review.id, status: "PENDING" }, data: { status: answer === "YES" ? "APPROVED" : "DECLINED", respondedAt: now },
   });
   if (!claimed.count) return null;
-  const isPost = review.reviewType === "APPROVE_SUGGESTION";
-  const commonsName = String((review.presentationData as { commonsName?: unknown } | null)?.commonsName ?? "the Commons");
+  const isSuggestion = review.reviewType === "APPROVE_SUGGESTION";
+  const capability = String((action.payload as { capability?: unknown } | null)?.capability ?? "");
+  const words = ANSWER_TEXT[capability] ?? ANSWER_TEXT[MEMBER_POST_CAPABILITY]!;
   if (answer === "NO") {
     await db.commonsAction.update({ where: { id: action.id }, data: { status: "DISMISSED" } });
     await db.commonsActionAudit.create({ data: { actionId: action.id, actorId: input.memberId, eventType: "REVIEW_DECLINED", metadata: { reviewType: review.reviewType, via: "conversation" } } });
-    return { reply: isPost ? "Okay, I won't post it." : "Okay, I won't make the introduction." };
+    if (capability === THANK_HELPER_CAPABILITY) {
+      const introActionId = (action.payload as { introActionId?: unknown } | null)?.introActionId;
+      if (typeof introActionId === "string") {
+        await db.commonsActionAudit.create({ data: { actionId: introActionId, actorId: input.memberId, eventType: "HELP_NOT_CONFIRMED", metadata: {} } }).catch(console.error);
+      }
+    }
+    return { reply: isSuggestion ? words.no : "Okay, I won't make the introduction." };
   }
   await db.commonsActionAudit.create({ data: { actionId: action.id, actorId: input.memberId, eventType: "REVIEW_APPROVED", metadata: { reviewType: review.reviewType, via: "conversation" } } });
-  // Publishing sends its own "It's posted" message in this conversation, after the post exists.
-  if (isPost) return { afterReply: () => enqueueSageActionExecute(action.id, action.revision) };
+  // A post sends its own "It's posted" message after it exists; the others confirm first, then run.
+  if (isSuggestion) return { reply: words.yes, afterReply: () => enqueueSageActionExecute(action.id, action.revision) };
   await askIntroductionHelper(action.id);
   return { reply: "I've asked them. If they say yes too, I'll start a private chat for the two of you." };
 }
@@ -260,13 +277,121 @@ export async function relayReplyToMember(commentId: string): Promise<"RELAYED" |
   return "RELAYED";
 }
 
-/** The wake loop's nudge when nobody has answered the member's post yet. */
+/** The wake loop's nudge when nobody has answered the member's post yet. It's outreach, so it counts toward the weekly limit. */
 export async function remindAboutMemberPost(task: { postId: string | null; subjectId: string }): Promise<void> {
   const target = await memberPostFor(task.postId ?? task.subjectId);
   if (!target) return;
   const commons = (await memberCommons(target.memberId)).find((entry) => entry.coopId === target.post.coopId);
-  await sendInConversation(target.conversationGroupId,
-    `Nobody has replied to your post in ${commons?.name ?? "the Commons"} yet. Want me to look for other openings, or introduce you to someone whose profile fits?`);
+  const { sendProactiveSageMessage } = await import("./sage-proactive.js");
+  await sendProactiveSageMessage({
+    userId: target.memberId, kind: "post-reminder", key: target.post.id,
+    content: `Nobody has replied to your post in ${commons?.name ?? "the Commons"} yet. Want me to look for other openings, or introduce you to someone whose profile fits?`,
+  });
+}
+
+// ── Asks Sage starts itself ───────────────────────────────────────────────────
+
+export const THANK_HELPER_CAPABILITY = "thank_helper";
+export const SHARE_WIN_CAPABILITY = "share_win";
+const CONVERSATION_ASK_SOURCE = "sage_conversation_ask";
+
+/**
+ * A yes/no question Sage asks in a member's conversation on its own (not in reply to them). One action
+ * per capability and source; calling again re-arms the same ask as the newest one in the conversation.
+ * Returns null if the member already answered it.
+ */
+export async function createConversationAsk(input: {
+  coopId: string; memberId: string; conversationGroupId: string; capability: string; sourceId: string;
+  summary: string; payload: Record<string, unknown>; presentation: Record<string, unknown>;
+}): Promise<{ actionId: string } | null> {
+  const payload = { capability: input.capability, ...input.payload, conversationGroupId: input.conversationGroupId };
+  const hash = payloadHash(payload);
+  const action = await db.commonsAction.upsert({
+    where: { sourceType_sourceId_contentHash_charterConfigId_position: {
+      sourceType: CONVERSATION_ASK_SOURCE, sourceId: input.sourceId, contentHash: input.capability, charterConfigId: "sage-conversation-ask:v1", position: 0,
+    } },
+    create: {
+      coopId: input.coopId, sourceType: CONVERSATION_ASK_SOURCE, sourceId: input.sourceId, sourcePostId: input.sourceId, sourceAuthorId: input.memberId,
+      contentHash: input.capability, position: 0, type: "SUGGEST_ACTION", status: "PENDING", summary: input.summary.slice(0, 2000),
+      confidence: 1, charterConfigId: "sage-conversation-ask:v1", payload, payloadHash: hash, revision: 1,
+      participants: { create: { userId: input.memberId, role: "SUBJECT" } },
+      auditEvents: { create: { eventType: "SUGGESTION_CREATED", metadata: { kind: input.capability } } },
+    },
+    update: {},
+    select: { id: true, status: true },
+  });
+  if (action.status !== "PENDING") return null;
+  const answered = await db.commonsActionReview.findFirst({ where: { actionId: action.id, status: { in: ["APPROVED", "DECLINED"] } }, select: { id: true } });
+  if (answered) return null;
+  await supersedePendingAsks(input.memberId, input.conversationGroupId, action.id);
+  const presentationData = { ...input.presentation, capability: input.capability, conversationGroupId: input.conversationGroupId };
+  const existing = await db.commonsActionReview.findFirst({ where: { actionId: action.id, userId: input.memberId }, select: { id: true } });
+  if (existing) {
+    await db.commonsActionReview.update({ where: { id: existing.id }, data: { status: "PENDING", payloadHash: hash, presentationData } });
+  } else {
+    await db.commonsActionReview.create({ data: { actionId: action.id, userId: input.memberId, reviewType: "APPROVE_SUGGESTION", payloadHash: hash, status: "PENDING", presentationData } });
+  }
+  return { actionId: action.id };
+}
+
+async function introductionDetails(introActionId: string) {
+  const intro = await db.commonsAction.findUnique({
+    where: { id: introActionId },
+    select: { id: true, coopId: true, status: true, payload: true, participants: { select: { userId: true, role: true } } },
+  });
+  if (!intro) return null;
+  const need = String((intro.payload as { needSummary?: unknown } | null)?.needSummary ?? "").slice(0, 160);
+  return {
+    intro, need,
+    needUserId: intro.participants.find((participant) => participant.role === "SUBJECT")?.userId ?? null,
+    helperUserId: intro.participants.find((participant) => participant.role === "HELPER")?.userId ?? null,
+  };
+}
+
+/** Five days after an introduction: asks the person who needed help whether it helped. */
+export async function askWhetherIntroductionHelped(introActionId: string, needUserId: string, now = new Date()): Promise<"SENT" | "LIMITED" | "SKIPPED"> {
+  const details = await introductionDetails(introActionId);
+  if (!details || details.intro.status !== "APPROVED" || !details.helperUserId || details.needUserId !== needUserId) return "SKIPPED";
+  const { sageConversation, sendProactiveSageMessage } = await import("./sage-proactive.js");
+  const { group } = await sageConversation(needUserId);
+  const ask = await createConversationAsk({
+    coopId: details.intro.coopId, memberId: needUserId, conversationGroupId: group.id, capability: THANK_HELPER_CAPABILITY,
+    sourceId: introActionId, summary: "Did the introduction help?",
+    payload: { introActionId, helperUserId: details.helperUserId },
+    presentation: { title: "Did the introduction help?", body: details.need ? `Sage introduced you about: ${details.need}` : "", reason: "If it helped, Sage thanks the person who helped you." },
+  });
+  if (!ask) return "SKIPPED";
+  const about = details.need ? ` with ${details.need.replace(/[.!?]+$/, "")}` : "";
+  const sent = await sendProactiveSageMessage({
+    userId: needUserId, kind: "thanks-ask", key: introActionId, now,
+    content: `Did connecting with the member I introduced you to help${about}? Reply yes or no.`,
+  });
+  return sent.status === "LIMITED" ? "LIMITED" : "SENT";
+}
+
+/** After "yes, it helped": thanks the helper privately and asks whether Sage may name them in a shout-out. */
+export async function thankHelperAndAskToShare(introActionId: string, now = new Date()): Promise<string | null> {
+  const details = await introductionDetails(introActionId);
+  if (!details?.helperUserId) return null;
+  const { sageConversation, sendProactiveSageMessage } = await import("./sage-proactive.js");
+  const { group } = await sageConversation(details.helperUserId);
+  const commons = (await memberCommons(details.helperUserId)).find((entry) => entry.coopId === details.intro.coopId);
+  const ask = await createConversationAsk({
+    coopId: details.intro.coopId, memberId: details.helperUserId, conversationGroupId: group.id, capability: SHARE_WIN_CAPABILITY,
+    sourceId: introActionId, summary: "Share a shout-out for your help?",
+    payload: { introActionId },
+    presentation: {
+      title: "Share a shout-out?", body: `Sage would post a short thank-you naming you in ${commons?.name ?? "the Commons"}.`,
+      reason: "The member you helped stays anonymous.", commonsName: commons?.name ?? "the Commons",
+    },
+  });
+  if (!ask) return null;
+  const about = details.need ? ` with ${details.need.replace(/[.!?]+$/, "")}` : "";
+  await sendProactiveSageMessage({
+    userId: details.helperUserId, kind: "thanks", key: introActionId, now,
+    content: `Thank you. The member you were introduced to says your help${about} made a difference. Can I share a short shout-out in ${commons?.name ?? "the Commons"} naming you? They stay anonymous. Reply yes or no.`,
+  });
+  return ask.actionId;
 }
 
 /** Lets Sage change when it checks back on the member's latest post from this conversation. */

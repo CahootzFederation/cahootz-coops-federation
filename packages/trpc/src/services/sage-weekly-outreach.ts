@@ -10,6 +10,7 @@ import { COMMONS_COOP_ID } from "../lib/commons.js";
 import { recordAgentResultCost } from "./ai-cost.js";
 import { directKeyFor, openDirectCircle, sendDirectCircleMessage } from "./direct-circles.js";
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
+import { PROACTIVE_WEEKLY_LIMIT, proactiveCountThisWeek, sendProactiveSageMessage } from "./sage-proactive.js";
 import { cleanseUntrustedText } from "./untrusted-input.js";
 
 export const WEEKLY_OUTREACH_AGENT = "sage-weekly-outreach";
@@ -282,6 +283,8 @@ export interface WeeklyOutreachSummary {
   sent: number;
   recent: number;
   duplicate: number;
+  /** Skipped because the member already had the week's outreach limit from Sage. */
+  limited: number;
   failed: number;
 }
 
@@ -296,7 +299,7 @@ export async function runWeeklySageOutreach(options: {
   generateWithModel?: boolean;
 } = {}): Promise<WeeklyOutreachSummary> {
   const now = options.now ?? new Date();
-  const summary: WeeklyOutreachSummary = { considered: 0, due: 0, sent: 0, recent: 0, duplicate: 0, failed: 0 };
+  const summary: WeeklyOutreachSummary = { considered: 0, due: 0, sent: 0, recent: 0, duplicate: 0, limited: 0, failed: 0 };
   const scheduleVersion = options.scheduleVersion ?? WEEKLY_OUTREACH_SCHEDULE_VERSION;
   const members: Array<{ id: string; name: string | null; email: string }> = [];
   let cursor: string | undefined;
@@ -336,8 +339,19 @@ export async function runWeeklySageOutreach(options: {
           continue;
         }
       }
-      await deliverOutreach(sage, user, now, systemKey, options.generateWithModel);
-      summary.sent++;
+      // Checked before writing the message, so a member at the limit doesn't cost a model call.
+      if (await proactiveCountThisWeek(user.id, now) >= PROACTIVE_WEEKLY_LIMIT) {
+        summary.limited++;
+        continue;
+      }
+      const context = await loadOutreachContext(user.id, now);
+      const content = options.generateWithModel === false
+        ? fallbackMessage(user, context)
+        : await generateOutreach(user, context).catch(() => fallbackMessage(user, context));
+      const sent = await sendProactiveSageMessage({ userId: user.id, kind: "weekly", key: `${user.id}:${isoWeekKey(now)}`, content, now });
+      if (sent.status === "SENT") summary.sent++;
+      else if (sent.status === "LIMITED") summary.limited++;
+      else summary.duplicate++;
     } catch (error) {
       if (isUniqueViolation(error)) summary.duplicate++;
       else {

@@ -343,6 +343,24 @@ For every Sage behavior change:
 - 2026-10-06: Everyday decisions may be grounded on the thread or a checked source; rules, votes, membership, discipline and the Commons' money still require the charter. An independent relevance check gates autonomous publishing.
 - 2026-10-11: `AIObservation` is the canonical store for Sage's generated narrative memory. Check-ins and conversations remain source interactions; only durable outcomes, confirmed preferences, corrections, and useful patterns become sourced, scoped observations. Do not add a parallel generic Notes or Sage-memory table unless `AIObservation` demonstrably cannot represent the required semantics.
 - 2026-10-11: Weekly outreach and Commons hypotheses are implemented behind default-off flags. The daily outreach sweep assigns a stable weekday, rotates multi-Commons members through one named context, and uses the existing Sage DM/push path with weekly idempotency. The daily memory sweep dispatches an isolated run per Commons. Private signals require separate remember/anonymous-aggregation consent; sensitive and urgent material is excluded before extraction. Commons hypotheses start `CANDIDATE`/`SAGE_INTERNAL`, bind to config ID and version, resist repeated-member and correlated-burst inflation, and distinguish `UNSUPPORTED` from `DISMISSED`. Thirty-/ninety-day impact observations link reviewable actions through `CommonsAction.originObservationId`. (Superseded 2026-10-13: all three flags were removed; see below.)
+- 2026-10-13: Sage reaches out on its own, within one weekly limit.
+  - **Limit:** at most 7 outreach messages per member per 7 days (`PROACTIVE_WEEKLY_LIMIT`, `sage-proactive.ts`), the weekly check-in included.
+    - Only messages Sage starts count. They all go through `sendProactiveSageMessage`, which stamps a `sage-<kind>:<key>` system key.
+    - Replies in a back-and-forth, confirmations after a yes, and relays of replies to the member's own post have no system key, so they never count.
+    - A held message is audited as `SAGE_PROACTIVE_LIMITED`. A check-in skipped by the limit makes no model call.
+  - **Promises:** `schedule_check_in` is in the member toolkit, so every agent that has it can use it (check-in follow-ups, DMs). The steward review has `schedule_member_check_in`, at most 3 per review.
+    - One open promise per member (`SageTask` subject `member_conversation`).
+    - When due, it's closed if the member already talked with Sage since. Otherwise Sage sends "Checking back like I said: …?" with no model call.
+    - At the limit it waits a day, up to 3 times. Trails are admin-only.
+  - **Unanswered needs:** a wake step (`sage-unanswered-needs.ts`). A Need/Ask feed post 48 hours to 14 days old with no reply from anyone but its author gets one likely helper (`findMembersForNeed`) asked privately to take a look.
+    - Limits: at most 2 helpers per post, a week apart; at most 1 need per helper per week; at most 5 asks per Commons per day.
+    - Deterministic, no model call.
+  - **Thanks:** when both people accept a Sage introduction, a 5-day `introduction_outcome` task is scheduled. Then Sage asks the person who needed help "Did it help?".
+    - Yes runs `thank_helper`: it records `HELP_CONFIRMED` plus a `member_help_outcome` observation, thanks the helper privately, and asks to share.
+    - The helper's yes runs `share_win`: a Win post from Sage naming only the helper, never what the other member needed.
+    - No answers end the chain (`HELP_NOT_CONFIRMED`).
+  - Verified by unit tests (gate, promises, deferral, needs, thanks chain) and a live probe of all three flows against the local database through the real message path, cleaned up afterwards.
+  - Not yet: a member opt-out for Sage's outreach (deferred), helper matching beyond profile keywords, and an E2E run (the spec is written and runs in CI).
 - 2026-10-13: Sage can act for a member from a private conversation (a check-in or a DM) through a reusable toolkit, `buildMemberActionTools` (`agents/tools/member-action-tools.ts`). Any agent can be handed it. The check-in follow-up agent and the DM agent have it; @mentions in the feed don't.
   - `list_my_commons` and `search_opportunities` are read-only. The search covers matching posts, approved stores, published resources and upcoming events in the member's own Commons, and returns no names.
   - `propose_post` and `suggest_introduction` only propose. Each saves a normal `CommonsAction` + review (hash-checked, audited, also visible in the member's Sage suggestions), and code appends the exact ask to Sage's reply after the reply's safety check.

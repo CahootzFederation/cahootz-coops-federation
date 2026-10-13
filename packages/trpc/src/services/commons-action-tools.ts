@@ -6,7 +6,8 @@ import { ensureSageBotUser } from "../lib/bot.js";
 import { generateInviteCode } from "../lib/invite-code.js";
 import { createNotificationAndPush } from "./push-notification-service.js";
 import { notifySageComment } from "./sage-comment-notifications.js";
-import { MEMBER_POST_FOLLOW_UP_DAYS, MEMBER_POST_SOURCE, MEMBER_POST_TAGS, mentionsMember } from "./sage-member-actions.js";
+import { recordObservation } from "./ai-memory.js";
+import { MEMBER_POST_FOLLOW_UP_DAYS, MEMBER_POST_SOURCE, MEMBER_POST_TAGS, mentionsMember, thankHelperAndAskToShare } from "./sage-member-actions.js";
 import { createSageTask } from "./sage-tasks.js";
 import { checkSageOutput } from "./untrusted-input.js";
 
@@ -256,6 +257,61 @@ async function postForMember(ctx: ToolContext): Promise<ToolResult> {
   return { resultEntityType: "CommonsPost", resultEntityId: post.id };
 }
 
+/** "Yes, it helped": records the outcome, then thanks the helper and asks about a shout-out. */
+async function thankHelper(ctx: ToolContext): Promise<ToolResult> {
+  const memberId = subjectUserId(ctx);
+  const introActionId = (ctx.action.payload as { introActionId?: unknown } | null)?.introActionId;
+  if (typeof introActionId !== "string") throw new ToolRefusal("No introduction to thank for");
+  await db.commonsActionAudit.create({ data: { actionId: introActionId, actorId: memberId, eventType: "HELP_CONFIRMED", metadata: {} } });
+  await recordObservation({
+    type: "member_help_outcome", scopeType: "commons", scopeId: ctx.action.coopId, confidence: 1,
+    summary: "A member confirmed that an introduction Sage made helped them.",
+    details: { introActionId, helped: true }, sources: [{ type: "commons_action", id: introActionId }],
+    generatedByAgentKey: "sage-member-actions", systemKey: `help-outcome:${introActionId}`,
+  }).catch((error) => {
+    if (!(typeof error === "object" && error !== null && (error as { code?: string }).code === "P2002")) throw error;
+  });
+  const shareActionId = await thankHelperAndAskToShare(introActionId);
+  return { resultEntityType: "CommonsAction", resultEntityId: shareActionId ?? introActionId };
+}
+
+/** The helper agreed: a short Win post from Sage naming them. The member they helped is never named or described. */
+async function shareWin(ctx: ToolContext): Promise<ToolResult> {
+  const helperId = subjectUserId(ctx);
+  const membership = await db.userCoopMembership.findUnique({ where: { userId_coopId: { userId: helperId, coopId: ctx.action.coopId } }, select: { status: true } });
+  if (membership?.status !== "ACTIVE") throw new ToolRefusal("The helper is no longer active in this Commons");
+  const helper = await db.user.findUnique({ where: { id: helperId }, select: { name: true, handle: true } });
+  const name = helper?.name?.trim() || helper?.handle?.trim();
+  if (!name) throw new ToolRefusal("The helper has no name to thank");
+  const content = `Shout-out to ${name} for showing up for another member through Sage. This is what the Commons is for.`;
+  if (!checkSageOutput(content).ok) throw new ToolRefusal("The shout-out failed Sage's output check");
+  const sage = await ensureSageBotUser(db, ctx.action.coopId);
+  const post = await db.commonsPost.create({
+    data: {
+      coopId: ctx.action.coopId, circleId: generalCircleId(ctx.action.coopId), authorId: sage.id,
+      title: `Thank you, ${name}`.slice(0, 120), content, tag: "Win", classification: "sage_shout_out", classificationConfidence: 1,
+      classificationSignals: { version: 1, source: "sage_shout_out", actionId: ctx.action.id },
+    },
+  });
+  return { resultEntityType: "CommonsPost", resultEntityId: post.id };
+}
+
+/** Days after both people accept an introduction before Sage asks whether it helped. */
+export const INTRODUCTION_OUTCOME_DAYS = 5;
+
+/** After both people accept a Sage introduction, schedule "did it help?" for the person who needed help. */
+export async function scheduleIntroductionOutcome(action: Pick<CommonsAction, "id" | "coopId" | "type" | "sourceType">, participants: Pick<CommonsActionParticipant, "userId" | "role">[]) {
+  if (action.type !== "CONNECT_MEMBERS" || action.sourceType !== "sage_introduction") return null;
+  const needer = participants.find((participant) => participant.role === "SUBJECT");
+  if (!needer) return null;
+  return createSageTask({
+    coopId: action.coopId, kind: "FOLLOW_UP", title: "Did the introduction help?",
+    reason: "Sage asks the member it introduced whether it helped, then thanks the helper.",
+    ownerUserId: needer.userId, subjectType: "introduction_outcome", subjectId: action.id, sourceActionId: action.id,
+    dueInDays: INTRODUCTION_OUTCOME_DAYS,
+  });
+}
+
 const TOOL_REGISTRY: Record<string, (ctx: ToolContext) => Promise<ToolResult>> = {
   create_private_circle: createPrivateCircle,
   create_event: createEvent,
@@ -264,12 +320,14 @@ const TOOL_REGISTRY: Record<string, (ctx: ToolContext) => Promise<ToolResult>> =
   comment_on_post: commentOnPost,
   draft_proposal: draftProposal,
   post_for_member: postForMember,
+  thank_helper: thankHelper,
+  share_win: shareWin,
 };
 
 // Tools whose result announces itself: Sage-authored posts and comments are visible in the feed, and a
 // proposal draft sends its own "draft is ready" alert. A generic "your suggestion is done" alert on top
 // of those would be redundant noise.
-const SELF_ANNOUNCING_TOOL_KEYS = new Set(["create_circle_post", "create_commons_post", "comment_on_post", "draft_proposal", "post_for_member"]);
+const SELF_ANNOUNCING_TOOL_KEYS = new Set(["create_circle_post", "create_commons_post", "comment_on_post", "draft_proposal", "post_for_member", "thank_helper", "share_win"]);
 
 const TOOL_KEY_BY_ACTION_TYPE: Partial<Record<CommonsAction["type"], string>> = {
   RIDE_MATCH_PROPOSAL: "create_private_circle",
@@ -325,6 +383,7 @@ export async function executeSageAction(actionId: string): Promise<void> {
     const result = await tool({ action, participants });
     await db.commonsAction.update({ where: { id: action.id }, data: { status: "APPROVED", reviewedAt: new Date() } });
     await db.commonsActionAudit.create({ data: { actionId: action.id, eventType: "ACTION_EXECUTED", metadata: { ...result } } });
+    await scheduleIntroductionOutcome(action, participants).catch((error) => console.error("Could not schedule the introduction check", error));
     if (!SELF_ANNOUNCING_TOOL_KEYS.has(toolKey!)) {
       await Promise.all(participants.map((participant) =>
         createNotificationAndPush(db, {

@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   MEMBER_POST_TAGS, memberCommons, proposeIntroduction, proposeMemberPost, rescheduleMemberPostFollowUp,
 } from "../../services/sage-member-actions.js";
+import { scheduleMemberCheckIn } from "../../services/sage-proactive.js";
 import { cleanseUntrustedText } from "../../services/untrusted-input.js";
 import { findMembersForNeed } from "./specialist-tools.js";
 
@@ -17,6 +18,7 @@ import { findMembersForNeed } from "./specialist-tools.js";
  *   for the member is added to the agent's reply by the caller (`state.asks`). A plain "yes" from the member
  *   is checked in code (handleConversationConfirmation) before anything is published or shared.
  * - follow_up_later: changes when Sage checks back on a post it made for the member.
+ * - schedule_check_in: Sage promises to message the member back about something later, and does.
  *
  * Every tool returns { ok, ... } rather than throwing, so the model can explain a refusal to the member.
  */
@@ -40,6 +42,7 @@ export const MEMBER_ACTION_INSTRUCTIONS = [
   "- propose_post when it would help to ask their Commons. Write it so it never names or identifies them (\"A member is looking for...\"). Use list_my_commons and, if they're in more than one Commons, ask which one before proposing.",
   "- suggest_introduction when someone's profile fits their need.",
   "- follow_up_later if they want you to check back on their post sooner or later than three days.",
+  "- schedule_check_in whenever you say you'll check back with them about something (an interview, an appointment, how a plan went), or they ask you to. Then you can honestly say you will.",
   "After propose_post or suggest_introduction, the exact post or introduction and the yes/no question are shown right after your reply. So keep your reply to one short sentence, don't quote or restate the post, and don't ask for confirmation yourself. Never claim you posted or introduced anyone; that only happens after they say yes.",
 ].join("\n");
 
@@ -161,5 +164,21 @@ export function buildMemberActionTools(ctx: MemberActionContext, state: MemberAc
     },
   });
 
-  return { tools: [listMyCommons, searchOpportunities, proposePost, suggestIntroduction, followUpLater], state };
+  const scheduleCheckIn = tool({
+    name: "schedule_check_in",
+    description: "Promise to message this member back in 1-14 days about something specific, e.g. \"how the interview went\". Sage sends it then, unless you've already talked about it. Replaces any earlier promise.",
+    parameters: z.object({
+      days: z.number().int().min(1).max(14),
+      about: z.string().min(3).max(120).describe("A short phrase about them, never naming anyone else"),
+    }),
+    execute: async ({ days, about }) => {
+      const group = await db.group.findUnique({ where: { id: ctx.conversationGroupId }, select: { coopId: true } });
+      if (!group) return { ok: false, reason: "Conversation not found" };
+      const result = await scheduleMemberCheckIn({ memberId: ctx.memberId, coopId: group.coopId, about, days });
+      state.log.push(result.ok ? `Promised to check back in ${result.days} days: ${about}` : `Couldn't schedule a check-in: ${result.reason}`);
+      return result.ok ? { ok: true, days: result.days } : result;
+    },
+  });
+
+  return { tools: [listMyCommons, searchOpportunities, proposePost, suggestIntroduction, followUpLater, scheduleCheckIn], state };
 }

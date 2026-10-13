@@ -1,6 +1,7 @@
 import { tool } from "@openai/agents";
 import { z } from "zod";
 
+import { scheduleMemberCheckIn } from "../../services/sage-proactive.js";
 import { checkSageOutput, describeOutputProblems } from "../../services/untrusted-input.js";
 import type { AgentToolContext } from "./context.js";
 
@@ -15,6 +16,7 @@ import type { AgentToolContext } from "./context.js";
 export type SpecialistLog = (specialist: "Cadence" | "Guardian" | "Bridge" | "Ledger", summary: string, detail?: string) => void;
 
 const DAY_MS = 86_400_000;
+export const STEWARD_CHECK_INS_PER_REVIEW = 3;
 const STOPWORDS = new Set(["a", "an", "the", "for", "to", "of", "and", "with", "help", "need", "someone", "who", "can", "my", "our"]);
 
 function needWords(text: string): string[] {
@@ -80,7 +82,28 @@ export function buildCadenceTools(ctx: AgentToolContext, log?: SpecialistLog) {
       };
     },
   });
-  return [listOpenTasks, listUpcomingDeadlines];
+  // The one Cadence tool that acts: a promise to check back with a member privately later. Capped per
+  // review, and the message itself counts toward the member's weekly outreach limit when it goes out.
+  let scheduled = 0;
+  const scheduleMemberCheckInTool = tool({
+    name: "schedule_member_check_in",
+    description: "Cadence: schedule Sage to message one active member of this Commons privately in 1-14 days about something specific (e.g. \"how the ride to Saturday's event worked out\"). At most 3 per review. Never name or describe anyone else.",
+    parameters: z.object({
+      userId: z.string().min(1),
+      days: z.number().int().min(1).max(14),
+      about: z.string().min(3).max(120),
+    }),
+    errorFunction: null,
+    execute: async ({ userId, days, about }) => {
+      if (scheduled >= STEWARD_CHECK_INS_PER_REVIEW) return { ok: false, reason: `At most ${STEWARD_CHECK_INS_PER_REVIEW} check-ins per review` };
+      if (!(await activeMember(ctx, userId))) return { ok: false, reason: "Not an active member of this Commons" };
+      const result = await scheduleMemberCheckIn({ memberId: userId, coopId: ctx.coopId, about, days });
+      if (result.ok) scheduled++;
+      log?.("Cadence", result.ok ? `Scheduled a private check-in in ${result.days} days` : `Couldn't schedule a check-in: ${result.reason}`, about);
+      return result.ok ? { ok: true, days: result.days } : result;
+    },
+  });
+  return [listOpenTasks, listUpcomingDeadlines, scheduleMemberCheckInTool];
 }
 
 // ── Guardian: charter, rules, who may do what ─────────────────────────────────

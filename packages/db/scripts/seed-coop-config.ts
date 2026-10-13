@@ -115,6 +115,109 @@ async function seedCoopConfig() {
       isActive: true,
       name: "Cahootz",
       slug: "cahootz",
+      tagline: "Building the Infrastructure for Cooperative Economies",
+      description:
+        "The internal builder cooperative behind the Cahootz ecosystem. Cahootz Coop is made up of the people who build, operate, and maintain the technology and infrastructure that powers Cahootz coops.",
+      displayMission:
+        "To create and maintain the technology, tools, and systems that allow cooperative economies to function and grow.",
+      displayFeatures: [
+        {
+          title: "Platform Development",
+          description:
+            "Build and maintain the Cahootz platform, developing software and internal tools that power the entire coop network.",
+        },
+        {
+          title: "Technical Infrastructure",
+          description:
+            "Support operations and technical infrastructure for the coop network, ensuring reliability and scalability.",
+        },
+        {
+          title: "Shared Systems",
+          description:
+            "Create shared systems that help coops launch and scale, giving builders and contributors ownership in the ecosystem they create.",
+        },
+      ],
+      eligibility:
+        "Open to software engineers, designers, product builders, operators, organizers, and technical contributors building the Cahootz ecosystem",
+      bgColor: "bg-blue-700",
+      accentColor: "bg-blue-600",
+      displayOrder: 3,
+      applicationQuestions: [
+        {
+          id: "technical_role",
+          type: "select",
+          label: "What's your primary role?",
+          required: true,
+          options: [
+            { value: "engineer", label: "Software Engineer" },
+            { value: "designer", label: "Designer" },
+            { value: "product", label: "Product Manager" },
+            { value: "operator", label: "Operator/Organizer" },
+            { value: "other-tech", label: "Other Technical Role" },
+          ],
+        },
+        {
+          id: "experience_level",
+          type: "select",
+          label: "Years of professional experience?",
+          required: true,
+          options: [
+            { value: "0-2", label: "0-2 years" },
+            { value: "3-5", label: "3-5 years" },
+            { value: "6-10", label: "6-10 years" },
+            { value: "over-10", label: "Over 10 years" },
+          ],
+        },
+        {
+          id: "skills",
+          type: "multiselect",
+          label: "What skills can you contribute?",
+          description: "Select all that apply",
+          required: true,
+          options: [
+            { value: "frontend", label: "Frontend Development" },
+            { value: "backend", label: "Backend Development" },
+            { value: "mobile", label: "Mobile Development" },
+            { value: "design", label: "UI/UX Design" },
+            { value: "devops", label: "DevOps/Infrastructure" },
+            { value: "product", label: "Product Management" },
+            { value: "community", label: "Community Building" },
+            { value: "other", label: "Other" },
+          ],
+        },
+        {
+          id: "time_commitment",
+          type: "select",
+          label: "How much time can you commit monthly?",
+          required: true,
+          options: [
+            { value: "5-10", label: "5-10 hours" },
+            { value: "10-20", label: "10-20 hours" },
+            { value: "20-40", label: "20-40 hours" },
+            { value: "full-time", label: "Full-time" },
+          ],
+        },
+        {
+          id: "coop_interest",
+          type: "radio",
+          label: "Why are you interested in cooperative ownership?",
+          required: true,
+          options: [
+            { value: "ownership", label: "Want ownership in what I build" },
+            { value: "mission", label: "Believe in the mission" },
+            { value: "community", label: "Want to work with community" },
+            { value: "all", label: "All of the above" },
+          ],
+        },
+        {
+          id: "motivation",
+          type: "textarea",
+          label: "Why do you want to join Cahootz? (Optional)",
+          placeholder: "Tell us about your interest in building cooperative technology...",
+          required: false,
+          validation: { maxLength: 500 },
+        },
+      ],
       charterText,
       missionGoals,
       structuralWeights,

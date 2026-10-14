@@ -102,12 +102,11 @@ export function buildFeedbackSlackMessage(input: FeedbackSlackInput) {
 }
 
 /**
- * Posts the report to Slack. Uses SLACK_FEEDBACK_WEBHOOK_URL so feedback can
- * have its own channel, falling back to the general SLACK_WEBHOOK_URL.
+ * Posts the report to the team's Slack channel (SLACK_WEBHOOK_URL).
  * Returns whether Slack accepted it; never throws.
  */
 export async function sendFeedbackToSlack(input: FeedbackSlackInput): Promise<boolean> {
-  const webhookUrl = process.env.SLACK_FEEDBACK_WEBHOOK_URL || process.env.SLACK_WEBHOOK_URL;
+  const webhookUrl = process.env.SLACK_WEBHOOK_URL;
   if (!webhookUrl) {
     console.log("⚠️ Slack feedback webhook not configured, skipping feedback notification");
     return false;

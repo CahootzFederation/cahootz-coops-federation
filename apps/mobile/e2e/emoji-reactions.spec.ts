@@ -78,11 +78,16 @@ test("two members react to a post and a comment with emoji", async ({ browser })
       }),
     ).toBeVisible();
 
-    // ...then likes A's comment and adds 🔥 from the quick reactions.
+    // ...then adds ❤️ and 🔥 to A's comment from the quick reactions. There
+    // is no separate like button any more; ❤️ is an ordinary reaction.
     const bComment = b.getByTestId(`comment-${commentId}`);
-    await bComment.getByRole("button", { name: /^Like .+'s comment, 0 likes$/ }).click();
+    await expect(bComment.getByRole("button", { name: /^Like / })).toHaveCount(0);
+    await bComment.getByRole("button", { name: /^Add a reaction to .+'s comment$/ }).click();
+    await expect(picker).toBeVisible();
+    await picker.getByRole("button", { name: "red heart", exact: true }).first().click();
+    await expect(picker).toBeHidden();
     await expect(
-      bComment.getByRole("button", { name: /^Remove your like from .+'s comment, 1 like$/ }),
+      bComment.getByRole("button", { name: /^Remove your red heart reaction from .+'s comment, 1 reaction$/ }),
     ).toBeVisible();
     await bComment.getByRole("button", { name: /^Add a reaction to .+'s comment$/ }).click();
     await expect(picker).toBeVisible();
@@ -101,7 +106,7 @@ test("two members react to a post and a comment with emoji", async ({ browser })
     ).toBeVisible();
     await expect(bFire).toBeVisible();
     await expect(
-      bComment.getByRole("button", { name: /^Remove your like from .+'s comment, 1 like$/ }),
+      bComment.getByRole("button", { name: /^Remove your red heart reaction from .+'s comment, 1 reaction$/ }),
     ).toBeVisible();
 
     // User A sees B's reactions and joins the 🎉 with one tap on its chip.
@@ -127,6 +132,71 @@ test("two members react to a post and a comment with emoji", async ({ browser })
         name: "Remove your party popper reaction from this post, 2 reactions",
       }),
     ).toBeVisible();
+  } finally {
+    if (postId && token) {
+      await trpcPost("commons.deletePost", token, { postId }).catch(() => {});
+    }
+    await author.context.close();
+    await reactor.context.close();
+  }
+});
+
+// Feed cards carry the same reactions as the post page: no separate like,
+// repost or bookmark buttons. User B hearts User A's post straight from the
+// General feed (without opening it); the ❤️ is the post's like, so User A sees
+// it on the post page as an ordinary reaction.
+test("a member reacts to a post from the feed card", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const postText = `E2E ${runId}: heart this from the feed`;
+  const author = await newSignedInPage(browser, USER_A_EMAIL);
+  const reactor = await newSignedInPage(browser, USER_B_EMAIL);
+  let postId: string | undefined;
+  let token: string | null = null;
+
+  try {
+    token = await sessionTokenFor(author.page);
+    expect(token).toBeTruthy();
+    const created = await trpcPost("commons.createPost", token!, {
+      coopId: COOP_ID,
+      content: postText,
+      tag: "Social",
+    });
+    postId = created?.post?.id;
+    expect(postId).toBeTruthy();
+
+    const b = reactor.page;
+    await b.goto(`/${COOP_ID}/posts`);
+    await expect(b.getByText(postText, { exact: true })).toBeVisible();
+    const feedUrl = b.url();
+    // This post's card: the nearest ancestor that also holds a reaction button.
+    const card = b
+      .getByText(postText, { exact: true })
+      .locator('xpath=ancestor::*[.//*[starts-with(@aria-label, "Add a reaction to")]][1]');
+    // The card shows its comment count; the old like / repost / bookmark buttons are gone.
+    await expect(card.getByLabel("0 comments", { exact: true })).toBeVisible();
+
+    await card.getByRole("button", { name: /^Add a reaction to .+'s post$/ }).click();
+    const picker = b.getByTestId("emoji-picker");
+    await expect(picker).toBeVisible();
+    await picker.getByRole("button", { name: "red heart", exact: true }).first().click();
+    await expect(picker).toBeHidden();
+    const bHeart = card.getByRole("button", {
+      name: /^Remove your red heart reaction from .+'s post, 1 reaction$/,
+    });
+    await expect(bHeart).toBeVisible();
+    // Reacting stayed on the feed instead of opening the post.
+    expect(b.url()).toBe(feedUrl);
+    await b.reload();
+    await expect(bHeart).toBeVisible();
+
+    const a = author.page;
+    await a.goto(`/${COOP_ID}/posts/${postId}`);
+    await expect(a.getByText(postText, { exact: true })).toBeVisible();
+    await expect(
+      a.getByRole("button", { name: "Add red heart reaction to this post, 1 reaction" }),
+    ).toBeVisible();
+    await expect(a.getByText("Like", { exact: true })).toHaveCount(0);
   } finally {
     if (postId && token) {
       await trpcPost("commons.deletePost", token, { postId }).catch(() => {});

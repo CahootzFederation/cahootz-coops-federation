@@ -14,9 +14,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import {
   ArrowLeft,
   Award,
-  CheckCircle2,
   CornerDownRight,
-  Heart,
   ImagePlus,
   Pencil,
   Send,
@@ -44,7 +42,6 @@ import { LoadError } from '@/components/load-error';
 import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
 import { SageDecisionTrails } from '@/components/sage-decision-trail';
 import { ReactionBar } from '@/components/reaction-bar';
-import { LIKE_EMOJI } from '@/lib/emoji-catalog';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -138,39 +135,8 @@ export default function CommonsPostDetailScreen() {
     };
   }, [authLoading, coopId, postId, sessionToken, reloadKey]);
 
-  const supportPost = async () => {
-    if (!post) return;
-    if (circleIsMember === false) {
-      setError('Join this circle before liking posts.');
-      return;
-    }
-    if (!sessionToken) {
-      setError('Sign in to like posts.');
-      return;
-    }
-
-    try {
-      const result = await api.toggleCommonsSupport(post.id, sessionToken);
-      setPost((current) =>
-        current
-          ? {
-              ...current,
-              support: Math.max(0, current.support + (result.supported ? 1 : -1)),
-            }
-          : current
-      );
-    } catch (caughtError) {
-      console.error('Failed to support post:', caughtError);
-      setError(friendlyError(caughtError, "We couldn't save your like."));
-    }
-  };
-
   const [isReactingToPost, setIsReactingToPost] = useState(false);
   const togglePostReaction = async (emoji: string) => {
-    if (emoji === LIKE_EMOJI) {
-      await supportPost();
-      return;
-    }
     if (!post || !sessionToken || isReactingToPost) return;
     setIsReactingToPost(true);
     try {
@@ -557,10 +523,6 @@ export default function CommonsPostDetailScreen() {
 
             <View className="mt-4 flex-row items-center gap-4">
               <Text className="text-xs font-semibold text-stone-600">
-                <Text className="font-black" style={{ color: THEME.primary }}>{post.support}</Text>{' '}
-                {post.support === 1 ? 'like' : 'likes'}
-              </Text>
-              <Text className="text-xs font-semibold text-stone-600">
                 <Text className="font-black text-stone-800">{post.replies}</Text>{' '}
                 {post.replies === 1 ? 'comment' : 'comments'}
               </Text>
@@ -578,10 +540,6 @@ export default function CommonsPostDetailScreen() {
             ) : null}
 
             <View className="mt-4 flex-row border-y border-stone-100 py-2">
-              <TouchableOpacity onPress={supportPost} disabled={circleIsMember === false} className="flex-1 flex-row items-center justify-center gap-2 py-2" style={{ opacity: circleIsMember === false ? 0.4 : 1 }}>
-                <CheckCircle2 size={16} color={THEME.primary} />
-                <Text className="text-sm font-bold text-stone-700">Like</Text>
-              </TouchableOpacity>
               <TouchableOpacity onPress={sharePost} className="flex-1 flex-row items-center justify-center gap-2 py-2">
                 <Share2 size={16} color="#78716C" />
                 <Text className="text-sm font-bold text-stone-700">Share</Text>
@@ -711,32 +669,7 @@ export default function CommonsPostDetailScreen() {
                           onToggle={(emoji) => void toggleCommentReaction(comment.id, emoji)}
                           disabled={!sessionToken || circleIsMember === false || reactingCommentId === comment.id}
                           targetLabel={`${comment.author}'s comment`}
-                        >
-                          <TouchableOpacity
-                            onPress={() => void toggleCommentReaction(comment.id)}
-                            disabled={!sessionToken || circleIsMember === false || reactingCommentId === comment.id}
-                            className="flex-row items-center gap-1 rounded-full px-2 py-1"
-                            style={{
-                              backgroundColor: comment.viewerReacted ? THEME.primarySoft : 'transparent',
-                              opacity: !sessionToken || circleIsMember === false ? 0.5 : 1,
-                            }}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: !!comment.viewerReacted }}
-                            accessibilityLabel={`${comment.viewerReacted ? 'Remove your like from' : 'Like'} ${comment.author}'s comment, ${comment.reactionCount ?? 0} ${(comment.reactionCount ?? 0) === 1 ? 'like' : 'likes'}`}
-                          >
-                            <Heart
-                              size={13}
-                              color={comment.viewerReacted ? THEME.primary : THEME.muted}
-                              fill={comment.viewerReacted ? THEME.primary : 'transparent'}
-                            />
-                            <Text
-                              className="text-[11px] font-bold"
-                              style={{ color: comment.viewerReacted ? THEME.primary : '#78716C' }}
-                            >
-                              {comment.reactionCount ?? 0}
-                            </Text>
-                          </TouchableOpacity>
-                        </ReactionBar>
+                        />
                       </View>
                     ) : null}
                   </View>

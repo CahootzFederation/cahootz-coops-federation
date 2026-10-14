@@ -31,6 +31,7 @@ import {
   MAX_POST_MEDIA_ATTACHMENTS,
 } from '@/components/commons-media-viewer';
 import { EventCard, UpcomingEventsModule } from '@/components/event-card';
+import { ReactionBar } from '@/components/reaction-bar';
 import { WelcomeIntroPrompt } from '@/components/welcome-intro-prompt';
 import { LoadError } from '@/components/load-error';
 import { MentionComposerInput } from '@/components/mention-composer-input';
@@ -76,7 +77,6 @@ import {
   ChevronRight,
   Compass,
   FileText,
-  Heart,
   Home,
   Image as ImageIcon,
   Info,
@@ -87,7 +87,6 @@ import {
   MessageSquareWarning,
   Pin,
   Plus,
-  Repeat2,
   RotateCcw,
   Scale,
   Search,
@@ -293,6 +292,7 @@ export default function CommonsAiEntry({
     useState<SelectedPostType>(DEFAULT_POST_TYPE);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [reactingPostId, setReactingPostId] = useState<string | null>(null);
   const [pinningPostId, setPinningPostId] = useState<string | null>(null);
   const [rsvpPendingEventId, setRsvpPendingEventId] = useState<string | null>(null);
   const [composerNotice, setComposerNotice] = useState<ComposerNotice>(null);
@@ -1182,29 +1182,26 @@ export default function CommonsAiEntry({
       );
     }
   };
-  const supportPost = (post: CommonsPost) => {
+  const reactToPost = (post: CommonsPost, emoji: string) => {
+    if (reactingPostId) return;
     void requireAccount(async (token) => {
+      setReactingPostId(post.id);
       try {
-        const result = await api.toggleCommonsSupport(post.id, token);
-        setFeedPosts((current) =>
-          current.map((item) =>
-            item.id === post.id
-              ? {
-                  ...item,
-                  support: Math.max(
-                    0,
-                    item.support + (result.supported ? 1 : -1),
-                  ),
-                }
-              : item,
-          ),
-        );
+        const result = await api.togglePostReaction(post.id, emoji, token);
+        const withResult = (item: CommonsPost) =>
+          item.id === post.id
+            ? { ...item, support: result.support, reactions: result.reactions }
+            : item;
+        setFeedPosts((current) => current.map(withResult));
+        setPinnedPost((current) => (current ? withResult(current) : current));
       } catch (error) {
-        console.error('Failed to support post:', error);
+        console.error('Failed to save post reaction:', error);
         Alert.alert(
-          "Couldn't save your support",
-          friendlyError(error, "We couldn't save your support for this post."),
+          "Couldn't save your reaction",
+          friendlyError(error, "We couldn't save your reaction to this post."),
         );
+      } finally {
+        setReactingPostId(null);
       }
     });
   };
@@ -2319,38 +2316,35 @@ export default function CommonsAiEntry({
 
                   {!post.event ? (
                     <View className="p-4 pt-3">
-                      <View className="flex-row items-center justify-between gap-2">
-                        <TouchableOpacity
-                          onPress={(event) => {
-                            event.stopPropagation();
-                            supportPost(post);
-                          }}
-                          disabled={Boolean(feedCircleId && circleIsMember === false)}
-                          className="flex-row items-center gap-1.5"
-                          style={{ opacity: feedCircleId && circleIsMember === false ? 0.4 : 1 }}
+                      {/* Reactions (❤️ included) and the comment count. Taps
+                          here react instead of opening the post. */}
+                      <View className="flex-row items-start justify-between gap-3">
+                        <View
+                          className="min-w-0 flex-1"
+                          onStartShouldSetResponder={() => true}
+                          onTouchEnd={(event) => event.stopPropagation()}
+                          // @ts-expect-error onClick exists on react-native-web views
+                          onClick={(event: { stopPropagation: () => void }) => event.stopPropagation()}
                         >
-                          <Heart
-                            size={19}
-                            color={SOCIAL_THEME.primary}
-                            fill={SOCIAL_THEME.primary}
+                          <ReactionBar
+                            reactions={post.reactions ?? []}
+                            onToggle={(emoji) => reactToPost(post, emoji)}
+                            disabled={
+                              Boolean(feedCircleId && circleIsMember === false) ||
+                              reactingPostId === post.id
+                            }
+                            targetLabel={`${post.author}'s post`}
                           />
-                          <Text className="text-sm font-black text-slate-800">
-                            {post.support}
-                          </Text>
-                        </TouchableOpacity>
-                        <View className="flex-row items-center gap-1.5">
-                          <MessageCircle size={19} color="#334155" />
+                        </View>
+                        <View
+                          className="flex-row items-center gap-1.5 pt-0.5"
+                          accessibilityLabel={`${post.replies} ${post.replies === 1 ? 'comment' : 'comments'}`}
+                        >
+                          <MessageCircle size={17} color="#334155" />
                           <Text className="text-sm font-semibold text-slate-700">
                             {post.replies}
                           </Text>
                         </View>
-                        <View className="flex-row items-center gap-1.5">
-                          <Repeat2 size={18} color="#334155" />
-                          <Text className="text-sm font-semibold text-slate-700">
-                            {Math.max(0, Math.round(post.replies / 2))}
-                          </Text>
-                        </View>
-                        <Bookmark size={19} color="#334155" />
                       </View>
 
                       {firstComment ? (

@@ -56,18 +56,16 @@ describe("sendFeedbackToSlack", () => {
     vi.unstubAllGlobals();
   });
 
-  it("prefers the feedback webhook and reports success", async () => {
-    vi.stubEnv("SLACK_FEEDBACK_WEBHOOK_URL", "https://hooks.slack.test/feedback");
+  it("posts to SLACK_WEBHOOK_URL and reports success", async () => {
     vi.stubEnv("SLACK_WEBHOOK_URL", "https://hooks.slack.test/general");
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(sendFeedbackToSlack(report)).resolves.toBe(true);
-    expect(fetchMock).toHaveBeenCalledWith("https://hooks.slack.test/feedback", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith("https://hooks.slack.test/general", expect.any(Object));
   });
 
   it("skips quietly without a webhook and never throws on Slack errors", async () => {
-    vi.stubEnv("SLACK_FEEDBACK_WEBHOOK_URL", "");
     vi.stubEnv("SLACK_WEBHOOK_URL", "");
     await expect(sendFeedbackToSlack(report)).resolves.toBe(false);
 

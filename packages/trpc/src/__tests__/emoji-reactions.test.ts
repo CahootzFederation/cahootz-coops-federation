@@ -88,6 +88,7 @@ function makeDb(state: {
         supported = false;
       }),
       count: vi.fn(async () => (supported ? 1 : 0)),
+      findMany: vi.fn(async () => (supported ? [{ userId: VIEWER.id }] : [])),
     },
   } as any;
 }
@@ -216,11 +217,19 @@ describe('togglePostReaction', () => {
   });
 
   it('treats ❤️ as the post like, keeping support counts and the like alert', async () => {
-    const db = makeDb();
+    const db = makeDb({ postRows: [{ id: 'r_0', emoji: '🎉', userId: 'user_other' }] });
 
     const result = await callerFor(db).togglePostReaction({ postId: 'post_1', emoji: LIKE_EMOJI });
 
-    expect(result).toMatchObject({ reacted: true, support: 1, reactions: [] });
+    // The like is reported as an ordinary ❤️ chip, listed first.
+    expect(result).toMatchObject({
+      reacted: true,
+      support: 1,
+      reactions: [
+        { emoji: LIKE_EMOJI, count: 1, viewerReacted: true },
+        { emoji: '🎉', count: 1, viewerReacted: false },
+      ],
+    });
     expect(db.commonsPostReaction.create).not.toHaveBeenCalled();
     expect(push).toHaveBeenCalledWith(db, expect.objectContaining({ title: 'Someone liked your post' }));
   });

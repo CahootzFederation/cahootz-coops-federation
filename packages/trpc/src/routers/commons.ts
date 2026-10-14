@@ -231,6 +231,7 @@ async function loadFeedPosts(
           rsvps: { select: { userId: true, status: true } },
         },
       },
+      ...POST_REACTIONS_INCLUDE,
       _count: { select: { comments: true, supports: true } },
     },
   });
@@ -733,6 +734,35 @@ export function mapEventSummary(record: any, viewerId?: string) {
   };
 }
 
+// Every reaction on a post, oldest first so chips keep the order each emoji
+// was first used. A post's ❤️ is its like, stored as CommonsPostSupport rows.
+const POST_REACTIONS_INCLUDE = {
+  reactions: {
+    select: { emoji: true, userId: true },
+    orderBy: { createdAt: 'asc' },
+    take: 1000,
+  },
+  supports: {
+    select: { userId: true },
+    orderBy: { createdAt: 'asc' },
+    take: 1000,
+  },
+} as const;
+
+// One chip per emoji with ❤️ (the like) first, so the app can show likes as
+// an ordinary reaction. Older app builds hide the ❤️ chip and keep using
+// `support` for their separate like button.
+function mapPostReactions(
+  supports: ReadonlyArray<{ userId: string }>,
+  reactions: ReadonlyArray<{ emoji: string; userId: string }>,
+  viewerId?: string | null,
+) {
+  return summarizeReactions(
+    [...supports.map((support) => ({ emoji: LIKE_EMOJI, userId: support.userId })), ...reactions],
+    viewerId,
+  );
+}
+
 // A comment's reactions: the like (❤️) count and the viewer's like, kept as
 // separate fields for older app builds, plus one chip per emoji.
 function mapCommentReactions(rows: Array<{ emoji: string; userId: string }>, viewerId?: string | null) {
@@ -797,8 +827,9 @@ function mapPostWithGroup(record: any, groupName: string, viewerId?: string) {
     classification: record.classification ?? 'social',
     replies: record._count?.comments ?? record.comments?.length ?? 0,
     support: record._count?.supports ?? record.supports?.length ?? 0,
-    // Emoji reactions other than the like; only loaded on the post detail.
-    reactions: summarizeReactions(record.reactions ?? [], viewerId),
+    // Every emoji reaction, ❤️ included, when the query loaded them
+    // (POST_REACTIONS_INCLUDE: the feed, pinned post and post detail).
+    reactions: mapPostReactions(record.supports ?? [], record.reactions ?? [], viewerId),
     pledges: undefined as string | undefined,
     isPinned: record.isPinned ?? false,
     event: record.event ? mapEventSummary(record.event, viewerId) : undefined,
@@ -1184,6 +1215,7 @@ export const commonsRouter = router({
             },
             media: { orderBy: { order: 'asc' } },
             event: { include: eventInclude },
+            ...POST_REACTIONS_INCLUDE,
             _count: { select: { comments: true, supports: true } },
           },
         }),
@@ -2083,11 +2115,7 @@ export const commonsRouter = router({
               },
             },
           },
-          reactions: {
-            select: { emoji: true, userId: true },
-            orderBy: { createdAt: 'asc' },
-            take: 1000,
-          },
+          ...POST_REACTIONS_INCLUDE,
           _count: { select: { comments: true, supports: true } },
         },
       });
@@ -3284,12 +3312,14 @@ export const commonsRouter = router({
         }
       }
 
-      const [rows, support] = await Promise.all([
+      const [rows, supports, support] = await Promise.all([
         ctx.db.commonsPostReaction.findMany({
           where: { postId: post.id },
-          select: { emoji: true, userId: true },
-          orderBy: { createdAt: 'asc' },
-          take: 1000,
+          ...POST_REACTIONS_INCLUDE.reactions,
+        }),
+        ctx.db.commonsPostSupport.findMany({
+          where: { postId: post.id },
+          ...POST_REACTIONS_INCLUDE.supports,
         }),
         ctx.db.commonsPostSupport.count({ where: { postId: post.id } }),
       ]);
@@ -3297,7 +3327,7 @@ export const commonsRouter = router({
         emoji: input.emoji,
         reacted,
         support,
-        reactions: summarizeReactions(rows, accountUser.id),
+        reactions: mapPostReactions(supports, rows, accountUser.id),
       };
     }),
 

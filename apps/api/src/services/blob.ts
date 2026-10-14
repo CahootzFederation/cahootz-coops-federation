@@ -50,6 +50,8 @@ export function generateFileKey(
   }
 }
 
+const UPLOAD_TOKEN_TTL_MS = 30 * 60 * 1000;
+
 export async function generateUploadToken(
   pathname: string,
   contentType: string,
@@ -61,7 +63,9 @@ export async function generateUploadToken(
     maximumSizeInBytes: maxSizeBytes,
     allowedContentTypes: [contentType],
     addRandomSuffix: false,
-    validUntil: Date.now() + 5 * 60 * 1000,
+    // A 100 MB post video on a slow phone connection can take well over five
+    // minutes to send, and an expired token fails the whole post.
+    validUntil: Date.now() + UPLOAD_TOKEN_TTL_MS,
   });
 
   const uploadUrl = `${VERCEL_BLOB_API_URL}/${encodeURIComponent(pathname)}`;

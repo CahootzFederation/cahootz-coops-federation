@@ -22,6 +22,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type PersonalPageFeedPost, type PersonalPageProfile } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
+import { reportPostFailure, uploadPostMedia } from '@/lib/post-media-upload';
 import { DEFAULT_POST_TYPE, postTypePlaceholder, type SelectedPostType } from '@/lib/post-types';
 import { personDisplayHandle, personHandleFromName } from '@/lib/social-profile';
 
@@ -134,6 +135,8 @@ export default function PersonalPageScreen() {
       selectionLimit: MAX_POST_MEDIA_ATTACHMENTS - selectedMedia.length,
       quality: 0.9,
       videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+      // Re-encode picked videos to 720p so they fit the 100 MB limit.
+      videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
     });
 
     if (result.canceled) return;
@@ -157,24 +160,11 @@ export default function PersonalPageScreen() {
     if ((!trimmed && selectedMedia.length === 0) || isSaving) return;
 
     setIsSaving(true);
+    const pendingMedia = selectedMedia.map((media) => ({ ...media, uri: media.uri || media.url || '' }));
+    let stage: 'upload' | 'save' = 'upload';
     try {
-      const uploadedMedia = selectedMedia.length
-        ? await Promise.all(
-            selectedMedia.map((media) =>
-              api.uploadCommonsPostMedia({
-                coopId: 'personal-page',
-                uri: media.uri || media.url || '',
-                fileName: media.fileName,
-                mimeType: media.mimeType,
-                mediaType: media.mediaType,
-                width: media.width,
-                height: media.height,
-                durationMs: media.durationMs,
-                sizeBytes: media.sizeBytes,
-              })
-            )
-          )
-        : [];
+      const uploadedMedia = await uploadPostMedia('personal-page', pendingMedia);
+      stage = 'save';
       const result = await api.createPersonalPagePost(
         {
           content: trimmed,
@@ -190,6 +180,7 @@ export default function PersonalPageScreen() {
     } catch (error) {
       // Keep the draft so nothing they wrote is lost.
       console.error('Failed to publish personal page post:', error);
+      reportPostFailure(error, { stage, destination: 'personal-page', media: pendingMedia });
       Alert.alert("Couldn't post to your page", friendlyError(error, "We couldn't post that. Your words are still in the box."));
     } finally {
       setIsSaving(false);

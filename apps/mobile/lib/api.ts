@@ -560,7 +560,6 @@ export interface CommonsDirectoryItem extends CommonsProfile {
   joinPolicy?: CommonsJoinPolicy;
   isPrivate?: boolean;
   isMember: boolean;
-  isDefault?: boolean;
   isSteward?: boolean;
   isLocked: boolean;
   canApply: boolean;
@@ -1106,19 +1105,6 @@ export const api = {
     return readTrpcResult<{ coops: CommonsDirectoryItem[] }>(
       response,
       'Failed to load commons',
-    );
-  },
-
-  async setDefaultCommons(coopId: string, sessionToken: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.setDefaultCommons`, {
-      method: 'POST',
-      headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({ coopId }),
-    });
-
-    return readTrpcResult<{ defaultCoopId: string }>(
-      response,
-      'Failed to save default commons',
     );
   },
 

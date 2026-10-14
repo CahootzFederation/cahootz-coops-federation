@@ -894,7 +894,6 @@ export async function resolveOptionalAccountUser(context: Context) {
       email: true,
       name: true,
       phone: true,
-      defaultCoopId: true,
       deletedAt: true,
     },
   });
@@ -1389,35 +1388,6 @@ export const commonsRouter = router({
       };
     }),
 
-  setDefaultCommons: accountAuthenticatedProcedure
-    .input(z.object({ coopId: z.string().trim().min(1).max(120) }))
-    .mutation(async ({ input, ctx }) => {
-      const context = ctx as AccountAuthenticatedContext;
-      const membership = await context.db.userCoopMembership.findUnique({
-        where: {
-          userId_coopId: {
-            userId: context.accountUser.id,
-            coopId: input.coopId,
-          },
-        },
-        select: { status: true },
-      });
-
-      if (membership?.status !== 'ACTIVE') {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Join this Commons before making it your default.',
-        });
-      }
-
-      await context.db.user.update({
-        where: { id: context.accountUser.id },
-        data: { defaultCoopId: input.coopId },
-      });
-
-      return { defaultCoopId: input.coopId };
-    }),
-
   listDirectory: publicProcedure.query(async ({ ctx }) => {
     const context = ctx as Context;
     const accountUser = await resolveOptionalAccountUser(context);
@@ -1517,8 +1487,6 @@ export const commonsRouter = router({
     });
 
     const sortedCoops = [...visibleCoops].sort((a: any, b: any) => {
-      if (a.coopId === accountUser?.defaultCoopId) return -1;
-      if (b.coopId === accountUser?.defaultCoopId) return 1;
       if (a.coopId === COMMONS_COOP_ID) return -1;
       if (b.coopId === COMMONS_COOP_ID) return 1;
       return 0;
@@ -1564,8 +1532,6 @@ export const commonsRouter = router({
           joinPolicy,
           isPrivate: !!coop.isPrivate || joinPolicy === 'INVITE_ONLY',
           isMember: accessStatus === 'ACTIVE',
-          isDefault:
-            accessStatus === 'ACTIVE' && coop.coopId === accountUser?.defaultCoopId,
           isSteward:
             membership?.status === 'ACTIVE' &&
             ((membership?.roles as string[] | undefined) || []).some((role) =>

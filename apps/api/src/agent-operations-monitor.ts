@@ -1,5 +1,6 @@
 import { getAgentOperationalSnapshot } from "@repo/trpc/services/agent-operations";
 import { sendAgentOperationalAlert } from "@repo/trpc/services/slack-notification-service";
+import { env } from "./env.js";
 
 const FIRST_CHECK_DELAY_MS = 2 * 60 * 1000;
 const CHECK_INTERVAL_MS = 70 * 60 * 1000;
@@ -14,7 +15,7 @@ async function checkAgentOperations() {
     const delivered = await sendAgentOperationalAlert({
       checkedAt: snapshot.checkedAt,
       issues: snapshot.issues,
-      environment: process.env.NODE_ENV,
+      environment: env.NODE_ENV,
     });
     if (!delivered) console.error("Agent operations monitor found issues, but Slack delivery failed");
   } catch (error) {
@@ -28,7 +29,7 @@ async function checkAgentOperations() {
  * also silence agent-health alerts.
  */
 export function startAgentOperationsMonitor() {
-  if (process.env.NODE_ENV !== "production" || firstCheck || interval) return false;
+  if (env.NODE_ENV !== "production" || firstCheck || interval) return false;
   firstCheck = setTimeout(() => void checkAgentOperations(), FIRST_CHECK_DELAY_MS);
   firstCheck.unref?.();
   interval = setInterval(() => void checkAgentOperations(), CHECK_INTERVAL_MS);

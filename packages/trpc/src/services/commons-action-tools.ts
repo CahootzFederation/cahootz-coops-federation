@@ -1,5 +1,6 @@
 import type { CommonsAction, CommonsActionParticipant } from "@repo/db";
 import { db } from "@repo/db";
+import { defaultCircleNotificationLevel } from "@repo/validators/notification";
 
 import { auditLogEntry } from "../lib/audit.js";
 import { ensureSageBotUser } from "../lib/bot.js";
@@ -186,7 +187,7 @@ async function createPrivateCircle(ctx: ToolContext): Promise<ToolResult> {
     const created = await tx.group.create({
       data: {
         coopId: ctx.action.coopId,
-        name: (ctx.action.payload as { circleName?: unknown } | null)?.circleName === "Introduction" ? "Introduction" : "Ride match",
+        name: "Introduction",
         purpose: ctx.action.summary.slice(0, 500),
         privacy: "private",
         inviteCode,
@@ -194,7 +195,13 @@ async function createPrivateCircle(ctx: ToolContext): Promise<ToolResult> {
       },
     });
     for (const userId of participantIds) {
-      await tx.groupMember.create({ data: { groupId: created.id, userId } });
+      await tx.groupMember.create({
+        data: {
+          groupId: created.id,
+          userId,
+          notificationLevel: defaultCircleNotificationLevel,
+        },
+      });
     }
     await tx.auditLog.create({
       data: auditLogEntry({
@@ -202,7 +209,7 @@ async function createPrivateCircle(ctx: ToolContext): Promise<ToolResult> {
         action: "GROUP_CREATED",
         resource: "Group",
         resourceId: created.id,
-        metadata: { source: "sage-ride-match", actionId: ctx.action.id },
+        metadata: { source: "sage-introduction", actionId: ctx.action.id },
       }),
     });
     return created;
@@ -330,14 +337,12 @@ const TOOL_REGISTRY: Record<string, (ctx: ToolContext) => Promise<ToolResult>> =
 const SELF_ANNOUNCING_TOOL_KEYS = new Set(["create_circle_post", "create_commons_post", "comment_on_post", "draft_proposal", "post_for_member", "thank_helper", "share_win"]);
 
 const TOOL_KEY_BY_ACTION_TYPE: Partial<Record<CommonsAction["type"], string>> = {
-  RIDE_MATCH_PROPOSAL: "create_private_circle",
   CONNECT_MEMBERS: "create_private_circle",
 };
 
 // The reviewType whose approval actually authorizes execution, per action type. SUGGEST_ACTION resolves
 // its tool from payload.capability instead of a fixed type mapping - see resolveToolKey().
 export const FINAL_REVIEW_TYPE_BY_ACTION_TYPE: Partial<Record<CommonsAction["type"], string>> = {
-  RIDE_MATCH_PROPOSAL: "ACCEPT_MATCH",
   SUGGEST_ACTION: "APPROVE_SUGGESTION",
   CONNECT_MEMBERS: "ACCEPT_INTRODUCTION",
 };

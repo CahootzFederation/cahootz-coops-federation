@@ -1,4 +1,3 @@
-import { Agent, run } from '@openai/agents';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
@@ -25,7 +24,6 @@ import {
   publicProcedure,
 } from '../procedures/index.js';
 import { recordObservation } from '../services/ai-memory.js';
-import { recordAgentResultCost } from '../services/ai-cost.js';
 import { enqueueCommonsActionContent } from '../services/commons-action-dispatch.js';
 import {
   DIRECT_KIND,
@@ -35,7 +33,7 @@ import {
   sendDirectCircleMessage,
 } from '../services/direct-circles.js';
 import { createNotificationAndPush } from '../services/push-notification-service.js';
-import { notifyCircleActivity } from '../services/circle-notifications.js';
+import { notifyCircleActivity, notifyCircleHighlight } from '../services/circle-notifications.js';
 import { notifyNewCommentReaction, notifyNewPostReaction } from '../services/comment-reactions.js';
 import {
   LIKE_EMOJI,
@@ -1022,6 +1020,7 @@ export function aiSpendCategory(feature: string) {
   if (feature.startsWith('proposal-')) return 'Proposal reviews';
   if (feature.startsWith('newsletter-')) return 'Newsletter';
   if (feature.startsWith('knowledge-')) return 'Knowledge base';
+  // Both agents were removed on 2026-10-14; their past cost events still need a label.
   if (feature === 'commons-assistant' || feature === 'commons-recommender') {
     return 'Assistant';
   }
@@ -1033,75 +1032,6 @@ export function aiSpendCategory(feature: string) {
     return 'Sage';
   }
   return 'Other';
-}
-
-function fallbackAiResponse(prompt: string) {
-  const lower = prompt.toLowerCase();
-
-  if (lower.includes('vote')) {
-    return [
-      'Start with the decision: what exactly should members choose?',
-      'Then define options, deadline, eligible voters, budget impact, and who reports back.',
-    ].join('\n');
-  }
-
-  if (
-    lower.includes('cost') ||
-    lower.includes('fund') ||
-    lower.includes('money') ||
-    lower.includes('$')
-  ) {
-    return [
-      'Break this into money, time, space, tools, and people.',
-      'A good next step is a small pledge list before turning it into a proposal.',
-    ].join('\n');
-  }
-
-  if (
-    lower.includes('proposal') ||
-    lower.includes('plan') ||
-    lower.includes('help')
-  ) {
-    return [
-      'This can become a Commons thread first.',
-      'Ask people to name the need, who is affected, what help exists, and the smallest useful pilot.',
-    ].join('\n');
-  }
-
-  return [
-    'I can help you turn this into action.',
-    'Try framing it as: need, people affected, helpers, resources, decision needed, and first step.',
-  ].join('\n');
-}
-
-async function runCommonsAi(prompt: string, coopId?: string) {
-  if (!process.env.OPENAI_API_KEY) {
-    return fallbackAiResponse(prompt);
-  }
-
-  try {
-    const agent = new Agent({
-      name: 'Cahootz Commons Assistant',
-      model: process.env.COMMONS_AI_MODEL || 'gpt-5.2',
-      instructions: [
-        'You are the general AI assistant inside Cahootz Commons, a community social network for coordinating help, proposals, votes, and shared resources.',
-        'Answer in plain language and move conversation toward practical community action.',
-        'When useful, organize answers into need, helpers, resources, decision, and next step.',
-        'Do not pretend an anonymous visitor is a logged-in member.',
-      ].join('\n'),
-    });
-    const runResult = await run(agent, prompt);
-    await recordAgentResultCost({ coopId, feature: 'commons-assistant', model: process.env.COMMONS_AI_MODEL || 'gpt-5.2', result: runResult }).catch(console.error);
-    const result = runResult as unknown as {
-      finalOutput?: string;
-      output?: string;
-    };
-
-    return result.finalOutput || result.output || fallbackAiResponse(prompt);
-  } catch (error) {
-    console.error('Commons AI failed:', error);
-    return fallbackAiResponse(prompt);
-  }
 }
 
 export const commonsRouter = router({
@@ -2241,63 +2171,6 @@ export const commonsRouter = router({
       };
     }),
 
-  ask: publicProcedure
-    .input(
-      z.object({
-        prompt: z.string().min(1).max(4000),
-        postId: z.string().optional(),
-      }),
-    )
-    .mutation(async ({ input, ctx }) => {
-      let context = '';
-      let contextCoopId: string | undefined;
-
-      if (input.postId) {
-        const post = await ctx.db.commonsPost.findUnique({
-          where: { id: input.postId },
-          include: {
-            comments: {
-              orderBy: { createdAt: 'asc' },
-              take: 10,
-              include: {
-                author: { select: { name: true, email: true, handle: true, isBot: true } },
-              },
-            },
-          },
-        });
-
-        const accountUser = await resolveOptionalAccountUser(ctx as Context);
-        if (
-          post &&
-          (await canReadPostCircle(ctx.db, accountUser?.id, post)) &&
-          (post.coopId === COMMONS_COOP_ID ||
-            (accountUser &&
-              (await hasActiveCommonsMembership(
-                ctx.db,
-                accountUser.id,
-                post.coopId,
-              ))))
-        ) {
-          contextCoopId = post.coopId;
-          context = [
-            `Thread title: ${post.title}`,
-            `Thread body: ${post.content}`,
-            'Recent comments:',
-            ...post.comments.map(
-              (comment) => `${displayName(comment.author)}: ${comment.content}`,
-            ),
-          ].join('\n');
-        }
-      }
-
-      const answer = await runCommonsAi(
-        [input.prompt, context ? `\nContext:\n${context}` : ''].join(''),
-        contextCoopId,
-      );
-
-      return { answer };
-    }),
-
   getPersonalPage: publicProcedure
     .input(
       z.object({
@@ -2950,6 +2823,17 @@ export const commonsRouter = router({
           data: { isPinned: true, pinnedAt: new Date(), pinnedById: accountUser.id },
         }),
       ]);
+
+      await notifyCircleHighlight(ctx.db, {
+        coopId: post.coopId,
+        circleId: post.circleId!,
+        postId: post.id,
+        actorId: accountUser.id,
+      }).catch(() =>
+        console.error('[push] circle highlight notification failed', {
+          postId: post.id,
+        }),
+      );
 
       return { success: true };
     }),

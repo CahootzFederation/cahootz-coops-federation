@@ -75,13 +75,12 @@ test("a circle leader receives and approves a Sage trend suggestion", { tag: "@s
       const content = i < themedLines.length ? themedLines[i] : `E2E ${runId}: chatting, message ${i}.`;
       await trpcPost("commons.createComment", token, { postId: post.id, content });
     }
-    // Item #40 closes the window and kicks off both detection passes (ride-match and trend).
+    // Item #40 closes the window and kicks off trend detection.
     await trpcPost("commons.createComment", leaderToken, { postId: post.id, content: `E2E ${runId}: ok last thought - a cleanup day, who's with me?` });
 
     let suggestionId: string | undefined;
     await expect.poll(async () => {
       const { suggestions } = await trpcGet("sage.list", leaderToken, { tab: "NEEDS_YOU" });
-      // Ride-match detection runs on the same closed window; pick the trend suggestion.
       suggestionId = suggestions.find((s: { circleId: string | null; type: string }) =>
         s.circleId === circleId && s.type === "SUGGEST_ACTION")?.id;
       return suggestionId;

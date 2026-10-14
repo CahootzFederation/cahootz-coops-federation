@@ -274,7 +274,7 @@ function AutonomyLimits({ autonomy, busy, onSave }: {
       <strong>Sage autonomy limit</strong>
       <span className={`text-sm font-semibold ${autonomy.paused ? "text-red-300" : "text-emerald-300"}`}>{autonomy.paused ? "Paused" : "Active"}</span>
     </div>
-    <p className="mt-1 text-sm text-slate-400">Monthly cap on work Sage starts on its own (Commons replies, circle trend and ride-match detection). Member-requested AI is not counted. Resets {new Date(autonomy.resetsAt).toUTCString().slice(5, 16)}.</p>
+    <p className="mt-1 text-sm text-slate-400">Monthly cap on work Sage starts on its own (Commons replies and circle trend detection). Member-requested AI is not counted. Resets {new Date(autonomy.resetsAt).toUTCString().slice(5, 16)}.</p>
     <p className="mt-2 text-sm">This month: ${autonomy.usd.toFixed(4)} of ${autonomy.usdLimit.toFixed(2)} · {autonomy.calls} of {autonomy.callLimit} calls</p>
     <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); if (valid) onSave(Math.round(usdValue * 100) / 100, callValue); }}>
       <label className="text-sm">Monthly USD limit<input aria-label="Monthly USD limit" type="number" min="0" step="0.01" value={usd} onChange={(event) => setUsd(event.target.value)} className="mt-1 block w-32 rounded-md border border-white/20 bg-slate-900 px-2 py-1" /></label>
@@ -291,11 +291,11 @@ const TRAIL_STAGES: { stage: TrailStage; label: string }[] = [
 ];
 const STEP_MARK = { PASS: { mark: "✓", className: "text-emerald-300" }, FAIL: { mark: "✗", className: "text-red-300" }, INFO: { mark: "•", className: "text-slate-400" } };
 const SOURCE_LABEL: Record<string, string> = {
-  commons_post: "Commons post", commons_comment: "Commons comment", circle_window: "Circle conversation", circle_ride_match: "Circle ride-match scan",
+  commons_post: "Commons post", commons_comment: "Commons comment", circle_window: "Circle conversation",
   proposal: "Proposal", proposal_comment: "Proposal comment", sage_mention: "@mention of Sage", sage_dm: "Direct message to Sage",
 };
 const AGENT_LABELS: Record<string, string> = {
-  "commons-action-agent": "Commons feed", "sage-trend": "Circle trends", "sage-ride-match": "Ride matches",
+  "commons-action-agent": "Commons feed", "sage-trend": "Circle trends",
   "proposal-engine": "Proposal review", "comment-evaluation": "Comment evaluation", "sage-reply": "Sage replies",
   cadence: "Follow-ups", guardian: "Routing", steward: "Steward review",
 };

@@ -6,7 +6,6 @@ const db = vi.hoisted(() => {
     userCoopMembership: { count: vi.fn() },
     group: { findUnique: vi.fn() },
     groupMember: { findUnique: vi.fn() },
-    groupComment: { findUnique: vi.fn() },
     commonsPost: { findUnique: vi.fn() },
     commonsComment: { findFirst: vi.fn() },
     commonsProposalDraft: { findMany: vi.fn() },
@@ -50,7 +49,6 @@ beforeEach(() => {
   db.userCoopMembership.count.mockResolvedValue(1);
   db.group.findUnique.mockResolvedValue({ leaderId: "leader-1" });
   db.groupMember.findUnique.mockResolvedValue({ id: "m1" });
-  db.groupComment.findUnique.mockResolvedValue({ id: "msg-1" });
   db.commonsPost.findUnique.mockResolvedValue({ id: "post-1" });
   db.commonsComment.findFirst.mockResolvedValue(null);
   db.commonsProposalDraft.findMany.mockResolvedValue([]);
@@ -78,13 +76,16 @@ describe("deciding whether a waiting suggestion still applies", () => {
     await expect(suggestionNoLongerApplies(review(), action(), NOW)).resolves.toBe(reason);
   });
 
-  it("closes a ride match whose message was deleted, and one whose member left the circle", async () => {
-    const ride = action({ type: "RIDE_MATCH_PROPOSAL", sourceType: "circle_message", sourceId: "msg-1", payload: null });
+  it("closes when the person asked left the circle", async () => {
     db.commonsActionParticipant.findMany.mockResolvedValue([{ userId: "maya" }]);
-    db.groupComment.findUnique.mockResolvedValueOnce(null);
-    await expect(suggestionNoLongerApplies(review({ reviewType: "PROVIDE_CONTEXT", userId: "maya" }), ride, NOW)).resolves.toBe("The message it came from was deleted");
     db.groupMember.findUnique.mockResolvedValueOnce(null);
-    await expect(suggestionNoLongerApplies(review({ reviewType: "PROVIDE_CONTEXT", userId: "maya" }), ride, NOW)).resolves.toBe("The person asked left the circle");
+    await expect(suggestionNoLongerApplies(review({ reviewType: "ACCEPT_INTRODUCTION", userId: "maya" }), action(), NOW)).resolves.toBe("The person asked left the circle");
+  });
+
+  it("closes a ride match still waiting from before Sage stopped suggesting them", async () => {
+    const ride = action({ type: "RIDE_MATCH_PROPOSAL", sourceType: "circle_message", sourceId: "msg-1", payload: null });
+    await expect(suggestionNoLongerApplies(review({ reviewType: "PROVIDE_CONTEXT", userId: "maya" }), ride, NOW)).resolves.toBe("Sage no longer suggests ride matches");
+    expect(db.userCoopMembership.count).not.toHaveBeenCalled();
   });
 
   it("closes an event whose suggested time passed, and a proposal the leader already drafted", async () => {

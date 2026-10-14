@@ -140,7 +140,7 @@ describe("thanking and sharing", () => {
     const participants = [{ userId: "needer", role: "SUBJECT" }, { userId: "helper", role: "HELPER" }];
     await scheduleIntroductionOutcome({ id: "intro1", coopId: "harbor", type: "CONNECT_MEMBERS", sourceType: "sage_introduction" }, participants);
     expect(tasks.createSageTask.mock.calls[0]![0]).toMatchObject({ ownerUserId: "needer", subjectType: "introduction_outcome", subjectId: "intro1", dueInDays: 5 });
-    expect(await scheduleIntroductionOutcome({ id: "r1", coopId: "harbor", type: "RIDE_MATCH_PROPOSAL", sourceType: "circle_ride" }, participants)).toBeNull();
+    expect(await scheduleIntroductionOutcome({ id: "s1", coopId: "harbor", type: "SUGGEST_ACTION", sourceType: "circle_trend" }, participants)).toBeNull();
     expect(tasks.createSageTask).toHaveBeenCalledTimes(1);
   });
 });

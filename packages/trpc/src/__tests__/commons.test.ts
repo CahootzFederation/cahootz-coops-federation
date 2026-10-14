@@ -918,16 +918,6 @@ describe('commonsRouter', () => {
     );
   });
 
-  it('lets anonymous visitors ask the general Cahootz AI', async () => {
-    const db = makeDb();
-
-    const result = await callerFor(db).ask({
-      prompt: 'How do we turn this into a vote?',
-    });
-
-    expect(result.answer).toContain('decision');
-  });
-
   it('lists active Commons members for starting real DMs', async () => {
     const db = makeDb({
       userCoopMembership: {

@@ -4,8 +4,8 @@ import { createNotificationAndPush } from "./push-notification-service.js";
 import { titlesNearlyIdentical } from "./sage-titles.js";
 
 /**
- * Follow-through on Sage's suggestions that wait on someone (a circle leader's approval, a ride
- * detail, an introduction's yes). Every waiting answer gets one task in the wake loop, so Sage:
+ * Follow-through on Sage's suggestions that wait on someone (a circle leader's approval, an
+ * introduction's yes). Every waiting answer gets one task in the wake loop, so Sage:
  *
  * - closes the suggestion as soon as it no longer applies, judged from app data only (the post or
  *   circle is gone, someone left, the time passed, the work was already done) - no model call;
@@ -31,11 +31,22 @@ const ANSWERED: Record<string, string> = {
   EXPIRED: "The suggestion was closed", SUPERSEDED: "The suggestion changed",
 };
 
+/** Suggestion kinds Sage no longer makes. Any still waiting are closed rather than left unanswerable. */
+const RETIRED_ACTION_TYPES: Partial<Record<CommonsAction["type"], string>> = {
+  RIDE_MATCH_PROPOSAL: "Sage no longer suggests ride matches",
+};
+
+export function retiredSuggestionReason(action: Pick<CommonsAction, "type">): string | null {
+  return RETIRED_ACTION_TYPES[action.type] ?? null;
+}
+
 /**
  * Why a waiting suggestion no longer applies, or null while it still does. Deterministic checks on
  * app data; the reasons are shown to the people involved, so they never name another member.
  */
 export async function suggestionNoLongerApplies(review: Pick<CommonsActionReview, "userId" | "reviewType">, action: CommonsAction, now = new Date()): Promise<string | null> {
+  const retired = retiredSuggestionReason(action);
+  if (retired) return retired;
   const participants = await db.commonsActionParticipant.findMany({ where: { actionId: action.id }, select: { userId: true } });
   const people = [...new Set([review.userId, ...participants.map((participant) => participant.userId)])];
   const active = await db.userCoopMembership.count({ where: { coopId: action.coopId, userId: { in: people }, status: "ACTIVE" } });
@@ -47,11 +58,6 @@ export async function suggestionNoLongerApplies(review: Pick<CommonsActionReview
     if (review.reviewType === "APPROVE_SUGGESTION" && circle.leaderId !== review.userId) return "The circle has a new leader";
     const stillInCircle = await db.groupMember.findUnique({ where: { groupId_userId: { groupId: action.circleId, userId: review.userId } }, select: { id: true } });
     if (!stillInCircle && circle.leaderId !== review.userId) return "The person asked left the circle";
-  }
-
-  if (action.sourceType === "circle_message") {
-    const message = await db.groupComment.findUnique({ where: { id: action.sourceId }, select: { id: true } });
-    if (!message) return "The message it came from was deleted";
   }
 
   const payload = (action.payload ?? {}) as { capability?: unknown; title?: unknown; targetPostId?: unknown; suggestedStartAt?: unknown };

@@ -61,6 +61,7 @@ async function supersedeOlder(scopeType: string, scopeId: string, newId: string,
 export async function consolidateSageMemory(coopId: string, now = new Date()): Promise<{ remembered: number; superseded: number }> {
   const since = new Date(now.getTime() - CONSOLIDATE_LOOKBACK_DAYS * DAY_MS);
   const [actions, tasks] = await Promise.all([
+    // RIDE_MATCH_PROPOSAL is retired, but its old rows still name one member's need and must never be remembered.
     db.commonsAction.findMany({
       where: { coopId, status: { in: [...TERMINAL] }, updatedAt: { gte: since }, type: { notIn: ["RIDE_MATCH_PROPOSAL", "CONNECT_MEMBERS", "ESCALATE_TO_ADMIN", "NO_ACTION", "ASK_COMMONS"] } },
       select: { id: true, summary: true, status: true, createdAt: true, payload: true, circleId: true, type: true,
@@ -69,7 +70,7 @@ export async function consolidateSageMemory(coopId: string, now = new Date()): P
     }),
     db.sageTask.findMany({
       // Suggestion follow-ups aren't remembered separately: the suggestion's own outcome is (above), with
-      // personal kinds (ride matches, introductions) excluded, which a task's title alone can't tell.
+      // personal kinds (introductions) excluded, which a task's title alone can't tell.
       where: { coopId, status: { in: ["DONE", "ABANDONED", "DISMISSED"] }, updatedAt: { gte: since }, subjectType: { not: "suggestion_review" } },
       select: { id: true, title: true, status: true, outcome: true, circleId: true, updatedAt: true },
       orderBy: { updatedAt: "asc" }, take: 200,

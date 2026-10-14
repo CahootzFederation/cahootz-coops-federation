@@ -8,7 +8,7 @@ import { buildDbTools, buildQueryObservationsTool, buildSearchKnowledgeBaseTool 
 import { recordAgentResultCost, withCostedProposalRun } from "../services/ai-cost.js";
 import { sageReplyStyleInstructions } from "../services/sage-reply-templates.js";
 import { sageCorePrinciplesInstructions } from "../services/sage-principles.js";
-import { MEMBER_MEMORY_INSTRUCTIONS } from "../services/sage-member-memory.js";
+import { MEMBER_MEMORY_INSTRUCTIONS, memberMemoryPrompt } from "../services/sage-member-memory.js";
 
 export interface AgentDefinition {
   key: string;
@@ -382,7 +382,7 @@ const SageCommonsReplyInputZ = z.object({
   message: z.string().min(1).describe("The message that mentioned or was sent to Sage"),
   threadContext: z.string().optional().describe("Prior thread/comment/DM history, oldest-first, for continuity"),
   channel: z.enum(["mention", "dm"]).optional().describe("Direct messages to Sage use a cheaper model than public @mentions"),
-  memberMemory: z.array(z.string()).optional().describe("DMs only: what this member asked Sage to remember, from memberMemoryLines"),
+  memberMemory: z.array(z.string()).optional().describe("DMs only: needs this member mentioned in check-ins, from memberMemoryLines"),
 });
 
 const SageCommonsReplyOutputZ = z.object({
@@ -464,7 +464,7 @@ export async function runSageCommonsReply(
   });
 
   const prompt = [
-    memberMemory.length ? `You remember (the member asked you to):\n${memberMemory.map((line) => `- ${line}`).join("\n")}` : "",
+    memberMemoryPrompt(memberMemory),
     input.threadContext ? `Prior conversation (oldest first):\n${input.threadContext}` : "",
     `Message to reply to: ${input.message}`,
   ].filter(Boolean).join("\n\n");

@@ -47,14 +47,14 @@ describe("weekly check-in follow-ups", () => {
     expect(runMock).toHaveBeenCalledTimes(1);
   });
 
-  it("uses what the member asked Sage to remember, and only that", async () => {
+  it("uses the needs the member mentioned in earlier check-ins, and only those", async () => {
     runMock.mockResolvedValue({ finalOutput: "How are rides going?" });
     await runCheckinFollowup({
       coopId: "c", checkin: "How was your week?", message: "Busy", followupsSent: 0,
       memberMemory: ["2026-10-10: a need around transportation access (Harbor Commons)"],
     });
     const [agent, prompt] = runMock.mock.calls[0];
-    expect(prompt).toContain("You remember (the member asked you to):\n- 2026-10-10: a need around transportation access (Harbor Commons)");
+    expect(prompt).toContain("You remember (from their earlier check-ins):\n- 2026-10-10: a need around transportation access (Harbor Commons)");
     expect(agent.opts.instructions).toContain("Never claim to remember anything that isn't listed");
     expect(agent.opts.instructions).not.toContain("or claim to remember anything.");
 

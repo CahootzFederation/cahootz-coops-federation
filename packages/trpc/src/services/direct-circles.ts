@@ -13,8 +13,8 @@ import { createNotificationAndPush } from './push-notification-service.js';
 import { traceSageReply } from './sage-reply-trails.js';
 import { checkinFollowupAllowed, runCheckinFollowup } from './sage-checkin-followup.js';
 import { handleConversationConfirmation } from './sage-member-actions.js';
-import { handlePrivateCheckinSignal } from './sage-private-signals.js';
-import { handleMemberMemoryRequest, loadMemberMemory, memberMemoryLines, parseMemberMemoryRequest } from './sage-member-memory.js';
+import { handlePrivateCheckinSignal, relevantCommonsForCheckin } from './sage-private-signals.js';
+import { handleMemberMemoryRequest, loadMemberMemory, memberMemoryLines, memberMemoryScopeForDm, parseMemberMemoryRequest } from './sage-member-memory.js';
 
 // A direct message is a private circle with exactly two members. It reuses
 // circle membership for access control and GroupComment for messages, but
@@ -257,6 +257,7 @@ async function replyAsSage(
 ) {
   const { group, sender, sage, message } = input;
   try {
+    const memoryRequest = parseMemberMemoryRequest(message.content) !== null;
     const privateSignal = await handlePrivateCheckinSignal({
       groupId: group.id,
       coopId: group.coopId,
@@ -264,6 +265,7 @@ async function replyAsSage(
       messageId: message.id,
       content: message.content,
       createdAt: message.createdAt,
+      memoryRequest,
     });
     if (privateSignal.safetyReply) {
       await db.groupComment.create({ data: { groupId: group.id, authorId: sage.id, content: privateSignal.safetyReply } });
@@ -271,7 +273,7 @@ async function replyAsSage(
       return;
     }
     // "What do you remember about me?" and "forget that" are answered in code, no model call.
-    if (parseMemberMemoryRequest(message.content)) {
+    if (memoryRequest) {
       const lastSage = await db.groupComment.findFirst({
         where: { groupId: group.id, authorId: sage.id, createdAt: { lt: message.createdAt } },
         orderBy: { createdAt: 'desc' }, select: { content: true },
@@ -300,20 +302,25 @@ async function replyAsSage(
     const actions = buildMemberActionTools({ memberId: sender.id, conversationGroupId: group.id });
     const publish = async (reply: string) => {
       const asks = actions.state.asks.slice(-1);
-      // One question per message, so a "yes" can only mean one thing: the memory offer waits if Sage already asked.
-      const askedAlready = asks.length > 0 || reply.includes('?');
-      const parts = [reply, ...asks, ...(privateSignal.consentQuestion && !askedAlready ? [privateSignal.consentQuestion] : [])];
+      // When Sage saved a need from this reply it says so, last, so "forget that" refers to it.
+      const parts = [reply, ...asks, ...(privateSignal.memoryNotice ? [privateSignal.memoryNotice] : [])];
       const content = parts.join('\n\n');
       await db.groupComment.create({
         data: { groupId: group.id, authorId: sage.id, content },
       });
       await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
     };
-    // What this member asked Sage to remember. This is their own private conversation, so it's the
-    // one place besides the weekly check-in where that memory is used.
-    const remembered = memberMemoryLines(await loadMemberMemory({ memberId: sender.id, purpose: 'sage dm reply' }).catch(() => []));
-    // Replies to a weekly check-in get a short conversational follow-up, a few turns per check-in.
+    // Needs this member mentioned in earlier check-ins. This is their own private conversation, so it's the
+    // one place besides the weekly check-in where that memory is used, scoped by memberMemoryScopeForDm.
     const checkin = privateSignal.checkin;
+    const memoryScope = memberMemoryScopeForDm({
+      dmCoopId: group.coopId, platformCoopId: COMMONS_COOP_ID, inCheckin: Boolean(checkin),
+      checkinCoopIds: checkin && group.coopId === COMMONS_COOP_ID ? await relevantCommonsForCheckin(sender.id, checkin.content) : [],
+    });
+    const remembered = !memoryScope ? [] : memberMemoryLines(await loadMemberMemory({
+      memberId: sender.id, purpose: 'sage dm reply', focusCoopId: memoryScope.focusCoopId, before: message.createdAt,
+    }).catch(() => []));
+    // Replies to a weekly check-in get a short conversational follow-up, a few turns per check-in.
     if (checkin) {
       const since = await db.groupComment.findMany({
         where: { groupId: group.id, id: { notIn: [checkin.id, message.id] }, createdAt: { gt: checkin.createdAt } },

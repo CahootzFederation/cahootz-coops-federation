@@ -1,17 +1,19 @@
 import { db } from "@repo/db";
 
 import { auditLogEntry } from "../lib/audit.js";
-import { ASKS_WHAT_SAGE_REMEMBERS, MEMBER_SIGNAL_AGENT_KEY, privateThemeLabel } from "./sage-private-signals.js";
+import { ASKS_WHAT_SAGE_REMEMBERS, MEMBER_SIGNAL_AGENT_KEY, NEED_SUMMARY_MAX_CHARS, privateThemeLabel, themeSummary } from "./sage-private-signals.js";
+import { cleanseUntrustedText } from "./untrusted-input.js";
 
 /**
- * What a member asked Sage to remember about them, read back into that member's own private
+ * Needs a member mentioned in weekly check-ins, read back into that member's own private
  * conversations with Sage.
  *
- * The rows are the consented `member_need_signal` / `member_need_resolution` observations that
- * sage-private-signals.ts writes. They are generalized themes ("transportation access"), never the
- * member's own words. Reads are limited to this one member, to PRIVATE_TO_AUTHOR_SCOPE rows, and to
- * Commons the member still belongs to; only the member's 1:1 Sage conversation and their weekly
- * check-in use them, never a feed reply or another member's context. Every read is audited.
+ * The rows are the `member_need_signal` / `member_need_resolution` observations that
+ * sage-private-signals.ts saves automatically: a theme plus a short, non-identifying summary
+ * ("needs rides to work on weekdays"), never the member's own words. Reads are limited to this one
+ * member, to PRIVATE_TO_AUTHOR_SCOPE rows, and to Commons the member still belongs to; with a focus
+ * Commons, only needs tied to that Commons. Only the member's 1:1 Sage conversation and their weekly
+ * check-in use them, never a feed reply, an @mention or another member's context. Every read is audited.
  *
  * The member can ask "what do you remember about me?" and "forget that / forget 2 / forget
  * everything". Both are answered in code with no model call.
@@ -25,6 +27,8 @@ const MAX_REQUEST_CHARS = 120;
 export interface MemberMemoryItem {
   themeKey: string;
   label: string;
+  /** The saved one-line summary, or a sentence built from the theme for rows without one. */
+  summary: string;
   resolved: boolean;
   /** The day the member told Sage, as YYYY-MM-DD. */
   sourceDate: string;
@@ -33,21 +37,22 @@ export interface MemberMemoryItem {
   rowIds: string[];
 }
 
-type MemberSignalDetails = { themeKey?: unknown; stance?: unknown; relevantCoopIds?: unknown; sourceDate?: unknown };
+type MemberSignalDetails = { themeKey?: unknown; stance?: unknown; relevantCoopIds?: unknown; sourceDate?: unknown; summaryKind?: unknown };
 
 function describe(item: MemberMemoryItem): string {
   const where = item.commonsName ? ` (${item.commonsName})` : "";
-  return item.resolved
-    ? `${item.sourceDate}: ${item.label} is no longer a need${where}`
-    : `${item.sourceDate}: a need around ${item.label}${where}`;
+  return `${item.sourceDate}: ${item.summary}${where}`;
 }
 
 /**
- * The member's remembered themes, newest first, one per theme with the latest thing they said winning.
- * With `focusCoopId`, only themes from that Commons or from no particular Commons.
+ * The member's remembered needs, newest first, one per theme with the latest thing they said winning.
+ * With `focusCoopId` (the Commons of the conversation), only needs tied to that Commons; a need Sage
+ * couldn't tie to one Commons is shown only when the member asks what Sage remembers.
  */
 export async function loadMemberMemory(input: {
   memberId: string; purpose: string; focusCoopId?: string | null; maxItems?: number; now?: Date;
+  /** Only notes saved before this time, so a reply never "remembers" the message it answers. */
+  before?: Date;
 }): Promise<MemberMemoryItem[]> {
   const now = input.now ?? new Date();
   const [rows, memberships] = await Promise.all([
@@ -56,9 +61,10 @@ export async function loadMemberMemory(input: {
         scopeType: "member", scopeId: input.memberId, visibility: "PRIVATE_TO_AUTHOR_SCOPE", status: "ACTIVE",
         generatedByAgentKey: MEMBER_SIGNAL_AGENT_KEY, type: { in: MEMBER_MEMORY_TYPES },
         OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        ...(input.before ? { createdAt: { lt: input.before } } : {}),
       },
       orderBy: { createdAt: "desc" }, take: 50,
-      select: { id: true, details: true, createdAt: true },
+      select: { id: true, summary: true, details: true, createdAt: true },
     }),
     db.userCoopMembership.findMany({ where: { userId: input.memberId, status: "ACTIVE" }, select: { coopId: true }, take: 50 }),
   ]);
@@ -72,7 +78,7 @@ export async function loadMemberMemory(input: {
     // A theme tied to Commons the member has left stays out; so does one from another Commons when Sage
     // is writing about a specific one.
     if (coopIds.length && !coopIds.some((id) => activeCoopIds.has(id))) continue;
-    if (input.focusCoopId && coopIds.length && !coopIds.includes(input.focusCoopId)) continue;
+    if (input.focusCoopId && !coopIds.includes(input.focusCoopId)) continue;
     const existing = byTheme.get(details.themeKey);
     if (existing) existing.rowIds.push(row.id);
     else byTheme.set(details.themeKey, { latest: row, details, coopIds, rowIds: [row.id] });
@@ -90,10 +96,18 @@ export async function loadMemberMemory(input: {
   let used = 0;
   for (const [themeKey, theme] of byTheme) {
     if (items.length >= maxItems) break;
+    const label = privateThemeLabel(themeKey);
+    const resolved = theme.details.stance === "CONTRADICT";
+    // Summaries are model-written from member text, so they are cleansed again on the way out. Rows
+    // saved before summaries existed fall back to the theme sentence.
+    const saved = theme.details.summaryKind === "model"
+      ? cleanseUntrustedText(theme.latest.summary, { maxChars: NEED_SUMMARY_MAX_CHARS })
+      : null;
     const item: MemberMemoryItem = {
       themeKey,
-      label: privateThemeLabel(themeKey),
-      resolved: theme.details.stance === "CONTRADICT",
+      label,
+      summary: saved && saved.text && !saved.flags.length ? saved.text : themeSummary({ themeLabel: label, stance: resolved ? "CONTRADICT" : "SUPPORT" }),
+      resolved,
       sourceDate: typeof theme.details.sourceDate === "string" ? theme.details.sourceDate : theme.latest.createdAt.toISOString().slice(0, 10),
       commonsName: theme.coopIds.length === 1 ? names.get(theme.coopIds[0]!) ?? null : null,
       rowIds: theme.rowIds,
@@ -113,6 +127,20 @@ export async function loadMemberMemory(input: {
   return items;
 }
 
+/**
+ * Which Commons' needs a Sage DM may use. A DM in a specific Commons sees that Commons. Sage's
+ * platform-wide DM sees the Commons the current check-in is about (nothing if that's unclear), and
+ * outside a check-in, any Commons the member still belongs to (`focusCoopId: null`).
+ * Returns null when no memory may be used.
+ */
+export function memberMemoryScopeForDm(input: {
+  dmCoopId: string; platformCoopId: string; inCheckin: boolean; checkinCoopIds: string[];
+}): { focusCoopId: string | null } | null {
+  if (input.dmCoopId !== input.platformCoopId) return { focusCoopId: input.dmCoopId };
+  if (!input.inCheckin) return { focusCoopId: null };
+  return input.checkinCoopIds.length === 1 ? { focusCoopId: input.checkinCoopIds[0]! } : null;
+}
+
 /** Prompt lines for a model. Generated by code from themes, so they carry no member-written text. */
 export function memberMemoryLines(items: MemberMemoryItem[]): string[] {
   return items.map(describe);
@@ -120,10 +148,15 @@ export function memberMemoryLines(items: MemberMemoryItem[]): string[] {
 
 /** Instructions that go with memberMemoryLines, for agents that talk to the member privately. */
 export const MEMBER_MEMORY_INSTRUCTIONS = [
-  "\"You remember\" lists things this member asked you to remember. You may use them to ask a better question or to check how something is going, and you may say you remember them.",
+  "\"You remember\" lists needs this member mentioned in earlier check-ins (date first). You may gently bring one up, for example to ask how it's going, and you may say you remember it.",
   "Never claim to remember anything that isn't listed, never add details they didn't give, and never mention a Commons other than the one shown with an item.",
   "If an item says something is no longer a need, don't ask about it as if it were.",
 ].join(" ");
+
+/** The prompt section that carries memberMemoryLines. The lines are code-built and cleansed. */
+export function memberMemoryPrompt(lines: string[]): string {
+  return lines.length ? `You remember (from their earlier check-ins):\n${lines.map((line) => `- ${line}`).join("\n")}` : "";
+}
 
 export type MemberMemoryRequest =
   | { kind: "list" }
@@ -161,8 +194,8 @@ function themeMatches(item: MemberMemoryItem, words: string): boolean {
   return wanted.some((word) => theme.includes(word) || extra.some((alias) => word.startsWith(alias)));
 }
 
-const LIST_FOOTER = "Say \"forget 1\" (or another number), \"forget that\" for the newest, or \"forget everything\". I only use these in our private conversations, and in anonymous Commons-wide patterns only where you told me that was OK.";
-const NOTHING_KEPT = "I'm not keeping anything about you right now. If you share something in a check-in, I'll ask before I remember it.";
+const LIST_FOOTER = "Say \"forget 1\" (or another number), \"forget that\" for the newest, or \"forget everything\". I use these in our private conversations, and count them without your name in anonymous patterns for your Commons once enough members share the same need.";
+const NOTHING_KEPT = "I'm not keeping anything about you right now. When you mention a need in a check-in, I keep a short note of it, tell you when I do, and forget it whenever you ask.";
 
 /**
  * Answers a memory request in code: lists what Sage remembers, or forgets what the member names.
@@ -180,7 +213,7 @@ export async function handleMemberMemoryRequest(input: {
 
   if (request.kind === "list") {
     if (!items.length) return { reply: NOTHING_KEPT };
-    return { reply: ["Here's what you've asked me to remember:", ...items.map((item, i) => `${i + 1}. ${describe(item)}`), "", LIST_FOOTER].join("\n") };
+    return { reply: ["Here's what I remember from our check-ins:", ...items.map((item, i) => `${i + 1}. ${describe(item)}`), "", LIST_FOOTER].join("\n") };
   }
 
   const target = request.target;
@@ -208,7 +241,7 @@ export async function handleMemberMemoryRequest(input: {
     }),
   }).catch((error) => console.error("Could not audit member memory forget", error));
 
-  const what = target === "all" ? `everything you asked me to remember (${chosen.length === 1 ? "1 thing" : `${chosen.length} things`})`
-    : `that you mentioned ${chosen.map((item) => item.label).join(" and ")}`;
+  const what = target === "all" ? `everything I remembered about you (${chosen.length === 1 ? "1 thing" : `${chosen.length} things`})`
+    : chosen.map((item) => `"${item.summary}"`).join(" and ");
   return { reply: `Done. I've forgotten ${what}. I won't bring it up again, and it's no longer counted in any anonymous Commons-wide pattern from the next daily update.` };
 }

@@ -1,7 +1,7 @@
 import { Agent, run, type Tool } from "@openai/agents";
 
 import { recordAICost, recordAgentResultCost } from "./ai-cost.js";
-import { MEMBER_MEMORY_INSTRUCTIONS } from "./sage-member-memory.js";
+import { MEMBER_MEMORY_INSTRUCTIONS, memberMemoryPrompt } from "./sage-member-memory.js";
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
 
 /**
@@ -26,7 +26,7 @@ export interface CheckinFollowupInput {
   /** Optional action tools (see buildMemberActionTools) and the instructions that go with them. */
   tools?: Tool[];
   toolInstructions?: string;
-  /** What this member asked Sage to remember (memberMemoryLines), already bounded and scoped to them. */
+  /** Needs this member mentioned in earlier check-ins (memberMemoryLines), already bounded and scoped to them. */
   memberMemory?: string[];
 }
 
@@ -75,7 +75,7 @@ export async function runCheckinFollowup(input: CheckinFollowupInput): Promise<{
     ...(input.tools?.length ? { tools: input.tools, modelSettings: { maxTokens: 400, reasoning: { effort: "low" as const }, text: { verbosity: "low" as const }, toolChoice: "auto" as const } } : {}),
   });
   const prompt = [
-    input.memberMemory?.length ? `You remember (the member asked you to):\n${input.memberMemory.map((line) => `- ${line}`).join("\n")}` : "",
+    memberMemoryPrompt(input.memberMemory ?? []),
     `Your check-in: ${input.checkin}`,
     input.threadContext ? `Conversation since (oldest first):\n${input.threadContext}` : "",
     `Member's reply: ${input.message}`,

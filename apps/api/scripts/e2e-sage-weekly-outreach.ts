@@ -24,7 +24,7 @@ async function cleanup(email: string) {
   const { systemKey } = await target(email);
   const comment = await db.groupComment.findUnique({ where: { systemKey }, select: { id: true, groupId: true, createdAt: true } });
   if (!comment) return { deleted: 0 };
-  // Memory Sage kept from replies in this conversation (sage-member-memory.spec.ts asks it to remember).
+  // Needs Sage saved from replies in this conversation (sage-member-memory.spec.ts mentions one).
   const replies = await db.groupComment.findMany({ where: { groupId: comment.groupId, createdAt: { gte: comment.createdAt } }, select: { id: true } });
   await db.$transaction([
     db.aIObservation.deleteMany({

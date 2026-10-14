@@ -61,7 +61,7 @@ export async function traceSageReply(
     ? `${input.threadCount} earlier ${source.kind === "dm" ? "messages in this conversation" : "items in the thread"}`
     : "No earlier conversation");
   if (input.remembered?.length) {
-    trail.step("EVIDENCE", `${input.remembered.length} thing${input.remembered.length === 1 ? "" : "s"} the member asked Sage to remember`, { detail: input.remembered.join("\n") });
+    trail.step("EVIDENCE", `${input.remembered.length} need${input.remembered.length === 1 ? "" : "s"} remembered from the member's check-ins`, { detail: input.remembered.join("\n") });
   }
   if (source.kind === "dm") trail.policy("The sender is in this direct message with Sage", true);
   else {

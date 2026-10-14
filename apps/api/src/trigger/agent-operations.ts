@@ -2,6 +2,7 @@ import { logger, schedules } from "@trigger.dev/sdk";
 
 import { getAgentOperationalSnapshot } from "../../../../packages/trpc/src/services/agent-operations.js";
 import { sendAgentOperationalAlert } from "../../../../packages/trpc/src/services/slack-notification-service.js";
+import { env } from "../env.js";
 
 // Independent of any one product agent: while an agent is off, gated, paused,
 // stale, or broken, this posts the same loud alert every hour until it clears.
@@ -17,7 +18,7 @@ export const agentOperationsWatchdog = schedules.task({
       const checkedAt = new Date();
       const delivered = await sendAgentOperationalAlert({
         checkedAt,
-        environment: process.env.NODE_ENV,
+        environment: env.NODE_ENV,
         issues: [
           {
             agentId: "agent-health-inspection",
@@ -46,7 +47,7 @@ export const agentOperationsWatchdog = schedules.task({
     const delivered = await sendAgentOperationalAlert({
       checkedAt: snapshot.checkedAt,
       issues: snapshot.issues,
-      environment: process.env.NODE_ENV,
+      environment: env.NODE_ENV,
     });
     if (!delivered)
       throw new Error(

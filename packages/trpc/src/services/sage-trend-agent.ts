@@ -17,7 +17,7 @@ import {
 } from "./untrusted-input.js";
 import { sageAutonomyAllowed } from "./sage-autonomy.js";
 import { loadOutcomeContext } from "./sage-memory.js";
-import { payloadHash } from "./sage-ride-match-agent.js";
+import { payloadHash } from "./sage-payload-hash.js";
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
 import { checkRelevance, modelRelevanceJudge, type RelevanceJudge } from "./sage-grounding.js";
 import { buildCommentTools } from "../agents/tools/comment-tools.js";

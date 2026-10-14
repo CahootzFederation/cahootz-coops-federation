@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-
 import { Agent, run } from "@openai/agents";
 import { db } from "@repo/db";
 import { z } from "zod";
@@ -8,7 +7,11 @@ import { auditLogEntry } from "../lib/audit.js";
 import { ensureSageBotUser } from "../lib/bot.js";
 import { COMMONS_COOP_ID } from "../lib/commons.js";
 import { recordAgentResultCost } from "./ai-cost.js";
-import { directKeyFor, openDirectCircle, sendDirectCircleMessage } from "./direct-circles.js";
+import {
+  directKeyFor,
+  openDirectCircle,
+  sendDirectCircleMessage,
+} from "./direct-circles.js";
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
 import { PROACTIVE_WEEKLY_LIMIT, proactiveCountThisWeek, sendProactiveSageMessage } from "./sage-proactive.js";
 import { cleanseUntrustedText } from "./untrusted-input.js";
@@ -23,30 +26,46 @@ const DAY_MS = 86_400_000;
 
 const OutreachOutputZ = z.object({ message: z.string().min(1).max(600) });
 
-export function stableOutreachWeekday(userId: string, scheduleVersion = "v1"): number {
-  const byte = createHash("sha256").update(`${scheduleVersion}:${userId}`).digest()[0] ?? 0;
+export function stableOutreachWeekday(
+  userId: string,
+  scheduleVersion = "v1",
+): number {
+  const byte =
+    createHash("sha256").update(`${scheduleVersion}:${userId}`).digest()[0] ??
+    0;
   return byte % 7;
 }
 
 /** ISO week key used by the database idempotency key, e.g. 2026-W41. */
 export function isoWeekKey(date: Date): string {
-  const value = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const value = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
   const day = value.getUTCDay() || 7;
   value.setUTCDate(value.getUTCDate() + 4 - day);
   const yearStart = new Date(Date.UTC(value.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((value.getTime() - yearStart.getTime()) / DAY_MS + 1) / 7);
+  const week = Math.ceil(
+    ((value.getTime() - yearStart.getTime()) / DAY_MS + 1) / 7,
+  );
   return `${value.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
 function startOfIsoWeek(date: Date) {
   const day = date.getUTCDay() || 7;
-  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const start = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
   start.setUTCDate(start.getUTCDate() - day + 1);
   return start;
 }
 
-export function assignedOutreachAt(userId: string, now: Date, scheduleVersion = "v1") {
-  const mondayBasedDay = (stableOutreachWeekday(userId, scheduleVersion) + 6) % 7;
+export function assignedOutreachAt(
+  userId: string,
+  now: Date,
+  scheduleVersion = "v1",
+) {
+  const mondayBasedDay =
+    (stableOutreachWeekday(userId, scheduleVersion) + 6) % 7;
   const scheduled = startOfIsoWeek(now);
   scheduled.setUTCDate(scheduled.getUTCDate() + mondayBasedDay);
   scheduled.setUTCHours(WEEKLY_OUTREACH_HOUR_UTC, 0, 0, 0);
@@ -64,9 +83,14 @@ function firstName(name: string | null, email: string) {
   return name?.trim().split(/\s+/)[0] || email.split("@")[0] || "there";
 }
 
-function fallbackMessage(member: { name: string | null; email: string }, context: OutreachContext) {
+function fallbackMessage(
+  member: { name: string | null; email: string },
+  context: OutreachContext,
+) {
   const hello = `Hi ${firstName(member.name, member.email)}`;
-  const commons = context.focusCommons ? ` in ${context.focusCommons.name}` : " in your Commons";
+  const commons = context.focusCommons
+    ? ` in ${context.focusCommons.name}`
+    : " in your Commons";
   const topic = context.activity[0];
   if (topic) {
     return `${hello} — I was thinking about ${topic}${commons}. How is that sitting with you this week? And outside the Commons, how have you been doing?`;
@@ -80,7 +104,10 @@ interface OutreachContext {
   focusCommons: { id: string; name: string } | null;
 }
 
-async function loadOutreachContext(userId: string, now: Date): Promise<OutreachContext> {
+async function loadOutreachContext(
+  userId: string,
+  now: Date,
+): Promise<OutreachContext> {
   const memberships = await db.userCoopMembership.findMany({
     where: { userId, status: "ACTIVE" },
     orderBy: { coopId: "asc" },
@@ -89,32 +116,69 @@ async function loadOutreachContext(userId: string, now: Date): Promise<OutreachC
   });
   const configs = memberships.length
     ? await db.coopConfig.findMany({
-        where: { coopId: { in: memberships.map((membership) => membership.coopId) }, isActive: true },
-        orderBy: [{ coopId: "asc" }, { version: "desc" }], select: { coopId: true, name: true },
+        where: {
+          coopId: { in: memberships.map((membership) => membership.coopId) },
+          isActive: true,
+        },
+        orderBy: [{ coopId: "asc" }, { version: "desc" }],
+        select: { coopId: true, name: true },
       })
     : [];
   const names = new Map<string, string>();
-  for (const config of configs) if (!names.has(config.coopId)) names.set(config.coopId, config.name || config.coopId);
+  for (const config of configs)
+    if (!names.has(config.coopId))
+      names.set(config.coopId, config.name || config.coopId);
   const available = memberships
     .filter((membership) => names.has(membership.coopId))
-    .map((membership) => ({ id: membership.coopId, name: names.get(membership.coopId)! }));
-  const rotation = createHash("sha256").update(`${userId}:${isoWeekKey(now)}`).digest()[0] ?? 0;
-  const focusCommons = available.length ? available[rotation % available.length]! : null;
+    .map((membership) => ({
+      id: membership.coopId,
+      name: names.get(membership.coopId)!,
+    }));
+  const rotation =
+    createHash("sha256")
+      .update(`${userId}:${isoWeekKey(now)}`)
+      .digest()[0] ?? 0;
+  const focusCommons = available.length
+    ? available[rotation % available.length]!
+    : null;
   const [posts, comments] = await Promise.all([
     db.commonsPost.findMany({
-      where: { authorId: userId, ...(focusCommons ? { coopId: focusCommons.id } : {}) }, orderBy: { createdAt: "desc" }, take: 3,
+      where: {
+        authorId: userId,
+        ...(focusCommons ? { coopId: focusCommons.id } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: 3,
       select: { title: true, coopId: true },
     }),
     db.commonsComment.findMany({
-      where: { authorId: userId, ...(focusCommons ? { post: { coopId: focusCommons.id } } : {}) }, orderBy: { createdAt: "desc" }, take: 3,
-      select: { content: true, post: { select: { title: true, coopId: true } } },
+      where: {
+        authorId: userId,
+        ...(focusCommons ? { post: { coopId: focusCommons.id } } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: 3,
+      select: {
+        content: true,
+        post: { select: { title: true, coopId: true } },
+      },
     }),
   ]);
   const activity = [
-    ...posts.map((post) => `your post “${cleanseUntrustedText(post.title, { maxChars: 100 }).text}”`),
-    ...comments.map((comment) => `the conversation on “${cleanseUntrustedText(comment.post.title, { maxChars: 100 }).text}”`),
+    ...posts.map(
+      (post) =>
+        `your post “${cleanseUntrustedText(post.title, { maxChars: 100 }).text}”`,
+    ),
+    ...comments.map(
+      (comment) =>
+        `the conversation on “${cleanseUntrustedText(comment.post.title, { maxChars: 100 }).text}”`,
+    ),
   ];
-  return { commons: available.map((commons) => commons.name), activity, focusCommons };
+  return {
+    commons: available.map((commons) => commons.name),
+    activity,
+    focusCommons,
+  };
 }
 
 interface GeneratedOutreach {
@@ -123,15 +187,26 @@ interface GeneratedOutreach {
   fallbackReason?: "MODEL_NOT_CONFIGURED" | "MODEL_FAILED";
 }
 
-async function generateOutreach(member: { name: string | null; email: string }, context: OutreachContext): Promise<GeneratedOutreach> {
+async function generateOutreach(
+  member: { name: string | null; email: string },
+  context: OutreachContext,
+): Promise<GeneratedOutreach> {
   const fallback = fallbackMessage(member, context);
   if (!process.env.OPENAI_API_KEY) {
-    return { content: fallback, usedFallback: true, fallbackReason: "MODEL_NOT_CONFIGURED" };
+    return {
+      content: fallback,
+      usedFallback: true,
+      fallbackReason: "MODEL_NOT_CONFIGURED",
+    };
   }
   const agent = new Agent({
     name: "Sage Weekly Check-in",
     model: process.env.COMMONS_AI_MODEL || "gpt-5.6-luna",
-    modelSettings: { maxTokens: 180, reasoning: { effort: "low" }, text: { verbosity: "low" } },
+    modelSettings: {
+      maxTokens: 180,
+      reasoning: { effort: "low" },
+      text: { verbosity: "low" },
+    },
     instructions: [
       "You write one private weekly check-in from Sage to a community member.",
       sageCorePrinciplesInstructions(),
@@ -144,29 +219,59 @@ async function generateOutreach(member: { name: string | null; email: string }, 
     outputType: OutreachOutputZ,
   });
   try {
-    const result = await run(agent, JSON.stringify({
-      memberFirstName: firstName(member.name, member.email),
-      commons: context.commons.slice(0, 8),
-      focusCommons: context.focusCommons?.name ?? null,
-      recentMemberActivity: context.activity.slice(0, 4),
-    }));
-    await recordAgentResultCost({ coopId: COMMONS_COOP_ID, feature: WEEKLY_OUTREACH_AGENT, model: process.env.COMMONS_AI_MODEL || "gpt-5.6-luna", result }).catch(console.error);
+    const result = await run(
+      agent,
+      JSON.stringify({
+        memberFirstName: firstName(member.name, member.email),
+        commons: context.commons.slice(0, 8),
+        focusCommons: context.focusCommons?.name ?? null,
+        recentMemberActivity: context.activity.slice(0, 4),
+      }),
+    );
+    await recordAgentResultCost({
+      coopId: COMMONS_COOP_ID,
+      feature: WEEKLY_OUTREACH_AGENT,
+      model: process.env.COMMONS_AI_MODEL || "gpt-5.6-luna",
+      result,
+    }).catch(console.error);
     const message = OutreachOutputZ.parse(result.finalOutput).message.trim();
-    if (!message) return { content: fallback, usedFallback: true, fallbackReason: "MODEL_FAILED" };
-    if (context.focusCommons && !message.toLocaleLowerCase().includes(context.focusCommons.name.toLocaleLowerCase())) {
-      return { content: fallback, usedFallback: true, fallbackReason: "MODEL_FAILED" };
+    if (!message)
+      return {
+        content: fallback,
+        usedFallback: true,
+        fallbackReason: "MODEL_FAILED",
+      };
+    if (
+      context.focusCommons &&
+      !message
+        .toLocaleLowerCase()
+        .includes(context.focusCommons.name.toLocaleLowerCase())
+    ) {
+      return {
+        content: fallback,
+        usedFallback: true,
+        fallbackReason: "MODEL_FAILED",
+      };
     }
     return { content: message, usedFallback: false };
   } catch (error) {
     console.error("[sage-weekly-outreach] Model generation failed", {
       error: error instanceof Error ? error.message : String(error),
     });
-    return { content: fallback, usedFallback: true, fallbackReason: "MODEL_FAILED" };
+    return {
+      content: fallback,
+      usedFallback: true,
+      fallbackReason: "MODEL_FAILED",
+    };
   }
 }
 
 function isUniqueViolation(error: unknown) {
-  return typeof error === "object" && error !== null && (error as { code?: string }).code === "P2002";
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: string }).code === "P2002"
+  );
 }
 
 type SageBot = Awaited<ReturnType<typeof ensureSageBotUser>>;
@@ -295,7 +400,6 @@ export async function listSageOutreachHistory(options: { limit?: number; scan?: 
 }
 
 export interface WeeklyOutreachSummary {
-  enabled: boolean;
   modelConfigured: boolean;
   considered: number;
   due: number;
@@ -314,6 +418,31 @@ export interface WeeklyOutreachSummary {
   }>;
 }
 
+export async function recordWeeklyOutreachOperationalStatus(input: {
+  checkedAt: Date;
+  status: "success" | "error";
+  message?: string;
+}): Promise<void> {
+  await db.platformConfig.upsert({
+    where: { key: "agent.health.sage-weekly-outreach" },
+    create: {
+      key: "agent.health.sage-weekly-outreach",
+      value: JSON.stringify({
+        lastRunAt: input.checkedAt.toISOString(),
+        lastRunStatus: input.status,
+        lastRunMessage: input.message?.slice(0, 500) ?? null,
+      }),
+    },
+    update: {
+      value: JSON.stringify({
+        lastRunAt: input.checkedAt.toISOString(),
+        lastRunStatus: input.status,
+        lastRunMessage: input.message?.slice(0, 500) ?? null,
+      }),
+    },
+  });
+}
+
 export async function runWeeklySageOutreach(options: {
   now?: Date;
   userIds?: string[];
@@ -326,7 +455,6 @@ export async function runWeeklySageOutreach(options: {
 } = {}): Promise<WeeklyOutreachSummary> {
   const now = options.now ?? new Date();
   const summary: WeeklyOutreachSummary = {
-    enabled: true,
     modelConfigured: Boolean(process.env.OPENAI_API_KEY),
     considered: 0,
     due: 0,
@@ -356,27 +484,52 @@ export async function runWeeklySageOutreach(options: {
   }
   summary.considered = members.length;
   const sage = await ensureSageBotUser(db, COMMONS_COOP_ID);
-  const recentSince = new Date(now.getTime() - RECENT_CONVERSATION_DAYS * DAY_MS);
+  const recentSince = new Date(
+    now.getTime() - RECENT_CONVERSATION_DAYS * DAY_MS,
+  );
   for (const user of members) {
     if (!outreachIsDue({ userId: user.id, now, notBefore: options.notBefore, scheduleVersion })) continue;
     summary.due++;
-    const label = user.handle ? `@${user.handle}` : user.name?.trim() || `member ${user.id.slice(0, 8)}`;
+    const label = user.handle
+      ? `@${user.handle}`
+      : user.name?.trim() || `member ${user.id.slice(0, 8)}`;
     const systemKey = `sage-weekly:${user.id}:${isoWeekKey(now)}`;
     try {
-      if (await db.groupComment.findUnique({ where: { systemKey }, select: { id: true } })) {
+      if (
+        await db.groupComment.findUnique({
+          where: { systemKey },
+          select: { id: true },
+        })
+      ) {
         summary.duplicate++;
-        summary.deliveries.push({ userId: user.id, label, status: "DUPLICATE" });
+        summary.deliveries.push({
+          userId: user.id,
+          label,
+          status: "DUPLICATE",
+        });
         continue;
       }
       const directKey = directKeyFor(COMMONS_COOP_ID, sage.id, user.id);
-      const existing = await db.group.findUnique({ where: { directKey }, select: { id: true } });
+      const existing = await db.group.findUnique({
+        where: { directKey },
+        select: { id: true },
+      });
       if (existing && !options.ignoreRecentConversation) {
         const recent = await db.groupComment.findFirst({
-          where: { groupId: existing.id, authorId: user.id, createdAt: { gte: recentSince } }, select: { id: true },
+          where: {
+            groupId: existing.id,
+            authorId: user.id,
+            createdAt: { gte: recentSince },
+          },
+          select: { id: true },
         });
         if (recent) {
           summary.recent++;
-          summary.deliveries.push({ userId: user.id, label, status: "RECENT_CONVERSATION" });
+          summary.deliveries.push({
+            userId: user.id,
+            label,
+            status: "RECENT_CONVERSATION",
+          });
           continue;
         }
       }
@@ -387,9 +540,10 @@ export async function runWeeklySageOutreach(options: {
         continue;
       }
       const context = await loadOutreachContext(user.id, now);
-      const generated: GeneratedOutreach = options.generateWithModel === false
-        ? { content: fallbackMessage(user, context), usedFallback: false }
-        : await generateOutreach(user, context);
+      const generated: GeneratedOutreach =
+        options.generateWithModel === false
+          ? { content: fallbackMessage(user, context), usedFallback: false }
+          : await generateOutreach(user, context);
       if (generated.usedFallback) summary.modelFallbacks++;
       const sent = await sendProactiveSageMessage({
         userId: user.id,
@@ -416,12 +570,24 @@ export async function runWeeklySageOutreach(options: {
     } catch (error) {
       if (isUniqueViolation(error)) {
         summary.duplicate++;
-        summary.deliveries.push({ userId: user.id, label, status: "DUPLICATE" });
+        summary.deliveries.push({
+          userId: user.id,
+          label,
+          status: "DUPLICATE",
+        });
       } else {
         summary.failed++;
         const reason = error instanceof Error ? error.message : String(error);
-        summary.deliveries.push({ userId: user.id, label, status: "FAILED", reason: reason.slice(0, 240) });
-        console.error("[sage-weekly-outreach] Member delivery failed", { userId: user.id, error: reason });
+        summary.deliveries.push({
+          userId: user.id,
+          label,
+          status: "FAILED",
+          reason: reason.slice(0, 240),
+        });
+        console.error("[sage-weekly-outreach] Member delivery failed", {
+          userId: user.id,
+          error: reason,
+        });
       }
     }
   }

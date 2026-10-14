@@ -11,9 +11,36 @@ export const agentOperationsWatchdog = schedules.task({
   cron: "5 * * * *",
   maxDuration: 600,
   run: async () => {
-    const snapshot = await getAgentOperationalSnapshot();
+    let snapshot: Awaited<ReturnType<typeof getAgentOperationalSnapshot>>;
+    try {
+      snapshot = await getAgentOperationalSnapshot();
+    } catch (error) {
+      const checkedAt = new Date();
+      const delivered = await sendAgentOperationalAlert({
+        checkedAt,
+        environment: env.NODE_ENV,
+        issues: [
+          {
+            agentId: "agent-health-inspection",
+            state: "BROKEN",
+            reason:
+              "The watchdog could not read agent health from the database. Check the Trigger.dev run and application logs.",
+          },
+        ],
+      });
+      logger.error("Agent operations watchdog could not inspect health", {
+        error: String(error),
+      });
+      if (!delivered)
+        throw new Error(
+          "Agent health inspection and Slack delivery both failed.",
+        );
+      throw error;
+    }
     if (snapshot.healthy) {
-      logger.info("Agent operations watchdog passed", { checkedAt: snapshot.checkedAt.toISOString() });
+      logger.info("Agent operations watchdog passed", {
+        checkedAt: snapshot.checkedAt.toISOString(),
+      });
       return { healthy: true, issueCount: 0 };
     }
 
@@ -22,7 +49,10 @@ export const agentOperationsWatchdog = schedules.task({
       issues: snapshot.issues,
       environment: env.NODE_ENV,
     });
-    if (!delivered) throw new Error(`Agent watchdog found ${snapshot.issues.length} issue(s), but Slack delivery failed.`);
+    if (!delivered)
+      throw new Error(
+        `Agent watchdog found ${snapshot.issues.length} issue(s), but Slack delivery failed.`,
+      );
 
     logger.error("Agent operations watchdog found issues", {
       checkedAt: snapshot.checkedAt.toISOString(),

@@ -1,10 +1,12 @@
 import { db } from "@repo/db";
 
-import { getSageAutonomyUsage } from "./sage-autonomy.js";
 import type { AgentOperationalIssue } from "./slack-notification-service.js";
+import { getSageAutonomyUsage } from "./sage-autonomy.js";
 
+const WEEKLY_OUTREACH_HEALTH_KEY = "agent.health.sage-weekly-outreach";
 const WAKE_STALE_MS = 45 * 60 * 1000;
 const RUNNING_STALE_MS = 20 * 60 * 1000;
+const DAILY_SWEEP_STALE_MS = 26 * 60 * 60 * 1000;
 
 interface NewsletterSchedule {
   enabled: boolean;
@@ -14,24 +16,38 @@ interface NewsletterSchedule {
   lastRunMessage?: string;
 }
 
-function newsletterSchedule(value: unknown, agentId: "article-writer" | "event-writer"): NewsletterSchedule {
-  const root = typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-  const schedules = typeof root.newsletterAgentSchedules === "object" && root.newsletterAgentSchedules !== null && !Array.isArray(root.newsletterAgentSchedules)
-    ? root.newsletterAgentSchedules as Record<string, unknown>
-    : {};
-  const raw = typeof schedules[agentId] === "object" && schedules[agentId] !== null && !Array.isArray(schedules[agentId])
-    ? schedules[agentId] as Record<string, unknown>
-    : {};
+function newsletterSchedule(
+  value: unknown,
+  agentId: "article-writer" | "event-writer",
+): NewsletterSchedule {
+  const root =
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const schedules =
+    typeof root.newsletterAgentSchedules === "object" &&
+    root.newsletterAgentSchedules !== null &&
+    !Array.isArray(root.newsletterAgentSchedules)
+      ? (root.newsletterAgentSchedules as Record<string, unknown>)
+      : {};
+  const raw =
+    typeof schedules[agentId] === "object" &&
+    schedules[agentId] !== null &&
+    !Array.isArray(schedules[agentId])
+      ? (schedules[agentId] as Record<string, unknown>)
+      : {};
   return {
     enabled: typeof raw.enabled === "boolean" ? raw.enabled : true,
-    intervalHours: typeof raw.intervalHours === "number" && Number.isFinite(raw.intervalHours)
-      ? Math.min(Math.max(Math.round(raw.intervalHours), 1), 24 * 60)
-      : 168,
+    intervalHours:
+      typeof raw.intervalHours === "number" &&
+      Number.isFinite(raw.intervalHours)
+        ? Math.min(Math.max(Math.round(raw.intervalHours), 1), 24 * 60)
+        : 168,
     lastRunAt: typeof raw.lastRunAt === "string" ? raw.lastRunAt : undefined,
-    lastRunStatus: typeof raw.lastRunStatus === "string" ? raw.lastRunStatus : undefined,
-    lastRunMessage: typeof raw.lastRunMessage === "string" ? raw.lastRunMessage : undefined,
+    lastRunStatus:
+      typeof raw.lastRunStatus === "string" ? raw.lastRunStatus : undefined,
+    lastRunMessage:
+      typeof raw.lastRunMessage === "string" ? raw.lastRunMessage : undefined,
   };
 }
 
@@ -45,26 +61,104 @@ export interface AgentOperationalSnapshot {
  * Deterministic operational inventory for every configurable production agent.
  * The hourly Trigger task sends every issue on every run until it clears.
  */
-export async function getAgentOperationalSnapshot(now = new Date()): Promise<AgentOperationalSnapshot> {
+export async function getAgentOperationalSnapshot(
+  now = new Date(),
+): Promise<AgentOperationalSnapshot> {
   const issues: AgentOperationalIssue[] = [];
-  const [configs, settings, publicInfos] = await Promise.all([
+  const [outreachHealthRow, configs, settings, publicInfos] = await Promise.all([
+    db.platformConfig.findUnique({
+      where: { key: WEEKLY_OUTREACH_HEALTH_KEY },
+      select: { value: true },
+    }),
     db.coopConfig.findMany({
       where: { isActive: true, isDemo: false },
       select: { coopId: true },
       distinct: ["coopId"],
     }),
-    db.commonsAgentSetting.findMany({ select: { coopId: true, autoReply: true } }),
-    db.publicCoopInfo.findMany({ select: { coopId: true, previewOverrides: true } }),
+    db.commonsAgentSetting.findMany({
+      select: { coopId: true, autoReply: true },
+    }),
+    db.publicCoopInfo.findMany({
+      select: { coopId: true, previewOverrides: true },
+    }),
   ]);
 
+  if (!outreachHealthRow) {
+    issues.push({
+      agentId: "sage-weekly-outreach",
+      state: "FAILED",
+      reason: "No completed daily outreach sweep has been recorded.",
+    });
+  } else {
+    let metadata: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(outreachHealthRow.value) as unknown;
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed))
+        metadata = parsed as Record<string, unknown>;
+    } catch {
+      issues.push({
+        agentId: "sage-weekly-outreach",
+        state: "BROKEN",
+        reason: "The saved outreach health record is invalid JSON.",
+      });
+    }
+    const lastRunAt =
+      typeof metadata.lastRunAt === "string"
+        ? new Date(metadata.lastRunAt)
+        : null;
+    if (metadata.lastRunStatus === "error") {
+      issues.push({
+        agentId: "sage-weekly-outreach",
+        state: "FAILED",
+        reason:
+          typeof metadata.lastRunMessage === "string"
+            ? metadata.lastRunMessage.slice(0, 500)
+            : "The most recent daily outreach sweep failed.",
+      });
+    } else if (
+      lastRunAt &&
+      !Number.isNaN(lastRunAt.getTime()) &&
+      now.getTime() - lastRunAt.getTime() > DAILY_SWEEP_STALE_MS
+    ) {
+      issues.push({
+        agentId: "sage-weekly-outreach",
+        state: "FAILED",
+        reason: "No successful daily outreach sweep has completed in 26 hours.",
+      });
+    } else if (!lastRunAt) {
+      issues.push({
+        agentId: "sage-weekly-outreach",
+        state: "FAILED",
+        reason: "The outreach health record has no completed run timestamp.",
+      });
+    }
+  }
+
   if (!process.env.OPENAI_API_KEY) {
-    issues.push({ agentId: "model-backed-agents", state: "BROKEN", reason: "OPENAI_API_KEY is missing; model calls cannot run." });
+    issues.push({
+      agentId: "model-backed-agents",
+      state: "BROKEN",
+      reason: "OPENAI_API_KEY is missing; model calls cannot run.",
+    });
   }
   if (!process.env.SLACK_WEBHOOK_URL) {
-    issues.push({ agentId: "agent-alerting", state: "BROKEN", reason: "SLACK_WEBHOOK_URL is missing; persistent alerts cannot be delivered." });
+    issues.push({
+      agentId: "agent-alerting",
+      state: "BROKEN",
+      reason:
+        "SLACK_WEBHOOK_URL is missing; persistent alerts cannot be delivered.",
+    });
   }
-  if (process.env.NODE_ENV === "production" && !process.env.TRIGGER_SECRET_KEY) {
-    issues.push({ agentId: "scheduled-agents", state: "BROKEN", reason: "TRIGGER_SECRET_KEY is missing; production schedules other than the local Sage wake fallback cannot be dispatched." });
+  if (
+    process.env.NODE_ENV === "production" &&
+    !process.env.TRIGGER_SECRET_KEY
+  ) {
+    issues.push({
+      agentId: "scheduled-agents",
+      state: "BROKEN",
+      reason:
+        "TRIGGER_SECRET_KEY is missing; production schedules other than the local Sage wake fallback cannot be dispatched.",
+    });
   }
 
   const coopIds = configs.map((config) => config.coopId);
@@ -77,16 +171,30 @@ export async function getAgentOperationalSnapshot(now = new Date()): Promise<Age
           select: { coopId: true, status: true, startedAt: true, error: true },
         })
       : [],
-    Promise.all(coopIds.map(async (coopId) => ({ coopId, usage: await getSageAutonomyUsage(coopId) }))),
+    Promise.all(
+      coopIds.map(async (coopId) => ({
+        coopId,
+        usage: await getSageAutonomyUsage(coopId),
+      })),
+    ),
   ]);
-  const settingByCoop = new Map(settings.map((setting) => [setting.coopId, setting]));
+  const settingByCoop = new Map(
+    settings.map((setting) => [setting.coopId, setting]),
+  );
   const latestWakeByCoop = new Map<string, (typeof wakeCycles)[number]>();
-  for (const cycle of wakeCycles) if (!latestWakeByCoop.has(cycle.coopId)) latestWakeByCoop.set(cycle.coopId, cycle);
+  for (const cycle of wakeCycles)
+    if (!latestWakeByCoop.has(cycle.coopId))
+      latestWakeByCoop.set(cycle.coopId, cycle);
 
   for (const coopId of coopIds) {
     const setting = settingByCoop.get(coopId);
     if (setting?.autoReply === false) {
-      issues.push({ agentId: "sage-auto-reply", coopId, state: "OFF", reason: "The Commons auto-reply setting is disabled." });
+      issues.push({
+        agentId: "sage-auto-reply",
+        coopId,
+        state: "OFF",
+        reason: "The Commons auto-reply setting is disabled.",
+      });
     }
     const usage = usages.find((item) => item.coopId === coopId)?.usage;
     if (usage?.paused) {
@@ -100,13 +208,38 @@ export async function getAgentOperationalSnapshot(now = new Date()): Promise<Age
 
     const cycle = latestWakeByCoop.get(coopId);
     if (!cycle) {
-      issues.push({ agentId: "sage-wake", coopId, state: "FAILED", reason: "No wake cycle has ever been recorded." });
+      issues.push({
+        agentId: "sage-wake",
+        coopId,
+        state: "FAILED",
+        reason: "No wake cycle has ever been recorded.",
+      });
     } else if (cycle.status === "FAILED") {
-      issues.push({ agentId: "sage-wake", coopId, state: "FAILED", reason: cycle.error?.slice(0, 500) || "The most recent wake cycle failed." });
-    } else if (cycle.status === "RUNNING" && now.getTime() - cycle.startedAt.getTime() > RUNNING_STALE_MS) {
-      issues.push({ agentId: "sage-wake", coopId, state: "FAILED", reason: "The most recent wake cycle is stuck in RUNNING for more than 20 minutes." });
+      issues.push({
+        agentId: "sage-wake",
+        coopId,
+        state: "FAILED",
+        reason:
+          cycle.error?.slice(0, 500) || "The most recent wake cycle failed.",
+      });
+    } else if (
+      cycle.status === "RUNNING" &&
+      now.getTime() - cycle.startedAt.getTime() > RUNNING_STALE_MS
+    ) {
+      issues.push({
+        agentId: "sage-wake",
+        coopId,
+        state: "FAILED",
+        reason:
+          "The most recent wake cycle is stuck in RUNNING for more than 20 minutes.",
+      });
     } else if (now.getTime() - cycle.startedAt.getTime() > WAKE_STALE_MS) {
-      issues.push({ agentId: "sage-wake", coopId, state: "FAILED", reason: "No wake cycle has started in the last 45 minutes." });
+      issues.push({
+        agentId: "sage-wake",
+        coopId,
+        state: "FAILED",
+        reason: "No wake cycle has started in the last 45 minutes.",
+      });
     }
   }
 
@@ -115,7 +248,12 @@ export async function getAgentOperationalSnapshot(now = new Date()): Promise<Age
     for (const agentId of ["article-writer", "event-writer"] as const) {
       const schedule = newsletterSchedule(publicInfo.previewOverrides, agentId);
       if (!schedule.enabled) {
-        issues.push({ agentId: `newsletter-${agentId}`, coopId: publicInfo.coopId, state: "OFF", reason: "The saved agent schedule is disabled." });
+        issues.push({
+          agentId: `newsletter-${agentId}`,
+          coopId: publicInfo.coopId,
+          state: "OFF",
+          reason: "The saved agent schedule is disabled.",
+        });
         continue;
       }
       if (schedule.lastRunStatus === "error") {
@@ -123,14 +261,19 @@ export async function getAgentOperationalSnapshot(now = new Date()): Promise<Age
           agentId: `newsletter-${agentId}`,
           coopId: publicInfo.coopId,
           state: "FAILED",
-          reason: schedule.lastRunMessage?.slice(0, 500) || "The most recent run failed.",
+          reason:
+            schedule.lastRunMessage?.slice(0, 500) ||
+            "The most recent run failed.",
         });
         continue;
       }
       if (schedule.lastRunAt) {
         const lastRunAt = new Date(schedule.lastRunAt);
         const staleAfter = (schedule.intervalHours + 2) * 60 * 60 * 1000;
-        if (!Number.isNaN(lastRunAt.getTime()) && now.getTime() - lastRunAt.getTime() > staleAfter) {
+        if (
+          !Number.isNaN(lastRunAt.getTime()) &&
+          now.getTime() - lastRunAt.getTime() > staleAfter
+        ) {
           issues.push({
             agentId: `newsletter-${agentId}`,
             coopId: publicInfo.coopId,

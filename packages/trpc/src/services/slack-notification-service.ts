@@ -85,19 +85,19 @@ export async function sendAgentOperationalAlert(params: {
 
 /** Daily proof of who Sage evaluated for outreach and what actually happened. */
 export async function sendSageOutreachDailyReport(params: {
-  enabled: boolean;
   modelConfigured: boolean;
   considered: number;
   due: number;
   sent: number;
   recent: number;
   duplicate: number;
+  limited: number;
   failed: number;
   modelFallbacks: number;
   deliveries: Array<{ label: string; status: string; reason?: string }>;
   checkedAt?: Date;
 }): Promise<boolean> {
-  const broken = !params.enabled || !params.modelConfigured || params.failed > 0 || params.modelFallbacks > 0;
+  const broken = !params.modelConfigured || params.failed > 0 || params.modelFallbacks > 0;
   const recipients = params.deliveries.length
     ? params.deliveries.slice(0, 50).map((delivery) => {
         const reason = delivery.reason ? ` — ${safeSlackText(delivery.reason)}` : "";
@@ -112,11 +112,11 @@ export async function sendSageOutreachDailyReport(params: {
     attachments: [{
       color: broken ? "danger" : "good",
       fields: [
-        { title: "Agent", value: params.enabled ? "ON" : "OFF — feature flag disabled", short: true },
+        { title: "Agent", value: "ON — always enabled", short: true },
         { title: "Model", value: params.modelConfigured ? (params.modelFallbacks ? `FAILED/FALLBACK (${params.modelFallbacks})` : "READY") : "BROKEN — OPENAI_API_KEY missing", short: true },
         { title: "Members checked", value: String(params.considered), short: true },
         { title: "Due / sent", value: `${params.due} / ${params.sent}`, short: true },
-        { title: "Skipped", value: `${params.recent} recent, ${params.duplicate} duplicate`, short: true },
+        { title: "Skipped", value: `${params.recent} recent, ${params.duplicate} duplicate, ${params.limited} weekly-limit`, short: true },
         { title: "Delivery failures", value: String(params.failed), short: true },
         { title: "Checked at", value: (params.checkedAt ?? new Date()).toISOString(), short: false },
       ],

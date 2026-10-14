@@ -159,7 +159,7 @@ export async function notifyCircleHighlight(
     actorId: string;
   },
 ) {
-  const [circle, members, chatting] = await Promise.all([
+  const [circle, members] = await Promise.all([
     db.group.findUnique({
       where: { id: activity.circleId },
       select: { name: true },
@@ -172,19 +172,8 @@ export async function notifyCircleHighlight(
         user: { select: { isBot: true } },
       },
     }),
-    db.circleChatPresence.findMany({
-      where: {
-        groupId: activity.circleId,
-        exitedAt: null,
-        lastActivityAt: { gt: new Date(Date.now() - CHATTING_WINDOW_MS) },
-      },
-      select: { userId: true },
-    }),
   ]);
   const circleName = circle?.name || "your circle";
-  const chattingIds = new Set<string>(
-    chatting.map((row: { userId: string }) => row.userId),
-  );
   const recipients = members.filter(
     (member: {
       userId: string;
@@ -193,8 +182,7 @@ export async function notifyCircleHighlight(
     }) =>
       member.userId !== activity.actorId &&
       !member.user.isBot &&
-      parseCircleNotificationLevel(member.notificationLevel) === "HIGHLIGHTS" &&
-      !chattingIds.has(member.userId),
+      parseCircleNotificationLevel(member.notificationLevel) === "HIGHLIGHTS",
   );
 
   let sent = 0;

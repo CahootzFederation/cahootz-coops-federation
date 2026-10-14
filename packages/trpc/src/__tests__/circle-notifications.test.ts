@@ -142,6 +142,7 @@ describe("notifyCircleActivity", () => {
 
     expect(sent()).toEqual([
       { userId: "highlights", type: "CIRCLE_HIGHLIGHT", push: undefined },
+      { userId: "watching", type: "CIRCLE_HIGHLIGHT", push: undefined },
     ]);
     expect(createNotificationAndPush.mock.calls[0][1]).toMatchObject({
       title: "Circle highlight",

@@ -41,7 +41,7 @@ test('a member changes their name, unique @, and nickname', async ({ browser }) 
       await userB.page.goto(`/people/${nextHandle}`);
       await expect(userB.page.getByText(nextNickname, { exact: true })).toBeVisible();
       await expect(userB.page.getByText(nextName, { exact: true })).toBeVisible();
-      await expect(userB.page.getByText(`@${nextHandle}`, { exact: true })).toBeVisible();
+      await expect(userB.page.getByText(`@${nextHandle}`, { exact: true }).first()).toBeVisible();
     } finally {
       const sessionToken = await userA.page.evaluate(() => window.localStorage.getItem('cahootz.sessionToken'));
       if (sessionToken && original.name && original.handle) {

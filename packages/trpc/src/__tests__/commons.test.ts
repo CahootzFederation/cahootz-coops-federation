@@ -972,6 +972,7 @@ describe('commonsRouter', () => {
       email: 'maya@example.com',
       handle: 'maya',
       name: 'Maya R.',
+      nickname: 'May',
       selfDescription: null,
       avatarUrl: null,
       avatarEmoji: null,
@@ -1014,6 +1015,17 @@ describe('commonsRouter', () => {
       };
       return db;
     }
+
+    it('preserves allowed separators when looking up a public handle', async () => {
+      const db = profileDb([]);
+
+      const { profile } = await callerFor(db).getPersonalPage({ handle: 'Maya_North-West' });
+
+      expect(db.user.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { handle: 'maya_north-west', deletedAt: null } }),
+      );
+      expect(profile).toMatchObject({ name: 'Maya R.', nickname: 'May', handle: 'maya' });
+    });
 
     it('shows public commons, and private ones only when the viewer is also a member', async () => {
       const db = profileDb(['private-shared']);

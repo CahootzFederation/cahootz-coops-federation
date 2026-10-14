@@ -2308,7 +2308,7 @@ export const commonsRouter = router({
     )
     .query(async ({ input, ctx }) => {
       const context = ctx as Context;
-      const handle = input.handle.toLowerCase().replace(/[^a-z0-9]+/g, '');
+      const handle = input.handle.toLowerCase().replace(/[^a-z0-9_-]+/g, '');
       const user = await findUserByPersonalHandle(ctx.db, handle);
 
       if (!user) {

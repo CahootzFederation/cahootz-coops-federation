@@ -63,6 +63,15 @@ export async function skipOnboardingWizard(
     await deferProfile.click();
   }
 
+  // Then the "Invite people you know" step.
+  const inviteNext = page.getByRole("button", { name: "Next", exact: true });
+  if (mode === "always") {
+    await expect(inviteNext).toBeVisible();
+    await inviteNext.click();
+  } else if (await inviteNext.isVisible().catch(() => false)) {
+    await inviteNext.click();
+  }
+
   // "Do this later" only skips the profile form - it now lands on a third
   // "find your way in" step (welcome lounge / General / invited family / skip) before the
   // feed, so skip that too to reach Circle View.

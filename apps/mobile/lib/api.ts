@@ -10,7 +10,7 @@ import type { CommonsPostTag } from './post-types';
 // Uses native fetch API - no additional dependencies required
 
 import { getApiUrl, getWebUrl, networkConfig } from './config';
-import { apiError, httpError } from './friendly-error';
+import { ApiError, apiError, httpError } from './friendly-error';
 import { coopConfig } from './coop-config';
 
 /**
@@ -300,6 +300,12 @@ export interface SupporterBadge {
   color: string;
 }
 
+// Match the API's /api/upload/presigned limits.
+export const UPLOAD_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+export const POST_VIDEO_MAX_BYTES = 100 * 1024 * 1024;
+
+export type FeedbackCategory = 'BUG' | 'COMPLAINT' | 'IDEA' | 'OTHER';
+
 export interface CommonsPostMedia {
   id?: string;
   pathname: string;
@@ -399,6 +405,14 @@ export interface SearchPerson {
   id: string;
   name: string;
   handle: string;
+}
+
+/** An active person in a Commons. Bot accounts such as Sage are never listed. */
+export interface CommonsMember {
+  id: string;
+  name: string;
+  handle: string;
+  isSteward: boolean;
 }
 
 export interface PrivateGroupSummary {
@@ -537,6 +551,8 @@ export interface PersonalPageFeedPost {
   createdAt: string;
   replies: number;
   support: number;
+  /** Every emoji reaction, ❤️ (the like) first. */
+  reactions?: ReactionSummary[];
   media: CommonsPostMedia[];
   comments: PersonalPageComment[];
 }
@@ -1392,8 +1408,17 @@ export const api = {
     coopId: string,
     sessionToken?: string | null,
     limit = 8,
+    options: { offset?: number; sort?: 'recent' | 'name'; search?: string } = {},
   ) {
-    const input = encodeURIComponent(JSON.stringify({ coopId, limit }));
+    const input = encodeURIComponent(
+      JSON.stringify({
+        coopId,
+        limit,
+        offset: options.offset,
+        sort: options.sort,
+        search: options.search?.trim() || undefined,
+      }),
+    );
     const response = await fetch(
       `${API_BASE_URL}/trpc/commons.listMembers?input=${input}`,
       {
@@ -1404,7 +1429,8 @@ export const api = {
 
     return readTrpcResult<{
       totalCount: number;
-      members: { id: string; name: string; handle: string }[];
+      hasMore: boolean;
+      members: CommonsMember[];
     }>(response, 'Failed to load commons members');
   },
 
@@ -1446,6 +1472,28 @@ export const api = {
       response,
       'Could not send the commons suggestion',
     );
+  },
+
+  /** A member's complaint, bug report or idea; the team sees it in Slack. */
+  async submitFeedback(
+    data: {
+      category: FeedbackCategory;
+      message: string;
+      screenshotUrls: string[];
+      screen?: string;
+      coopId?: string;
+      platform?: string;
+      appVersion?: string;
+    },
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/feedback.submit`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{ id: string }>(response, 'Could not send your feedback');
   },
 
   async createCommonsPost(
@@ -1725,25 +1773,6 @@ export const api = {
     );
   },
 
-  async togglePersonalPageSupport(
-    postId: string,
-    sessionToken?: string | null,
-  ) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/commons.togglePersonalPagePostSupport`,
-      {
-        method: 'POST',
-        headers: createApiHeaders(null, sessionToken),
-        body: JSON.stringify({ postId }),
-      },
-    );
-
-    return readTrpcResult<{ supported: boolean }>(
-      response,
-      'Failed to update like',
-    );
-  },
-
   async editComment(
     data: { commentId: string; content: string },
     sessionToken?: string | null,
@@ -1813,8 +1842,8 @@ export const api = {
 
   async uploadCommonsPostMedia(data: {
     coopId: string;
-    /** Blob folder; profile photos use 'profile'. */
-    uploadType?: 'post' | 'profile';
+    /** Blob folder; profile photos use 'profile', feedback screenshots 'feedback'. */
+    uploadType?: 'post' | 'profile' | 'feedback';
     uri: string;
     fileName?: string | null;
     mimeType: string;
@@ -1855,6 +1884,19 @@ export const api = {
 
     const fileResponse = await fetch(data.uri);
     const fileBlob = await fileResponse.blob();
+    // iOS often omits a video's size at pick time, so check the real file
+    // before sending it; storage would otherwise reject it partway through.
+    const maxBytes =
+      data.mediaType === 'video' && (data.uploadType || 'post') === 'post'
+        ? POST_VIDEO_MAX_BYTES
+        : UPLOAD_IMAGE_MAX_BYTES;
+    if (fileBlob.size > maxBytes) {
+      const kind = data.mediaType === 'video' ? 'video' : 'photo';
+      throw new ApiError(
+        `That ${kind} is ${Math.ceil(fileBlob.size / 1024 / 1024)} MB. Each ${kind} must be under ${Math.round(maxBytes / 1024 / 1024)} MB.`,
+        { code: 'PAYLOAD_TOO_LARGE', httpStatus: 413 },
+      );
+    }
     const uploadResponse = await fetch(tokenData.uploadUrl, {
       method: 'PUT',
       headers: {
@@ -1866,7 +1908,13 @@ export const api = {
     });
 
     if (!uploadResponse.ok) {
-      throw httpError(uploadResponse.status);
+      // Keep storage's own reason (expired token, size, content type) for
+      // error reports; the member still sees friendly wording.
+      const detail = await uploadResponse.text().catch(() => '');
+      throw new ApiError(
+        `Upload to storage failed (status: ${uploadResponse.status}) ${detail.slice(0, 300)}`.trim(),
+        { httpStatus: uploadResponse.status },
+      );
     }
 
     const blobResult = await uploadResponse.json();
@@ -2000,6 +2048,21 @@ export const api = {
   /** Toggles one emoji on a post; ❤️ is the post's like. */
   async togglePostReaction(postId: string, emoji: string, sessionToken?: string | null) {
     const response = await fetch(`${API_BASE_URL}/trpc/commons.togglePostReaction`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ postId, emoji }),
+    });
+
+    return readTrpcResult<{
+      emoji: string;
+      reacted: boolean;
+      support: number;
+      reactions: ReactionSummary[];
+    }>(response, 'Could not update your reaction');
+  },
+
+  async togglePersonalPagePostReaction(postId: string, emoji: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.togglePersonalPagePostReaction`, {
       method: 'POST',
       headers: createApiHeaders(null, sessionToken),
       body: JSON.stringify({ postId, emoji }),

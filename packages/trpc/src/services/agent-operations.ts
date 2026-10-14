@@ -3,9 +3,6 @@ import { db } from "@repo/db";
 import { getSageAutonomyUsage } from "./sage-autonomy.js";
 import type { AgentOperationalIssue } from "./slack-notification-service.js";
 
-const WEEKLY_OUTREACH_FLAG = "sage_weekly_outreach";
-const COMMUNITY_MEMORY_FLAG = "sage_community_memory";
-const PRIVATE_SAFETY_FLAG = "sage_private_safety_response";
 const WAKE_STALE_MS = 45 * 60 * 1000;
 const RUNNING_STALE_MS = 20 * 60 * 1000;
 
@@ -38,21 +35,6 @@ function newsletterSchedule(value: unknown, agentId: "article-writer" | "event-w
   };
 }
 
-export function flagIssue(input: {
-  agentId: string;
-  flag: { enabled: boolean } | undefined;
-  missingDefault: boolean;
-  gatedReason?: string;
-}): AgentOperationalIssue | null {
-  const enabled = input.flag?.enabled ?? input.missingDefault;
-  if (enabled) return null;
-  return {
-    agentId: input.agentId,
-    state: input.gatedReason ? "GATED" : "OFF",
-    reason: input.gatedReason ?? "Feature flag is disabled. An operator must explicitly turn it back on.",
-  };
-}
-
 export interface AgentOperationalSnapshot {
   checkedAt: Date;
   issues: AgentOperationalIssue[];
@@ -65,11 +47,7 @@ export interface AgentOperationalSnapshot {
  */
 export async function getAgentOperationalSnapshot(now = new Date()): Promise<AgentOperationalSnapshot> {
   const issues: AgentOperationalIssue[] = [];
-  const [flags, configs, settings, publicInfos] = await Promise.all([
-    db.featureFlag.findMany({
-      where: { key: { in: [WEEKLY_OUTREACH_FLAG, COMMUNITY_MEMORY_FLAG, PRIVATE_SAFETY_FLAG] } },
-      select: { key: true, enabled: true },
-    }),
+  const [configs, settings, publicInfos] = await Promise.all([
     db.coopConfig.findMany({
       where: { isActive: true, isDemo: false },
       select: { coopId: true },
@@ -78,24 +56,6 @@ export async function getAgentOperationalSnapshot(now = new Date()): Promise<Age
     db.commonsAgentSetting.findMany({ select: { coopId: true, autoReply: true } }),
     db.publicCoopInfo.findMany({ select: { coopId: true, previewOverrides: true } }),
   ]);
-
-  const flagByKey = new Map(flags.map((flag) => [flag.key, flag]));
-  const flagIssues = [
-    flagIssue({ agentId: "sage-weekly-outreach", flag: flagByKey.get(WEEKLY_OUTREACH_FLAG), missingDefault: true }),
-    flagIssue({
-      agentId: "sage-community-memory",
-      flag: flagByKey.get(COMMUNITY_MEMORY_FLAG),
-      missingDefault: false,
-      gatedReason: "Feature flag is disabled pending privacy review.",
-    }),
-    flagIssue({
-      agentId: "sage-private-safety-response",
-      flag: flagByKey.get(PRIVATE_SAFETY_FLAG),
-      missingDefault: false,
-      gatedReason: "Feature flag is disabled pending policy and legal review.",
-    }),
-  ].filter((issue): issue is AgentOperationalIssue => issue !== null);
-  issues.push(...flagIssues);
 
   if (!process.env.OPENAI_API_KEY) {
     issues.push({ agentId: "model-backed-agents", state: "BROKEN", reason: "OPENAI_API_KEY is missing; model calls cannot run." });

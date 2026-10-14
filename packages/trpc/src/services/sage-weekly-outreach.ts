@@ -4,17 +4,19 @@ import { Agent, run } from "@openai/agents";
 import { db } from "@repo/db";
 import { z } from "zod";
 
+import { auditLogEntry } from "../lib/audit.js";
 import { ensureSageBotUser } from "../lib/bot.js";
 import { COMMONS_COOP_ID } from "../lib/commons.js";
 import { recordAgentResultCost } from "./ai-cost.js";
 import { directKeyFor, openDirectCircle, sendDirectCircleMessage } from "./direct-circles.js";
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
+import { PROACTIVE_WEEKLY_LIMIT, proactiveCountThisWeek, sendProactiveSageMessage } from "./sage-proactive.js";
 import { cleanseUntrustedText } from "./untrusted-input.js";
 
-export const WEEKLY_OUTREACH_FLAG = "sage_weekly_outreach";
 export const WEEKLY_OUTREACH_AGENT = "sage-weekly-outreach";
 export const WEEKLY_OUTREACH_BATCH = 100;
 export const WEEKLY_OUTREACH_HOUR_UTC = 18;
+export const WEEKLY_OUTREACH_SCHEDULE_VERSION = "v1";
 const RECENT_CONVERSATION_DAYS = 7;
 const RECOVERY_HOURS = 48;
 const DAY_MS = 86_400_000;
@@ -51,10 +53,11 @@ export function assignedOutreachAt(userId: string, now: Date, scheduleVersion = 
   return scheduled;
 }
 
-export function outreachIsDue(input: { userId: string; now: Date; enabledAt: Date; scheduleVersion?: string }) {
+/** Due from the member's assigned time for 48 hours. `notBefore` skips slots before a cutoff (tests, recovery). */
+export function outreachIsDue(input: { userId: string; now: Date; notBefore?: Date; scheduleVersion?: string }) {
   const scheduledAt = assignedOutreachAt(input.userId, input.now, input.scheduleVersion);
   const age = input.now.getTime() - scheduledAt.getTime();
-  return scheduledAt >= input.enabledAt && age >= 0 && age <= RECOVERY_HOURS * 3_600_000;
+  return (!input.notBefore || scheduledAt >= input.notBefore) && age >= 0 && age <= RECOVERY_HOURS * 3_600_000;
 }
 
 function firstName(name: string | null, email: string) {
@@ -166,6 +169,131 @@ function isUniqueViolation(error: unknown) {
   return typeof error === "object" && error !== null && (error as { code?: string }).code === "P2002";
 }
 
+type SageBot = Awaited<ReturnType<typeof ensureSageBotUser>>;
+
+async function deliverOutreach(
+  sage: SageBot,
+  user: { id: string; name: string | null; email: string },
+  now: Date,
+  systemKey: string,
+  generateWithModel?: boolean,
+) {
+  const context = await loadOutreachContext(user.id, now);
+  const generated = generateWithModel === false
+    ? { content: fallbackMessage(user, context), usedFallback: false }
+    : await generateOutreach(user, context);
+  const { group } = await openDirectCircle(db, { coopId: COMMONS_COOP_ID, userId: sage.id, otherUserId: user.id });
+  await sendDirectCircleMessage(db, { group, sender: sage, content: generated.content, systemKey });
+  return { groupId: group.id, content: generated.content };
+}
+
+const OUTREACH_KEY_PREFIX = "sage-weekly:";
+const MANUAL_KEY_MARKER = "manual-";
+
+const outreachMemberWhere = {
+  deletedAt: null, isBot: false, status: "ACTIVE" as const, memberships: { some: { status: "ACTIVE" as const } },
+};
+
+/**
+ * Platform-admin trigger: send one check-in to a chosen member right now. It skips the weekday
+ * schedule and the recent-conversation pause, but uses its own system key so it never uses up or
+ * blocks that member's scheduled weekly check-in. Replies get the normal check-in follow-ups.
+ */
+export async function sendSageOutreachNow(
+  userId: string,
+  options: { now?: Date; generateWithModel?: boolean; sentBy?: string } = {},
+) {
+  const now = options.now ?? new Date();
+  const user = await db.user.findFirst({ where: { id: userId, ...outreachMemberWhere }, select: { id: true, name: true, email: true } });
+  if (!user) throw new Error("Only active members of at least one Commons can receive a Sage check-in.");
+  const sage = await ensureSageBotUser(db, COMMONS_COOP_ID);
+  const systemKey = `${OUTREACH_KEY_PREFIX}${user.id}:${MANUAL_KEY_MARKER}${now.getTime()}`;
+  const delivered = await deliverOutreach(sage, user, now, systemKey, options.generateWithModel);
+  await db.auditLog.create({
+    data: auditLogEntry({
+      actorId: options.sentBy ?? "system/sage", action: "SAGE_OUTREACH_SENT_MANUALLY", resource: "User", resourceId: user.id,
+      metadata: { groupId: delivered.groupId, systemKey },
+    }),
+  }).catch(console.error);
+  return { ...delivered, name: user.name, email: user.email, sentAt: now.toISOString() };
+}
+
+/** Active members matching a name or email, for the admin outreach page's member picker. */
+export async function searchOutreachMembers(query: string, limit = 10) {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  return db.user.findMany({
+    where: {
+      ...outreachMemberWhere,
+      OR: [{ name: { contains: q, mode: "insensitive" } }, { email: { contains: q, mode: "insensitive" } }],
+    },
+    orderBy: { email: "asc" },
+    take: limit,
+    select: { id: true, name: true, email: true },
+  });
+}
+
+export interface SageOutreachHistoryRow {
+  userId: string;
+  name: string | null;
+  email: string;
+  lastReachedAt: string;
+  lastTrigger: "scheduled" | "manual";
+  lastMessage: string;
+  outreachCount: number;
+  repliedAt: string | null;
+}
+
+/** Most recent Sage check-in per member, newest first, with whether they replied since. */
+export async function listSageOutreachHistory(options: { limit?: number; scan?: number } = {}) {
+  const limit = options.limit ?? 200;
+  const comments = await db.groupComment.findMany({
+    where: { systemKey: { startsWith: OUTREACH_KEY_PREFIX } },
+    orderBy: { createdAt: "desc" },
+    take: options.scan ?? 2000,
+    select: { groupId: true, content: true, createdAt: true, systemKey: true },
+  });
+  const latest = new Map<string, { groupId: string; content: string; createdAt: Date; manual: boolean; count: number }>();
+  for (const comment of comments) {
+    const [, userId, suffix = ""] = (comment.systemKey ?? "").split(":");
+    if (!userId) continue;
+    const seen = latest.get(userId);
+    if (seen) seen.count++;
+    else if (latest.size < limit) {
+      latest.set(userId, {
+        groupId: comment.groupId, content: comment.content, createdAt: comment.createdAt,
+        manual: suffix.startsWith(MANUAL_KEY_MARKER), count: 1,
+      });
+    }
+  }
+  if (!latest.size) return [] as SageOutreachHistoryRow[];
+  const userIds = [...latest.keys()];
+  const [users, replies] = await Promise.all([
+    db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, email: true } }),
+    db.groupComment.groupBy({
+      by: ["groupId", "authorId"],
+      where: { groupId: { in: [...new Set([...latest.values()].map((row) => row.groupId))] }, authorId: { in: userIds } },
+      _max: { createdAt: true },
+    }),
+  ]);
+  const byId = new Map(users.map((user) => [user.id, user]));
+  const replyAt = new Map(replies.map((reply) => [`${reply.groupId}:${reply.authorId}`, reply._max.createdAt]));
+  return userIds.flatMap((userId): SageOutreachHistoryRow[] => {
+    const row = latest.get(userId)!;
+    const user = byId.get(userId);
+    if (!user) return [];
+    const reply = replyAt.get(`${row.groupId}:${userId}`);
+    return [{
+      userId, name: user.name, email: user.email,
+      lastReachedAt: row.createdAt.toISOString(),
+      lastTrigger: row.manual ? "manual" : "scheduled",
+      lastMessage: row.content,
+      outreachCount: row.count,
+      repliedAt: reply && reply > row.createdAt ? reply.toISOString() : null,
+    }];
+  });
+}
+
 export interface WeeklyOutreachSummary {
   enabled: boolean;
   modelConfigured: boolean;
@@ -174,12 +302,14 @@ export interface WeeklyOutreachSummary {
   sent: number;
   recent: number;
   duplicate: number;
+  /** Skipped because the member already had the week's outreach limit from Sage. */
+  limited: number;
   failed: number;
   modelFallbacks: number;
   deliveries: Array<{
     userId: string;
     label: string;
-    status: "SENT" | "RECENT_CONVERSATION" | "DUPLICATE" | "FAILED";
+    status: "SENT" | "RECENT_CONVERSATION" | "DUPLICATE" | "LIMITED" | "FAILED";
     reason?: string;
   }>;
 }
@@ -187,8 +317,7 @@ export interface WeeklyOutreachSummary {
 export async function runWeeklySageOutreach(options: {
   now?: Date;
   userIds?: string[];
-  enabled?: boolean;
-  enabledAt?: Date;
+  notBefore?: Date;
   scheduleVersion?: string;
   limit?: number;
   /** Internal test/recovery controls; never accepted by a public API. */
@@ -196,41 +325,26 @@ export async function runWeeklySageOutreach(options: {
   generateWithModel?: boolean;
 } = {}): Promise<WeeklyOutreachSummary> {
   const now = options.now ?? new Date();
-  const flag = options.enabled === undefined
-    ? await db.featureFlag.findUnique({ where: { key: WEEKLY_OUTREACH_FLAG } })
-    : null;
-  // Weekly check-ins are a reviewed, low-risk workflow. A missing flag is on by
-  // default; an explicit false remains an emergency/operator pause and is
-  // surfaced by the operational watchdog.
-  const enabled = options.enabled ?? flag?.enabled ?? true;
   const summary: WeeklyOutreachSummary = {
-    enabled,
+    enabled: true,
     modelConfigured: Boolean(process.env.OPENAI_API_KEY),
     considered: 0,
     due: 0,
     sent: 0,
     recent: 0,
     duplicate: 0,
+    limited: 0,
     failed: 0,
     modelFallbacks: 0,
     deliveries: [],
   };
-  if (!enabled) return summary;
-  const metadata = (flag?.metadata ?? {}) as { enabledAt?: string; scheduleVersion?: string };
-  const enabledAt = options.enabledAt ?? (metadata.enabledAt ? new Date(metadata.enabledAt) : flag?.updatedAt ?? now);
-  const scheduleVersion = options.scheduleVersion ?? metadata.scheduleVersion ?? "v1";
+  const scheduleVersion = options.scheduleVersion ?? WEEKLY_OUTREACH_SCHEDULE_VERSION;
   const members: Array<{ id: string; name: string | null; handle: string | null; email: string }> = [];
   let cursor: string | undefined;
   const maximum = options.limit ?? Number.POSITIVE_INFINITY;
   while (members.length < maximum) {
     const page = await db.user.findMany({
-      where: {
-        ...(options.userIds ? { id: { in: options.userIds } } : {}),
-        deletedAt: null,
-        isBot: false,
-        status: "ACTIVE",
-        memberships: { some: { status: "ACTIVE" } },
-      },
+      where: { ...(options.userIds ? { id: { in: options.userIds } } : {}), ...outreachMemberWhere },
       orderBy: { id: "asc" },
       take: Math.min(WEEKLY_OUTREACH_BATCH, maximum - members.length),
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -244,7 +358,7 @@ export async function runWeeklySageOutreach(options: {
   const sage = await ensureSageBotUser(db, COMMONS_COOP_ID);
   const recentSince = new Date(now.getTime() - RECENT_CONVERSATION_DAYS * DAY_MS);
   for (const user of members) {
-    if (!outreachIsDue({ userId: user.id, now, enabledAt, scheduleVersion })) continue;
+    if (!outreachIsDue({ userId: user.id, now, notBefore: options.notBefore, scheduleVersion })) continue;
     summary.due++;
     const label = user.handle ? `@${user.handle}` : user.name?.trim() || `member ${user.id.slice(0, 8)}`;
     const systemKey = `sage-weekly:${user.id}:${isoWeekKey(now)}`;
@@ -266,20 +380,39 @@ export async function runWeeklySageOutreach(options: {
           continue;
         }
       }
+      // Checked before writing the message, so a member at the limit doesn't cost a model call.
+      if (await proactiveCountThisWeek(user.id, now) >= PROACTIVE_WEEKLY_LIMIT) {
+        summary.limited++;
+        summary.deliveries.push({ userId: user.id, label, status: "LIMITED" });
+        continue;
+      }
       const context = await loadOutreachContext(user.id, now);
       const generated: GeneratedOutreach = options.generateWithModel === false
         ? { content: fallbackMessage(user, context), usedFallback: false }
         : await generateOutreach(user, context);
       if (generated.usedFallback) summary.modelFallbacks++;
-      const { group } = await openDirectCircle(db, { coopId: COMMONS_COOP_ID, userId: sage.id, otherUserId: user.id });
-      await sendDirectCircleMessage(db, { group, sender: sage, content: generated.content, systemKey });
-      summary.sent++;
-      summary.deliveries.push({
+      const sent = await sendProactiveSageMessage({
         userId: user.id,
-        label,
-        status: "SENT",
-        ...(generated.usedFallback ? { reason: generated.fallbackReason } : {}),
+        kind: "weekly",
+        key: `${user.id}:${isoWeekKey(now)}`,
+        content: generated.content,
+        now,
       });
+      if (sent.status === "SENT") {
+        summary.sent++;
+        summary.deliveries.push({
+          userId: user.id,
+          label,
+          status: "SENT",
+          ...(generated.usedFallback ? { reason: generated.fallbackReason } : {}),
+        });
+      } else if (sent.status === "LIMITED") {
+        summary.limited++;
+        summary.deliveries.push({ userId: user.id, label, status: "LIMITED" });
+      } else {
+        summary.duplicate++;
+        summary.deliveries.push({ userId: user.id, label, status: "DUPLICATE" });
+      }
     } catch (error) {
       if (isUniqueViolation(error)) {
         summary.duplicate++;

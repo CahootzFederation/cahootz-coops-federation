@@ -114,9 +114,17 @@ async function loadOutreachContext(userId: string, now: Date): Promise<OutreachC
   return { commons: available.map((commons) => commons.name), activity, focusCommons };
 }
 
-async function generateOutreach(member: { name: string | null; email: string }, context: OutreachContext) {
+interface GeneratedOutreach {
+  content: string;
+  usedFallback: boolean;
+  fallbackReason?: "MODEL_NOT_CONFIGURED" | "MODEL_FAILED";
+}
+
+async function generateOutreach(member: { name: string | null; email: string }, context: OutreachContext): Promise<GeneratedOutreach> {
   const fallback = fallbackMessage(member, context);
-  if (!process.env.OPENAI_API_KEY) return fallback;
+  if (!process.env.OPENAI_API_KEY) {
+    return { content: fallback, usedFallback: true, fallbackReason: "MODEL_NOT_CONFIGURED" };
+  }
   const agent = new Agent({
     name: "Sage Weekly Check-in",
     model: process.env.COMMONS_AI_MODEL || "gpt-5.6-luna",
@@ -132,17 +140,26 @@ async function generateOutreach(member: { name: string | null; email: string }, 
     ].join("\n"),
     outputType: OutreachOutputZ,
   });
-  const result = await run(agent, JSON.stringify({
-    memberFirstName: firstName(member.name, member.email),
-    commons: context.commons.slice(0, 8),
-    focusCommons: context.focusCommons?.name ?? null,
-    recentMemberActivity: context.activity.slice(0, 4),
-  }));
-  await recordAgentResultCost({ coopId: COMMONS_COOP_ID, feature: WEEKLY_OUTREACH_AGENT, model: process.env.COMMONS_AI_MODEL || "gpt-5.6-luna", result }).catch(console.error);
-  const message = OutreachOutputZ.parse(result.finalOutput).message.trim();
-  if (!message) return fallback;
-  if (context.focusCommons && !message.toLocaleLowerCase().includes(context.focusCommons.name.toLocaleLowerCase())) return fallback;
-  return message;
+  try {
+    const result = await run(agent, JSON.stringify({
+      memberFirstName: firstName(member.name, member.email),
+      commons: context.commons.slice(0, 8),
+      focusCommons: context.focusCommons?.name ?? null,
+      recentMemberActivity: context.activity.slice(0, 4),
+    }));
+    await recordAgentResultCost({ coopId: COMMONS_COOP_ID, feature: WEEKLY_OUTREACH_AGENT, model: process.env.COMMONS_AI_MODEL || "gpt-5.6-luna", result }).catch(console.error);
+    const message = OutreachOutputZ.parse(result.finalOutput).message.trim();
+    if (!message) return { content: fallback, usedFallback: true, fallbackReason: "MODEL_FAILED" };
+    if (context.focusCommons && !message.toLocaleLowerCase().includes(context.focusCommons.name.toLocaleLowerCase())) {
+      return { content: fallback, usedFallback: true, fallbackReason: "MODEL_FAILED" };
+    }
+    return { content: message, usedFallback: false };
+  } catch (error) {
+    console.error("[sage-weekly-outreach] Model generation failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { content: fallback, usedFallback: true, fallbackReason: "MODEL_FAILED" };
+  }
 }
 
 function isUniqueViolation(error: unknown) {
@@ -151,12 +168,20 @@ function isUniqueViolation(error: unknown) {
 
 export interface WeeklyOutreachSummary {
   enabled: boolean;
+  modelConfigured: boolean;
   considered: number;
   due: number;
   sent: number;
   recent: number;
   duplicate: number;
   failed: number;
+  modelFallbacks: number;
+  deliveries: Array<{
+    userId: string;
+    label: string;
+    status: "SENT" | "RECENT_CONVERSATION" | "DUPLICATE" | "FAILED";
+    reason?: string;
+  }>;
 }
 
 export async function runWeeklySageOutreach(options: {
@@ -174,13 +199,27 @@ export async function runWeeklySageOutreach(options: {
   const flag = options.enabled === undefined
     ? await db.featureFlag.findUnique({ where: { key: WEEKLY_OUTREACH_FLAG } })
     : null;
-  const enabled = options.enabled ?? flag?.enabled ?? false;
-  const summary: WeeklyOutreachSummary = { enabled, considered: 0, due: 0, sent: 0, recent: 0, duplicate: 0, failed: 0 };
+  // Weekly check-ins are a reviewed, low-risk workflow. A missing flag is on by
+  // default; an explicit false remains an emergency/operator pause and is
+  // surfaced by the operational watchdog.
+  const enabled = options.enabled ?? flag?.enabled ?? true;
+  const summary: WeeklyOutreachSummary = {
+    enabled,
+    modelConfigured: Boolean(process.env.OPENAI_API_KEY),
+    considered: 0,
+    due: 0,
+    sent: 0,
+    recent: 0,
+    duplicate: 0,
+    failed: 0,
+    modelFallbacks: 0,
+    deliveries: [],
+  };
   if (!enabled) return summary;
   const metadata = (flag?.metadata ?? {}) as { enabledAt?: string; scheduleVersion?: string };
   const enabledAt = options.enabledAt ?? (metadata.enabledAt ? new Date(metadata.enabledAt) : flag?.updatedAt ?? now);
   const scheduleVersion = options.scheduleVersion ?? metadata.scheduleVersion ?? "v1";
-  const members: Array<{ id: string; name: string | null; email: string }> = [];
+  const members: Array<{ id: string; name: string | null; handle: string | null; email: string }> = [];
   let cursor: string | undefined;
   const maximum = options.limit ?? Number.POSITIVE_INFINITY;
   while (members.length < maximum) {
@@ -195,7 +234,7 @@ export async function runWeeklySageOutreach(options: {
       orderBy: { id: "asc" },
       take: Math.min(WEEKLY_OUTREACH_BATCH, maximum - members.length),
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, handle: true, email: true },
     });
     members.push(...page);
     if (page.length < WEEKLY_OUTREACH_BATCH || !page.at(-1)) break;
@@ -207,10 +246,12 @@ export async function runWeeklySageOutreach(options: {
   for (const user of members) {
     if (!outreachIsDue({ userId: user.id, now, enabledAt, scheduleVersion })) continue;
     summary.due++;
+    const label = user.handle ? `@${user.handle}` : user.name?.trim() || `member ${user.id.slice(0, 8)}`;
     const systemKey = `sage-weekly:${user.id}:${isoWeekKey(now)}`;
     try {
       if (await db.groupComment.findUnique({ where: { systemKey }, select: { id: true } })) {
         summary.duplicate++;
+        summary.deliveries.push({ userId: user.id, label, status: "DUPLICATE" });
         continue;
       }
       const directKey = directKeyFor(COMMONS_COOP_ID, sage.id, user.id);
@@ -221,21 +262,33 @@ export async function runWeeklySageOutreach(options: {
         });
         if (recent) {
           summary.recent++;
+          summary.deliveries.push({ userId: user.id, label, status: "RECENT_CONVERSATION" });
           continue;
         }
       }
       const context = await loadOutreachContext(user.id, now);
-      const content = options.generateWithModel === false
-        ? fallbackMessage(user, context)
-        : await generateOutreach(user, context).catch(() => fallbackMessage(user, context));
+      const generated: GeneratedOutreach = options.generateWithModel === false
+        ? { content: fallbackMessage(user, context), usedFallback: false }
+        : await generateOutreach(user, context);
+      if (generated.usedFallback) summary.modelFallbacks++;
       const { group } = await openDirectCircle(db, { coopId: COMMONS_COOP_ID, userId: sage.id, otherUserId: user.id });
-      await sendDirectCircleMessage(db, { group, sender: sage, content, systemKey });
+      await sendDirectCircleMessage(db, { group, sender: sage, content: generated.content, systemKey });
       summary.sent++;
+      summary.deliveries.push({
+        userId: user.id,
+        label,
+        status: "SENT",
+        ...(generated.usedFallback ? { reason: generated.fallbackReason } : {}),
+      });
     } catch (error) {
-      if (isUniqueViolation(error)) summary.duplicate++;
-      else {
+      if (isUniqueViolation(error)) {
+        summary.duplicate++;
+        summary.deliveries.push({ userId: user.id, label, status: "DUPLICATE" });
+      } else {
         summary.failed++;
-        console.error("[sage-weekly-outreach] Member delivery failed", { userId: user.id, error: error instanceof Error ? error.message : String(error) });
+        const reason = error instanceof Error ? error.message : String(error);
+        summary.deliveries.push({ userId: user.id, label, status: "FAILED", reason: reason.slice(0, 240) });
+        console.error("[sage-weekly-outreach] Member delivery failed", { userId: user.id, error: reason });
       }
     }
   }

@@ -137,6 +137,15 @@ their answer is not silently attributed to every community. Delivery uses the ex
 DM, inbox alert, push notification, and mobile deep link. The key
 `sage-weekly:<userId>:<isoWeek>` makes retries idempotent.
 
+The production sweep posts a daily operational receipt through the existing configured Slack
+webhook. It names each due member by handle or display name (never by private-message contents) and
+records whether delivery was sent, skipped for a recent conversation, deduplicated, or failed. A
+separate hourly watchdog repeats a prominent alert while any configurable agent is disabled,
+safety-gated, paused by a Commons autonomy limit, stale, or broken. The watchdog reports the exact
+gate or shutdown reason. It does not bypass the gate: private urgent-disclosure responses remain off
+until policy and legal review, and governance, money, membership, and disciplinary decisions remain
+human-authorized.
+
 Private replies are classified for safety before any memory extraction. Sensitive medical,
 legal, financial, relationship, identity, abuse, or crisis details are aggregation-ineligible.
 Urgent disclosures stay in the private safety path, which is disabled until policy and legal

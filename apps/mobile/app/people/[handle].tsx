@@ -87,8 +87,8 @@ export default function PublicPersonPageScreen() {
   }, [routeHandle, sessionToken, reloadKey]);
 
   const profileName = useMemo(() => {
-    return profile?.name || routeName || pagePosts[0]?.author || posts[0]?.author || routeHandle;
-  }, [pagePosts, posts, profile?.name, routeHandle, routeName]);
+    return profile?.nickname || profile?.name || routeName || pagePosts[0]?.author || posts[0]?.author || routeHandle;
+  }, [pagePosts, posts, profile?.name, profile?.nickname, routeHandle, routeName]);
 
   const isOwnPage = user?.handle ? user.handle === routeHandle : false;
   const totalPostCount = pagePosts.length + posts.length;
@@ -196,6 +196,9 @@ export default function PublicPersonPageScreen() {
                 <Text className="text-2xl font-black text-gray-950" numberOfLines={1}>
                   {profileName}
                 </Text>
+                {profile?.nickname && profile.name ? (
+                  <Text className="mt-0.5 text-xs font-semibold text-gray-500">{profile.name}</Text>
+                ) : null}
                 <Text className="mt-1 text-sm font-semibold text-gray-500">{personDisplayHandle(routeHandle)}</Text>
                 <View className="mt-3 flex-row flex-wrap gap-2">
                   <Metric label="Posts" value={String(totalPostCount)} />

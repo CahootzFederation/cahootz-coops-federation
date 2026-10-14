@@ -21,6 +21,7 @@ import {
   MessageCircle,
   RotateCcw,
   Scale,
+  Star,
   Store,
   Home,
   UserCircle,
@@ -70,6 +71,8 @@ export default function AppDrawer({
   const [directoryError, setDirectoryError] = useState('');
   const [directoryReloadKey, setDirectoryReloadKey] = useState(0);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  const [defaultSavingId, setDefaultSavingId] = useState<string | null>(null);
+  const [defaultError, setDefaultError] = useState('');
   // Signing out means asking for a new email code to get back in, so it takes a second tap.
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const hasAccountSession = isAuthenticated && !!sessionToken;
@@ -105,13 +108,14 @@ export default function AppDrawer({
   const activeCommonsForDrawer =
     memberCommons.length > 0
       ? memberCommons
-      : [{ ...DEFAULT_COMMONS_PROFILE, accessStatus: 'ACTIVE' as const, isMember: true, isLocked: false, canApply: false }];
+      : [{ ...DEFAULT_COMMONS_PROFILE, accessStatus: 'ACTIVE' as const, isMember: true, isDefault: false, isLocked: false, canApply: false }];
 
   const commonsItems = activeCommonsForDrawer.map((commons) => ({
     id: commons.id,
     label: commons.name,
     accessStatus: commons.accessStatus,
     isMember: commons.isMember,
+    isDefault: commons.isDefault,
     icon: commons.name.slice(0, 1).toUpperCase(),
     iconEmoji: 'iconEmoji' in commons ? commons.iconEmoji : null,
     iconColor: 'iconColor' in commons ? commons.iconColor : null,
@@ -151,6 +155,25 @@ export default function AppDrawer({
   const switchCommons = (coopId: string) => {
     onClose();
     router.replace({ pathname: '/(tabs)', params: { coopId } } as any);
+  };
+
+  const makeDefaultCommons = async (coopId: string) => {
+    if (!sessionToken || defaultSavingId) return;
+    setDefaultSavingId(coopId);
+    setDefaultError('');
+    try {
+      await api.setDefaultCommons(coopId, sessionToken);
+      setMemberCommons((items) =>
+        items
+          .map((item) => ({ ...item, isDefault: item.id === coopId }))
+          .sort((a, b) => Number(b.isDefault) - Number(a.isDefault)),
+      );
+    } catch (error) {
+      console.error('Failed to save default commons:', error);
+      setDefaultError(friendlyError(error, "We couldn't save your default Commons."));
+    } finally {
+      setDefaultSavingId(null);
+    }
   };
 
   const openSignIn = () => {
@@ -218,6 +241,9 @@ export default function AppDrawer({
                 />
               </View>
             ) : null}
+            {defaultError ? (
+              <Text className="mb-3 text-sm font-semibold text-red-600">{defaultError}</Text>
+            ) : null}
             <View className="mb-3 overflow-hidden rounded-2xl border border-stone-200 bg-white">
               {drawerItems.map((item) => {
                 const isActive = item.id === activeCommonsId || (item.id === 'cahootz' && activeCommonsId === 'cahootz');
@@ -279,6 +305,33 @@ export default function AppDrawer({
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
                         <Info size={15} color="#57534E" />
+                      </TouchableOpacity>
+                    ) : null}
+                    {item.id !== PERSONAL_PAGE_DESTINATION_ID && 'isMember' in item && item.isMember ? (
+                      <TouchableOpacity
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          makeDefaultCommons(item.id);
+                        }}
+                        disabled={item.isDefault || defaultSavingId !== null}
+                        className="h-8 w-8 items-center justify-center rounded-full"
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          item.isDefault
+                            ? `${item.label} is your default commons`
+                            : `Make ${item.label} your default commons`
+                        }
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        {defaultSavingId === item.id ? (
+                          <ActivityIndicator size="small" color={THEME.primary} />
+                        ) : (
+                          <Star
+                            size={17}
+                            color={item.isDefault ? '#D97706' : '#A8A29E'}
+                            fill={item.isDefault ? '#FBBF24' : 'transparent'}
+                          />
+                        )}
                       </TouchableOpacity>
                     ) : null}
                     {isActive ? (

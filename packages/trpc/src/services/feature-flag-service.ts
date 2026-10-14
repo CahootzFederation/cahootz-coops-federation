@@ -21,8 +21,8 @@ export const FEATURE_FLAGS = {
   SESSION_MANAGEMENT: 'session_management',
   ADMIN_MFA: 'admin_mfa',
 
-  // Proactive Sage member/community memory workflows. Both default off so
-  // policy review and staged rollout can happen independently.
+  // Weekly outreach is a reviewed low-risk workflow and defaults on. The
+  // memory and urgent private-response paths retain their independent gates.
   SAGE_WEEKLY_OUTREACH: 'sage_weekly_outreach',
   SAGE_COMMUNITY_MEMORY: 'sage_community_memory',
   SAGE_PRIVATE_SAFETY_RESPONSE: 'sage_private_safety_response',
@@ -140,7 +140,7 @@ export async function initializeDefaultFlags(): Promise<void> {
     { key: FEATURE_FLAGS.WALLET_AUTH_V2, enabled: false, description: 'Use challenge-based wallet authentication' },
     { key: FEATURE_FLAGS.SESSION_MANAGEMENT, enabled: false, description: 'Enable session-based auth' },
     { key: FEATURE_FLAGS.ADMIN_MFA, enabled: false, description: 'Require MFA for admin operations' },
-    { key: FEATURE_FLAGS.SAGE_WEEKLY_OUTREACH, enabled: false, description: 'Send one private weekly Sage check-in on each member\'s stable weekday', metadata: { scheduleVersion: 'v1' } },
+    { key: FEATURE_FLAGS.SAGE_WEEKLY_OUTREACH, enabled: true, description: 'Send one private weekly Sage check-in on each member\'s stable weekday', metadata: { scheduleVersion: 'v1' } },
     { key: FEATURE_FLAGS.SAGE_COMMUNITY_MEMORY, enabled: false, description: 'Consolidate consented member signals into Sage-internal Commons hypotheses' },
     { key: FEATURE_FLAGS.SAGE_PRIVATE_SAFETY_RESPONSE, enabled: false, description: 'Use the reviewed private urgent-disclosure response path' },
     

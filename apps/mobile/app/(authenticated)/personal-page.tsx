@@ -289,7 +289,8 @@ export default function PersonalPageScreen() {
                 />
               </TouchableOpacity>
               <View className="min-w-0 flex-1">
-                <Text className="text-xl font-black text-gray-950" numberOfLines={1}>{displayName}</Text>
+                <Text className="text-xl font-black text-gray-950" numberOfLines={1}>{profile?.nickname || displayName}</Text>
+                {profile?.nickname ? <Text className="mt-0.5 text-xs font-semibold text-gray-500">{displayName}</Text> : null}
                 <Text className="mt-0.5 text-sm font-semibold text-gray-500">{personDisplayHandle(publicHandle)}</Text>
               </View>
               <View className="rounded-full bg-gray-100 px-3 py-1.5">

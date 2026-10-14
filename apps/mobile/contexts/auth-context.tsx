@@ -14,6 +14,7 @@ interface User {
   email: string;
   handle: string;
   name: string | null;
+  nickname: string | null;
   roles: string[];
   status: string;
   walletAddress: string | null;
@@ -274,7 +275,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(userData);
       setSessionToken(userData.sessionToken || null);
       if (isNewSignIn) {
-        analytics.identify(userData.id, { coopId: userData.coop?.id ?? 'cahootz' });
+        analytics.identify(userData.id, { coopId: userData.coop?.id ?? 'cahootz', email: userData.email });
         analytics.track('signed_in');
       }
     } catch (error) {

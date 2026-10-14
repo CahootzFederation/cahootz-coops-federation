@@ -553,6 +553,64 @@ describe('commonsRouter', () => {
     ]);
   });
 
+  it('marks and sorts the signed-in member default Commons first', async () => {
+    const db = makeDb({
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          ...ACTIVE_USER,
+          defaultCoopId: 'artists',
+        }),
+      },
+      coopConfig: {
+        findMany: vi.fn().mockResolvedValue([
+          { coopId: 'cahootz', name: 'Cahootz Commons', slug: 'Cahootz' },
+          { coopId: 'artists', name: 'Artists Commons', slug: 'Artists' },
+        ]),
+      },
+      userCoopMembership: {
+        findMany: vi.fn().mockResolvedValue([
+          { coopId: 'cahootz', status: 'ACTIVE', roles: ['member'] },
+          { coopId: 'artists', status: 'ACTIVE', roles: ['member'] },
+        ]),
+      },
+    });
+
+    const result = await callerFor(db, { 'x-session-token': 'token_1' }).listDirectory();
+
+    expect(result.coops.map((commons) => commons.id)).toEqual(['artists', 'cahootz']);
+    expect(result.coops[0]).toEqual(expect.objectContaining({ isDefault: true }));
+    expect(result.coops[1]).toEqual(expect.objectContaining({ isDefault: false }));
+  });
+
+  it('lets an active member choose their default Commons', async () => {
+    const db = makeDb({
+      userCoopMembership: {
+        findUnique: vi.fn().mockResolvedValue({ status: 'ACTIVE' }),
+      },
+    });
+
+    await expect(
+      callerFor(db, { 'x-session-token': 'token_1' }).setDefaultCommons({ coopId: 'artists' }),
+    ).resolves.toEqual({ defaultCoopId: 'artists' });
+    expect(db.user.update).toHaveBeenCalledWith({
+      where: { id: ACTIVE_USER.id },
+      data: { defaultCoopId: 'artists' },
+    });
+  });
+
+  it('does not let a non-member choose a default Commons', async () => {
+    const db = makeDb({
+      userCoopMembership: {
+        findUnique: vi.fn().mockResolvedValue({ status: 'PENDING' }),
+      },
+    });
+
+    await expect(
+      callerFor(db, { 'x-session-token': 'token_1' }).setDefaultCommons({ coopId: 'artists' }),
+    ).rejects.toThrow('Join this Commons');
+    expect(db.user.update).not.toHaveBeenCalled();
+  });
+
   it("counts only the caller's own circles per commons, not every circle that exists", async () => {
     const db = makeDb({
       coopConfig: {

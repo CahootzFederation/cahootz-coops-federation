@@ -16,8 +16,7 @@ import {
   type CleansedText,
 } from "./untrusted-input.js";
 import { sageAutonomyAllowed } from "./sage-autonomy.js";
-import { loadCircleOutcomeMemory } from "./sage-outcome-memory.js";
-import { retrieveSageMemory } from "./sage-memory.js";
+import { loadOutcomeContext } from "./sage-memory.js";
 import { payloadHash } from "./sage-ride-match-agent.js";
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
 import { checkRelevance, modelRelevanceJudge, type RelevanceJudge } from "./sage-grounding.js";
@@ -217,20 +216,21 @@ async function runTrendWindow(
   if (!scanWhere) return { processed: 0 };
 
   try {
-    // Live outcomes in this circle, plus consolidated memory from this circle and the Commons (never
-    // another circle). Bounded both ways; duplicates removed.
-    const liveOutcomes = await loadCircleOutcomeMemory(window.coopId, window.groupId);
-    const remembered = await retrieveSageMemory({
-      coopId: window.coopId, circleId: window.groupId, about: combinedText.slice(0, 2000), purpose: "circle trend analysis", maxItems: 5, maxChars: 800,
-    }).catch(() => []);
-    const priorOutcomes = [...liveOutcomes, ...remembered.map((line) => line.text).filter((text) => !liveOutcomes.some((live) => text.startsWith(live.slice(0, 60))))];
+    // One list under one budget: this circle's outcomes as they stand now, then consolidated memory
+    // from this circle and the Commons (never another circle) for what the live read can't show.
+    const outcomeContext = await loadOutcomeContext({
+      coopId: window.coopId, circleId: window.groupId, about: combinedText.slice(0, 2000), purpose: "circle trend analysis",
+    });
+    const priorOutcomes = outcomeContext.map((line) => line.text);
     const replyTargets = posts.slice(-10);
     trail.step("EVIDENCE", replyTargets.length ? `${replyTargets.length} posts Sage could reply to` : "No posts to reply to", {
       detail: replyTargets.map((post) => `• ${post.title.slice(0, 120)}`).join("\n") || undefined,
     });
     trail.step("EVIDENCE", priorOutcomes.length
       ? `${priorOutcomes.length} earlier Sage outcomes it remembered (this circle and the Commons)`
-      : "No earlier Sage outcomes to remember", { detail: priorOutcomes.join("\n") || undefined });
+      : "No earlier Sage outcomes to remember", {
+        detail: outcomeContext.map((line) => `${line.origin === "live" ? "Current" : "Remembered"}: ${line.text}`).join("\n") || undefined,
+      });
 
     const prompt = JSON.stringify({
       circleName: group.name,

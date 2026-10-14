@@ -2,15 +2,16 @@ import { db } from "@repo/db";
 
 import { auditLogEntry } from "../lib/audit.js";
 import { recordObservation } from "./ai-memory.js";
-import { formatOutcomeLine } from "./sage-outcome-memory.js";
+import { formatOutcomeLine, loadLiveCircleOutcomes, OUTCOME_MEMORY_MAX_CHARS, OUTCOME_MEMORY_MAX_ITEMS } from "./sage-outcome-memory.js";
 
 /**
  * Sage's long-term memory (P1 memory consolidation).
  *
  * Each wake cycle turns what actually happened - suggestions approved, declined or failed, reviewer
  * corrections, follow-ups done or dropped - into scoped AIObservation rows with sources. These are
- * records of decisions, not facts about the world. Newer outcomes about the same thing supersede older
- * ones, and everything expires. Retrieval is bounded and scoped: a private circle's memory is only
+ * records of decisions, not facts about the world. When a remembered action changes afterwards (it is
+ * published or fails after approval, or a reviewer rates or corrects it), its memory is rewritten to
+ * match. Newer outcomes about the same thing supersede older ones, and everything expires. Retrieval is bounded and scoped: a private circle's memory is only
  * ever returned for that circle, and every system read is audited.
  */
 export const MEMORY_TTL_DAYS = 180;
@@ -36,10 +37,14 @@ export function overlap(a: string, b: string): number {
   return shared / Math.min(left.size, right.size);
 }
 
-async function alreadyRemembered(sourceType: string, sourceIds: string[]): Promise<Set<string>> {
-  if (!sourceIds.length) return new Set();
-  const rows = await db.aIObservationSource.findMany({ where: { sourceType, sourceId: { in: sourceIds } }, select: { sourceId: true } });
-  return new Set(rows.map((row) => row.sourceId));
+/** This memory's own rows for each source, by source id. Other agents' observations that cite the same source don't count. */
+async function alreadyRemembered(sourceType: string, sourceIds: string[]): Promise<Map<string, { id: string; summary: string }>> {
+  if (!sourceIds.length) return new Map();
+  const rows = await db.aIObservationSource.findMany({
+    where: { sourceType, sourceId: { in: sourceIds }, observation: { generatedByAgentKey: AGENT_KEY } },
+    select: { sourceId: true, observation: { select: { id: true, summary: true } } },
+  });
+  return new Map(rows.map((row) => [row.sourceId, row.observation]));
 }
 
 /** Marks older active memories in the same scope about nearly the same thing as superseded. */
@@ -58,11 +63,15 @@ async function supersedeOlder(scopeType: string, scopeId: string, newId: string,
 }
 
 /** Turns recent outcomes in a Commons into memory. Safe to run repeatedly: each source is remembered once. */
-export async function consolidateSageMemory(coopId: string, now = new Date()): Promise<{ remembered: number; superseded: number }> {
+export async function consolidateSageMemory(coopId: string, now = new Date()): Promise<{ remembered: number; superseded: number; refreshed: number }> {
   const since = new Date(now.getTime() - CONSOLIDATE_LOOKBACK_DAYS * DAY_MS);
   const [actions, tasks] = await Promise.all([
     db.commonsAction.findMany({
-      where: { coopId, status: { in: [...TERMINAL] }, updatedAt: { gte: since }, type: { notIn: ["RIDE_MATCH_PROPOSAL", "CONNECT_MEMBERS", "ESCALATE_TO_ADMIN", "NO_ACTION"] } },
+      // A rating or correction added later changes the feedback row, not the action, so look at both.
+      where: {
+        coopId, status: { in: [...TERMINAL] }, type: { notIn: ["RIDE_MATCH_PROPOSAL", "CONNECT_MEMBERS", "ESCALATE_TO_ADMIN", "NO_ACTION"] },
+        OR: [{ updatedAt: { gte: since } }, { feedback: { updatedAt: { gte: since } } }],
+      },
       select: { id: true, summary: true, status: true, createdAt: true, payload: true, circleId: true, type: true,
         feedback: { select: { rating: true, notes: true, correctedText: true } } },
       orderBy: { updatedAt: "asc" }, take: 200,
@@ -82,14 +91,25 @@ export async function consolidateSageMemory(coopId: string, now = new Date()): P
 
   let remembered = 0;
   let superseded = 0;
+  let refreshed = 0;
   for (const action of actions) {
-    if (doneActions.has(action.id)) continue;
+    const line = formatOutcomeLine({ summary: action.summary, status: action.status, createdAt: action.createdAt, payload: action.payload, feedback: action.feedback });
+    const details = { title: action.summary, status: action.status, actionType: action.type, capability: (action.payload as { capability?: string } | null)?.capability ?? null };
+    const existing = doneActions.get(action.id);
+    if (existing) {
+      // Remembered before its status or feedback changed: bring the memory up to date instead of
+      // leaving an outdated outcome next to the live one.
+      if (existing.summary !== line) {
+        await db.aIObservation.update({ where: { id: existing.id }, data: { summary: line, details } });
+        refreshed++;
+      }
+      continue;
+    }
     const scope = action.circleId && !action.circleId.startsWith("general:") ? { scopeType: "circle", scopeId: action.circleId, visibility: "CIRCLE" as const }
       : { scopeType: "commons", scopeId: coopId, visibility: "COMMONS_MEMBERS" as const };
-    const line = formatOutcomeLine({ summary: action.summary, status: action.status, createdAt: action.createdAt, payload: action.payload, feedback: action.feedback });
     const row = await recordObservation({
       type: "sage_outcome", ...scope, confidence: 1, summary: line,
-      details: { title: action.summary, status: action.status, actionType: action.type, capability: (action.payload as { capability?: string } | null)?.capability ?? null },
+      details,
       sources: [{ type: "commons_action", id: action.id }],
       expiresAt: new Date(now.getTime() + MEMORY_TTL_DAYS * DAY_MS), reviewAt: new Date(now.getTime() + MEMORY_REVIEW_DAYS * DAY_MS),
       generatedByAgentKey: AGENT_KEY,
@@ -111,7 +131,7 @@ export async function consolidateSageMemory(coopId: string, now = new Date()): P
     });
     remembered++;
   }
-  return { remembered, superseded };
+  return { remembered, superseded, refreshed };
 }
 
 /** Expires memories past their date in this Commons and its circles. */
@@ -189,4 +209,47 @@ export async function maintainSageMemory(coopId: string, now = new Date()) {
   const consolidated = await consolidateSageMemory(coopId, now);
   const expired = await expireSageMemory(coopId, now);
   return { ...consolidated, expired };
+}
+
+export interface OutcomeContextLine {
+  text: string;
+  /** live: read from the action itself just now. remembered: consolidated memory. */
+  origin: "live" | "remembered";
+}
+
+/** Share of the outcome budget kept for consolidated memory, so follow-ups and Commons outcomes aren't crowded out. */
+const LIVE_MAX_ITEMS = 6;
+const LIVE_MAX_CHARS = 1100;
+
+/**
+ * Everything a circle agent is told about Sage's past outcomes, as one list under one budget.
+ * The circle's own actions come first and straight from CommonsAction, which is the authority for
+ * their current status. Consolidated memory then fills the rest with what the live read can't show
+ * (follow-up results, Commons-level outcomes, anything older than the live window). A memory whose
+ * source is one of the live actions is dropped, so one outcome never appears twice.
+ */
+export async function loadOutcomeContext(input: {
+  coopId: string; circleId: string; about?: string; purpose: string; maxItems?: number; maxChars?: number; now?: Date;
+}): Promise<OutcomeContextLine[]> {
+  const now = input.now ?? new Date();
+  const maxItems = input.maxItems ?? OUTCOME_MEMORY_MAX_ITEMS;
+  const maxChars = input.maxChars ?? OUTCOME_MEMORY_MAX_CHARS;
+  const live = await loadLiveCircleOutcomes(input.coopId, input.circleId, now, {
+    maxItems: Math.min(LIVE_MAX_ITEMS, maxItems), maxChars: Math.min(LIVE_MAX_CHARS, maxChars),
+  });
+  const liveIds = new Set(live.map((line) => line.actionId));
+  const lines: OutcomeContextLine[] = live.map((line) => ({ text: line.text, origin: "live" }));
+  let used = live.reduce((sum, line) => sum + line.text.length, 0);
+  if (lines.length >= maxItems) return lines;
+  const remembered = await retrieveSageMemory({
+    coopId: input.coopId, circleId: input.circleId, about: input.about, purpose: input.purpose, maxItems, maxChars, now,
+  }).catch(() => []);
+  for (const line of remembered) {
+    if (lines.length >= maxItems) break;
+    if (line.sourceIds.some((id) => liveIds.has(id))) continue;
+    if (used + line.text.length > maxChars) break;
+    lines.push({ text: line.text, origin: "remembered" });
+    used += line.text.length;
+  }
+  return lines;
 }

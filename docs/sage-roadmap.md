@@ -1,6 +1,6 @@
 # Sage product roadmap
 
-Last updated: 2026-10-13
+Last updated: 2026-10-14
 
 ## North star
 
@@ -210,6 +210,27 @@ Status (2026-10-04): built and verified, except the items listed as remaining.
 - Tests: `sage-memory.test.ts` (7, including private-circle isolation and the budget), Playwright `sage-steward.spec.ts` (a dismissed follow-up appears in the next steward review's memory).
 - Remaining: supersession is by near-identical title, not by detecting a genuine contradiction; "verified observations" from other agents aren't consolidated yet; members can't yet ask Sage directly what happened to a past suggestion.
 
+One outcome list, and memory that follows its source (2026-10-14):
+
+- Before, the circle trend agent read two overlapping lists: its circle's actions straight from `CommonsAction` (8 items, 1,500 characters) and consolidated memory (5 items, 800 characters). It removed duplicates by comparing the first 60 characters. Consolidation remembered each action once and never updated it, so an action approved and then published showed twice, as `[APPROVED]` and `[PUBLISHED]`. A reviewer's rating or correction added after consolidation never reached memory at all. The feed agent and the steward read only that memory.
+- Consolidation (`consolidateSageMemory`) now rewrites a remembered outcome when the action's status or its feedback changes. It also looks at actions whose feedback changed in the last 30 days, not just the action itself. Only this memory's own rows count as already remembered, so another agent's observation citing the same action no longer blocks it.
+- `loadOutcomeContext` (`sage-memory.ts`) gives the trend agent one list under one budget (8 items, 1,500 characters). The circle's own actions come first, read from `CommonsAction`, which is the authority for their status (at most 6 items and 1,100 characters, so there's room for memory). Consolidated memory fills the rest, and a memory whose source is one of those actions is dropped by id. The trail marks each line Current or Remembered. Scope is unchanged: this circle and the Commons' member-visible memory, never another circle.
+- `PUBLISHED` now has its own label in outcome lines.
+- No model calls. The trend prompt's outcome section drops from about 2,300 to at most 1,500 characters.
+- Tests: new cases in `sage-memory.test.ts` (published after approval shows once; a later rating is picked up; another agent's row doesn't count; one budget with room for memory).
+- Remaining: a rewritten memory keeps its original expiry and review dates. The feed agent and steward still call `retrieveSageMemory` directly; they now get corrected memory, but no live read.
+
+Member memory in the member's own conversations (2026-10-14):
+
+- Before, when a member said yes to "Would you like me to remember that for future check-ins?", Sage stored a `member_need_signal` (a theme such as "transportation access", never their words) and never used it with them. Only the Commons-level aggregation read it.
+- `sage-member-memory.ts` reads it back. `loadMemberMemory` returns only this member's `PRIVATE_TO_AUTHOR_SCOPE` rows from the member-signal writer that are active and unexpired. It skips themes tied to a Commons the member has left, keeps one line per theme with the latest answer winning (so "no longer a need" replaces the need), and stops at 5 items and 500 characters. Every read is audited as `SAGE_MEMBER_MEMORY_READ`.
+- Used in the member's 1:1 conversation with Sage (check-in follow-ups and ordinary DMs) and the weekly check-in, which gets at most 2 items from its focus Commons or none in particular. @mentions and every Commons-facing agent never get it. The agents may say they remember a listed item; they are told never to claim anything else or add details. The DM trail shows what was remembered, and DM trails are visible only to the two people in the conversation.
+- "What do you remember about me?" gets a numbered list, and "forget 2", "forget about my rides", "forget everything" and (right after Sage talked about remembering) "forget that" mark those themes `DISMISSED`, including older rows about the same theme. Both are answered in code with no model call, and forgetting is audited as `SAGE_MEMBER_MEMORY_FORGOTTEN`. The update repeats the member scope, so it can't touch anyone else's memory. A dismissed theme also drops out of anonymous Commons patterns at the next daily sweep, which reads only active rows.
+- Asking what Sage remembers no longer counts as permission to remember something new (`ASKS_WHAT_SAGE_REMEMBERS`).
+- Cost: no new model calls. Prompts grow by at most about 500 characters in DMs and about 200 in the weekly message.
+- Tests: `sage-member-memory.test.ts` (12), new cases in `sage-checkin-followup.test.ts` (memory in the check-in and DM prompts, never in an @mention) and the private-signals check; Playwright `sage-member-memory.spec.ts` (TESTING.md journey 64).
+- Remaining: "forget" marks rows dismissed rather than deleting them; they stay until their 180-day expiry and no purge exists yet. Requests are recognized by patterns, so unusual wording goes to the model, which can't forget anything. Only check-in themes are remembered; there is no general "remember my preference" yet. Whether the model actually brings up a remembered item is its choice; tests check what it is given, not what it says.
+
 ### P1 — Steward and specialists (from `docs/sage-stewardship-system.md`)
 
 Status (2026-10-04): built and verified.
@@ -381,6 +402,7 @@ For every Sage behavior change:
   - Limitations: the guardrail is pattern-based and biased toward letting messages through, so unusual phrasing of code or math can still reach the model, and some legitimate messages (e.g. three lines ending in `;`) may be refused. The cap counts Sage's messages since the check-in, not distinct topics. Nano may answer charter questions in DMs less well than gpt-5.2 did.
   - Verified: `pnpm -F @repo/trpc test` (751 passed), the trpc and mobile type-checks, and `sage-weekly-outreach.spec.ts` (member answers → follow-up visible after reload; code → guardrail reply). With a working key the E2E follow-up was a live gpt-5.6-luna reply (`AICostEvent` SUCCESS), and the code snippet produced no model call. With the earlier invalid key, the same journey passed on the fixed follow-up.
 - 2026-10-13: Agent operations are no longer allowed to fail or pause silently. The always-on weekly-outreach sweep sends a daily receipt through the existing Slack webhook with each due member and the actual outcome, including the shared proactive weekly limit. Its latest result is stored as platform operational health, so an independent hourly watchdog repeats a channel-level alert while the model configuration, outreach sweep, Commons auto-reply setting, autonomy budget, newsletter schedule, or Sage wake cycle is off, paused, stale, or failed.
+- 2026-10-14: Consented member memory is used only in the member's own private conversations with Sage and their weekly check-in, never in anything other members can see. Members can see it and make Sage forget it, answered in code. `CommonsAction` is the authority for an action's current status; consolidated memory only adds what a live read can't show.
 
 ## Completed milestones
 

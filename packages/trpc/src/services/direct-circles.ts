@@ -14,6 +14,7 @@ import { traceSageReply } from './sage-reply-trails.js';
 import { checkinFollowupAllowed, runCheckinFollowup } from './sage-checkin-followup.js';
 import { handleConversationConfirmation } from './sage-member-actions.js';
 import { handlePrivateCheckinSignal } from './sage-private-signals.js';
+import { handleMemberMemoryRequest, loadMemberMemory, memberMemoryLines, parseMemberMemoryRequest } from './sage-member-memory.js';
 
 // A direct message is a private circle with exactly two members. It reuses
 // circle membership for access control and GroupComment for messages, but
@@ -269,6 +270,19 @@ async function replyAsSage(
       await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
       return;
     }
+    // "What do you remember about me?" and "forget that" are answered in code, no model call.
+    if (parseMemberMemoryRequest(message.content)) {
+      const lastSage = await db.groupComment.findFirst({
+        where: { groupId: group.id, authorId: sage.id, createdAt: { lt: message.createdAt } },
+        orderBy: { createdAt: 'desc' }, select: { content: true },
+      });
+      const memoryAnswer = await handleMemberMemoryRequest({ memberId: sender.id, content: message.content, lastSageMessage: lastSage?.content });
+      if (memoryAnswer) {
+        await db.groupComment.create({ data: { groupId: group.id, authorId: sage.id, content: memoryAnswer.reply } });
+        await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
+        return;
+      }
+    }
     // A plain yes or no to Sage's latest ask (a post or an introduction) is handled in code, no model call.
     const confirmed = await handleConversationConfirmation({
       conversationGroupId: group.id, memberId: sender.id, sageId: sage.id, content: message.content,
@@ -295,6 +309,9 @@ async function replyAsSage(
       });
       await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
     };
+    // What this member asked Sage to remember. This is their own private conversation, so it's the
+    // one place besides the weekly check-in where that memory is used.
+    const remembered = memberMemoryLines(await loadMemberMemory({ memberId: sender.id, purpose: 'sage dm reply' }).catch(() => []));
     // Replies to a weekly check-in get a short conversational follow-up, a few turns per check-in.
     const checkin = privateSignal.checkin;
     if (checkin) {
@@ -310,11 +327,11 @@ async function replyAsSage(
           .join('\n');
         await traceSageReply(
           { kind: 'dm', coopId: group.coopId, groupId: group.id, messageId: message.id },
-          { message: message.content, threadContext, threadCount: since.length },
+          { message: message.content, threadContext, threadCount: since.length, remembered },
           async (cleanMessage, thread) => {
             const out = await runCheckinFollowup({
               coopId: group.coopId, checkin: checkin.content, threadContext: thread, message: cleanMessage, followupsSent,
-              tools: actions.tools, toolInstructions: MEMBER_ACTION_INSTRUCTIONS,
+              tools: actions.tools, toolInstructions: MEMBER_ACTION_INSTRUCTIONS, memberMemory: remembered,
             });
             return { reply: out.reply, grounding: { charterChars: 0, missionGoalCount: 0, model: out.model, usedFallback: out.usedFallback } };
           },
@@ -334,9 +351,9 @@ async function replyAsSage(
       .join('\n');
     await traceSageReply(
       { kind: 'dm', coopId: group.coopId, groupId: group.id, messageId: message.id },
-      { message: message.content, threadContext, threadCount: prior.length },
+      { message: message.content, threadContext, threadCount: prior.length, remembered },
       (cleanMessage, thread) => runSageCommonsReply(
-        { coopId: group.coopId, message: cleanMessage, threadContext: thread, channel: 'dm' },
+        { coopId: group.coopId, message: cleanMessage, threadContext: thread, channel: 'dm', memberMemory: remembered },
         undefined,
         { tools: actions.tools, instructions: MEMBER_ACTION_INSTRUCTIONS },
       ),

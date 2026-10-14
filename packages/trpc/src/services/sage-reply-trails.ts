@@ -49,7 +49,7 @@ function trailFor(source: SageReplySource, message: string, threadContext: strin
 
 export async function traceSageReply(
   source: SageReplySource,
-  input: { message: string; threadContext?: string; threadCount: number },
+  input: { message: string; threadContext?: string; threadCount: number; remembered?: string[] },
   produce: (message: string, threadContext: string | undefined) => Promise<{ reply: string; grounding?: SageReplyGrounding }>,
   publish: (reply: string) => Promise<void>,
 ): Promise<void> {
@@ -60,6 +60,9 @@ export async function traceSageReply(
   trail.step("EVIDENCE", input.threadCount
     ? `${input.threadCount} earlier ${source.kind === "dm" ? "messages in this conversation" : "items in the thread"}`
     : "No earlier conversation");
+  if (input.remembered?.length) {
+    trail.step("EVIDENCE", `${input.remembered.length} thing${input.remembered.length === 1 ? "" : "s"} the member asked Sage to remember`, { detail: input.remembered.join("\n") });
+  }
   if (source.kind === "dm") trail.policy("The sender is in this direct message with Sage", true);
   else {
     trail.policy("The sender is an active member of this Commons", true);

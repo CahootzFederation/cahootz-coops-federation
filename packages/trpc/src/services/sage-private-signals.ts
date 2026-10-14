@@ -36,6 +36,14 @@ const THEMES: Array<{ key: string; category: string; label: string; pattern: Reg
   { key: "skills_and_help", category: "mutual_support", label: "skills and mutual help", pattern: /\b(?:need help|could help|skill|volunteer|support)\b/i },
 ];
 
+/** Plain-words label for a remembered theme, e.g. "transportation access". */
+export function privateThemeLabel(themeKey: string): string {
+  return THEMES.find((theme) => theme.key === themeKey)?.label ?? themeKey.replace(/_/g, " ");
+}
+
+/** "What do you remember about me?" asks about memory; it isn't permission to remember something new. */
+export const ASKS_WHAT_SAGE_REMEMBERS = /\bwhat\s+(?:do|did|have)\s+you\s+(?:remember(?:ed)?|saved?|kept|stored)\b|\bwhat\s+do\s+you\s+know\s+about\s+me\b/i;
+
 export interface PrivateSignalClassification {
   urgent: boolean;
   sensitiveCategory: string | null;
@@ -51,7 +59,7 @@ export function classifyPrivateSignal(content: string): PrivateSignalClassificat
   const urgent = URGENT_PATTERNS.some((pattern) => pattern.test(content));
   const sensitiveCategory = SENSITIVE_PATTERNS.find(([, pattern]) => pattern.test(content))?.[0] ?? null;
   const theme = THEMES.find((candidate) => candidate.pattern.test(content)) ?? null;
-  const rememberConsent = /\b(?:remember|keep (?:this|that) in mind|save this)\b/i.test(content);
+  const rememberConsent = !ASKS_WHAT_SAGE_REMEMBERS.test(content) && /\b(?:remember|keep (?:this|that) in mind|save this)\b/i.test(content);
   const aggregationConsent = /\b(?:anonymous|anonymously)\b/i.test(content)
     && /\b(?:share|use|include|community|commons|pattern)\b/i.test(content);
   const stance = /\b(?:no longer|not anymore|has been resolved|is resolved|isn't an issue|is not an issue)\b/i.test(content)

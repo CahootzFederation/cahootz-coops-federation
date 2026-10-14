@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Alert, ScrollView, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
@@ -13,6 +13,7 @@ import {
   Copy,
   HelpCircle,
   LogOut,
+  Pencil,
   QrCode,
   ReceiptText,
   RotateCcw,
@@ -52,11 +53,17 @@ type NavItem = {
 };
 
 export default function AccountProfileScreen() {
-  const { user, logout, resetProfileOnboarding } = useAuth();
+  const { user, login, logout, resetProfileOnboarding } = useAuth();
   const coin = useCoin();
   const [copiedAddress, setCopiedAddress] = React.useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = React.useState(false);
   const [fundingBadges, setFundingBadges] = React.useState<any[]>([]);
+  const [isEditingIdentity, setIsEditingIdentity] = React.useState(false);
+  const [isSavingIdentity, setIsSavingIdentity] = React.useState(false);
+  const [identityError, setIdentityError] = React.useState('');
+  const [nameDraft, setNameDraft] = React.useState('');
+  const [nicknameDraft, setNicknameDraft] = React.useState('');
+  const [handleDraft, setHandleDraft] = React.useState('');
 
   React.useEffect(() => {
     if (!user?.walletAddress) return;
@@ -65,8 +72,8 @@ export default function AccountProfileScreen() {
       .catch(() => setFundingBadges([]));
   }, [user?.walletAddress]);
 
-  const displayName = user?.name?.trim() || user?.email?.split('@')[0] || 'Member';
-  const handle = user?.email?.split('@')[0]?.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() || 'member';
+  const displayName = user?.nickname?.trim() || user?.name?.trim() || user?.email?.split('@')[0] || 'Member';
+  const handle = user?.handle || user?.email?.split('@')[0]?.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() || 'member';
   const commonsName = user?.coop?.name?.trim() || 'Your commons';
   const roleLabel = user?.roles?.join(', ') || 'Member';
   const statusLabel = user?.status?.toLowerCase() || 'active';
@@ -145,6 +152,32 @@ export default function AccountProfileScreen() {
     }
 
     router.replace('/(tabs)' as any);
+  };
+
+  const openIdentityEditor = () => {
+    setNameDraft(user?.name || '');
+    setNicknameDraft(user?.nickname || '');
+    setHandleDraft(handle);
+    setIdentityError('');
+    setIsEditingIdentity(true);
+  };
+
+  const saveIdentity = async () => {
+    if (!user || isSavingIdentity) return;
+    setIsSavingIdentity(true);
+    setIdentityError('');
+    try {
+      const saved = await api.updateIdentity(
+        { name: nameDraft.trim(), nickname: nicknameDraft.trim() || null, handle: handleDraft.trim().toLowerCase() },
+        user.sessionToken,
+      );
+      await login({ ...user, ...saved });
+      setIsEditingIdentity(false);
+    } catch (error) {
+      setIdentityError(friendlyError(error, "We couldn't save your profile."));
+    } finally {
+      setIsSavingIdentity(false);
+    }
   };
 
   const navItems: NavItem[] = [
@@ -289,6 +322,9 @@ export default function AccountProfileScreen() {
                 <Text className="text-xl font-black text-gray-950" numberOfLines={1}>
                   {displayName}
                 </Text>
+                {user?.nickname && user?.name ? (
+                  <Text className="mt-0.5 text-xs font-semibold text-gray-500" numberOfLines={1}>{user.name}</Text>
+                ) : null}
                 <Text className="mt-0.5 text-sm font-semibold text-gray-500" numberOfLines={1}>
                   @{handle} · {roleLabel}
                 </Text>
@@ -306,6 +342,17 @@ export default function AccountProfileScreen() {
                 <Text className="mt-1 text-sm text-gray-800" numberOfLines={1}>{user.email}</Text>
               </View>
             ) : null}
+
+            <TouchableOpacity
+              onPress={openIdentityEditor}
+              className="mt-4 flex-row items-center justify-center gap-2 rounded-xl py-3"
+              style={{ backgroundColor: PROFILE_THEME.primarySoft }}
+              accessibilityRole="button"
+              accessibilityLabel="Edit name, nickname, and @"
+            >
+              <Pencil size={15} color={PROFILE_THEME.primary} />
+              <Text className="font-black" style={{ color: PROFILE_THEME.primary }}>Edit name, nickname, and @</Text>
+            </TouchableOpacity>
 
             {user?.walletAddress ? (
               <TouchableOpacity
@@ -412,6 +459,74 @@ export default function AccountProfileScreen() {
 
         </View>
       </ScrollView>
+
+      <Modal visible={isEditingIdentity} transparent animationType="slide" onRequestClose={() => setIsEditingIdentity(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-end bg-black/40">
+          <View className="rounded-t-3xl bg-white px-5 pb-8 pt-5">
+            <Text className="text-xl font-black text-gray-950">Edit your identity</Text>
+            <Text className="mt-1 text-sm text-gray-500">Your @ is public and must be unique.</Text>
+
+            <Text className="mb-1 mt-5 text-xs font-black uppercase text-gray-500">Name</Text>
+            <TextInput
+              value={nameDraft}
+              onChangeText={setNameDraft}
+              maxLength={100}
+              autoCapitalize="words"
+              accessibilityLabel="Name"
+              className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-base text-gray-950"
+            />
+
+            <Text className="mb-1 mt-4 text-xs font-black uppercase text-gray-500">Nickname (optional)</Text>
+            <TextInput
+              value={nicknameDraft}
+              onChangeText={setNicknameDraft}
+              maxLength={60}
+              accessibilityLabel="Nickname"
+              className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-base text-gray-950"
+            />
+
+            <Text className="mb-1 mt-4 text-xs font-black uppercase text-gray-500">Your @</Text>
+            <View className="flex-row items-center rounded-xl border border-gray-200 bg-gray-50 px-3">
+              <Text className="text-base font-black text-gray-500">@</Text>
+              <TextInput
+                value={handleDraft}
+                onChangeText={(value) => setHandleDraft(value.toLowerCase())}
+                maxLength={30}
+                autoCapitalize="none"
+                autoCorrect={false}
+                accessibilityLabel="Handle"
+                className="flex-1 py-3 pl-1 text-base text-gray-950"
+              />
+            </View>
+            <Text className="mt-1 text-xs text-gray-500">3–30 lowercase letters, numbers, underscores, or hyphens.</Text>
+
+            {identityError ? <Text className="mt-3 font-semibold text-red-600">{identityError}</Text> : null}
+
+            <View className="mt-5 flex-row gap-3">
+              <TouchableOpacity
+                onPress={() => setIsEditingIdentity(false)}
+                disabled={isSavingIdentity}
+                className="flex-1 rounded-xl border border-gray-200 py-3"
+                accessibilityRole="button"
+                accessibilityLabel="Cancel editing identity"
+              >
+                <Text className="text-center font-black text-gray-700">Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => void saveIdentity()}
+                disabled={isSavingIdentity}
+                className="flex-1 flex-row items-center justify-center rounded-xl py-3"
+                style={{ backgroundColor: PROFILE_THEME.primary, opacity: isSavingIdentity ? 0.65 : 1 }}
+                accessibilityRole="button"
+                accessibilityLabel="Save identity"
+              >
+                {isSavingIdentity ? <ActivityIndicator size="small" color="#FFFFFF" /> : null}
+                <Text className="ml-2 font-black text-white">{isSavingIdentity ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }

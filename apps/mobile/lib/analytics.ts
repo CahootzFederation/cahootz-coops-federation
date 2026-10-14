@@ -4,9 +4,10 @@
  * - Completely inert unless EXPO_PUBLIC_POSTHOG_KEY is set: the SDK is never
  *   loaded, nothing is stored, and no request leaves the device. Dev, CI and
  *   E2E runs leave the key unset.
- * - Identifies people by their internal user id only. Never pass email,
- *   phone, wallet address, names, handles, or message/post content. As a
- *   backstop, `sanitizeProperties` drops keys and values that look like PII.
+ * - Identifies people by their internal user id and attaches their email only
+ *   to the PostHog person profile. Events never contain email, phone, wallet
+ *   address, names, handles, or message/post content. As a backstop,
+ *   `sanitizeProperties` drops keys and values that look like PII.
  * - Event names and their properties are a typed map. To add an event, add
  *   an entry to `AnalyticsEvents` and call `track('your_event', {...})`.
  *
@@ -165,6 +166,7 @@ const FIRST_OPEN_KEY = 'cahootz.analytics.firstOpenedAt';
 let client: PostHog | null = null;
 let initialized = false;
 let identifiedUserId: string | null = null;
+let identifiedEmail: string | null = null;
 let lastScreen: string | null = null;
 
 export type AnalyticsConfig = { apiKey?: string; host?: string };
@@ -230,15 +232,19 @@ export function track<E extends AnalyticsEvent>(
 /**
  * Links this device to an account by internal user id, and records the
  * person's commons as `coop_id` on the person and on every later event.
- * Repeat calls with the same id are ignored.
+ * Repeat calls with the same id and email are ignored.
  */
-export function identify(userId: string, options: { coopId?: string | null } = {}): void {
+export function identify(userId: string, options: { coopId?: string | null; email?: string | null } = {}): void {
   if (!client || !userId) return;
   const coopId = options.coopId || null;
+  const email = options.email?.trim().toLowerCase() || null;
   try {
-    if (identifiedUserId !== userId) {
-      client.identify(userId, sanitizeProperties({ coop_id: coopId }));
+    if (identifiedUserId !== userId || identifiedEmail !== email) {
+      // Email is deliberately allowed only here so PostHog's People list is
+      // usable for support. Event properties still go through the PII filter.
+      client.identify(userId, { coop_id: coopId, ...(email ? { email } : {}) });
       identifiedUserId = userId;
+      identifiedEmail = email;
     }
     void client.register(sanitizeProperties({ coop_id: coopId }));
   } catch (error) {
@@ -249,6 +255,7 @@ export function identify(userId: string, options: { coopId?: string | null } = {
 /** Call on sign-out: forgets the identified user and starts a new anonymous id. */
 export function reset(): void {
   identifiedUserId = null;
+  identifiedEmail = null;
   if (!client) return;
   try {
     client.reset();
@@ -299,5 +306,6 @@ export function __resetAnalyticsForTests(): void {
   client = null;
   initialized = false;
   identifiedUserId = null;
+  identifiedEmail = null;
   lastScreen = null;
 }

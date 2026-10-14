@@ -31,8 +31,8 @@ export function AnalyticsTracker() {
   // Session restore: identify before app_opened so it's attributed to the account.
   useEffect(() => {
     if (isLoading || !user) return;
-    identify(user.id, { coopId: user.coop?.id ?? 'cahootz' });
-  }, [isLoading, user?.id, user?.coop?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    identify(user.id, { coopId: user.coop?.id ?? 'cahootz', email: user.email });
+  }, [isLoading, user?.id, user?.email, user?.coop?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isAnalyticsEnabled() || isLoading || coldStartSent.current) return;

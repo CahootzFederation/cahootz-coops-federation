@@ -471,7 +471,7 @@ export interface CircleInvitation {
   invitedAt: string;
 }
 
-export type CircleNotificationLevel = 'ALL' | 'MENTIONS' | 'NONE';
+export type CircleNotificationLevel = 'ALL' | 'HIGHLIGHTS' | 'MENTIONS' | 'NONE';
 
 export interface PrivateGroupComment {
   id: string;

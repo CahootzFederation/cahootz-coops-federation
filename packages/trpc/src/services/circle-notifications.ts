@@ -24,7 +24,8 @@ type CircleActivity = {
  * Fans out notifications for new activity in a circle, honouring each member's
  * per-circle level:
  *  - ALL:      every new post/reply, plus mentions and replies to their posts
- *  - MENTIONS: only mentions and replies to their posts (default)
+ *  - HIGHLIGHTS: important circle activity, plus mentions and replies (default)
+ *  - MENTIONS: only mentions and replies to their posts
  *  - NONE:     inbox only - nothing is pushed to their phone
  */
 export async function notifyCircleActivity(db: any, activity: CircleActivity) {
@@ -141,4 +142,87 @@ export async function notifyCircleActivity(db: any, activity: CircleActivity) {
   }
 
   return { recipients: notified.size - skippedCount };
+}
+
+/**
+ * Notifies members who chose Highlights when a leader makes a post important.
+ * The signal is deterministic and contains no post content or media. A member
+ * does not receive another alert when a previously highlighted post is pinned
+ * again later.
+ */
+export async function notifyCircleHighlight(
+  db: any,
+  activity: {
+    coopId: string;
+    circleId: string;
+    postId: string;
+    actorId: string;
+  },
+) {
+  const [circle, members, chatting] = await Promise.all([
+    db.group.findUnique({
+      where: { id: activity.circleId },
+      select: { name: true },
+    }),
+    db.groupMember.findMany({
+      where: { groupId: activity.circleId },
+      select: {
+        userId: true,
+        notificationLevel: true,
+        user: { select: { isBot: true } },
+      },
+    }),
+    db.circleChatPresence.findMany({
+      where: {
+        groupId: activity.circleId,
+        exitedAt: null,
+        lastActivityAt: { gt: new Date(Date.now() - CHATTING_WINDOW_MS) },
+      },
+      select: { userId: true },
+    }),
+  ]);
+  const circleName = circle?.name || "your circle";
+  const chattingIds = new Set<string>(
+    chatting.map((row: { userId: string }) => row.userId),
+  );
+  const recipients = members.filter(
+    (member: {
+      userId: string;
+      notificationLevel: string;
+      user: { isBot: boolean };
+    }) =>
+      member.userId !== activity.actorId &&
+      !member.user.isBot &&
+      parseCircleNotificationLevel(member.notificationLevel) === "HIGHLIGHTS" &&
+      !chattingIds.has(member.userId),
+  );
+
+  let sent = 0;
+  await Promise.all(
+    recipients.map(async (member: { userId: string }) => {
+      const existing = await db.notification.findFirst({
+        where: {
+          userId: member.userId,
+          type: "CIRCLE_HIGHLIGHT",
+          data: { path: ["postId"], equals: activity.postId },
+        },
+        select: { id: true },
+      });
+      if (existing) return;
+      await createNotificationAndPush(db, {
+        userId: member.userId,
+        coopId: activity.coopId,
+        type: "CIRCLE_HIGHLIGHT",
+        title: "Circle highlight",
+        body: `A circle leader pinned a post in ${circleName}.`,
+        data: {
+          postId: activity.postId,
+          coopId: activity.coopId,
+          circleId: activity.circleId,
+        },
+      });
+      sent += 1;
+    }),
+  );
+  return { recipients: sent };
 }

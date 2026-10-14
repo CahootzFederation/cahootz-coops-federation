@@ -48,6 +48,11 @@ const NOTIFICATION_LEVEL_OPTIONS: Array<{
     description: 'Every new post and reply in this circle.',
   },
   {
+    level: 'HIGHLIGHTS',
+    label: 'Highlights',
+    description: 'Leader-pinned posts, plus @mentions and replies to your posts.',
+  },
+  {
     level: 'MENTIONS',
     label: 'Only @mentions',
     description: 'When someone mentions you or replies to your post.',

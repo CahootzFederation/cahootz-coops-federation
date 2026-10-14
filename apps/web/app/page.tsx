@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { BlogCard } from "@/components/blog/blog-card";
@@ -9,9 +9,32 @@ import { TreasuryContributionCalculator } from "@/components/treasury-contributi
 import { WaitlistSignupForm } from "@/components/waitlist-signup-form";
 import { env } from "@/env";
 import { getFeaturedBlogPosts } from "@/lib/blog";
-import { ArrowDownRight, ArrowRight, Github, MoveUpRight } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowRight,
+  Github,
+  MoveUpRight,
+  Smartphone,
+} from "lucide-react";
 
 import "./landing.css";
+
+const APP_STORE_URL =
+  "https://apps.apple.com/us/app/cahootz-commons/id6772781102";
+
+function AppStoreButton({
+  children = "Download on the App Store",
+  className = "button button-primary",
+}: {
+  children?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <a className={className} href={APP_STORE_URL} target="_blank" rel="noreferrer">
+      <Smartphone size={18} /> {children}
+    </a>
+  );
+}
 
 interface CoopOption {
   coopId: string;
@@ -41,9 +64,9 @@ async function getActiveCoops(): Promise<CoopOption[]> {
 }
 
 export const metadata: Metadata = {
-  title: "Cahootz | A place for your commons to move together",
+  title: "Cahootz | A place for communities to move together",
   description:
-    "Cahootz connects members, local businesses, and shared decisions, with a Commons AI Agent that helps coordinate the commons and evaluates proposals against community-set rules.",
+    "Cahootz Commons is the iPhone app for the communities you belong to. Post and react in your commons, talk in circles, organize your family, and let Sage introduce you to the members who can help.",
   alternates: { canonical: "https://cahootzcommons.com" },
 };
 
@@ -53,26 +76,23 @@ const GITHUB_REPOSITORY_URL =
 const pathways = [
   {
     index: "01",
-    label: "Find your people",
-    title: "A home for the conversation and the work.",
-    body: "Join a commons, find member spaces and circles, and follow the activity that matters to you. The Commons AI Agent can summarize conversations and surface needs or resources so useful signals do not get lost.",
-    details: ["Member spaces", "Group activity", "Community updates"],
+    label: "Belong",
+    title: "Know the people around you.",
+    body: "See what your neighbors, family, and friends are up to, celebrate each other's wins, and jump into the conversations that matter to you. It feels like the group chat, the town square, and the kitchen table in one place.",
     className: "pathway-community",
   },
   {
     index: "02",
-    label: "Keep it local",
-    title: "Make the local economy visible.",
-    body: "Discover businesses in your network, explore what they offer, and make purchases through the member app. Participation connects the people doing business to the people building the commons.",
-    details: ["Stores and products", "Payments", "Member rewards"],
+    label: "Show up",
+    title: "Help each other without having to ask twice.",
+    body: "Need a hand moving, a recommendation, or someone to watch the kids? Ask once and the people who can help will see it. When you can help, you'll know.",
     className: "pathway-commerce",
   },
   {
     index: "03",
-    label: "Decide together",
-    title: "Turn a shared need into a shared decision.",
-    body: "Members propose ideas and discuss tradeoffs. The Commons AI Agent checks each proposal against the commons' goals and rules: does it fit the mission, seem workable, and account for risks? It shows its scores and reasons so members can understand the decision. Within limits the commons sets, the agent can approve a small request, ask for changes, or stop it from advancing. Larger requests go to a council vote.",
-    details: ["Proposals", "Discussion", "Voting"],
+    label: "Build",
+    title: "Make things happen together.",
+    body: "Spend with the businesses your people run, pool ideas into plans, and watch your community get stronger because you're part of it.",
     className: "pathway-governance",
   },
 ];
@@ -80,31 +100,23 @@ const pathways = [
 const faqs = [
   {
     q: "What is a commons?",
-    a: "A commons is a community that organizes people, businesses, and shared resources around a common purpose. Each commons sets its own membership and decision rules.",
+    a: "A commons is your community on Cahootz: a neighborhood, a family, a congregation, a club, or a co-op. Each one sets its own way of doing things.",
+  },
+  {
+    q: "How do I join?",
+    a: "Get an invite from someone already in, or apply to a commons below. Then download the app and join.",
+  },
+  {
+    q: "Is there an Android app?",
+    a: "Not yet. Cahootz Commons is on iPhone today and Android is coming. Join the interest list below and we'll tell you when it's ready.",
+  },
+  {
+    q: "Who is Sage?",
+    a: "Sage is the AI Community Guide built into every commons. It connects people who can help each other and keeps good ideas moving. People still make the decisions.",
   },
   {
     q: "Do I need to own a business to join?",
-    a: "No. Members can take part in community spaces, support local businesses, and participate in decisions. Businesses have a separate interest form below.",
-  },
-  {
-    q: "Does the Commons AI Agent make decisions for members?",
-    a: "Yes, within limits the commons sets. The agent evaluates proposals against the commons' mission and rules. It can approve qualifying proposals below that commons' small-spending limit, ask for revisions, or keep a proposal from advancing. Proposals above the automatic approval limit go to a council vote.",
-  },
-  {
-    q: "How else does the Commons AI Agent help?",
-    a: "The agent can help summarize circle activity, identify needs and resources in posts, recommend relevant commons, and answer questions using a commons' charter and mission. These uses are designed to serve the commons and its members. Each commons sets the rules for its decisions; Cahootz currently operates the agent as a shared service across commons.",
-  },
-  {
-    q: "Will each commons own its own agent?",
-    a: "That is the direction we are building toward: a Commons AI Agent owned by each commons, isolated for that commons, and used only to serve it. Today, each commons controls the charter, goals, and limits that guide the agent's decisions, while Cahootz runs a shared service. Separate ownership and isolation are not in place yet.",
-  },
-  {
-    q: "How do you work toward fair decisions?",
-    a: "Each commons sets the goals, scoring weights, and spending limits that guide proposal reviews. Cahootz records scores and reasons so people can see how a proposal was judged. That is a way to make decisions more consistent and open to scrutiny, but the agent can still make mistakes or reflect bias.",
-  },
-  {
-    q: "What if my commons is not listed?",
-    a: "Join the interest list and tell us which commons you want to join or start. We will use that to understand where a new network could grow.",
+    a: "No. Most members just want to stay close to their people. If you do run a business, there's a separate form below.",
   },
 ];
 
@@ -128,11 +140,18 @@ export default async function HomePage() {
           </Link>
           <nav aria-label="Main navigation" className="header-nav">
             <a href="#how-it-works">How it works</a>
+            <a href="#sage">Meet Sage</a>
+            <a href="#get-in">How to get in</a>
             <a href="#find-a-commons">Find a commons</a>
             <Link href="/blog">Journal</Link>
           </nav>
-          <a className="header-action" href="#join">
-            Join a commons <ArrowRight size={16} />
+          <a
+            className="header-action"
+            href={APP_STORE_URL}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Get the app <ArrowRight size={16} />
           </a>
         </div>
       </header>
@@ -142,29 +161,33 @@ export default async function HomePage() {
           <div className="landing-shell hero-inner">
             <div className="hero-copy">
               <p className="eyebrow">
-                A place for the people building what comes next
+                The app for the communities you actually belong to
               </p>
               <h1 id="hero-title">
                 A community is more powerful when it can{" "}
                 <span>move together.</span>
               </h1>
               <p className="hero-description">
-                Cahootz brings the people, places, businesses, and decisions in
-                a commons together. Find your people, support local businesses,
-                and help decide what your community does next.
+                Stay close to the people who matter, find help when you need
+                it, and be the help someone else is looking for. Cahootz is
+                where your community comes together, every day.
               </p>
               <div className="hero-actions">
-                <a className="button button-primary" href="#join">
-                  Find your commons <ArrowRight size={18} />
+                <AppStoreButton />
+                <a className="button button-secondary" href="#get-in">
+                  Have an invite? <ArrowRight size={18} />
                 </a>
                 <a className="text-link" href="#how-it-works">
                   See how it works <ArrowDownRight size={18} />
                 </a>
               </div>
+              <p className="hero-note">
+                Free on iPhone. Android is coming soon.
+              </p>
             </div>
             <div
               className="commons-map"
-              aria-label="Members, spaces, local businesses, and decisions connect through a commons"
+              aria-label="Your feed, circles, families, Sage, and local stores connect through a commons"
             >
               <div className="map-caption">
                 ONE COMMONS, MANY WAYS TO PARTICIPATE
@@ -180,14 +203,14 @@ export default async function HomePage() {
                 <span>People working together</span>
               </div>
               <div className="map-node map-members">
-                <span className="node-kicker">PEOPLE</span>
-                <strong>Members</strong>
-                <small>Meet, share, organize</small>
+                <span className="node-kicker">CONNECT</span>
+                <strong>Stay close</strong>
+                <small>See what your people are up to</small>
               </div>
               <div className="map-node map-spaces">
-                <span className="node-kicker">PLACE</span>
-                <strong>Spaces & circles</strong>
-                <small>Find where you belong</small>
+                <span className="node-kicker">SUPPORT</span>
+                <strong>Get help</strong>
+                <small>Ask once, the right people see it</small>
               </div>
               <div className="map-node map-business">
                 <span className="node-kicker">ECONOMY</span>
@@ -195,14 +218,14 @@ export default async function HomePage() {
                 <small>Buy and build nearby</small>
               </div>
               <div className="map-node map-decisions">
-                <span className="node-kicker">DIRECTION</span>
-                <strong>Decisions</strong>
-                <small>Ideas, reviews, votes</small>
+                <span className="node-kicker">AI COMMUNITY GUIDE</span>
+                <strong>Sage</strong>
+                <small>Connects you with people who can help</small>
               </div>
             </div>
           </div>
           <div className="hero-footer landing-shell">
-            <span>Built for the work communities already do.</span>
+            <span>For neighborhoods, families, clubs, and co-ops.</span>
             <span>Scroll to explore ↓</span>
           </div>
         </section>
@@ -216,9 +239,9 @@ export default async function HomePage() {
               Do something together.
             </h2>
             <p>
-              A commons becomes real through everyday participation. Cahootz
-              connects the conversations, commerce, and decisions that usually
-              happen in separate places.
+              Life is better when you're not doing it alone. Cahootz keeps you
+              close to your people, so the asks, the offers, the good news, and
+              the plans all land in the same place.
             </p>
           </div>
         </section>
@@ -239,12 +262,7 @@ export default async function HomePage() {
               <div className="pathway-main">
                 <h3>{pathway.title}</h3>
                 <p>{pathway.body}</p>
-                <div className="pathway-tags">
-                  {pathway.details.map((detail) => (
-                    <span key={detail}>{detail}</span>
-                  ))}
-                </div>
-                {pathway.index === "02" && (
+                {pathway.index === "03" && (
                   <a className="text-link pathway-link" href="#business-form">
                     Bring your business into the commons{" "}
                     <ArrowRight size={17} />
@@ -258,38 +276,85 @@ export default async function HomePage() {
               </div>
             </article>
           ))}
+          <div className="section-cta">
+            <span>Your people are already there.</span>
+            <AppStoreButton />
+          </div>
         </section>
 
-        <section className="decision-section" id="ai-role">
+        <section className="decision-section" id="sage">
           <div className="landing-shell decision-inner">
             <div>
-              <p className="eyebrow">SHARED DECISIONS</p>
-              <h2>From an idea to a decision.</h2>
+              <p className="eyebrow">MEET SAGE</p>
+              <h2>Someone always looking out for you.</h2>
+              <p className="sage-intro">
+                Sage is your AI Community Guide. Ask it anything, and it
+                connects you with people who can help.
+              </p>
             </div>
             <div>
+              <ul className="sage-list">
+                <li>
+                  <strong>The right people find each other.</strong> When
+                  someone posts that they can fix bikes or need a babysitter,
+                  Sage can list it as a resource so the right people find it.
+                </li>
+                <li>
+                  <strong>Nothing falls through the cracks.</strong> Good
+                  ideas and open asks get a nudge, so they turn into plans
+                  instead of getting buried.
+                </li>
+                <li>
+                  <strong>Answers when you&apos;re new.</strong> Ask how your
+                  community does things and get an answer right away, without
+                  feeling like you&apos;re bothering anyone.
+                </li>
+              </ul>
+              <AppStoreButton>Meet Sage in the app</AppStoreButton>
+            </div>
+          </div>
+        </section>
+
+        <section className="get-in-section" id="get-in">
+          <div className="landing-shell">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">HOW TO GET IN</p>
+                <h2>Three steps to your people.</h2>
+              </div>
               <p>
-                Members bring forward ideas, discuss tradeoffs, and decide
-                together what their commons should do. Each commons sets the
-                charter, goals, and spending limits that guide those decisions.
-                As the number of proposals grows, it gets harder to review
-                every idea carefully, apply the rules consistently, and explain
-                why a decision was made.
+                Commons grow through people who already know each other.
+                Members and guides can invite you directly.
               </p>
-              <p>
-                The Commons AI Agent helps with that work. It checks proposals
-                for mission fit, feasibility, risk, and accountability using
-                the commons&apos; rules, then shows its scores and reasons. It can
-                approve a qualifying request below the commons&apos; automatic
-                approval limit, ask for revisions, or keep an idea from
-                advancing. Larger requests go to a council vote.
-              </p>
-              <p>
-                Shared rules and visible reasons can support fairer decisions,
-                though the agent can still be wrong or biased. The commons
-                controls the rules and can see how each proposal was judged.
-              </p>
+            </div>
+            <ol className="get-in-steps">
+              <li>
+                <span>01</span>
+                <strong>Get an invite.</strong>
+                <p>
+                  A member or guide invites you, or you apply to a commons
+                  below.
+                </p>
+              </li>
+              <li>
+                <span>02</span>
+                <strong>Download the app.</strong>
+                <p>
+                  Get Cahootz Commons free on the App Store.
+                </p>
+              </li>
+              <li>
+                <span>03</span>
+                <strong>You&apos;re in your circles.</strong>
+                <p>
+                  Your commons, its circles, and Sage are waiting. Say hello.
+                </p>
+              </li>
+            </ol>
+            <div className="get-in-actions">
+              <AppStoreButton />
               <a className="text-link" href="#join">
-                Get involved <MoveUpRight size={18} />
+                No invite? Apply or start a commons <ArrowRight size={18} />
               </a>
             </div>
           </div>
@@ -358,7 +423,8 @@ export default async function HomePage() {
               </p>
               <div className="join-aside">
                 <span>FOR MEMBERS</span>
-                <strong>Find your people and start participating.</strong>
+                <strong>Already invited? Get the app and sign in.</strong>
+                <AppStoreButton className="button button-secondary" />
               </div>
             </div>
             <div className="join-forms">
@@ -429,7 +495,22 @@ export default async function HomePage() {
             </div>
           </div>
         </section>
+        <section className="final-cta">
+          <div className="landing-shell final-cta-inner">
+            <h2>Your community is already here.</h2>
+            <AppStoreButton>Download Cahootz Commons for iPhone</AppStoreButton>
+            <a className="text-link" href="#join">
+              On Android? Tell us and we&apos;ll let you know{" "}
+              <ArrowRight size={18} />
+            </a>
+          </div>
+        </section>
       </main>
+
+      <div className="sticky-app-bar">
+        <span>Cahootz Commons for iPhone</span>
+        <AppStoreButton>Get the app</AppStoreButton>
+      </div>
 
       <footer className="landing-footer">
         <div className="landing-shell footer-inner">

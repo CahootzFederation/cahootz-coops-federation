@@ -14,6 +14,7 @@ interface User {
   email: string;
   handle: string;
   name: string | null;
+  nickname: string | null;
   roles: string[];
   status: string;
   walletAddress: string | null;
@@ -274,7 +275,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(userData);
       setSessionToken(userData.sessionToken || null);
       if (isNewSignIn) {
-        analytics.identify(userData.id, { coopId: userData.coop?.id ?? 'cahootz' });
+        analytics.identify(userData.id, { coopId: userData.coop?.id ?? 'cahootz', email: userData.email });
         analytics.track('signed_in');
       }
     } catch (error) {
@@ -329,14 +330,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Dev/QA helper: the Welcome Wizard only ever shows on a logged-out
   // device, so previewing it again means clearing its "seen" flag and
   // signing out. Setting forceWelcomeIntro makes app/index.tsx route back
-  // into the wizard immediately, from whichever screen this was triggered
-  // from — no router navigation involved here.
+  // into the wizard once it's showing.
   const previewWelcomeScreen = async () => {
     await clearAnonymousProfileIntroSeen();
     if (user) {
       await logout();
     }
     setForceWelcomeIntro(true);
+    // app/index.tsx only sees the flag while it's mounted, so go there too
+    // (triggered from the drawer on another screen, it may not be).
+    router.replace('/' as any);
   };
 
   const dismissForcedWelcomeIntro = () => {

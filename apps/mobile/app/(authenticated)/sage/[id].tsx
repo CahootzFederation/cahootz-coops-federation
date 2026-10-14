@@ -86,6 +86,9 @@ function labelForReviewType(reviewType: string, capability: string | null) {
   if (reviewType === 'APPROVE_SUGGESTION') {
     if (capability === 'comment_on_post') return 'Sage recommends commenting';
     if (capability === 'draft_proposal') return 'Sage recommends a proposal';
+    if (capability === 'post_for_member') return 'Sage can post this for you';
+    if (capability === 'thank_helper') return 'Did the introduction help?';
+    if (capability === 'share_win') return 'Share a shout-out for your help?';
     return 'Sage has an idea';
   }
   return 'Confirm details';
@@ -95,6 +98,9 @@ function labelForReviewType(reviewType: string, capability: string | null) {
 function approvalConsequence(capability: string | null) {
   if (capability === 'comment_on_post') return 'Approving posts this comment as Sage on that post. It will not speak for you.';
   if (capability === 'draft_proposal') return 'Approving saves an editable draft for you. Nothing is submitted until you submit it.';
+  if (capability === 'post_for_member') return 'Approving posts this in your Commons from Sage, without your name. Sage tells you privately when someone replies.';
+  if (capability === 'thank_helper') return 'Approving tells Sage it helped. Sage thanks the person who helped you; you are not named.';
+  if (capability === 'share_win') return 'Approving posts a short thank-you naming you in the Commons. The member you helped is not named or described.';
   return null;
 }
 

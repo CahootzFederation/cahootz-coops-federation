@@ -17,7 +17,7 @@ Leave the key unset in local development, CI and the Playwright suite. With no k
 
 ## Privacy rules
 
-- People are identified by their internal user id (`identify(user.id)`) only. We never send email, phone, wallet address, names, handles, or post, comment or message content.
+- People are identified by their internal user id (`identify(user.id)`). Their signed-in email is attached only to the PostHog person profile so support can find the right person. Email is never attached to product events, and we never send phone, wallet address, names, handles, or post, comment, or message content.
 - Every event and person gets `coop_id`, the id of the person's commons.
 - `sanitizeProperties` is a backstop. It drops any property whose key looks like PII (`email`, `phone`, `wallet`, `address`, `name`, `handle`, `message`, `body`, `text`, `title`, `token`, ...), any string value that looks like an email, phone number or wallet address, and any value that isn't a primitive. In development it logs a warning when it drops something.
 - Screens are recorded by route pattern (`/people/[handle]`), not by URL, so ids and handles never appear in screen names.
@@ -31,6 +31,9 @@ Leave the key unset in local development, CI and the Playwright suite. With no k
 | `app_opened` | `components/analytics-tracker.tsx`: on launch, after the saved session loads, and when the app returns from the background | `source` (`cold_start` / `foreground`), `is_first_open`, `signed_in`, `days_since_signup` (signed in only) |
 | `$screen` | same component, on every route change | route pattern |
 | `onboarding_step_viewed` | `app/profile-onboarding.tsx` | `step` (`intro` / `profile` / `circles`), `signed_in` |
+| `contact_invite_started` | Tapped the invite-from-contacts card | `source`, `picker` |
+| `contact_invite_batch_started` | Started texting the contacts chosen in the invite checklist | `source`, `count` |
+| `contact_invite_batch_finished` | Finished or stopped texting them | `source`, `sent`, `total` |
 | `onboarding_deferred` | "Skip" on the profile form, "Skip for now" on the circles step | `step`, `signed_in` |
 | `onboarding_completed` | the wizard finished, however the person left it | `exit` (`welcome_lounge` / `general` / `skip` / `invitation`), `profile_completed`, `signed_in` |
 | `welcome_lounge_joined` | onboarding circles step, Circle View's "Join a welcome lounge" card | `source` (`onboarding` / `circle_view`), `auto_joined` |
@@ -79,4 +82,4 @@ Break it down by `coop_id` to compare commons, or by `$os_name` to compare iOS, 
 
 ## Open questions
 
-- **App Store and Play privacy labels** need an update to list product analytics tied to a user id.
+- **App Store and Play privacy labels** need an update to list product analytics tied to a user id and email address.

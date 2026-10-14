@@ -25,7 +25,7 @@ function getExtensionFromContentType(contentType: string): string {
 }
 
 export function generateFileKey(
-  uploadType: 'profile' | 'store' | 'product' | 'post' | 'comment',
+  uploadType: 'profile' | 'store' | 'product' | 'post' | 'comment' | 'feedback',
   resourceId: string,
   filename: string
 ): string {
@@ -43,10 +43,14 @@ export function generateFileKey(
       return `posts/${resourceId}/${timestamp}-${sanitizedFilename}`;
     case 'comment':
       return `comments/${resourceId}/${timestamp}-${sanitizedFilename}`;
+    case 'feedback':
+      return `feedback/${resourceId}/${timestamp}-${sanitizedFilename}`;
     default:
       return `uploads/${timestamp}-${sanitizedFilename}`;
   }
 }
+
+const UPLOAD_TOKEN_TTL_MS = 30 * 60 * 1000;
 
 export async function generateUploadToken(
   pathname: string,
@@ -59,7 +63,9 @@ export async function generateUploadToken(
     maximumSizeInBytes: maxSizeBytes,
     allowedContentTypes: [contentType],
     addRandomSuffix: false,
-    validUntil: Date.now() + 5 * 60 * 1000,
+    // A 100 MB post video on a slow phone connection can take well over five
+    // minutes to send, and an expired token fails the whole post.
+    validUntil: Date.now() + UPLOAD_TOKEN_TTL_MS,
   });
 
   const uploadUrl = `${VERCEL_BLOB_API_URL}/${encodeURIComponent(pathname)}`;

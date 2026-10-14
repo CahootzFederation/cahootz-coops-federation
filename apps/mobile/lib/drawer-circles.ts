@@ -2,42 +2,32 @@ import type { PrivateGroupSummary } from "./api";
 
 export const DRAWER_CIRCLE_PREVIEW_LIMIT = 3;
 
-export type DrawerCirclePreview =
-  | {
-      id: string;
-      kind: "main";
-      label: "General";
-    }
-  | {
-      id: string;
-      kind: "public" | "private";
-      label: string;
-      memberCount: number;
-      isLeader: boolean;
-    };
+export type DrawerCirclePreview = {
+  id: string;
+  kind: "public" | "private";
+  label: string;
+  memberCount: number;
+  isLeader: boolean;
+};
 
 /**
- * Every commons has one durable public circle: its existing commons feed.
- * Public and joined circles follow it, keeping the drawer preview intentionally
- * short while preserving the existing feed and post data model.
+ * The drawer previews a few of the commons' circles. General (the commons
+ * feed) is not listed here: the drawer's Home row opens Circle View, where
+ * General is always the first card.
  */
 export function buildDrawerCirclePreview(
-  coopId: string,
   circles: PrivateGroupSummary[],
   limit = DRAWER_CIRCLE_PREVIEW_LIMIT,
 ): DrawerCirclePreview[] {
   if (limit <= 0) return [];
 
-  return [
-    { id: `general:${coopId}`, kind: "main", label: "General" as const },
-    ...eligibleDrawerCircles(circles).slice(0, Math.max(0, limit - 1)).map((circle) => ({
-      id: circle.id,
-      kind: circle.privacy === "public" ? "public" as const : "private" as const,
-      label: circle.name,
-      memberCount: circle.memberCount,
-      isLeader: circle.isLeader,
-    })),
-  ];
+  return eligibleDrawerCircles(circles).slice(0, limit).map((circle) => ({
+    id: circle.id,
+    kind: circle.privacy === "public" ? "public" as const : "private" as const,
+    label: circle.name,
+    memberCount: circle.memberCount,
+    isLeader: circle.isLeader,
+  }));
 }
 
 export function eligibleDrawerCircles(circles: PrivateGroupSummary[]) {
@@ -48,14 +38,12 @@ export function shouldShowCreateCircle(
   circles: PrivateGroupSummary[],
   limit = DRAWER_CIRCLE_PREVIEW_LIMIT,
 ) {
-  const privateCircleSlots = Math.max(0, limit - 1);
-  return eligibleDrawerCircles(circles).length < privateCircleSlots;
+  return eligibleDrawerCircles(circles).length < Math.max(0, limit);
 }
 
 export function hiddenDrawerCircleCount(
   circles: PrivateGroupSummary[],
   limit = DRAWER_CIRCLE_PREVIEW_LIMIT,
 ) {
-  const visiblePrivateCircleCount = Math.max(0, limit - 1);
-  return Math.max(0, eligibleDrawerCircles(circles).length - visiblePrivateCircleCount);
+  return Math.max(0, eligibleDrawerCircles(circles).length - Math.max(0, limit));
 }

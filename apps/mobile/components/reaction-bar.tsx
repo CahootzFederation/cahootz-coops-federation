@@ -5,14 +5,14 @@ import { SmilePlus } from 'lucide-react-native';
 import { EmojiPickerSheet } from '@/components/emoji-picker';
 import { Text } from '@/components/ui/text';
 import type { ReactionSummary } from '@/lib/api';
-import { LIKE_EMOJI, emojiName } from '@/lib/emoji-catalog';
+import { emojiName } from '@/lib/emoji-catalog';
 
 const PRIMARY = '#FF6B00';
 
 /**
  * Slack-style emoji reactions: one chip per emoji (tap to add or remove
- * yours) and a button that opens the full emoji picker. The like (❤️) keeps
- * its own button, so its chip is hidden here.
+ * yours) and a button that opens the full emoji picker. There is no separate
+ * like button; ❤️ is an ordinary reaction.
  */
 export function ReactionBar({
   reactions,
@@ -26,11 +26,11 @@ export function ReactionBar({
   disabled?: boolean;
   /** e.g. "Ana's comment", for screen reader labels. */
   targetLabel: string;
-  /** Rendered first in the row, e.g. the like button. */
+  /** Rendered first in the row. */
   children?: React.ReactNode;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
-  const chips = reactions.filter((reaction) => reaction.emoji !== LIKE_EMOJI && reaction.count > 0);
+  const chips = reactions.filter((reaction) => reaction.count > 0);
   const mine = reactions.filter((reaction) => reaction.viewerReacted).map((reaction) => reaction.emoji);
 
   return (

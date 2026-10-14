@@ -58,11 +58,6 @@
       "import": "./dist/services/reward-retry-service.js",
       "require": "./dist/services/reward-retry-service.js"
     },
-    "./services/feature-flag-service": {
-      "types": "./dist/services/feature-flag-service.d.ts",
-      "import": "./dist/services/feature-flag-service.js",
-      "require": "./dist/services/feature-flag-service.js"
-    },
     "./services/payment-webhook-service": {
       "types": "./dist/services/payment-webhook-service.d.ts",
       "import": "./dist/services/payment-webhook-service.js",
@@ -118,6 +113,11 @@
       "import": "./dist/services/platform-admin.js",
       "require": "./dist/services/platform-admin.js"
     },
+    "./services/sage-weekly-outreach": {
+      "types": "./dist/services/sage-weekly-outreach.d.ts",
+      "import": "./dist/services/sage-weekly-outreach.js",
+      "require": "./dist/services/sage-weekly-outreach.js"
+    },
     "./services/welcome-tables": {
       "types": "./dist/services/welcome-tables.d.ts",
       "import": "./dist/services/welcome-tables.js",
@@ -167,6 +167,11 @@
       "types": "./dist/services/sage-wake.d.ts",
       "import": "./dist/services/sage-wake.js",
       "require": "./dist/services/sage-wake.js"
+    },
+    "./services/agent-operations": {
+      "types": "./dist/services/agent-operations.d.ts",
+      "import": "./dist/services/agent-operations.js",
+      "require": "./dist/services/agent-operations.js"
     }
   },
   "keywords": [],

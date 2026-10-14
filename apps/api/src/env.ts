@@ -94,4 +94,16 @@ if (env.NODE_ENV === "production" && !env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET is required in production");
 }
 
+// Without a deployed Trigger key, production silently loses every scheduled agent (community memory,
+// weekly check-ins, recovery scans) except the in-process Sage wake fallback, so refuse to build or start.
+if (env.NODE_ENV === "production") {
+  const triggerKey = env.TRIGGER_SECRET_KEY?.trim();
+  if (!triggerKey) {
+    throw new Error("TRIGGER_SECRET_KEY is required in production. Copy the Production secret key from the Trigger.dev project's API keys page.");
+  }
+  if (!triggerKey.startsWith("tr_") || triggerKey.startsWith("tr_dev_")) {
+    throw new Error("TRIGGER_SECRET_KEY must be a deployed Trigger.dev secret key (tr_prod_... or tr_stg_...), not a development key.");
+  }
+}
+
 console.log("✅ API environment variables validated successfully");

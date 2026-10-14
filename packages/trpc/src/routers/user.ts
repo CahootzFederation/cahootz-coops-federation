@@ -31,6 +31,7 @@ const mobileProfileUserOutput = z.object({
   id: z.string(),
   email: z.string(),
   name: z.string().nullable(),
+  nickname: z.string().nullable(),
   roles: z.array(z.string()),
   status: z.string(),
   walletAddress: z.string().nullable(),
@@ -53,6 +54,7 @@ const mobileProfileUserSelect = {
   id: true,
   email: true,
   name: true,
+  nickname: true,
   roles: true,
   status: true,
   walletAddress: true,
@@ -292,6 +294,8 @@ export const userRouter = router({
       id: z.string(),
       email: z.string(),
       name: z.string().nullable(),
+      nickname: z.string().nullable(),
+      handle: z.string().nullable(),
       roles: z.array(z.string()),
       status: z.string(),
       walletAddress: z.string().nullable(),
@@ -311,6 +315,8 @@ export const userRouter = router({
           id: true,
           email: true,
           name: true,
+          nickname: true,
+          handle: true,
           roles: true,
           status: true,
           walletAddress: true,
@@ -339,6 +345,53 @@ export const userRouter = router({
       }
 
       return user;
+    }),
+
+  /** Update the signed-in member's public identity. Handles are normalized
+   * to lowercase so the database uniqueness constraint is case-insensitive. */
+  updateIdentity: accountAuthenticatedProcedure
+    .input(z.object({
+      name: z.string().trim().min(1, "Enter your name.").max(100),
+      nickname: z.string().trim().max(60).nullable(),
+      handle: z.string().trim().toLowerCase()
+        .min(3, "Your @ must be at least 3 characters.")
+        .max(30, "Your @ must be 30 characters or fewer.")
+        .regex(/^[a-z0-9][a-z0-9_-]*$/, "Use lowercase letters, numbers, underscores, or hyphens."),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      if (input.handle === "everyone" || input.handle === "here") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "That @ is reserved. Choose another one." });
+      }
+
+      const existing = await context.db.user.findFirst({
+        where: {
+          handle: { equals: input.handle, mode: "insensitive" },
+          id: { not: context.accountUser.id },
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new TRPCError({ code: "CONFLICT", message: "That @ is already taken." });
+      }
+
+      try {
+        return await context.db.user.update({
+          where: { id: context.accountUser.id },
+          data: {
+            name: input.name,
+            nickname: input.nickname || null,
+            handle: input.handle,
+          },
+          select: { name: true, nickname: true, handle: true },
+        });
+      } catch (error) {
+        if ((error as { code?: string })?.code === "P2002") {
+          throw new TRPCError({ code: "CONFLICT", message: "That @ is already taken." });
+        }
+        throw error;
+      }
     }),
 
   /**

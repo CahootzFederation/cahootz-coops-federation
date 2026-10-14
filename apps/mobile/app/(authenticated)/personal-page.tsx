@@ -9,6 +9,7 @@ import {
   COMPOSER_MEDIA_TILE_SIZE,
   CommonsMediaTile,
   CommonsMediaViewer,
+  MAX_POST_MEDIA_ATTACHMENTS,
   type CommonsMediaPreview,
 } from '@/components/commons-media-viewer';
 import { EditPersonalProfileSheet } from '@/components/edit-personal-profile-sheet';
@@ -21,6 +22,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type PersonalPageFeedPost, type PersonalPageProfile } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
+import { reportPostFailure, uploadPostMedia } from '@/lib/post-media-upload';
 import { DEFAULT_POST_TYPE, postTypePlaceholder, type SelectedPostType } from '@/lib/post-types';
 import { personDisplayHandle, personHandleFromName } from '@/lib/social-profile';
 
@@ -122,7 +124,7 @@ export default function PersonalPageScreen() {
   };
 
   const pickMedia = async () => {
-    if (selectedMedia.length >= 4) return;
+    if (selectedMedia.length >= MAX_POST_MEDIA_ATTACHMENTS) return;
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) return;
@@ -130,9 +132,11 @@ export default function PersonalPageScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsMultipleSelection: true,
-      selectionLimit: 4 - selectedMedia.length,
+      selectionLimit: MAX_POST_MEDIA_ATTACHMENTS - selectedMedia.length,
       quality: 0.9,
       videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+      // Re-encode picked videos to 720p so they fit the 100 MB limit.
+      videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
     });
 
     if (result.canceled) return;
@@ -148,7 +152,7 @@ export default function PersonalPageScreen() {
       sizeBytes: asset.fileSize ?? null,
     }));
 
-    setSelectedMedia((current) => [...current, ...next].slice(0, 4));
+    setSelectedMedia((current) => [...current, ...next].slice(0, MAX_POST_MEDIA_ATTACHMENTS));
   };
 
   const publishPost = async () => {
@@ -156,24 +160,11 @@ export default function PersonalPageScreen() {
     if ((!trimmed && selectedMedia.length === 0) || isSaving) return;
 
     setIsSaving(true);
+    const pendingMedia = selectedMedia.map((media) => ({ ...media, uri: media.uri || media.url || '' }));
+    let stage: 'upload' | 'save' = 'upload';
     try {
-      const uploadedMedia = selectedMedia.length
-        ? await Promise.all(
-            selectedMedia.map((media) =>
-              api.uploadCommonsPostMedia({
-                coopId: 'personal-page',
-                uri: media.uri || media.url || '',
-                fileName: media.fileName,
-                mimeType: media.mimeType,
-                mediaType: media.mediaType,
-                width: media.width,
-                height: media.height,
-                durationMs: media.durationMs,
-                sizeBytes: media.sizeBytes,
-              })
-            )
-          )
-        : [];
+      const uploadedMedia = await uploadPostMedia('personal-page', pendingMedia);
+      stage = 'save';
       const result = await api.createPersonalPagePost(
         {
           content: trimmed,
@@ -189,6 +180,7 @@ export default function PersonalPageScreen() {
     } catch (error) {
       // Keep the draft so nothing they wrote is lost.
       console.error('Failed to publish personal page post:', error);
+      reportPostFailure(error, { stage, destination: 'personal-page', media: pendingMedia });
       Alert.alert("Couldn't post to your page", friendlyError(error, "We couldn't post that. Your words are still in the box."));
     } finally {
       setIsSaving(false);
@@ -289,7 +281,8 @@ export default function PersonalPageScreen() {
                 />
               </TouchableOpacity>
               <View className="min-w-0 flex-1">
-                <Text className="text-xl font-black text-gray-950" numberOfLines={1}>{displayName}</Text>
+                <Text className="text-xl font-black text-gray-950" numberOfLines={1}>{profile?.nickname || displayName}</Text>
+                {profile?.nickname ? <Text className="mt-0.5 text-xs font-semibold text-gray-500">{displayName}</Text> : null}
                 <Text className="mt-0.5 text-sm font-semibold text-gray-500">{personDisplayHandle(publicHandle)}</Text>
               </View>
               <View className="rounded-full bg-gray-100 px-3 py-1.5">

@@ -1851,6 +1851,7 @@ export const publicCoopInfoRouter = router({
             where: {
               coopId: input.coopId,
               status: "ACTIVE",
+              user: { isBot: false },
             },
           }),
           ctx.db.store.count({

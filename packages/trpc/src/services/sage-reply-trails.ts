@@ -1,10 +1,14 @@
+import { db } from "@repo/db";
+
+import { auditLogEntry } from "../lib/audit.js";
 import { DecisionTrail } from "./sage-decision-trail.js";
 import {
-  checkSageOutput, cleanseUntrustedText, describeInputFlags, describeOutputProblems, isSteeringAttempt, isUnsafeReply, mergeFlags,
+  SAGE_INPUT_REFUSAL_REPLIES, checkSageInput, checkSageOutput, cleanseUntrustedText, describeInputFlags, describeOutputProblems,
+  describeSageInputRefusal, isSteeringAttempt, isUnsafeReply, mergeFlags,
 } from "./untrusted-input.js";
 
 /** Sent instead of a model reply when the message tries to instruct Sage. No model call is made. */
-export const SAGE_STEERING_REPLY = "I can only help with questions about this Commons, its charter and its goals.";
+export const SAGE_STEERING_REPLY = SAGE_INPUT_REFUSAL_REPLIES.STEERING;
 /** Sent instead of a model reply that failed the safety check in a way cleanup can't fix. */
 export const SAGE_UNSAFE_REPLY = "I can't give a good answer to that here. A Commons admin can help.";
 
@@ -64,9 +68,23 @@ export async function traceSageReply(
   // Only the new message decides this; earlier turns are context, and Sage's own replies are in them.
   const steering = isSteeringAttempt(message.flags);
   trail.policy("The message has no instructions aimed at Sage", !steering, describeInputFlags(inputCheck));
+  // Code, math problems, huge pastes and encoded blobs never reach a model.
+  const refusal = checkSageInput(input.message, message.flags);
+  if (refusal && refusal !== "STEERING") {
+    trail.policy("The message reads as a person writing to Sage", false, describeSageInputRefusal(refusal));
+  }
   try {
-    if (steering) {
-      await publish(SAGE_STEERING_REPLY);
+    if (refusal) {
+      await publish(SAGE_INPUT_REFUSAL_REPLIES[refusal]);
+      if (refusal !== "STEERING") {
+        await db.auditLog.create({
+          data: auditLogEntry({
+            actorId: "system/sage", action: "SAGE_INPUT_REFUSED", resource: source.kind === "dm" ? "GroupComment" : source.kind === "comment" ? "CommonsComment" : "CommonsPost",
+            resourceId: source.kind === "post" ? source.postId : source.kind === "comment" ? source.commentId : source.messageId,
+            metadata: { reason: refusal, channel: source.kind, length: input.message.length },
+          }),
+        }).catch(console.error);
+      }
       trail.taken("Sent the standard reply without asking the model", "INFO");
       trail.result("Reply posted", "PASS", "None.");
       await trail.save();

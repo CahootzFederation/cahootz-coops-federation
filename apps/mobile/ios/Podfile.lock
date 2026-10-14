@@ -215,6 +215,8 @@ PODS:
     - ZXingObjC/PDF417
   - ExpoClipboard (55.0.17):
     - ExpoModulesCore
+  - ExpoContacts (55.0.18):
+    - ExpoModulesCore
   - ExpoDevice (55.0.21):
     - ExpoModulesCore
   - ExpoDomWebView (55.0.6):
@@ -309,6 +311,8 @@ PODS:
     - ExpoModulesCore
     - RNScreens
   - ExpoSecureStore (55.0.18):
+    - ExpoModulesCore
+  - ExpoSMS (55.0.18):
     - ExpoModulesCore
   - ExpoSplashScreen (55.0.25):
     - ExpoModulesCore
@@ -2621,6 +2625,7 @@ DEPENDENCIES:
   - ExpoCamera (from `../../../node_modules/expo-camera/ios`)
   - ExpoCameraBarcodeScanning (from `../../../node_modules/expo-camera/ios`)
   - ExpoClipboard (from `../../../node_modules/expo-clipboard/ios`)
+  - ExpoContacts (from `../../../node_modules/expo-contacts/ios`)
   - ExpoDevice (from `../../../node_modules/expo-device/ios`)
   - "ExpoDomWebView (from `../../../node_modules/@expo/dom-webview/ios`)"
   - ExpoFileSystem (from `../../../node_modules/expo-file-system/ios`)
@@ -2641,6 +2646,7 @@ DEPENDENCIES:
   - ExpoObserve (from `../../../node_modules/expo-observe/ios`)
   - ExpoRouter (from `../../../node_modules/expo-router/ios`)
   - ExpoSecureStore (from `../../../node_modules/expo-secure-store/ios`)
+  - ExpoSMS (from `../../../node_modules/expo-sms/ios`)
   - ExpoSplashScreen (from `../../../node_modules/expo-splash-screen/ios`)
   - ExpoSymbols (from `../../../node_modules/expo-symbols/ios`)
   - ExpoSystemUI (from `../../../node_modules/expo-system-ui/ios`)
@@ -2778,6 +2784,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/expo-camera/ios"
   ExpoClipboard:
     :path: "../../../node_modules/expo-clipboard/ios"
+  ExpoContacts:
+    :path: "../../../node_modules/expo-contacts/ios"
   ExpoDevice:
     :path: "../../../node_modules/expo-device/ios"
   ExpoDomWebView:
@@ -2818,6 +2826,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/expo-router/ios"
   ExpoSecureStore:
     :path: "../../../node_modules/expo-secure-store/ios"
+  ExpoSMS:
+    :path: "../../../node_modules/expo-sms/ios"
   ExpoSplashScreen:
     :path: "../../../node_modules/expo-splash-screen/ios"
   ExpoSymbols:
@@ -3018,6 +3028,7 @@ SPEC CHECKSUMS:
   ExpoCamera: 8c699b7e65d479a25e4bb693c11f6a4c407a5e9a
   ExpoCameraBarcodeScanning: 5a70a41981162f2498b810cf8e93ca7748b145fa
   ExpoClipboard: ded290c5207322d41d34da299a0aeda94d6680e3
+  ExpoContacts: 5a62f9bb9fa1af40cafdb51e363adeb4845d22ab
   ExpoDevice: 92f09083f5786c5274d013f487d7269e7aa5960e
   ExpoDomWebView: b2e9d601f9cb77d3c97da73234e175b64be91928
   ExpoFileSystem: bdb067c7739d9f7405227154a7280e2d6653bbc8
@@ -3038,6 +3049,7 @@ SPEC CHECKSUMS:
   ExpoObserve: f681fccf603a876a7020bd7dfc7ca6cf46906d41
   ExpoRouter: d606824355c288ac18492641c326b571a16762de
   ExpoSecureStore: 422f8e24d8ba1693600bc3720f0a71a17ddcbea0
+  ExpoSMS: 77dbcec6746ba32d84b3070c4bc00ebdac0fd6d1
   ExpoSplashScreen: b7c56a0ae848fb5e34c6217255a5ac211ffa261a
   ExpoSymbols: 896159288ad708e1a32dc12c92fe5f90bff01126
   ExpoSystemUI: a468e48b21465d415983b01858af097090ec95f7
@@ -3060,7 +3072,7 @@ SPEC CHECKSUMS:
   React: c8a434eb4c7720649ce29b79ec65a8a085d9ef89
   React-callinvoker: 4c2b5f172ed44389be239e98c3f337c5196cace7
   React-Core: bf2977380d26b10c311fc205c66f856bc46d19cd
-  React-Core-prebuilt: f265c39ae425cad92e17c6785e225b50f87ddcae
+  React-Core-prebuilt: 97e5d8de4b8f7e69503c9b0bc780019e5d4c93a2
   React-CoreModules: a3ce5ded6a0e1ce1994afe27108d91a3c1cfb815
   React-cxxreact: f6321e3f111c22152d95505cfdb5ca7f31319276
   React-debug: 4f438e5a751a73ea73cded17cd51db62588d7bac
@@ -3123,7 +3135,7 @@ SPEC CHECKSUMS:
   ReactAppDependencyProvider: 5cc0b8b95a5be99ad92aee2d59bc59987df97753
   ReactCodegen: cb89ace4a86e49ba3b808eeba24088e166b75ab6
   ReactCommon: 4d9dcc879c31dcfb3ebcef8d3189293ba501d6b3
-  ReactNativeDependencies: b91578d45d99f93a462ea63f18d736d60baf067b
+  ReactNativeDependencies: d971521e7cf0f00f5868a3efc2bc9ef4d0167931
   RNCAsyncStorage: 3a4f5e2777dae1688b781a487923a08569e27fe4
   RNDateTimePicker: 9c0a849bbe1c256f0854fea255734b715f5ea876
   RNGestureHandler: 0ea8153746a92b3744d4eaadade647debedf646e

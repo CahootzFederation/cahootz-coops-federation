@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { USER_A_EMAIL, USER_B_EMAIL, newSignedInPage } from "./support/auth";
 import { withExclusiveAccountSetting } from "./support/exclusive";
 import {
@@ -12,6 +12,16 @@ import {
   threadComment,
   trpc,
 } from "./support/welcome-lounge";
+
+// Likes a comment: ❤️ from the reaction picker (there's no separate like
+// button). A ❤️ on a comment is still its like on the server.
+async function likeComment(page: Page, comment: Locator) {
+  await comment.getByRole("button", { name: /^Add a reaction to .+'s comment$/ }).click();
+  const picker = page.getByTestId("emoji-picker");
+  await expect(picker).toBeVisible();
+  await picker.getByRole("button", { name: "red heart", exact: true }).first().click();
+  await expect(picker).toBeHidden();
+}
 
 // Both journeys here reseat the shared fixture accounts in the open lounge,
 // so they live in one file to run in order rather than in parallel.
@@ -131,14 +141,14 @@ test("liking a newcomer's welcome lounge intro sends them a reaction alert", asy
     await openWelcomeThreadFromJoinAlert(member.page, lounge.name);
     const introComment = threadComment(member.page, introText);
     await expect(introComment).toBeVisible();
-    await introComment.getByRole("button", { name: /^Like .+'s comment, 0 likes$/ }).click();
+    await likeComment(member.page, introComment);
     await expect(
-      introComment.getByRole("button", { name: /^Remove your like from .+'s comment, 1 like$/ }),
+      introComment.getByRole("button", { name: /^Remove your red heart reaction from .+'s comment, 1 reaction$/ }),
     ).toBeVisible();
     await member.page.reload();
     await expect(
       threadComment(member.page, introText).getByRole("button", {
-        name: /^Remove your like from .+'s comment, 1 like$/,
+        name: /^Remove your red heart reaction from .+'s comment, 1 reaction$/,
       }),
     ).toBeVisible();
 
@@ -178,9 +188,9 @@ test("liking a newcomer's welcome lounge intro sends them a reaction alert", asy
     await member.page.reload();
     const followUp = threadComment(member.page, followUpText);
     await expect(followUp).toBeVisible();
-    await followUp.getByRole("button", { name: /^Like .+'s comment, 0 likes$/ }).click();
+    await likeComment(member.page, followUp);
     await expect(
-      followUp.getByRole("button", { name: /^Remove your like from .+'s comment, 1 like$/ }),
+      followUp.getByRole("button", { name: /^Remove your red heart reaction from .+'s comment, 1 reaction$/ }),
     ).toBeVisible();
 
     await newcomer.page.reload();

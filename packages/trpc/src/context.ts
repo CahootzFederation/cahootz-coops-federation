@@ -51,6 +51,7 @@ export type AccountAuthenticatedContext = Context & {
     email: string;
     handle: string | null;
     name: string | null;
+    nickname: string | null;
     phone: string | null;
     roles: string[];
     status: string;

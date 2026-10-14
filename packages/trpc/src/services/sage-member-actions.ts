@@ -3,7 +3,7 @@ import { db } from "@repo/db";
 import { ensureSageBotUser } from "../lib/bot.js";
 import { askIntroductionHelper, createIntroductionSuggestion } from "./sage-introductions.js";
 import { enqueueSageActionExecute } from "./sage-dispatch.js";
-import { payloadHash } from "./sage-ride-match-agent.js";
+import { payloadHash } from "./sage-payload-hash.js";
 import { checkSageOutput, cleanseUntrustedText } from "./untrusted-input.js";
 
 /**

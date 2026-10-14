@@ -1448,21 +1448,6 @@ export const api = {
     }>(response, 'Failed to load commons members');
   },
 
-  async askCommonsAi(prompt: string, postId?: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.ask`, {
-      method: 'POST',
-      headers: {
-        ...networkConfig.defaultHeaders,
-      },
-      body: JSON.stringify({ prompt, postId }),
-    });
-
-    return readTrpcResult<{ answer: string }>(
-      response,
-      'Failed to ask Cahootz AI',
-    );
-  },
-
   async suggestCommons(
     data: CommonsSuggestionData,
     sessionToken?: string | null,
@@ -4710,12 +4695,11 @@ export const api = {
     reviewId: string,
     response_: 'APPROVE' | 'DECLINE' | 'ESCALATE',
     sessionToken: string,
-    payload?: Record<string, unknown>,
   ) {
     const response = await fetch(`${API_BASE_URL}/trpc/sage.respondToReview`, {
       method: 'POST',
       headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({ reviewId, response: response_, ...(payload ? { payload } : {}) }),
+      body: JSON.stringify({ reviewId, response: response_ }),
     });
     return readTrpcResult<{ success: boolean }>(response, 'Could not send your response');
   },

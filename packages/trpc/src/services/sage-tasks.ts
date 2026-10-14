@@ -197,7 +197,7 @@ export function reminderText(task: Pick<SageTask, "kind" | "expected" | "offer" 
 // ── The wake loop ────────────────────────────────────────────────────────────
 
 async function taskTrailVisibility(task: SageTask): Promise<{ visibility: "COMMONS_MEMBERS" | "CIRCLE" | "ADMINS"; circleId: string | null; relatedPostIds: string[] }> {
-  // Suggestions are visible only to the people in them (an introduction or ride match names a need), so their trails are admin-only.
+  // Suggestions are visible only to the people in them (an introduction names a need), so their trails are admin-only.
   // So are private promises and introduction outcomes: they describe one member's conversation with Sage.
   if (task.subjectType === SUGGESTION_TASK_SUBJECT || OUTREACH_SUBJECTS.has(task.subjectType)) {
     return { visibility: "ADMINS", circleId: task.circleId, relatedPostIds: [] };

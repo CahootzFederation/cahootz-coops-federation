@@ -23,6 +23,7 @@ export function inAppAlertKind(type: string): InAppAlertKind {
   if (
     type === "CIRCLE_POST" ||
     type === "CIRCLE_COMMENT" ||
+    type === "CIRCLE_HIGHLIGHT" ||
     type === "COMMONS_COMMENT" ||
     type === "PERSONAL_PAGE_COMMENT" ||
     type === "DIRECT_MESSAGE" ||

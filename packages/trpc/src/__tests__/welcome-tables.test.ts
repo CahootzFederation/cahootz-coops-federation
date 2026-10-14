@@ -204,7 +204,9 @@ describe('welcomeTablesRouter', () => {
       });
       expect(db.groupMember.create).toHaveBeenCalledTimes(1); // only the new guide, no newcomer
       expect(db.groupMember.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { groupId: 'wt_2', userId: 'guide_1', role: 'GUIDE' } }),
+        expect.objectContaining({
+          data: { groupId: 'wt_2', userId: 'guide_1', role: 'GUIDE', notificationLevel: 'HIGHLIGHTS' },
+        }),
       );
       expect(db.commonsPost.create).toHaveBeenCalledWith({
         data: expect.objectContaining({

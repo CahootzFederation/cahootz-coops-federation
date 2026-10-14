@@ -1,5 +1,6 @@
 import type { CommonsAction, CommonsActionParticipant } from "@repo/db";
 import { db } from "@repo/db";
+import { defaultCircleNotificationLevel } from "@repo/validators/notification";
 
 import { auditLogEntry } from "../lib/audit.js";
 import { ensureSageBotUser } from "../lib/bot.js";
@@ -194,7 +195,13 @@ async function createPrivateCircle(ctx: ToolContext): Promise<ToolResult> {
       },
     });
     for (const userId of participantIds) {
-      await tx.groupMember.create({ data: { groupId: created.id, userId } });
+      await tx.groupMember.create({
+        data: {
+          groupId: created.id,
+          userId,
+          notificationLevel: defaultCircleNotificationLevel,
+        },
+      });
     }
     await tx.auditLog.create({
       data: auditLogEntry({

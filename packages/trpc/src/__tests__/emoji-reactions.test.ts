@@ -90,6 +90,20 @@ function makeDb(state: {
       count: vi.fn(async () => (supported ? 1 : 0)),
       findMany: vi.fn(async () => (supported ? [{ userId: VIEWER.id }] : [])),
     },
+    // Personal page posts reuse the same rows and support flag.
+    personalPagePost: { findUnique: vi.fn().mockResolvedValue({ id: 'page_post_1', authorId: 'author_1' }) },
+    personalPagePostReaction: table(postRows, 'postId'),
+    personalPagePostSupport: {
+      findUnique: vi.fn(async () => (supported ? { id: 'support_1' } : null)),
+      create: vi.fn(async () => {
+        supported = true;
+      }),
+      delete: vi.fn(async () => {
+        supported = false;
+      }),
+      count: vi.fn(async () => (supported ? 1 : 0)),
+      findMany: vi.fn(async () => (supported ? [{ userId: VIEWER.id }] : [])),
+    },
   } as any;
 }
 
@@ -232,5 +246,53 @@ describe('togglePostReaction', () => {
     });
     expect(db.commonsPostReaction.create).not.toHaveBeenCalled();
     expect(push).toHaveBeenCalledWith(db, expect.objectContaining({ title: 'Someone liked your post' }));
+  });
+});
+
+describe('togglePersonalPagePostReaction', () => {
+  it('stores other emoji as reactions, alerting the author once per member', async () => {
+    const db = makeDb();
+
+    const first = await callerFor(db).togglePersonalPagePostReaction({ postId: 'page_post_1', emoji: '🎉' });
+    await callerFor(db).togglePersonalPagePostReaction({ postId: 'page_post_1', emoji: '🔥' });
+
+    expect(first).toEqual({
+      emoji: '🎉',
+      reacted: true,
+      support: 0,
+      reactions: [{ emoji: '🎉', count: 1, viewerReacted: true }],
+    });
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith(db, expect.objectContaining({ userId: 'author_1', title: 'Someone reacted 🎉 to your post' }));
+    expect(db.personalPagePostSupport.create).not.toHaveBeenCalled();
+  });
+
+  it('treats ❤️ as the like and lists it first', async () => {
+    const db = makeDb({ postRows: [{ id: 'r_0', emoji: '🎉', userId: 'user_other' }] });
+
+    const result = await callerFor(db).togglePersonalPagePostReaction({ postId: 'page_post_1', emoji: LIKE_EMOJI });
+
+    expect(result).toMatchObject({
+      reacted: true,
+      support: 1,
+      reactions: [
+        { emoji: LIKE_EMOJI, count: 1, viewerReacted: true },
+        { emoji: '🎉', count: 1, viewerReacted: false },
+      ],
+    });
+    expect(db.personalPagePostReaction.create).not.toHaveBeenCalled();
+    expect(push).toHaveBeenCalledWith(db, expect.objectContaining({ title: 'Someone liked your post' }));
+
+    const undone = await callerFor(db).togglePersonalPagePostReaction({ postId: 'page_post_1', emoji: LIKE_EMOJI });
+    expect(undone).toMatchObject({ reacted: false, support: 0 });
+  });
+
+  it('refuses a missing post', async () => {
+    const db = makeDb();
+    db.personalPagePost.findUnique.mockResolvedValue(null);
+
+    await expect(
+      callerFor(db).togglePersonalPagePostReaction({ postId: 'missing', emoji: '🎉' }),
+    ).rejects.toThrow('Post not found.');
   });
 });

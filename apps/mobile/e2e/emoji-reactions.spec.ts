@@ -205,3 +205,80 @@ test("a member reacts to a post from the feed card", async ({ browser }) => {
     await reactor.context.close();
   }
 });
+
+// Personal Page posts use the same reactions as Commons posts (❤️ is their
+// like). User B reacts to User A's page post from A's public profile, and
+// User A sees the reactions on their own Personal Page.
+test("a member reacts to a personal page post", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const postText = `E2E ${runId}: react to my page post`;
+  const author = await newSignedInPage(browser, USER_A_EMAIL);
+  const reactor = await newSignedInPage(browser, USER_B_EMAIL);
+  let postId: string | undefined;
+  let token: string | null = null;
+
+  try {
+    token = await sessionTokenFor(author.page);
+    expect(token).toBeTruthy();
+    const created = await trpcPost("commons.createPersonalPagePost", token!, {
+      content: postText,
+      media: [],
+    });
+    postId = created?.post?.id;
+    expect(postId).toBeTruthy();
+    const authorHandle: string = created?.post?.handle;
+    expect(authorHandle).toBeTruthy();
+
+    const b = reactor.page;
+    await b.goto(`/people/${authorHandle}`);
+    await expect(b.getByText(postText, { exact: true })).toBeVisible();
+    await expect(b.getByText("Reactions", { exact: true })).toBeVisible();
+    const card = b
+      .getByText(postText, { exact: true })
+      .locator('xpath=ancestor::*[.//*[starts-with(@aria-label, "Add a reaction to")]][1]');
+    const picker = b.getByTestId("emoji-picker");
+
+    for (const name of ["red heart", "party popper"]) {
+      await card.getByRole("button", { name: /^Add a reaction to .+'s post$/ }).click();
+      await expect(picker).toBeVisible();
+      if (name === "party popper") {
+        await picker.getByRole("textbox", { name: "Search emoji" }).fill("party");
+        await picker.getByTestId("emoji-picker-grid").getByRole("button", { name, exact: true }).click();
+      } else {
+        await picker.getByRole("button", { name, exact: true }).first().click();
+      }
+      await expect(picker).toBeHidden();
+    }
+    const bHeart = card.getByRole("button", {
+      name: /^Remove your red heart reaction from .+'s post, 1 reaction$/,
+    });
+    const bParty = card.getByRole("button", {
+      name: /^Remove your party popper reaction from .+'s post, 1 reaction$/,
+    });
+    await expect(bHeart).toBeVisible();
+    await expect(bParty).toBeVisible();
+    await b.reload();
+    await expect(bHeart).toBeVisible();
+    await expect(bParty).toBeVisible();
+
+    const a = author.page;
+    await a.goto("/personal-page");
+    await expect(a.getByText(postText, { exact: true })).toBeVisible();
+    const aCard = a
+      .getByText(postText, { exact: true })
+      .locator('xpath=ancestor::*[.//*[starts-with(@aria-label, "Add a reaction to")]][1]');
+    await expect(
+      aCard.getByRole("button", { name: /^Add red heart reaction to .+'s post, 1 reaction$/ }),
+    ).toBeVisible();
+    await expect(
+      aCard.getByRole("button", { name: /^Add party popper reaction to .+'s post, 1 reaction$/ }),
+    ).toBeVisible();
+  } finally {
+    if (postId && token) {
+      await trpcPost("commons.deletePersonalPagePost", token, { postId }).catch(() => {});
+    }
+    await author.context.close();
+    await reactor.context.close();
+  }
+});

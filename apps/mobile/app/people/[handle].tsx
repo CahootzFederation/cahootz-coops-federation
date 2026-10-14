@@ -12,7 +12,6 @@ import {
   ArrowLeft,
   CheckCircle2,
   FileText,
-  Heart,
   MessageCircle,
   UserCircle,
 } from 'lucide-react-native';
@@ -25,6 +24,7 @@ import { LoadError } from '@/components/load-error';
 import { PersonAvatar } from '@/components/person-avatar';
 import { PersonalPagePostCard } from '@/components/personal-page-post-card';
 import { ProfileCommonsSection } from '@/components/profile-commons-section';
+import { ReactionBar } from '@/components/reaction-bar';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsPost, type PersonalPageFeedPost, type PersonalPageProfile } from '@/lib/api';
@@ -53,6 +53,7 @@ export default function PublicPersonPageScreen() {
   const [profile, setProfile] = useState<PersonalPageProfile | null>(null);
   const [followsPerson, setFollowsPerson] = useState(false);
   const [isFollowBusy, setIsFollowBusy] = useState(false);
+  const [reactingPostId, setReactingPostId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -92,7 +93,12 @@ export default function PublicPersonPageScreen() {
 
   const isOwnPage = user?.handle ? user.handle === routeHandle : false;
   const totalPostCount = pagePosts.length + posts.length;
-  const supportCount = posts.reduce((total, post) => total + post.support, 0);
+  // Every reaction (❤️ likes included) on this person's page and Commons posts.
+  const reactionCount = [...pagePosts, ...posts].reduce(
+    (total, post) =>
+      total + (post.reactions ?? []).reduce((sum, reaction) => sum + reaction.count, 0),
+    0,
+  );
   const replyCount = posts.reduce((total, post) => total + post.replies, 0);
 
   const handleBack = () => {
@@ -102,6 +108,24 @@ export default function PublicPersonPageScreen() {
     }
 
     router.replace('/(tabs)' as any);
+  };
+
+  const reactToCommonsPost = async (post: CommonsPost, emoji: string) => {
+    if (!sessionToken || reactingPostId) return;
+    setReactingPostId(post.id);
+    try {
+      const result = await api.togglePostReaction(post.id, emoji, sessionToken);
+      setPosts((current) =>
+        current.map((item) =>
+          item.id === post.id ? { ...item, support: result.support, reactions: result.reactions } : item,
+        ),
+      );
+    } catch (caughtError) {
+      console.error('Failed to save post reaction:', caughtError);
+      Alert.alert("Couldn't save your reaction", friendlyError(caughtError, "We couldn't save your reaction."));
+    } finally {
+      setReactingPostId(null);
+    }
   };
 
   const handleFollow = async () => {
@@ -201,7 +225,7 @@ export default function PublicPersonPageScreen() {
                   <Metric label="Posts" value={String(totalPostCount)} />
                   <Metric label="Followers" value={String(profile?.followerCount ?? 0)} />
                   <Metric label="Following" value={String(profile?.followingCount ?? 0)} />
-                  <Metric label="Likes" value={String(supportCount)} />
+                  <Metric label="Reactions" value={String(reactionCount)} />
                   <Metric label="Replies" value={String(replyCount)} />
                 </View>
               </View>
@@ -337,16 +361,25 @@ export default function PublicPersonPageScreen() {
                   </ScrollView>
                 ) : null}
 
-                <View className="flex-row border-t border-gray-100 px-4 py-3">
-                  <View className="flex-1 flex-row items-center justify-center gap-2">
-                    <Heart size={15} color={THEME.muted} />
-                    <Text className="text-xs font-black text-gray-600">{post.support}</Text>
+                <View className="flex-row items-start gap-3 border-t border-gray-100 px-4 py-3">
+                  <View
+                    className="min-w-0 flex-1"
+                    onStartShouldSetResponder={() => true}
+                    // @ts-expect-error onClick exists on react-native-web views
+                    onClick={(event: { stopPropagation: () => void }) => event.stopPropagation()}
+                  >
+                    <ReactionBar
+                      reactions={post.reactions ?? []}
+                      onToggle={(emoji) => void reactToCommonsPost(post, emoji)}
+                      disabled={!sessionToken || reactingPostId === post.id}
+                      targetLabel={`${post.author}'s post`}
+                    />
                   </View>
-                  <View className="flex-1 flex-row items-center justify-center gap-2">
+                  <View className="flex-row items-center gap-2 pt-0.5">
                     <MessageCircle size={15} color={THEME.muted} />
                     <Text className="text-xs font-black text-gray-600">{post.replies}</Text>
                   </View>
-                  <View className="flex-1 flex-row items-center justify-center gap-2">
+                  <View className="flex-row items-center gap-2 pt-0.5">
                     <CheckCircle2 size={15} color={THEME.muted} />
                     <Text className="text-xs font-black text-gray-600">{post.classification || 'post'}</Text>
                   </View>

@@ -375,7 +375,7 @@ export function personHandle(user: {
   );
 }
 
-function mapPersonalPagePost(record: any) {
+function mapPersonalPagePost(record: any, viewerId?: string | null) {
   return {
     id: record.id,
     authorId: record.authorId,
@@ -387,6 +387,8 @@ function mapPersonalPagePost(record: any) {
     createdAt: record.createdAt.toISOString(),
     replies: record._count?.comments ?? record.comments?.length ?? 0,
     support: record._count?.supports ?? 0,
+    // Every emoji reaction, ❤️ (the like) first, when the query loaded them.
+    reactions: mapPostReactions(record.supports ?? [], record.reactions ?? [], viewerId),
     media: Array.isArray(record.media) ? record.media : [],
     comments:
       record.comments?.map((comment: any) => ({
@@ -803,6 +805,47 @@ async function togglePostSupport(
         postId: post.id,
         coopId: post.coopId,
       },
+    });
+  }
+  return true;
+}
+
+async function findPersonalPagePostForReaction(db: Context['db'], postId: string) {
+  const post = await db.personalPagePost.findUnique({
+    where: { id: postId },
+    select: { id: true, authorId: true },
+  });
+  if (!post) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Post not found.' });
+  }
+  return post;
+}
+
+// Toggles a member's like (support) on a personal page post and alerts the
+// author to a new like. Returns whether the post is now liked.
+async function togglePersonalPageSupport(
+  db: Context['db'],
+  post: { id: string; authorId: string },
+  userId: string,
+): Promise<boolean> {
+  const existing = await db.personalPagePostSupport.findUnique({
+    where: { postId_userId: { postId: post.id, userId } },
+  });
+  if (existing) {
+    await db.personalPagePostSupport.delete({ where: { id: existing.id } });
+    return false;
+  }
+
+  await db.personalPagePostSupport.create({ data: { postId: post.id, userId } });
+
+  if (post.authorId && post.authorId !== userId) {
+    void createNotificationAndPush(db, {
+      userId: post.authorId,
+      coopId: COMMONS_COOP_ID,
+      type: 'PERSONAL_PAGE_SUPPORT',
+      title: 'Someone liked your post',
+      body: 'A member liked what you shared on your page.',
+      data: { postId: post.id },
     });
   }
   return true;
@@ -2255,6 +2298,7 @@ export const commonsRouter = router({
                   author: { select: { name: true, email: true, handle: true, isBot: true } },
                 },
               },
+              ...POST_REACTIONS_INCLUDE,
               _count: { select: { comments: true, supports: true } },
             },
           }),
@@ -2302,7 +2346,7 @@ export const commonsRouter = router({
           viewerIsFollowing,
           commons,
         },
-        posts: posts.map(mapPersonalPagePost),
+        posts: posts.map((post: any) => mapPersonalPagePost(post, viewerUser?.id)),
         nextCursor,
       };
     }),
@@ -2552,50 +2596,81 @@ export const commonsRouter = router({
     .input(z.object({ postId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const { accountUser } = ctx as AccountAuthenticatedContext;
-      const post = await ctx.db.personalPagePost.findUnique({
-        where: { id: input.postId },
-        select: { authorId: true },
-      });
+      const post = await findPersonalPagePostForReaction(ctx.db, input.postId);
+      const supported = await togglePersonalPageSupport(ctx.db, post, accountUser.id);
+      return { supported };
+    }),
 
-      if (!post) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Post not found.',
+  // A member's emoji reaction on a personal page post. "❤️" is the post's
+  // like, so it goes through the same support row (and alert) as
+  // togglePersonalPagePostSupport. Mirrors togglePostReaction.
+  togglePersonalPagePostReaction: accountAuthenticatedProcedure
+    .input(z.object({ postId: z.string().min(1), emoji: reactionEmojiSchema }))
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const post = await findPersonalPagePostForReaction(ctx.db, input.postId);
+
+      let reacted: boolean;
+      if (input.emoji === LIKE_EMOJI) {
+        reacted = await togglePersonalPageSupport(ctx.db, post, accountUser.id);
+      } else {
+        const mine = await ctx.db.personalPagePostReaction.findMany({
+          where: { postId: post.id, userId: accountUser.id },
+          select: { id: true, emoji: true },
         });
+        const existing = mine.find((reaction) => reaction.emoji === input.emoji);
+        if (existing) {
+          await ctx.db.personalPagePostReaction.delete({ where: { id: existing.id } });
+          reacted = false;
+        } else {
+          if (mine.length >= MAX_REACTIONS_PER_MEMBER) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `You can add up to ${MAX_REACTIONS_PER_MEMBER} reactions to one post.`,
+            });
+          }
+          let created = true;
+          try {
+            await ctx.db.personalPagePostReaction.create({
+              data: { postId: post.id, userId: accountUser.id, emoji: input.emoji },
+            });
+          } catch (error) {
+            // A double tap raced us; the reaction exists either way.
+            if ((error as { code?: string } | undefined)?.code !== 'P2002') throw error;
+            created = false;
+          }
+          reacted = true;
+          // One alert per member per post, not one per emoji.
+          if (created && mine.length === 0 && post.authorId !== accountUser.id) {
+            void createNotificationAndPush(ctx.db, {
+              userId: post.authorId,
+              coopId: COMMONS_COOP_ID,
+              type: 'PERSONAL_PAGE_SUPPORT',
+              title: `Someone reacted ${input.emoji} to your post`,
+              body: 'A member reacted to what you shared on your page.',
+              data: { postId: post.id },
+            });
+          }
+        }
       }
 
-      const existing = await ctx.db.personalPagePostSupport.findUnique({
-        where: {
-          postId_userId: {
-            postId: input.postId,
-            userId: accountUser.id,
-          },
-        },
-      });
-
-      if (existing) {
-        await ctx.db.personalPagePostSupport.delete({
-          where: { id: existing.id },
-        });
-        return { supported: false };
-      }
-
-      await ctx.db.personalPagePostSupport.create({
-        data: { postId: input.postId, userId: accountUser.id },
-      });
-
-      if (post.authorId && post.authorId !== accountUser.id) {
-        void createNotificationAndPush(ctx.db, {
-          userId: post.authorId,
-          coopId: COMMONS_COOP_ID,
-          type: 'PERSONAL_PAGE_SUPPORT',
-          title: 'Someone liked your post',
-          body: 'A member liked what you shared on your page.',
-          data: { postId: input.postId },
-        });
-      }
-
-      return { supported: true };
+      const [rows, supports, support] = await Promise.all([
+        ctx.db.personalPagePostReaction.findMany({
+          where: { postId: post.id },
+          ...POST_REACTIONS_INCLUDE.reactions,
+        }),
+        ctx.db.personalPagePostSupport.findMany({
+          where: { postId: post.id },
+          ...POST_REACTIONS_INCLUDE.supports,
+        }),
+        ctx.db.personalPagePostSupport.count({ where: { postId: post.id } }),
+      ]);
+      return {
+        emoji: input.emoji,
+        reacted,
+        support,
+        reactions: mapPostReactions(supports, rows, accountUser.id),
+      };
     }),
 
   createPost: accountAuthenticatedProcedure

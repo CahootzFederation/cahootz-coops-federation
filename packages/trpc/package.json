@@ -113,6 +113,11 @@
       "import": "./dist/services/platform-admin.js",
       "require": "./dist/services/platform-admin.js"
     },
+    "./services/sage-weekly-outreach": {
+      "types": "./dist/services/sage-weekly-outreach.d.ts",
+      "import": "./dist/services/sage-weekly-outreach.js",
+      "require": "./dist/services/sage-weekly-outreach.js"
+    },
     "./services/welcome-tables": {
       "types": "./dist/services/welcome-tables.d.ts",
       "import": "./dist/services/welcome-tables.js",

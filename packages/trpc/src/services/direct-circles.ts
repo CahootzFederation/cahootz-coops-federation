@@ -3,7 +3,8 @@ import { randomBytes } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 
 import type { AccountAuthenticatedContext } from '../context.js';
-import { getAgent } from '../agents/registry.js';
+import { runSageCommonsReply } from '../agents/registry.js';
+import { MEMBER_ACTION_INSTRUCTIONS, buildMemberActionTools } from '../agents/tools/member-action-tools.js';
 import { auditLogEntry } from '../lib/audit.js';
 import { isSageUser } from '../lib/bot.js';
 import { COMMONS_COOP_ID, ensureCommonsMembership } from '../lib/commons.js';
@@ -11,6 +12,7 @@ import { encodeMentions } from '../lib/mentions.js';
 import { createNotificationAndPush } from './push-notification-service.js';
 import { traceSageReply } from './sage-reply-trails.js';
 import { checkinFollowupAllowed, runCheckinFollowup } from './sage-checkin-followup.js';
+import { handleConversationConfirmation } from './sage-member-actions.js';
 import { handlePrivateCheckinSignal } from './sage-private-signals.js';
 
 // A direct message is a private circle with exactly two members. It reuses
@@ -267,8 +269,27 @@ async function replyAsSage(
       await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
       return;
     }
+    // A plain yes or no to Sage's latest ask (a post or an introduction) is handled in code, no model call.
+    const confirmed = await handleConversationConfirmation({
+      conversationGroupId: group.id, memberId: sender.id, sageId: sage.id, content: message.content,
+    });
+    if (confirmed) {
+      if (confirmed.reply) {
+        await db.groupComment.create({ data: { groupId: group.id, authorId: sage.id, content: confirmed.reply } });
+        await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
+      }
+      await confirmed.afterReply?.();
+      return;
+    }
+    // Sage can act for the member here. Asks it makes are added after its reply, past the reply's safety
+    // check, so the member sees exactly what a "yes" would do.
+    const actions = buildMemberActionTools({ memberId: sender.id, conversationGroupId: group.id });
     const publish = async (reply: string) => {
-      const content = privateSignal.consentQuestion ? `${reply}\n\n${privateSignal.consentQuestion}` : reply;
+      const asks = actions.state.asks.slice(-1);
+      // One question per message, so a "yes" can only mean one thing: the memory offer waits if Sage already asked.
+      const askedAlready = asks.length > 0 || reply.includes('?');
+      const parts = [reply, ...asks, ...(privateSignal.consentQuestion && !askedAlready ? [privateSignal.consentQuestion] : [])];
+      const content = parts.join('\n\n');
       await db.groupComment.create({
         data: { groupId: group.id, authorId: sage.id, content },
       });
@@ -293,6 +314,7 @@ async function replyAsSage(
           async (cleanMessage, thread) => {
             const out = await runCheckinFollowup({
               coopId: group.coopId, checkin: checkin.content, threadContext: thread, message: cleanMessage, followupsSent,
+              tools: actions.tools, toolInstructions: MEMBER_ACTION_INSTRUCTIONS,
             });
             return { reply: out.reply, grounding: { charterChars: 0, missionGoalCount: 0, model: out.model, usedFallback: out.usedFallback } };
           },
@@ -301,8 +323,6 @@ async function replyAsSage(
         return;
       }
     }
-    const agent = getAgent('sage-commons-reply');
-    if (!agent) return;
     const prior = await db.groupComment.findMany({
       where: { groupId: group.id, id: { not: message.id } },
       orderBy: { createdAt: 'desc' },
@@ -315,7 +335,11 @@ async function replyAsSage(
     await traceSageReply(
       { kind: 'dm', coopId: group.coopId, groupId: group.id, messageId: message.id },
       { message: message.content, threadContext, threadCount: prior.length },
-      (cleanMessage, thread) => agent.run({ coopId: group.coopId, message: cleanMessage, threadContext: thread, channel: 'dm' }),
+      (cleanMessage, thread) => runSageCommonsReply(
+        { coopId: group.coopId, message: cleanMessage, threadContext: thread, channel: 'dm' },
+        undefined,
+        { tools: actions.tools, instructions: MEMBER_ACTION_INSTRUCTIONS },
+      ),
       publish,
     );
   } catch (error) {

@@ -48,6 +48,7 @@ import { FUNDING_BADGE_BY_TIER } from '../services/funding-badge-service.js';
 import { getSageAutonomyUsage } from '../services/sage-autonomy.js';
 import { touchCircleWindow } from '../services/circle-window.js';
 import { wakeTasksForReply } from '../services/sage-tasks.js';
+import { relayReplyToMember } from '../services/sage-member-actions.js';
 import { recordSkippedCircleMention, traceSageReply } from '../services/sage-reply-trails.js';
 import { notifySageComment } from '../services/sage-comment-notifications.js';
 import {
@@ -3019,6 +3020,10 @@ export const commonsRouter = router({
       // A reply may be what Sage was waiting for: check the member's open follow-ups on this post now.
       void wakeTasksForReply(post.id, accountUser.id).catch((error) =>
         console.error('Could not wake Sage follow-ups', { postId: post.id, error }),
+      );
+      // A reply to a post Sage made for a member goes back to that member privately.
+      void relayReplyToMember(comment.id).catch((error) =>
+        console.error('Could not relay a reply to the member', { commentId: comment.id, error }),
       );
       const isCirclePost =
         !!post.circleId && post.circleId !== generalCircleId(post.coopId);

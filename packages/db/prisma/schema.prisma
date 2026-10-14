@@ -1148,6 +1148,7 @@ enum CommonsActionType {
   NO_ACTION
   RIDE_MATCH_PROPOSAL // retired 2026-10-14; kept so existing rows stay readable
   SUGGEST_ACTION
+  ASK_COMMONS // Sage's open question to the whole Commons about a community pattern
 
   @@schema("public")
 }

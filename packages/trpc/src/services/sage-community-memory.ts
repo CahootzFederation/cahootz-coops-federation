@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { auditLogEntry } from "../lib/audit.js";
 import { recordObservation } from "./ai-memory.js";
+import { askCommonsAboutHypothesis, COMMUNITY_QUESTION_MIN_RESPONDERS, countQuestionResponders } from "./sage-community-question.js";
 import { MEMBER_SIGNAL_AGENT_KEY } from "./sage-private-signals.js";
 
 export const COMMUNITY_MEMORY_AGENT_KEY = "sage-community-memory";
@@ -269,11 +270,35 @@ async function writeCandidate(coopId: string, candidate: CommunityCandidate, now
   return { state: "created", observationId: row.id };
 }
 
-export function impactOutcome(actions: Array<{ status: string; feedback?: { rating: string } | null }>): ImpactOutcome {
-  if (!actions.length) return "NO_ACTION";
+/**
+ * Usefulness of what Sage did about a hypothesis: reviewable actions, plus Sage's open questions to the
+ * Commons. A question counts by how many members answered it publicly: enough replies or reactions is
+ * helpful; none, or a question an admin removed, is not.
+ */
+export function impactOutcome(
+  actions: Array<{ status: string; feedback?: { rating: string } | null }>,
+  questions: Array<{ removed: boolean; responders: number }> = [],
+): ImpactOutcome {
+  if (!actions.length && !questions.length) return "NO_ACTION";
   if (actions.some((action) => action.status === "PUBLISHED" && action.feedback?.rating === "GOOD")) return "HELPFUL";
+  if (questions.some((question) => !question.removed && question.responders >= COMMUNITY_QUESTION_MIN_RESPONDERS)) return "HELPFUL";
   if (actions.some((action) => action.feedback?.rating === "NEEDS_WORK" || ["DISMISSED", "FAILED"].includes(action.status))) return "NOT_HELPFUL";
+  if (questions.some((question) => question.removed || question.responders === 0)) return "NOT_HELPFUL";
   return "INCONCLUSIVE";
+}
+
+/**
+ * Hypotheses Sage stops acting on: two reviews where what Sage did didn't help. A review with no linked
+ * action (NO_ACTION) says nothing about whether the need is real, so it never counts.
+ */
+export function discouragedHypothesisIds(impactDetails: Array<unknown>): Set<string> {
+  const counts = new Map<string, number>();
+  for (const value of impactDetails) {
+    const detail = value as { sourceObservationId?: unknown; outcome?: unknown } | null;
+    if (typeof detail?.sourceObservationId !== "string" || detail.outcome !== "NOT_HELPFUL") continue;
+    counts.set(detail.sourceObservationId, (counts.get(detail.sourceObservationId) ?? 0) + 1);
+  }
+  return new Set([...counts].filter(([, count]) => count >= 2).map(([id]) => id));
 }
 
 async function reviewImpacts(coopId: string, now: Date) {
@@ -290,11 +315,17 @@ async function reviewImpacts(coopId: string, now: Date) {
       if (ageDays < days) continue;
       const systemKey = `community-impact:${observation.id}:${days}`;
       if (await db.aIObservation.findUnique({ where: { systemKey }, select: { id: true } })) continue;
-      const actions = await db.commonsAction.findMany({
+      const linked = await db.commonsAction.findMany({
         where: { originObservationId: observation.id }, include: { feedback: true, reviews: true },
       });
+      const actions = linked.filter((action) => action.type !== "ASK_COMMONS");
+      const questions = await Promise.all(linked.filter((action) => action.type === "ASK_COMMONS" && action.status !== "FAILED")
+        .map(async (action) => {
+          const responders = action.status === "PUBLISHED" ? await countQuestionResponders(action.sourcePostId) : null;
+          return { removed: responders === null, responders: responders ?? 0 };
+        }));
       const details = parseDetails(observation.details);
-      const outcome = impactOutcome(actions);
+      const outcome = impactOutcome(actions, questions);
       const related = await db.aIObservation.findMany({
         where: {
           scopeType: "commons", scopeId: coopId, generatedByAgentKey: COMMUNITY_MEMORY_AGENT_KEY,
@@ -320,6 +351,11 @@ async function reviewImpacts(coopId: string, now: Date) {
           reviewWindowDays: days,
           outcome,
           linkedActionCount: actions.length,
+          questionProgress: {
+            askedCount: questions.length,
+            removedCount: questions.filter((question) => question.removed).length,
+            responders: questions.reduce((total, question) => total + question.responders, 0),
+          },
           actionProgress: {
             suggested: actions.length > 0,
             reviewedCount: actions.filter((action) => action.reviewedAt || action.reviews.some((review) => review.respondedAt)).length,
@@ -338,7 +374,7 @@ async function reviewImpacts(coopId: string, now: Date) {
         },
         sources: [
           { type: "ai_observation", id: observation.id },
-          ...actions.map((action) => ({ type: "commons_action", id: action.id })),
+          ...linked.map((action) => ({ type: "commons_action", id: action.id })),
         ],
         visibility: "SAGE_INTERNAL",
         status: "ACTIVE",
@@ -412,6 +448,8 @@ export async function consolidateCommonsMemory(coopId: string, now = new Date())
     await db.aIObservation.updateMany({ where: { id: { in: unsupportedIds } }, data: { status: "UNSUPPORTED" } });
     counts.unsupported += unsupportedIds.length;
   }
+  // A live hypothesis goes to the whole Commons as an open question, never to one person.
+  const question = await askCommonsAboutHypothesis(coopId, await retrieveCommunityInsights(coopId, "community question", now), now);
   const impacts = await reviewImpacts(coopId, now);
   await db.auditLog.create({
     data: auditLogEntry({
@@ -419,10 +457,10 @@ export async function consolidateCommonsMemory(coopId: string, now = new Date())
       action: "SAGE_COMMUNITY_MEMORY_CONSOLIDATED",
       resource: "CoopConfig",
       resourceId: config.id,
-      metadata: { coopId, themes: byTheme.size, activeMembers: activeMembers.size, ...counts, impacts },
+      metadata: { coopId, themes: byTheme.size, activeMembers: activeMembers.size, ...counts, impacts, questionAsked: question.asked },
     }),
   }).catch(() => {});
-  return { skipped: false as const, themes: byTheme.size, ...counts, impacts };
+  return { skipped: false as const, themes: byTheme.size, ...counts, impacts, question };
 }
 
 export async function retrieveCommunityInsights(coopId: string, purpose: string, now = new Date()) {
@@ -453,20 +491,18 @@ export async function retrieveCommunityInsights(coopId: string, purpose: string,
       select: { details: true },
     }),
   ]);
-  const discouragingReviews = new Map<string, number>();
-  for (const row of impactRows) {
-    const detail = row.details as { sourceObservationId?: unknown; outcome?: unknown } | null;
-    if (typeof detail?.sourceObservationId !== "string" || !["NOT_HELPFUL", "NO_ACTION"].includes(String(detail.outcome))) continue;
-    discouragingReviews.set(detail.sourceObservationId, (discouragingReviews.get(detail.sourceObservationId) ?? 0) + 1);
-  }
-  const valid = rows.filter((row) => {
+  const discouraged = discouragedHypothesisIds(impactRows.map((row) => row.details));
+  const valid = rows.flatMap((row) => {
     const details = parseDetails(row.details);
-    return details?.evaluatedConfigId === config.id
+    const current = details?.evaluatedConfigId === config.id
       && details.evaluatedConfigVersion === config.version
       && details.charterSnapshotHash === activeCharterHash
-      && (discouragingReviews.get(row.id) ?? 0) < 2;
-  })
-    .map((row) => ({ id: row.id, summary: row.summary, confidence: row.confidence }));
+      && !discouraged.has(row.id);
+    return current ? [{
+      id: row.id, themeKey: details.themeKey, summary: row.summary, confidence: row.confidence,
+      goalLabels: details.missionGoalSnapshot.map((goal) => goal.label),
+    }] : [];
+  });
   await db.auditLog.create({
     data: auditLogEntry({
       actorId: "system/sage", action: "SAGE_COMMUNITY_MEMORY_READ", resource: "AIObservation", resourceId: coopId,

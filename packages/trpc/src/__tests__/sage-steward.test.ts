@@ -98,6 +98,15 @@ describe("the steward's actions are checked in code", () => {
     expect(routeSageAlert).toHaveBeenCalledWith(expect.objectContaining({ coopId: "harbor", category: "TREASURY", title: "Budget question" }));
   });
 
+  it("never sees community hypotheses; they go to the whole Commons as a question instead", async () => {
+    db.sageDecisionTrail.findFirst.mockResolvedValueOnce(null);
+    db.coopConfig.findFirst.mockResolvedValueOnce({ name: "Harbor" });
+    const decide = vi.fn().mockResolvedValue({ summary: "Nothing", actions: [] });
+    await runStewardReview("harbor", new Date(), decide);
+    const prompt = JSON.parse(decide.mock.calls[0][0] as string);
+    expect(Object.keys(prompt).sort()).toEqual(["commons", "memory", "today"]);
+  });
+
   it("skips the daily review if it ran recently or Sage is over its limit, and otherwise applies what passes", async () => {
     db.sageDecisionTrail.findFirst.mockResolvedValueOnce({ id: "recent" });
     expect(await runStewardReview("harbor")).toEqual({ skipped: "recent" });

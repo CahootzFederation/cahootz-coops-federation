@@ -650,7 +650,13 @@ describe('groupsRouter', () => {
         data: { status: 'ACCEPTED', respondedAt: expect.any(Date) },
       });
       expect(db.groupMember.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ create: { groupId: 'group_1', userId: ACTIVE_USER.id } }),
+        expect.objectContaining({
+          create: {
+            groupId: 'group_1',
+            userId: ACTIVE_USER.id,
+            notificationLevel: 'HIGHLIGHTS',
+          },
+        }),
       );
     });
 
@@ -1035,7 +1041,11 @@ describe('groupsRouter', () => {
 
       expect(result.joined).toBe(true);
       expect(db.groupMember.upsert).toHaveBeenCalledWith(expect.objectContaining({
-        create: { groupId: 'group_1', userId: ACTIVE_USER.id },
+        create: {
+          groupId: 'group_1',
+          userId: ACTIVE_USER.id,
+          notificationLevel: 'HIGHLIGHTS',
+        },
       }));
     });
 
@@ -1540,10 +1550,14 @@ describe('groupsRouter', () => {
         }),
       );
       expect(db.groupMember.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { groupId: 'wt_1', userId: 'guide_1', role: 'GUIDE' } }),
+        expect.objectContaining({
+          data: { groupId: 'wt_1', userId: 'guide_1', role: 'GUIDE', notificationLevel: 'HIGHLIGHTS' },
+        }),
       );
       expect(db.groupMember.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' } }),
+        expect.objectContaining({
+          data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER', notificationLevel: 'HIGHLIGHTS' },
+        }),
       );
       expect(db.commonsPost.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -1576,7 +1590,9 @@ describe('groupsRouter', () => {
 
       expect(db.groupMember.create).toHaveBeenCalledTimes(1);
       expect(db.groupMember.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' } }),
+        expect.objectContaining({
+          data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER', notificationLevel: 'HIGHLIGHTS' },
+        }),
       );
       expect(db.group.create).not.toHaveBeenCalled();
       expect(db.commonsPost.create).not.toHaveBeenCalled();
@@ -1755,7 +1771,9 @@ describe('groupsRouter', () => {
       // Only the NEWCOMER row is created - no GUIDE membership when unguided.
       expect(db.groupMember.create).toHaveBeenCalledTimes(1);
       expect(db.groupMember.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' } }),
+        expect.objectContaining({
+          data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER', notificationLevel: 'HIGHLIGHTS' },
+        }),
       );
       expect(result.welcomeTableNumber).toBe(1);
     });

@@ -35,7 +35,7 @@ import {
   sendDirectCircleMessage,
 } from '../services/direct-circles.js';
 import { createNotificationAndPush } from '../services/push-notification-service.js';
-import { notifyCircleActivity } from '../services/circle-notifications.js';
+import { notifyCircleActivity, notifyCircleHighlight } from '../services/circle-notifications.js';
 import { notifyNewCommentReaction, notifyNewPostReaction } from '../services/comment-reactions.js';
 import {
   LIKE_EMOJI,
@@ -2950,6 +2950,17 @@ export const commonsRouter = router({
           data: { isPinned: true, pinnedAt: new Date(), pinnedById: accountUser.id },
         }),
       ]);
+
+      await notifyCircleHighlight(ctx.db, {
+        coopId: post.coopId,
+        circleId: post.circleId!,
+        postId: post.id,
+        actorId: accountUser.id,
+      }).catch(() =>
+        console.error('[push] circle highlight notification failed', {
+          postId: post.id,
+        }),
+      );
 
       return { success: true };
     }),

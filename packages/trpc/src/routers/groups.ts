@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
   circleNotificationLevelSchema,
+  defaultCircleNotificationLevel,
   parseCircleNotificationLevel,
 } from '@repo/validators/notification';
 
@@ -278,7 +279,11 @@ export const groupsRouter = router({
         });
 
         await tx.groupMember.create({
-          data: { groupId: created.id, userId },
+          data: {
+            groupId: created.id,
+            userId,
+            notificationLevel: defaultCircleNotificationLevel,
+          },
         });
 
         await tx.auditLog.create({
@@ -672,7 +677,11 @@ export const groupsRouter = router({
         }),
         context.db.groupMember.upsert({
           where: { groupId_userId: { groupId: invite.groupId, userId } },
-          create: { groupId: invite.groupId, userId },
+          create: {
+            groupId: invite.groupId,
+            userId,
+            notificationLevel: defaultCircleNotificationLevel,
+          },
           update: {},
         }),
         context.db.auditLog.create({
@@ -754,7 +763,11 @@ export const groupsRouter = router({
       await context.db.$transaction([
         context.db.groupMember.upsert({
           where: { groupId_userId: { groupId: group.id, userId } },
-          create: { groupId: group.id, userId },
+          create: {
+            groupId: group.id,
+            userId,
+            notificationLevel: defaultCircleNotificationLevel,
+          },
           update: {},
         }),
         context.db.auditLog.create({
@@ -799,7 +812,11 @@ export const groupsRouter = router({
         await context.db.$transaction([
           context.db.groupMember.upsert({
             where: { groupId_userId: { groupId: group.id, userId } },
-            create: { groupId: group.id, userId },
+            create: {
+              groupId: group.id,
+              userId,
+              notificationLevel: defaultCircleNotificationLevel,
+            },
             update: {},
           }),
           context.db.auditLog.create({

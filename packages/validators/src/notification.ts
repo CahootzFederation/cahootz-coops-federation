@@ -38,6 +38,7 @@ export const notificationCategoryTypes: Record<
     "MENTION",
     "CIRCLE_POST",
     "CIRCLE_COMMENT",
+    "CIRCLE_HIGHLIGHT",
     "NEW_FOLLOWER",
     "EVENT_REMINDER",
     "WELCOME_LOUNGE_JOIN",
@@ -123,13 +124,18 @@ export const defaultNotificationPreferences: NotificationPreferences = {
   onboarding: true,
   other: true,
 };
-export const circleNotificationLevels = ["ALL", "MENTIONS", "NONE"] as const;
+export const circleNotificationLevels = [
+  "ALL",
+  "HIGHLIGHTS",
+  "MENTIONS",
+  "NONE",
+] as const;
 export const circleNotificationLevelSchema = z.enum(circleNotificationLevels);
 export type CircleNotificationLevel = z.infer<
   typeof circleNotificationLevelSchema
 >;
 export const defaultCircleNotificationLevel: CircleNotificationLevel =
-  "MENTIONS";
+  "HIGHLIGHTS";
 export function parseCircleNotificationLevel(
   value: string | null | undefined,
 ): CircleNotificationLevel {

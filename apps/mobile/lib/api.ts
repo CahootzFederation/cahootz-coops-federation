@@ -10,7 +10,7 @@ import type { CommonsPostTag } from './post-types';
 // Uses native fetch API - no additional dependencies required
 
 import { getApiUrl, getWebUrl, networkConfig } from './config';
-import { apiError, httpError } from './friendly-error';
+import { ApiError, apiError, httpError } from './friendly-error';
 import { coopConfig } from './coop-config';
 
 /**
@@ -298,6 +298,10 @@ export interface SupporterBadge {
   shortName: string;
   color: string;
 }
+
+// Match the API's /api/upload/presigned limits.
+export const UPLOAD_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+export const POST_VIDEO_MAX_BYTES = 100 * 1024 * 1024;
 
 export type FeedbackCategory = 'BUG' | 'COMPLAINT' | 'IDEA' | 'OTHER';
 
@@ -1878,6 +1882,19 @@ export const api = {
 
     const fileResponse = await fetch(data.uri);
     const fileBlob = await fileResponse.blob();
+    // iOS often omits a video's size at pick time, so check the real file
+    // before sending it; storage would otherwise reject it partway through.
+    const maxBytes =
+      data.mediaType === 'video' && (data.uploadType || 'post') === 'post'
+        ? POST_VIDEO_MAX_BYTES
+        : UPLOAD_IMAGE_MAX_BYTES;
+    if (fileBlob.size > maxBytes) {
+      const kind = data.mediaType === 'video' ? 'video' : 'photo';
+      throw new ApiError(
+        `That ${kind} is ${Math.ceil(fileBlob.size / 1024 / 1024)} MB. Each ${kind} must be under ${Math.round(maxBytes / 1024 / 1024)} MB.`,
+        { code: 'PAYLOAD_TOO_LARGE', httpStatus: 413 },
+      );
+    }
     const uploadResponse = await fetch(tokenData.uploadUrl, {
       method: 'PUT',
       headers: {
@@ -1889,7 +1906,13 @@ export const api = {
     });
 
     if (!uploadResponse.ok) {
-      throw httpError(uploadResponse.status);
+      // Keep storage's own reason (expired token, size, content type) for
+      // error reports; the member still sees friendly wording.
+      const detail = await uploadResponse.text().catch(() => '');
+      throw new ApiError(
+        `Upload to storage failed (status: ${uploadResponse.status}) ${detail.slice(0, 300)}`.trim(),
+        { httpStatus: uploadResponse.status },
+      );
     }
 
     const blobResult = await uploadResponse.json();

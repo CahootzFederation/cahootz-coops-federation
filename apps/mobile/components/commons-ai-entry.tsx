@@ -32,6 +32,7 @@ import {
 } from '@/components/commons-media-viewer';
 import { EventCard, UpcomingEventsModule } from '@/components/event-card';
 import { ReactionBar } from '@/components/reaction-bar';
+import { reportPostFailure, uploadPostMedia } from '@/lib/post-media-upload';
 import { WelcomeIntroPrompt } from '@/components/welcome-intro-prompt';
 import { LoadError } from '@/components/load-error';
 import { MentionComposerInput } from '@/components/mention-composer-input';
@@ -798,27 +799,15 @@ export default function CommonsAiEntry({
 
   const publishOutgoingPost = async (outgoing: OutgoingPost, token: string) => {
     if (outgoing.pendingPostId) markPendingPostFailed(outgoing.pendingPostId, false);
+    let stage: 'upload' | 'save' = 'upload';
     const isPersonalPageDestination =
       outgoing.destination.id === PERSONAL_PAGE_DESTINATION_ID;
     try {
       const uploadResourceId = isPersonalPageDestination
         ? 'personal-page'
         : outgoing.destination.id;
-      const uploadedMedia = await Promise.all(
-        outgoing.media.map((media) =>
-          api.uploadCommonsPostMedia({
-            coopId: uploadResourceId,
-            uri: media.uri,
-            fileName: media.fileName,
-            mimeType: media.mimeType,
-            mediaType: media.mediaType,
-            width: media.width,
-            height: media.height,
-            durationMs: media.durationMs,
-            sizeBytes: media.sizeBytes,
-          }),
-        ),
-      );
+      const uploadedMedia = await uploadPostMedia(uploadResourceId, outgoing.media);
+      stage = 'save';
 
       if (isPersonalPageDestination) {
         await api.createPersonalPagePost(
@@ -868,6 +857,11 @@ export default function CommonsAiEntry({
       );
     } catch (error) {
       console.error('Failed to publish post:', error);
+      reportPostFailure(error, {
+        stage,
+        destination: isPersonalPageDestination ? 'personal-page' : 'commons',
+        media: outgoing.media,
+      });
       const message = friendlyError(error, "We couldn't post that.");
       const { pendingPostId } = outgoing;
       if (pendingPostId && activeFeedKeyRef.current === outgoing.feedKey) {
@@ -1023,6 +1017,10 @@ export default function CommonsAiEntry({
         selectionLimit: remainingSlots,
         quality: 0.85,
         videoMaxDuration: 120,
+        // Re-encode videos to 720p H.264 so a phone video fits the 100 MB
+        // limit and uploads in reasonable time (the default keeps the
+        // original, often hundreds of MB).
+        videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
       });
 
       if (result.canceled || !result.assets[0]) return;

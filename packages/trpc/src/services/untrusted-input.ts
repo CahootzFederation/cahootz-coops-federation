@@ -81,6 +81,72 @@ export function describeInputFlags(result: { flags: InputFlag[]; matches: string
   return parts.length ? parts.join("\n") : undefined;
 }
 
+// ── Message guardrail ───────────────────────────────────────────────────────
+// Sage chats with people. A message that is clearly not a person talking (a huge paste, code, a math
+// problem, an encoded blob) gets a fixed reply and never reaches a model. Biased toward letting
+// ordinary messages through: prices, dates, addresses and short lists must pass.
+
+export type SageInputRefusal = "TOO_LONG" | "CODE" | "MATH" | "NOT_CONVERSATIONAL" | "STEERING";
+
+export const SAGE_INPUT_MAX_CHARS = 1500;
+
+const CODE_PATTERNS: RegExp[] = [
+  /```/,
+  /<\/?(?:script|style|html|body|div|iframe|svg|img|a)\b[^>]*>/i,
+  // SQL keywords in capitals only, so "select a few from the list" passes.
+  /\b(?:SELECT\s+[\w*,\s]+\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DROP\s+TABLE|DELETE\s+FROM)\b/,
+  /(?:^|\n)\s*#include\s*</,
+  /\b(?:function\s*\w*\s*\(|=>\s*\{|console\.log\(|System\.out\.|print\(|def\s+\w+\s*\(|import\s+[\w{}*,\s]+\s+from\s+['"]|require\(['"])/,
+];
+const CODE_LINE = /^\s*(?:(?:const|let|var)\s+\w+\s*=|def\s+\w+\s*\(|class\s+\w+\s*[:{(]|(?:if|for|while)\s*\(|return\b.*;|import\s+\w|.*[;{}]\s*$)/;
+
+const MATH_PATTERNS: RegExp[] = [
+  /\\(?:frac|int|sum|sqrt|lim|begin\{|cdot|alpha|beta|theta|pi)\b/,
+  /\$\$/,
+  /\b(?:solve|simplify|integrate|differentiate|factor(?:ize)?|evaluate)\b[^.\n]{0,40}(?:[=^]|\bfor\s+[xyzn]\b|\bequation\b|\bintegral\b|\bderivative\b)/i,
+  /\b(?:derivative|integral|antiderivative|eigen(?:value|vector)s?|polynomial|quadratic equation)\s+(?:of|for)\b/i,
+  // Variables combined with operators and an equals sign: 3x^2 + 5 = 17, x/2 - y = 4.
+  /\b\d*[a-z]\s*(?:\^|\*\*)\s*\d|\b\d+[a-z]\s*[-+*/]\s*\d+\s*=|\b[a-z]\b\s*[-+*/]\s*\d+\s*=\s*-?\d/i,
+];
+
+/** Fixed replies for refused messages. No model call is made. */
+export const SAGE_INPUT_REFUSAL_REPLIES: Record<SageInputRefusal, string> = {
+  TOO_LONG: "That's a lot to take in at once. I'm here for questions about your Commons and how you're doing. Could you tell me what you need in a few sentences?",
+  CODE: "That looks like code, so I can't help with it here. I'm here for questions about your Commons and how you're doing. What do you need, in a sentence or two?",
+  MATH: "I can't work through math problems here. I'm here for questions about your Commons and how you're doing. What's on your mind?",
+  NOT_CONVERSATIONAL: "I couldn't read that as a message. I'm here for questions about your Commons and how you're doing. Could you put it in your own words?",
+  STEERING: "I can only help with questions about this Commons, its charter and its goals.",
+};
+
+/** Deterministic check run before any Sage reply model call. Returns null when the message may go through. */
+export function checkSageInput(raw: string, flags: InputFlag[] = []): SageInputRefusal | null {
+  const text = (raw ?? "").normalize("NFKC");
+  if (isSteeringAttempt(flags)) return "STEERING";
+  if (text.length > SAGE_INPUT_MAX_CHARS) return "TOO_LONG";
+  if (CODE_PATTERNS.some((pattern) => pattern.test(text))) return "CODE";
+  const lines = text.split("\n").filter((line) => line.trim());
+  if (lines.filter((line) => CODE_LINE.test(line)).length >= 3) return "CODE";
+  const visible = text.replace(/\s/g, "");
+  const symbols = (visible.match(/[{}[\]<>;=|\\]/g) ?? []).length;
+  if (visible.length >= 40 && symbols / visible.length > 0.08) return "CODE";
+  if (MATH_PATTERNS.some((pattern) => pattern.test(text))) return "MATH";
+  const letters = (visible.match(/\p{L}/gu) ?? []).length;
+  // Encoded blobs: long, mostly non-letters, or long unbroken runs (base64, hex, hashes).
+  if (visible.length >= 200 && letters / visible.length < 0.5) return "NOT_CONVERSATIONAL";
+  if (!/https?:\/\//i.test(text) && /[A-Za-z0-9+/=_-]{80,}/.test(text)) return "NOT_CONVERSATIONAL";
+  return null;
+}
+
+export function describeSageInputRefusal(reason: SageInputRefusal): string {
+  return {
+    TOO_LONG: `The message was over ${SAGE_INPUT_MAX_CHARS.toLocaleString("en-US")} characters.`,
+    CODE: "The message looked like code.",
+    MATH: "The message looked like a math problem.",
+    NOT_CONVERSATIONAL: "The message didn't read as a person writing (encoded or mostly symbols).",
+    STEERING: "The message had instructions aimed at Sage.",
+  }[reason];
+}
+
 // ── Output check ────────────────────────────────────────────────────────────
 
 export type OutputProblem = "EMPTY" | "TOO_LONG" | "LINK" | "MENTION" | "ACTION_CLAIM" | "INSTRUCTION_ECHO";

@@ -141,10 +141,10 @@ The production sweep posts a daily operational receipt through the existing conf
 webhook. It names each due member by handle or display name (never by private-message contents) and
 records whether delivery was sent, skipped for a recent conversation, deduplicated, or failed. A
 separate hourly watchdog repeats a prominent alert while any configurable agent is disabled,
-safety-gated, paused by a Commons autonomy limit, stale, or broken. The watchdog reports the exact
-gate or shutdown reason. It does not bypass the gate: private urgent-disclosure responses remain off
-until policy and legal review, and governance, money, membership, and disciplinary decisions remain
-human-authorized.
+paused by a Commons autonomy limit, stale, or broken. The always-on outreach sweep stores its latest
+health result in platform configuration so model fallbacks remain alerting until a clean run clears
+them. The watchdog reports the exact failure or shutdown reason. Governance, money, membership, and
+disciplinary decisions remain human-authorized.
 
 Private replies are classified for safety before any memory extraction. Sensitive medical,
 legal, financial, relationship, identity, abuse, or crisis details are aggregation-ineligible.

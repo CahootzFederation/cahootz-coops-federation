@@ -62,12 +62,18 @@ async function signInFromSignInScreen(page: Page, email: string) {
   const deferProfile = page.getByRole("button", { name: "Do this later" });
   await expect(introContinue.or(deferProfile).first()).toBeVisible();
   if (await introContinue.isVisible()) await introContinue.click();
+  // Trying to finish an empty profile shows what's missing; skipping it
+  // must not carry that error onto the next step (checked by the caller).
+  await page.getByRole("button", { name: "Start using Cahootz" }).click();
+  await expect(shown(page, /Almost there\. To continue/)).toBeVisible();
   await deferProfile.click();
+  // The invite step comes next; the onboarding journey checks it, so stop here.
+  await expect(shown(page, "Bring people with you")).toBeVisible();
 }
 
 /**
  * A fresh browser signed in through the UI and left on the onboarding
- * wizard's last step ("Find your way in"), like a newcomer. The onboarding
+ * wizard's "Invite people you know" step, like a newcomer. The onboarding
  * journeys sign up throwaway accounts (see `newcomerEmail`) rather than the
  * shared releaseclick fixtures, so seating someone in a welcome lounge never
  * disturbs the lounge specs running alongside this file.
@@ -81,7 +87,6 @@ async function newcomerAtOnboardingChoices(browser: Browser, email: string) {
   const page = await context.newPage();
   await page.goto("/?entry=sign-in");
   await signInFromSignInScreen(page, email);
-  await expect(shown(page, "Find your way in")).toBeVisible();
   return { context, page };
 }
 
@@ -196,6 +201,8 @@ test.describe("family commons", () => {
       await expect(steward.page.getByLabel("Family mission")).toHaveValue(`E2E mission ${runId}`);
       await shown(steward.page, "Create family", { exact: true }).click();
       await expect(steward.page).toHaveURL(/commons-invites\?coopId=family-/);
+      // A new family opens on a prompt to bring people in.
+      await expect(shown(steward.page, "Your family is ready")).toBeVisible();
       const familyPath = new URL(steward.page.url()).searchParams.get("coopId")!;
       await expect(shown(steward.page, "Steward tools")).toBeVisible();
 
@@ -221,6 +228,8 @@ test.describe("family commons", () => {
       await expect(shown(steward.page, new RegExp(`${customGoal} \\(60%\\): \\$5,000 within 6 months`))).toBeVisible();
       await steward.page.goto(`/commons-invites?coopId=${familyPath}`);
       await expect(shown(steward.page, "Steward tools")).toBeVisible();
+      // Only a just-created family shows the welcome prompt.
+      await expect(shown(steward.page, "Your family is ready")).toHaveCount(0);
 
       // A steward's named invitation, bound to the newcomer's email.
       await steward.page.getByLabel("Their name").fill("Cousin E2E");
@@ -269,6 +278,22 @@ test.describe("family commons", () => {
     const newcomer = await newcomerAtOnboardingChoices(browser, generalNewcomer);
 
     try {
+      // Web has no contact picker, so inviting someone copies a message with
+      // the app link instead.
+      await newcomer.context.grantPermissions(["clipboard-read", "clipboard-write"]);
+      await newcomer.page.evaluate(() => {
+        (navigator as { share?: unknown }).share = undefined;
+      });
+      await newcomer.page.getByRole("button", { name: "Share an invitation" }).click();
+      await expect(shown(newcomer.page, "Invitation copied. Paste it into a text or email.")).toBeVisible();
+      expect(await newcomer.page.evaluate(() => navigator.clipboard.readText())).toContain(
+        "https://cahootzcommons.com",
+      );
+
+      // The profile step's "Almost there" error doesn't follow onto later steps.
+      await expect(shown(newcomer.page, /Almost there\. To continue/)).toHaveCount(0);
+      await newcomer.page.getByRole("button", { name: "Next", exact: true }).click();
+      await expect(shown(newcomer.page, "Find your way in")).toBeVisible();
       await shown(newcomer.page, "Go to General").click();
       await expect(newcomer.page).toHaveURL(/\/cahootz\/posts/);
       await expect(
@@ -311,6 +336,7 @@ test.describe("family commons", () => {
       // After signing in (and the onboarding wizard), the link resumes, and it
       // only lets User B ask to join.
       await signInFromSignInScreen(visitor, USER_B_EMAIL);
+      await visitor.getByRole("button", { name: "Next", exact: true }).click();
       await expect(visitor).toHaveURL(/\/invite\//);
       await expect(shown(visitor, "Request access", { exact: true })).toBeVisible();
 

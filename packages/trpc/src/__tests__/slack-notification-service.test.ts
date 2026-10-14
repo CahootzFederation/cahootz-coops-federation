@@ -45,13 +45,13 @@ describe("agent Slack operations alerts", () => {
 
     await expect(
       sendSageOutreachDailyReport({
-        enabled: true,
         modelConfigured: true,
         considered: 8,
         due: 1,
         sent: 1,
         recent: 0,
         duplicate: 0,
+        limited: 0,
         failed: 0,
         modelFallbacks: 1,
         deliveries: [

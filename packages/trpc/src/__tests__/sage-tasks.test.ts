@@ -21,6 +21,9 @@ vi.mock("../services/sage-suggestion-follow-up.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/sage-suggestion-follow-up.js")>()), ...suggestions,
 }));
 
+const proactive = vi.hoisted(() => ({ LIMITED_RETRIES: 3, runProactiveTask: vi.fn(), promiseAlreadyKept: vi.fn() }));
+vi.mock("../services/sage-proactive.js", () => proactive);
+
 const tasks = await import("../services/sage-tasks.js");
 const { createSageTask, clampFollowUpDays, checkTaskOutcome, wakeTask, claimDueTasks, reminderText, runSageWakeCycle, dismissSageTask } = tasks;
 
@@ -204,5 +207,37 @@ describe("the wake loop", () => {
 
   it("words reminders for stale drafts", () => {
     expect(reminderText({ kind: "REVIEW_STALE_DRAFT", title: "Tool library", expected: null, offer: null } as never).title).toBe("Your proposal draft is waiting");
+  });
+});
+
+describe("promises Sage made to a member", () => {
+  const promise = (overrides: Record<string, unknown> = {}) => task({
+    subjectType: "member_conversation", subjectId: "member-1", postId: null, sourceActionId: null, expected: "how the interview went", ...overrides,
+  });
+
+  it("closes without messaging when the member already talked with Sage about it", async () => {
+    proactive.promiseAlreadyKept.mockResolvedValueOnce(true);
+    await expect(wakeTask(promise(), NOW)).resolves.toBe("DONE");
+    expect(proactive.runProactiveTask).not.toHaveBeenCalled();
+  });
+
+  it("sends the check-back and closes, with an admin-only trail", async () => {
+    proactive.promiseAlreadyKept.mockResolvedValueOnce(false);
+    proactive.runProactiveTask.mockResolvedValueOnce("SENT");
+    await expect(wakeTask(promise(), NOW)).resolves.toBe("DONE");
+    expect(push).not.toHaveBeenCalled();
+    expect(db.sageDecisionTrail.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ visibility: "ADMINS" }) }));
+  });
+
+  it("waits a day when the member is at the weekly limit, then gives up after three tries", async () => {
+    proactive.promiseAlreadyKept.mockResolvedValue(false);
+    proactive.runProactiveTask.mockResolvedValue("LIMITED");
+    await expect(wakeTask(promise(), NOW)).resolves.toBe("REMINDED");
+    expect(db.sageTask.update).toHaveBeenCalledWith({ where: { id: "task-1" }, data: expect.objectContaining({
+      attempts: { increment: 1 }, nextWakeAt: new Date(NOW.getTime() + DAY),
+    }) });
+    db.sageTask.update.mockClear();
+    await expect(wakeTask(promise({ attempts: 3 }), NOW)).resolves.toBe("ABANDONED");
+    expect(db.sageTask.update).toHaveBeenCalledWith({ where: { id: "task-1" }, data: expect.objectContaining({ status: "ABANDONED" }) });
   });
 });

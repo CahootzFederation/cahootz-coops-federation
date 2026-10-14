@@ -1,12 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  flagIssue,
-  getAgentOperationalSnapshot,
-} from "../services/agent-operations.js";
+import { getAgentOperationalSnapshot } from "../services/agent-operations.js";
 
 const mocks = vi.hoisted(() => ({
-  featureFlagFindMany: vi.fn(),
+  platformConfigFindUnique: vi.fn(),
   coopConfigFindMany: vi.fn(),
   commonsAgentSettingFindMany: vi.fn(),
   publicCoopInfoFindMany: vi.fn(),
@@ -16,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@repo/db", () => ({
   db: {
-    featureFlag: { findMany: mocks.featureFlagFindMany },
+    platformConfig: { findUnique: mocks.platformConfigFindUnique },
     coopConfig: { findMany: mocks.coopConfigFindMany },
     commonsAgentSetting: { findMany: mocks.commonsAgentSettingFindMany },
     publicCoopInfo: { findMany: mocks.publicCoopInfoFindMany },
@@ -32,26 +29,13 @@ beforeEach(() => {
   vi.stubEnv("OPENAI_API_KEY", "sk-test");
   vi.stubEnv("SLACK_WEBHOOK_URL", "https://hooks.slack.test/agent-health");
   vi.stubEnv("TRIGGER_SECRET_KEY", "tr_prod_test");
-  mocks.featureFlagFindMany.mockResolvedValue([
-    {
-      key: "sage_weekly_outreach",
-      enabled: true,
-      metadata: { lastRunAt: "2026-10-13T17:00:00Z", lastRunStatus: "success" },
-      updatedAt: new Date("2026-10-12T18:00:00Z"),
-    },
-    {
-      key: "sage_community_memory",
-      enabled: true,
-      metadata: null,
-      updatedAt: new Date(),
-    },
-    {
-      key: "sage_private_safety_response",
-      enabled: true,
-      metadata: null,
-      updatedAt: new Date(),
-    },
-  ]);
+  mocks.platformConfigFindUnique.mockResolvedValue({
+    value: JSON.stringify({
+      lastRunAt: "2026-10-13T17:00:00Z",
+      lastRunStatus: "success",
+      lastRunMessage: null,
+    }),
+  });
   mocks.coopConfigFindMany.mockResolvedValue([{ coopId: "cahootz" }]);
   mocks.commonsAgentSettingFindMany.mockResolvedValue([
     { coopId: "cahootz", autoReply: true },
@@ -82,47 +66,6 @@ afterEach(() => {
 });
 
 describe("agent operational health", () => {
-  it("keeps reviewed agents on when their flag row has not been created yet", () => {
-    expect(
-      flagIssue({
-        agentId: "sage-weekly-outreach",
-        flag: undefined,
-        missingDefault: true,
-      }),
-    ).toBeNull();
-  });
-
-  it("reports an explicit operator pause instead of silently skipping the agent", () => {
-    expect(
-      flagIssue({
-        agentId: "sage-weekly-outreach",
-        flag: { enabled: false },
-        missingDefault: true,
-      }),
-    ).toEqual({
-      agentId: "sage-weekly-outreach",
-      state: "OFF",
-      reason:
-        "Feature flag is disabled. An operator must explicitly turn it back on.",
-    });
-  });
-
-  it("distinguishes a deliberate safety gate from an unexplained shutdown", () => {
-    expect(
-      flagIssue({
-        agentId: "sage-private-safety-response",
-        flag: { enabled: false },
-        missingDefault: false,
-        gatedReason:
-          "Feature flag is disabled pending policy and legal review.",
-      }),
-    ).toEqual({
-      agentId: "sage-private-safety-response",
-      state: "GATED",
-      reason: "Feature flag is disabled pending policy and legal review.",
-    });
-  });
-
   it("passes when configured agents, budgets, and wake cycles are healthy", async () => {
     const snapshot = await getAgentOperationalSnapshot(
       new Date("2026-10-13T18:00:00Z"),
@@ -131,27 +74,7 @@ describe("agent operational health", () => {
     expect(snapshot).toMatchObject({ healthy: true, issues: [] });
   });
 
-  it("reports feature gates, pauses, failed cycles, and disabled newsletter agents together", async () => {
-    mocks.featureFlagFindMany.mockResolvedValue([
-      {
-        key: "sage_weekly_outreach",
-        enabled: false,
-        metadata: null,
-        updatedAt: new Date(),
-      },
-      {
-        key: "sage_community_memory",
-        enabled: false,
-        metadata: null,
-        updatedAt: new Date(),
-      },
-      {
-        key: "sage_private_safety_response",
-        enabled: false,
-        metadata: null,
-        updatedAt: new Date(),
-      },
-    ]);
+  it("reports pauses, failed cycles, and disabled newsletter agents together", async () => {
     mocks.commonsAgentSettingFindMany.mockResolvedValue([
       { coopId: "cahootz", autoReply: false },
     ]);
@@ -187,18 +110,6 @@ describe("agent operational health", () => {
     expect(snapshot.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          agentId: "sage-weekly-outreach",
-          state: "OFF",
-        }),
-        expect.objectContaining({
-          agentId: "sage-community-memory",
-          state: "GATED",
-        }),
-        expect.objectContaining({
-          agentId: "sage-private-safety-response",
-          state: "GATED",
-        }),
-        expect.objectContaining({
           agentId: "sage-auto-reply",
           state: "OFF",
           coopId: "cahootz",
@@ -223,30 +134,13 @@ describe("agent operational health", () => {
   });
 
   it("keeps a failed model-backed outreach run unhealthy until a clean daily run", async () => {
-    mocks.featureFlagFindMany.mockResolvedValue([
-      {
-        key: "sage_weekly_outreach",
-        enabled: true,
-        metadata: {
-          lastRunAt: "2026-10-13T17:59:00Z",
-          lastRunStatus: "error",
-          lastRunMessage: "modelFallbacks=1",
-        },
-        updatedAt: new Date("2026-10-12T18:00:00Z"),
-      },
-      {
-        key: "sage_community_memory",
-        enabled: true,
-        metadata: null,
-        updatedAt: new Date(),
-      },
-      {
-        key: "sage_private_safety_response",
-        enabled: true,
-        metadata: null,
-        updatedAt: new Date(),
-      },
-    ]);
+    mocks.platformConfigFindUnique.mockResolvedValue({
+      value: JSON.stringify({
+        lastRunAt: "2026-10-13T17:59:00Z",
+        lastRunStatus: "error",
+        lastRunMessage: "modelFallbacks=1",
+      }),
+    });
 
     const snapshot = await getAgentOperationalSnapshot(
       new Date("2026-10-13T18:00:00Z"),
@@ -256,6 +150,20 @@ describe("agent operational health", () => {
       agentId: "sage-weekly-outreach",
       state: "FAILED",
       reason: "modelFallbacks=1",
+    });
+  });
+
+  it("reports when an always-on outreach sweep has never recorded health", async () => {
+    mocks.platformConfigFindUnique.mockResolvedValue(null);
+
+    const snapshot = await getAgentOperationalSnapshot(
+      new Date("2026-10-13T18:00:00Z"),
+    );
+
+    expect(snapshot.issues).toContainEqual({
+      agentId: "sage-weekly-outreach",
+      state: "FAILED",
+      reason: "No completed daily outreach sweep has been recorded.",
     });
   });
 });

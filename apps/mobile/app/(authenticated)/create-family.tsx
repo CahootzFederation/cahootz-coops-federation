@@ -355,7 +355,7 @@ export default function CreateFamilyScreen() {
       );
       router.replace({
         pathname: '/(authenticated)/commons-invites',
-        params: { coopId: result.coopId },
+        params: { coopId: result.coopId, created: '1' },
       } as any);
     } catch (err) {
       console.error('Failed to create family commons:', err);

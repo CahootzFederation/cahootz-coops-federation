@@ -8,7 +8,6 @@ import { recordObservation } from "./ai-memory.js";
 import { MEMBER_SIGNAL_AGENT_KEY } from "./sage-private-signals.js";
 
 export const COMMUNITY_MEMORY_AGENT_KEY = "sage-community-memory";
-export const COMMUNITY_MEMORY_FLAG = "sage_community_memory";
 export const COMMUNITY_MEMORY_MIN_COMMONS_MEMBERS = 10;
 export const COMMUNITY_MEMORY_MIN_CONTRIBUTORS = 5;
 export const COMMUNITY_MEMORY_MEMBER_FRACTION = 0.2;
@@ -477,13 +476,8 @@ export async function retrieveCommunityInsights(coopId: string, purpose: string,
   return valid;
 }
 
-export async function runCommunityMemorySweep(options: { now?: Date; coopIds?: string[]; enabled?: boolean } = {}) {
+export async function runCommunityMemorySweep(options: { now?: Date; coopIds?: string[] } = {}) {
   const now = options.now ?? new Date();
-  const flag = options.enabled === undefined
-    ? await db.featureFlag.findUnique({ where: { key: COMMUNITY_MEMORY_FLAG }, select: { enabled: true } })
-    : null;
-  const enabled = options.enabled ?? flag?.enabled ?? false;
-  if (!enabled) return { enabled: false, commons: 0, failed: 0, results: [] as unknown[] };
   const configs = await db.coopConfig.findMany({
     where: { isActive: true, isDemo: false, ...(options.coopIds ? { coopId: { in: options.coopIds } } : {}) },
     select: { coopId: true }, distinct: ["coopId"],
@@ -498,5 +492,5 @@ export async function runCommunityMemorySweep(options: { now?: Date; coopIds?: s
       results.push({ coopId, error: error instanceof Error ? error.message : String(error) });
     }
   }
-  return { enabled: true, commons: configs.length, failed, results };
+  return { commons: configs.length, failed, results };
 }

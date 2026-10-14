@@ -1,9 +1,10 @@
 import React from 'react';
 import { ActivityIndicator, Alert, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
-import { Heart, MessageCircle, Pencil, Send, Trash2 } from 'lucide-react-native';
+import { MessageCircle, Pencil, Send, Trash2 } from 'lucide-react-native';
 
 import { CommonsMediaTile, FEED_MEDIA_TILE_SIZE } from '@/components/commons-media-viewer';
 import { PersonLink } from '@/components/person-link';
+import { ReactionBar } from '@/components/reaction-bar';
 import { Text } from '@/components/ui/text';
 import { api, type CommonsPostMedia, type PersonalPageFeedPost } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
@@ -38,7 +39,7 @@ export function PersonalPagePostCard({
   isDeletingPost,
   onMediaPress,
 }: Props) {
-  const [isLiking, setIsLiking] = React.useState(false);
+  const [isReacting, setIsReacting] = React.useState(false);
   const [expanded, setExpanded] = React.useState(false);
   const [commentDraft, setCommentDraft] = React.useState('');
   const [isCommenting, setIsCommenting] = React.useState(false);
@@ -46,17 +47,18 @@ export function PersonalPagePostCard({
   const [editDraft, setEditDraft] = React.useState('');
   const [busyCommentId, setBusyCommentId] = React.useState<string | null>(null);
 
-  const toggleLike = async () => {
-    if (!sessionToken || isLiking) return;
-    setIsLiking(true);
+  // Emoji reactions, ❤️ included (it is the post's like on the server).
+  const toggleReaction = async (emoji: string) => {
+    if (!sessionToken || isReacting) return;
+    setIsReacting(true);
     try {
-      const result = await api.togglePersonalPageSupport(post.id, sessionToken);
-      onChange({ ...post, support: Math.max(0, post.support + (result.supported ? 1 : -1)) });
+      const result = await api.togglePersonalPagePostReaction(post.id, emoji, sessionToken);
+      onChange({ ...post, support: result.support, reactions: result.reactions });
     } catch (error) {
-      console.error('Failed to like page post:', error);
-      Alert.alert("Couldn't save your like", friendlyError(error, "We couldn't save your like."));
+      console.error('Failed to react to page post:', error);
+      Alert.alert("Couldn't save your reaction", friendlyError(error, "We couldn't save your reaction."));
     } finally {
-      setIsLiking(false);
+      setIsReacting(false);
     }
   };
 
@@ -179,18 +181,19 @@ export function PersonalPagePostCard({
         </ScrollView>
       ) : null}
 
-      <View className="flex-row border-t border-gray-100 px-4 py-3">
-        <TouchableOpacity
-          onPress={() => void toggleLike()}
-          disabled={isLiking}
-          className="flex-1 flex-row items-center justify-center gap-2"
-        >
-          <Heart size={15} color={THEME.muted} />
-          <Text className="text-xs font-black text-gray-600">{post.support}</Text>
-        </TouchableOpacity>
+      <View className="flex-row items-start gap-3 border-t border-gray-100 px-4 py-3">
+        <View className="min-w-0 flex-1">
+          <ReactionBar
+            reactions={post.reactions ?? []}
+            onToggle={(emoji) => void toggleReaction(emoji)}
+            disabled={!sessionToken || isReacting}
+            targetLabel={`${post.author}'s post`}
+          />
+        </View>
         <TouchableOpacity
           onPress={() => setExpanded((current) => !current)}
-          className="flex-1 flex-row items-center justify-center gap-2"
+          className="flex-row items-center gap-2 pt-0.5"
+          accessibilityLabel={`${post.replies} ${post.replies === 1 ? 'comment' : 'comments'}`}
         >
           <MessageCircle size={15} color={THEME.muted} />
           <Text className="text-xs font-black text-gray-600">{post.replies}</Text>

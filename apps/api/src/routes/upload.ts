@@ -3,7 +3,7 @@ import { generateUploadToken, generateBatchUploadTokens, generateFileKey, getExt
 
 const router = Router();
 
-const ALLOWED_UPLOAD_TYPES = ['profile', 'store', 'product', 'post', 'comment'] as const;
+const ALLOWED_UPLOAD_TYPES = ['profile', 'store', 'product', 'post', 'comment', 'feedback'] as const;
 const ALLOWED_MIMES = [
   'image/jpeg',
   'image/jpg',
@@ -50,7 +50,7 @@ router.post('/presigned', async (req: Request, res: Response) => {
       clientToken,
       pathname,
       uploadUrl,
-      expiresIn: 300,
+      expiresIn: 1800,
     });
   } catch (error) {
     console.error('❌ Upload token generation error:', error);
@@ -92,7 +92,7 @@ router.post('/presigned-batch', async (req: Request, res: Response) => {
     return res.json({
       success: true,
       uploads,
-      expiresIn: 300,
+      expiresIn: 1800,
     });
   } catch (error) {
     console.error('❌ Batch upload token generation error:', error);

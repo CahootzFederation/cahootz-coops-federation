@@ -27,7 +27,10 @@ const WAKE_BATCH = 50;
 
 // REVIEW_SUGGESTION / suggestion_review tasks are created by sage-suggestion-follow-up.ts, not createSageTask.
 export type SageTaskKind = "FOLLOW_UP" | "REVIEW_STALE_DRAFT" | "DEADLINE_REMINDER";
-export type SageTaskSubject = "commons_post" | "proposal_draft" | "proposal" | "event";
+export type SageTaskSubject = "commons_post" | "proposal_draft" | "proposal" | "event" | "member_post" | "member_conversation" | "introduction_outcome";
+
+/** Tasks whose due action is outreach to the member (a kept promise, "did it help?"), not a reminder. */
+const OUTREACH_SUBJECTS = new Set(["member_conversation", "introduction_outcome"]);
 
 export interface CreateTaskInput {
   coopId: string;
@@ -105,6 +108,17 @@ export interface TaskCheck {
 /** Decides from app data alone whether what Sage was waiting for has happened. */
 export async function checkTaskOutcome(task: Pick<SageTask, "id" | "kind" | "subjectType" | "subjectId" | "ownerUserId" | "postId" | "createdAt">, now = new Date()): Promise<TaskCheck> {
   if (task.subjectType === SUGGESTION_TASK_SUBJECT) return checkSuggestionReview(task, now);
+  if (task.subjectType === "member_conversation") {
+    const { promiseAlreadyKept } = await import("./sage-proactive.js");
+    return (await promiseAlreadyKept(task))
+      ? { resolved: true, outcome: "The member already talked with Sage since the promise" }
+      : { resolved: false };
+  }
+  if (task.subjectType === "introduction_outcome") {
+    const intro = await db.commonsAction.findUnique({ where: { id: task.subjectId }, select: { status: true } });
+    if (!intro || intro.status !== "APPROVED") return { resolved: true, moot: true, outcome: "The introduction didn't go ahead" };
+    return { resolved: false };
+  }
   if (task.subjectType === "commons_post") {
     const postId = task.postId ?? task.subjectId;
     const post = await db.commonsPost.findUnique({ where: { id: postId }, select: { id: true } });
@@ -124,6 +138,25 @@ export async function checkTaskOutcome(task: Pick<SageTask, "id" | "kind" | "sub
       if (draft) return { resolved: true, outcome: "A proposal draft was created from the thread" };
     }
     return { resolved: false };
+  }
+  if (task.subjectType === "member_conversation") {
+    const { promiseAlreadyKept } = await import("./sage-proactive.js");
+    return (await promiseAlreadyKept(task))
+      ? { resolved: true, outcome: "The member already talked with Sage since the promise" }
+      : { resolved: false };
+  }
+  if (task.subjectType === "introduction_outcome") {
+    const intro = await db.commonsAction.findUnique({ where: { id: task.subjectId }, select: { status: true } });
+    if (!intro || intro.status !== "APPROVED") return { resolved: true, moot: true, outcome: "The introduction didn't go ahead" };
+    return { resolved: false };
+  }
+  if (task.subjectType === "member_post") {
+    // A post Sage made for a member: done once anyone other than Sage answers it.
+    const postId = task.postId ?? task.subjectId;
+    const post = await db.commonsPost.findUnique({ where: { id: postId }, select: { authorId: true } });
+    if (!post) return { resolved: true, moot: true, outcome: "The post was deleted" };
+    const reply = await db.commonsComment.findFirst({ where: { postId, authorId: { not: post.authorId }, author: { isBot: false } }, select: { id: true } });
+    return reply ? { resolved: true, outcome: "Someone replied to the post" } : { resolved: false };
   }
   if (task.subjectType === "proposal_draft") {
     const draft = await db.commonsProposalDraft.findUnique({ where: { id: task.subjectId }, select: { submittedAt: true } });
@@ -165,7 +198,10 @@ export function reminderText(task: Pick<SageTask, "kind" | "expected" | "offer" 
 
 async function taskTrailVisibility(task: SageTask): Promise<{ visibility: "COMMONS_MEMBERS" | "CIRCLE" | "ADMINS"; circleId: string | null; relatedPostIds: string[] }> {
   // Suggestions are visible only to the people in them (an introduction or ride match names a need), so their trails are admin-only.
-  if (task.subjectType === SUGGESTION_TASK_SUBJECT) return { visibility: "ADMINS", circleId: task.circleId, relatedPostIds: [] };
+  // So are private promises and introduction outcomes: they describe one member's conversation with Sage.
+  if (task.subjectType === SUGGESTION_TASK_SUBJECT || OUTREACH_SUBJECTS.has(task.subjectType)) {
+    return { visibility: "ADMINS", circleId: task.circleId, relatedPostIds: [] };
+  }
   if (!task.postId) return { visibility: task.circleId ? "CIRCLE" : "COMMONS_MEMBERS", circleId: task.circleId, relatedPostIds: [] };
   const post = await db.commonsPost.findUnique({ where: { id: task.postId }, select: { circleId: true, coopId: true } });
   const isCircle = !!post?.circleId && post.circleId !== `general:${post.coopId}`;
@@ -197,6 +233,26 @@ export async function wakeTask(task: SageTask, now = new Date()): Promise<"DONE"
         .result("Done", "PASS", "None.").setOutcome(`Follow-up closed: ${check.outcome ?? "done"}`).save();
       return "DONE";
     }
+    if (OUTREACH_SUBJECTS.has(task.subjectType)) {
+      const { LIMITED_RETRIES, runProactiveTask } = await import("./sage-proactive.js");
+      const sent = await runProactiveTask(task, now);
+      trail.policy("Under the weekly outreach limit", sent !== "LIMITED");
+      if (sent === "LIMITED" && task.attempts < LIMITED_RETRIES) {
+        const nextWakeAt = new Date(now.getTime() + DAY_MS);
+        await db.sageTask.update({
+          where: { id: task.id },
+          data: { attempts: { increment: 1 }, nextWakeAt, leaseUntil: null, lastWokeAt: now, events: { create: { eventType: "DEFERRED", detail: "Weekly outreach limit reached; trying tomorrow" } } },
+        });
+        await trail.taken("Waited a day: the member already heard from Sage enough this week", "INFO")
+          .result("Waiting", "INFO", "Sage tries again tomorrow.").setOutcome("Outreach deferred by the weekly limit").save();
+        return "REMINDED";
+      }
+      const done = sent === "SENT";
+      await finishTask(task, done ? "DONE" : "ABANDONED", done ? "Sage reached out" : sent === "LIMITED" ? "Weekly limit kept blocking it" : "Nothing to send", done ? "RESOLVED" : "ABANDONED");
+      await trail.taken(done ? "Reached out to the member" : "Didn't reach out", done ? "PASS" : "INFO")
+        .result(done ? "Sent" : "Stopped", done ? "PASS" : "INFO", "None.").setOutcome(done ? "Sage reached out" : "Outreach skipped").save();
+      return done ? "DONE" : "ABANDONED";
+    }
     const canRemind = trail.policy(`Under the reminder limit (${task.maxAttempts})`, task.attempts < task.maxAttempts,
       `${task.attempts} sent so far`);
     const isSuggestion = task.subjectType === SUGGESTION_TASK_SUBJECT;
@@ -213,7 +269,11 @@ export async function wakeTask(task: SageTask, now = new Date()): Promise<"DONE"
         .result("Stopped", "INFO", "None. Sage doesn't keep reminding.").setOutcome("Follow-up stopped after one reminder").save();
       return "ABANDONED";
     }
-    if (task.ownerUserId) {
+    if (task.subjectType === "member_post") {
+      // The member asked Sage privately, so the nudge goes to that conversation, not a public push.
+      const { remindAboutMemberPost } = await import("./sage-member-actions.js");
+      await remindAboutMemberPost(task).catch((error) => console.error("Could not send the member post reminder", error));
+    } else if (task.ownerUserId) {
       const text = reminderText(task);
       await createNotificationAndPush(db, {
         userId: task.ownerUserId, coopId: task.coopId, type: isSuggestion ? "SAGE_SUGGESTION_REMINDER" : "SAGE_REMINDER", title: text.title, body: text.body,

@@ -45,7 +45,6 @@ export const sageWeeklyOutreachSweep = schedules.task({
       checkedAt,
     });
     const runFailed =
-      !summary.enabled ||
       summary.failed > 0 ||
       summary.modelFallbacks > 0 ||
       !slackDelivered;
@@ -54,7 +53,7 @@ export const sageWeeklyOutreachSweep = schedules.task({
       status: runFailed ? "error" : "success",
       ...(runFailed
         ? {
-            message: `enabled=${summary.enabled}; failed=${summary.failed}; modelFallbacks=${summary.modelFallbacks}; slackDelivered=${slackDelivered}`,
+            message: `failed=${summary.failed}; modelFallbacks=${summary.modelFallbacks}; slackDelivered=${slackDelivered}`,
           }
         : {}),
     });
@@ -64,7 +63,6 @@ export const sageWeeklyOutreachSweep = schedules.task({
       );
     }
     logger.info("Sage weekly outreach sweep completed", {
-      enabled: summary.enabled,
       considered: summary.considered,
       due: summary.due,
       sent: summary.sent,

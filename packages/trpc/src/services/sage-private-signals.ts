@@ -7,7 +7,6 @@ import { recordObservation } from "./ai-memory.js";
 import { routeSageAlert } from "./sage-responsibility.js";
 
 export const MEMBER_SIGNAL_AGENT_KEY = "sage-member-signal";
-export const PRIVATE_SAFETY_FLAG = "sage_private_safety_response";
 const CHECKIN_WINDOW_MS = 14 * 86_400_000;
 
 const URGENT_PATTERNS = [
@@ -87,7 +86,7 @@ async function latestWeeklyCheckin(groupId: string, createdAt: Date) {
       createdAt: { gte: new Date(createdAt.getTime() - CHECKIN_WINDOW_MS), lte: createdAt },
     },
     orderBy: { createdAt: "desc" },
-    select: { id: true, content: true },
+    select: { id: true, content: true, createdAt: true },
   });
 }
 
@@ -206,10 +205,8 @@ export async function handlePrivateCheckinSignal(input: {
         metadata: { coopId: input.coopId, category: classification.sensitiveCategory ?? "urgent", aggregationEligible: false },
       }),
     }).catch(() => {});
-    const safetyEnabled = classification.urgent
-      ? (await db.featureFlag.findUnique({ where: { key: PRIVATE_SAFETY_FLAG }, select: { enabled: true } }))?.enabled ?? false
-      : false;
-    if (safetyEnabled) {
+    // Urgent disclosures always get the fixed safety reply; merely sensitive ones get no reply from this gate.
+    if (classification.urgent) {
       await db.auditLog.create({
         data: auditLogEntry({
           actorId: "system/sage", action: "SAGE_PRIVATE_SAFETY_RESPONSE_OFFERED", resource: "GroupComment", resourceId: input.messageId,
@@ -220,7 +217,7 @@ export async function handlePrivateCheckinSignal(input: {
     return {
       inCheckin: true,
       classification,
-      safetyReply: safetyEnabled ? privateSafetyReply() : null,
+      safetyReply: classification.urgent ? privateSafetyReply() : null,
       consentQuestion: null,
     };
   }
@@ -267,6 +264,7 @@ export async function handlePrivateCheckinSignal(input: {
   }
   return {
     inCheckin: true,
+    checkin,
     classification,
     safetyReply: null,
     consentQuestion: memoryConsentQuestion(classification),

@@ -3,9 +3,7 @@ import { db } from "@repo/db";
 import type { AgentOperationalIssue } from "./slack-notification-service.js";
 import { getSageAutonomyUsage } from "./sage-autonomy.js";
 
-const WEEKLY_OUTREACH_FLAG = "sage_weekly_outreach";
-const COMMUNITY_MEMORY_FLAG = "sage_community_memory";
-const PRIVATE_SAFETY_FLAG = "sage_private_safety_response";
+const WEEKLY_OUTREACH_HEALTH_KEY = "agent.health.sage-weekly-outreach";
 const WAKE_STALE_MS = 45 * 60 * 1000;
 const RUNNING_STALE_MS = 20 * 60 * 1000;
 const DAILY_SWEEP_STALE_MS = 26 * 60 * 60 * 1000;
@@ -53,23 +51,6 @@ function newsletterSchedule(
   };
 }
 
-export function flagIssue(input: {
-  agentId: string;
-  flag: { enabled: boolean } | undefined;
-  missingDefault: boolean;
-  gatedReason?: string;
-}): AgentOperationalIssue | null {
-  const enabled = input.flag?.enabled ?? input.missingDefault;
-  if (enabled) return null;
-  return {
-    agentId: input.agentId,
-    state: input.gatedReason ? "GATED" : "OFF",
-    reason:
-      input.gatedReason ??
-      "Feature flag is disabled. An operator must explicitly turn it back on.",
-  };
-}
-
 export interface AgentOperationalSnapshot {
   checkedAt: Date;
   issues: AgentOperationalIssue[];
@@ -84,18 +65,10 @@ export async function getAgentOperationalSnapshot(
   now = new Date(),
 ): Promise<AgentOperationalSnapshot> {
   const issues: AgentOperationalIssue[] = [];
-  const [flags, configs, settings, publicInfos] = await Promise.all([
-    db.featureFlag.findMany({
-      where: {
-        key: {
-          in: [
-            WEEKLY_OUTREACH_FLAG,
-            COMMUNITY_MEMORY_FLAG,
-            PRIVATE_SAFETY_FLAG,
-          ],
-        },
-      },
-      select: { key: true, enabled: true, metadata: true, updatedAt: true },
+  const [outreachHealthRow, configs, settings, publicInfos] = await Promise.all([
+    db.platformConfig.findUnique({
+      where: { key: WEEKLY_OUTREACH_HEALTH_KEY },
+      select: { value: true },
     }),
     db.coopConfig.findMany({
       where: { isActive: true, isDemo: false },
@@ -110,44 +83,29 @@ export async function getAgentOperationalSnapshot(
     }),
   ]);
 
-  const flagByKey = new Map(flags.map((flag) => [flag.key, flag]));
-  const flagIssues = [
-    flagIssue({
+  if (!outreachHealthRow) {
+    issues.push({
       agentId: "sage-weekly-outreach",
-      flag: flagByKey.get(WEEKLY_OUTREACH_FLAG),
-      missingDefault: true,
-    }),
-    flagIssue({
-      agentId: "sage-community-memory",
-      flag: flagByKey.get(COMMUNITY_MEMORY_FLAG),
-      missingDefault: false,
-      gatedReason: "Feature flag is disabled pending privacy review.",
-    }),
-    flagIssue({
-      agentId: "sage-private-safety-response",
-      flag: flagByKey.get(PRIVATE_SAFETY_FLAG),
-      missingDefault: false,
-      gatedReason: "Feature flag is disabled pending policy and legal review.",
-    }),
-  ].filter((issue): issue is AgentOperationalIssue => issue !== null);
-  issues.push(...flagIssues);
-
-  const outreachFlag = flagByKey.get(WEEKLY_OUTREACH_FLAG);
-  if (outreachFlag?.enabled) {
-    const metadata =
-      typeof outreachFlag.metadata === "object" &&
-      outreachFlag.metadata !== null &&
-      !Array.isArray(outreachFlag.metadata)
-        ? (outreachFlag.metadata as Record<string, unknown>)
-        : {};
+      state: "FAILED",
+      reason: "No completed daily outreach sweep has been recorded.",
+    });
+  } else {
+    let metadata: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(outreachHealthRow.value) as unknown;
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed))
+        metadata = parsed as Record<string, unknown>;
+    } catch {
+      issues.push({
+        agentId: "sage-weekly-outreach",
+        state: "BROKEN",
+        reason: "The saved outreach health record is invalid JSON.",
+      });
+    }
     const lastRunAt =
       typeof metadata.lastRunAt === "string"
         ? new Date(metadata.lastRunAt)
         : null;
-    const enabledAt =
-      typeof metadata.enabledAt === "string"
-        ? new Date(metadata.enabledAt)
-        : outreachFlag.updatedAt;
     if (metadata.lastRunStatus === "error") {
       issues.push({
         agentId: "sage-weekly-outreach",
@@ -167,16 +125,11 @@ export async function getAgentOperationalSnapshot(
         state: "FAILED",
         reason: "No successful daily outreach sweep has completed in 26 hours.",
       });
-    } else if (
-      !lastRunAt &&
-      !Number.isNaN(enabledAt.getTime()) &&
-      now.getTime() - enabledAt.getTime() > DAILY_SWEEP_STALE_MS
-    ) {
+    } else if (!lastRunAt) {
       issues.push({
         agentId: "sage-weekly-outreach",
         state: "FAILED",
-        reason:
-          "Weekly outreach has been enabled for more than 26 hours without a completed daily sweep.",
+        reason: "The outreach health record has no completed run timestamp.",
       });
     }
   }

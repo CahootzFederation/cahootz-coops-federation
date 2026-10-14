@@ -299,6 +299,8 @@ export interface SupporterBadge {
   color: string;
 }
 
+export type FeedbackCategory = 'BUG' | 'COMPLAINT' | 'IDEA' | 'OTHER';
+
 export interface CommonsPostMedia {
   id?: string;
   pathname: string;
@@ -1464,6 +1466,28 @@ export const api = {
     );
   },
 
+  /** A member's complaint, bug report or idea; the team sees it in Slack. */
+  async submitFeedback(
+    data: {
+      category: FeedbackCategory;
+      message: string;
+      screenshotUrls: string[];
+      screen?: string;
+      coopId?: string;
+      platform?: string;
+      appVersion?: string;
+    },
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/feedback.submit`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{ id: string }>(response, 'Could not send your feedback');
+  },
+
   async createCommonsPost(
     data: {
       content: string;
@@ -1829,8 +1853,8 @@ export const api = {
 
   async uploadCommonsPostMedia(data: {
     coopId: string;
-    /** Blob folder; profile photos use 'profile'. */
-    uploadType?: 'post' | 'profile';
+    /** Blob folder; profile photos use 'profile', feedback screenshots 'feedback'. */
+    uploadType?: 'post' | 'profile' | 'feedback';
     uri: string;
     fileName?: string | null;
     mimeType: string;

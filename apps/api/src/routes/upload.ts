@@ -3,7 +3,7 @@ import { generateUploadToken, generateBatchUploadTokens, generateFileKey, getExt
 
 const router = Router();
 
-const ALLOWED_UPLOAD_TYPES = ['profile', 'store', 'product', 'post', 'comment'] as const;
+const ALLOWED_UPLOAD_TYPES = ['profile', 'store', 'product', 'post', 'comment', 'feedback'] as const;
 const ALLOWED_MIMES = [
   'image/jpeg',
   'image/jpg',

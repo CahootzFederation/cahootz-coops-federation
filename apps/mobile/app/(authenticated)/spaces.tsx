@@ -7,6 +7,8 @@ import React from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   TextInput,
   TouchableOpacity,
@@ -70,6 +72,7 @@ export default function SpacesScreen() {
   const [invitesError, setInvitesError] = React.useState<string | null>(null);
   const [name, setName] = React.useState('');
   const [purpose, setPurpose] = React.useState('');
+  const purposeInputRef = React.useRef<TextInput>(null);
   const [privacy, setPrivacy] = React.useState<'public' | 'private'>('public');
   const [iconEmoji, setIconEmoji] = React.useState<string | null>(null);
   const [iconColor, setIconColor] = React.useState<string | null>(null);
@@ -340,10 +343,17 @@ export default function SpacesScreen() {
         </View>
       </View>
 
+      {/* Lift the form above the keyboard and let a drag put it away, so the
+          Create button stays reachable after typing the purpose. */}
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       >
         {activeView === 'circles' ? (
           <>
@@ -656,6 +666,9 @@ export default function SpacesScreen() {
                 placeholderTextColor={SPACES_THEME.muted}
                 maxLength={120}
                 autoFocus={mode === 'create'}
+                returnKeyType="next"
+                submitBehavior="submit"
+                onSubmitEditing={() => purposeInputRef.current?.focus()}
                 className="mt-3 min-h-12 rounded-2xl border bg-gray-50 px-3 text-sm text-gray-900"
                 style={{ borderColor: SPACES_THEME.border }}
               />
@@ -670,12 +683,22 @@ export default function SpacesScreen() {
                 Explain what members will talk about or build together.
               </Text>
               <TextInput
+                ref={purposeInputRef}
                 value={purpose}
                 onChangeText={setPurpose}
                 placeholder="What brings this circle together?"
                 placeholderTextColor={SPACES_THEME.muted}
                 maxLength={2000}
                 multiline
+                // Return closes the keyboard instead of adding a line, so the
+                // Create button below is never trapped under the keyboard.
+                returnKeyType="done"
+                submitBehavior="blurAndSubmit"
+                // React Native Web reads blurOnSubmit instead, and needs
+                // onSubmitEditing to keep Return from adding a newline.
+                blurOnSubmit
+                onSubmitEditing={() => purposeInputRef.current?.blur()}
+                accessibilityLabel="Circle purpose"
                 className="mt-3 min-h-28 rounded-2xl border bg-gray-50 px-3 py-3 text-sm text-gray-900"
                 style={{
                   borderColor: SPACES_THEME.border,
@@ -788,6 +811,7 @@ export default function SpacesScreen() {
           </>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <EmojiColorPicker
         visible={iconPickerOpen}

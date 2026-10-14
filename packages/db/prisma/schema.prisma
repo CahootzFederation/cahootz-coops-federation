@@ -107,6 +107,7 @@ model User {
   pinnedPosts                CommonsPost[]             @relation("CommonsPostPinnedBy")
   onboardingDripSends        OnboardingDripSend[]
   commonsInvitationsSent     CommonsInvitation[]       @relation("CommonsInvitationInviter")
+  appFeedback                AppFeedback[]
 
   @@index([deletedAt])
   @@schema("public")
@@ -2286,6 +2287,28 @@ model Notification {
   @@index([userId, coopId, read, createdAt])
   @@index([userId, createdAt, id])
   @@index([coopId])
+  @@schema("public")
+}
+
+/// A member's in-app complaint, bug report or idea, with optional screenshots.
+/// Saved first, then posted to the team's Slack channel.
+model AppFeedback {
+  id             String    @id @default(cuid())
+  userId         String?
+  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  category       String // BUG, COMPLAINT, IDEA, OTHER
+  message        String
+  screenshotUrls String[]
+  /// Where the member was when they opened the form (route path).
+  screen         String?
+  coopId         String?
+  platform       String?
+  appVersion     String?
+  slackSentAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
   @@schema("public")
 }
 

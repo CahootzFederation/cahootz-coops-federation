@@ -9,6 +9,7 @@ import {
   COMPOSER_MEDIA_TILE_SIZE,
   CommonsMediaTile,
   CommonsMediaViewer,
+  MAX_POST_MEDIA_ATTACHMENTS,
   type CommonsMediaPreview,
 } from '@/components/commons-media-viewer';
 import { EditPersonalProfileSheet } from '@/components/edit-personal-profile-sheet';
@@ -122,7 +123,7 @@ export default function PersonalPageScreen() {
   };
 
   const pickMedia = async () => {
-    if (selectedMedia.length >= 4) return;
+    if (selectedMedia.length >= MAX_POST_MEDIA_ATTACHMENTS) return;
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) return;
@@ -130,7 +131,7 @@ export default function PersonalPageScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsMultipleSelection: true,
-      selectionLimit: 4 - selectedMedia.length,
+      selectionLimit: MAX_POST_MEDIA_ATTACHMENTS - selectedMedia.length,
       quality: 0.9,
       videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
     });
@@ -148,7 +149,7 @@ export default function PersonalPageScreen() {
       sizeBytes: asset.fileSize ?? null,
     }));
 
-    setSelectedMedia((current) => [...current, ...next].slice(0, 4));
+    setSelectedMedia((current) => [...current, ...next].slice(0, MAX_POST_MEDIA_ATTACHMENTS));
   };
 
   const publishPost = async () => {

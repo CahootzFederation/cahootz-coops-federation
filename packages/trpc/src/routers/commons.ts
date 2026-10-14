@@ -80,6 +80,9 @@ const postTagSchema = z.enum([
 
 const postMediaTypeSchema = z.enum(['image', 'video']);
 
+// Photos and videos one post may carry (the mobile composer uses the same cap).
+const MAX_POST_MEDIA = 10;
+
 const uploadedPostMediaSchema = z.object({
   pathname: z.string().min(1).max(1024),
   url: z.string().url(),
@@ -2282,7 +2285,7 @@ export const commonsRouter = router({
         .object({
           content: z.string().trim().max(5000).default(''),
           tag: postTagSchema.nullable().optional(),
-          media: z.array(uploadedPostMediaSchema).max(4).default([]),
+          media: z.array(uploadedPostMediaSchema).max(MAX_POST_MEDIA).default([]),
         })
         .refine((input) => input.content.length > 0 || input.media.length > 0, {
           message: 'Write something or attach media before posting.',
@@ -2576,7 +2579,7 @@ export const commonsRouter = router({
           title: z.string().trim().min(1).max(120).optional(),
           content: z.string().trim().max(5000).default(''),
           tag: postTagSchema.default('Social'),
-          media: z.array(uploadedPostMediaSchema).max(4).default([]),
+          media: z.array(uploadedPostMediaSchema).max(MAX_POST_MEDIA).default([]),
         })
         .refine((input) => input.content.length > 0 || input.media.length > 0, {
           message: 'Write something or attach media before posting.',

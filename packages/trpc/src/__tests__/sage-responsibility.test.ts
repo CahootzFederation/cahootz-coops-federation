@@ -96,15 +96,17 @@ describe("Not for me", () => {
       id: "alert-9", coopId: "harbor", circleId: "circle-1", category: "CIRCLE_LEADER", recipientUserId: "leader-1", status: "SENT",
       subjectType: "commons_post", subjectId: "post-1", postId: "post-1", severity: "MEDIUM", title: "t", body: "b",
       evidence: { source: "s", why: "It needs a person's judgment. You're getting this as the circle's leader.", recommendation: "r" },
-      dueAt: null, sourceActionId: null,
+      dueAt: null, sourceActionId: null, originObservationId: "hypothesis-1",
     });
     db.sageAlert.findMany.mockResolvedValueOnce([{ recipientUserId: "leader-1" }]).mockResolvedValue([]);
     db.adminRole.findMany.mockResolvedValueOnce([{ userId: "admin-1", role: "SUPER_ADMIN" }]);
     const result = await rerouteSageAlert("alert-9", "leader-1", "I'm not involved", NOW);
     expect(db.sageAlert.update).toHaveBeenCalledWith({ where: { id: "alert-9" }, data: { status: "REROUTED", feedback: "I'm not involved" } });
     expect(result).toMatchObject({ status: "ROUTED", category: "COMMONS_ADMIN", alerts: [{ recipientUserId: "admin-1" }] });
+    // The successor keeps the hypothesis link, so the impact review still sees what happened to it.
     expect(db.sageAlert.create).toHaveBeenCalledWith({ data: expect.objectContaining({
-      reroutedFromId: "alert-9", evidence: expect.objectContaining({ why: "It needs a person's judgment. You're getting this as a Commons admin." }),
+      reroutedFromId: "alert-9", originObservationId: "hypothesis-1",
+      evidence: expect.objectContaining({ why: "It needs a person's judgment. You're getting this as a Commons admin." }),
     }), select: { id: true } });
   });
 

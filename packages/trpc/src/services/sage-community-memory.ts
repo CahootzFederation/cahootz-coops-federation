@@ -269,11 +269,35 @@ async function writeCandidate(coopId: string, candidate: CommunityCandidate, now
   return { state: "created", observationId: row.id };
 }
 
-export function impactOutcome(actions: Array<{ status: string; feedback?: { rating: string } | null }>): ImpactOutcome {
-  if (!actions.length) return "NO_ACTION";
+/**
+ * Usefulness of what Sage did about a hypothesis: reviewable actions, plus the steward's alerts to a
+ * Commons admin. An admin marking the alert handled counts as helpful and an alert left to expire as
+ * not helpful; a rerouted alert is replaced by its successor (which carries the same link).
+ */
+export function impactOutcome(
+  actions: Array<{ status: string; feedback?: { rating: string } | null }>,
+  alerts: Array<{ status: string }> = [],
+): ImpactOutcome {
+  if (!actions.length && !alerts.length) return "NO_ACTION";
   if (actions.some((action) => action.status === "PUBLISHED" && action.feedback?.rating === "GOOD")) return "HELPFUL";
+  if (alerts.some((alert) => alert.status === "ACKNOWLEDGED")) return "HELPFUL";
   if (actions.some((action) => action.feedback?.rating === "NEEDS_WORK" || ["DISMISSED", "FAILED"].includes(action.status))) return "NOT_HELPFUL";
+  if (alerts.some((alert) => alert.status === "EXPIRED")) return "NOT_HELPFUL";
   return "INCONCLUSIVE";
+}
+
+/**
+ * Hypotheses the steward shouldn't see again: two reviews where what Sage did didn't help. A review
+ * with no linked action (NO_ACTION) says nothing about whether the need is real, so it never counts.
+ */
+export function discouragedHypothesisIds(impactDetails: Array<unknown>): Set<string> {
+  const counts = new Map<string, number>();
+  for (const value of impactDetails) {
+    const detail = value as { sourceObservationId?: unknown; outcome?: unknown } | null;
+    if (typeof detail?.sourceObservationId !== "string" || detail.outcome !== "NOT_HELPFUL") continue;
+    counts.set(detail.sourceObservationId, (counts.get(detail.sourceObservationId) ?? 0) + 1);
+  }
+  return new Set([...counts].filter(([, count]) => count >= 2).map(([id]) => id));
 }
 
 async function reviewImpacts(coopId: string, now: Date) {
@@ -290,11 +314,14 @@ async function reviewImpacts(coopId: string, now: Date) {
       if (ageDays < days) continue;
       const systemKey = `community-impact:${observation.id}:${days}`;
       if (await db.aIObservation.findUnique({ where: { systemKey }, select: { id: true } })) continue;
-      const actions = await db.commonsAction.findMany({
-        where: { originObservationId: observation.id }, include: { feedback: true, reviews: true },
-      });
+      const [actions, alerts] = await Promise.all([
+        db.commonsAction.findMany({
+          where: { originObservationId: observation.id }, include: { feedback: true, reviews: true },
+        }),
+        db.sageAlert.findMany({ where: { originObservationId: observation.id }, select: { id: true, status: true } }),
+      ]);
       const details = parseDetails(observation.details);
-      const outcome = impactOutcome(actions);
+      const outcome = impactOutcome(actions, alerts);
       const related = await db.aIObservation.findMany({
         where: {
           scopeType: "commons", scopeId: coopId, generatedByAgentKey: COMMUNITY_MEMORY_AGENT_KEY,
@@ -320,6 +347,12 @@ async function reviewImpacts(coopId: string, now: Date) {
           reviewWindowDays: days,
           outcome,
           linkedActionCount: actions.length,
+          alertProgress: {
+            linkedCount: alerts.length,
+            acknowledgedCount: alerts.filter((alert) => alert.status === "ACKNOWLEDGED").length,
+            expiredCount: alerts.filter((alert) => alert.status === "EXPIRED").length,
+            reroutedCount: alerts.filter((alert) => alert.status === "REROUTED").length,
+          },
           actionProgress: {
             suggested: actions.length > 0,
             reviewedCount: actions.filter((action) => action.reviewedAt || action.reviews.some((review) => review.respondedAt)).length,
@@ -339,6 +372,7 @@ async function reviewImpacts(coopId: string, now: Date) {
         sources: [
           { type: "ai_observation", id: observation.id },
           ...actions.map((action) => ({ type: "commons_action", id: action.id })),
+          ...alerts.map((alert) => ({ type: "sage_alert", id: alert.id })),
         ],
         visibility: "SAGE_INTERNAL",
         status: "ACTIVE",
@@ -453,20 +487,15 @@ export async function retrieveCommunityInsights(coopId: string, purpose: string,
       select: { details: true },
     }),
   ]);
-  const discouragingReviews = new Map<string, number>();
-  for (const row of impactRows) {
-    const detail = row.details as { sourceObservationId?: unknown; outcome?: unknown } | null;
-    if (typeof detail?.sourceObservationId !== "string" || !["NOT_HELPFUL", "NO_ACTION"].includes(String(detail.outcome))) continue;
-    discouragingReviews.set(detail.sourceObservationId, (discouragingReviews.get(detail.sourceObservationId) ?? 0) + 1);
-  }
-  const valid = rows.filter((row) => {
+  const discouraged = discouragedHypothesisIds(impactRows.map((row) => row.details));
+  const valid = rows.flatMap((row) => {
     const details = parseDetails(row.details);
-    return details?.evaluatedConfigId === config.id
+    const current = details?.evaluatedConfigId === config.id
       && details.evaluatedConfigVersion === config.version
       && details.charterSnapshotHash === activeCharterHash
-      && (discouragingReviews.get(row.id) ?? 0) < 2;
-  })
-    .map((row) => ({ id: row.id, summary: row.summary, confidence: row.confidence }));
+      && !discouraged.has(row.id);
+    return current ? [{ id: row.id, themeKey: details.themeKey, summary: row.summary, confidence: row.confidence }] : [];
+  });
   await db.auditLog.create({
     data: auditLogEntry({
       actorId: "system/sage", action: "SAGE_COMMUNITY_MEMORY_READ", resource: "AIObservation", resourceId: coopId,

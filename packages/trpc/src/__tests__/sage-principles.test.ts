@@ -23,7 +23,6 @@ const { SAGE_CORE_PRINCIPLES, SAGE_DEFAULTS_TO_AVOID, sageCorePrinciplesInstruct
 const { createCommonsActionAgent } = await import("../services/commons-action-agent.js");
 const { createTrendDetectorAgent } = await import("../services/sage-trend-agent.js");
 const { createStewardAgent } = await import("../services/sage-steward.js");
-const { createRideMatchDetectorAgent } = await import("../services/sage-ride-match-agent.js");
 const { getAgent } = await import("../agents/registry.js");
 
 beforeEach(() => {
@@ -45,11 +44,10 @@ describe("Sage's core principles", () => {
     createCommonsActionAgent();
     createTrendDetectorAgent();
     createStewardAgent([]);
-    createRideMatchDetectorAgent();
     db.coopConfig.findFirst.mockResolvedValue({ name: "Harbor", charterText: "Members share tools.", missionGoals: [] });
     await getAgent("sage-commons-reply")!.run({ coopId: "harbor", message: "Library or homes for the potluck?" });
 
-    expect(built.map((agent) => agent.name)).toEqual(["Commons Action Observer", "Sage Trend Observer", "Sage Steward", "Sage Ride Match Observer", "Sage"]);
+    expect(built.map((agent) => agent.name)).toEqual(["Commons Action Observer", "Sage Trend Observer", "Sage Steward", "Sage"]);
     for (const agent of built) expect(agent.instructions, agent.name).toContain(sageCorePrinciplesInstructions());
   });
 

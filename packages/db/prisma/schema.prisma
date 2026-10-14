@@ -1146,7 +1146,7 @@ enum CommonsActionType {
   CONNECT_MEMBERS
   ESCALATE_TO_ADMIN
   NO_ACTION
-  RIDE_MATCH_PROPOSAL
+  RIDE_MATCH_PROPOSAL // retired 2026-10-14; kept so existing rows stay readable
   SUGGEST_ACTION
 
   @@schema("public")
@@ -1378,7 +1378,7 @@ model CommonsProposalDraft {
   @@schema("public")
 }
 
-// One record per Sage analysis (a Commons post or comment, a circle window, a ride-match window),
+// One record per Sage analysis (a Commons post or comment, a circle window),
 // including analyses where Sage decided to do nothing. Steps up to "action taken" are written when
 // Sage decides; result and follow-up are read live from the linked CommonsActions.
 // Something Sage is waiting on or will check back about: a promise it made, an answer it asked
@@ -1478,11 +1478,11 @@ model SageAlert {
 
 model SageDecisionTrail {
   id             String   @id @default(cuid())
-  agent          String // commons-action-agent | sage-trend | sage-ride-match | proposal-engine | comment-evaluation | sage-reply
+  agent          String // commons-action-agent | sage-trend | proposal-engine | comment-evaluation | sage-reply (old rows: sage-ride-match)
   coopId         String
   circleId       String?
   proposalId     String?
-  sourceType     String // commons_post | commons_comment | circle_window | circle_ride_match | proposal | proposal_comment | sage_mention | sage_dm
+  sourceType     String // commons_post | commons_comment | circle_window | proposal | proposal_comment | sage_mention | sage_dm (old rows: circle_ride_match)
   sourceId       String
   trigger        String // NEW_CONTENT | SCHEDULED_SCAN | ADMIN_SCAN | CIRCLE_WINDOW_FULL | ADMIN_ANALYZE | PROPOSAL_SUBMITTED | PROPOSAL_RESUBMITTED | PROPOSAL_ALTERNATIVE_APPLIED | PROPOSAL_COMMENT | SAGE_MENTION | SAGE_DM
   visibility     String // COMMONS_MEMBERS | CIRCLE | ADMINS

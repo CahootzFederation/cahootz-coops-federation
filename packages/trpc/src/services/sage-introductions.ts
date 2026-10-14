@@ -1,7 +1,7 @@
 import { db } from "@repo/db";
 
 import { createNotificationAndPush } from "./push-notification-service.js";
-import { payloadHash } from "./sage-ride-match-agent.js";
+import { payloadHash } from "./sage-payload-hash.js";
 
 /**
  * Consent-first introductions (Bridge). Sage proposes connecting a member who needs something with a

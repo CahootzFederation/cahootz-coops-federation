@@ -65,7 +65,7 @@ export default function SageSettingsScreen() {
           />
         </View>
         <Text style={{ fontSize: 12, color: '#78716C' }}>
-          You&apos;ll only see trails for posts and circles you can already see. Ride matches and anything Sage flags for an
+          You&apos;ll only see trails for posts and circles you can already see. Introductions and anything Sage flags for an
           admin stay private to platform admins.
         </Text>
         {mutation.isError ? (

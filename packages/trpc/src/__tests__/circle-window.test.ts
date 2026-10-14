@@ -5,7 +5,7 @@ const tx = vi.hoisted(() => ({
   circleAgentWindow: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
 }));
 const db = vi.hoisted(() => ({ $transaction: vi.fn((fn: (client: unknown) => unknown) => fn(tx)) }));
-const dispatch = vi.hoisted(() => ({ enqueueSageRideMatchDetect: vi.fn(), enqueueSageTrendDetect: vi.fn() }));
+const dispatch = vi.hoisted(() => ({ enqueueSageTrendDetect: vi.fn() }));
 
 vi.mock("@repo/db", () => ({ db }));
 vi.mock("../services/sage-dispatch.js", () => dispatch);
@@ -28,7 +28,6 @@ describe("circle analysis window", () => {
     tx.circleAgentWindow.findFirst.mockResolvedValue({ id: "w1", messageCount: CIRCLE_WINDOW_MESSAGE_LIMIT - 1 });
     await touchCircleWindow("g1", "harbor");
     expect(tx.circleAgentWindow.update).toHaveBeenCalledWith({ where: { id: "w1" }, data: expect.objectContaining({ status: "CLOSED" }) });
-    expect(dispatch.enqueueSageRideMatchDetect).toHaveBeenCalledWith("w1");
     expect(dispatch.enqueueSageTrendDetect).toHaveBeenCalledWith("w1");
     expect(db.$transaction.mock.invocationCallOrder[0]!).toBeLessThan(dispatch.enqueueSageTrendDetect.mock.invocationCallOrder[0]!);
   });
@@ -42,7 +41,6 @@ describe("analyze a circle now", () => {
     expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
     expect(tx.circleAgentWindow.update).toHaveBeenCalledWith({ where: { id: "w2" }, data: expect.objectContaining({ status: "CLOSED" }) });
     expect(dispatch.enqueueSageTrendDetect).toHaveBeenCalledWith("w2");
-    expect(dispatch.enqueueSageRideMatchDetect).toHaveBeenCalledWith("w2");
   });
 
   it("does nothing when there is no new activity", async () => {

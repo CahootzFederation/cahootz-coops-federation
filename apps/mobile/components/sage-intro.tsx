@@ -20,7 +20,7 @@ const SECTIONS = [
   },
   {
     title: 'What Sage can do on its own',
-    body: 'Reply with helpful information, send you reminders and alerts, check back on plans, and close its own suggestions when nobody answers or they no longer apply.',
+    body: 'Reply with helpful information, send you reminders and alerts, check back on plans, ask the whole commons an open question when a need keeps coming up, and close its own suggestions when nobody answers or they no longer apply.',
   },
   {
     title: 'What always waits for a person',

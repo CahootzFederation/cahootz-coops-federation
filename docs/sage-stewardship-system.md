@@ -167,12 +167,18 @@ immediate reconsideration: the older observation remains historical and is super
 candidate, retained only as a general-wellbeing theme, or made `UNSUPPORTED`. Insufficient
 support is not contradiction: only affirmative contrary evidence produces `DISMISSED`.
 
-An `ACTIVE` hypothesis may motivate a reviewable `CommonsAction` through
-`originObservationId`; publication, proposals, money, introductions, and governance still use
+No steward, admin, or other single person checks or views a hypothesis, and the steward agent
+does not receive them. When a hypothesis is `ACTIVE`, Sage asks the whole Commons one open
+question in the feed (`ASK_COMMONS`, linked through `originObservationId`). The question comes
+from a fixed template per theme about what the group could do together. It carries no counts,
+quotes, or hint of private check-ins, and is limited to one per Commons every 14 days and one
+per theme every 90 days. Publication, proposals, money, introductions, and governance still use
 their existing human gates. Thirty- and ninety-day reviews distinguish action completion,
-feedback, and signal movement and label the result `HELPFUL`, `NOT_HELPFUL`, `INCONCLUSIVE`, or
-`NO_ACTION`. They record association, never causation. Source IDs remain available for audit but
-are excluded from member- and Commons-facing retrieval.
+feedback, and signal movement. They count a question's public answers (distinct members who
+replied, reacted, or supported) and label the result `HELPFUL`, `NOT_HELPFUL`, `INCONCLUSIVE`, or
+`NO_ACTION`. They record association, never causation. Only `NOT_HELPFUL` reviews count against a
+hypothesis. Source IDs remain available for audit but are excluded from member- and
+Commons-facing retrieval.
 
 ## Financial intelligence
 

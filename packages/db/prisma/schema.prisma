@@ -957,7 +957,6 @@ model AIObservation {
   details             Json?
   sources             AIObservationSource[]
   originatedActions   CommonsAction[]
-  originatedAlerts    SageAlert[]
   visibility          AIObservationVisibility @default(COMMONS_ADMINS)
   status              AIObservationStatus     @default(ACTIVE)
   expiresAt           DateTime?
@@ -1149,6 +1148,7 @@ enum CommonsActionType {
   NO_ACTION
   RIDE_MATCH_PROPOSAL
   SUGGEST_ACTION
+  ASK_COMMONS // Sage's open question to the whole Commons about a community pattern
 
   @@schema("public")
 }
@@ -1468,13 +1468,10 @@ model SageAlert {
   reroutedFromId  String?
   feedback        String?   @db.Text
   sourceActionId  String?
-  originObservationId String? // internal community hypothesis that motivated this alert
-  originObservation   AIObservation? @relation(fields: [originObservationId], references: [id], onDelete: Restrict)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@index([recipientUserId, createdAt])
-  @@index([originObservationId, status])
   @@index([coopId, status, createdAt])
   @@index([subjectType, subjectId, category])
   @@schema("public")

@@ -81,12 +81,12 @@ describe("Commons observation candidate policy", () => {
     expect(impactOutcome([{ status: "FAILED", feedback: null }])).toBe("NOT_HELPFUL");
   });
 
-  it("counts the steward's alerts about a hypothesis: handled helps, ignored doesn't, open is undecided", () => {
-    expect(impactOutcome([], [{ status: "ACKNOWLEDGED" }])).toBe("HELPFUL");
-    expect(impactOutcome([], [{ status: "EXPIRED" }])).toBe("NOT_HELPFUL");
-    expect(impactOutcome([], [{ status: "SENT" }])).toBe("INCONCLUSIVE");
-    expect(impactOutcome([], [{ status: "REROUTED" }, { status: "ACKNOWLEDGED" }])).toBe("HELPFUL");
-    expect(impactOutcome([{ status: "DISMISSED", feedback: null }], [{ status: "ACKNOWLEDGED" }])).toBe("HELPFUL");
+  it("judges Sage's question to the Commons by how many members answered it publicly", () => {
+    expect(impactOutcome([], [{ removed: false, responders: 2 }])).toBe("HELPFUL");
+    expect(impactOutcome([], [{ removed: false, responders: 1 }])).toBe("INCONCLUSIVE");
+    expect(impactOutcome([], [{ removed: false, responders: 0 }])).toBe("NOT_HELPFUL");
+    expect(impactOutcome([], [{ removed: true, responders: 0 }])).toBe("NOT_HELPFUL");
+    expect(impactOutcome([{ status: "DISMISSED", feedback: null }], [{ removed: false, responders: 3 }])).toBe("HELPFUL");
   });
 
   it("hides a hypothesis only after two reviews where what Sage did didn't help, never for no action", () => {

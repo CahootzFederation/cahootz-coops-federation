@@ -20,8 +20,6 @@ const push = vi.hoisted(() => vi.fn().mockResolvedValue({ id: "n" }));
 vi.mock("@repo/db", () => ({ db }));
 vi.mock("../services/sage-responsibility.js", () => ({ routeSageAlert, RESPONSIBILITY_CATEGORIES: ["CIRCLE_LEADER", "COMMONS_ADMIN", "GOVERNANCE", "TREASURY", "SUPPORT"] }));
 vi.mock("../services/sage-memory.js", () => ({ retrieveSageMemory: vi.fn().mockResolvedValue([]) }));
-const retrieveCommunityInsights = vi.hoisted(() => vi.fn());
-vi.mock("../services/sage-community-memory.js", () => ({ retrieveCommunityInsights }));
 vi.mock("../services/sage-autonomy.js", () => ({ sageAutonomyAllowed: vi.fn().mockResolvedValue(true) }));
 vi.mock("../services/push-notification-service.js", () => ({ createNotificationAndPush: push }));
 
@@ -38,9 +36,7 @@ const call = (tools: unknown[], name: string, args: Record<string, unknown>) =>
 const blankAction = {
   type: "NONE" as const, reason: "r", subjectType: "" as const, subjectId: "", ownerUserId: "", expected: "", followUpDays: 0,
   category: "" as const, circleId: "", severity: "MEDIUM" as const, title: "", recommendation: "", needUserId: "", helperUserId: "", needSummary: "",
-  hypothesisId: "",
 };
-const offered = new Map([["hyp-1", { themeKey: "transportation_access" }]]);
 const trail = () => new DecisionTrail({ agent: "steward", coopId: "harbor", sourceType: "commons_review", sourceId: "x", trigger: "SAGE_WAKE", visibility: "ADMINS", observed: {} });
 
 beforeEach(() => {
@@ -49,7 +45,6 @@ beforeEach(() => {
   db.sageTask.findFirst.mockResolvedValue(null);
   db.sageTask.create.mockResolvedValue({ id: "task-new" });
   routeSageAlert.mockResolvedValue({ status: "ROUTED", category: "COMMONS_ADMIN", alerts: [] });
-  retrieveCommunityInsights.mockResolvedValue([]);
 });
 
 describe("specialist tools", () => {
@@ -103,45 +98,13 @@ describe("the steward's actions are checked in code", () => {
     expect(routeSageAlert).toHaveBeenCalledWith(expect.objectContaining({ coopId: "harbor", category: "TREASURY", title: "Budget question" }));
   });
 
-  it("links an alert about a community hypothesis back to it, and dedupes by theme", async () => {
-    expect(await applyStewardAction("harbor", {
-      ...blankAction, type: "ROUTE_ALERT", category: "COMMONS_ADMIN", hypothesisId: "hyp-1", subjectType: "proposal", subjectId: "p1", title: "Rides keep coming up",
-    }, trail(), offered)).toBe("alert");
-    expect(routeSageAlert).toHaveBeenCalledWith(expect.objectContaining({
-      category: "COMMONS_ADMIN", originObservationId: "hyp-1", subjectType: "community_theme", subjectId: "harbor:transportation_access",
-    }));
-    routeSageAlert.mockClear();
-    expect(await applyStewardAction("harbor", { ...blankAction, type: "ROUTE_ALERT", category: "TREASURY", title: "Budget" }, trail(), offered)).toBe("alert");
-    expect(routeSageAlert).toHaveBeenCalledWith(expect.objectContaining({ originObservationId: null, subjectType: "commons", subjectId: "harbor" }));
-  });
-
-  it("refuses a hypothesis it wasn't shown, or one sent anywhere but a Commons admin's alert", async () => {
-    const tries = [
-      { ...blankAction, type: "ROUTE_ALERT" as const, category: "COMMONS_ADMIN" as const, hypothesisId: "made-up" },
-      { ...blankAction, type: "ROUTE_ALERT" as const, category: "CIRCLE_LEADER" as const, hypothesisId: "hyp-1" },
-      { ...blankAction, type: "ROUTE_ALERT" as const, category: "COMMONS_ADMIN" as const, circleId: "c1", hypothesisId: "hyp-1" },
-      { ...blankAction, type: "SUGGEST_INTRODUCTION" as const, needUserId: "u1", helperUserId: "u2", hypothesisId: "hyp-1" },
-      { ...blankAction, type: "FOLLOW_UP" as const, subjectType: "proposal_draft" as const, subjectId: "d1", ownerUserId: "u1", hypothesisId: "hyp-1" },
-    ];
-    for (const action of tries) expect(await applyStewardAction("harbor", action, trail(), offered)).toBe("rejected");
-    expect(routeSageAlert).not.toHaveBeenCalled();
-    expect(db.commonsAction.create).not.toHaveBeenCalled();
-    expect(db.sageTask.create).not.toHaveBeenCalled();
-  });
-
-  it("offers the day's hypotheses by id and links the alert it routes from one", async () => {
+  it("never sees community hypotheses; they go to the whole Commons as a question instead", async () => {
     db.sageDecisionTrail.findFirst.mockResolvedValueOnce(null);
     db.coopConfig.findFirst.mockResolvedValueOnce({ name: "Harbor" });
-    retrieveCommunityInsights.mockResolvedValueOnce([
-      { id: "hyp-1", themeKey: "transportation_access", summary: "6 members reported a need related to transportation.", confidence: 0.7 },
-    ]);
-    const decide = vi.fn().mockResolvedValue({ summary: "A transport need", actions: [
-      { ...blankAction, type: "ROUTE_ALERT", category: "COMMONS_ADMIN", hypothesisId: "hyp-1", title: "Transport keeps coming up" },
-    ] });
-    expect(await runStewardReview("harbor", new Date(), decide)).toEqual({ skipped: false, outcomes: ["alert"] });
+    const decide = vi.fn().mockResolvedValue({ summary: "Nothing", actions: [] });
+    await runStewardReview("harbor", new Date(), decide);
     const prompt = JSON.parse(decide.mock.calls[0][0] as string);
-    expect(prompt.communityHypotheses).toEqual([{ id: "hyp-1", summary: "6 members reported a need related to transportation.", confidence: 0.7 }]);
-    expect(routeSageAlert).toHaveBeenCalledWith(expect.objectContaining({ originObservationId: "hyp-1" }));
+    expect(Object.keys(prompt).sort()).toEqual(["commons", "memory", "today"]);
   });
 
   it("skips the daily review if it ran recently or Sage is over its limit, and otherwise applies what passes", async () => {

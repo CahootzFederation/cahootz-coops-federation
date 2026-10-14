@@ -114,8 +114,6 @@ export interface RouteAlertInput {
   evidence: AlertEvidence;
   dueAt?: Date | null;
   sourceActionId?: string | null;
-  /** The internal community hypothesis this alert came from, for its impact reviews. */
-  originObservationId?: string | null;
   excludeUserIds?: string[];
   reroutedFromId?: string | null;
 }
@@ -156,7 +154,6 @@ export async function routeSageAlert(input: RouteAlertInput, now = new Date()): 
     body: input.body.slice(0, 2000),
     evidence: { ...input.evidence, why: `${input.evidence.why} You're getting this as ${ROLE_LABEL[resolved.category]}.` } as unknown as Prisma.InputJsonValue,
     dueAt: input.dueAt ?? null, expiresAt, sourceActionId: input.sourceActionId ?? null, reroutedFromId: input.reroutedFromId ?? null,
-    originObservationId: input.originObservationId ?? null,
   };
 
   const alerts: Array<{ id: string; recipientUserId: string | null; delivered: boolean }> = [];
@@ -200,7 +197,7 @@ export async function rerouteSageAlert(alertId: string, userId: string, feedback
     coopId: alert.coopId, circleId: alert.circleId, category: next, subjectType: alert.subjectType, subjectId: alert.subjectId,
     postId: alert.postId, severity: alert.severity as RouteAlertInput["severity"], title: alert.title, body: alert.body,
     evidence: { ...evidence, why: evidence.why.replace(/ You're getting this as .*$/, "") }, dueAt: alert.dueAt,
-    sourceActionId: alert.sourceActionId, originObservationId: alert.originObservationId, reroutedFromId: alert.id,
+    sourceActionId: alert.sourceActionId, reroutedFromId: alert.id,
     excludeUserIds: chain.map((row) => row.recipientUserId!),
   }, now);
 }

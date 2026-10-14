@@ -23,6 +23,7 @@ model User {
   status                       UserStatus              @default(PENDING)
   isBot                        Boolean                 @default(false) // true for platform bot accounts (e.g. Sage)
   showSageDecisionTrails       Boolean                 @default(false) // personal app setting: show Sage's decision trails on content this user can see
+  defaultCoopId                String?                 // member-selected Commons shown first after sign-in
   password                     String?
   phone                        String?                 @unique // E.164 format: +1XXXXXXXXXX
   walletAddress                String?                 @unique // DEPRECATED: Use Wallet model instead

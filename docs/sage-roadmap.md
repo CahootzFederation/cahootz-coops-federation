@@ -1,6 +1,6 @@
 # Sage product roadmap
 
-Last updated: 2026-10-11
+Last updated: 2026-10-13
 
 ## North star
 
@@ -342,7 +342,8 @@ For every Sage behavior change:
 - 2026-10-06: Sage's core principles are platform-wide and fixed in every Sage prompt; no Commons can change them. Sage must not fall back on mainstream US individual-finance advice.
 - 2026-10-06: Everyday decisions may be grounded on the thread or a checked source; rules, votes, membership, discipline and the Commons' money still require the charter. An independent relevance check gates autonomous publishing.
 - 2026-10-11: `AIObservation` is the canonical store for Sage's generated narrative memory. Check-ins and conversations remain source interactions; only durable outcomes, confirmed preferences, corrections, and useful patterns become sourced, scoped observations. Do not add a parallel generic Notes or Sage-memory table unless `AIObservation` demonstrably cannot represent the required semantics.
-- 2026-10-11: Weekly outreach and Commons hypotheses are implemented behind default-off flags. The daily outreach sweep assigns a stable weekday, rotates multi-Commons members through one named context, and uses the existing Sage DM/push path with weekly idempotency. The daily memory sweep dispatches an isolated run per Commons. Private signals require separate remember/anonymous-aggregation consent; sensitive and urgent material is excluded before extraction. Commons hypotheses start `CANDIDATE`/`SAGE_INTERNAL`, bind to config ID and version, resist repeated-member and correlated-burst inflation, and distinguish `UNSUPPORTED` from `DISMISSED`. Thirty-/ninety-day impact observations link reviewable actions through `CommonsAction.originObservationId`. Enable `sage_weekly_outreach` only after content review; enable `sage_community_memory` after migration and privacy review; keep `sage_private_safety_response` off until policy and legal review.
+- 2026-10-11: Weekly outreach and Commons hypotheses are implemented with independent gates. The daily outreach sweep assigns a stable weekday, rotates multi-Commons members through one named context, and uses the existing Sage DM/push path with weekly idempotency. The daily memory sweep dispatches an isolated run per Commons. Private signals require separate remember/anonymous-aggregation consent; sensitive and urgent material is excluded before extraction. Commons hypotheses start `CANDIDATE`/`SAGE_INTERNAL`, bind to config ID and version, resist repeated-member and correlated-burst inflation, and distinguish `UNSUPPORTED` from `DISMISSED`. Thirty-/ninety-day impact observations link reviewable actions through `CommonsAction.originObservationId`. Weekly outreach is default-on after content and journey review. Enable `sage_community_memory` after migration and privacy review; keep `sage_private_safety_response` off until policy and legal review.
+- 2026-10-13: Agent operations are no longer allowed to fail or pause silently. The weekly-outreach production sweep sends a daily receipt through the existing Slack webhook with each due member and the actual delivery outcome. An independent hourly watchdog repeats a channel-level alert while a model key, explicit feature flag, Commons auto-reply setting, autonomy budget, newsletter schedule, or Sage wake cycle is off, gated, paused, stale, or failed. Weekly outreach and newsletter agents default on; safety-gated capabilities remain gated and are reported rather than bypassed.
 
 ## Completed milestones
 

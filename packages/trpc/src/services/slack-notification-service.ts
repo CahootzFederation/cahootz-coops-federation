@@ -3,37 +3,125 @@
  * Sends notifications to Slack for important events
  */
 
-const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
-
 export async function sendSlackNotification(message: {
   text: string;
   attachments?: Array<{
     color?: string;
     fields?: Array<{ title: string; value: string; short?: boolean }>;
   }>;
-}) {
-  if (!SLACK_WEBHOOK_URL) {
+}): Promise<boolean> {
+  const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL;
+  if (!slackWebhookUrl) {
     console.log("⚠️ Slack webhook not configured, skipping notification");
-    return;
+    return false;
   }
 
   try {
-    const response = await fetch(SLACK_WEBHOOK_URL, {
+    const response = await fetch(slackWebhookUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(message),
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!response.ok) {
       console.error(`Slack webhook failed: ${response.status}`);
+      return false;
     } else {
       console.log("✅ Slack notification sent");
+      return true;
     }
   } catch (error) {
     console.error("Failed to send Slack notification:", error);
+    return false;
   }
+}
+
+export interface AgentOperationalIssue {
+  agentId: string;
+  state: "OFF" | "GATED" | "BROKEN" | "PAUSED" | "FAILED";
+  reason: string;
+  coopId?: string;
+}
+
+function safeSlackText(value: string, maxLength = 500): string {
+  return value
+    .slice(0, maxLength)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/@(channel|here|everyone)/gi, "@$1-disabled");
+}
+
+/** Loud, repeatable alert used by the hourly watchdog while an agent is not operational. */
+export async function sendAgentOperationalAlert(params: {
+  checkedAt: Date;
+  issues: AgentOperationalIssue[];
+  environment?: string;
+}): Promise<boolean> {
+  const issueLines = params.issues.slice(0, 30).map((issue) => {
+    const scope = issue.coopId ? ` (${safeSlackText(issue.coopId, 100)})` : "";
+    return `• *${issue.state}* — ${safeSlackText(issue.agentId, 100)}${scope}: ${safeSlackText(issue.reason)}`;
+  });
+  if (params.issues.length > issueLines.length) {
+    issueLines.push(`• …and ${params.issues.length - issueLines.length} more issue(s)`);
+  }
+
+  return sendSlackNotification({
+    text: `<!channel> 🚨🚨🚨 *AGENT SYSTEM NEEDS ATTENTION* 🚨🚨🚨\n${issueLines.join("\n")}`,
+    attachments: [{
+      color: "danger",
+      fields: [
+        { title: "Environment", value: params.environment ?? process.env.NODE_ENV ?? "unknown", short: true },
+        { title: "Issue count", value: String(params.issues.length), short: true },
+        { title: "Checked at", value: params.checkedAt.toISOString(), short: false },
+        { title: "Alert behavior", value: "This alert repeats every watchdog run until every issue is cleared.", short: false },
+      ],
+    }],
+  });
+}
+
+/** Daily proof of who Sage evaluated for outreach and what actually happened. */
+export async function sendSageOutreachDailyReport(params: {
+  enabled: boolean;
+  modelConfigured: boolean;
+  considered: number;
+  due: number;
+  sent: number;
+  recent: number;
+  duplicate: number;
+  failed: number;
+  modelFallbacks: number;
+  deliveries: Array<{ label: string; status: string; reason?: string }>;
+  checkedAt?: Date;
+}): Promise<boolean> {
+  const broken = !params.enabled || !params.modelConfigured || params.failed > 0 || params.modelFallbacks > 0;
+  const recipients = params.deliveries.length
+    ? params.deliveries.slice(0, 50).map((delivery) => {
+        const reason = delivery.reason ? ` — ${safeSlackText(delivery.reason)}` : "";
+        return `• ${safeSlackText(delivery.label, 120)}: *${safeSlackText(delivery.status, 60)}*${reason}`;
+      }).join("\n")
+    : "• No member was assigned today.";
+
+  return sendSlackNotification({
+    text: broken
+      ? `<!channel> 🚨🚨🚨 *SAGE OUTREACH IS NOT FULLY OPERATIONAL* 🚨🚨🚨\n${recipients}`
+      : `✅ *Daily Sage outreach report*\n${recipients}`,
+    attachments: [{
+      color: broken ? "danger" : "good",
+      fields: [
+        { title: "Agent", value: params.enabled ? "ON" : "OFF — feature flag disabled", short: true },
+        { title: "Model", value: params.modelConfigured ? (params.modelFallbacks ? `FAILED/FALLBACK (${params.modelFallbacks})` : "READY") : "BROKEN — OPENAI_API_KEY missing", short: true },
+        { title: "Members checked", value: String(params.considered), short: true },
+        { title: "Due / sent", value: `${params.due} / ${params.sent}`, short: true },
+        { title: "Skipped", value: `${params.recent} recent, ${params.duplicate} duplicate`, short: true },
+        { title: "Delivery failures", value: String(params.failed), short: true },
+        { title: "Checked at", value: (params.checkedAt ?? new Date()).toISOString(), short: false },
+      ],
+    }],
+  });
 }
 
 export async function sendApplicationSubmittedNotification(params: {

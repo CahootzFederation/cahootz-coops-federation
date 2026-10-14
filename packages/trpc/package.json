@@ -167,6 +167,11 @@
       "types": "./dist/services/sage-wake.d.ts",
       "import": "./dist/services/sage-wake.js",
       "require": "./dist/services/sage-wake.js"
+    },
+    "./services/agent-operations": {
+      "types": "./dist/services/agent-operations.d.ts",
+      "import": "./dist/services/agent-operations.js",
+      "require": "./dist/services/agent-operations.js"
     }
   },
   "keywords": [],

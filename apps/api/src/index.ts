@@ -10,6 +10,8 @@ import { fileURLToPath } from "url";
 import { resolve } from "path";
 import { getHealthStatus, startHealthMonitoring } from "./health-monitor.js";
 import { startLocalSageWakeLoop } from "@repo/trpc/services/sage-wake";
+import { sendAgentOperationalAlert } from "@repo/trpc/services/slack-notification-service";
+import { startAgentOperationsMonitor, stopAgentOperationsMonitor } from "./agent-operations-monitor.js";
 
 const app: Application = express();
 
@@ -422,11 +424,28 @@ const server = app.listen(port, async () => {
 
   // Without Trigger.dev, the API runs Sage's wake-and-wait loop itself (follow-ups, reminders).
   if (startLocalSageWakeLoop()) console.log('⏰ Sage wake loop running in the API (no Trigger key)');
+  if (startAgentOperationsMonitor()) console.log('🚨 Redundant agent operations monitor running in the API');
 });
 
 // Graceful shutdown handling
+let shutdownStarted = false;
 const gracefulShutdown = async (signal: string) => {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
   console.log(`\n⚠️  Received ${signal}, starting graceful shutdown...`);
+  stopAgentOperationsMonitor();
+
+  if (env.NODE_ENV === 'production') {
+    await sendAgentOperationalAlert({
+      checkedAt: new Date(),
+      environment: env.NODE_ENV,
+      issues: [{
+        agentId: 'api-and-local-agent-loops',
+        state: 'OFF',
+        reason: `The API process is shutting down because it received ${signal}. External uptime monitoring must confirm whether it restarts.`,
+      }],
+    }).catch((error) => console.error('Failed to send shutdown alert:', error));
+  }
   
   server.close(async () => {
     console.log('✅ HTTP server closed');

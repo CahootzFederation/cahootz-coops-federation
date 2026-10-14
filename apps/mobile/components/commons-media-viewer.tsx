@@ -16,6 +16,8 @@ export type CommonsMediaPreview = Pick<
 
 export const COMPOSER_MEDIA_TILE_SIZE = 92;
 export const FEED_MEDIA_TILE_SIZE = 132;
+/** Photos and videos one post may carry; the API enforces the same cap. */
+export const MAX_POST_MEDIA_ATTACHMENTS = 10;
 
 function mediaUri(media: CommonsMediaPreview) {
   return media.uri || media.url || '';

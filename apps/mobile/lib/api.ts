@@ -299,6 +299,8 @@ export interface SupporterBadge {
   color: string;
 }
 
+export type FeedbackCategory = 'BUG' | 'COMPLAINT' | 'IDEA' | 'OTHER';
+
 export interface CommonsPostMedia {
   id?: string;
   pathname: string;
@@ -543,6 +545,8 @@ export interface PersonalPageFeedPost {
   createdAt: string;
   replies: number;
   support: number;
+  /** Every emoji reaction, ❤️ (the like) first. */
+  reactions?: ReactionSummary[];
   media: CommonsPostMedia[];
   comments: PersonalPageComment[];
 }
@@ -1464,6 +1468,28 @@ export const api = {
     );
   },
 
+  /** A member's complaint, bug report or idea; the team sees it in Slack. */
+  async submitFeedback(
+    data: {
+      category: FeedbackCategory;
+      message: string;
+      screenshotUrls: string[];
+      screen?: string;
+      coopId?: string;
+      platform?: string;
+      appVersion?: string;
+    },
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/feedback.submit`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{ id: string }>(response, 'Could not send your feedback');
+  },
+
   async createCommonsPost(
     data: {
       content: string;
@@ -1741,25 +1767,6 @@ export const api = {
     );
   },
 
-  async togglePersonalPageSupport(
-    postId: string,
-    sessionToken?: string | null,
-  ) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/commons.togglePersonalPagePostSupport`,
-      {
-        method: 'POST',
-        headers: createApiHeaders(null, sessionToken),
-        body: JSON.stringify({ postId }),
-      },
-    );
-
-    return readTrpcResult<{ supported: boolean }>(
-      response,
-      'Failed to update like',
-    );
-  },
-
   async editComment(
     data: { commentId: string; content: string },
     sessionToken?: string | null,
@@ -1829,8 +1836,8 @@ export const api = {
 
   async uploadCommonsPostMedia(data: {
     coopId: string;
-    /** Blob folder; profile photos use 'profile'. */
-    uploadType?: 'post' | 'profile';
+    /** Blob folder; profile photos use 'profile', feedback screenshots 'feedback'. */
+    uploadType?: 'post' | 'profile' | 'feedback';
     uri: string;
     fileName?: string | null;
     mimeType: string;
@@ -2016,6 +2023,21 @@ export const api = {
   /** Toggles one emoji on a post; ❤️ is the post's like. */
   async togglePostReaction(postId: string, emoji: string, sessionToken?: string | null) {
     const response = await fetch(`${API_BASE_URL}/trpc/commons.togglePostReaction`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ postId, emoji }),
+    });
+
+    return readTrpcResult<{
+      emoji: string;
+      reacted: boolean;
+      support: number;
+      reactions: ReactionSummary[];
+    }>(response, 'Could not update your reaction');
+  },
+
+  async togglePersonalPagePostReaction(postId: string, emoji: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.togglePersonalPagePostReaction`, {
       method: 'POST',
       headers: createApiHeaders(null, sessionToken),
       body: JSON.stringify({ postId, emoji }),

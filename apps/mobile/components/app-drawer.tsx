@@ -19,6 +19,7 @@ import {
   Info,
   LogOut,
   MessageCircle,
+  MessageSquareWarning,
   RotateCcw,
   Scale,
   Store,
@@ -44,6 +45,7 @@ const DRAWER_SECTIONS = [
   { label: 'Personal Page', icon: UserCircle, action: '/(authenticated)/personal-page', requiresAuth: true },
   { label: 'Commons Stores & Shops', icon: Store, action: '/(tabs)/store', requiresAuth: true },
   { label: 'Messages & Direct Chat', icon: MessageCircle, action: '/(tabs)/messages' },
+  { label: 'Report a Problem or Idea', icon: MessageSquareWarning, action: '/(authenticated)/feedback', requiresAuth: true },
 ];
 
 // Shared "hamburger" drawer - same navigation surface (switch commons, explore

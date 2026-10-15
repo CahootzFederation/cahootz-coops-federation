@@ -43,7 +43,7 @@ async function activeCoopId(page: Page): Promise<string> {
   return coopId;
 }
 
-test("member pays a store by typing its code, up to the confirm step", async ({ browser }) => {
+test("member pays a store by typing its code, up to the confirm step", { tag: "@smoke" }, async ({ browser }) => {
   const member = await newSignedInPage(browser, USER_A_EMAIL);
   const { page } = member;
   const code = `E2EQP${Date.now().toString(36).slice(-6).toUpperCase()}`;

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { USER_A_EMAIL, newSignedInPage } from "./support/auth";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -11,6 +11,29 @@ const APPLICANT_EMAIL = `e2e-applicant-${RUN_ID}@test.cahootz.local`;
 /** Visible text only: Expo Router keeps earlier screens mounted (hidden). */
 function shown(page: Page, text: string | RegExp, options?: { exact?: boolean }) {
   return page.getByText(text, options).filter({ visible: true });
+}
+
+async function contrastRatio(foreground: Locator, background: Locator) {
+  const [foregroundColor, backgroundColor] = await Promise.all([
+    foreground.evaluate((element) => getComputedStyle(element).color),
+    background.evaluate((element) => getComputedStyle(element).backgroundColor),
+  ]);
+  const luminance = (value: string) => {
+    const [red, green, blue] = value
+      .match(/[\d.]+/g)!
+      .slice(0, 3)
+      .map((channel) => Number(channel) / 255)
+      .map((channel) =>
+        channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+      );
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  };
+  const foregroundLuminance = luminance(foregroundColor);
+  const backgroundLuminance = luminance(backgroundColor);
+  return (
+    (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+    (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+  );
 }
 
 /** Lookup and cleanup for the throwaway applicant (apps/api/scripts/e2e-application-reference.ts). */
@@ -49,7 +72,7 @@ test.describe("onboarding usability", () => {
     applicationFixture("cleanup", APPLICANT_EMAIL);
   });
 
-  test("a returning member signs in from the first welcome screen without seeing the intro again", async ({
+  test("a returning member signs in from the first welcome screen without seeing the intro again", { tag: "@smoke" }, async ({
     page,
   }) => {
     await page.goto("/");
@@ -88,6 +111,29 @@ test.describe("onboarding usability", () => {
     await page.reload();
     await expect(page.getByLabel("Open menu").filter({ visible: true })).toBeVisible();
     await expect(page).not.toHaveURL(/profile-onboarding/);
+  });
+
+  test("a dark-mode device keeps the app's supported light theme and readable sign-in controls", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.addInitScript(() => document.documentElement.classList.add("dark"));
+    await page.goto("/");
+    await expect(page.locator("html")).not.toHaveClass(/dark/);
+
+    await page.getByRole("button", { name: "I already have an account" }).click();
+    const email = page.getByPlaceholder("name@email.com");
+    const label = shown(page, "Email address", { exact: true });
+    const card = page.getByTestId("login-form-card");
+    const submit = page.getByRole("button", { name: "Log in with code" });
+    const submitText = shown(page, "Log in with code", { exact: true });
+
+    await expect(email).toBeVisible();
+    await expect(label).toBeVisible();
+    await expect(card).toBeVisible();
+    await expect(submit).toBeVisible();
+    expect(await contrastRatio(label, card)).toBeGreaterThan(2);
+    expect(await contrastRatio(submitText, submit)).toBeGreaterThan(2);
   });
 
   test("someone who tapped Continue past the intro doesn't see it again after signing in", async ({ page }) => {

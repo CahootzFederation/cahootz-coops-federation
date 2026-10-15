@@ -60,7 +60,7 @@ async function openProposals(page: Page) {
 }
 
 test.describe("automatic wallet creation", () => {
-  test("signing in creates a wallet for a member who has none", async ({ browser }) => {
+  test("signing in creates a wallet for a member who has none", { tag: "@smoke" }, async ({ browser }) => {
     const email = throwawayEmail("signin");
     walletFixture("create", email);
     const context = await browser.newContext({ viewport: { width: 430, height: 932 } });

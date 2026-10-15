@@ -47,7 +47,7 @@ test('signed-out visitors do not see the Shop and are sent to sign in from a dir
   }
 });
 
-test('member chooses a funding badge, opens the cart, and reaches checkout', async ({ browser }) => {
+test('member chooses a funding badge, opens the cart, and reaches checkout', { tag: "@smoke" }, async ({ browser }) => {
   const member = await newSignedInPage(browser, USER_A_EMAIL);
   try {
     await member.page.getByRole('tab', { name: 'Shop' }).click();

@@ -50,6 +50,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:e2e:mobile": "pnpm -F @cahootz/mobile test:e2e",
+    "test:e2e:mobile:smoke": "pnpm -F @cahootz/mobile test:e2e:smoke",
     "test:contracts": "pnpm -F @cahootz/contracts test",
     "test:coverage": "turbo run test:coverage",
     "test:watch": "turbo run test:watch",

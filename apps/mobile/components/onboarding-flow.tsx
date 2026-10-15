@@ -1381,7 +1381,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             </Text>
           </View>
 
-          <Card className="bg-white border-border">
+          <Card className="bg-white border-border" testID="login-form-card">
             <CardContent className="p-6">
               <View className="gap-5">
                 {/* Email */}

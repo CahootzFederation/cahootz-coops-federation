@@ -32,7 +32,7 @@ async function trpc(
 // Circles are joined by direct invitation, not by sharing an invite code:
 // the leader searches commons members from circle settings, and the invitee
 // accepts from their Circles screen.
-test("a circle leader searches for a commons member and invites them, and the invitee accepts", async ({
+test("a circle leader searches for a commons member and invites them, and the invitee accepts", { tag: "@smoke" }, async ({
   browser,
 }) => {
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

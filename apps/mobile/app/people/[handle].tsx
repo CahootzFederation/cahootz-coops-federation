@@ -32,6 +32,7 @@ import { api, type CommonsPost, type PersonalPageFeedPost, type PersonalPageProf
 import { friendlyError } from '@/lib/friendly-error';
 import { postTypeLabel, shouldShowPostType } from '@/lib/post-types';
 import { personDisplayHandle, personHandleFromName, postBelongsToHandle } from '@/lib/social-profile';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -205,7 +206,7 @@ export default function PublicPersonPageScreen() {
         </View>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView {...keyboardInsetScrollProps} className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
         <View className="px-5 py-4">
           <View className="rounded-2xl border bg-white p-5" style={{ borderColor: THEME.border }}>
             <View className="flex-row items-start gap-4">

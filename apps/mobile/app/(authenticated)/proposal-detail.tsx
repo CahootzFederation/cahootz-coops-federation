@@ -41,6 +41,7 @@ import { ConfirmSheet } from '@/components/confirm-sheet';
 import { api } from '@/lib/api';
 import { ApiError, friendlyError } from '@/lib/friendly-error';
 import { votingDeadlineLine } from '@/lib/voting-deadline';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -567,10 +568,10 @@ export function ProposalDetailContent() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1">
         <ScrollView
+          {...keyboardScrollProps}
           className="flex-1"
           contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 12 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#FF6B00" />}
-          keyboardShouldPersistTaps="handled"
         >
           {loadError ? (
             <LoadError

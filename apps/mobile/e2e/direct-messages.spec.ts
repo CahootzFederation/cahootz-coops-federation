@@ -34,7 +34,7 @@ async function trpc(page: Page, path: string, input: Record<string, unknown>) {
 // B's profile, B sees it as unread, opens it, and replies; A sees the reply
 // without reloading, and the conversation survives a reload. The DM circle
 // never shows up in Circle View's list of circles.
-test("two members exchange direct messages in a private two-person circle", async ({
+test("two members exchange direct messages in a private two-person circle", { tag: "@smoke" }, async ({
   browser,
 }) => {
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -109,6 +109,54 @@ test("two members exchange direct messages in a private two-person circle", asyn
     await expect(userA.page.getByText("Direct message", { exact: true })).toHaveCount(0);
   } finally {
     // Both people leaving deletes the DM circle and its messages.
+    if (groupId) {
+      await trpc(userA.page, "groups.leave", { groupId });
+      await trpc(userB.page, "groups.leave", { groupId });
+    }
+    await Promise.all([userA.context.close(), userB.context.close()]);
+  }
+});
+
+// Regression: the message box used to sit at the end of the scrolling
+// conversation, so in a long thread (or with the keyboard up) Send was out of
+// reach. It is now pinned below the conversation and stays on screen.
+test("the message box and Send stay on screen in a long conversation", async ({ browser }) => {
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const userA = await newSignedInPage(browser, USER_A_EMAIL);
+  const userB = await newSignedInPage(browser, USER_B_EMAIL);
+  let groupId: string | undefined;
+
+  try {
+    const personB = await storedUser(userB.page);
+
+    // Fixture: a conversation long enough to fill the screen.
+    const opened = await trpc(userA.page, "groups.openDirect", { userId: personB.id });
+    groupId = opened?.result?.data?.groupId;
+    expect(groupId).toBeTruthy();
+    for (let index = 1; index <= 12; index += 1) {
+      await trpc(userA.page, "groups.sendDirect", {
+        groupId,
+        content: `E2E DM filler ${index} ${runId}`,
+      });
+    }
+
+    await userA.page.goto(`/people/${personB.handle}`);
+    await userA.page.getByLabel(`Message ${displayName(personB)}`).click();
+    await expect(userA.page.getByText(`E2E DM filler 12 ${runId}`).last()).toBeAttached();
+
+    const composer = userA.page.getByRole("textbox", { name: `Message ${displayName(personB)}` });
+    const send = userA.page.getByLabel("Send message");
+    await expect(composer).toBeInViewport();
+    await expect(send).toBeInViewport();
+
+    // Typing and sending works without scrolling to find the button.
+    const message = `E2E DM pinned send ${runId}`;
+    await composer.fill(message);
+    await send.click();
+    await expect(userA.page.getByText(message).last()).toBeAttached();
+    await expect(composer).toHaveValue("");
+    await expect(send).toBeInViewport();
+  } finally {
     if (groupId) {
       await trpc(userA.page, "groups.leave", { groupId });
       await trpc(userB.page, "groups.leave", { groupId });

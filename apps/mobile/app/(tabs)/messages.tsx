@@ -1,6 +1,6 @@
 // Hallmark - pre-emit critique: P4 H4 E4 S4 R4 V4
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
   CheckCheck,
@@ -14,6 +14,7 @@ import {
 
 import { Text } from '@/components/ui/text';
 import { MentionText } from '@/components/mention-text';
+import { keyboardAvoidingBehavior, keyboardScrollProps } from '@/lib/keyboard';
 import {
   api,
   type DirectMember,
@@ -282,7 +283,7 @@ export default function MessagesScreen() {
   }
 
   return (
-    <View className="flex-1 bg-stone-50">
+    <KeyboardAvoidingView className="flex-1 bg-stone-50" behavior={keyboardAvoidingBehavior}>
       <View className="px-5 pt-14 pb-4" style={{ backgroundColor: '#12362D' }}>
         <View className="flex-row items-center justify-between">
           <View>
@@ -315,7 +316,11 @@ export default function MessagesScreen() {
         </View>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 24 }}>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 24 }}
+        {...keyboardScrollProps}
+      >
         <View className="border-b border-stone-200 bg-white px-5 py-3">
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View className="flex-row gap-3">
@@ -478,31 +483,6 @@ export default function MessagesScreen() {
                 <SageDecisionTrails filter={{ circleId: selectedGroupId }} sessionToken={sessionToken} refreshKey={messages.length} hideWhenEmpty />
               </View>
             ) : null}
-
-            <View className="border-t border-stone-100 p-3">
-              <View className="flex-row items-end gap-2">
-                <TextInput
-                  value={messageDraft}
-                  onChangeText={setMessageDraft}
-                  placeholder={`Message ${selected.person.name}`}
-                  accessibilityLabel={`Message ${selected.person.name}`}
-                  placeholderTextColor="#78716C"
-                  multiline
-                  className="min-h-11 flex-1 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-base text-gray-900"
-                  style={{ maxHeight: 96, textAlignVertical: 'top' }}
-                />
-                <TouchableOpacity
-                  onPress={sendMessage}
-                  disabled={isSending}
-                  accessibilityLabel="Send message"
-                  className="h-11 w-11 items-center justify-center rounded-xl bg-red-600"
-                  style={{ opacity: isSending ? 0.6 : 1 }}
-                  activeOpacity={0.8}
-                >
-                  {isSending ? <ActivityIndicator size="small" color="white" /> : <Send size={18} color="white" />}
-                </TouchableOpacity>
-              </View>
-            </View>
           </View>
           )}
 
@@ -534,6 +514,35 @@ export default function MessagesScreen() {
           </View>
         </View>
       </ScrollView>
-    </View>
+
+      {selected ? (
+        // Pinned below the conversation so it rides up with the keyboard and
+        // Send is always reachable; dragging the conversation down hides the keyboard.
+        <View className="border-t border-stone-200 bg-white px-4 py-3">
+          <View className="flex-row items-end gap-2">
+            <TextInput
+              value={messageDraft}
+              onChangeText={setMessageDraft}
+              placeholder={`Message ${selected.person.name}`}
+              accessibilityLabel={`Message ${selected.person.name}`}
+              placeholderTextColor="#78716C"
+              multiline
+              className="min-h-11 flex-1 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-base text-gray-900"
+              style={{ maxHeight: 96, textAlignVertical: 'top' }}
+            />
+            <TouchableOpacity
+              onPress={sendMessage}
+              disabled={isSending}
+              accessibilityLabel="Send message"
+              className="h-11 w-11 items-center justify-center rounded-xl bg-red-600"
+              style={{ opacity: isSending ? 0.6 : 1 }}
+              activeOpacity={0.8}
+            >
+              {isSending ? <ActivityIndicator size="small" color="white" /> : <Send size={18} color="white" />}
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
+    </KeyboardAvoidingView>
   );
 }

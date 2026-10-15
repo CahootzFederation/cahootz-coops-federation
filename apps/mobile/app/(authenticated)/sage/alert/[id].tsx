@@ -9,6 +9,7 @@ import { friendlyError } from '@/lib/friendly-error';
 import { SAGE_ONE_LINER } from '@/components/sage-intro';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type SageAlertView } from '@/lib/api';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F8FAFC',
@@ -95,7 +96,7 @@ export default function SageAlertScreen() {
         <Text style={{ fontSize: 20, fontWeight: '800', color: THEME.ink }}>Sage alert</Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
+      <ScrollView {...keyboardInsetScrollProps} contentContainerStyle={{ padding: 16, gap: 14 }}>
         <Text style={{ color: THEME.muted, fontSize: 15 }}>{SAGE_ONE_LINER}</Text>
         {!alert ? (
           error ? <Text style={{ color: THEME.danger }}>{error}</Text> : <ActivityIndicator accessibilityLabel="Loading alert" color={THEME.primary} />

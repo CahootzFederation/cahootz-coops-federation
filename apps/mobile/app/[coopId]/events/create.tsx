@@ -17,6 +17,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type EventRecurrenceFreq, type PrivateGroupSummary } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -147,7 +148,7 @@ export default function CreateEventScreen() {
         </View>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, gap: 16 }}>
+      <ScrollView {...keyboardScrollProps} className="flex-1" contentContainerStyle={{ padding: 16, gap: 16 }}>
         <View>
           <Text className="mb-1 text-xs font-black uppercase text-gray-500">Event name</Text>
           <TextInput

@@ -102,6 +102,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react-native';
+import { keyboardInsetScrollProps, keyboardScrollProps } from '@/lib/keyboard';
 
 // Hallmark - pre-emit critique: P4 H4 E4 S4 R4 V4
 
@@ -1891,10 +1892,10 @@ export default function CommonsAiEntry({
       <View className="bg-white px-4 py-3">{renderComposer()}</View>
 
       <ScrollView
+        {...keyboardScrollProps}
         ref={scrollRef}
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 28 }}
-        keyboardShouldPersistTaps="handled"
         onScroll={handleFeedScroll}
         scrollEventThrottle={200}
       >
@@ -3100,8 +3101,8 @@ export default function CommonsAiEntry({
             </View>
 
             <ScrollView
+              {...keyboardScrollProps}
               contentContainerStyle={{ padding: 20, paddingBottom: 28 }}
-              keyboardShouldPersistTaps="handled"
             >
               <View className="rounded-xl border border-gray-200 bg-white p-4">
                 <Text className="font-black text-gray-950">
@@ -3266,8 +3267,8 @@ export default function CommonsAiEntry({
           </View>
 
           <ScrollView
+            {...keyboardInsetScrollProps}
             contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-            keyboardShouldPersistTaps="handled"
           >
             {searchError ? (
               <Text className="mb-3 text-sm font-semibold text-red-600">

@@ -43,6 +43,7 @@ import {
   Vote,
   UserPlus,
 } from 'lucide-react-native';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -626,6 +627,7 @@ export default function CommonsDetailScreen() {
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
       <ScrollView
+        {...keyboardInsetScrollProps}
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 32 }}
       >
@@ -984,7 +986,7 @@ export default function CommonsDetailScreen() {
               </View>
             ) : (
               <ScrollView
-                keyboardShouldPersistTaps="handled"
+                {...keyboardInsetScrollProps}
                 showsVerticalScrollIndicator={false}
               >
                 <View className="mb-4 flex-row items-start justify-between gap-3">

@@ -27,6 +27,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { api, API_BASE_URL } from '@/lib/api';
 import OrderDetailHybrid from '@/components/order-detail-hybrid';
 import { friendlyError } from '@/lib/friendly-error';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 interface OrderItem {
   id: string;
@@ -278,7 +279,7 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      <ScrollView {...keyboardInsetScrollProps} className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="p-5">
           {/* Order Status Card */}
           <View className="bg-white rounded-2xl p-4 mb-4 shadow-sm">
@@ -416,7 +417,7 @@ function OrderDetailLegacyScreen({ orderId }: { orderId: string }) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView {...keyboardInsetScrollProps} showsVerticalScrollIndicator={false}>
               {/* Status Options */}
               <View className="mb-5">
                 <Text className="text-sm font-semibold text-gray-700 mb-3">Select New Status</Text>

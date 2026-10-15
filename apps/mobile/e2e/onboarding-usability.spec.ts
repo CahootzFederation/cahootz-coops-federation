@@ -72,7 +72,7 @@ test.describe("onboarding usability", () => {
     applicationFixture("cleanup", APPLICANT_EMAIL);
   });
 
-  test("a returning member signs in from the first welcome screen without seeing the intro again", async ({
+  test("a returning member signs in from the first welcome screen without seeing the intro again", { tag: "@smoke" }, async ({
     page,
   }) => {
     await page.goto("/");

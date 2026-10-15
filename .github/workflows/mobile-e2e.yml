@@ -31,11 +31,34 @@ concurrency:
 
 jobs:
   mobile-e2e:
-    name: Two-user mobile UI journeys
+    name: Mobile UI journeys (${{ matrix.name }})
     runs-on: ubuntu-latest
-    # Setup takes ~4 min and the suite ~14 min with no retries, so 20 min
-    # cancelled any run that needed a retry before it could report results.
-    timeout-minutes: 40
+    # One runner took 20-30 min: three browsers, Metro, the API and Next shared
+    # 4 vCPUs, so page reloads of the dev bundle ran past test timeouts. Each
+    # shard gets its own runner and database and runs a quarter of the
+    # deterministic journeys (~5-8 min after ~4 min of setup); the live-model
+    # Sage journeys run beside them. Shards are by file, so specs that take
+    # turns through e2e/support/exclusive.ts only wait on specs in their shard.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "1/4"
+            key: ui-1
+            args: --grep-invert @sage --shard=1/4
+          - name: "2/4"
+            key: ui-2
+            args: --grep-invert @sage --shard=2/4
+          - name: "3/4"
+            key: ui-3
+            args: --grep-invert @sage --shard=3/4
+          - name: "4/4"
+            key: ui-4
+            args: --grep-invert @sage --shard=4/4
+          - name: Sage
+            key: sage
+            args: --grep @sage
 
     services:
       postgres:
@@ -126,8 +149,8 @@ jobs:
         run: |
           nohup pnpm -F @cahootz/api dev > /tmp/cahootz-api.log 2>&1 &
           echo $! > /tmp/cahootz-api.pid
-          # Metro holds the whole web bundle in memory for the full run; the default
-          # heap ran out partway through the suite and every later journey failed.
+          # Metro holds the whole web bundle in memory for the run; the default
+          # heap ran out partway through the full suite.
           NODE_OPTIONS=--max-old-space-size=6144 nohup setsid pnpm -F @cahootz/mobile dev > /tmp/cahootz-mobile.log 2>&1 &
           echo $! > /tmp/cahootz-mobile.pid
           nohup pnpm -F @cahootz/web dev --port 3000 > /tmp/cahootz-web.log 2>&1 &
@@ -182,48 +205,8 @@ jobs:
           fi
           time curl --fail --silent --output /dev/null --max-time 300 "http://localhost:8081${bundle_path}"
 
-      - name: Run non-Sage UI tests
-        run: pnpm -F @cahootz/mobile test:e2e:fast
-
-      # Metro retains compiled bundles and eventually exhausts its heap during the
-      # complete suite. Restart it between the deterministic and live-model groups
-      # while preserving Playwright's saved browser sessions in e2e/.auth.
-      - name: Restart mobile web app before Sage journeys
-        shell: bash
-        run: |
-          kill -- -"$(cat /tmp/cahootz-mobile.pid)" || true
-          for attempt in {1..30}; do
-            if ! curl --silent http://localhost:8081 >/dev/null; then
-              break
-            fi
-            if [ "$attempt" -eq 30 ]; then
-              echo "Mobile web app did not stop cleanly"
-              exit 1
-            fi
-            sleep 1
-          done
-
-          NODE_OPTIONS=--max-old-space-size=6144 nohup setsid pnpm -F @cahootz/mobile dev > /tmp/cahootz-mobile-sage.log 2>&1 &
-          echo $! > /tmp/cahootz-mobile.pid
-
-          for attempt in {1..60}; do
-            if curl --fail --silent http://localhost:8081 >/dev/null; then
-              break
-            fi
-            if [ "$attempt" -eq 60 ]; then
-              cat /tmp/cahootz-mobile-sage.log
-              exit 1
-            fi
-            sleep 2
-          done
-
-          bundle_path=$(curl --fail --silent http://localhost:8081 | grep -o 'src="/[^"]*\.bundle[^"]*"' | head -1 | sed 's/^src="//; s/"$//')
-          if [ -n "$bundle_path" ]; then
-            time curl --fail --silent --output /dev/null --max-time 300 "http://localhost:8081${bundle_path}"
-          fi
-
-      - name: Run Sage UI tests
-        run: pnpm -F @cahootz/mobile exec playwright test --grep @sage --no-deps
+      - name: Run UI tests
+        run: pnpm -F @cahootz/mobile exec playwright test ${{ matrix.args }}
 
       - name: Collect server logs
         if: ${{ always() }}
@@ -235,9 +218,6 @@ jobs:
           if [ -f /tmp/cahootz-mobile.log ]; then
             cp /tmp/cahootz-mobile.log output/playwright/server-logs/mobile.log
           fi
-          if [ -f /tmp/cahootz-mobile-sage.log ]; then
-            cp /tmp/cahootz-mobile-sage.log output/playwright/server-logs/mobile-sage.log
-          fi
           if [ -f /tmp/cahootz-web.log ]; then
             cp /tmp/cahootz-web.log output/playwright/server-logs/web.log
           fi
@@ -246,7 +226,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-e2e-artifacts
+          name: mobile-e2e-artifacts-${{ matrix.key }}
           path: output/playwright/
           if-no-files-found: ignore
           retention-days: 14

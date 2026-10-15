@@ -17,6 +17,7 @@ import { friendlyError } from '@/lib/friendly-error';
 import { IconAvatar } from '@/components/icon-avatar';
 import { LoadError } from '@/components/load-error';
 import { PersonLink } from '@/components/person-link';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F8FAFC',
@@ -180,6 +181,7 @@ export default function CommonsMembersScreen() {
         </View>
       ) : (
         <FlatList
+          {...keyboardInsetScrollProps}
           data={members}
           keyExtractor={(member) => member.id}
           contentContainerStyle={{ padding: 16, gap: 8 }}

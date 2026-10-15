@@ -45,7 +45,7 @@ async function fillEventForm(
   await page.getByLabel("Publish event").click();
 }
 
-test("creating an event shows it inline in the feed and in the upcoming module", async ({
+test("creating an event shows it inline in the feed and in the upcoming module", { tag: "@smoke" }, async ({
   browser,
 }) => {
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

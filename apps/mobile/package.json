@@ -21,6 +21,7 @@
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:fast": "playwright test --grep-invert @sage",
+    "test:e2e:smoke": "playwright test --grep @smoke",
     "ios": "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 expo run:ios"
   },
   "jest": {

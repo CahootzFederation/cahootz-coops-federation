@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useCoin } from '@/contexts/platform-config-context';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 function bpsToPercent(bps: number): string {
   return (bps / 100).toFixed(1) + '%';
@@ -150,7 +151,7 @@ export default function ApplyScVerificationScreen() {
         <View className="w-6" />
       </View>
 
-      <ScrollView className="flex-1 px-5 py-5" showsVerticalScrollIndicator={false}>
+      <ScrollView {...keyboardInsetScrollProps} className="flex-1 px-5 py-5" showsVerticalScrollIndicator={false}>
 
         {/* What this means */}
         <View className="bg-white dark:bg-gray-800 rounded-2xl p-5 mb-4">

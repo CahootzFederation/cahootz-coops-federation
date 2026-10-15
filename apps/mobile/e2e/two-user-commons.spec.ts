@@ -7,7 +7,7 @@ const USER_A_EMAIL =
 const USER_B_EMAIL =
   process.env.E2E_USER_B_EMAIL || "releaseclick2@test.cahootz.local";
 
-test("signing out one user does not sign out the other user", async ({
+test("signing out one user does not sign out the other user", { tag: "@smoke" }, async ({
   browser,
 }) => {
   const userA = await newSignedInPage(browser, USER_A_EMAIL);
@@ -47,7 +47,7 @@ test("signing out one user does not sign out the other user", async ({
   }
 });
 
-test("two users can complete a post and comment workflow in separate sessions", async ({
+test("two users can complete a post and comment workflow in separate sessions", { tag: "@smoke" }, async ({
   browser,
 }) => {
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

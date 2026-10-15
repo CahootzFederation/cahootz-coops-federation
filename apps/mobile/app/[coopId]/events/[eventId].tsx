@@ -21,6 +21,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { api, type EventDetail, type EventRsvpStatus } from '@/lib/api';
 import { ApiError, friendlyError } from '@/lib/friendly-error';
 import { LoadError } from '@/components/load-error';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -199,7 +200,7 @@ export default function EventDetailScreen() {
         </View>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 28, gap: 16 }} keyboardShouldPersistTaps="handled">
+      <ScrollView {...keyboardScrollProps} className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 28, gap: 16 }}>
         {isLoading ? (
           <View className="mt-12 items-center gap-3">
             <ActivityIndicator color={THEME.primary} />

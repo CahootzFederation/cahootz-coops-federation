@@ -9,7 +9,9 @@ export default defineConfig({
   // flip an account-wide setting take turns through e2e/support/exclusive.ts.
   fullyParallel: false,
   workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 3,
-  retries: process.env.CI ? 2 : 0,
+  // One retry absorbs a one-off flake. A second only re-ran tests that were
+  // really broken, adding several minutes to every failing run.
+  retries: process.env.CI ? 1 : 0,
   timeout: 90_000,
   expect: { timeout: 15_000 },
   outputDir: "../../output/playwright/test-results",

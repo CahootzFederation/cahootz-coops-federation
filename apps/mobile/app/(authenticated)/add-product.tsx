@@ -27,6 +27,7 @@ import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
 import BlobPhotoUpload from '@/components/blob-photo-upload';
 import BlobMultiPhotoUpload from '@/components/blob-multi-photo-upload';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 export default function AddProductScreen() {
   const { user } = useAuth();
@@ -155,7 +156,7 @@ export default function AddProductScreen() {
           <View className="w-6" />
         </View>
 
-        <ScrollView className="flex-1 px-5 py-4" showsVerticalScrollIndicator={false}>
+        <ScrollView {...keyboardScrollProps} className="flex-1 px-5 py-4" showsVerticalScrollIndicator={false}>
           {/* Basic Info */}
           <View className="mb-6">
             <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-4">

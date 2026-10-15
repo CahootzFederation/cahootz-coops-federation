@@ -14,9 +14,10 @@ import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { sageStatusMeta } from '@/lib/sage-status';
 import { SageFollowing } from '@/components/sage-following';
+import { SageAvatar } from '@/components/sage-avatar';
 import { SageIntro } from '@/components/sage-intro';
 import { friendlyError } from '@/lib/friendly-error';
-import { ArrowLeft, Sparkles } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 
 const THEME = {
   paper: '#F8FAFC',
@@ -84,7 +85,7 @@ export default function SageSuggestionsScreen() {
         >
           <ArrowLeft size={22} color={THEME.primary} />
         </TouchableOpacity>
-        <Sparkles size={22} color={THEME.primary} />
+        <SageAvatar size={32} />
         <Text style={{ fontSize: 20, fontWeight: '800', color: THEME.ink }}>Sage suggestions</Text>
       </View>
       <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>

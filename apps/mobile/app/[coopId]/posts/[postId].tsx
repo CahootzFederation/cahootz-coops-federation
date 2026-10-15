@@ -33,6 +33,7 @@ import {
 } from '@/components/commons-media-viewer';
 import { Text } from '@/components/ui/text';
 import { AiBadge } from '@/components/ai-badge';
+import { SageAvatar } from '@/components/sage-avatar';
 import { MentionText } from '@/components/mention-text';
 import { MentionComposerInput } from '@/components/mention-composer-input';
 import { useAuth } from '@/contexts/auth-context';
@@ -472,11 +473,15 @@ export default function CommonsPostDetailScreen() {
             <View className="flex-row items-center gap-3">
               <TouchableOpacity
                 onPress={() => openPersonPage(post.author, post.authorHandle)}
-                className="h-11 w-11 items-center justify-center rounded-full bg-slate-200"
+                className={`h-11 w-11 items-center justify-center rounded-full ${post.authorIsAi ? '' : 'bg-slate-200'}`}
                 activeOpacity={0.75}
                 accessibilityLabel={`Open ${post.author}'s personal page`}
               >
-                <Text className="text-base font-black text-slate-600">{personInitials(post.author)}</Text>
+                {post.authorIsAi ? (
+                  <SageAvatar size={44} />
+                ) : (
+                  <Text className="text-base font-black text-slate-600">{personInitials(post.author)}</Text>
+                )}
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => openPersonPage(post.author, post.authorHandle)}

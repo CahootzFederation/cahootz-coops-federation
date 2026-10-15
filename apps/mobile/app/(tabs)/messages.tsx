@@ -22,6 +22,7 @@ import {
   type DirectThread,
 } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import { SageAvatar } from '@/components/sage-avatar';
 import { SageDecisionTrails } from '@/components/sage-decision-trail';
 import { LoadError } from '@/components/load-error';
 import { friendlyError } from '@/lib/friendly-error';
@@ -53,7 +54,7 @@ function threadToConversation(thread: DirectThread): Conversation {
 
 function memberToConversation(member: DirectMember): Conversation {
   return {
-    person: { id: member.id, name: member.name, handle: member.handle },
+    person: { id: member.id, name: member.name, handle: member.handle, isSage: member.isSage },
     groupId: null,
     preview: 'Start a private conversation',
     lastMessageAt: null,
@@ -319,9 +320,13 @@ export default function MessagesScreen() {
                     activeOpacity={0.75}
                   >
                     <View className="mb-2 flex-row items-center gap-2">
-                      <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
-                        <Text className="font-black text-stone-700">{conversation.person.name.slice(0, 1)}</Text>
-                      </View>
+                      {conversation.person.isSage ? (
+                        <SageAvatar size={36} />
+                      ) : (
+                        <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
+                          <Text className="font-black text-stone-700">{conversation.person.name.slice(0, 1)}</Text>
+                        </View>
+                      )}
                       <View className="flex-1">
                         <Text className="font-bold text-gray-900" numberOfLines={1}>
                           {conversation.person.name}
@@ -384,9 +389,13 @@ export default function MessagesScreen() {
           ) : (
           <View className="rounded-xl border border-stone-200 bg-white">
             <View className="flex-row items-center gap-3 border-b border-stone-100 p-4">
-              <View className="h-11 w-11 items-center justify-center rounded-xl bg-emerald-100">
-                <Text className="font-black text-emerald-900">{selected.person.name.slice(0, 1)}</Text>
-              </View>
+              {selected.person.isSage ? (
+                <SageAvatar size={44} />
+              ) : (
+                <View className="h-11 w-11 items-center justify-center rounded-xl bg-emerald-100">
+                  <Text className="font-black text-emerald-900">{selected.person.name.slice(0, 1)}</Text>
+                </View>
+              )}
               <View className="flex-1">
                 <Text className="font-black text-gray-900">{selected.person.name}</Text>
                 <View className="flex-row items-center gap-1">

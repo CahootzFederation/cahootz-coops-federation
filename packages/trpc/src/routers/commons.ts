@@ -511,6 +511,8 @@ async function findUserByPersonalHandle(db: any, handle: string) {
       avatarEmoji: true,
       avatarColor: true,
       createdAt: true,
+      isBot: true,
+      roles: true,
     },
   });
 }
@@ -1345,7 +1347,7 @@ export const commonsRouter = router({
           },
           orderBy: { createdAt: 'desc' },
           take: input.limit,
-          select: { id: true, name: true, email: true, handle: true },
+          select: { id: true, name: true, email: true, handle: true, isBot: true, roles: true },
         }),
         canReadPosts
           ? context.db.commonsPost.findMany({
@@ -1393,6 +1395,7 @@ export const commonsRouter = router({
           id: user.id,
           name: displayName(user),
           handle: personHandle(user),
+          isSage: isSageUser(user),
         })),
         posts: posts.map((post: any) => mapPostWithGroup(post, coop.name)),
       };
@@ -2249,6 +2252,7 @@ export const commonsRouter = router({
           avatarUrl: user.avatarUrl,
           avatarEmoji: user.avatarEmoji,
           avatarColor: user.avatarColor,
+          isSage: isSageUser(user),
           createdAt: user.createdAt.toISOString(),
           followerCount,
           followingCount,
@@ -3397,7 +3401,7 @@ export const commonsRouter = router({
       orderBy: { lastActiveAt: 'desc' },
       take: 50,
       include: {
-        user: { select: { id: true, name: true, email: true, handle: true } },
+        user: { select: { id: true, name: true, email: true, handle: true, isBot: true, roles: true } },
       },
     });
 
@@ -3406,6 +3410,7 @@ export const commonsRouter = router({
         id: membership.user.id,
         name: displayName(membership.user),
         handle: personHandle(membership.user),
+        isSage: isSageUser(membership.user),
         role: 'Cahootz Commons',
       })),
     };

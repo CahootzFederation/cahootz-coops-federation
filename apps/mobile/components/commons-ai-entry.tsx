@@ -41,6 +41,7 @@ import { PostTypeSelector } from '@/components/post-type-selector';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { AiBadge } from '@/components/ai-badge';
+import { SageAvatar } from '@/components/sage-avatar';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
@@ -2086,13 +2087,17 @@ export default function CommonsAiEntry({
                           event.stopPropagation();
                           openPersonPage(post.author, post.authorHandle);
                         }}
-                        className="h-11 w-11 items-center justify-center rounded-full bg-slate-200"
+                        className={`h-11 w-11 items-center justify-center rounded-full ${post.authorIsAi ? '' : 'bg-slate-200'}`}
                         activeOpacity={0.75}
                         accessibilityLabel={`Open ${post.author}'s personal page`}
                       >
-                        <Text className="text-base font-black text-slate-600">
-                          {personInitials(post.author)}
-                        </Text>
+                        {post.authorIsAi ? (
+                          <SageAvatar size={44} />
+                        ) : (
+                          <Text className="text-base font-black text-slate-600">
+                            {personInitials(post.author)}
+                          </Text>
+                        )}
                       </TouchableOpacity>
                       <View className="min-w-0 flex-1">
                         <TouchableOpacity
@@ -3306,11 +3311,15 @@ export default function CommonsAiEntry({
                       }`}
                       activeOpacity={0.75}
                     >
-                      <View className="h-9 w-9 items-center justify-center rounded-full bg-slate-200">
-                        <Text className="text-sm font-black text-slate-600">
-                          {personInitials(person.name)}
-                        </Text>
-                      </View>
+                      {person.isSage ? (
+                        <SageAvatar size={36} />
+                      ) : (
+                        <View className="h-9 w-9 items-center justify-center rounded-full bg-slate-200">
+                          <Text className="text-sm font-black text-slate-600">
+                            {personInitials(person.name)}
+                          </Text>
+                        </View>
+                      )}
                       <View className="min-w-0 flex-1">
                         <Text
                           className="text-sm font-black text-gray-950"

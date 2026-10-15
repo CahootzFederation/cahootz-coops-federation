@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
+import { SageAvatar } from '@/components/sage-avatar';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
@@ -15,9 +16,11 @@ interface Suggestion {
   name: string;
   label: string;
   caption?: string;
+  /** Sage's own account, shown with Sage's face. */
+  isSage?: boolean;
 }
 
-const SAGE_SUGGESTION: Suggestion = { id: 'sage', name: 'sage', label: 'Sage', caption: 'Commons AI assistant' };
+const SAGE_SUGGESTION: Suggestion = { id: 'sage', name: 'sage', label: 'Sage', caption: 'Commons AI assistant', isSage: true };
 
 function personInitial(label: string) {
   return label.trim().slice(0, 1).toUpperCase() || '?';
@@ -44,7 +47,7 @@ export function MentionSuggestions({ keyword, onSelect, coopId = 'cahootz' }: Me
         setDefaultMembers(
           result.members
             .filter((m) => m.handle)
-            .map((m) => ({ id: m.id, name: m.handle, label: m.name, caption: `@${m.handle}` })),
+            .map((m) => ({ id: m.id, name: m.handle, label: m.name, caption: `@${m.handle}`, isSage: m.isSage })),
         );
       })
       .catch(() => setDefaultMembers([]));
@@ -66,7 +69,13 @@ export function MentionSuggestions({ keyword, onSelect, coopId = 'cahootz' }: Me
         .then((result) => {
           if (requestId.current !== thisRequest) return;
           setSearchResults(
-            result.people.map((p) => ({ id: p.id, name: p.handle, label: p.name, caption: `@${p.handle}` })),
+            result.people.map((p) => ({
+              id: p.id,
+              name: p.handle,
+              label: p.name,
+              caption: `@${p.handle}`,
+              isSage: p.isSage,
+            })),
           );
         })
         .catch(() => {
@@ -110,9 +119,13 @@ export function MentionSuggestions({ keyword, onSelect, coopId = 'cahootz' }: Me
               index < results.length - 1 ? 'border-b border-gray-100' : ''
             }`}
           >
-            <View className="h-8 w-8 items-center justify-center rounded-full bg-slate-200">
-              <Text className="text-xs font-black text-slate-600">{personInitial(suggestion.label)}</Text>
-            </View>
+            {suggestion.isSage ? (
+              <SageAvatar size={32} />
+            ) : (
+              <View className="h-8 w-8 items-center justify-center rounded-full bg-slate-200">
+                <Text className="text-xs font-black text-slate-600">{personInitial(suggestion.label)}</Text>
+              </View>
+            )}
             <View className="min-w-0 flex-1">
               <Text className="text-sm font-bold text-gray-900" numberOfLines={1}>
                 {suggestion.label}

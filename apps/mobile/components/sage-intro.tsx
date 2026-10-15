@@ -1,7 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, View } from 'react-native';
-import { Sparkles } from 'lucide-react-native';
 
+import { SageAvatar } from '@/components/sage-avatar';
 import { Text } from '@/components/ui/text';
 import { secureStorage } from '@/lib/secure-storage';
 
@@ -93,7 +93,7 @@ export function SageIntro({ dismissible = true }: { dismissible?: boolean }) {
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Sparkles size={20} color={THEME.primary} />
+        <SageAvatar size={32} />
         <Text accessibilityRole="header" style={{ fontSize: 18, fontWeight: '800', color: THEME.ink }}>
           Meet Sage
         </Text>

@@ -25,6 +25,7 @@ import { friendlyError } from '@/lib/friendly-error';
 import { reportPostFailure, uploadPostMedia } from '@/lib/post-media-upload';
 import { DEFAULT_POST_TYPE, postTypePlaceholder, type SelectedPostType } from '@/lib/post-types';
 import { personDisplayHandle, personHandleFromName } from '@/lib/social-profile';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const PAGE_THEME = {
   paper: '#F6F7F8',
@@ -257,9 +258,9 @@ export default function PersonalPageScreen() {
       </View>
 
       <ScrollView
+        {...keyboardInsetScrollProps}
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 32 }}
-        keyboardShouldPersistTaps="handled"
         onScroll={handleScroll}
         scrollEventThrottle={200}
       >

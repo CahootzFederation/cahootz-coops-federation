@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useCart } from '@/contexts/cart-context';
 import { api, resolveCoopId } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 type ShopCommons = { id: string; name: string };
 const FALLBACK_COMMONS_ID = 'cahootz';
@@ -110,7 +111,7 @@ export default function StoreScreen() {
 
   return (
     <SafeAreaView className="flex-1" edges={['top']} style={{ backgroundColor: colors.paper }}>
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.orange} />} contentContainerStyle={{ paddingBottom: 112 }}>
+      <ScrollView {...keyboardInsetScrollProps} className="flex-1" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.orange} />} contentContainerStyle={{ paddingBottom: 112 }}>
         <View className="px-4 pb-3 pt-2">
           <View className="flex-row items-center justify-between">
             <View className="flex-1 pr-2">

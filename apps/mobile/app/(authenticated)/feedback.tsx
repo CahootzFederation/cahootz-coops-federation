@@ -22,6 +22,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type FeedbackCategory } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F8FAFC',
@@ -208,10 +209,9 @@ export default function FeedbackScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <ScrollView
+            {...keyboardScrollProps}
             className="flex-1"
             contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           >
             <Text className="text-sm font-black text-gray-950">What kind of feedback?</Text>
             <View className="mt-3 flex-row flex-wrap gap-2">

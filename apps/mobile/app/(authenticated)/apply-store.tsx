@@ -28,6 +28,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
 import BlobPhotoUpload from '@/components/blob-photo-upload';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 type Step = 'store' | 'owner' | 'review';
 
@@ -498,7 +499,7 @@ export default function ApplyStoreScreen() {
         </View>
 
         {/* Content */}
-        <ScrollView className="flex-1 py-4" showsVerticalScrollIndicator={false}>
+        <ScrollView {...keyboardScrollProps} className="flex-1 py-4" showsVerticalScrollIndicator={false}>
           {currentStep === 'store' && renderStoreStep()}
           {currentStep === 'owner' && renderOwnerStep()}
           {currentStep === 'review' && renderReviewStep()}

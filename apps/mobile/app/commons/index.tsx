@@ -11,6 +11,7 @@ import { LoadError } from '@/components/load-error';
 import { useAuth } from '@/contexts/auth-context';
 import { IconAvatar } from '@/components/icon-avatar';
 import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -163,7 +164,7 @@ export default function CommonsDirectoryScreen() {
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView {...keyboardInsetScrollProps} className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
         <View className="px-4 pb-4 pt-2">
           <View className="mb-4 flex-row items-center justify-between">
             <TouchableOpacity

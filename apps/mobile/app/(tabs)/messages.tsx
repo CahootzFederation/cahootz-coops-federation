@@ -80,6 +80,9 @@ export default function MessagesScreen() {
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  // Shown as a faded bubble until the send returns. A Sage reply is written
+  // inside the send request, so Sage shows as thinking while isSending.
+  const [pendingBody, setPendingBody] = useState<string | null>(null);
   const [messageDraft, setMessageDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   // Sending failed (shown above the conversation).
@@ -219,20 +222,29 @@ export default function MessagesScreen() {
     if (!content || !selected || !sessionToken || isSending) return;
 
     setIsSending(true);
+    setPendingBody(content);
+    setMessageDraft('');
+    let sent = false;
     try {
       const groupId =
         selected.groupId ?? (await api.openDirectThread(selected.person.id, sessionToken)).groupId;
       const result = await api.sendDirectMessage(groupId, content, sessionToken);
+      sent = true;
       setMessages((current) => [...current, result.message]);
-      setMessageDraft('');
+      setPendingBody(null);
       setDmError('');
       await loadThreads();
       // Picks up an immediate reply (e.g. from Sage) in the same round trip.
       await loadMessages(groupId);
     } catch (error) {
       console.error('Failed to send direct message:', error);
-      setDmError(friendlyError(error, "We couldn't send your message. It's still in the box."));
+      if (!sent) {
+        // Put the note back unless they've already started typing another one.
+        setMessageDraft((current) => current || content);
+        setDmError(friendlyError(error, "We couldn't send your message. It's still in the box."));
+      }
     } finally {
+      setPendingBody(null);
       setIsSending(false);
     }
   };
@@ -390,7 +402,7 @@ export default function MessagesScreen() {
           <View className="rounded-xl border border-stone-200 bg-white">
             <View className="flex-row items-center gap-3 border-b border-stone-100 p-4">
               {selected.person.isSage ? (
-                <SageAvatar size={44} />
+                <SageAvatar size={44} motion="blink" />
               ) : (
                 <View className="h-11 w-11 items-center justify-center rounded-xl bg-emerald-100">
                   <Text className="font-black text-emerald-900">{selected.person.name.slice(0, 1)}</Text>
@@ -442,6 +454,23 @@ export default function MessagesScreen() {
                   </View>
                 </View>
               ))}
+              {pendingBody ? (
+                <View className="max-w-[86%] self-end rounded-xl bg-emerald-800 px-4 py-3" style={{ opacity: 0.7 }}>
+                  <MentionText
+                    content={pendingBody}
+                    style={{ fontSize: 14, lineHeight: 20, color: '#FFFFFF' }}
+                    mentionClassName="font-bold text-white underline"
+                  />
+                </View>
+              ) : null}
+              {isSending && selected.person.isSage ? (
+                <View className="flex-row items-center gap-2 self-start">
+                  <SageAvatar size={32} motion="thinking" />
+                  <View className="rounded-xl bg-stone-100 px-4 py-3">
+                    <Text className="text-sm text-gray-500">Sage is thinking…</Text>
+                  </View>
+                </View>
+              ) : null}
             </View>
 
             {selectedGroupId ? (

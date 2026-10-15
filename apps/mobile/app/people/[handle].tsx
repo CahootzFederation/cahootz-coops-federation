@@ -210,7 +210,7 @@ export default function PublicPersonPageScreen() {
           <View className="rounded-2xl border bg-white p-5" style={{ borderColor: THEME.border }}>
             <View className="flex-row items-start gap-4">
               {profile?.isSage ? (
-                <SageAvatar size={64} />
+                <SageAvatar size={64} motion="blink" />
               ) : (
                 <PersonAvatar
                   name={profileName}

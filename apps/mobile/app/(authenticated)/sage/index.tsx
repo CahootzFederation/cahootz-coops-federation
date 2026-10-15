@@ -85,7 +85,7 @@ export default function SageSuggestionsScreen() {
         >
           <ArrowLeft size={22} color={THEME.primary} />
         </TouchableOpacity>
-        <SageAvatar size={32} />
+        <SageAvatar size={32} motion="blink" />
         <Text style={{ fontSize: 20, fontWeight: '800', color: THEME.ink }}>Sage suggestions</Text>
       </View>
       <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>

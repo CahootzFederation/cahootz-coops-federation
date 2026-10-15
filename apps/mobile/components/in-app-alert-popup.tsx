@@ -233,7 +233,7 @@ export function InAppAlertPopup() {
             style={styles.main}
           >
             {current.kind === "sage" ? (
-              <SageAvatar size={36} />
+              <SageAvatar size={36} motion="blink" />
             ) : (
               <View style={[styles.icon, { backgroundColor: kind.background }]}>
                 <Icon size={18} color={kind.color} />

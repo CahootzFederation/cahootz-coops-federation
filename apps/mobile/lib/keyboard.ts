@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, type ScrollViewProps } from 'react-native';
 
 /**
  * Shared keyboard behavior for every screen where a member types.
@@ -8,10 +8,16 @@ import { Platform } from 'react-native';
  *   puts the keyboard away.
  * - `keyboardDismissMode` lets a downward drag put the keyboard away, which is
  *   the only way out of a multiline field (Return adds a new line there).
+ *   Off on web: react-native-web blurs the focused field on any scroll,
+ *   including a screen scrolling itself to show the field, which drops typing.
  */
 export const keyboardScrollProps = {
   keyboardShouldPersistTaps: 'handled',
-  keyboardDismissMode: Platform.OS === 'ios' ? 'interactive' : 'on-drag',
+  keyboardDismissMode: Platform.select<ScrollViewProps['keyboardDismissMode']>({
+    ios: 'interactive',
+    android: 'on-drag',
+    default: 'none',
+  }),
 } as const;
 
 /** Lift content above the keyboard on iOS; Android resizes the window itself. */

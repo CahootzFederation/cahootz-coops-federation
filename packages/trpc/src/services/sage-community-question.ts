@@ -40,6 +40,22 @@ const QUESTIONS: Record<string, { title: string; ask: string; label: string }> =
     title: "Helping each other at home", label: "help at home",
     ask: "Could we pool help on home repairs, moving days or finding good places to live?",
   },
+  childcare_and_care: {
+    title: "Sharing childcare and care", label: "childcare and care",
+    ask: "Would a childcare swap, a shared sitter list or trading care time help this group?",
+  },
+  jobs_and_work: {
+    title: "Finding work together", label: "finding work",
+    ask: "Would it help to share job leads, practice interviews together, or hire from within the group first?",
+  },
+  learning_and_school: {
+    title: "Learning together", label: "learning together",
+    ask: "Would a homework circle, tutoring swap or shared class be useful to this group?",
+  },
+  digital_access: {
+    title: "Sharing internet and devices", label: "internet and devices",
+    ask: "Would a shared laptop, a device lending list, or help getting online be useful to this group?",
+  },
   belonging_connection: {
     title: "More ways to get together", label: "getting together",
     ask: "Would a regular, low-key way to get together help, like a standing meal, a walk or a work session?",

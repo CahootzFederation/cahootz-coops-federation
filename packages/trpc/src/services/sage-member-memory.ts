@@ -1,7 +1,7 @@
 import { db } from "@repo/db";
 
 import { auditLogEntry } from "../lib/audit.js";
-import { ASKS_WHAT_SAGE_REMEMBERS, MEMBER_SIGNAL_AGENT_KEY, NEED_SUMMARY_MAX_CHARS, privateThemeLabel, themeSummary } from "./sage-private-signals.js";
+import { ASKS_WHAT_SAGE_REMEMBERS, MEMBER_SIGNAL_AGENT_KEY, NEED_SUMMARY_MAX_CHARS, OTHER_NEED_THEME, privateThemeLabel, themeSummary } from "./sage-private-signals.js";
 import { cleanseUntrustedText } from "./untrusted-input.js";
 
 /**
@@ -70,7 +70,7 @@ export async function loadMemberMemory(input: {
   ]);
   const activeCoopIds = new Set(memberships.map((membership) => membership.coopId));
 
-  const byTheme = new Map<string, { latest: (typeof rows)[number]; details: MemberSignalDetails; coopIds: string[]; rowIds: string[] }>();
+  const byTheme = new Map<string, { themeKey: string; latest: (typeof rows)[number]; details: MemberSignalDetails; coopIds: string[]; rowIds: string[] }>();
   for (const row of rows) {
     const details = (row.details ?? {}) as MemberSignalDetails;
     if (typeof details.themeKey !== "string") continue;
@@ -79,9 +79,11 @@ export async function loadMemberMemory(input: {
     // is writing about a specific one.
     if (coopIds.length && !coopIds.some((id) => activeCoopIds.has(id))) continue;
     if (input.focusCoopId && !coopIds.includes(input.focusCoopId)) continue;
-    const existing = byTheme.get(details.themeKey);
+    // Notes under "other" are unrelated to each other, so each one is its own item.
+    const groupKey = details.themeKey === OTHER_NEED_THEME.key ? `${details.themeKey}:${row.id}` : details.themeKey;
+    const existing = byTheme.get(groupKey);
     if (existing) existing.rowIds.push(row.id);
-    else byTheme.set(details.themeKey, { latest: row, details, coopIds, rowIds: [row.id] });
+    else byTheme.set(groupKey, { themeKey: details.themeKey, latest: row, details, coopIds, rowIds: [row.id] });
   }
 
   const singleCoopIds = [...new Set([...byTheme.values()].filter((theme) => theme.coopIds.length === 1).map((theme) => theme.coopIds[0]!))];
@@ -94,7 +96,8 @@ export async function loadMemberMemory(input: {
   const maxItems = input.maxItems ?? MEMBER_MEMORY_MAX_ITEMS;
   const items: MemberMemoryItem[] = [];
   let used = 0;
-  for (const [themeKey, theme] of byTheme) {
+  for (const theme of byTheme.values()) {
+    const { themeKey } = theme;
     if (items.length >= maxItems) break;
     const label = privateThemeLabel(themeKey);
     const resolved = theme.details.stance === "CONTRADICT";
@@ -188,7 +191,9 @@ function themeMatches(item: MemberMemoryItem, words: string): boolean {
   // Common ways members name a theme that the label doesn't contain.
   const aliases: Record<string, string[]> = {
     transportation_access: ["ride", "rides", "transport", "carpool", "bus"], food_access: ["food", "groceries", "meals"],
-    housing_stability: ["housing", "rent", "home"], time_and_workload: ["childcare", "schedule", "busy"],
+    housing_stability: ["housing", "rent", "home"], time_and_workload: ["schedule", "busy"],
+    childcare_and_care: ["childcare", "kids", "babysit", "daycare", "caregiv"], jobs_and_work: ["job", "work", "hiring", "shift"],
+    learning_and_school: ["school", "tutor", "class", "homework"], digital_access: ["internet", "wifi", "laptop", "computer", "phone"],
   };
   const extra = aliases[item.themeKey] ?? [];
   return wanted.some((word) => theme.includes(word) || extra.some((alias) => word.startsWith(alias)));

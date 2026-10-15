@@ -29,20 +29,41 @@ const SENSITIVE_PATTERNS: Array<[string, RegExp]> = [
   ["abuse", /\b(?:abuse|abused|assault|stalking|threatened)\b/i],
 ];
 
+/**
+ * The fixed themes a need is filed under. Keywords are the fallback when the summary model can't run;
+ * otherwise the model picks the theme (or OTHER_NEED_THEME). Order matters for keywords: the first
+ * match wins. Health and money stay out on purpose: they're sensitive and never saved.
+ */
 const THEMES: Array<{ key: string; category: string; label: string; pattern: RegExp }> = [
-  { key: "transportation_access", category: "transportation", label: "transportation access", pattern: /\b(?:ride|rides|transport(?:ation)?|bus|carpool|getting there|pickup)\b/i },
-  { key: "food_access", category: "food", label: "food access", pattern: /\b(?:food|grocer|meal|hungry|pantry)\b/i },
-  { key: "housing_stability", category: "housing", label: "housing stability", pattern: /\b(?:housing|rent|landlord|home repair|place to live)\b/i },
-  { key: "belonging_connection", category: "belonging", label: "belonging and connection", pattern: /\b(?:lonely|isolated|belong|connection|meet people|community)\b/i },
-  { key: "time_and_workload", category: "time_pressure", label: "time and workload pressure", pattern: /\b(?:overwhelmed|too busy|schedule|childcare|time|workload)\b/i },
+  { key: "transportation_access", category: "transportation", label: "transportation access", pattern: /\b(?:ride|rides|transport(?:ation)?|bus|carpool|getting there|pickup|car broke)\b/i },
+  { key: "food_access", category: "food", label: "food access", pattern: /\b(?:food|grocer(?:y|ies)?|meals?|hungry|pantry)\b/i },
+  { key: "housing_stability", category: "housing", label: "housing stability", pattern: /\b(?:housing|rent|landlord|home repairs?|place to live|moving)\b/i },
+  { key: "childcare_and_care", category: "care", label: "childcare and caregiving", pattern: /\b(?:childcare|child care|babysit\w*|daycare|after[- ]school|elder care|caregiv\w*|watch (?:my|the) kids)\b/i },
+  { key: "jobs_and_work", category: "work", label: "jobs and work", pattern: /\b(?:jobs?|hiring|shifts?|gigs?|resume|interviews?|employment|unemployed|laid off)\b/i },
+  { key: "learning_and_school", category: "learning", label: "learning and school", pattern: /\b(?:tutor\w*|homework|school|classes|training|ged|learn to)\b/i },
+  { key: "digital_access", category: "digital", label: "internet and devices", pattern: /\b(?:internet|wi-?fi|laptop|computer|phone plan|data plan|printer)\b/i },
+  { key: "belonging_connection", category: "belonging", label: "belonging and connection", pattern: /\b(?:lonely|isolated|belong|meet people|make friends)\b/i },
+  { key: "time_and_workload", category: "time_pressure", label: "time and workload pressure", pattern: /\b(?:overwhelmed|too busy|no time|not enough time|stretched thin|workload)\b/i },
   { key: "safety_access", category: "safety", label: "access and safety", pattern: /\b(?:unsafe|safety|lighting|harassment)\b/i },
-  { key: "shared_resources", category: "resources", label: "shared tools or resources", pattern: /\b(?:tool|equipment|resource|borrow|share)\b/i },
-  { key: "skills_and_help", category: "mutual_support", label: "skills and mutual help", pattern: /\b(?:need help|could help|skill|volunteer|support)\b/i },
+  { key: "shared_resources", category: "resources", label: "shared tools or resources", pattern: /\b(?:tools?|equipment|borrow|lend)\b/i },
+  { key: "skills_and_help", category: "mutual_support", label: "skills and mutual help", pattern: /\b(?:need help|could help|skills?|volunteer|mentor)\b/i },
 ];
+
+/**
+ * A need that fits none of the themes. It's remembered for the member like any other, but it never
+ * counts toward Commons patterns: unrelated needs filed together would look like a shared one.
+ */
+export const OTHER_NEED_THEME = { key: "other_need", category: "other", label: "something else" } as const;
+export const PRIVATE_THEME_KEYS: [string, ...string[]] = [OTHER_NEED_THEME.key, ...THEMES.map((theme) => theme.key)];
 
 /** Plain-words label for a remembered theme, e.g. "transportation access". */
 export function privateThemeLabel(themeKey: string): string {
+  if (themeKey === OTHER_NEED_THEME.key) return OTHER_NEED_THEME.label;
   return THEMES.find((theme) => theme.key === themeKey)?.label ?? themeKey.replace(/_/g, " ");
+}
+
+function themeByKey(themeKey: string) {
+  return themeKey === OTHER_NEED_THEME.key ? OTHER_NEED_THEME : THEMES.find((theme) => theme.key === themeKey) ?? null;
 }
 
 /** "What do you remember about me?" asks about memory; it isn't permission to remember something new. */
@@ -87,6 +108,7 @@ export const NEED_SUMMARY_MAX_CHARS = 80;
 
 const NeedSummaryZ = z.object({
   isNeed: z.boolean().describe("False if the reply doesn't describe a need or a change in one (e.g. 'had a good time')"),
+  themeKey: z.enum(PRIVATE_THEME_KEYS).describe("The theme that fits best, or other_need if none fits"),
   summary: z.string().describe("At most 12 words, e.g. 'needs rides to work on weekdays'"),
   sensitive: z.boolean().describe("True if the message touches health, legal, money trouble, relationships, identity, abuse or safety"),
 });
@@ -96,16 +118,21 @@ const IDENTIFYING = /@|https?:|www\.|\d{3}[\s.-]?\d{3,4}|\b\d{1,2}(?::\d{2})?\s*
 
 /** The sentence used when there's no model summary: built in code from the theme, never member text. */
 export function themeSummary(classification: Pick<PrivateSignalClassification, "themeLabel" | "stance">) {
+  if (!classification.themeLabel || classification.themeLabel === OTHER_NEED_THEME.label) {
+    return classification.stance === "CONTRADICT" ? "something you mentioned is no longer a need" : "a need you mentioned in a check-in";
+  }
   return classification.stance === "CONTRADICT"
     ? `${classification.themeLabel} is no longer a need`
     : `a need around ${classification.themeLabel}`;
 }
 
 export type NeedSummary =
-  | { kind: "model" | "theme"; summary: string }
+  | { kind: "model" | "theme"; summary: string; themeKey: string }
   | { kind: "dropped"; reason: "not_a_need" | "model_flagged_sensitive" | "summary_matched_sensitive" };
 
 export type NeedSummarizer = (input: { message: string; checkin: string; themeLabel: string; stance: "SUPPORT" | "CONTRADICT" }) => Promise<z.infer<typeof NeedSummaryZ>>;
+
+const THEME_MENU = [...THEMES, OTHER_NEED_THEME].map((theme) => `${theme.key} (${theme.label})`).join(", ");
 
 /** The default summarizer: one structured nano call, recorded in the AI cost ledger. */
 export function modelNeedSummarizer(coopId: string): NeedSummarizer {
@@ -116,7 +143,8 @@ export function modelNeedSummarizer(coopId: string): NeedSummarizer {
       modelSettings: { maxTokens: 600, reasoning: { effort: "low" }, text: { verbosity: "low" } },
       instructions: [
         "You turn a community member's reply to a weekly check-in into one short, private note about what they need, so the assistant can follow up with them later.",
-        "isNeed: false if the reply doesn't actually describe something they need, or that a need went away.",
+        "isNeed: false only if the reply doesn't describe anything they need, want help with, or that a need went away. When unsure, it's a need.",
+        `themeKey: the one theme that fits best: ${THEME_MENU}. Use other_need when none fits; never force a poor fit. The keyword hint in the input may be wrong.`,
         "summary: a lowercase phrase of at most 12 words with no subject, like 'needs rides to work on weekdays' or 'no longer needs help with groceries'.",
         "Keep only the need. Leave out names of people, places, employers, businesses, schools, dates, exact times, numbers and anything that could identify them or someone else.",
         "sensitive: true if the reply mentions health, medication, pregnancy, mental health, legal trouble, immigration, debt or money trouble, eviction, relationships, custody, sexuality, gender identity, disability, abuse or safety. Then summary may be empty.",
@@ -124,7 +152,7 @@ export function modelNeedSummarizer(coopId: string): NeedSummarizer {
       ].join("\n"),
       outputType: NeedSummaryZ,
     });
-    const prompt = JSON.stringify({ checkin: input.checkin.slice(0, 400), reply: input.message, theme: input.themeLabel, resolved: input.stance === "CONTRADICT" });
+    const prompt = JSON.stringify({ checkin: input.checkin.slice(0, 400), reply: input.message, keywordHint: input.themeLabel || null, resolved: input.stance === "CONTRADICT" });
     const result = await run(agent, prompt).catch(async (error: unknown) => {
       await recordAICost({ coopId, feature: NEED_SUMMARY_FEATURE, model: NEED_SUMMARY_MODEL, status: "ERROR" }).catch(console.error);
       throw error;
@@ -135,34 +163,41 @@ export function modelNeedSummarizer(coopId: string): NeedSummarizer {
 }
 
 /**
- * A one-line, non-identifying summary of a need. Returns `dropped` when the model calls it sensitive
- * or its summary trips the same sensitive patterns as the reply, so nothing is saved. Any failure,
- * an over-long or identifying summary, or no API key falls back to the theme sentence.
+ * A theme and a one-line, non-identifying summary of a need. The model picks the theme (or other_need);
+ * keywords are only its hint and the fallback. Nothing that is a need is lost: if the model fails or
+ * there's no API key, the need is kept under its keyword theme, or other_need when none matched, with a
+ * sentence built in code. Only three outcomes save nothing: the model says the reply isn't a need, the
+ * model calls it sensitive, or its summary trips the sensitive patterns.
  */
 export async function summarizeNeed(
   input: { message: string; checkin: string; classification: PrivateSignalClassification },
   summarizer: NeedSummarizer | null,
 ): Promise<NeedSummary> {
-  const fallback = { kind: "theme" as const, summary: themeSummary(input.classification) };
-  if (!summarizer) return fallback;
+  const keywordTheme = input.classification.themeKey ?? OTHER_NEED_THEME.key;
+  const fallbackFor = (themeKey: string) => ({
+    kind: "theme" as const, themeKey,
+    summary: themeSummary({ themeLabel: privateThemeLabel(themeKey), stance: input.classification.stance }),
+  });
+  if (!summarizer) return fallbackFor(keywordTheme);
   const message = cleanseUntrustedText(input.message, { maxChars: 600 }).text;
   const checkin = cleanseUntrustedText(input.checkin, { maxChars: 400 }).text;
   let out: z.infer<typeof NeedSummaryZ>;
   try {
     out = await summarizer({ message, checkin, themeLabel: input.classification.themeLabel ?? "", stance: input.classification.stance });
   } catch (error) {
-    console.error("[sage-private-signals] Need summary failed; using the theme", error instanceof Error ? error.message : error);
-    return fallback;
+    console.error("[sage-private-signals] Need summary failed; keeping the need under its keyword theme", error instanceof Error ? error.message : error);
+    return fallbackFor(keywordTheme);
   }
   if (out.sensitive) return { kind: "dropped", reason: "model_flagged_sensitive" };
   if (!out.isNeed) return { kind: "dropped", reason: "not_a_need" };
+  const themeKey = themeByKey(out.themeKey) ? out.themeKey : keywordTheme;
   const summary = out.summary.replace(/\s+/g, " ").replace(/[.!]+$/, "").trim();
   if (SENSITIVE_PATTERNS.some(([, pattern]) => pattern.test(summary)) || URGENT_PATTERNS.some((pattern) => pattern.test(summary))) {
     return { kind: "dropped", reason: "summary_matched_sensitive" };
   }
   if (!summary || summary.length > NEED_SUMMARY_MAX_CHARS || IDENTIFYING.test(summary)
-    || cleanseUntrustedText(summary, { maxChars: NEED_SUMMARY_MAX_CHARS }).flags.length) return fallback;
-  return { kind: "model", summary };
+    || cleanseUntrustedText(summary, { maxChars: NEED_SUMMARY_MAX_CHARS }).flags.length) return fallbackFor(themeKey);
+  return { kind: "model", summary, themeKey };
 }
 
 /** What Sage adds to its reply when it saved a need: transparency in place of a consent question. */
@@ -297,20 +332,9 @@ export async function handlePrivateCheckinSignal(input: {
       memoryNotice: null,
     };
   }
-  if (!classification.themeKey || input.memoryRequest) {
+  if (input.memoryRequest) {
     return { inCheckin: true, checkin, classification, safetyReply: null, memoryNotice: null };
   }
-
-  // One note per theme per check-in: saying it again doesn't save it again or repeat the notice.
-  const alreadySaved = await db.aIObservation.findFirst({
-    where: {
-      scopeType: "member", scopeId: input.userId, generatedByAgentKey: MEMBER_SIGNAL_AGENT_KEY, status: "ACTIVE",
-      createdAt: { gte: checkin.createdAt },
-      AND: [{ details: { path: ["themeKey"], equals: classification.themeKey } }, { details: { path: ["stance"], equals: classification.stance } }],
-    },
-    select: { id: true },
-  });
-  if (alreadySaved) return { inCheckin: true, checkin, classification, safetyReply: null, memoryNotice: null };
 
   const relevantCoopIds = await relevantCommonsForCheckin(input.userId, checkin.content);
   const summarizer = input.summarizer !== undefined ? input.summarizer
@@ -326,11 +350,26 @@ export async function handlePrivateCheckinSignal(input: {
     }).catch(() => {});
     return { inCheckin: true, checkin, classification, safetyReply: null, memoryNotice: null };
   }
+  const theme = themeByKey(need.themeKey) ?? OTHER_NEED_THEME;
+  const isOther = theme.key === OTHER_NEED_THEME.key;
 
-  // Counted toward anonymous Commons patterns only when the need belongs to exactly one Commons.
-  const aggregationEligible = relevantCoopIds.length === 1;
+  // One note per theme per check-in: saying it again doesn't save it again or repeat the notice. Needs
+  // filed under "other" can be unrelated to each other, so each one is kept.
+  const alreadySaved = isOther ? null : await db.aIObservation.findFirst({
+    where: {
+      scopeType: "member", scopeId: input.userId, generatedByAgentKey: MEMBER_SIGNAL_AGENT_KEY, status: "ACTIVE",
+      createdAt: { gte: checkin.createdAt },
+      AND: [{ details: { path: ["themeKey"], equals: theme.key } }, { details: { path: ["stance"], equals: classification.stance } }],
+    },
+    select: { id: true },
+  });
+  if (alreadySaved) return { inCheckin: true, checkin, classification, safetyReply: null, memoryNotice: null };
+
+  // Counted toward anonymous Commons patterns only when the need belongs to exactly one Commons and has a
+  // real theme: "other" needs are unrelated to each other, so counting them together would invent a pattern.
+  const aggregationEligible = relevantCoopIds.length === 1 && !isOther;
   const sourceDate = input.createdAt.toISOString().slice(0, 10);
-  const fingerprint = createHash("sha256").update(`${classification.themeKey}:${classification.stance}:${sourceDate}`).digest("hex").slice(0, 16);
+  const fingerprint = createHash("sha256").update(`${theme.key}:${classification.stance}:${sourceDate}`).digest("hex").slice(0, 16);
   const saved = await recordObservation({
     type: classification.stance === "CONTRADICT" ? "member_need_resolution" : "member_need_signal",
     scopeType: "member",
@@ -338,8 +377,8 @@ export async function handlePrivateCheckinSignal(input: {
     confidence: 1,
     summary: need.summary,
     details: {
-      themeKey: classification.themeKey,
-      wellbeingCategory: classification.wellbeingCategory,
+      themeKey: theme.key,
+      wellbeingCategory: theme.category,
       stance: classification.stance,
       summaryKind: need.kind,
       aggregationBasis: "automatic",
@@ -365,7 +404,7 @@ export async function handlePrivateCheckinSignal(input: {
     await db.auditLog.create({
       data: auditLogEntry({
         actorId: "system/sage", action: "SAGE_PRIVATE_MEMORY_SAVED", resource: "GroupComment", resourceId: input.messageId,
-        metadata: { themeKey: classification.themeKey, summaryKind: need.kind, aggregationEligible },
+        metadata: { themeKey: theme.key, keywordThemeKey: classification.themeKey, summaryKind: need.kind, aggregationEligible },
       }),
     }).catch(() => {});
   }

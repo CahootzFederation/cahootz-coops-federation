@@ -135,7 +135,48 @@ describe("summarizeNeed", () => {
   it("describes resolution from the theme when there's no model", async () => {
     const classification = classifyPrivateSignal("rides are no longer an issue");
     await expect(summarizeNeed({ message: "rides are no longer an issue", checkin: "Hi", classification }, null))
-      .resolves.toEqual({ kind: "theme", summary: themeSummary(classification) });
+      .resolves.toEqual({ kind: "theme", summary: themeSummary(classification), themeKey: "transportation_access" });
     expect(themeSummary(classification)).toBe("transportation access is no longer a need");
+  });
+});
+
+describe("themes, and needs that fit none", () => {
+  it("files new kinds of need under their own themes, and stops matching everyday words", () => {
+    expect(classifyPrivateSignal("I could use a babysitter on Thursdays").themeKey).toBe("childcare_and_care");
+    expect(classifyPrivateSignal("I got laid off and I'm looking for a job").themeKey).toBe("jobs_and_work");
+    expect(classifyPrivateSignal("My son needs a math tutor").themeKey).toBe("learning_and_school");
+    expect(classifyPrivateSignal("Our internet keeps cutting out").themeKey).toBe("digital_access");
+    expect(classifyPrivateSignal("Had a good time at the community potluck").themeKey).toBeNull();
+  });
+
+  it("lets the model pick a better theme than the keywords", async () => {
+    const write: NeedSummarizer = vi.fn().mockResolvedValue({ isNeed: true, sensitive: false, themeKey: "housing_stability", summary: "needs help clearing the yard" });
+    await reply("I need help getting the yard cleared before winter", { summarizer: write });
+    expect(recordObservation.mock.calls[0][0].details).toMatchObject({ themeKey: "housing_stability", wellbeingCategory: "housing", aggregationEligible: true });
+  });
+
+  it("never drops a need that fits no theme: it's kept as 'something else' for the member, outside Commons patterns", async () => {
+    const write: NeedSummarizer = vi.fn().mockResolvedValue({ isNeed: true, sensitive: false, themeKey: "other_need", summary: "needs a hand fixing a bike chain" });
+    const result = await reply("Trying to figure out how to fix my bike chain", { summarizer: write });
+    expect(recordObservation.mock.calls[0][0]).toMatchObject({
+      summary: "needs a hand fixing a bike chain",
+      details: expect.objectContaining({ themeKey: "other_need", wellbeingCategory: "other", aggregationEligible: false }),
+    });
+    expect(result.memoryNotice).toBe(memoryNotice("needs a hand fixing a bike chain"));
+  });
+
+  it("keeps a need with no matching words even when the model can't run", async () => {
+    await reply("Trying to figure out how to fix my bike chain", { summarizer: vi.fn().mockRejectedValue(new Error("timeout")) });
+    await reply("Trying to sort out my garden beds", { summarizer: null });
+    expect(recordObservation.mock.calls.map(([arg]) => [arg.summary, arg.details.themeKey, arg.details.aggregationEligible])).toEqual(
+      Array(2).fill(["a need you mentioned in a check-in", "other_need", false]),
+    );
+  });
+
+  it("keeps each 'other' need even within one check-in, since they can be unrelated", async () => {
+    db.aIObservation.findFirst.mockResolvedValue({ id: "earlier" });
+    const write: NeedSummarizer = vi.fn().mockResolvedValue({ isNeed: true, sensitive: false, themeKey: "other_need", summary: "needs a hand fixing a bike chain" });
+    expect((await reply("Trying to fix my bike chain", { summarizer: write })).memoryNotice).not.toBeNull();
+    expect(db.aIObservation.findFirst).not.toHaveBeenCalled();
   });
 });

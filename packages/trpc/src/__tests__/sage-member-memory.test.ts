@@ -60,6 +60,18 @@ describe("reading what a member asked Sage to remember", () => {
     ]);
   });
 
+  it("lists each 'something else' need on its own line, since they aren't related to each other", async () => {
+    db.aIObservation.findMany.mockResolvedValueOnce([
+      signal("o2", "other_need", { date: "2026-10-12", summary: "needs a hand fixing a bike chain" }),
+      signal("o1", "other_need", { date: "2026-10-11", summary: "wants to start a garden bed" }),
+    ]);
+    const items = await loadMemberMemory({ memberId: "member-1", purpose: "test", now: NOW });
+    expect(items.map((item) => [item.label, item.summary, item.rowIds])).toEqual([
+      ["something else", "needs a hand fixing a bike chain", ["o2"]],
+      ["something else", "wants to start a garden bed", ["o1"]],
+    ]);
+  });
+
   it("leaves out themes from a Commons the member left, and other Commons' themes when writing about one", async () => {
     db.aIObservation.findMany.mockResolvedValue([
       signal("left", "housing_stability", { coopIds: ["old-commons"] }),

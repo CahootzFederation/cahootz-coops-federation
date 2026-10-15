@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@repo/db", () => ({ db: {} }));
 
-import { buildCommunityCandidate, discouragedHypothesisIds, impactOutcome } from "../services/sage-community-memory.js";
+import { buildCommunityCandidate, discouragedHypothesisIds, impactOutcome, MemberSignalDetailsZ } from "../services/sage-community-memory.js";
 
 const config = {
   id: "config-2",
@@ -98,5 +98,23 @@ describe("Commons observation candidate policy", () => {
       review("helped", "HELPFUL"), null, { outcome: "NOT_HELPFUL" },
     ]);
     expect([...hidden]).toEqual(["failed"]);
+  });
+});
+
+describe("which saved member needs count toward Commons patterns", () => {
+  const autoSaved = {
+    themeKey: "transportation_access", wellbeingCategory: "transportation", stance: "SUPPORT", summaryKind: "model",
+    aggregationBasis: "automatic", aggregationEligible: true, relevantCoopIds: ["harbor"], sourceDate: "2026-10-14",
+    sourceFingerprint: "abc", sensitive: false, urgent: false,
+  };
+
+  it("counts a need saved automatically, without a consent step", () => {
+    expect(MemberSignalDetailsZ.safeParse(autoSaved).success).toBe(true);
+  });
+
+  it("still leaves out needs tied to no single Commons, sensitive ones, and older remember-only notes", () => {
+    expect(MemberSignalDetailsZ.safeParse({ ...autoSaved, relevantCoopIds: [], aggregationEligible: false }).success).toBe(false);
+    expect(MemberSignalDetailsZ.safeParse({ ...autoSaved, sensitive: true }).success).toBe(false);
+    expect(MemberSignalDetailsZ.safeParse({ ...autoSaved, aggregationConsent: false, aggregationEligible: false }).success).toBe(false);
   });
 });

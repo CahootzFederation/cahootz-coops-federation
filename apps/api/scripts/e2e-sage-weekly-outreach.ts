@@ -24,7 +24,12 @@ async function cleanup(email: string) {
   const { systemKey } = await target(email);
   const comment = await db.groupComment.findUnique({ where: { systemKey }, select: { id: true, groupId: true, createdAt: true } });
   if (!comment) return { deleted: 0 };
+  // Needs Sage saved from replies in this conversation (sage-member-memory.spec.ts mentions one).
+  const replies = await db.groupComment.findMany({ where: { groupId: comment.groupId, createdAt: { gte: comment.createdAt } }, select: { id: true } });
   await db.$transaction([
+    db.aIObservation.deleteMany({
+      where: { generatedByAgentKey: "sage-member-signal", sources: { some: { sourceType: "group_comment", sourceId: { in: replies.map((reply) => reply.id) } } } },
+    }),
     db.notification.deleteMany({ where: { type: "DIRECT_MESSAGE", createdAt: { gte: comment.createdAt }, data: { path: ["groupId"], equals: comment.groupId } } }),
     // The check-in and the follow-up conversation the spec adds after it.
     db.groupComment.deleteMany({ where: { groupId: comment.groupId, createdAt: { gte: comment.createdAt } } }),

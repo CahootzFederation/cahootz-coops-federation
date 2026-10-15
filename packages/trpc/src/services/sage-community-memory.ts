@@ -53,11 +53,13 @@ export const CommunityObservationDetailsZ = z.object({
 });
 export type CommunityObservationDetails = z.infer<typeof CommunityObservationDetailsZ>;
 
-const MemberSignalDetailsZ = z.object({
+export const MemberSignalDetailsZ = z.object({
   themeKey: z.string().min(1),
   wellbeingCategory: z.string().min(1),
   stance: z.enum(["SUPPORT", "CONTRADICT"]),
-  aggregationConsent: z.literal(true),
+  // Needs are saved and counted without a consent step since 2026-10-14; rows saved before then under
+  // remember-only consent carry aggregationEligible: false and stay out.
+  aggregationConsent: z.boolean().optional(),
   aggregationEligible: z.literal(true),
   relevantCoopIds: z.array(z.string()),
   sourceDate: z.string().date(),

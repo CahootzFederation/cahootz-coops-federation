@@ -23,6 +23,10 @@ const SECTIONS = [
     body: 'Reply with helpful information, send you reminders and alerts, check back on plans, ask the whole commons an open question when a need keeps coming up, and close its own suggestions when nobody answers or they no longer apply.',
   },
   {
+    title: 'What Sage remembers',
+    body: 'Needs you mention in your check-ins, as a short private note, never your exact words. It uses them only in your own chats with Sage, and counts them without your name toward patterns in your commons. Ask Sage "What do you remember about me?" to see them, or say "forget everything" anytime.',
+  },
+  {
     title: 'What always waits for a person',
     body: 'Submitting a proposal, spending or moving money, changing who is a member, and making decisions for the group.',
   },

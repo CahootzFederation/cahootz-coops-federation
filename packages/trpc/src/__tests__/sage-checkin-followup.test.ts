@@ -5,6 +5,8 @@ vi.mock("@openai/agents", () => {
   class MockAgent { constructor(public opts: any) {} }
   return { Agent: MockAgent, run: (...args: unknown[]) => runMock(...args) };
 });
+const db = vi.hoisted(() => ({ coopConfig: { findFirst: vi.fn().mockResolvedValue({ name: "Harbor", charterText: "Be kind.", missionGoals: [] }) } }));
+vi.mock("@repo/db", () => ({ db }));
 vi.mock("../services/ai-cost.js", () => ({ recordAgentResultCost: vi.fn().mockResolvedValue(undefined), recordAICost: vi.fn().mockResolvedValue(undefined) }));
 
 import {
@@ -45,6 +47,22 @@ describe("weekly check-in follow-ups", () => {
     expect(runMock).toHaveBeenCalledTimes(1);
   });
 
+  it("uses the needs the member mentioned in earlier check-ins, and only those", async () => {
+    runMock.mockResolvedValue({ finalOutput: "How are rides going?" });
+    await runCheckinFollowup({
+      coopId: "c", checkin: "How was your week?", message: "Busy", followupsSent: 0,
+      memberMemory: ["2026-10-10: a need around transportation access (Harbor Commons)"],
+    });
+    const [agent, prompt] = runMock.mock.calls[0];
+    expect(prompt).toContain("You remember (from their earlier check-ins):\n- 2026-10-10: a need around transportation access (Harbor Commons)");
+    expect(agent.opts.instructions).toContain("Never claim to remember anything that isn't listed");
+    expect(agent.opts.instructions).not.toContain("or claim to remember anything.");
+
+    await runCheckinFollowup({ coopId: "c", checkin: "How was your week?", message: "Busy", followupsSent: 0 });
+    expect(runMock.mock.calls[1][1]).not.toContain("You remember");
+    expect(runMock.mock.calls[1][0].opts.instructions).toContain("or claim to remember anything.");
+  });
+
   it("still replies with the fixed follow-up when the model call fails", async () => {
     runMock.mockRejectedValue(new Error("401"));
     const out = await runCheckinFollowup({ coopId: "c", checkin: "Hi", message: "Rough week", followupsSent: 0 });
@@ -60,5 +78,21 @@ describe("Sage reply model by channel", async () => {
     delete process.env.COMMONS_AI_MODEL;
     expect(sageReplyModel("dm")).toBe(SAGE_DM_MODEL);
     expect(sageReplyModel(undefined)).toBe("gpt-5.2");
+  });
+});
+
+describe("Sage reply and member memory", async () => {
+  const { runSageCommonsReply } = await import("../agents/registry.js");
+  const memory = ["2026-10-10: a need around food access"];
+
+  it("uses the member's memory in their DM with Sage, never in a public @mention", async () => {
+    runMock.mockReset().mockResolvedValue({ finalOutput: "Sure." });
+    await runSageCommonsReply({ coopId: "harbor", message: "Any ideas this week?", channel: "dm", memberMemory: memory });
+    expect(runMock.mock.calls[0][1]).toContain("- 2026-10-10: a need around food access");
+    expect(runMock.mock.calls[0][0].opts.instructions).toContain("Never claim to remember anything that isn't listed");
+
+    await runSageCommonsReply({ coopId: "harbor", message: "Any ideas this week?", channel: "mention", memberMemory: memory });
+    expect(runMock.mock.calls[1][1]).not.toContain("food access");
+    expect(runMock.mock.calls[1][0].opts.instructions).not.toContain("You remember");
   });
 });

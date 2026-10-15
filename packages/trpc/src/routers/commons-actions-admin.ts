@@ -29,6 +29,7 @@ const Command = z.discriminatedUnion("command", [
   Scoped.extend({ command: z.literal("edit-draft"), actionId: z.string().min(1), draftText: z.string().trim().max(2000) }),
   Scoped.extend({ command: z.literal("approve"), actionId: z.string().min(1) }),
   Scoped.extend({ command: z.literal("remove-reply"), actionId: z.string().min(1) }),
+  Scoped.extend({ command: z.literal("remove-question"), actionId: z.string().min(1) }),
   Scoped.extend({ command: z.literal("publish-resource"), resourceId: z.string().min(1) }),
   Scoped.extend({ command: z.literal("rate-response"), actionId: z.string().min(1),
     rating: z.enum(["GOOD", "NEEDS_WORK"]), reasons: z.array(FeedbackReasons).max(7),
@@ -259,6 +260,16 @@ export const commonsActionsAdminRouter = router({
         // Scoped by Commons rather than sourcePostId: a circle-trend comment's source is its window, not the post.
         await tx.commonsComment.deleteMany({ where: { id: action.publishedCommentId!, post: { coopId }, author: { isBot: true } } });
         await tx.commonsAction.update({ where: { id: action.id }, data: { status: "DISMISSED", publishedCommentId: null, replySourceKey: null, reviewedBy: actor, reviewedAt: new Date() } });
+      });
+      return { success: true };
+    }
+    if (input.command === "remove-question") {
+      if (action.type !== "ASK_COMMONS" || action.status !== "PUBLISHED") conflict("Only a published Sage question can be removed");
+      await ctx.db.$transaction(async (tx) => {
+        // sourcePostId is the question post itself; only Sage's own post in this Commons is deleted.
+        await tx.commonsPost.deleteMany({ where: { id: action.sourcePostId, coopId, author: { isBot: true } } });
+        await tx.commonsAction.update({ where: { id: action.id }, data: { status: "DISMISSED", reviewedBy: actor, reviewedAt: new Date() } });
+        await tx.commonsActionAudit.create({ data: { actionId: action.id, eventType: "QUESTION_REMOVED", metadata: { by: actor } } });
       });
       return { success: true };
     }

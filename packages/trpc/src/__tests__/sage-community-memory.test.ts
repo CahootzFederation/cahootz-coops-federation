@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@repo/db", () => ({ db: {} }));
 
-import { buildCommunityCandidate, impactOutcome, MemberSignalDetailsZ } from "../services/sage-community-memory.js";
+import { buildCommunityCandidate, discouragedHypothesisIds, impactOutcome, MemberSignalDetailsZ } from "../services/sage-community-memory.js";
 
 const config = {
   id: "config-2",
@@ -79,6 +79,25 @@ describe("Commons observation candidate policy", () => {
     expect(impactOutcome([{ status: "PUBLISHED", feedback: { rating: "GOOD" } }])).toBe("HELPFUL");
     expect(impactOutcome([{ status: "PENDING", feedback: { rating: "GOOD" } }])).toBe("INCONCLUSIVE");
     expect(impactOutcome([{ status: "FAILED", feedback: null }])).toBe("NOT_HELPFUL");
+  });
+
+  it("judges Sage's question to the Commons by how many members answered it publicly", () => {
+    expect(impactOutcome([], [{ removed: false, responders: 2 }])).toBe("HELPFUL");
+    expect(impactOutcome([], [{ removed: false, responders: 1 }])).toBe("INCONCLUSIVE");
+    expect(impactOutcome([], [{ removed: false, responders: 0 }])).toBe("NOT_HELPFUL");
+    expect(impactOutcome([], [{ removed: true, responders: 0 }])).toBe("NOT_HELPFUL");
+    expect(impactOutcome([{ status: "DISMISSED", feedback: null }], [{ removed: false, responders: 3 }])).toBe("HELPFUL");
+  });
+
+  it("hides a hypothesis only after two reviews where what Sage did didn't help, never for no action", () => {
+    const review = (id: string, outcome: string) => ({ sourceObservationId: id, outcome });
+    const hidden = discouragedHypothesisIds([
+      review("ignored", "NO_ACTION"), review("ignored", "NO_ACTION"),
+      review("failed", "NOT_HELPFUL"), review("failed", "NOT_HELPFUL"),
+      review("mixed", "NOT_HELPFUL"), review("mixed", "NO_ACTION"),
+      review("helped", "HELPFUL"), null, { outcome: "NOT_HELPFUL" },
+    ]);
+    expect([...hidden]).toEqual(["failed"]);
   });
 });
 

@@ -8,7 +8,7 @@ function shown(page: Page, text: string | RegExp, options?: { exact?: boolean })
 
 const RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
-test("a member sends a proposal by answering three plain questions", async ({ browser }) => {
+test("a member sends a proposal by answering three plain questions", { tag: "@smoke" }, async ({ browser }) => {
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
   // Sending runs the AI proposal review (paid model calls, several minutes),
   // which other journeys cover. Here only the form is under test, so the

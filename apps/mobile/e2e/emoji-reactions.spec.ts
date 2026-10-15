@@ -31,7 +31,7 @@ async function trpcPost(path: string, sessionToken: string, body: unknown) {
 // like: User B adds 🎉 to User A's post from the full picker's search and 🔥 to
 // A's comment from the quick reactions, alongside a like. User A sees both
 // after reload and joins B's 🎉, which then counts 2 for both of them.
-test("two members react to a post and a comment with emoji", async ({ browser }) => {
+test("two members react to a post and a comment with emoji", { tag: "@smoke" }, async ({ browser }) => {
   // Two signed-in contexts, two fixtures and four reloads outrun the 90s default.
   test.setTimeout(180_000);
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

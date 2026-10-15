@@ -33,7 +33,7 @@ function feedbackFixture(...args: string[]) {
   return JSON.parse(line.slice("E2E_RESULT ".length));
 }
 
-test("a post leaves the composer at once, keeps a new draft intact, and can be retried after a failure", async ({
+test("a post leaves the composer at once, keeps a new draft intact, and can be retried after a failure", { tag: "@smoke" }, async ({
   browser,
 }) => {
   const runId = `${Date.now()}`;

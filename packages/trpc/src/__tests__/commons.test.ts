@@ -956,6 +956,44 @@ describe('commonsRouter', () => {
     );
   });
 
+  it('flags the Commons Sage account so the app can show its face', async () => {
+    const db = makeDb({
+      userCoopMembership: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            user: {
+              id: 'sage_1',
+              name: 'Sage',
+              email: 'sage@bot.cahootz.internal',
+              handle: 'sage',
+              isBot: true,
+              roles: ['member', 'sage'],
+            },
+          },
+          {
+            user: {
+              id: 'user_2',
+              name: 'Maya R.',
+              email: 'maya@example.com',
+              handle: 'sage-maya',
+              isBot: false,
+              roles: ['member'],
+            },
+          },
+        ]),
+      },
+    });
+
+    const result = await callerFor(db, {
+      'x-session-token': 'token_1',
+    }).listDirectMembers();
+
+    expect(result.members.map((member) => [member.handle, member.isSage])).toEqual([
+      ['sage', true],
+      ['sage-maya', false],
+    ]);
+  });
+
   describe('getPersonalPage commons', () => {
     const PROFILE_USER = {
       id: 'user_2',

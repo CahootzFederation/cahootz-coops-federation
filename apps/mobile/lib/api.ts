@@ -405,6 +405,8 @@ export interface SearchPerson {
   id: string;
   name: string;
   handle: string;
+  /** True for a Commons' Sage account, which shows its own face. */
+  isSage?: boolean;
 }
 
 /** An active person in a Commons. Bot accounts such as Sage are never listed. */
@@ -511,6 +513,8 @@ export interface PersonalPageProfile {
   avatarUrl?: string | null;
   avatarEmoji?: string | null;
   avatarColor?: string | null;
+  /** True for a Commons' Sage account, which shows its own face. */
+  isSage?: boolean;
   createdAt: string;
   followerCount: number;
   followingCount: number;
@@ -840,6 +844,8 @@ export interface DirectPerson {
   id: string;
   name: string;
   handle: string | null;
+  /** True for a Commons' Sage account, which shows its own face. */
+  isSage?: boolean;
 }
 
 export interface DirectMessage {
@@ -855,6 +861,8 @@ export interface DirectMember {
   name: string;
   handle: string;
   role: string;
+  /** True for a Commons' Sage account, which shows its own face. */
+  isSage?: boolean;
 }
 
 async function readTrpcResult<T>(

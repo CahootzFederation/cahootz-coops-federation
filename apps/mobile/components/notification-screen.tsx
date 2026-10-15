@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
+import { SageAvatar } from "@/components/sage-avatar";
 import { useAuth } from "@/contexts/auth-context";
 import { api } from "@/lib/api";
 import { notificationDestination } from "@/lib/notification-navigation";
@@ -21,7 +22,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { ArrowLeft, Bell, ChevronRight, Settings, Sparkles } from "lucide-react-native";
+import { ArrowLeft, Bell, ChevronRight, Settings } from "lucide-react-native";
 
 import type {
   AccountNotification,
@@ -276,7 +277,7 @@ export default function NotificationScreen({
               activeOpacity={0.9}
             >
               <View style={s.sageBannerIcon}>
-                <Sparkles size={22} color="#FFFFFF" />
+                <SageAvatar size={36} />
               </View>
               <View style={s.grow}>
                 <Text style={s.sageBannerHeading}>Sage suggestions</Text>

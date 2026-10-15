@@ -23,16 +23,16 @@ import { handleMemberMemoryRequest, loadMemberMemory, memberMemoryLines, memberM
 export const DIRECT_KIND = 'DIRECT';
 
 type Db = AccountAuthenticatedContext['db'];
-type Person = { id: string; name: string | null; email: string; handle: string | null };
+type Person = { id: string; name: string | null; email: string; handle: string | null; isBot: boolean; roles: string[] };
 
-const personSelect = { id: true, name: true, email: true, handle: true } as const;
+const personSelect = { id: true, name: true, email: true, handle: true, isBot: true, roles: true } as const;
 
 function displayName(user: { name: string | null; email: string }) {
   return user.name || user.email.split('@')[0] || 'Member';
 }
 
 function personSummary(user: Person) {
-  return { id: user.id, name: displayName(user), handle: user.handle };
+  return { id: user.id, name: displayName(user), handle: user.handle, isSage: isSageUser(user) };
 }
 
 export function directKeyFor(coopId: string, userIdA: string, userIdB: string) {
@@ -109,7 +109,7 @@ export async function openDirectCircle(
 
   const other = await db.user.findUnique({
     where: { id: otherUserId },
-    select: { ...personSelect, deletedAt: true, isBot: true, roles: true },
+    select: { ...personSelect, deletedAt: true },
   });
   if (!other || other.deletedAt || (other.isBot && !isSageUser(other))) {
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Member not found.' });
@@ -200,7 +200,7 @@ export async function sendDirectCircleMessage(
   const otherId = participantIds(group.directKey).find((id) => id !== sender.id)!;
   const other = await db.user.findUnique({
     where: { id: otherId },
-    select: { ...personSelect, deletedAt: true, isBot: true, roles: true },
+    select: { ...personSelect, deletedAt: true },
   });
   if (!other || other.deletedAt) {
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Member not found.' });

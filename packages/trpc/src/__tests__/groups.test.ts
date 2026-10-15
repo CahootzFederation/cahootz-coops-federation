@@ -972,7 +972,7 @@ describe('groupsRouter', () => {
       expect(threads).toEqual([
         expect.objectContaining({
           groupId: 'dm_1',
-          person: { id: OTHER_USER.id, name: 'Bob', handle: 'bob' },
+          person: { id: OTHER_USER.id, name: 'Bob', handle: 'bob', isSage: false },
           preview: 'see you there',
           lastMessageFromMe: false,
           unreadCount: 2,

@@ -22,6 +22,7 @@ import {
 } from '@/components/commons-media-viewer';
 import { LoadError } from '@/components/load-error';
 import { PersonAvatar } from '@/components/person-avatar';
+import { SageAvatar } from '@/components/sage-avatar';
 import { PersonalPagePostCard } from '@/components/personal-page-post-card';
 import { ProfileCommonsSection } from '@/components/profile-commons-section';
 import { ReactionBar } from '@/components/reaction-bar';
@@ -209,14 +210,18 @@ export default function PublicPersonPageScreen() {
         <View className="px-5 py-4">
           <View className="rounded-2xl border bg-white p-5" style={{ borderColor: THEME.border }}>
             <View className="flex-row items-start gap-4">
-              <PersonAvatar
-                name={profileName}
-                avatarUrl={profile?.avatarUrl}
-                avatarEmoji={profile?.avatarEmoji}
-                avatarColor={profile?.avatarColor}
-                size={64}
-                radius={16}
-              />
+              {profile?.isSage ? (
+                <SageAvatar size={64} motion="blink" />
+              ) : (
+                <PersonAvatar
+                  name={profileName}
+                  avatarUrl={profile?.avatarUrl}
+                  avatarEmoji={profile?.avatarEmoji}
+                  avatarColor={profile?.avatarColor}
+                  size={64}
+                  radius={16}
+                />
+              )}
               <View className="min-w-0 flex-1">
                 <Text className="text-2xl font-black text-gray-950" numberOfLines={1}>
                   {profileName}

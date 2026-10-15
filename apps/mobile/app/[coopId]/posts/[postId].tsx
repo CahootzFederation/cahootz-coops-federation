@@ -42,6 +42,7 @@ import { LoadError } from '@/components/load-error';
 import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
 import { SageDecisionTrails } from '@/components/sage-decision-trail';
 import { ReactionBar } from '@/components/reaction-bar';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -450,7 +451,7 @@ export default function CommonsPostDetailScreen() {
         </View>
       </View>
 
-      <ScrollView ref={scrollRef} className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 28 }} keyboardShouldPersistTaps="handled">
+      <ScrollView {...keyboardScrollProps} ref={scrollRef} className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 28 }}>
         {isLoading ? (
           <View className="mt-12 items-center gap-3">
             <ActivityIndicator color={THEME.primary} />

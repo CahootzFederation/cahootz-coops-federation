@@ -24,6 +24,7 @@ import { Text } from '@/components/ui/text';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
 import { withAlpha } from '@/lib/brand-colors';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 // ── Colors ───────────────────────────────────────────────────────────────────
 
@@ -219,7 +220,7 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
         </View>
 
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+          <ScrollView {...keyboardScrollProps} style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
 
             {/* ── Sending ── */}
             {submitting && (

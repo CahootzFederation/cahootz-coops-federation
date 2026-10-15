@@ -31,6 +31,7 @@ import {
 import { track } from '@/lib/analytics';
 import { friendlyError } from '@/lib/friendly-error';
 import { secureStorage } from '@/lib/secure-storage';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 const MIN_SELF_DESCRIPTION = 40;
 const MIN_SIGNAL_ITEMS = 1;
@@ -726,8 +727,8 @@ export default function ProfileOnboardingScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
+          {...keyboardScrollProps}
           ref={scrollRef}
-          keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.content}
         >
           <View style={styles.profileIntro}>

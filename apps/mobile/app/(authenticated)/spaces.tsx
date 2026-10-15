@@ -35,6 +35,7 @@ import {
   Plus,
   Users,
 } from 'lucide-react-native';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 const SPACES_THEME = {
   paper: '#F8FAFC',
@@ -350,10 +351,9 @@ export default function SpacesScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
       <ScrollView
+        {...keyboardScrollProps}
         className="flex-1"
         contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       >
         {activeView === 'circles' ? (
           <>

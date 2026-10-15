@@ -19,6 +19,7 @@ import { markAnonymousProfileIntroSeen } from '@/lib/anonymous-id';
 import { api, type CommonsInvitationDetail } from '@/lib/api';
 import { ApiError, friendlyError } from '@/lib/friendly-error';
 import { secureStorage } from '@/lib/secure-storage';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -259,7 +260,7 @@ export function CommonsInvitationView({
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 }}>
+      <ScrollView {...keyboardInsetScrollProps} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 }}>
         {header}
 
         <View className="rounded-2xl border border-gray-200 bg-white p-5">

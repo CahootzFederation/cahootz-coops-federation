@@ -10,6 +10,7 @@ import { LoadError } from '@/components/load-error';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
 import { proposalHubHref } from '@/lib/proposal-navigation';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const PRIMARY = '#FF6B00';
 
@@ -58,7 +59,7 @@ export default function CommonsProposalDrafts() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-stone-50" contentContainerStyle={{ padding: 20, paddingTop: 56, paddingBottom: 40 }}>
+    <ScrollView {...keyboardInsetScrollProps} className="flex-1 bg-stone-50" contentContainerStyle={{ padding: 20, paddingTop: 56, paddingBottom: 40 }}>
       <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Back to ${commonsLabel} proposals and votes`} onPress={() => router.replace(proposalHubHref(coopId) as any)} className="mb-6 h-10 w-10 items-center justify-center rounded-full border border-stone-200 bg-white">
         <ArrowLeft size={19} color="#1F2937" />
       </TouchableOpacity>

@@ -23,6 +23,7 @@ import { LoadError } from '@/components/load-error';
 import { ConfirmSheet } from '@/components/confirm-sheet';
 import { contactToInviteTarget, loadContactPicker } from '@/lib/contact-invite';
 import { GUIDE_EXPLANATION, StewardHelp, guidePowersFor, stewardPowersFor } from '@/components/role-help';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -316,6 +317,7 @@ export default function CommonsInvitesScreen() {
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
       <ScrollView
+        {...keyboardInsetScrollProps}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 48 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(); }} />}
       >

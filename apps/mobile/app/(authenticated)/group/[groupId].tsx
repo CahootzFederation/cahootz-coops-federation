@@ -36,6 +36,7 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react-native';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const NOTIFICATION_LEVEL_OPTIONS: Array<{
   level: CircleNotificationLevel;
@@ -416,6 +417,7 @@ export default function GroupDetailScreen() {
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
       <ScrollView
+        {...keyboardInsetScrollProps}
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 32 }}
       >

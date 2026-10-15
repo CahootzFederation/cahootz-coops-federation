@@ -24,6 +24,7 @@ import {
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 export default function EditProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -256,7 +257,7 @@ export default function EditProductScreen() {
           </TouchableOpacity>
         </View>
 
-        <ScrollView className="flex-1 px-5 py-4" showsVerticalScrollIndicator={false}>
+        <ScrollView {...keyboardScrollProps} className="flex-1 px-5 py-4" showsVerticalScrollIndicator={false}>
           {/* Active Toggle */}
           <View className="bg-white dark:bg-gray-800 rounded-xl mb-6 overflow-hidden">
             <View className="flex-row items-center justify-between px-4 py-4">

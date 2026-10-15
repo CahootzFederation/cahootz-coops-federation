@@ -23,6 +23,7 @@ import {
   textableContacts,
   type TextableContact,
 } from '@/lib/contact-invite';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 type Modules = NonNullable<ReturnType<typeof loadInviteModules>>;
 
@@ -275,9 +276,9 @@ export function ContactInviteSheet({
               />
             </View>
             <FlatList
+              {...keyboardInsetScrollProps}
               data={shown}
               keyExtractor={(item) => item.id}
-              keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
                 <Text style={[styles.body, { textAlign: 'center', marginTop: 24 }]}>
                   {contacts.length === 0 ? 'No contacts with a phone number.' : 'No matches.'}

@@ -19,6 +19,7 @@ import { api, resolveCoopId } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
 import { coopConfig } from '@/lib/coop-config';
 import { resolveBrandColor, withAlpha } from '@/lib/brand-colors';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 type SubmissionType = 'article' | 'event';
 
@@ -90,7 +91,7 @@ export default function SubmitNewsletterScreen() {
         className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
+        <ScrollView {...keyboardScrollProps} className="flex-1">
           <View className="px-5 py-4">
             <View className="mb-5 flex-row items-center">
               <TouchableOpacity

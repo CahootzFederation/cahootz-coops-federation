@@ -8,7 +8,6 @@ import {
   sendAgentOperationalAlert,
   sendSageOutreachDailyReport,
 } from "../../../../packages/trpc/src/services/slack-notification-service.js";
-import { env } from "../env.js";
 
 // One stable weekday per member. The service's system key makes retries and the
 // 48-hour recovery window safe; this schedule only decides when to look.
@@ -30,7 +29,6 @@ export const sageWeeklyOutreachSweep = schedules.task({
       }).catch(() => undefined);
       await sendAgentOperationalAlert({
         checkedAt,
-        environment: env.NODE_ENV,
         issues: [
           {
             agentId: "sage-weekly-outreach",

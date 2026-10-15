@@ -34,7 +34,7 @@ async function trpc(page: Page, path: string, input: Record<string, unknown>) {
 // B's profile, B sees it as unread, opens it, and replies; A sees the reply
 // without reloading, and the conversation survives a reload. The DM circle
 // never shows up in Circle View's list of circles.
-test("two members exchange direct messages in a private two-person circle", async ({
+test("two members exchange direct messages in a private two-person circle", { tag: "@smoke" }, async ({
   browser,
 }) => {
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

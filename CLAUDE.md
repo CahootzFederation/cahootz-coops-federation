@@ -9,8 +9,10 @@ Read `AGENT.md` for the project's security, governance, and architecture rules. 
 - Exercise the real UI with clicks, typing, navigation, reloads, and visible assertions. Do not replace a UI journey with direct API calls. Direct API calls are allowed for fixture setup and cleanup.
 - Workflows involving two people must use two isolated browser contexts and two user accounts. Reuse the `releaseclick1` and `releaseclick2` fixtures unless the scenario needs different roles.
 - Use unique `E2E` content and clean it up. Never run destructive E2E tests against production.
+- Journeys run in tiers (see "Test tiers" in `TESTING.md`). Leave a new journey untagged unless it fits a tier: tag it `@sage` if it calls a live model, and `@smoke` only if it is a core path with no smoke coverage yet. Keep the smoke set at about 15 to 20 journeys. A smoke journey must not take a `withExclusiveAccountSetting` lock or call a live model.
+- Don't paper over a flaky journey with more retries or longer timeouts. Fix it, or quarantine it with `test.fixme()` and a comment naming the tracking issue.
 - Update `TESTING.md` when adding a new journey or changing its setup.
-- Before finishing a relevant change, run `pnpm -F @cahootz/mobile type-check` and `pnpm test:e2e:mobile`. If the services are not running locally, follow the startup instructions in `TESTING.md`.
+- Before finishing a relevant change, run `pnpm -F @cahootz/mobile type-check`, `pnpm test:e2e:mobile:smoke`, and every spec file you added or changed (`pnpm -F @cahootz/mobile exec playwright test e2e/<name>.spec.ts`). For a change to Sage behavior, also run the affected `@sage` journeys. Run the whole suite (`pnpm test:e2e:mobile`) only when you change the E2E harness (`e2e/support/`, `e2e/auth.setup.ts`, `playwright.config.ts`, or the workflow). CI runs the full suite on `main` and nightly. If the services are not running locally, follow the startup instructions in `TESTING.md`.
 - Pure refactors, documentation, copy, or styling changes do not require a new journey unless they change behavior or fix a UI regression.
 
 ## Sage and Commons AI work

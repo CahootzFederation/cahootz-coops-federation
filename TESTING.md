@@ -43,8 +43,27 @@ How the suite stays fast:
 
 - **One sign-in per account per run.** A `setup` project (`e2e/auth.setup.ts`) signs both fixture accounts in through the real UI (journey 1) and saves each browser's storage to `apps/mobile/e2e/.auth/` (git-ignored). `newSignedInPage` starts every test's isolated context from that saved session instead of repeating the sign-in. Sign-out only clears the browser's own storage, so a test that signs out doesn't affect the saved session. If you run with `--no-deps`, delete `e2e/.auth/` first or the tests will reuse the last run's sessions.
 - **Files run in parallel.** Three workers by default (`E2E_WORKERS=1` to run serially, e.g. on a slow machine). Tests inside one file still run in order. New specs must create uniquely named `E2E` content and must not depend on state another file changes. A spec that changes shared fixture-account state (for example "Show Sage decision trails" or welcome-lounge membership) must wrap its test body, cleanup included, in `withExclusiveAccountSetting("<state>", ...)` from `e2e/support/exclusive.ts`, so specs that touch the same state take turns instead of changing it under each other. `sage-decision-trail`, `agent-decision-trails` and `sage-decision-comments` share the `sage-decision-trails` lock; all welcome-lounge membership journeys share `welcome-lounge-membership`; Sage journeys that create an introduction between the two shared accounts use `sage-introductions` because the product intentionally suppresses recent duplicate matches. Fixture cleanup must target only the alerts or records owned by its journey—never clear a shared account's whole inbox.
-- **`pnpm -F @cahootz/mobile test:e2e:fast`** skips the `@sage` journeys (such as 15), which call a live model and are the slowest journeys (40s to 90s each). CI always runs them.
+- **`pnpm -F @cahootz/mobile test:e2e:fast`** skips the `@sage` journeys (such as 15), which call a live model and are the slowest journeys (40s to 90s each). CI runs them nightly, not on pull requests.
 - Video is recorded only when CI retries a failed test; traces and screenshots are still kept for every failure.
+
+### Test tiers
+
+Journeys run in three tiers, so a pull request gets an answer in about 10 minutes and the slow, nondeterministic journeys don't block merges:
+
+| Tier | Tag | Runs | Time |
+| --- | --- | --- | --- |
+| Smoke | `@smoke` | Every pull request, plus every spec file the PR changed | ~10 min |
+| Full deterministic | (untagged) | Every push to `main`, nightly, and manual runs | ~12 min, 4 shards |
+| Live model | `@sage` | Nightly and manual runs only | ~8 min |
+
+- **`@smoke`** marks the critical journeys a regression must never slip past: two-user sign-in and sign-out isolation, a post and comment between two users, Circle View for members and signed-out visitors, direct messages, emoji reactions, creating an event, inviting someone to a circle and their accepting, posting with retry, sending a proposal, a confirmed council vote, cart to checkout, paying a store by code, a receipt from History, wallet creation at sign-in, and a returning member's sign-in. Keep the set small (about 15 to 20 journeys). Add `@smoke` to a new journey only when it is a core path that has no smoke coverage yet, and remove it from one that has become redundant. A smoke journey must not wait on a `withExclusiveAccountSetting` lock or call a live model.
+- **Untagged** journeys are deterministic. They run on a pull request only when it changes their spec file, and in full on `main` and nightly.
+- **`@sage`** journeys call a live model and can answer differently from run to run. They report drift nightly rather than gate pull requests. Before merging a change to Sage behavior, run its `@sage` journeys locally, or start the workflow with **Run workflow**.
+- A pull request that changes the E2E harness itself (`e2e/support/`, `e2e/auth.setup.ts`, `playwright.config.ts` or the workflow) runs every deterministic journey.
+
+Run the tiers locally with `pnpm test:e2e:mobile:smoke`, `pnpm -F @cahootz/mobile test:e2e:fast` and `pnpm test:e2e:mobile` (everything). To run one spec, pass its file: `pnpm -F @cahootz/mobile exec playwright test e2e/events.spec.ts`.
+
+**Flaky journeys.** A journey that fails and then passes with no code change is flaky. Fix it, or quarantine it the same day with `test.fixme()` and a comment that names the tracking issue. Don't raise retries or timeouts to hide it. CI retries a failed test once.
 
 The current Playwright suite covers:
 
@@ -198,9 +217,9 @@ Failure artifacts are written under `output/playwright/`, including screenshots,
 
 ## GitHub Actions
 
-The `Mobile E2E` workflow runs for pull requests that change the mobile app, API, tRPC routes, database package, or dependency lockfile. It also runs on relevant pushes to `main` and can be started manually with **Run workflow**.
+The `Mobile E2E` workflow runs for pull requests that change the mobile app, API, tRPC routes, database package, or dependency lockfile, on relevant pushes to `main`, nightly at 07:00 UTC, and manually with **Run workflow**. A first `Choose journeys` job picks the tier (see [Test tiers](#test-tiers)). GitHub emails a failed nightly run to whoever last changed the workflow's `schedule` line.
 
-Each job creates an isolated PostgreSQL database service, applies migrations, seeds the `cahootz` `CoopConfig` (`scripts/seed-coop-config.ts`, which only creates it when missing; its name is required for `commons.listDirectory` to recognize any membership and its display fields for the signup commons list, which gates every real circle feed, not just General), seeds the two users above, starts the API and Expo web app, installs Chromium, and runs its part of the suite. The workflow runs five jobs side by side, each with its own runner and database: four shards of the deterministic journeys (`--grep-invert @sage --shard=N/4`, split by file) and one job for the `@sage` journeys. On one runner the suite took 20-30 minutes and its reloads ran past test timeouts; split, each job finishes in about 10-12 minutes and is capped at 20. CI retries a failed test once. To reproduce one shard locally, run `pnpm -F @cahootz/mobile exec playwright test --grep-invert @sage --shard=2/4`. Each job uploads its Playwright report, failure traces, screenshots, videos, and server logs as `mobile-e2e-artifacts-<shard>` (`ui-1` to `ui-4`, `sage`).
+Each job creates an isolated PostgreSQL database service, applies migrations, seeds the `cahootz` `CoopConfig` (`scripts/seed-coop-config.ts`, which only creates it when missing; its name is required for `commons.listDirectory` to recognize any membership and its display fields for the signup commons list, which gates every real circle feed, not just General), seeds the two users above, starts the API and Expo web app, installs Chromium, and runs its part of the suite. The journeys run in parallel jobs, each with its own runner and database: two shards on a pull request, four shards of the deterministic journeys on `main` (`--grep-invert @sage --shard=N/4`, split by file), plus one `@sage` job nightly. On one runner the full suite took 20-30 minutes and its reloads ran past test timeouts; split, each job finishes in about 10-12 minutes and is capped at 20. CI retries a failed test once. To reproduce one shard locally, run `pnpm -F @cahootz/mobile exec playwright test --grep-invert @sage --shard=2/4`. Each job uploads its Playwright report, failure traces, screenshots, videos, and server logs as `mobile-e2e-artifacts-<shard>` (`pr-1`, `pr-2`, `ui-1` to `ui-4`, `sage`).
 
 No repository secrets are required for journeys 1-13 or journey 16. Journey 15 (Sage trends) exercises a real detection model rather than a mock, so it needs an `OPENAI_API_KEY` repository secret (Settings > Secrets and variables > Actions) - without it, that journey fails in CI with "Sage never surfaced a trend suggestion for this window" even though the rest of the suite passes. Journey 17 uses `E2E_STRIPE_SECRET_KEY`, `E2E_STRIPE_PUBLISHABLE_KEY`, `E2E_STRIPE_WEBHOOK_SECRET`, and `E2E_STRIPE_CONNECTED_ACCOUNT_ID`. The connected account must be charges-enabled in Stripe test mode; never use a live account. Forward Stripe test webhooks to `/webhooks/stripe-new` when verifying badge issuance and refunds locally or in staging.
 
@@ -210,7 +229,7 @@ Official funding shops now inherit the platform's shared Stripe connected accoun
 
 Each commons detail page in the platform admin has a **View all stores** link. The store directory includes the official badge store and every member-owned store, including pending or payment-incomplete shops that are not public yet. Each store detail page reports public/payment readiness, the effective Stripe account, order and sales totals, and its complete product catalog. In the mobile marketplace, the official badge store also appears in the normal **All shops** list and opens through the same store-detail experience as a member shop.
 
-After the workflow has run once on GitHub, add **Two-user mobile UI journeys** as a required status check in the `main` branch protection rules so a failing E2E suite blocks merging.
+After the workflow has run once on GitHub, add **Mobile E2E** as a required status check in the `main` ruleset so a failing pull request tier blocks merging. That final job passes only when every shard passed; the shard jobs' own names change with the tier, so don't require them.
 
 ## Automated journeys to add before release
 

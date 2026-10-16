@@ -4,7 +4,8 @@ import { TRPCError } from '@trpc/server';
 
 import type { AccountAuthenticatedContext } from '../context.js';
 import { runSageCommonsReply } from '../agents/registry.js';
-import { MEMBER_ACTION_INSTRUCTIONS, buildMemberActionTools } from '../agents/tools/member-action-tools.js';
+import { buildSageReplyTools } from '../agents/tools/member-action-tools.js';
+import { safeFirstName } from './sage-reply-templates.js';
 import { auditLogEntry } from '../lib/audit.js';
 import { isSageUser } from '../lib/bot.js';
 import { COMMONS_COOP_ID, ensureCommonsMembership } from '../lib/commons.js';
@@ -299,7 +300,7 @@ async function replyAsSage(
     }
     // Sage can act for the member here. Asks it makes are added after its reply, past the reply's safety
     // check, so the member sees exactly what a "yes" would do.
-    const actions = buildMemberActionTools({ memberId: sender.id, conversationGroupId: group.id });
+    const actions = buildSageReplyTools({ kind: 'dm', memberId: sender.id, conversationGroupId: group.id, coopId: group.coopId });
     const publish = async (reply: string) => {
       const asks = actions.state.asks.slice(-1);
       // When Sage saved a need from this reply it says so, last, so "forget that" refers to it.
@@ -334,11 +335,11 @@ async function replyAsSage(
           .join('\n');
         await traceSageReply(
           { kind: 'dm', coopId: group.coopId, groupId: group.id, messageId: message.id },
-          { message: message.content, threadContext, threadCount: since.length, remembered },
+          { message: message.content, threadContext, threadCount: since.length, remembered, toolLog: actions.state.log },
           async (cleanMessage, thread) => {
             const out = await runCheckinFollowup({
               coopId: group.coopId, checkin: checkin.content, threadContext: thread, message: cleanMessage, followupsSent,
-              tools: actions.tools, toolInstructions: MEMBER_ACTION_INSTRUCTIONS, memberMemory: remembered,
+              tools: actions.tools, toolInstructions: actions.instructions, memberMemory: remembered, memberName: safeFirstName(sender.name) ?? undefined,
             });
             return { reply: out.reply, grounding: { charterChars: 0, missionGoalCount: 0, model: out.model, usedFallback: out.usedFallback } };
           },
@@ -358,11 +359,11 @@ async function replyAsSage(
       .join('\n');
     await traceSageReply(
       { kind: 'dm', coopId: group.coopId, groupId: group.id, messageId: message.id },
-      { message: message.content, threadContext, threadCount: prior.length, remembered },
+      { message: message.content, threadContext, threadCount: prior.length, remembered, toolLog: actions.state.log },
       (cleanMessage, thread) => runSageCommonsReply(
-        { coopId: group.coopId, message: cleanMessage, threadContext: thread, channel: 'dm', memberMemory: remembered },
+        { coopId: group.coopId, message: cleanMessage, threadContext: thread, channel: 'dm', memberMemory: remembered, memberName: safeFirstName(sender.name) ?? undefined },
         undefined,
-        { tools: actions.tools, instructions: MEMBER_ACTION_INSTRUCTIONS },
+        actions,
       ),
       publish,
     );

@@ -14,7 +14,7 @@ import { FOLLOW_UP_DEFAULT_DAYS, clampFollowUpDays, createSageTask } from "./sag
 import { routeSageAlert, type ResponsibilityCategory } from "./sage-responsibility.js";
 import { retrieveSageMemory } from "./sage-memory.js";
 import { DecisionTrail, type TrailTrigger } from "./sage-decision-trail.js";
-import { SAGE_FOLLOW_THROUGH_RULE, followUpExpectation, renderTemplatedReply, sageReplyStyleInstructions } from "./sage-reply-templates.js";
+import { SAGE_FOLLOW_THROUGH_RULE, followUpExpectation, renderTemplatedReply, safeFirstName, sagePersonalInstructions, sageReplyStyleInstructions } from "./sage-reply-templates.js";
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
 import {
   CHARTER_ONLY_ACTIONS, EVIDENCE_SOURCES, EVIDENCE_SOURCE_LABEL, checkRelevance, groundingCheck, modelRelevanceJudge,
@@ -95,6 +95,8 @@ export interface SourceItem {
   content: string;
   context: string;
   coopId: string;
+  /** The author's first name, so a reply speaks to them. */
+  authorName?: string | null;
   /** Set by code when this comment answers what Sage asked this member earlier in the thread. */
   followThrough?: FollowThrough;
 }
@@ -530,6 +532,8 @@ export function createCommonsActionAgent(tools: ReturnType<typeof buildCommentTo
       "Do not create replies to bots. Do not claim an action happened unless it did.",
       "How to write reply drafts:",
       sageReplyStyleInstructions({ structured: true }),
+      sagePersonalInstructions(),
+      "Each item's authorName, when given, is the first name of the member who wrote it: the person your reply draft talks to.",
       SAGE_FOLLOW_THROUGH_RULE,
       FOLLOW_THROUGH_ITEM_RULE,
       "When a reply asks the member to do or share something specific, set followUpDays (1-14) to when Sage should check back and followUpExpect to what you're waiting for, phrased as what the member does (for example \"share your delivery days and costs\"). Otherwise set followUpDays to 0 and followUpExpect to \"\".",
@@ -557,7 +561,7 @@ export function commonsActionPrompt(config: CoopConfig, items: SourceItem[], mem
     goals: missionGoals(config).slice(0, 20),
     memory,
     items: items.map((item) => ({
-      id: item.sourceId, type: item.sourceType, title: item.title.slice(0, 160), content: item.content.slice(0, 2200), context: item.context.slice(0, THREAD_CONTEXT_CHARS),
+      id: item.sourceId, type: item.sourceType, ...(item.authorName ? { authorName: item.authorName } : {}), title: item.title.slice(0, 160), content: item.content.slice(0, 2200), context: item.context.slice(0, THREAD_CONTEXT_CHARS),
       ...(item.followThrough ? { answersSage: true } : {}),
     })),
   });
@@ -682,27 +686,29 @@ async function processItems(rawItems: SourceItem[], config: CoopConfig, autoRepl
   return count;
 }
 
-function postItem(post: { id: string; coopId: string; authorId: string; title: string; content: string; createdAt: Date }): SourceItem {
+type ItemAuthor = { author?: { name: string | null } | null };
+function postItem(post: { id: string; coopId: string; authorId: string; title: string; content: string; createdAt: Date } & ItemAuthor): SourceItem {
   return { sourceType: "commons_post", sourceId: post.id, sourcePostId: post.id, sourceAuthorId: post.authorId,
-    createdAt: post.createdAt, title: post.title, content: post.content, context: "", coopId: post.coopId };
+    createdAt: post.createdAt, title: post.title, content: post.content, context: "", coopId: post.coopId, authorName: safeFirstName(post.author?.name) };
 }
-function commentItem(comment: { id: string; postId: string; authorId: string; content: string; createdAt: Date; post: { coopId: string; title: string; content: string } }): SourceItem {
+function commentItem(comment: { id: string; postId: string; authorId: string; content: string; createdAt: Date; post: { coopId: string; title: string; content: string } } & ItemAuthor): SourceItem {
   return { sourceType: "commons_comment", sourceId: comment.id, sourcePostId: comment.postId, sourceAuthorId: comment.authorId,
     createdAt: comment.createdAt, title: comment.post.title, content: comment.content,
-    context: comment.post.content, coopId: comment.post.coopId };
+    context: comment.post.content, coopId: comment.post.coopId, authorName: safeFirstName(comment.author?.name) };
 }
+const AUTHOR_NAME = { author: { select: { name: true } } } as const;
 
 export async function processCommonsActionContent(sourceType: SourceItem["sourceType"], sourceId: string): Promise<{ processed: number }> {
   let source: SourceItem;
   let coopId: string;
   if (sourceType === "commons_post") {
-    const post = await db.commonsPost.findUnique({ where: { id: sourceId }, include: { author: { select: { isBot: true } } } });
+    const post = await db.commonsPost.findUnique({ where: { id: sourceId }, include: { author: { select: { isBot: true, name: true } } } });
     if (!post || post.author.isBot || (post.circleId && post.circleId !== `general:${post.coopId}`)) return { processed: 0 };
     source = postItem(post);
     coopId = post.coopId;
   } else {
     const comment = await db.commonsComment.findUnique({ where: { id: sourceId }, include: {
-      author: { select: { isBot: true } }, post: true,
+      author: { select: { isBot: true, name: true } }, post: true,
     } });
     if (!comment || comment.author.isBot || (comment.post.circleId && comment.post.circleId !== `general:${comment.post.coopId}`)) return { processed: 0 };
     source = commentItem(comment);
@@ -735,8 +741,8 @@ export async function scanCommons(coopId: string, trigger: Extract<TrailTrigger,
   // the backfill begins at the newest item and covers this same range.
   if (settings.lastScanAt) {
     const [posts, comments] = await Promise.all([
-      db.commonsPost.findMany({ where: { coopId, ...generalCircle, createdAt: { gte: settings.lastScanAt }, author: { isBot: false } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], skip: settings.newPostOffset, take: PAGE_SIZE }),
-      db.commonsComment.findMany({ where: { post: { coopId, ...generalCircle }, createdAt: { gte: settings.lastScanAt }, author: { isBot: false } }, include: { post: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], skip: settings.newCommentOffset, take: PAGE_SIZE }),
+      db.commonsPost.findMany({ where: { coopId, ...generalCircle, createdAt: { gte: settings.lastScanAt }, author: { isBot: false } }, include: AUTHOR_NAME, orderBy: [{ createdAt: "asc" }, { id: "asc" }], skip: settings.newPostOffset, take: PAGE_SIZE }),
+      db.commonsComment.findMany({ where: { post: { coopId, ...generalCircle }, createdAt: { gte: settings.lastScanAt }, author: { isBot: false } }, include: { post: true, ...AUTHOR_NAME }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], skip: settings.newCommentOffset, take: PAGE_SIZE }),
     ]);
     processed += await processItems(posts.map(postItem), config, settings.autoReply, trigger);
     processed += await processItems(comments.map(commentItem), config, settings.autoReply, trigger);
@@ -750,7 +756,7 @@ export async function scanCommons(coopId: string, trigger: Extract<TrailTrigger,
     }
   }
   if (!settings.backfillPostsDone) {
-    const posts = await db.commonsPost.findMany({ where: { coopId, ...generalCircle, author: { isBot: false } },
+    const posts = await db.commonsPost.findMany({ where: { coopId, ...generalCircle, author: { isBot: false } }, include: AUTHOR_NAME,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: PAGE_SIZE,
       ...(settings.backfillPostCursor ? { cursor: { id: settings.backfillPostCursor }, skip: 1 } : {}) });
     processed += await processItems(posts.map(postItem), config, settings.autoReply, trigger);
@@ -760,7 +766,7 @@ export async function scanCommons(coopId: string, trigger: Extract<TrailTrigger,
     } });
   }
   if (!settings.backfillCommentsDone) {
-    const comments = await db.commonsComment.findMany({ where: { post: { coopId, ...generalCircle }, author: { isBot: false } }, include: { post: true },
+    const comments = await db.commonsComment.findMany({ where: { post: { coopId, ...generalCircle }, author: { isBot: false } }, include: { post: true, ...AUTHOR_NAME },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: PAGE_SIZE,
       ...(settings.backfillCommentCursor ? { cursor: { id: settings.backfillCommentCursor }, skip: 1 } : {}) });
     processed += await processItems(comments.map(commentItem), config, settings.autoReply, trigger);

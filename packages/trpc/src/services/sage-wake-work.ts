@@ -9,6 +9,7 @@ import { runCommunityRhythm } from "./sage-community-rhythm.js";
 import { maintainSageMemory } from "./sage-memory.js";
 import { runStewardReview } from "./sage-steward.js";
 import { followUpOnSuggestions } from "./sage-suggestion-follow-up.js";
+import { summarizeProposalsNearingVote } from "./sage-pre-vote.js";
 import { askHelpersForUnansweredNeeds } from "./sage-unanswered-needs.js";
 
 type Step = { name: string; run: (coopId: string, now: Date) => Promise<unknown> };
@@ -22,6 +23,8 @@ const steps: Step[] = [
   // Templated rhythm posts (Monday priorities, midweek open requests, Friday appreciation, monthly review):
   // no model call, one post per category per period, skipped in Commons with too few active members.
   { name: "community rhythm", run: (coopId, now) => runCommunityRhythm(coopId, now) },
+  // One balanced summary per proposal whose vote closes within 48 hours; one model call each, within the monthly limit.
+  { name: "pre-vote summaries", run: summarizeProposalsNearingVote },
   // At most once a day per Commons (the steward checks its own last run), and only within the monthly limit.
   { name: "steward review", run: (coopId, now) => runStewardReview(coopId, now) },
 ];

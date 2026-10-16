@@ -2948,11 +2948,11 @@ export const commonsRouter = router({
           media: { orderBy: { order: 'asc' } },
         },
       });
-      if (!post.circleId || post.circleId === generalCircleId(post.coopId)) {
-        await enqueueCommonsActionContent('commons_comment', comment.id).catch((error) =>
-          console.error('Could not enqueue Commons action scan for comment', { commentId: comment.id, error }),
-        );
-      }
+      // General feed comments get Sage's usual analysis; circle comments are checked for whether the
+      // thread needs facilitation (no model call unless it does).
+      await enqueueCommonsActionContent('commons_comment', comment.id).catch((error) =>
+        console.error('Could not enqueue Commons action scan for comment', { commentId: comment.id, error }),
+      );
 
       // A reply may be what Sage was waiting for: check the member's open follow-ups on this post now.
       void wakeTasksForReply(post.id, accountUser.id).catch((error) =>

@@ -425,6 +425,8 @@ export const CommentOutputZ = z.object({
   content: z.string(),
   createdAt: z.string(),
   aiEvaluation: CommentAIEvaluationZ.optional().nullable(),
+  /** True for Sage's comments (the pre-vote summary), so apps can mark them as an AI helper. */
+  authorIsAi: z.boolean().optional(),
 });
 
 // ── tiny helper: build output from input + computed values ────────────────────

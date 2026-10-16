@@ -1152,6 +1152,7 @@ enum CommonsActionType {
   SUGGEST_ACTION
   ASK_COMMONS // Sage's open question to the whole Commons about a community pattern
   COMMUNITY_RHYTHM // Sage's weekly/monthly rhythm post (priorities, open work, appreciation, monthly review)
+  SUMMARIZE_DISCUSSION // Sage's balanced summary of a proposal's discussion before voting closes
 
   @@schema("public")
 }

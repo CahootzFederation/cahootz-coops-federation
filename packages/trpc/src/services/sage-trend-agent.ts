@@ -435,26 +435,34 @@ export async function createTrendSuggestion(
     return;
   }
 
+  await requestLeaderApproval({ coopId, actionId: action.id, leaderId, payloadHash: hash, payload, reason: output.reason, trail });
+}
+
+/** Asks the circle leader to approve a Sage suggestion (once per action): the review, the audit entry and the alert. */
+export async function requestLeaderApproval(input: {
+  coopId: string; actionId: string; leaderId: string; payloadHash: string;
+  payload: { title: string; body: string; capability: string }; reason: string; trail?: DecisionTrail;
+}) {
+  const { coopId, actionId, leaderId, payload, trail } = input;
   const existingReview = await db.commonsActionReview.findFirst({
-    where: { actionId: action.id, userId: leaderId, reviewType: "APPROVE_SUGGESTION" },
+    where: { actionId, userId: leaderId, reviewType: "APPROVE_SUGGESTION" },
   });
   trail?.taken(existingReview ? "Suggestion already sent to the circle leader" : "Sent to the circle leader for approval", existingReview ? "INFO" : "PASS");
-  if (!existingReview) {
-    await db.commonsActionReview.create({
-      data: {
-        actionId: action.id, userId: leaderId, reviewType: "APPROVE_SUGGESTION",
-        payloadHash: hash,
-        presentationData: { title: payload.title, body: payload.body, reason: output.reason.slice(0, 500), capability: payload.capability },
-        status: "PENDING",
-      },
-    });
-    await db.commonsActionAudit.create({
-      data: { actionId: action.id, actorId: null, eventType: "SUGGESTION_CREATED", metadata: { title: payload.title } },
-    });
-    await createNotificationAndPush(db, {
-      userId: leaderId, coopId, type: "SAGE_SUGGESTION_NEEDS_YOU",
-      title: "Sage has a suggestion for you", body: payload.body.slice(0, 200),
-      data: { actionId: action.id },
-    }).catch((error) => console.error("Could not notify Sage trend suggestion subject", error));
-  }
+  if (existingReview) return;
+  await db.commonsActionReview.create({
+    data: {
+      actionId, userId: leaderId, reviewType: "APPROVE_SUGGESTION",
+      payloadHash: input.payloadHash,
+      presentationData: { title: payload.title, body: payload.body, reason: input.reason.slice(0, 500), capability: payload.capability },
+      status: "PENDING",
+    },
+  });
+  await db.commonsActionAudit.create({
+    data: { actionId, actorId: null, eventType: "SUGGESTION_CREATED", metadata: { title: payload.title } },
+  });
+  await createNotificationAndPush(db, {
+    userId: leaderId, coopId, type: "SAGE_SUGGESTION_NEEDS_YOU",
+    title: "Sage has a suggestion for you", body: payload.body.slice(0, 200),
+    data: { actionId },
+  }).catch((error) => console.error("Could not notify Sage trend suggestion subject", error));
 }

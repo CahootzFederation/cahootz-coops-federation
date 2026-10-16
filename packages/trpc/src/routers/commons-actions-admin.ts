@@ -276,6 +276,12 @@ export const commonsActionsAdminRouter = router({
     }
     if (action.status !== "PENDING") conflict("Action is no longer pending");
     if (action.type === "VERIFY_RESOURCE" || action.type === "LOG_RESOURCE") conflict("Verify and publish the resource from the resource list");
+    if (action.type === "SUMMARIZE_DISCUSSION") {
+      const { publishPreVoteSummary } = await import("../services/sage-pre-vote.js");
+      const posted = await publishPreVoteSummary(action.id, actor);
+      if (!posted.published) conflict(posted.reason ?? "The summary can't be posted");
+      return { success: true };
+    }
     if (REPLY_ACTIONS.has(action.type)) {
       const config = await ctx.db.coopConfig.findFirst({ where: { coopId, isActive: true }, orderBy: { version: "desc" } });
       // A reply about rules, money or membership still needs a current charter quote. Anything else

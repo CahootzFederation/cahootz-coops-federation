@@ -13,7 +13,7 @@ import { createSageTask } from "./sage-tasks.js";
  *   comment; it schedules a SageTask and brings the thread back when it's due (kind "revisit").
  * - unanswered_question: a factual question that later comments show nobody has resolved.
  * - ready_for_proposal: three or more members back a shared purchase or project with concrete details.
- * - disagreement: at least two members push back on each other.
+ * - disagreement: at least two members push back on each other across three or more comments.
  * - narrow_decision: one or two people settle something in a longer thread nobody else joined.
  * - busy_thread: many comments or participants since Sage last spoke, with no decision yet.
  *
@@ -25,6 +25,7 @@ export const FACILITATION_COOLDOWN_HOURS = 12;
 export const BUSY_THREAD_COMMENTS = 8;
 export const BUSY_THREAD_PARTICIPANTS = 4;
 export const PROPOSAL_SUPPORTERS = 3;
+export const DISAGREEMENT_MIN_COMMENTS = 3;
 export const THREAD_ENTRY_LIMIT = 60;
 export const DEFAULT_REVISIT_DAYS = 3;
 /** Recorded with each claimed trigger, so a trigger is only ever claimed once. */
@@ -209,11 +210,13 @@ export function detectFacilitation(thread: ThreadSnapshot, now = new Date()): Fa
     } };
   }
 
+  // A real back-and-forth, not one reply: at least three comments (the post doesn't count).
   const pushback = new Set(turns.filter((turn) => DISAGREEMENT.test(turn.content)).map((turn) => turn.authorId));
-  if (pushback.size >= 2 && memberTurns >= 3) {
+  const comments = turns.filter((turn) => !turn.isPost).length;
+  if (pushback.size >= 2 && comments >= DISAGREEMENT_MIN_COMMENTS) {
     return { signal: {
       kind: "disagreement", template: "trade-off", anchorId: newest.id,
-      reason: `${pushback.size} members are pushing back on each other's options across ${memberTurns} comments, with no decision.`,
+      reason: `${pushback.size} members are pushing back on each other's options across ${comments} comments, with no decision.`,
     } };
   }
 

@@ -286,13 +286,13 @@ Known limitations:
 
 Goal: Sage acts like an assistant community manager inside active threads, and code (not the model's template choice on one comment) decides when a thread needs it.
 
-Status (2026-10-16): built and unit-tested. The Playwright journey is written but has not run yet (see Verification).
+Status (2026-10-16): built and verified (unit tests, journey 69, the smoke suite and the affected @sage journeys; see Verification).
 
 - **Deterministic trigger** (`services/sage-facilitation.ts`). On every new comment code reads the thread and decides, with no model call, whether it needs Sage. In priority order:
   - *deferral*: the newest comment puts it off ("let's revisit next week", "can we decide later?", "table this for now"). Sage doesn't comment. It creates a `SageTask` (subject `thread_revisit`, owned by the member who deferred, so it shows under their **Following**), due 1–14 days out from the words used (tomorrow 1, a weekday, next week 7, next month 14, otherwise 3). One open revisit per thread.
   - *unanswered_question*: a factual question ("what time…", "how much…", not "should we…") that a later comment shrugs at ("not sure", "no idea") or the asker repeats, with no answer after that. Missing piece template.
   - *ready_for_proposal*: three or more members back a shared purchase or project, with a number in the thread. MAKE_PROPOSAL, drafted for the member who raised the idea.
-  - *disagreement*: two or more members push back ("I'd rather", "I don't think", "but what about"), three or more turns. Trade-off template.
+  - *disagreement*: two or more members push back ("I'd rather", "I don't think", "but what about") across three or more comments (the post doesn't count, so one pushback in reply isn't enough). Trade-off template.
   - *narrow_decision*: the newest comment settles it ("let's go with") with only one or two members in a thread of four or more turns. Before we decide template (groups, never individuals).
   - *busy_thread*: eight member turns, or four participants and five turns, since Sage last spoke, with no decision in the last two. Where we are template.
 - **Limits.** Triggers count only turns since Sage's last comment in the thread. No trigger fires within 12 hours of a Sage comment (deferrals still schedule). Each trigger (kind plus the comment that tripped it) is claimed once in `CommonsContentScan` (`thread_facilitation`), and any claim blocks another for 12 hours whatever came of it, so a hot thread costs at most one facilitation call per 12 hours. Catch-up scans never facilitate.
@@ -305,11 +305,18 @@ Status (2026-10-16): built and unit-tested. The Playwright journey is written bu
 - **Cost.** Commons feed facilitation: none added. Circle facilitation: at most one luna call (about $0.001) plus one nano relevance check (about $0.0001) per thread per 12 hours, only when flagged. Revisit: the same, once per deferral. Pre-vote: one luna call plus one nano check per proposal, once. All counted toward the per-Commons autonomy limit (`sage-pre-vote` added to `AUTONOMOUS_SAGE_FEATURES`); none runs when it's reached.
 - Migration `20261016020000_sage_discussion_summary` adds `CommonsActionType.SUMMARIZE_DISCUSSION`.
 
-Verification (2026-10-16):
+Verification (2026-10-16, local stack: clone `soulaancoop_facilitation`, API :3014, web :8100, gpt-5.6-luna + gpt-5-nano):
 
-- `pnpm -F @repo/trpc test`: 91 files, 918 tests passed. New: `sage-facilitation.test.ts` (19), `sage-facilitation-flow.test.ts` (12), `sage-pre-vote.test.ts` (11), 3 revisit cases in `sage-tasks.test.ts`. Thread fixtures (`__tests__/fixtures/facilitation-threads.ts`) are written in members' register and include Sage's real reply from the shared-drivers CI runs; no local database had real multi-member threads, and production data isn't used.
+- `pnpm -F @repo/trpc test`: 91 files, 919 tests passed. New: `sage-facilitation.test.ts` (20), `sage-facilitation-flow.test.ts` (12), `sage-pre-vote.test.ts` (11), 3 revisit cases in `sage-tasks.test.ts`. Thread fixtures (`__tests__/fixtures/facilitation-threads.ts`) are written in members' register and include Sage's real reply from the shared-drivers CI runs; no local database had real multi-member threads, and production data isn't used.
 - `tsc` for `@repo/trpc` is clean. `pnpm -F @cahootz/mobile type-check` reports one error, in `components/sage-avatar.tsx`, which this branch doesn't touch; the proposal-page change type-checks.
-- Not yet run: `sage-facilitation.spec.ts` (journey 69), the smoke suite, and `sage-follow-through` / `sage-decision-comments`. The machine had about 275 MB of free disk, too little for a database clone and a Metro bundle.
+- Smoke suite (`--grep @smoke`, 1 worker): 18 passed. Two earlier attempts timed out (a 5-minute page load, then 30-minute tests) while other sessions' suites ran at the same time with load averages up to 300 and swap nearly full; with the machine to itself it passed in 3.8 minutes.
+- Journey 69 (`sage-facilitation.spec.ts`, live model): both tests passed on the final code.
+- `sage-follow-through.spec.ts` and `sage-decision-comments.spec.ts`: passed on the final code (and on the code before the threshold fix).
+- Found and fixed by the journey:
+  - The first version of journey 69 ran in the Commons feed. Sage's ordinary per-comment analysis answered the "library or homes" post at once with a trade-off, and the 12-hour cooldown then correctly blocked a second one, so the trigger never fired. The journey now runs in a circle, where only code's trigger starts Sage. It accepts either outcome of the gates: Sage posts by itself, or the circle leader approves the comment in the app.
+  - The disagreement trigger fired on the post plus one pushback in reply. It now needs three comments (the post doesn't count), with a unit test for the one-reply case.
+  - The fixture's seeded proposal lacked `missingData[].why_needed`, so the proposal page failed output validation.
+- Seen during the runs: when a test's cleanup deleted the post while Sage was still analyzing it, publishing failed on the missing post (recorded as "Analysis failed") and left a pending action for a deleted post. This is pre-existing behavior of the shared publish path, not specific to facilitation.
 
 Known limitations:
 

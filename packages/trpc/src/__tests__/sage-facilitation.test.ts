@@ -40,6 +40,12 @@ describe("when a thread needs Sage", () => {
     expect(signal?.reason.length).toBeGreaterThan(20);
   });
 
+  it("waits for a real back-and-forth before calling it a disagreement", () => {
+    // The idea and one pushback in reply: not yet.
+    expect(detectFacilitation(threadUpTo(fixtures.DISAGREEMENT, "c2"), NOW).signal).toBeNull();
+    expect(detectFacilitation(threadUpTo(fixtures.DISAGREEMENT, "c3"), NOW).signal?.kind).toBe("disagreement");
+  });
+
   it("leaves an answered question, small talk and a fresh post alone", () => {
     expect(detectFacilitation(fixtures.ANSWERED_QUESTION, NOW).signal).toBeNull();
     expect(detectFacilitation(fixtures.QUIET, NOW).signal).toBeNull();

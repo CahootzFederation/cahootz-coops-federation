@@ -51,22 +51,50 @@ function sageComments(page: Page) {
   return page.getByText("Sage", { exact: true }).locator("visible=true");
 }
 
-test("Sage lays out a disagreement, then brings the thread back after the group puts it off", { tag: "@sage" }, async ({ browser }) => {
-  test.setTimeout(420_000);
+/**
+ * Waits until the thread shows `count` Sage comments. In a circle, Sage posts by itself only when the
+ * live model is confident enough; otherwise the circle leader is asked, and here the leader approves it
+ * in the app. Either way exactly one comment results from the trigger.
+ */
+async function expectSageToSpeak(viewer: Page, leader: Page, postId: string, url: string, count: number) {
+  await expect(async () => {
+    await viewer.reload();
+    if (await sageComments(viewer).count() === count) return;
+    const [actionId] = fixture("pending", postId).actionIds as string[];
+    if (actionId) {
+      await leader.goto(`/sage/${actionId}`);
+      await leader.getByRole("button", { name: "Approve" }).click();
+      await expect(leader.getByRole("button", { name: "Approve" })).toHaveCount(0);
+    }
+    await viewer.goto(url);
+    await expect(sageComments(viewer)).toHaveCount(count, { timeout: 5_000 });
+  }).toPass(LIVE_POLL);
+}
+
+// A circle thread: only code's trigger starts Sage here (circle comments don't get the Commons feed's
+// per-comment analysis), so the journey exercises the trigger itself.
+test("Sage lays out a disagreement in a circle, then brings the thread back after the group puts it off", { tag: "@sage" }, async ({ browser }) => {
+  test.setTimeout(480_000);
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const userA = await newSignedInPage(browser, USER_A_EMAIL);
   const userB = await newSignedInPage(browser, USER_B_EMAIL);
   let postId: string | undefined;
+  let circleId: string | undefined;
   let tokenA: string | undefined;
+  let tokenB: string | undefined;
 
   try {
     tokenA = await sessionTokenFor(userA.page);
-    // Fixture: A shares an idea (the journey is the thread that follows).
+    tokenB = await sessionTokenFor(userB.page);
+    // Fixtures: A leads a circle that B joins, and shares an idea there (the journey is the thread that follows).
+    const { group } = await trpcPost("groups.create", tokenA, { name: `E2E Potluck circle ${runId}`, privacy: "invite-only" });
+    circleId = group.id as string;
+    await trpcPost("groups.joinByCode", tokenB, { inviteCode: group.inviteCode });
     const created = await trpcPost("commons.createPost", tokenA, {
-      coopId: COOP_ID, title: `E2E ${runId} potluck spot`,
+      coopId: COOP_ID, circleId, title: `E2E ${runId} potluck spot`,
       content: `E2E ${runId}: Idea for the monthly potluck: keep it in the library room, or start rotating between homes.`, tag: "Idea",
     });
-    postId = created.post.id as string;
+    postId = (created.post?.id ?? created.id) as string;
     const url = `/${COOP_ID}/posts/${postId}`;
     await userA.page.goto(url);
     await userB.page.goto(url);
@@ -74,34 +102,33 @@ test("Sage lays out a disagreement, then brings the thread back after the group 
     // 1. Two members push back on each other in the thread.
     await comment(userA.page, `E2E ${runId}: The library is free and on the bus line, I'd rather keep it there.`);
     await comment(userB.page, `E2E ${runId}: I don't think the library works, it closes at 7 and the same people always rush out.`);
+    expect(fixture("claims", postId).claims).toEqual([]);
     await comment(userA.page, `E2E ${runId}: But what about people without cars? Homes are spread all over town.`);
 
-    // 2. Code sees the disagreement on the third comment; Sage lays out the options once, on its own.
+    // 2. Code sees the disagreement on the third comment, and Sage lays out the options once.
     await expect.poll(() => fixture("claims", postId!).claims, { timeout: 60_000 }).toEqual([expect.stringMatching(/^disagreement:/)]);
-    await expect(async () => {
-      await userB.page.reload();
-      await expect(sageComments(userB.page)).toHaveCount(1, { timeout: 5_000 });
-    }).toPass(LIVE_POLL);
+    await expectSageToSpeak(userB.page, userA.page, postId, url, 1);
 
     // 3. B puts it off. Sage doesn't comment; it follows the thread under B's Following.
+    await userB.page.goto(url);
     await comment(userB.page, `E2E ${runId}: Let's revisit this next week once we know who could host.`);
-    await expect(async () => {
-      await userB.page.goto("/sage");
-      await userB.page.getByRole("tab", { name: "Following" }).locator("visible=true").first().click();
-      await expect(shown(userB.page, `Bring back: E2E ${runId} potluck spot`)).toBeVisible({ timeout: 5_000 });
-    }).toPass(LIVE_POLL);
-    await userA.page.reload();
+    await expect.poll(() => fixture("claims", postId!).claims, { timeout: 60_000 }).toContainEqual(expect.stringMatching(/^deferral:/));
+    await userB.page.goto("/sage");
+    await userB.page.getByRole("tab", { name: "Following" }).locator("visible=true").first().click();
+    await expect(shown(userB.page, `Bring back: E2E ${runId} potluck spot`)).toBeVisible();
+    await userA.page.goto(url);
     await expect(sageComments(userA.page)).toHaveCount(1);
 
     // 4. The week passes with nobody picking it up: the wake loop brings it back with one more Sage comment.
     expect(fixture("revisit-due", postId)).toMatchObject({ result: "DONE" });
-    await expect(async () => {
-      await userA.page.reload();
-      await expect(sageComments(userA.page)).toHaveCount(2, { timeout: 5_000 });
-    }).toPass(LIVE_POLL);
+    await expectSageToSpeak(userB.page, userA.page, postId, url, 2);
   } finally {
     if (postId) fixture("cleanup", postId, "-");
     if (postId && tokenA) await trpcPost("commons.deletePost", tokenA, { postId }).catch(() => {});
+    if (circleId) {
+      if (tokenB) await trpcPost("groups.leave", tokenB, { groupId: circleId }).catch(() => {});
+      if (tokenA) await trpcPost("groups.leave", tokenA, { groupId: circleId }).catch(() => {});
+    }
     await userA.context.close();
     await userB.context.close();
   }

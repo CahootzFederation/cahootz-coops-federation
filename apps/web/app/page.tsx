@@ -13,7 +13,6 @@ import {
   ArrowDownRight,
   ArrowRight,
   Github,
-  MoveUpRight,
   Smartphone,
 } from "lucide-react";
 
@@ -391,11 +390,6 @@ export default async function HomePage() {
                       <Link href={`/${coop.coopId}/application`}>
                         Apply <ArrowRight size={17} />
                       </Link>
-                      {coop.hasPublishedPublicPage && (
-                        <Link href={`/c/${coop.coopId}`}>
-                          Explore page <MoveUpRight size={17} />
-                        </Link>
-                      )}
                     </div>
                   </article>
                 ))}

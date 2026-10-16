@@ -804,6 +804,14 @@ export interface SageAlertView {
   createdAt: string;
 }
 
+export type SageRhythmCategory = 'weekly_priorities' | 'midweek_open_work' | 'friday_appreciation' | 'monthly_review';
+/** NOTIFY: feed post plus an alert. FEED (default): feed post only. MUTED: hidden from your feeds, no alert. */
+export type SageRhythmMode = 'NOTIFY' | 'FEED' | 'MUTED';
+export interface SageRhythmSettings {
+  modes: Record<SageRhythmCategory, SageRhythmMode>;
+  nameInAppreciation: boolean;
+}
+
 export type SageTrailFilter = { postId: string } | { actionId: string } | { proposalId: string } | { circleId: string };
 
 export interface SageDecisionTrail {
@@ -4759,6 +4767,31 @@ export const api = {
       body: JSON.stringify({ showSageDecisionTrails }),
     });
     return readTrpcResult<{ showSageDecisionTrails: boolean }>(response, 'Could not save Sage settings');
+  },
+
+  async getSageRhythmSettings(sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.rhythmSettings`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<SageRhythmSettings>(response, 'Could not load Sage settings');
+  },
+
+  async setSageRhythmMode(category: SageRhythmCategory, mode: SageRhythmMode, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.setRhythmMode`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ category, mode }),
+    });
+    return readTrpcResult<{ modes: Record<SageRhythmCategory, SageRhythmMode> }>(response, 'Could not save Sage settings');
+  },
+
+  async setSageAppreciationNaming(nameInAppreciation: boolean, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.setAppreciationNaming`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ nameInAppreciation }),
+    });
+    return readTrpcResult<{ nameInAppreciation: boolean }>(response, 'Could not save Sage settings');
   },
 
   async listSageTrails(filter: SageTrailFilter, sessionToken: string) {

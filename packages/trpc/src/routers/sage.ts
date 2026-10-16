@@ -6,6 +6,7 @@ import { accountAuthenticatedProcedure } from "../procedures/account-authenticat
 import { enqueueSageActionExecute } from "../services/sage-dispatch.js";
 import { describeSageAuditEvent } from "../services/sage-audit-descriptions.js";
 import { presentTrails } from "../services/sage-decision-trail.js";
+import { RHYTHM_CATEGORIES, RHYTHM_MODES, rhythmModesFor } from "../services/sage-community-rhythm.js";
 import { dismissSageTask } from "../services/sage-tasks.js";
 import { askIntroductionHelper } from "../services/sage-introductions.js";
 import { acknowledgeSageAlert, rerouteSageAlert } from "../services/sage-responsibility.js";
@@ -166,6 +167,42 @@ export const sageRouter = router({
         select: { showSageDecisionTrails: true },
       });
       return { showSageDecisionTrails: user.showSageDecisionTrails };
+    }),
+
+  /** The member's choice for each of Sage's rhythm post categories, and whether the Friday appreciation may name them. */
+  rhythmSettings: accountAuthenticatedProcedure.query(async ({ ctx }) => {
+    const context = ctx as AccountAuthenticatedContext;
+    const [modes, user] = await Promise.all([
+      rhythmModesFor(context.accountUser.id),
+      context.db.user.findUnique({ where: { id: context.accountUser.id }, select: { nameInSageAppreciation: true } }),
+    ]);
+    return { modes, nameInAppreciation: user?.nameInSageAppreciation ?? false };
+  }),
+
+  /** NOTIFY: feed post plus an alert. FEED (default): feed post only. MUTED: hidden from this member's feeds, no alert. */
+  setRhythmMode: accountAuthenticatedProcedure
+    .input(z.object({ category: z.enum(RHYTHM_CATEGORIES), mode: z.enum(RHYTHM_MODES) }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const userId = context.accountUser.id;
+      await context.db.sageRhythmPreference.upsert({
+        where: { userId_category: { userId, category: input.category } },
+        create: { userId, category: input.category, mode: input.mode },
+        update: { mode: input.mode },
+      });
+      return { modes: await rhythmModesFor(userId) };
+    }),
+
+  setAppreciationNaming: accountAuthenticatedProcedure
+    .input(z.object({ nameInAppreciation: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const user = await context.db.user.update({
+        where: { id: context.accountUser.id },
+        data: { nameInSageAppreciation: input.nameInAppreciation },
+        select: { nameInSageAppreciation: true },
+      });
+      return { nameInAppreciation: user.nameInSageAppreciation };
     }),
 
   /**

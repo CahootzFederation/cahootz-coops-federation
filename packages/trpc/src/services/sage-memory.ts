@@ -70,7 +70,7 @@ export async function consolidateSageMemory(coopId: string, now = new Date()): P
     db.commonsAction.findMany({
       // A rating or correction added later changes the feedback row, not the action, so look at both.
       where: {
-        coopId, status: { in: [...TERMINAL] }, type: { notIn: ["RIDE_MATCH_PROPOSAL", "CONNECT_MEMBERS", "ESCALATE_TO_ADMIN", "NO_ACTION", "ASK_COMMONS"] },
+        coopId, status: { in: [...TERMINAL] }, type: { notIn: ["RIDE_MATCH_PROPOSAL", "CONNECT_MEMBERS", "ESCALATE_TO_ADMIN", "NO_ACTION", "ASK_COMMONS", "COMMUNITY_RHYTHM"] },
         OR: [{ updatedAt: { gte: since } }, { feedback: { updatedAt: { gte: since } } }],
       },
       select: { id: true, summary: true, status: true, createdAt: true, payload: true, circleId: true, type: true,

@@ -31,6 +31,7 @@ export const notificationCategoryTypes: Record<
     "SAGE_SUGGESTION_REMINDER",
     "SAGE_SUGGESTION_DONE",
     "SAGE_SUGGESTION_CLOSED",
+    "SAGE_RHYTHM",
     "COMMONS_SUPPORT",
     "COMMONS_COMMENT_LIKE",
     "PERSONAL_PAGE_COMMENT",

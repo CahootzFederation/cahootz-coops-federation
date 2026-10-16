@@ -7,6 +7,7 @@ import { ArrowLeft } from 'lucide-react-native';
 
 import { PreferenceSwitch } from '@/components/preference-switch';
 import { SageIntro } from '@/components/sage-intro';
+import { SageRhythmSettings } from '@/components/sage-rhythm-settings';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
@@ -74,6 +75,8 @@ export default function SageSettingsScreen() {
           <Text accessibilityLiveRegion="polite" style={{ fontSize: 13, color: '#047857' }}>Saved.</Text>
         ) : null}
       </View>
+
+      {sessionToken ? <SageRhythmSettings sessionToken={sessionToken} /> : null}
     </ScrollView>
   );
 }

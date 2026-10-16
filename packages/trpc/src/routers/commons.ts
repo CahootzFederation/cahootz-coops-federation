@@ -49,6 +49,7 @@ import { wakeTasksForReply } from '../services/sage-tasks.js';
 import { relayReplyToMember } from '../services/sage-member-actions.js';
 import { recordSkippedCircleMention, traceSageReply } from '../services/sage-reply-trails.js';
 import { notifySageComment } from '../services/sage-comment-notifications.js';
+import { mutedRhythmClassifications } from '../services/sage-community-rhythm.js';
 import {
   sendApplicationSubmittedNotification,
   sendCommonsSuggestionNotification,
@@ -194,17 +195,26 @@ async function loadFeedPosts(
   limit: number,
   cursor?: string,
   circleId?: string,
+  /** Sage rhythm categories this viewer muted; their posts are left out of the viewer's feed. */
+  hiddenClassifications: string[] = [],
 ) {
   const coopIds = Array.isArray(coopId) ? coopId : [coopId];
+  const scope = circleId
+    ? { coopId: coopIds[0], circleId }
+    : {
+        OR: coopIds.flatMap((id) => [
+          { coopId: id, circleId: generalCircleId(id) },
+          { coopId: id, circleId: null },
+        ]),
+      };
   const posts = await db.commonsPost.findMany({
-    where: circleId
-      ? { coopId: coopIds[0], circleId }
-      : {
-          OR: coopIds.flatMap((id) => [
-            { coopId: id, circleId: generalCircleId(id) },
-            { coopId: id, circleId: null },
-          ]),
-        },
+    where: hiddenClassifications.length
+      ? {
+          ...scope,
+          // A plain notIn would also drop posts with no classification (SQL NULL).
+          AND: [{ OR: [{ classification: null }, { classification: { notIn: hiddenClassifications } }] }],
+        }
+      : scope,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -1078,6 +1088,8 @@ export const commonsRouter = router({
           activeCoopIds,
           input.limit,
           input.cursor,
+          undefined,
+          await mutedRhythmClassifications(accountUser?.id, context.db),
         );
 
         const coopConfigs = await context.db.coopConfig.findMany({
@@ -1161,6 +1173,7 @@ export const commonsRouter = router({
         input.limit,
         input.cursor,
         requestedCircleId,
+        await mutedRhythmClassifications(accountUser?.id, context.db),
       );
 
       const feedCircleWhere = requestedCircleId

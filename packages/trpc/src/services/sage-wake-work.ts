@@ -1,9 +1,11 @@
 /**
  * Work each wake cycle does for a Commons after its due tasks: following up on waiting suggestions
  * (closing ones that no longer apply or went unanswered), expiring routed alerts, keeping memory
- * current, asking a likely helper about needs nobody answered, and the steward's review. Each step is isolated so one failure doesn't stop the others.
+ * current, asking a likely helper about needs nobody answered, the weekly community rhythm posts, and the
+ * steward's review. Each step is isolated so one failure doesn't stop the others.
  */
 import { expireSageAlerts } from "./sage-responsibility.js";
+import { runCommunityRhythm } from "./sage-community-rhythm.js";
 import { maintainSageMemory } from "./sage-memory.js";
 import { runStewardReview } from "./sage-steward.js";
 import { followUpOnSuggestions } from "./sage-suggestion-follow-up.js";
@@ -17,6 +19,9 @@ const steps: Step[] = [
   { name: "maintain memory", run: maintainSageMemory },
   // Deterministic and capped per Commons per day; each ask counts toward the helper's weekly outreach limit.
   { name: "unanswered needs", run: askHelpersForUnansweredNeeds },
+  // Templated rhythm posts (Monday priorities, midweek open requests, Friday appreciation, monthly review):
+  // no model call, one post per category per period, skipped in Commons with too few active members.
+  { name: "community rhythm", run: (coopId, now) => runCommunityRhythm(coopId, now) },
   // At most once a day per Commons (the steward checks its own last run), and only within the monthly limit.
   { name: "steward review", run: (coopId, now) => runStewardReview(coopId, now) },
 ];

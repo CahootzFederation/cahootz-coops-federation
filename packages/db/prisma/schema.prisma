@@ -23,7 +23,9 @@ model User {
   status                       UserStatus              @default(PENDING)
   isBot                        Boolean                 @default(false) // true for platform bot accounts (e.g. Sage)
   showSageDecisionTrails       Boolean                 @default(false) // personal app setting: show Sage's decision trails on content this user can see
-  defaultCoopId                String?                 // member-selected Commons shown first after sign-in
+  nameInSageAppreciation       Boolean                 @default(false) // personal app setting: Sage's Friday appreciation may name this member for verified actions
+  sageRhythmPreferences        SageRhythmPreference[]
+  defaultCoopId                String? // member-selected Commons shown first after sign-in
   password                     String?
   phone                        String?                 @unique // E.164 format: +1XXXXXXXXXX
   walletAddress                String?                 @unique // DEPRECATED: Use Wallet model instead
@@ -66,9 +68,9 @@ model User {
   businesses                 Business[]
   onrampTransactions         OnrampTransaction[] // UC-era: preserved for future reactivation
   paymentMethods             PaymentMethod[]
-  sentTransfers              P2PTransfer[]             @relation("sender") // UC-era: preserved
-  receivedTransfers          P2PTransfer[]             @relation("recipient") // UC-era: preserved
-  pendingTransfersSent       PendingTransfer[]         @relation("sender") // UC-era: preserved
+  sentTransfers              P2PTransfer[]              @relation("sender") // UC-era: preserved
+  receivedTransfers          P2PTransfer[]              @relation("recipient") // UC-era: preserved
+  pendingTransfersSent       PendingTransfer[]          @relation("sender") // UC-era: preserved
   bankAccounts               BankAccount[]
   withdrawals                Withdrawal[] // UC-era: preserved
   notifications              Notification[]
@@ -84,31 +86,31 @@ model User {
   commonsComments            CommonsComment[]
   commonsPostSupports        CommonsPostSupport[]
   commonsSuggestions         CommonsSuggestion[]
-  sentDirectMessages         DirectMessage[]           @relation("DirectMessageSender")
-  receivedDirectMessages     DirectMessage[]           @relation("DirectMessageReceiver")
-  following                  Follow[]                  @relation("Follower")
-  followers                  Follow[]                  @relation("Following")
+  sentDirectMessages         DirectMessage[]            @relation("DirectMessageSender")
+  receivedDirectMessages     DirectMessage[]            @relation("DirectMessageReceiver")
+  following                  Follow[]                   @relation("Follower")
+  followers                  Follow[]                   @relation("Following")
   personalPagePostComments   PersonalPagePostComment[]
   personalPagePostSupports   PersonalPagePostSupport[]
-  groupsLed                  Group[]                   @relation("GroupLeader")
+  groupsLed                  Group[]                    @relation("GroupLeader")
   groupMemberships           GroupMember[]
-  groupInvitesReceived       GroupInvite[]             @relation("GroupInvitee")
-  groupInvitesSent           GroupInvite[]             @relation("GroupInviter")
+  groupInvitesReceived       GroupInvite[]              @relation("GroupInvitee")
+  groupInvitesSent           GroupInvite[]              @relation("GroupInviter")
   groupComments              GroupComment[]
   uploadedKnowledgeDocuments KnowledgeDocument[]
-  verifiedAIObservations     AIObservation[]           @relation("AIObservationVerifier")
-  welcomeTableConfigsGuiding WelcomeTableConfig[]      @relation("WelcomeTableGuide")
+  verifiedAIObservations     AIObservation[]            @relation("AIObservationVerifier")
+  welcomeTableConfigsGuiding WelcomeTableConfig[]       @relation("WelcomeTableGuide")
   welcomeIntros              WelcomeIntro[]
   commonsCommentReactions    CommonsCommentReaction[]
   commonsPostReactions       CommonsPostReaction[]
   circleChatPresence         CircleChatPresence[]
-  eventsCreated              Event[]                   @relation("EventCreatedBy")
+  eventsCreated              Event[]                    @relation("EventCreatedBy")
   eventHosting               EventHost[]
   eventRSVPs                 EventRSVP[]
   eventReminders             EventReminder[]
-  pinnedPosts                CommonsPost[]             @relation("CommonsPostPinnedBy")
+  pinnedPosts                CommonsPost[]              @relation("CommonsPostPinnedBy")
   onboardingDripSends        OnboardingDripSend[]
-  commonsInvitationsSent     CommonsInvitation[]       @relation("CommonsInvitationInviter")
+  commonsInvitationsSent     CommonsInvitation[]        @relation("CommonsInvitationInviter")
   appFeedback                AppFeedback[]
   personalPagePostReactions  PersonalPagePostReaction[]
 
@@ -1149,6 +1151,7 @@ enum CommonsActionType {
   RIDE_MATCH_PROPOSAL // retired 2026-10-14; kept so existing rows stay readable
   SUGGEST_ACTION
   ASK_COMMONS // Sage's open question to the whole Commons about a community pattern
+  COMMUNITY_RHYTHM // Sage's weekly/monthly rhythm post (priorities, open work, appreciation, monthly review)
 
   @@schema("public")
 }
@@ -2346,6 +2349,21 @@ model NotificationPreference {
   onboarding  Boolean  @default(true) // New-member "getting started" drip; off skips the drip entirely
   updatedAt   DateTime @updatedAt
 
+  @@schema("public")
+}
+
+// A member's choice for one of Sage's rhythm post categories (sage-community-rhythm.ts).
+// No row means FEED: the post shows in the feed with no alert. NOTIFY adds an inbox alert and
+// push; MUTED hides the category's posts from this member's feeds and sends nothing.
+model SageRhythmPreference {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  String // weekly_priorities | midweek_open_work | friday_appreciation | monthly_review
+  mode      String // NOTIFY | FEED | MUTED
+  updatedAt DateTime @updatedAt
+
+  @@id([userId, category])
+  @@index([category, mode])
   @@schema("public")
 }
 

@@ -1252,36 +1252,6 @@ async function seedPlatformAndTokenOps(users: Map<string, any>) {
   const avery = users.get("avery");
   const rosa = users.get("rosa");
 
-  await prisma.featureFlag.upsert({
-    where: { key: "demo.quickPay" },
-    update: {
-      enabled: true,
-      description: "Enable quick-pay flows in the demo co-op.",
-      metadata: { seedTag: SEED_TAG, coopId: DEMO_COOP_ID },
-    },
-    create: {
-      key: "demo.quickPay",
-      enabled: true,
-      description: "Enable quick-pay flows in the demo co-op.",
-      metadata: { seedTag: SEED_TAG, coopId: DEMO_COOP_ID },
-    },
-  });
-
-  await prisma.featureFlag.upsert({
-    where: { key: "demo.scRewards" },
-    update: {
-      enabled: true,
-      description: "Show seeded SC reward and minting flows.",
-      metadata: { seedTag: SEED_TAG, coopId: DEMO_COOP_ID },
-    },
-    create: {
-      key: "demo.scRewards",
-      enabled: true,
-      description: "Show seeded SC reward and minting flows.",
-      metadata: { seedTag: SEED_TAG, coopId: DEMO_COOP_ID },
-    },
-  });
-
   await prisma.platformConfig.upsert({
     where: { key: "demo.coin.symbol" },
     update: { value: "DSC", updatedBy: "system:demo-data-seed" },

@@ -6,7 +6,6 @@ const db = vi.hoisted(() => ({
   userCoopMembership: { findMany: vi.fn() },
   coopConfig: { findMany: vi.fn() },
   auditLog: { create: vi.fn() },
-  featureFlag: { findUnique: vi.fn() },
 }));
 const recordObservation = vi.hoisted(() => vi.fn());
 vi.mock("@repo/db", () => ({ db }));
@@ -91,7 +90,6 @@ describe("saving a need without asking", () => {
     expect(urgent.memoryNotice).toBeNull();
     expect(recordObservation).not.toHaveBeenCalled();
     expect(write).not.toHaveBeenCalled();
-    expect(db.featureFlag.findUnique).not.toHaveBeenCalled();
     expect(actions()).toEqual(expect.arrayContaining(["SAGE_PRIVATE_SENSITIVE_EXCLUDED", "SAGE_PRIVATE_SAFETY_DETECTED", "SAGE_PRIVATE_SAFETY_RESPONSE_OFFERED"]));
   });
 

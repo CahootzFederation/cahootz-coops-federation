@@ -160,6 +160,8 @@ test('funding badge checkout uses Stripe test mode when a ready official shop is
     await member.page.getByText(/^Pay \$\d/).click();
     expect(await confirmation).toContain('Payment Confirmed');
     await expect(member.page).toHaveURL(/order-detail\?id=/);
+    await expect(member.page.getByText('Order Details', { exact: true })).toBeVisible();
+    await expect(member.page.getByText('Hybrid commerce payment', { exact: true })).toBeVisible();
   } finally {
     await member.context.close();
   }

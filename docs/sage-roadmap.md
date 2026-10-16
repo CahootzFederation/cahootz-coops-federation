@@ -444,6 +444,31 @@ For every Sage behavior change:
   - Cosmetic only: no change to what Sage may do, approvals, memory or model cost.
   - Verified: the full `@repo/trpc` suite, the mobile type-check, and journey 66 (`sage-avatar.spec.ts`), including the thinking state.
   - Limitations: comment rows and message bubbles have no avatars for anyone, so Sage's comments still show only the AI badge. Blinking isn't asserted in E2E. A blinking avatar on a screen that stays mounted in the background keeps its animation scheduled until the screen unmounts.
+- 2026-10-16: Sage posts a predictable weekly rhythm in each Commons feed (`sage-community-rhythm.ts`), as the Commons' assistant community manager.
+  - **Rituals**, each its own category:
+    - Monday, "This week's three priorities": one from each source first (the soonest `VOTABLE` proposal closing within 7 days, the next Commons-wide event, the count of unanswered requests, the highest-weighted mission goal), then the rest.
+    - Midweek, "Still waiting for a hand": unanswered Need/Ask posts (the same query as `sage-unanswered-needs.ts`) and public threads whose Sage follow-up went past due after a reminder or was abandoned in the last 14 days. Titles only; it never says who asked.
+    - Friday, "This week's appreciation": counts from verified records only. Help is `HELP_CONFIRMED` (the helper is credited). Requests answered is a Need/Ask post's first reply from someone else. Resources are `PUBLISHED` `CommonsResource`s. Events hosted are events that ended with at least one non-host `GOING`. Proposals advanced are `VOTABLE`/`APPROVED`/`FUNDED` ones updated that week. Commitments kept are `SageTask`s closed with a fulfilled outcome (`FULFILLED_TASK_OUTCOMES`: the owner replied, drafted or submitted). It adds movement toward the top three mission goals: advanced proposals whose `ProposalGoalScore` for that goal is at least 0.6.
+    - Monthly, days 1–3, "How <month> went": the same six counts against the month before (up is improved, flat or down is stalled). "What could stop" comes from deterministic rules: a rhythm category whose posts all got no replies or reactions that month, proposals stuck `SUBMITTED` for over 30 days, and recurring event series with no RSVPs.
+  - **Naming (decided here):** a member is named in the Friday post only if they turned on "Name me in Sage's Friday appreciation" in Sage settings (`User.nameInSageAppreciation`, off by default) and are still an active member. Names are one combined thank-you list, never tied to a specific act, and nobody who asked for help is ever named. Everyone else is a count. An opt-in setting was chosen over a per-week `share_win`-style DM, because that would spend members' weekly outreach limit every Friday.
+  - **Mute and subscribe (decided here):** each category is a per-member setting (`SageRhythmPreference`) in mobile Sage settings, not a flag. **In feed** (default) shows the post with no alert. **Notify me** adds an inbox alert and push (`SAGE_RHYTHM`, in the Community push category, so the existing Community/push switches still apply). **Mute** does both: the category's posts leave that member's Commons and Home feeds (`listFeed` filters by `classification`), and they get no alert or push. A direct link still opens the post. Push is opt-in, so four posts a week never become four pushes to everyone.
+  - **Bounds:** no model call, so it doesn't spend the autonomy budget. Every post goes through `checkSageOutput`, and member-written titles are cleaned and checked one by one (failing ones are dropped). Each ritual posts at most once per Commons per period: the unique `CommonsAction` key `community_rhythm` / `<coop>:<category>:<ISO week or month>`, claimed before posting. A period with nothing to say is recorded as a `DISMISSED` action with `RHYTHM_SKIPPED`, so it isn't retried. Commons with fewer than 5 active members (`RHYTHM_MIN_ACTIVE_MEMBERS`) and demo Commons are skipped.
+  - **Schedule:** a wake-cycle step (`sage-wake-work.ts`, every 15 minutes through `sage-wake-sweep`, or in the API without Trigger). Times are UTC, with a two-day window per ritual (Mon–Tue, Wed–Thu, Fri–Sat; the month's days 1–3). The first day waits until 13:00 UTC.
+  - **Removal:** a platform admin can remove a rhythm post from the web Commons AI actions page (**Remove Sage's post**, the same `remove-question` command). The action becomes `DISMISSED` with `RHYTHM_POST_REMOVED`.
+  - **Hook for discussion facilitation:** `hasDecisionSummary(proposalId)` returns false today. When pre-vote summaries land (`SUMMARIZE_DISCUSSION`), it should return true for a proposal with a published summary, and Monday's line will add "Read the discussion summary in the thread first."
+  - The Meet Sage card's "What Sage can do on its own" now mentions the rhythm and that each one can be muted in Sage settings.
+  - Verified so far:
+    - `pnpm -F @repo/trpc test`: 893 passed, 30 skipped. New: `sage-community-rhythm.test.ts` (19) and a feed-filter case in `commons.test.ts`.
+    - The trpc type-check is clean. The mobile type-check is clean apart from an existing `sage-avatar.tsx` style-type error on `main`.
+    - A live run on a cloned database: the API's wake loop posted exactly one real Friday appreciation for `cahootz` (`2026-W42`) across repeated cycles, and skipped smaller Commons. The fixture's midweek and Friday posts read as intended.
+    - Journey 71 (`sage-community-rhythm.spec.ts`) is written, but hasn't run locally yet (the machine's disk was full).
+  - Limitations:
+    - Times are UTC, because Commons have no time zone.
+    - A proposal's "advanced" date is its last update, because status changes aren't timestamped.
+    - Goal movement relies on proposal goal scores, which are model-scored (an expert can override them). It's shown as a count, never as recognition.
+    - "Events hosted" uses a `GOING` RSVP as the proof it happened; there's no attendance record.
+    - Monthly "could stop" rules are few and deterministic.
+    - The skip record for an empty period shows on the admin actions page.
 
 ## Completed milestones
 

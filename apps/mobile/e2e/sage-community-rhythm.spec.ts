@@ -19,6 +19,11 @@ function shown(page: Page, text: string | RegExp) {
   return page.getByText(text).locator("visible=true").first();
 }
 
+/** Sage posts in each Commons' General circle. */
+function generalFeed(coopId: string) {
+  return `/${coopId}/posts?circleId=${encodeURIComponent(`general:${coopId}`)}`;
+}
+
 async function openSageSettings(page: Page) {
   await page.goto("/sage-settings");
   await expect(shown(page, "Sage's regular posts")).toBeVisible({ timeout: 60_000 });
@@ -61,9 +66,9 @@ test("Sage's rhythm posts follow each member's settings, and a muted category le
     expect(friday.alertedA).toBe(true);
     expect(midweek.alertedA).toBe(true);
 
-    // The appreciation names A (who opted in) for hosting, from records, and is labeled as Sage's.
+    // Post titles aren't shown in the app, so match the body. The appreciation names A (who opted in) for hosting, from records, and is labeled as Sage's.
     await page.goto(`/${seeded.coopId}/posts/${friday.postId}`);
-    await expect(shown(page, "This week's appreciation")).toBeVisible({ timeout: 60_000 });
+    await expect(shown(page, /Here's what members did for each other this week/)).toBeVisible({ timeout: 60_000 });
     await expect(shown(page, new RegExp(`Thank you, .*${seeded.nameA}`))).toBeVisible();
     await expect(shown(page, /\d+ events? hosted/)).toBeVisible();
     await expect(page.getByLabel("AI helper, not a person").filter({ visible: true }).first()).toBeVisible();
@@ -71,7 +76,7 @@ test("Sage's rhythm posts follow each member's settings, and a muted category le
     // The midweek list names the request but not who asked.
     await page.goto(`/${seeded.coopId}/posts/${midweek.postId}`);
     await expect(shown(page, listedNeed)).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByText("Still waiting for a hand").locator("visible=true").first()).toBeVisible();
+    await expect(shown(page, "These requests haven't had a reply yet:")).toBeVisible();
     await expect(shown(page, new RegExp(`${seeded.nameB}`))).toHaveCount(0);
 
     // A's alert for the appreciation is in the inbox.
@@ -81,8 +86,8 @@ test("Sage's rhythm posts follow each member's settings, and a muted category le
       await expect(shown(page, "Sage: This week's appreciation")).toBeVisible();
     }).toPass({ timeout: 30_000 });
 
-    // 3. Both posts are in A's feed.
-    await page.goto("/");
+    // 3. Both posts are in A's Commons feed (General).
+    await page.goto(generalFeed(seeded.coopId));
     await expect(shown(page, listedNeed)).toBeVisible({ timeout: 60_000 });
 
     // 4. A mutes the midweek list. The choice persists, and the post leaves A's feed.
@@ -92,12 +97,12 @@ test("Sage's rhythm posts follow each member's settings, and a muted category le
     await expect(muteMidweek).toBeChecked();
     await page.reload();
     await expect(page.getByRole("radio", { name: "Midweek open requests: Mute" })).toBeChecked({ timeout: 60_000 });
-    await page.goto("/");
+    await page.goto(generalFeed(seeded.coopId));
     await expect(shown(page, new RegExp(`Thank you, .*${seeded.nameA}`))).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText(listedNeed)).toHaveCount(0);
 
     // 5. Muting is A's alone: B still sees the midweek list in their feed.
-    await memberB.page.goto("/");
+    await memberB.page.goto(generalFeed(seeded.coopId));
     await expect(shown(memberB.page, listedNeed)).toBeVisible({ timeout: 60_000 });
 
     // 6. Muted also means no alert: the next midweek post doesn't alert A.

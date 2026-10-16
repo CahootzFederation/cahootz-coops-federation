@@ -205,11 +205,17 @@ export function memoryNotice(summary: string) {
   return `I'll remember this for our check-ins: ${summary}. Say "forget that" anytime and I will.`;
 }
 
+/**
+ * Sage messages that open a check-in: the weekly check-in, and the activation journey's "what got in the
+ * way?" (sage-activation.ts). A reply to either gets check-in follow-ups and is remembered the same way.
+ */
+export const CHECKIN_KEY_PREFIXES = ["sage-weekly:", "sage-activation-ask:"] as const;
+
 async function latestWeeklyCheckin(groupId: string, createdAt: Date) {
   return db.groupComment.findFirst({
     where: {
       groupId,
-      systemKey: { startsWith: "sage-weekly:" },
+      OR: CHECKIN_KEY_PREFIXES.map((prefix) => ({ systemKey: { startsWith: prefix } })),
       createdAt: { gte: new Date(createdAt.getTime() - CHECKIN_WINDOW_MS), lte: createdAt },
     },
     orderBy: { createdAt: "desc" },

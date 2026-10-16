@@ -1,6 +1,6 @@
 # Sage product roadmap
 
-Last updated: 2026-10-14
+Last updated: 2026-10-16
 
 ## North star
 
@@ -234,6 +234,34 @@ Member memory from check-ins, saved without asking and read back (2026-10-14):
 - Tests: `sage-private-signals.test.ts` (no consent prompt; sensitive, urgent and model-flagged notes never saved; fallback; untrusted input; dedupe; member scope), `sage-member-memory.test.ts` (member and Commons isolation, DM scope, the budget, summaries read back cleansed, forget), `sage-community-memory.test.ts` (auto-saved needs count, remember-only rows don't), `sage-checkin-followup.test.ts` (memory in the check-in and DM prompts, never an @mention). Playwright `sage-member-memory.spec.ts` (TESTING.md journey 65).
 - Remaining: "forget" marks rows dismissed rather than deleting them; they stay until their 180-day expiry and no purge exists yet. Requests are recognized by patterns, so unusual wording goes to the model, which can't forget anything. A need from a multi-Commons member whose check-in names no Commons is saved but tied to none, so it is only shown when the member asks what Sage remembers and never counted in patterns. Only check-in replies are remembered, not ordinary DMs. Theme detection is still keyword-based, so the model's `isNeed` is the main guard against saving small talk; without an API key small talk with a theme word is saved as a theme sentence. Whether the model actually brings up a note is its choice; tests check what it is given.
 
+### P1 — New-member activation (2026-10-16)
+
+Goal: in a member's first two weeks in a Commons, Sage moves them to one useful connection or contribution, checks from records whether it happened, and asks what got in the way when it didn't.
+
+Status (2026-10-16): built; unit-tested; journey 70 run locally (see Verification).
+
+- **Replaces the day 1/3/7 drip; doesn't run beside it.** The old drip (`onboarding-drip.ts`, deleted) sent three push/inbox alerts and stood down whenever the member opened the app. A second, parallel journey would have doubled new members' messages in week one, and "opened the app" is exactly what doesn't count as success here. So the drip's hourly schedule (`onboarding-drip-sweep`, same task id), its per-step ledger (`OnboardingDripSend`, now with channel `SAGE`), its opt-out ("Getting started tips") and its email fallback for members without push are reused, and its content is replaced. `onboarding-drip-config.ts` keeps only the shared helpers. Old `ONBOARDING_DRIP` alerts still open their screens.
+- **The journey** (`services/sage-activation.ts`), one per Commons membership, every message a fixed template filled from records (no model call), sent through `sendProactiveSageMessage` into the member's Sage conversation:
+  - About an hour after joining, **welcome**: the Commons' name, its mission in its own words (`displayMission`, else tagline, description, or the charter's first sentence, quoted), its coin (`CoopConfig.scTokenName`; never hardcoded, and the schema placeholder "FakeCoin" or an unsafe name is left out), its top three `missionGoals` by weight, and what's active now (proposals open for a vote, the next event, lively public circles). Each part must pass the output check or it is dropped. Members without a push device also get it by email.
+  - Day 3, **connect**: one thing, in this order: a consent-first introduction (`findMembersForNeed` on the newcomer's interests, skills and offers, then `proposeIntroduction`, so the yes/no is answered right in the chat and the other person is asked only after a yes); a public circle whose name or purpose fits their profile; the next event to RSVP to; a published resource that fits; the liveliest public circle they haven't joined.
+  - Day 7, **contribute**: an unanswered Need/Ask in the Commons feed from the last 14 days that matches their skills, offers or interests; otherwise an invitation to post one thing they could offer.
+  - Each step has a window (hour 1–72, day 3–7, day 7–14); a missed step is dropped, never sent late. A member in several new Commons hears from at most one per sweep. A step held by the weekly limit isn't recorded, so a later sweep in its window sends it.
+- **Success is verified from records** (`findActivationSignal`): the earliest, since joining, of a reply to another member's Need/Ask post (not Sage's), a Sage introduction both people accepted, joining a standard circle, an RSVP (going or maybe) to an event in that Commons, or a post there. Opening the app doesn't count. Once there's a signal, the connect and contribute steps stop and the journey closes at once.
+- **The journey task** (`SageTask` subject `member_activation`, kind `ACTIVATION_CHECK`, one per membership, ever) is created with the first message. It shows under **Following** with what Sage waits for, why, and Dismiss; dismissing stops the remaining messages. The wake loop hands it to `wakeActivationTask`:
+  - Day 14: closed as activated if a signal is on record. Otherwise Sage asks once, privately: "What got in the way? A few words is plenty…" (`sage-activation-ask:` key). The reply is handled like a weekly check-in reply (`CHECKIN_KEY_PREFIXES` in `sage-private-signals.ts`): check-in follow-ups, the urgent/sensitive gates, and a non-sensitive need saved as member memory with the usual notice. At the weekly limit it waits a day, up to 3 times; with Getting started tips off it doesn't ask.
+  - Day 30: closed either way, as `[NONE]` if nothing is on record. A member who left closes as `[LEFT]`.
+- **Outcomes and success rate.** The task's outcome starts with a code (`[NEED_REPLY]`, `[INTRODUCTION]`, `[CIRCLE_JOINED]`, `[RSVP]`, `[POST]`, `[NONE]`, `[LEFT]`); members see only the words. Every close writes a `SAGE_ACTIVATION_OUTCOME` audit (`ACTIVATED` with signal and days to activate, `NOT_ACTIVATED` with whether they answered the question, or `LEFT`). `activationStats(coopId, since)` gives started, activated, not activated, in progress, excluded (left or dismissed), the success rate (activated / finished) and counts by signal. Platform admins get the last 90 days in the Commons AI actions dashboard response (`activation`); there's no web screen for it yet.
+- **Limits and cost.** Every message Sage starts counts toward the 7-per-week limit; the "what got in the way" reply and its follow-ups are member-initiated and don't. No autonomous model call, so nothing is counted against the autonomy budget. The only model use is member-initiated: the check-in follow-up (gpt-5.6-luna, at most 5 per ask) and the nano need summary (about $0.00003) when the member answers.
+- The Meet Sage card's "What Sage can do on its own" now says Sage welcomes you when you join a Commons and, in your first two weeks, suggests one person or circle to meet and one small way to pitch in.
+- Tests: `sage-activation.test.ts` (27: step windows, signals, the Commons' language and coin, each step's fallbacks, the sweep's limit/opt-out/dismissal/early close/one-per-run/email, the day 14 and 30 checks, success rate), new cases in `sage-tasks.test.ts` (hand-off) and `sage-private-signals.test.ts` (the ask counts as a check-in); the old drip tests were cut to the shared helpers (`onboarding-helpers.test.ts`). Playwright `sage-activation.spec.ts` (TESTING.md journey 70) replaces `onboarding-drip.spec.ts` (journey 29).
+- Remaining:
+  - Matching is keyword-based (profile words against circle names, need posts, other profiles), like `findMembersForNeed`; a member with an empty profile gets the popular circle or the event, and the generic "offer something" invitation.
+  - A reply that isn't a need ("just busy") isn't saved as memory, because the check-in path saves needs only; the audit still records that they answered.
+  - The contribute step can suggest a need that `sage-unanswered-needs.ts` later also asks the same person about.
+  - A step held by the weekly limit is retried every hourly sweep inside its window, and each retry writes a `SAGE_PROACTIVE_LIMITED` audit.
+  - Welcome times use UTC, like the old drip.
+  - No member-facing or Commons-admin screen for the success rate yet; it's in the platform-admin dashboard's API response.
+
 ### P1 — Steward and specialists (from `docs/sage-stewardship-system.md`)
 
 Status (2026-10-04): built and verified.
@@ -443,6 +471,7 @@ For every Sage behavior change:
   - Cosmetic only: no change to what Sage may do, approvals, memory or model cost.
   - Verified: the full `@repo/trpc` suite, the mobile type-check, and journey 66 (`sage-avatar.spec.ts`), including the thinking state.
   - Limitations: comment rows and message bubbles have no avatars for anyone, so Sage's comments still show only the AI badge. Blinking isn't asserted in E2E. A blinking avatar on a screen that stays mounted in the background keeps its animation scheduled until the screen unmounts.
+- 2026-10-16: Sage's new-member activation journey replaces the day 1/3/7 drip instead of running beside it: one set of new-member messages, all from Sage, all counted toward the weekly limit, judged by a verified connection or contribution rather than an app open. The "what got in the way?" answer goes through the existing check-in memory path. Fixed templates, no model call; no feature flag.
 
 ## Completed milestones
 

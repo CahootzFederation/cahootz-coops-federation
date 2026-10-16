@@ -26,6 +26,7 @@ const REMINDER_GRACE_DAYS = 3;
 const WAKE_BATCH = 50;
 
 // REVIEW_SUGGESTION / suggestion_review tasks are created by sage-suggestion-follow-up.ts, not createSageTask.
+// ACTIVATION_CHECK / member_activation tasks are created by sage-activation.ts.
 export type SageTaskKind = "FOLLOW_UP" | "REVIEW_STALE_DRAFT" | "DEADLINE_REMINDER";
 export type SageTaskSubject = "commons_post" | "proposal_draft" | "proposal" | "event" | "member_post" | "member_conversation" | "introduction_outcome";
 
@@ -217,6 +218,11 @@ async function finishTask(task: SageTask, status: "DONE" | "ABANDONED" | "FAILED
 
 /** Wakes one claimed task: verify, then close, remind once, or give up. Returns what happened. */
 export async function wakeTask(task: SageTask, now = new Date()): Promise<"DONE" | "REMINDED" | "ABANDONED" | "FAILED"> {
+  if (task.subjectType === "member_activation") {
+    // A new member's activation journey has two checkpoints (day 14, day 30) and its own outcome record.
+    const { wakeActivationTask } = await import("./sage-activation.js");
+    return wakeActivationTask(task, now);
+  }
   const where = await taskTrailVisibility(task);
   const trail = new DecisionTrail({
     agent: "cadence", coopId: task.coopId, circleId: where.circleId, sourceType: "sage_task", sourceId: task.id,

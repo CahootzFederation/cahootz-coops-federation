@@ -23,6 +23,8 @@ vi.mock("../services/sage-suggestion-follow-up.js", async (importOriginal) => ({
 
 const proactive = vi.hoisted(() => ({ LIMITED_RETRIES: 3, runProactiveTask: vi.fn(), promiseAlreadyKept: vi.fn() }));
 vi.mock("../services/sage-proactive.js", () => proactive);
+const activation = vi.hoisted(() => ({ wakeActivationTask: vi.fn().mockResolvedValue("REMINDED") }));
+vi.mock("../services/sage-activation.js", () => activation);
 
 const tasks = await import("../services/sage-tasks.js");
 const { createSageTask, clampFollowUpDays, checkTaskOutcome, wakeTask, claimDueTasks, reminderText, runSageWakeCycle, dismissSageTask } = tasks;
@@ -207,6 +209,15 @@ describe("the wake loop", () => {
 
   it("words reminders for stale drafts", () => {
     expect(reminderText({ kind: "REVIEW_STALE_DRAFT", title: "Tool library", expected: null, offer: null } as never).title).toBe("Your proposal draft is waiting");
+  });
+});
+
+describe("a new member's activation journey", () => {
+  it("hands its checkpoints to the activation journey instead of the generic reminder", async () => {
+    const journey = task({ kind: "ACTIVATION_CHECK", subjectType: "member_activation", subjectId: "harbor:member-1", postId: null });
+    await expect(wakeTask(journey, NOW)).resolves.toBe("REMINDED");
+    expect(activation.wakeActivationTask).toHaveBeenCalledWith(journey, NOW);
+    expect(push).not.toHaveBeenCalled();
   });
 });
 

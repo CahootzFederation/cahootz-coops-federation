@@ -89,7 +89,8 @@ export const notificationCategoryTypes: Record<
     "ORDER_STATUS_UPDATE",
     "STORE_APPROVED",
   ],
-  // New-member drip (packages/trpc/src/services/onboarding-drip.ts).
+  // Alerts from the retired new-member drip. The "Getting started tips" switch now also turns off
+  // Sage's activation journey messages (packages/trpc/src/services/sage-activation.ts).
   onboarding: ["ONBOARDING_DRIP"],
 };
 export function notificationCategory(type: string): NotificationCategory {

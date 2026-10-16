@@ -49,6 +49,15 @@ describe("private check-in signal gate", () => {
   });
 });
 
+describe("check-ins", () => {
+  it("treats the activation journey's \"what got in the way?\" like a weekly check-in", async () => {
+    await handlePrivateCheckinSignal({ groupId: "g", coopId: "cahootz", userId: "u1", messageId: "m1", content: "hi", createdAt: new Date("2026-10-14T12:00:00.000Z"), summarizer: null });
+    expect(db.groupComment.findFirst.mock.calls[0]![0].where.OR).toEqual([
+      { systemKey: { startsWith: "sage-weekly:" } }, { systemKey: { startsWith: "sage-activation-ask:" } },
+    ]);
+  });
+});
+
 describe("saving a need without asking", () => {
   it("saves a non-sensitive need with its short summary, counts it toward patterns, and says so instead of asking", async () => {
     const write = summarizer({ summary: "needs rides to work on weekdays" });

@@ -10,6 +10,7 @@ import { closeCircleWindowNow } from "../services/circle-window.js";
 import { presentTrails } from "../services/sage-decision-trail.js";
 import { runSageWakeCycle } from "../services/sage-tasks.js";
 import { wakeCycleWork } from "../services/sage-wake-work.js";
+import { activationStats } from "../services/sage-activation.js";
 import { getSageAutonomyUsage } from "../services/sage-autonomy.js";
 import { notifySageComment } from "../services/sage-comment-notifications.js";
 import { enqueueSageActionExecute } from "../services/sage-dispatch.js";
@@ -74,10 +75,12 @@ export const commonsActionsAdminRouter = router({
       }),
     ]);
     const trails = await presentTrails(trailRows, { forAdmin: true }, ctx.db);
-    const [tasks, wakeCycles, alerts] = await Promise.all([
+    const [tasks, wakeCycles, alerts, activation] = await Promise.all([
       ctx.db.sageTask.findMany({ where: { coopId: input.coopId }, orderBy: { updatedAt: "desc" }, take: 50 }),
       ctx.db.sageWakeCycle.findMany({ where: { coopId: input.coopId }, orderBy: { startedAt: "desc" }, take: 10 }),
       ctx.db.sageAlert.findMany({ where: { coopId: input.coopId }, orderBy: { createdAt: "desc" }, take: 50 }),
+      // New-member activation outcomes over the last 90 days (sage-activation.ts).
+      activationStats(input.coopId, new Date(Date.now() - 90 * 86400000), ctx.db),
     ]);
     const windows = circles.length ? await ctx.db.circleAgentWindow.findMany({
       where: { groupId: { in: circles.map((circle) => circle.id) } },
@@ -136,6 +139,7 @@ export const commonsActionsAdminRouter = router({
       setting: { autoReply: setting?.autoReply ?? true, backfillPostsDone: setting?.backfillPostsDone ?? false,
         backfillCommentsDone: setting?.backfillCommentsDone ?? false },
       autonomy,
+      activation,
       circles: circles.map((circle) => {
         const open = windows.find((window) => window.groupId === circle.id && window.status === "OPEN");
         const lastClosed = windows.find((window) => window.groupId === circle.id && window.status === "CLOSED");

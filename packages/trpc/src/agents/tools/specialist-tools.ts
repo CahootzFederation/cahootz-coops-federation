@@ -19,7 +19,7 @@ const DAY_MS = 86_400_000;
 export const STEWARD_CHECK_INS_PER_REVIEW = 3;
 const STOPWORDS = new Set(["a", "an", "the", "for", "to", "of", "and", "with", "help", "need", "someone", "who", "can", "my", "our"]);
 
-function needWords(text: string): string[] {
+export function needWords(text: string): string[] {
   return [...new Set(text.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ").filter((word) => word.length > 2 && !STOPWORDS.has(word)))];
 }
 

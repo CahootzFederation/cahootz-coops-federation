@@ -25,7 +25,7 @@ export const LIMITED_RETRIES = 3;
 const DAY_MS = 86_400_000;
 const WEEK_MS = 7 * DAY_MS;
 
-export type ProactiveKind = "weekly" | "promise" | "need" | "thanks-ask" | "thanks" | "post-reminder";
+export type ProactiveKind = "weekly" | "promise" | "need" | "thanks-ask" | "thanks" | "post-reminder" | "activation" | "activation-ask";
 export type ProactiveResult = { status: "SENT"; groupId: string } | { status: "LIMITED" } | { status: "DUPLICATE" };
 
 /** The member's private conversation with Sage, if it exists yet. */

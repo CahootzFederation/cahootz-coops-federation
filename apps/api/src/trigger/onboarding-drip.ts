@@ -1,18 +1,17 @@
 import { logger, schedules } from "@trigger.dev/sdk";
-import { db } from "../../../../packages/db/index.js";
-import { runOnboardingDrip } from "../../../../packages/trpc/src/services/onboarding-drip.js";
+import { runActivationSweep } from "../../../../packages/trpc/src/services/sage-activation.js";
 
-// Hourly new-member re-engagement drip (day 1 / 3 / 7). Selection rules,
-// thresholds and copy: packages/trpc/src/services/onboarding-drip*.ts.
-// Each step is claimed in OnboardingDripSend before delivery, so an
-// overlapping or retried run can't send it twice.
+// Hourly sweep for Sage's new-member activation journey (welcome, connect, contribute), which replaced
+// the day 1/3/7 drip. The task id is unchanged so the existing schedule keeps running. Steps, copy and
+// outcome checks: packages/trpc/src/services/sage-activation.ts. Each message is idempotent by its
+// Sage system key, and each sent step is recorded in OnboardingDripSend.
 export const onboardingDripSweep = schedules.task({
   id: "onboarding-drip-sweep",
   cron: "15 * * * *",
   maxDuration: 600,
   run: async () => {
-    const summary = await runOnboardingDrip(db);
-    logger.info("Onboarding drip sweep completed", { ...summary });
+    const summary = await runActivationSweep();
+    logger.info("Sage activation sweep completed", { ...summary });
     return summary;
   },
 });

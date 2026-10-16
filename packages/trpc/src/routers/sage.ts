@@ -206,7 +206,9 @@ export const sageRouter = router({
       const view = (task: (typeof open)[number]) => ({
         id: task.id, kind: task.kind, status: task.status, title: task.title, reason: task.reason,
         expected: task.expected, offer: task.offer, postId: task.postId, subjectType: task.subjectType, subjectId: task.subjectId,
-        nextWakeAt: task.nextWakeAt.toISOString(), attempts: task.attempts, outcome: task.outcome, updatedAt: task.updatedAt.toISOString(),
+        nextWakeAt: task.nextWakeAt.toISOString(), attempts: task.attempts,
+        // Activation outcomes start with a code for the success-rate count ("[RSVP] ..."); members see the words.
+        outcome: task.outcome?.replace(/^\[[A-Z_]+\]\s*/, "") ?? null, updatedAt: task.updatedAt.toISOString(),
         // A suggestion follow-up opens the suggestion itself.
         actionId: task.subjectType === SUGGESTION_TASK_SUBJECT ? task.sourceActionId : null,
       });

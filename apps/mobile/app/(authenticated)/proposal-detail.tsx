@@ -36,6 +36,8 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { SageDecisionTrails } from '@/components/sage-decision-trail';
+import { AiBadge } from '@/components/ai-badge';
+import { SageAvatar } from '@/components/sage-avatar';
 import { LoadError } from '@/components/load-error';
 import { ConfirmSheet } from '@/components/confirm-sheet';
 import { api } from '@/lib/api';
@@ -129,14 +131,19 @@ function CommentItem({ comment }: { comment: any }) {
   const aiColor = comment.aiEvaluation ? alignmentColor[comment.aiEvaluation.alignment] : undefined;
 
   return (
-    <View className="pb-4 mb-4 border-b border-cream-200 last:border-0">
+    <View className="pb-4 mb-4 border-b border-cream-200 last:border-0" testID={comment.authorIsAi ? 'sage-proposal-comment' : undefined}>
       <View className="flex-row gap-3">
-        <View className="w-9 h-9 rounded-full bg-primary items-center justify-center flex-shrink-0">
-          <Text className="text-white text-xs font-bold">{initials}</Text>
-        </View>
+        {comment.authorIsAi ? (
+          <SageAvatar size={36} />
+        ) : (
+          <View className="w-9 h-9 rounded-full bg-primary items-center justify-center flex-shrink-0">
+            <Text className="text-white text-xs font-bold">{initials}</Text>
+          </View>
+        )}
         <View className="flex-1">
           <View className="flex-row items-center flex-wrap gap-1.5 mb-1">
             <Text className="text-charcoal-800 font-semibold text-sm">{name}</Text>
+            {comment.authorIsAi && <AiBadge />}
             <Text className="text-charcoal-400 text-xs">· {formatDate(comment.createdAt)}</Text>
           </View>
           <Text className="text-charcoal-600 text-sm leading-relaxed">{comment.content}</Text>

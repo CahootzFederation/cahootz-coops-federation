@@ -7,6 +7,7 @@ import { expireSageAlerts } from "./sage-responsibility.js";
 import { maintainSageMemory } from "./sage-memory.js";
 import { runStewardReview } from "./sage-steward.js";
 import { followUpOnSuggestions } from "./sage-suggestion-follow-up.js";
+import { summarizeProposalsNearingVote } from "./sage-pre-vote.js";
 import { askHelpersForUnansweredNeeds } from "./sage-unanswered-needs.js";
 
 type Step = { name: string; run: (coopId: string, now: Date) => Promise<unknown> };
@@ -17,6 +18,8 @@ const steps: Step[] = [
   { name: "maintain memory", run: maintainSageMemory },
   // Deterministic and capped per Commons per day; each ask counts toward the helper's weekly outreach limit.
   { name: "unanswered needs", run: askHelpersForUnansweredNeeds },
+  // One balanced summary per proposal whose vote closes within 48 hours; one model call each, within the monthly limit.
+  { name: "pre-vote summaries", run: summarizeProposalsNearingVote },
   // At most once a day per Commons (the steward checks its own last run), and only within the monthly limit.
   { name: "steward review", run: (coopId, now) => runStewardReview(coopId, now) },
 ];

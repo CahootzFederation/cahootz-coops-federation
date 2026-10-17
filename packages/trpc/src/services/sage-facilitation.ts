@@ -72,6 +72,10 @@ export interface FacilitationSignal {
   question?: string;
   /** For a proposal: who owns the draft (the member who raised the idea). */
   draftOwnerId?: string;
+  /** A sparse, deterministic social opening. Code adds it; the model cannot invent flattery. */
+  social?: { style: "compliment" | "light_humor"; opening: string };
+  /** Why code kept the social tone neutral, shown in the decision trail. */
+  socialRestricted?: string;
 }
 
 export interface FacilitationResult {
@@ -100,6 +104,49 @@ const AGREEMENT = /(?:\+1|\b(?:i agree|agreed|i'?m in|count me in|sounds good|i 
 const DECISION = /\b(?:let'?s go with|let'?s do (?:it|that|the|saturday|sunday|\w+day)|we'?ll go with|we'?re going with|(?:it'?s |that'?s )?decided|it'?s settled|settled then|that settles it|agreed then|done deal)\b/i;
 const SHARED_ACTION = /(?:\$\s?\d|\b(?:buy|rent|fund|pay for|pool|hire|split the cost|chip in|budget|costs?|purchase|lease)\b)/i;
 const CONCRETE = /\d/;
+const SOCIALLY_SENSITIVE = /\b(?:suicid|self[- ]?harm|emergency|danger|abuse|assault|harass|threat|grie(?:f|ving)|funeral|died|death|bereave|racis|discriminat|sexist|homophob|transphob|ableis|evict(?:ion|ed|ing)?|foreclos|homeless|food insecurity|can'?t afford|cannot afford|medical crisis|job loss|laid off|domestic violence|fraud|scam|retaliat|bully|moderation|moderator|ban(?:ned|ning)?|suspend|remove (?:a )?member|code of conduct)\b/i;
+
+function stableBucket(value: string, size: number): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % size;
+}
+
+/** Social warmth is deterministic and never used in sensitive or conflict-heavy discussions. */
+export function socialFacilitationFor(
+  thread: ThreadSnapshot,
+  signal: Pick<FacilitationSignal, "kind" | "anchorId">,
+): Pick<FacilitationSignal, "social" | "socialRestricted"> {
+  const text = [thread.title, thread.content, ...thread.comments.map((comment) => comment.content)].join("\n");
+  if (SOCIALLY_SENSITIVE.test(text)) {
+    return { socialRestricted: "The discussion may be sensitive or high-stakes, so Sage keeps the tone neutral." };
+  }
+  if (signal.kind === "ready_for_proposal") {
+    return { social: { style: "compliment", opening: "You’ve turned this from an idea into a concrete plan members can review." } };
+  }
+  if (signal.kind === "busy_thread") {
+    return stableBucket(`${thread.postId}:${signal.anchorId}`, 2) === 0
+      ? { social: { style: "compliment", opening: "You’ve surfaced the constraints clearly; here’s what still needs deciding." } }
+      : { social: { style: "light_humor", opening: "This thread has done a few laps; here’s the useful part." } };
+  }
+  return {};
+}
+
+function withSocialFacilitation(thread: ThreadSnapshot, signal: FacilitationSignal): FacilitationSignal {
+  if (signal.kind === "disagreement" || signal.kind === "narrow_decision") {
+    return { ...signal, socialRestricted: "The discussion involves disagreement or representation, so Sage keeps the tone neutral." };
+  }
+  return { ...signal, ...socialFacilitationFor(thread, signal) };
+}
+
+/** Adds code-approved social warmth once; model-written jokes or compliments are not trusted. */
+export function applySocialFacilitation(text: string, signal: FacilitationSignal | undefined): string {
+  if (!signal?.social || text.startsWith(signal.social.opening)) return text;
+  return `${signal.social.opening}\n\n${text}`;
+}
 
 function firstSentenceMatching(text: string, test: (sentence: string) => boolean): string | null {
   const sentences = text.split(/(?<=[?.!])\s+|\n+/).map((sentence) => sentence.trim()).filter(Boolean);
@@ -179,10 +226,10 @@ export function detectFacilitation(thread: ThreadSnapshot, now = new Date()): Fa
   // A deferral schedules a follow-up rather than a comment, so the comment cooldown doesn't stop it.
   if (isDeferral(newest.content)) {
     const days = revisitDays(newest.content, now);
-    return { signal: {
+    return { signal: withSocialFacilitation(thread, {
       kind: "deferral", template: null, anchorId: newest.id, revisitInDays: days,
       reason: `A member put the discussion off ("${clip(newest.content, 120)}"), so Sage brings it back in ${days} day${days === 1 ? "" : "s"} instead of commenting now.`,
-    } };
+    }) };
   }
   if (lastSageAt && now.getTime() - lastSageAt.getTime() < FACILITATION_COOLDOWN_HOURS * HOUR_MS) {
     const hours = Math.max(1, Math.round((now.getTime() - lastSageAt.getTime()) / HOUR_MS));
@@ -194,47 +241,47 @@ export function detectFacilitation(thread: ThreadSnapshot, now = new Date()): Fa
 
   const unanswered = unansweredQuestion(turns);
   if (unanswered) {
-    return { signal: {
+    return { signal: withSocialFacilitation(thread, {
       kind: "unanswered_question", template: "missing-piece", anchorId: unanswered.turn.id, question: unanswered.question,
       reason: `A factual question is still open: "${clip(unanswered.question, 160)}". Later comments show nobody has answered it.`,
-    } };
+    }) };
   }
 
   const supporters = new Set(turns.filter((turn) => !turn.isPost && AGREEMENT.test(turn.content)).map((turn) => turn.authorId));
   const allText = turns.map((turn) => turn.content).join("\n");
   if (SHARED_ACTION.test(`${thread.title}\n${thread.content}`) || SHARED_ACTION.test(allText)) supporters.add(thread.postAuthorId);
   if (supporters.size >= PROPOSAL_SUPPORTERS && CONCRETE.test(`${thread.content}\n${allText}`) && SHARED_ACTION.test(`${thread.title}\n${thread.content}\n${allText}`)) {
-    return { signal: {
+    return { signal: withSocialFacilitation(thread, {
       kind: "ready_for_proposal", template: null, anchorId: newest.id, draftOwnerId: thread.postAuthorId,
       reason: `${supporters.size} members back a shared plan with concrete details, so it's ready to become a proposal draft for the member who raised it.`,
-    } };
+    }) };
   }
 
   // A real back-and-forth, not one reply: at least three comments (the post doesn't count).
   const pushback = new Set(turns.filter((turn) => DISAGREEMENT.test(turn.content)).map((turn) => turn.authorId));
   const comments = turns.filter((turn) => !turn.isPost).length;
   if (pushback.size >= 2 && comments >= DISAGREEMENT_MIN_COMMENTS) {
-    return { signal: {
+    return { signal: withSocialFacilitation(thread, {
       kind: "disagreement", template: "trade-off", anchorId: newest.id,
       reason: `${pushback.size} members are pushing back on each other's options across ${comments} comments, with no decision.`,
-    } };
+    }) };
   }
 
   const everyone = distinct([thread.postAuthorId, ...thread.comments.filter((entry) => !entry.isSage).map((entry) => entry.authorId)]);
   const totalMemberTurns = 1 + thread.comments.filter((entry) => !entry.isSage).length;
   if (DECISION.test(newest.content) && everyone <= 2 && totalMemberTurns >= 4) {
-    return { signal: {
+    return { signal: withSocialFacilitation(thread, {
       kind: "narrow_decision", template: "before-we-decide", anchorId: newest.id,
       reason: `Only ${everyone} member${everyone === 1 ? "" : "s"} have settled this across ${totalMemberTurns} posts and comments; others it affects haven't weighed in.`,
-    } };
+    }) };
   }
 
   const settled = turns.slice(-2).some((turn) => DECISION.test(turn.content));
   if (!settled && (memberTurns >= BUSY_THREAD_COMMENTS || (participants >= BUSY_THREAD_PARTICIPANTS && memberTurns >= BUSY_THREAD_PARTICIPANTS + 1))) {
-    return { signal: {
+    return { signal: withSocialFacilitation(thread, {
       kind: "busy_thread", template: "where-we-are", anchorId: newest.id,
       reason: `${memberTurns} comments from ${participants} members since Sage last spoke, and no decision yet.`,
-    } };
+    }) };
   }
   return { signal: null };
 }
@@ -249,15 +296,17 @@ export function revisitSignal(anchorId: string, deferredText: string): Facilitat
 
 /** What the model is told for a thread code flagged. The kind decides the help; the template is a fit, not a must. */
 export function facilitationInstruction(signal: FacilitationSignal): string {
-  switch (signal.kind) {
+  const instruction = (() => { switch (signal.kind) {
     case "deferral": return "The group put this off for now. Don't comment; Sage will bring it back later.";
     case "unanswered_question": return `Answer this open question if a source you can check has the fact: "${signal.question}". If nothing you can check answers it, use the Missing piece template: name the fact and who could supply it (a role, not a name).`;
     case "ready_for_proposal": return "Members agree on a shared plan with details. Include MAKE_PROPOSAL drafted from what members said (the draft goes to the member who raised it). A short Where we are reply may accompany it.";
     case "disagreement": return "Members disagree. Use the Trade-off template: lay out the options evenly, what each costs or risks, and the one fact that would decide it. Don't take a side.";
-    case "narrow_decision": return "A few people are settling something that affects others who haven't spoken. Use the Before we decide template: name the affected groups (never individuals) and ask them.";
+    case "narrow_decision": return "A few people are settling something that may affect others who haven't spoken. Use the Before we decide template. Name an affected group only when the thread or a checked source explicitly supports it; otherwise say other affected members and ask who else is affected.";
     case "busy_thread": return "The thread is long with no decision. Use the Where we are template: what's agreed, what's still open, and the question that would settle it.";
     case "revisit": return "The group said it would come back to this, and it's time. Use the Where we are template to summarize where it was left and ask whether the group is ready to decide.";
-  }
+  } })();
+  if (signal.social) return `${instruction} Code will add one approved ${signal.social.style.replace("_", " ")} opening; don't add another joke, compliment, greeting, or flourish.`;
+  return `${instruction} Keep the tone direct and neutral; don't add a joke, compliment, greeting, or flourish.`;
 }
 
 function clip(text: string, max: number): string {

@@ -134,6 +134,57 @@ test("Sage lays out a disagreement in a circle, then brings the thread back afte
   }
 });
 
+test("Sage adds a little warmth when it helps a harmless busy discussion", { tag: "@sage" }, async ({ browser }) => {
+  test.setTimeout(360_000);
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const userA = await newSignedInPage(browser, USER_A_EMAIL);
+  const userB = await newSignedInPage(browser, USER_B_EMAIL);
+  let postId: string | undefined;
+  let circleId: string | undefined;
+  let tokenA: string | undefined;
+  let tokenB: string | undefined;
+
+  try {
+    tokenA = await sessionTokenFor(userA.page);
+    tokenB = await sessionTokenFor(userB.page);
+    const { group } = await trpcPost("groups.create", tokenA, { name: `E2E Garden circle ${runId}`, privacy: "invite-only" });
+    circleId = group.id as string;
+    await trpcPost("groups.joinByCode", tokenB, { inviteCode: group.inviteCode });
+    const created = await trpcPost("commons.createPost", tokenA, {
+      coopId: COOP_ID, circleId, title: `E2E ${runId} garden workday`,
+      content: `E2E ${runId}: Find a two-hour window for the garden workday.`, tag: "Idea",
+    });
+    postId = (created.post?.id ?? created.id) as string;
+    const url = `/${COOP_ID}/posts/${postId}`;
+    await userA.page.goto(url);
+    await userB.page.goto(url);
+
+    for (const [member, text] of [
+      [userA, `E2E ${runId}: Saturday morning works for my schedule.`],
+      [userB, `E2E ${runId}: Saturday morning overlaps with market setup.`],
+      [userA, `E2E ${runId}: Sunday afternoon leaves enough daylight.`],
+      [userB, `E2E ${runId}: Sunday afternoon overlaps with the pantry shift.`],
+      [userA, `E2E ${runId}: The hardware co-op can lend work lights.`],
+      [userB, `E2E ${runId}: The garden gate closes at six.`],
+      [userA, `E2E ${runId}: We still need a two-hour window that works.`],
+    ] as const) await comment(member.page, text);
+
+    await expect.poll(() => fixture("claims", postId!).claims, { timeout: 60_000 }).toEqual([expect.stringMatching(/^busy_thread:/)]);
+    await expectSageToSpeak(userB.page, userA.page, postId, url, 1);
+
+    await expect(shown(userB.page, /You’ve surfaced the constraints clearly; here’s what still needs deciding\.|This thread has done a few laps; here’s the useful part\./)).toBeVisible();
+  } finally {
+    if (postId) fixture("cleanup", postId, "-");
+    if (postId && tokenA) await trpcPost("commons.deletePost", tokenA, { postId }).catch(() => {});
+    if (circleId) {
+      if (tokenB) await trpcPost("groups.leave", tokenB, { groupId: circleId }).catch(() => {});
+      if (tokenA) await trpcPost("groups.leave", tokenA, { groupId: circleId }).catch(() => {});
+    }
+    await userA.context.close();
+    await userB.context.close();
+  }
+});
+
 test("Before a vote closes, Sage posts one balanced summary of the discussion", { tag: "@sage" }, async ({ browser }) => {
   test.setTimeout(300_000);
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

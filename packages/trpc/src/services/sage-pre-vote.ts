@@ -43,7 +43,7 @@ const PreVoteOutputZ = z.object({
   agreed: z.array(PointZ).max(4),
   debated: z.array(PointZ).max(4),
   missingFacts: z.array(PointZ).max(4),
-  unheardGroups: z.array(z.string()).max(3),
+  unheardGroups: z.array(PointZ).max(3),
   confidence: z.number().min(0).max(1),
 });
 export type PreVoteOutput = z.infer<typeof PreVoteOutputZ>;
@@ -60,7 +60,7 @@ export function createPreVoteAgent() {
       "agreed: points most commenters share. debated: points members disagree on, stating each side evenly in one sentence. missingFacts: facts the vote depends on that nobody has supplied (a cost, a date, who does the work). Each point is one plain sentence under 140 characters, about what members said, never naming anyone.",
       "Every point needs quote: an exact, continuous excerpt (at least 12 characters) from one comment or from the proposal that the point rests on. Code drops any point whose quote isn't there.",
       "Don't state rules, thresholds, quorum or what the charter requires; only what members said.",
-      "unheardGroups: up to 3 groups of members the proposal affects who don't appear in the discussion (for example \"members who don't drive\", \"parents with young kids\", \"people who'd do the work\"). Groups only, never a person's name.",
+      "unheardGroups: up to 3 affected perspectives the proposal or discussion explicitly names but has not addressed. Each needs point (the group perspective) and quote: an exact excerpt showing the proposal affects that group. Never infer identity or claim to know who a commenter represents. If the source does not name an affected group, leave this empty.",
       "Leave a list empty rather than inventing points. confidence is how sure you are the summary is accurate and balanced.",
     ].join("\n"),
     outputType: PreVoteOutputZ,
@@ -127,11 +127,7 @@ export function checkPreVotePoints(output: PreVoteOutput, sources: PreVoteSource
   const agreed = keep("Agreed", output.agreed);
   const debated = keep("Still debated", output.debated);
   const missingFacts = keep("Missing", output.missingFacts);
-  const unheardGroups = output.unheardGroups.map((group) => clip(group, 60)).filter((group) => {
-    const why = !group ? "empty" : namesSomeone(group, sources.names) ? "names a person" : VOTE_ADVICE.test(group) ? "says how to vote" : null;
-    if (why) dropped.push(`Not heard from: "${group}" (${why})`);
-    return !why;
-  }).slice(0, MAX_POINTS);
+  const unheardGroups = keep("Affected perspective not addressed", output.unheardGroups);
   return { agreed, debated, missingFacts, unheardGroups, quotes, dropped };
 }
 
@@ -154,7 +150,7 @@ export function renderPreVoteSummary(title: string, votingEndsAt: Date, summary:
     ...section("Agreed:", summary.agreed),
     ...section("Still debated:", summary.debated),
     ...section("Facts we don't have yet:", summary.missingFacts),
-    ...(summary.unheardGroups.length ? [`Not heard from yet: ${summary.unheardGroups.join("; ")}. If that's you, add your view before voting closes.`] : []),
+    ...(summary.unheardGroups.length ? [`Affected perspectives the discussion hasn't addressed yet: ${summary.unheardGroups.join("; ")}. If this affects you, add your view before voting closes.`] : []),
   ].join("\n").trim();
   const text = build(80);
   return text.length <= SAGE_OUTPUT_MAX_CHARS ? text : build(40).slice(0, SAGE_OUTPUT_MAX_CHARS);

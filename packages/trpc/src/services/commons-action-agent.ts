@@ -22,7 +22,7 @@ import {
 } from "./sage-grounding.js";
 import { buildCommentTools } from "../agents/tools/comment-tools.js";
 import {
-  claimFacilitation, detectFacilitation, facilitationInstruction, loadThread, revisitSignal, scheduleThreadRevisit, threadUpTo,
+  applySocialFacilitation, claimFacilitation, detectFacilitation, facilitationInstruction, loadThread, revisitSignal, scheduleThreadRevisit, threadUpTo,
   type FacilitationSignal,
 } from "./sage-facilitation.js";
 import { payloadHash } from "./sage-payload-hash.js";
@@ -454,6 +454,13 @@ async function saveActions(item: SourceItem, actions: ActionOutput[], config: Co
   const facilitation = item.facilitation;
   if (facilitation) trail.step("EVIDENCE", `Code flagged the thread: ${FACILITATION_LABEL[facilitation.kind]}`, { detail: facilitation.reason });
   else if (item.facilitationSkipped) trail.step("EVIDENCE", "Didn't step into the thread", { detail: item.facilitationSkipped });
+  if (facilitation?.social) {
+    trail.step("CONSIDERED", `Used one brief ${facilitation.social.style.replace("_", " ")} opening`, {
+      outcome: "INFO", detail: "Code selected contribution-focused social language; the model did not choose the joke or compliment.",
+    });
+  } else if (facilitation?.socialRestricted) {
+    trail.policy("Social tone stays neutral in sensitive or conflict-heavy discussion", true, facilitation.socialRestricted);
+  }
   const proposed = actions.filter((action) => action.type !== "NO_ACTION");
   let drafted = false;
   let helped = false;
@@ -648,7 +655,7 @@ export function charterOnlyEvidenceRule(): string {
 }
 
 /** Items code flagged as a thread that needs Sage (see withFacilitation and sage-facilitation.ts). */
-export const FACILITATION_ITEM_RULE = "An item with facilitate is a thread that code found needs Sage's help as a facilitator (an unanswered question, a disagreement, a long thread with no decision, a decision few have weighed in on, or a plan ready for a proposal). Follow its instruction for that item; that's the help worth giving. Use only what members said and what you can check, never take a side between members, name groups rather than people, and never say how anyone should vote.";
+export const FACILITATION_ITEM_RULE = "An item with facilitate is a thread that code found needs Sage's help as a facilitator (an unanswered question, a disagreement, a long thread with no decision, a decision few have weighed in on, or a plan ready for a proposal). Follow its instruction for that item; that's the help worth giving. Use only what members said and what you can check, never take a side between members, name a group only when the thread or a checked source supports it, and never say how anyone should vote. Code, not the model, decides whether a sparse social opening is safe; never invent another joke, compliment, greeting, or flourish.";
 
 /** Items code marked as answering Sage's earlier ask (see withFollowThrough). */
 export const FOLLOW_THROUGH_ITEM_RULE = "An item with answersSage: true is the member giving the details Sage asked them for in the thread. Include MAKE_PROPOSAL drafted from those details. Don't reply asking for more; code holds such a reply.";
@@ -731,7 +738,15 @@ async function analyzeBatch(items: SourceItem[], config: CoopConfig, autoReply: 
     await recordAgentResultCost({ coopId: config.coopId, feature: "commons-action-agent", model: COMMONS_ACTION_MODEL, result }).catch(console.error);
     const output = BatchOutputZ.parse(result.finalOutput);
     // A reply that picked a template is rendered from its parts, so the format is exact.
-    const byId = new Map(output.items.map((entry) => [entry.id, entry.actions.map((action) => ({ ...action, draftText: renderTemplatedReply(action).text }))]));
+    const itemById = new Map(claimed.map((claim) => [claim.item.sourceId, claim.item]));
+    const byId = new Map(output.items.map((entry) => [entry.id, entry.actions.map((action) => {
+      const rendered = renderTemplatedReply(action).text;
+      const item = itemById.get(entry.id);
+      return {
+        ...action,
+        draftText: REPLY_ACTIONS.has(action.type) ? applySocialFacilitation(rendered, item?.facilitation) : rendered,
+      };
+    })]));
     for (const claim of claimed) {
       const actions = byId.get(claim.item.sourceId) ?? [];
       const trail = itemTrail(claim.item, trigger).step("EVIDENCE",

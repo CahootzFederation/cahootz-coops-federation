@@ -52,7 +52,7 @@ test("Sage's rhythm posts follow each member's settings, and a muted category le
     await naming.click();
     await expect(naming).toHaveAttribute("aria-checked", "true");
     const fridayNotify = page.getByRole("radio", { name: "Friday appreciation: Notify me" });
-    await expect(page.getByRole("radio", { name: "Friday appreciation: In feed" })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "Friday appreciation: Show quietly" })).toBeChecked();
     await fridayNotify.click();
     await expect(fridayNotify).toBeChecked();
     const midweekNotify = page.getByRole("radio", { name: "Midweek open requests: Notify me" });

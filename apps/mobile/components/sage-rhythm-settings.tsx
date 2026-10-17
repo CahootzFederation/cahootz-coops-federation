@@ -16,14 +16,14 @@ const CATEGORIES: Array<{ key: SageRhythmCategory; title: string; body: string }
 
 const MODES: Array<{ value: SageRhythmMode; label: string }> = [
   { value: 'NOTIFY', label: 'Notify me' },
-  { value: 'FEED', label: 'In feed' },
+  { value: 'FEED', label: 'Show quietly' },
   { value: 'MUTED', label: 'Mute' },
 ];
 
 const NAMING_LABEL = "Name me in Sage's Friday appreciation";
 
 /**
- * Sage's regular community rhythm. In feed (default) shows the item with no alert; Notify me adds
+ * Sage's regular community rhythm. Show quietly (default) shows the item with no alert; Notify me adds
  * an alert and push; Mute hides that kind of item and never alerts you.
  */
 export function SageRhythmSettings({ sessionToken }: { sessionToken: string }) {

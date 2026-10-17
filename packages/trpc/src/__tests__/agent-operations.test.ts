@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getAgentOperationalSnapshot } from "../services/agent-operations.js";
+import { getAgentOperationalSnapshot, isPrimaryProductionDeployment } from "../services/agent-operations.js";
 
 const mocks = vi.hoisted(() => ({
   platformConfigFindUnique: vi.fn(),
@@ -165,5 +165,19 @@ describe("agent operational health", () => {
       state: "FAILED",
       reason: "No completed daily outreach sweep has been recorded.",
     });
+  });
+});
+
+describe("primary production deployment", () => {
+  it("runs only in Railway's production environment, not PR or dev copies", () => {
+    expect(isPrimaryProductionDeployment({ NODE_ENV: "production", RAILWAY_ENVIRONMENT_NAME: "production" })).toBe(true);
+    expect(isPrimaryProductionDeployment({ NODE_ENV: "production", RAILWAY_ENVIRONMENT_NAME: "cahootz-coops-federation-pr-260" })).toBe(false);
+    expect(isPrimaryProductionDeployment({ NODE_ENV: "production", RAILWAY_ENVIRONMENT_NAME: "dev" })).toBe(false);
+  });
+
+  it("keeps working outside Railway and stays off in development", () => {
+    expect(isPrimaryProductionDeployment({ NODE_ENV: "production" })).toBe(true);
+    expect(isPrimaryProductionDeployment({ NODE_ENV: "development" })).toBe(false);
+    expect(isPrimaryProductionDeployment({ NODE_ENV: "development", RAILWAY_ENVIRONMENT_NAME: "production" })).toBe(false);
   });
 });

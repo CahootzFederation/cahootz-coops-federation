@@ -12,6 +12,7 @@ import { getHealthStatus, startHealthMonitoring } from "./health-monitor.js";
 import { startLocalSageWakeLoop } from "@repo/trpc/services/sage-wake";
 import { sendAgentOperationalAlert } from "@repo/trpc/services/slack-notification-service";
 import { startAgentOperationsMonitor, stopAgentOperationsMonitor } from "./agent-operations-monitor.js";
+import { isPrimaryProductionDeployment } from "@repo/trpc/services/agent-operations";
 
 const app: Application = express();
 
@@ -435,7 +436,8 @@ const gracefulShutdown = async (signal: string) => {
   console.log(`\n⚠️  Received ${signal}, starting graceful shutdown...`);
   stopAgentOperationsMonitor();
 
-  if (env.NODE_ENV === 'production') {
+  // PR and dev copies shut down on every redeploy; only real production should alert.
+  if (isPrimaryProductionDeployment()) {
     await sendAgentOperationalAlert({
       checkedAt: new Date(),
       environment: env.NODE_ENV,

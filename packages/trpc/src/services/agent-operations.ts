@@ -51,6 +51,19 @@ function newsletterSchedule(
   };
 }
 
+/**
+ * True only for the real production API. Railway copies production settings into
+ * every PR and dev environment, each with its own database, so NODE_ENV alone would
+ * let those copies post "missing sweep" and shutdown alerts to the shared channel.
+ */
+export function isPrimaryProductionDeployment(
+  vars: Record<string, string | undefined> = process.env,
+): boolean {
+  if (vars.NODE_ENV !== "production") return false;
+  const railwayEnvironment = vars.RAILWAY_ENVIRONMENT_NAME?.trim();
+  return !railwayEnvironment || railwayEnvironment === "production";
+}
+
 export interface AgentOperationalSnapshot {
   checkedAt: Date;
   issues: AgentOperationalIssue[];

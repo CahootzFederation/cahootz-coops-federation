@@ -88,7 +88,7 @@ export async function sendAgentOperationalAlert(params: {
     attachments: [{
       color: "danger",
       fields: [
-        { title: "Environment", value: params.environment ?? process.env.NODE_ENV ?? "unknown", short: true },
+        { title: "Environment", value: process.env.RAILWAY_ENVIRONMENT_NAME ?? params.environment ?? process.env.NODE_ENV ?? "unknown", short: true },
         { title: "Issue count", value: String(params.issues.length), short: true },
         { title: "Sent by", value: params.source ?? "unknown", short: true },
         { title: "Database", value: safeSlackText(databaseLabel(), 200), short: true },

@@ -11,6 +11,7 @@ const CATEGORIES: Array<{ key: SageRhythmCategory; title: string; body: string }
   { key: 'midweek_open_work', title: 'Midweek open requests', body: 'Requests nobody has answered yet and conversations waiting on a next step. Never says who asked.' },
   { key: 'friday_appreciation', title: 'Friday appreciation', body: 'What members did for each other this week, counted from records in the app, and progress on our goals.' },
   { key: 'monthly_review', title: 'Monthly review', body: 'What improved, what stalled and what could stop, compared with the month before.' },
+  { key: 'before_decisions', title: 'Before decisions', body: 'A balanced summary of agreement, disagreement, missing facts and groups not yet heard before a vote closes.' },
 ];
 
 const MODES: Array<{ value: SageRhythmMode; label: string }> = [
@@ -22,8 +23,8 @@ const MODES: Array<{ value: SageRhythmMode; label: string }> = [
 const NAMING_LABEL = "Name me in Sage's Friday appreciation";
 
 /**
- * Sage's regular posts in each Commons feed. In feed (default) shows the post with no alert; Notify me adds
- * an alert and push; Mute hides that kind of post from your feeds and never alerts you.
+ * Sage's regular community rhythm. In feed (default) shows the item with no alert; Notify me adds
+ * an alert and push; Mute hides that kind of item and never alerts you.
  */
 export function SageRhythmSettings({ sessionToken }: { sessionToken: string }) {
   const client = useQueryClient();
@@ -52,10 +53,9 @@ export function SageRhythmSettings({ sessionToken }: { sessionToken: string }) {
   return (
     <View style={{ borderRadius: 14, borderWidth: 1, borderColor: '#E7E5E4', backgroundColor: '#FFFFFF', padding: 16, gap: 14 }}>
       <View style={{ gap: 4 }}>
-        <Text accessibilityRole="header" style={{ fontWeight: '800', color: '#1C1917' }}>Sage&apos;s regular posts</Text>
+        <Text accessibilityRole="header" style={{ fontWeight: '800', color: '#1C1917' }}>Sage&apos;s community rhythm</Text>
         <Text style={{ fontSize: 13, color: '#57534E' }}>
-          Sage posts these in your commons feed on a set rhythm. Choose an alert, the feed only, or mute each one. Muting
-          hides that kind of post from your feeds and stops its alerts.
+          Choose an alert, see the item without an alert, or mute each ritual. Muting hides that kind of item and stops its alerts.
         </Text>
       </View>
 

@@ -10,6 +10,7 @@ const db = vi.hoisted(() => {
     coopConfig: { findFirst: vi.fn() },
     commonsAction: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     commonsActionAudit: { create: vi.fn() },
+    sageRhythmPreference: { findMany: vi.fn() },
     sageDecisionTrail: { create: vi.fn() },
   };
   client.$transaction = vi.fn((fn: (tx: unknown) => unknown) => fn(client));
@@ -74,6 +75,7 @@ beforeEach(() => {
   db.commonsAction.findUnique.mockImplementation(async () => ({ id: "action-1", type: "SUMMARIZE_DISCUSSION", status: "PENDING", sourceId: "prop-1",
     draftText: db.commonsAction.create.mock.calls.at(-1)?.[0].data.draftText ?? "summary", payload: {} }));
   db.commonsAction.update.mockResolvedValue({});
+  db.sageRhythmPreference.findMany.mockResolvedValue([]);
   db.sageDecisionTrail.create.mockResolvedValue({ id: "trail-1" });
 });
 
@@ -150,6 +152,7 @@ describe("posting the summary before the vote closes", () => {
       proposalId: "prop-1", authorWallet: SAGE_PROPOSAL_COMMENT_WALLET, authorName: "Sage", content: expect.stringMatching(/I'm not taking a side/),
     }) });
     expect(db.commonsAction.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "PUBLISHED", replySourceKey: "proposal_pre_vote:prop-1" }) }));
+    expect(db.sageRhythmPreference.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ category: "before_decisions", mode: "NOTIFY" }) }));
     const trail = db.sageDecisionTrail.create.mock.calls[0]![0].data;
     expect(trail).toMatchObject({ agent: "sage-pre-vote", proposalId: "prop-1", visibility: "COMMONS_MEMBERS" });
     expect(trail.steps).toEqual(expect.arrayContaining([expect.objectContaining({ label: "Posted the summary on the proposal's discussion", outcome: "PASS" })]));

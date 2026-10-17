@@ -14,7 +14,7 @@
 import { db } from "../../../packages/db/index.js";
 import { COMMONS_COOP_ID } from "../../../packages/trpc/src/lib/commons.js";
 import {
-  buildRhythm, isRhythmCategory, publishRhythmPost, RHYTHM_NOTIFICATION_TYPE, RHYTHM_SOURCE,
+  buildRhythm, isScheduledRhythmCategory, publishRhythmPost, RHYTHM_NOTIFICATION_TYPE, RHYTHM_SOURCE,
 } from "../../../packages/trpc/src/services/sage-community-rhythm.js";
 
 const HOUR_MS = 3_600_000;
@@ -87,7 +87,7 @@ async function seed(runId: string, emailA: string, emailB: string) {
 }
 
 async function publish(runId: string, category: string, n: string, emailA: string) {
-  if (!isRhythmCategory(category)) throw new Error(`Unknown rhythm category: ${category}`);
+  if (!isScheduledRhythmCategory(category)) throw new Error(`Unknown scheduled rhythm category: ${category}`);
   const a = await member(emailA);
   const periodKey = `e2e-${runId}-${n}`;
   const need = await db.commonsPost.findFirst({ where: { coopId: COMMONS_COOP_ID, title: needTitle(runId) }, select: { id: true } });

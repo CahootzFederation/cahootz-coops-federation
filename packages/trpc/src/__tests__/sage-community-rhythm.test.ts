@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
-  commonsAction: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+  commonsAction: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
   commonsActionAudit: { create: vi.fn(), findMany: vi.fn() },
   commonsPost: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
   commonsComment: { findMany: vi.fn(), findFirst: vi.fn() },
@@ -249,7 +249,7 @@ describe("member settings", () => {
   it("defaults every category to the feed with no alert", async () => {
     db.sageRhythmPreference.findMany.mockResolvedValue([{ category: "friday_appreciation", mode: "NOTIFY" }]);
     expect(await rhythm.rhythmModesFor("u1")).toEqual({
-      weekly_priorities: "FEED", midweek_open_work: "FEED", friday_appreciation: "NOTIFY", monthly_review: "FEED",
+      weekly_priorities: "FEED", midweek_open_work: "FEED", friday_appreciation: "NOTIFY", monthly_review: "FEED", before_decisions: "FEED",
     });
   });
 });

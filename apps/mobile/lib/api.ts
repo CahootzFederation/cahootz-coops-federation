@@ -804,7 +804,7 @@ export interface SageAlertView {
   createdAt: string;
 }
 
-export type SageRhythmCategory = 'weekly_priorities' | 'midweek_open_work' | 'friday_appreciation' | 'monthly_review';
+export type SageRhythmCategory = 'weekly_priorities' | 'midweek_open_work' | 'friday_appreciation' | 'monthly_review' | 'before_decisions';
 /** NOTIFY: feed post plus an alert. FEED (default): feed post only. MUTED: hidden from your feeds, no alert. */
 export type SageRhythmMode = 'NOTIFY' | 'FEED' | 'MUTED';
 export interface SageRhythmSettings {

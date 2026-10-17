@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
+import { withExclusiveAccountSetting } from "./support/exclusive";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 
@@ -26,14 +27,14 @@ function generalFeed(coopId: string) {
 
 async function openSageSettings(page: Page) {
   await page.goto("/sage-settings");
-  await expect(shown(page, "Sage's regular posts")).toBeVisible({ timeout: 60_000 });
+  await expect(shown(page, "Sage's community rhythm")).toBeVisible({ timeout: 60_000 });
 }
 
 // Sage's weekly rhythm: templated posts built from records, one per category per period. Member A opts in
 // to being named and to alerts for the Friday appreciation and the midweek list, sees both posts and alerts,
 // then mutes the midweek list: it disappears from A's feed and stops alerting A, while member B
 // (separate context, default settings) still sees it. The midweek list names the request, never who asked.
-test("Sage's rhythm posts follow each member's settings, and a muted category leaves only that member's feed", async ({ browser }) => {
+test("Sage's rhythm posts follow each member's settings, and a muted category leaves only that member's feed", async ({ browser }) => withExclusiveAccountSetting("sage-rhythm-settings", async () => {
   test.setTimeout(300_000);
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const memberA = await newSignedInPage(browser, USER_A_EMAIL);
@@ -113,4 +114,4 @@ test("Sage's rhythm posts follow each member's settings, and a muted category le
     await memberA.context.close();
     await memberB.context.close();
   }
-});
+}));

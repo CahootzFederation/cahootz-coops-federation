@@ -20,10 +20,12 @@ import { checkSageOutput, cleanseUntrustedText } from "./untrusted-input.js";
  * is ever named. A helper, host or contributor is named only if they turned on "Name me in Sage's
  * appreciation"; everyone else is a count.
  *
- * Each category is a member setting (SageRhythmPreference): FEED (default) shows the post with no alert,
- * NOTIFY adds an inbox alert and push, MUTED hides the category from that member's feeds and sends nothing.
+ * Each category is a member setting (SageRhythmPreference): FEED (default) shows the item with no alert,
+ * NOTIFY adds an inbox alert and push, MUTED hides the item for that member and sends nothing.
  */
-export const RHYTHM_CATEGORIES = ["weekly_priorities", "midweek_open_work", "friday_appreciation", "monthly_review"] as const;
+export const SCHEDULED_RHYTHM_CATEGORIES = ["weekly_priorities", "midweek_open_work", "friday_appreciation", "monthly_review"] as const;
+export type ScheduledRhythmCategory = (typeof SCHEDULED_RHYTHM_CATEGORIES)[number];
+export const RHYTHM_CATEGORIES = [...SCHEDULED_RHYTHM_CATEGORIES, "before_decisions"] as const;
 export type RhythmCategory = (typeof RHYTHM_CATEGORIES)[number];
 export const RHYTHM_MODES = ["NOTIFY", "FEED", "MUTED"] as const;
 export type RhythmMode = (typeof RHYTHM_MODES)[number];
@@ -44,6 +46,7 @@ export const RHYTHM_LABELS: Record<RhythmCategory, { title: string; short: strin
   midweek_open_work: { title: "Midweek open requests", short: "midweek open requests" },
   friday_appreciation: { title: "Friday appreciation", short: "Friday appreciation" },
   monthly_review: { title: "Monthly review", short: "monthly review" },
+  before_decisions: { title: "Before decisions", short: "before-decision summaries" },
 };
 
 export function rhythmClassification(category: RhythmCategory) {
@@ -52,6 +55,10 @@ export function rhythmClassification(category: RhythmCategory) {
 
 export function isRhythmCategory(value: unknown): value is RhythmCategory {
   return typeof value === "string" && (RHYTHM_CATEGORIES as readonly string[]).includes(value);
+}
+
+export function isScheduledRhythmCategory(value: unknown): value is ScheduledRhythmCategory {
+  return typeof value === "string" && (SCHEDULED_RHYTHM_CATEGORIES as readonly string[]).includes(value);
 }
 
 // ── Schedule ────────────────────────────────────────────────────────────────
@@ -75,12 +82,12 @@ function monthKey(year: number, month: number) {
  * Which rituals are due now (UTC). Each has a two-day window so a missed cycle catches up the next day;
  * the period key keeps it to one post per window. The monthly review runs on days 1–3 about the month before.
  */
-export function dueRhythms(now: Date): Array<{ category: RhythmCategory; periodKey: string }> {
+export function dueRhythms(now: Date): Array<{ category: ScheduledRhythmCategory; periodKey: string }> {
   const weekday = now.getUTCDay();
   const hour = now.getUTCHours();
-  const due: Array<{ category: RhythmCategory; periodKey: string }> = [];
+  const due: Array<{ category: ScheduledRhythmCategory; periodKey: string }> = [];
   const week = isoWeekKey(now);
-  const window = (first: number, category: RhythmCategory) => {
+  const window = (first: number, category: ScheduledRhythmCategory) => {
     if ((weekday === first && hour >= RHYTHM_POST_HOUR_UTC) || weekday === first + 1) due.push({ category, periodKey: week });
   };
   window(1, "weekly_priorities");
@@ -150,7 +157,7 @@ export function prioritiesText(input: PrioritiesInput): RhythmText | null {
   const picked = [...firsts, ...rest].slice(0, 3);
   if (!picked.length) return null;
   const title = picked.length === 3 ? "This week's three priorities" : "This week's priorities";
-  return fit(title, [], picked.map((item, index) => `${index + 1}. ${item}`), ["", "Which one will you take on? Say so in the comments."]);
+  return fit(title, [], picked.map((item, index) => `${index + 1}. ${item}`), ["", "Choose one if it fits, invite a partner, and share your first step in the comments."]);
 }
 
 export interface OpenWorkInput {
@@ -169,7 +176,7 @@ export function openWorkText(input: OpenWorkInput): RhythmText | null {
     ...(requests.length && stalled.length ? [""] : []),
     ...(stalled.length ? ["These conversations are waiting on a next step:", ...stalled.map((title) => `• '${title}'`)] : []),
   ];
-  return fit("Still waiting for a hand", [], lines, ["", "If you can help with one, reply on the post. Anyone can pick one up."]);
+  return fit("Still waiting for a hand", [], lines, ["", "Pick one up, or—with their permission—connect someone who can help. Reply on the original post so the requester gets an answer."]);
 }
 
 export interface ActivityCounts {
@@ -213,7 +220,7 @@ export function appreciationText(counts: ActivityCounts, goals: GoalMovement[], 
   return fit("This week's appreciation", ["Here's what members did for each other this week, counted from records in the app:"], [
     ...lines,
     ...(goalLines.length ? ["", "Toward our goals:", ...goalLines] : []),
-  ], ["", thanks, "Members are named only if they turn it on in Sage settings."]);
+  ], ["", thanks, "Reply with a specific thank-you or a contribution the records missed.", "Members are named only if they turn it on in Sage settings."]);
 }
 
 export interface StopCandidate { text: string }
@@ -231,7 +238,7 @@ export function monthlyText(monthLabel: string, current: ActivityCounts, previou
     "", "What improved:", ...(improved.length ? improved : ["• Nothing grew this month."]),
     "", "What stalled:", ...(stalled.length ? stalled : ["• Nothing slipped this month."]),
     "", "What could stop:", ...(stopLines.length ? stopLines : ["• Nothing stands out. Reply if something isn't working."]),
-  ], ["", "What should we do differently next month? Reply here."]);
+  ], ["", "Reply with one thing to keep, change, or stop next month."]);
 }
 
 // ── Records ─────────────────────────────────────────────────────────────────
@@ -243,11 +250,13 @@ function generalFeed(coopId: string) {
 const NEED_POST = { OR: [{ tag: { in: ["Need", "Ask"] } }, { classification: "need" }] };
 
 /**
- * Hook for the discussion-facilitation work (another session owns before-decision summaries). Return true
- * when a proposal has one, and Monday's priority line points members to it. Until then there are none.
+ * When a proposal has a published before-decision summary, Monday's priority line points members to it.
  */
-export async function hasDecisionSummary(_proposalId: string): Promise<boolean> {
-  return false;
+export async function hasDecisionSummary(proposalId: string): Promise<boolean> {
+  return !!(await db.commonsAction.findFirst({
+    where: { type: "SUMMARIZE_DISCUSSION", sourceId: proposalId, status: "PUBLISHED" },
+    select: { id: true },
+  }));
 }
 
 export async function countActiveMembers(coopId: string) {
@@ -449,18 +458,22 @@ export async function gatherStopCandidates(coopId: string, from: Date, to: Date)
 
 // ── Publishing ──────────────────────────────────────────────────────────────
 
-export function rhythmSourceId(coopId: string, category: RhythmCategory, periodKey: string) {
+export function rhythmSourceId(coopId: string, category: ScheduledRhythmCategory, periodKey: string) {
   return `${coopId}:${category}:${periodKey}`;
 }
 
-function rhythmKey(coopId: string, category: RhythmCategory, periodKey: string) {
+function rhythmKey(coopId: string, category: ScheduledRhythmCategory, periodKey: string) {
   return { sourceType: RHYTHM_SOURCE, sourceId: rhythmSourceId(coopId, category, periodKey), contentHash: category, charterConfigId: CONFIG_KEY, position: 0 };
 }
 
-export type RhythmResult = { category: RhythmCategory; periodKey: string; posted: boolean; reason?: string; postId?: string; actionId?: string; notified?: number };
+export type RhythmResult = { category: ScheduledRhythmCategory; periodKey: string; posted: boolean; reason?: string; postId?: string; actionId?: string; notified?: number };
 
 /** Inbox alert and push for members who chose NOTIFY for this category. MUTED and FEED members get nothing. */
-async function notifySubscribers(coopId: string, category: RhythmCategory, text: RhythmText, postId: string): Promise<number> {
+export async function notifyRhythmSubscribers(
+  coopId: string,
+  category: RhythmCategory,
+  notification: { title: string; body: string; data: Record<string, string> },
+): Promise<number> {
   const subscribers = await db.sageRhythmPreference.findMany({
     where: { category, mode: "NOTIFY", user: { isBot: false, memberships: { some: { coopId, status: "ACTIVE" } } } },
     select: { userId: true },
@@ -469,8 +482,8 @@ async function notifySubscribers(coopId: string, category: RhythmCategory, text:
   for (const { userId } of subscribers) {
     try {
       await createNotificationAndPush(db as never, {
-        userId, coopId, type: RHYTHM_NOTIFICATION_TYPE, title: `Sage: ${text.title}`, body: text.body.split("\n").find(Boolean)!.slice(0, 140),
-        data: { postId, coopId, category },
+        userId, coopId, type: RHYTHM_NOTIFICATION_TYPE, title: notification.title, body: notification.body.slice(0, 140),
+        data: { ...notification.data, coopId, category },
       });
       notified++;
     } catch (error) {
@@ -485,7 +498,7 @@ async function notifySubscribers(coopId: string, category: RhythmCategory, text:
  * wake cycles can't both post; a period with nothing to say is recorded as dismissed, so it isn't retried.
  */
 export async function publishRhythmPost(
-  coopId: string, category: RhythmCategory, periodKey: string, text: RhythmText | null, extra: Record<string, unknown> = {},
+  coopId: string, category: ScheduledRhythmCategory, periodKey: string, text: RhythmText | null, extra: Record<string, unknown> = {},
 ): Promise<RhythmResult> {
   const base = { category, periodKey };
   const check = text ? checkSageOutput(`${text.title}\n${text.body}`) : null;
@@ -522,7 +535,11 @@ export async function publishRhythmPost(
     // sourcePostId now points at the post itself, so the admin page can remove it.
     await db.commonsAction.update({ where: { id: action.id }, data: { status: "PUBLISHED", sourcePostId: post.id } });
     await db.commonsActionAudit.create({ data: { actionId: action.id, eventType: "RHYTHM_POSTED", metadata: { resultEntityType: "CommonsPost", resultEntityId: post.id, category } } });
-    const notified = await notifySubscribers(coopId, category, text, post.id);
+    const notified = await notifyRhythmSubscribers(coopId, category, {
+      title: `Sage: ${text.title}`,
+      body: text.body.split("\n").find(Boolean)!,
+      data: { postId: post.id },
+    });
     return { ...base, posted: true, postId: post.id, actionId: action.id, notified };
   } catch (error) {
     await db.commonsAction.update({ where: { id: action.id }, data: { status: "FAILED" } }).catch(() => {});
@@ -535,7 +552,7 @@ const MONTH_FORMAT = new Intl.DateTimeFormat("en-US", { month: "long", timeZone:
 
 /** Builds one ritual's text from records. `needPostIds` is an internal test control (E2E fixtures), never a public input. */
 export async function buildRhythm(
-  coopId: string, category: RhythmCategory, periodKey: string, now: Date, options: { needPostIds?: string[] } = {},
+  coopId: string, category: ScheduledRhythmCategory, periodKey: string, now: Date, options: { needPostIds?: string[] } = {},
 ): Promise<{ text: RhythmText | null; extra: Record<string, unknown> }> {
   if (category === "weekly_priorities") {
     const input = await gatherPriorities(coopId, now);
@@ -564,7 +581,7 @@ export async function buildRhythm(
 }
 
 /** The wake-cycle step: posts whichever rituals are due and not yet posted for their period. */
-export async function runCommunityRhythm(coopId: string, now = new Date(), only?: RhythmCategory[]): Promise<{ skipped?: string; results: RhythmResult[] }> {
+export async function runCommunityRhythm(coopId: string, now = new Date(), only?: ScheduledRhythmCategory[]): Promise<{ skipped?: string; results: RhythmResult[] }> {
   const due = dueRhythms(now).filter((entry) => !only || only.includes(entry.category));
   if (!due.length) return { results: [] };
   const pending = [];

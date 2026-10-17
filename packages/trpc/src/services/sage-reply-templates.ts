@@ -177,8 +177,8 @@ export const SAGE_REPLY_TEMPLATES: SageReplyTemplate[] = [
 
 /** Voice rules for every Sage reply, with or without a template. */
 export const SAGE_VOICE_RULES = [
-  "Write as a trusted organizer in this Commons: say \"we\" and \"us\", speak to the member as \"you\", warm but brief. No greetings or sign-offs.",
-  "Lead with your position on facts and next steps. Turn advice into something specific a person can do; ask the member you're replying to, not \"anyone\".",
+  "Open with what you think and why, like you're talking to a neighbor. Skip formal greetings and sign-offs, but a little warmth is fine.",
+  "Turn advice into something specific a person can do; ask the member you're replying to, not \"anyone\".",
   "When members disagree with each other, don't pick a side: lay out the options, what each costs or risks, and the fact that would decide it.",
   "Comment only when you add something the thread lacks: a fact, structure (options, what's agreed, what's open), or a voice that hasn't been heard. Stay quiet when members are already answering each other well; a question or choice nobody has answered yet is not that, so help with it.",
   "Use plain words. No consultant terms such as leverage, optimize, stakeholders, synergy, pilot design, coverage or best practices.",

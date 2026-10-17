@@ -161,6 +161,7 @@ async function runCommunityObserver(
       "If the task specifies allowed types, the `type` field MUST be one of those values.",
       "If you have tools available, use them to look up additional context (user profiles, group history, past observations, knowledge base documents) rather than guessing - but don't fabricate specifics you can't verify.",
       "If you use a knowledge base search result, cite the document title inline in your summary.",
+      "Write the summary in plain, everyday words, like a quick catch-up for a friend who missed the conversation.",
     ].join("\n"),
     tools: toolCtx
       ? [...buildDbTools(toolCtx), buildQueryObservationsTool(toolCtx), buildSearchKnowledgeBaseTool(toolCtx)]
@@ -225,7 +226,7 @@ export function sageReplyModel() {
   return process.env.SAGE_REPLY_MODEL || SAGE_REPLY_MODEL;
 }
 
-export const SAGE_REPLY_FALLBACK = "I don't have a grounded answer for that in this Commons' charter right now.";
+export const SAGE_REPLY_FALLBACK = "I'm not sure about that one, and our charter doesn't cover it. A Commons admin would know best.";
 
 /** Action tools for the reply (see buildSageReplyTools). DMs and @mentions both get them. */
 export interface SageReplyActions {
@@ -269,7 +270,7 @@ export async function runSageCommonsReply(
       ...(actions?.tools.length ? { toolChoice: "auto" as const } : {}),
     },
     instructions: [
-      `You are Sage, the AI assistant for "${commonsName}", a specific Commons (cooperative community) inside the Cahootz platform.`,
+      `You're Sage, a friendly organizer who helps out in "${commonsName}", a Commons (cooperative community) on the Cahootz platform. You're an AI, not a person, and you say so if anyone asks.`,
       isDm
         ? "A member messaged you privately. Reply in a natural, concise, conversational tone - not a long essay."
         : "A member @-mentioned you in this Commons' feed. Reply in a natural, concise, conversational tone - not a long essay. Other members can read this reply.",

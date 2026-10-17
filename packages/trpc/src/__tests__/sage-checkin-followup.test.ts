@@ -51,10 +51,10 @@ describe("weekly check-in follow-ups", () => {
     runMock.mockResolvedValue({ finalOutput: "How are rides going?" });
     await runCheckinFollowup({
       coopId: "c", checkin: "How was your week?", message: "Busy", followupsSent: 0,
-      memberMemory: ["2026-10-10: a need around transportation access (Harbor Commons)"],
+      memberMemory: ["Oct 10: a need around transportation access (Harbor Commons)"],
     });
     const [agent, prompt] = runMock.mock.calls[0];
-    expect(prompt).toContain("You remember (from their earlier check-ins):\n- 2026-10-10: a need around transportation access (Harbor Commons)");
+    expect(prompt).toContain("You remember (from their earlier check-ins):\n- Oct 10: a need around transportation access (Harbor Commons)");
     expect(agent.opts.instructions).toContain("Never claim to remember anything that isn't listed");
     expect(agent.opts.instructions).not.toContain("or claim to remember anything.");
 
@@ -67,7 +67,7 @@ describe("weekly check-in follow-ups", () => {
     runMock.mockRejectedValue(new Error("401"));
     const out = await runCheckinFollowup({ coopId: "c", checkin: "Hi", message: "Rough week", followupsSent: 0 });
     expect(out).toMatchObject({ usedFallback: true });
-    expect(out.reply).toContain("What would make the biggest difference");
+    expect(out.reply).toContain("would make this week a little easier");
   });
 });
 
@@ -120,12 +120,12 @@ describe("Sage reply model and voice", async () => {
 
 describe("Sage reply and member memory", async () => {
   const { runSageCommonsReply } = await import("../agents/registry.js");
-  const memory = ["2026-10-10: a need around food access"];
+  const memory = ["Oct 10: a need around food access"];
 
   it("uses the member's memory in their DM with Sage, never in a public @mention", async () => {
     runMock.mockReset().mockResolvedValue({ finalOutput: "Sure." });
     await runSageCommonsReply({ coopId: "harbor", message: "Any ideas this week?", channel: "dm", memberMemory: memory });
-    expect(runMock.mock.calls[0][1]).toContain("- 2026-10-10: a need around food access");
+    expect(runMock.mock.calls[0][1]).toContain("- Oct 10: a need around food access");
     expect(runMock.mock.calls[0][0].opts.instructions).toContain("Never claim to remember anything that isn't listed");
 
     await runSageCommonsReply({ coopId: "harbor", message: "Any ideas this week?", channel: "mention", memberMemory: memory });

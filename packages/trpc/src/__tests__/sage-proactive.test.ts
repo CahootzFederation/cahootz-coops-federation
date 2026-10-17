@@ -103,7 +103,7 @@ describe("promises Sage keeps", () => {
   it("sends the promised check-back through the limit", async () => {
     const task = { id: "t1", ownerUserId: "m1", subjectType: "member_conversation", expected: "How the interview went" } as never;
     expect(await runProactiveTask(task, now)).toBe("SENT");
-    expect(dm.sendDirectCircleMessage.mock.calls[0]![1]).toMatchObject({ content: "Checking back like I said: how the interview went?", systemKey: "sage-promise:t1" });
+    expect(dm.sendDirectCircleMessage.mock.calls[0]![1]).toMatchObject({ content: "Checking back like I promised: how the interview went?", systemKey: "sage-promise:t1" });
     db.groupComment.count.mockResolvedValue(7);
     expect(await runProactiveTask({ ...(task as object), id: "t2" } as never, now)).toBe("LIMITED");
   });

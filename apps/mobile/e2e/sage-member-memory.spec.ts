@@ -87,7 +87,7 @@ test("Sage remembers a need from a check-in, uses it, and forgets it when asked"
       // Trails are listed newest first (sage.listTrails), so the follow-up's trail is the first one.
       await trails.first().click();
       await expect(shown(member.page, "1 need remembered from the member's check-ins").first()).toBeVisible();
-      await expect(shown(member.page, new RegExp(`\\d{4}-\\d{2}-\\d{2}: ${summary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)).first()).toBeVisible();
+      await expect(shown(member.page, new RegExp(`[A-Z][a-z]{2} \\d{1,2}: ${summary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)).first()).toBeVisible();
 
       // 3. The member asks what Sage remembers (answered in code), and the answer survives a reload.
       await send(member.page, "What do you remember about me?");

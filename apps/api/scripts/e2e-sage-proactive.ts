@@ -56,7 +56,7 @@ async function promise(emailA: string, runId: string) {
   if (!scheduled.ok) throw new Error(scheduled.reason);
   // Made two days ago, so nothing A said before today counts as already keeping it.
   await db.sageTask.update({ where: { id: scheduled.taskId }, data: { createdAt: new Date(Date.now() - 60_000) } });
-  return { woke: await wakeNow(scheduled.taskId), expected: `Checking back like I said: how the interview went (E2E ${runId})?` };
+  return { woke: await wakeNow(scheduled.taskId), expected: `Checking back like I promised: how the interview went (E2E ${runId})?` };
 }
 
 async function need(emailA: string, emailB: string, runId: string) {

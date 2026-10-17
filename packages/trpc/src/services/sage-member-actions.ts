@@ -358,13 +358,13 @@ export async function askWhetherIntroductionHelped(introActionId: string, needUs
     coopId: details.intro.coopId, memberId: needUserId, conversationGroupId: group.id, capability: THANK_HELPER_CAPABILITY,
     sourceId: introActionId, summary: "Did the introduction help?",
     payload: { introActionId, helperUserId: details.helperUserId },
-    presentation: { title: "Did the introduction help?", body: details.need ? `Sage introduced you about: ${details.need}` : "", reason: "If it helped, Sage thanks the person who helped you." },
+    presentation: { title: "Did the introduction help?", body: details.need ? `Sage connected you about ${details.need.replace(/[.!?]+$/, "")}` : "", reason: "If it helped, Sage thanks the person who helped you." },
   });
   if (!ask) return "SKIPPED";
   const about = details.need ? ` with ${details.need.replace(/[.!?]+$/, "")}` : "";
   const sent = await sendProactiveSageMessage({
     userId: needUserId, kind: "thanks-ask", key: introActionId, now,
-    content: `Did connecting with the member I introduced you to help${about}? Reply yes or no.`,
+    content: `Did the person I introduced you to help${about}? A quick yes or no is perfect.`,
   });
   return sent.status === "LIMITED" ? "LIMITED" : "SENT";
 }

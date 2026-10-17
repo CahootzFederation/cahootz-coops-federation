@@ -49,12 +49,12 @@ test("Sage's weekly check-in arrives through the existing private-message inbox"
     // Code sent to Sage gets the fixed guardrail reply instead of a model answer.
     await member.page.getByLabel(/^Message Sage/).locator("visible=true").first().fill("function hack() { return document.cookie; }");
     await member.page.getByLabel("Send message").click();
-    await expect(member.page.getByText("That looks like code, so I can't help with it here.", { exact: false }).last()).toBeVisible({ timeout: 30_000 });
+    await expect(member.page.getByText("That looks like code, and that's not really my thing.", { exact: false }).last()).toBeVisible({ timeout: 30_000 });
 
     // An urgent disclosure in a check-in reply always gets the fixed safety reply, with no model call.
     await member.page.getByLabel(/^Message Sage/).locator("visible=true").first().fill("E2E: honestly I've been thinking about suicide");
     await member.page.getByLabel("Send message").click();
-    await expect(member.page.getByText("If you're in immediate danger, contact local emergency services now.", { exact: false }).last()).toBeVisible({ timeout: 30_000 });
+    await expect(member.page.getByText("If you're in danger right now, please call your local emergency number.", { exact: false }).last()).toBeVisible({ timeout: 30_000 });
   } finally {
     fixture("cleanup");
     await member.context.close();

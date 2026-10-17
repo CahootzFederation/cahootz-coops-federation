@@ -88,7 +88,7 @@ export async function traceSageReply(
           }),
         }).catch(console.error);
       }
-      trail.taken("Sent the standard reply without asking the model", "INFO");
+      trail.taken("Sent a ready-made reply", "INFO");
       trail.result("Reply posted", "PASS", "None.");
       await trail.save();
       return;
@@ -107,7 +107,7 @@ export async function traceSageReply(
     trail.step("CONSIDERED", "Drafted a reply", { outcome: "INFO", detail: reply });
     if (grounding) {
       trail.policy("The model gave an answer", !grounding.usedFallback,
-        grounding.usedFallback ? "The model returned nothing, so Sage used its standard \"no grounded answer\" reply." : undefined);
+        grounding.usedFallback ? "The model returned nothing, so Sage sent its ready-made \"I'm not sure\" reply." : undefined);
     }
     trail.policy("The reply passes the safety check", outputCheck.ok, [
       describeOutputProblems(outputCheck.problems),

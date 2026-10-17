@@ -94,9 +94,9 @@ function fallbackMessage(
     : " in your Commons";
   const topic = context.activity[0];
   if (topic) {
-    return `${hello} — I was thinking about ${topic}${commons}. How is that sitting with you this week? And outside the Commons, how have you been doing?`;
+    return `${hello} — I was thinking about ${topic}${commons}. How's that going for you? And how are things outside the Commons?`;
   }
-  return `${hello} — I wanted to check in about ${context.focusCommons?.name ?? "your Commons"}. How has your week been going there, and is anything outside the community taking up your attention lately?`;
+  return `${hello} — just checking in about ${context.focusCommons?.name ?? "your Commons"}. How's your week been there? And is anything outside the Commons on your mind lately?`;
 }
 
 interface OutreachContext {
@@ -221,7 +221,7 @@ async function generateOutreach(
     instructions: [
       "You write one private weekly check-in from Sage to a community member.",
       sageCorePrinciplesInstructions(),
-      "Sound like a trusted community organizer, not a form, survey, case worker, or customer-success bot.",
+      "Don't sound like a form, a survey, a case worker or a customer-success bot.",
       "Name the supplied focus Commons so the member knows which community you mean. Use at most one supplied activity theme. Never imply surveillance or mention that you analyzed activity.",
       "Ask one warm question about that theme, then gently leave room for how life outside the Commons is going when natural.",
       "Do not diagnose, infer hardship, ask for sensitive details, use bullets, or offer services.",

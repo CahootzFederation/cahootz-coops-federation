@@ -95,8 +95,14 @@ export function classifyPrivateSignal(content: string): PrivateSignalClassificat
   };
 }
 
+/**
+ * The words that mark Sage's offer to find a support person, so a plain "yes" right after it counts as
+ * consent. The older wording stays so an offer sent before the rewrite still works.
+ */
+const SAFETY_OFFER_MARKERS = ["find someone you trust in your Commons to talk to", "help identifying a trusted person or support role"];
+
 export function privateSafetyReply() {
-  return "I'm really sorry you're dealing with this. I can't provide emergency help, but your immediate safety matters. If you're in immediate danger, contact local emergency services now. If you want, tell me whether you'd like help identifying a trusted person or support role in your Commons to contact; I won't share this without your permission.";
+  return `I'm so sorry you're going through this. If you're in danger right now, please call your local emergency number. I can't send help myself, but if you want, I can help you ${SAFETY_OFFER_MARKERS[0]}. Just say so. I won't share anything without your OK.`;
 }
 
 // ── Short need summaries ─────────────────────────────────────────────────────
@@ -244,7 +250,7 @@ async function priorSafetyOfferAccepted(input: { groupId: string; userId: string
     orderBy: { createdAt: "desc" }, take: 8,
     select: { authorId: true, content: true },
   });
-  return prior.some((message) => message.authorId !== input.userId && message.content.includes("help identifying a trusted person or support role"));
+  return prior.some((message) => message.authorId !== input.userId && SAFETY_OFFER_MARKERS.some((marker) => message.content.includes(marker)));
 }
 
 /**
@@ -299,11 +305,11 @@ export async function handlePrivateCheckinSignal(input: {
         }),
       });
       return {
-        inCheckin: true, classification, safetyReply: "Thank you for saying yes. I’ve privately asked an appropriate support person to contact you; I did not include what you disclosed.", memoryNotice: null,
+        inCheckin: true, classification, safetyReply: "Thanks for trusting me with this. I've privately asked someone who can help to reach out to you. I didn't pass on what you told me.", memoryNotice: null,
       };
     }
     return {
-      inCheckin: true, classification, safetyReply: "Thank you for saying yes. I couldn't safely tell which Commons support team you meant, so I haven't shared anything. Tell me the Commons name if you want me to route the request.", memoryNotice: null,
+      inCheckin: true, classification, safetyReply: "Thanks for saying yes. I wasn't sure which Commons you meant, so I haven't shared anything yet. Tell me the Commons name and I'll pass your request along.", memoryNotice: null,
     };
   }
   if (classification.urgent || classification.sensitiveCategory) {

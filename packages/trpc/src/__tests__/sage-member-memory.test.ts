@@ -55,8 +55,8 @@ describe("reading what a member asked Sage to remember", () => {
       ["food_access", false, ["r2"]],
     ]);
     expect(memberMemoryLines(items)).toEqual([
-      "2026-10-12: transportation access is no longer a need (Harbor Commons)",
-      "2026-10-11: a need around food access",
+      "Oct 12: transportation access is no longer a need (Harbor Commons)",
+      "Oct 11: a need around food access",
     ]);
   });
 
@@ -95,9 +95,9 @@ describe("reading what a member asked Sage to remember", () => {
     ]);
     const items = await loadMemberMemory({ memberId: "member-1", purpose: "test", focusCoopId: "harbor", now: NOW });
     expect(memberMemoryLines(items)).toEqual([
-      "2026-10-12: needs rides to work on weekdays (Harbor Commons)",
-      "2026-10-11: a need around food access (Harbor Commons)",
-      "2026-10-10: a need around housing stability (Harbor Commons)",
+      "Oct 12: needs rides to work on weekdays (Harbor Commons)",
+      "Oct 11: a need around food access (Harbor Commons)",
+      "Oct 10: a need around housing stability (Harbor Commons)",
     ]);
   });
 
@@ -164,10 +164,10 @@ describe("answering memory requests in code", () => {
     const answer = await handleMemberMemoryRequest({ memberId: "member-1", content: "What do you remember about me?", now: NOW });
     expect(answer?.reply).toBe([
       "Here's what I remember from our check-ins:",
-      "1. 2026-10-12: a need around food access",
-      "2. 2026-10-01: needs rides to the market (Harbor Commons)",
+      "1. Oct 12: a need around food access",
+      "2. Oct 1: needs rides to the market (Harbor Commons)",
       "",
-      "Say \"forget 1\" (or another number), \"forget that\" for the newest, or \"forget everything\". I use these in our private conversations, and count them without your name in anonymous patterns for your Commons once enough members share the same need.",
+      "Say \"forget 1\" (or another number), \"forget that\" for the newest, or \"forget everything\". I only bring these up in our private chats. When enough members mention the same need, I count it in group totals for your Commons, without your name.",
     ].join("\n"));
     expect(db.aIObservation.updateMany).not.toHaveBeenCalled();
   });
@@ -184,7 +184,7 @@ describe("answering memory requests in code", () => {
       where: { id: { in: ["r1", "r0"] }, scopeType: "member", scopeId: "member-1", generatedByAgentKey: "sage-member-signal" },
       data: { status: "DISMISSED" },
     });
-    expect(answer?.reply).toMatch(/^Done\. I've forgotten "needs rides to the market"\./);
+    expect(answer?.reply).toMatch(/^Done, I've forgotten "needs rides to the market"\..*group totals by tomorrow\.$/);
     expect(db.auditLog.create).toHaveBeenCalledWith({ data: expect.objectContaining({
       actorId: "member-1", action: "SAGE_MEMBER_MEMORY_FORGOTTEN", metadata: { themes: ["transportation_access"], rows: 2, all: false },
     }) });

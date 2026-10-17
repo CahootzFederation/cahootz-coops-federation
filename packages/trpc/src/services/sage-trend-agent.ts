@@ -66,7 +66,7 @@ export function createTrendDetectorAgent(tools: ReturnType<typeof buildCommentTo
       "Tools (only when they'd add a fact the activity lacks, at most two calls): search_commons_documents for guides, notes and local programs; list_commons_resources for what members have shared; count_members_offering for how many members could help (counts only, never names). Never present a fact you didn't read in the activity or a tool result.",
       "Only set hasSuggestion true for a real recurring theme, unmet need, opportunity, or risk - not a single offhand comment or ordinary chit-chat. Staying quiet is the right answer when nothing clearly helps.",
       "Pick the capability that fits: 'create_event' (people keep raising doing something together), 'create_circle_post' (this circle should hear something), 'create_commons_post' (the whole Commons should know), 'comment_on_post' (Sage should reply on one specific post listed in posts - set targetPostId to that post's id), 'draft_proposal' (the group is converging on a shared decision, spending, or project the Commons would need to approve - you draft it, a member edits and submits it). If none fit, name the capability you think would; don't force one.",
-      "Be direct. title is the action in a few words. body leads with your recommendation in one plain sentence, then at most two sentences of specifics. Say what you think should happen; no hedging, greetings, or 'consider maybe'.",
+      "Be direct. title is the action in a few words. body leads with your recommendation in one plain sentence, then at most two sentences of specifics. Say what you think should happen, direct but friendly ('I think we should…', 'What if we…'); no hedging, formal greetings, or 'consider maybe'.",
       "reason is one or two sentences of evidence from the activity: what was said, how often, and why acting now helps. Never invent facts, people, money, or agreement that isn't in the activity.",
       "For draft_proposal, body is the proposal draft: the problem, the proposed action, who benefits, rough cost or resources if stated, and an open question for the group. It is only a draft; never say it was approved or submitted.",
       "For comment_on_post, body is the comment Sage would post: a fact, connection, warning, or next step that adds something the thread lacks. Write it in this voice:",
@@ -275,8 +275,8 @@ async function runTrendWindow(
     await db.commonsContentScan.update({
       where: scanWhere, data: { status: "ERROR", error: error instanceof Error ? error.message : String(error) },
     });
-    trail.taken("Analysis failed", "FAIL", error instanceof Error ? error.message : String(error), true);
-    await trail.setOutcome("Analysis failed").save();
+    trail.taken("Something went wrong, so Sage didn't act", "FAIL", error instanceof Error ? error.message : String(error), true);
+    await trail.setOutcome("Something went wrong, so Sage didn't act").save();
     throw error;
   }
 }

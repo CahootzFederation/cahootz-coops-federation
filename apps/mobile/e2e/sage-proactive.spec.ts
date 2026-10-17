@@ -57,7 +57,7 @@ test("Sage keeps a promise, brings a quiet need to a likely helper, and thanks a
 
         // 3. Five days after an introduction, A says it helped; B is thanked and agrees to a shout-out.
         const intro = fixture("intro", USER_A_EMAIL, USER_B_EMAIL, runId);
-        await expectFromSage(memberA.page, /Did connecting with the member I introduced you to help/);
+        await expectFromSage(memberA.page, /Did the person I introduced you to help/);
         await reply(memberA.page, "yes");
         await expect(memberA.page.getByText("Thank you for telling me. I'll pass on your thanks.").last()).toBeVisible({ timeout: 60_000 });
 
@@ -69,7 +69,7 @@ test("Sage keeps a promise, brings a quiet need to a likely helper, and thanks a
         await expect.poll(() => (shout = fixture("shoutout", runId, since)).postId, { timeout: 60_000 }).toBeTruthy();
         await memberA.page.goto(`/${COOP_ID}/posts/${shout.postId}`);
         // The post page shows the body, not the title.
-        await expect(memberA.page.getByText(`Shout-out to ${intro.helperName} for showing up for another member through Sage`, { exact: false }).first()).toBeVisible({ timeout: 60_000 });
+        await expect(memberA.page.getByText(`Big thanks to ${intro.helperName} for stepping up for another member`, { exact: false }).first()).toBeVisible({ timeout: 60_000 });
         await expect(memberA.page.getByText(/ride to the clinic/)).toHaveCount(0);
       } finally {
         fixture("cleanup", USER_A_EMAIL, USER_B_EMAIL, runId, since);

@@ -61,7 +61,7 @@ test("Sage follows through on its offer when a member replies with the details",
     await member.page.getByLabel("Alerts", { exact: true }).locator("visible=true").first().click();
     await expect(async () => {
       await member.page.reload();
-      await expect(shown(member.page, "A proposal draft is ready")).toBeVisible({ timeout: 5_000 });
+      await expect(shown(member.page, "Your proposal draft is ready")).toBeVisible({ timeout: 5_000 });
     }).toPass(LIVE_POLL);
     const drafts = await (await fetch(`${API_BASE_URL}/trpc/commonsActions.myProposalDrafts`, { headers: { "x-session-token": token } })).json();
     const draft = drafts.result.data.find((entry: { body: string; title: string }) => /\$?650|40 stops|Mon/i.test(`${entry.title} ${entry.body}`));

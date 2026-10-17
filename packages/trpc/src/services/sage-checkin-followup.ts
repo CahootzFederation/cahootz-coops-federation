@@ -47,8 +47,8 @@ export function isClosingFollowup(followupsSent: number) {
 
 export function fallbackCheckinFollowup(followupsSent: number) {
   return isClosingFollowup(followupsSent)
-    ? "Thank you for sharing that with me. I'll check in again next week, and you can message me here anytime."
-    : "Thank you for telling me. What would make the biggest difference for you this week?";
+    ? "Thanks for sharing that with me. I'll check in again next week, and you can message me here anytime."
+    : "Thanks for telling me. Is there anything that would make this week a little easier?";
 }
 
 export async function runCheckinFollowup(input: CheckinFollowupInput): Promise<{ reply: string; model: string; usedFallback: boolean }> {
@@ -64,7 +64,7 @@ export async function runCheckinFollowup(input: CheckinFollowupInput): Promise<{
       "You are Sage, continuing a private weekly check-in you started with a community member. They replied; you respond.",
       sagePersonalInstructions(input.memberName),
       sageCorePrinciplesInstructions(),
-      "Sound like a trusted community organizer. Respond to what they actually said, in plain words, under 60 words, no bullets.",
+      "Respond to what they actually said, in plain words, under 60 words, no bullets.",
       closing
         ? "This is your last reply in this check-in. Acknowledge what they shared and close warmly. Do not ask a question. Let them know they can message you anytime."
         : "Ask at most one short follow-up question, only if it helps them say what they need. If they just said they're fine, acknowledge it and don't push.",

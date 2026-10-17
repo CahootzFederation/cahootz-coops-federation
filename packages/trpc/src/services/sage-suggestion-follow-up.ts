@@ -50,20 +50,20 @@ export async function suggestionNoLongerApplies(review: Pick<CommonsActionReview
   const participants = await db.commonsActionParticipant.findMany({ where: { actionId: action.id }, select: { userId: true } });
   const people = [...new Set([review.userId, ...participants.map((participant) => participant.userId)])];
   const active = await db.userCoopMembership.count({ where: { coopId: action.coopId, userId: { in: people }, status: "ACTIVE" } });
-  if (active < people.length) return "Someone it involved is no longer an active member of this Commons";
+  if (active < people.length) return "Someone it involved isn't an active member here anymore";
 
   if (action.circleId) {
     const circle = await db.group.findUnique({ where: { id: action.circleId }, select: { leaderId: true } });
-    if (!circle) return "The circle was deleted";
-    if (review.reviewType === "APPROVE_SUGGESTION" && circle.leaderId !== review.userId) return "The circle has a new leader";
+    if (!circle) return "The circle it was for has been deleted";
+    if (review.reviewType === "APPROVE_SUGGESTION" && circle.leaderId !== review.userId) return "The circle has a new leader now";
     const stillInCircle = await db.groupMember.findUnique({ where: { groupId_userId: { groupId: action.circleId, userId: review.userId } }, select: { id: true } });
-    if (!stillInCircle && circle.leaderId !== review.userId) return "The person asked left the circle";
+    if (!stillInCircle && circle.leaderId !== review.userId) return "The person we asked has left the circle";
   }
 
   const payload = (action.payload ?? {}) as { capability?: unknown; title?: unknown; targetPostId?: unknown; suggestedStartAt?: unknown };
   if (typeof payload.targetPostId === "string") {
     const post = await db.commonsPost.findUnique({ where: { id: payload.targetPostId }, select: { id: true } });
-    if (!post) return "The post it was about was deleted";
+    if (!post) return "The post it was about has been deleted";
     if (payload.capability === "comment_on_post") {
       const sageComment = await db.commonsComment.findFirst({
         where: { postId: payload.targetPostId, createdAt: { gt: action.createdAt }, author: { isBot: true } }, select: { id: true },
@@ -73,7 +73,7 @@ export async function suggestionNoLongerApplies(review: Pick<CommonsActionReview
   }
   if (typeof payload.suggestedStartAt === "string") {
     const startAt = new Date(payload.suggestedStartAt);
-    if (!Number.isNaN(startAt.getTime()) && startAt <= now) return "The suggested time has passed";
+    if (!Number.isNaN(startAt.getTime()) && startAt <= now) return "The time it suggested has already passed";
   }
   if (payload.capability === "draft_proposal" && typeof payload.title === "string") {
     const drafts = await db.commonsProposalDraft.findMany({
@@ -81,7 +81,7 @@ export async function suggestionNoLongerApplies(review: Pick<CommonsActionReview
       select: { title: true }, take: 20,
     });
     const title = payload.title;
-    if (drafts.some((draft) => titlesNearlyIdentical(draft.title, title))) return "A proposal draft on this already exists";
+    if (drafts.some((draft) => titlesNearlyIdentical(draft.title, title))) return "There's already a proposal draft for this";
   }
   return null;
 }
@@ -117,7 +117,7 @@ export async function closeSuggestion(actionId: string, reason: string, kind: "N
   for (const { userId } of action ? waiting : []) {
     await createNotificationAndPush(db, {
       userId, coopId: action!.coopId, type: "SAGE_SUGGESTION_CLOSED", push: false,
-      title: "Sage closed a suggestion", body: `"${action!.summary.slice(0, 120)}" won't go ahead. ${reason}.`,
+      title: "Sage closed this one", body: `"${action!.summary.slice(0, 120)}" won't go ahead. ${reason}.`,
       data: { actionId },
     }).catch((error) => console.error("Could not tell a member Sage closed a suggestion", error));
   }
@@ -149,8 +149,8 @@ export async function checkSuggestionReview(task: { id: string; subjectId: strin
 /** The reminder for a suggestion nobody has answered, built from the task - no model call. */
 export function suggestionReminderText(title: string): { title: string; body: string } {
   return {
-    title: "Sage is still waiting on you",
-    body: `"${title.slice(0, 120)}" needs your answer.`,
+    title: "Got a sec?",
+    body: `Sage would love your answer on "${title.slice(0, 120)}" when you have a minute.`,
   };
 }
 

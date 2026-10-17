@@ -40,7 +40,7 @@ import { AiBadge } from '@/components/ai-badge';
 import { SageAvatar } from '@/components/sage-avatar';
 import { LoadError } from '@/components/load-error';
 import { ConfirmSheet } from '@/components/confirm-sheet';
-import { api, type SageRhythmMode } from '@/lib/api';
+import { api } from '@/lib/api';
 import { ApiError, friendlyError } from '@/lib/friendly-error';
 import { votingDeadlineLine } from '@/lib/voting-deadline';
 import { keyboardScrollProps } from '@/lib/keyboard';
@@ -196,7 +196,6 @@ export function ProposalDetailContent() {
 
   const [proposal, setProposal] = useState<any>(null);
   const [comments, setComments] = useState<any[]>([]);
-  const [beforeDecisionMode, setBeforeDecisionMode] = useState<SageRhythmMode>('FEED');
   const [categoryLabels, setCategoryLabels] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -237,16 +236,14 @@ export function ProposalDetailContent() {
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const [p, c, r, revs, rhythmSettings] = await Promise.all([
+      const [p, c, r, revs] = await Promise.all([
         api.getProposal(id, user?.walletAddress),
         api.listProposalComments(id, user?.walletAddress),
         api.getReactionCounts(id, user?.walletAddress),
         api.getProposalRevisions(id, user?.walletAddress),
-        sessionToken ? api.getSageRhythmSettings(sessionToken).catch(() => null) : Promise.resolve(null),
       ]);
       setProposal(p);
       setComments(c?.comments ?? []);
-      setBeforeDecisionMode(rhythmSettings?.modes.before_decisions ?? 'FEED');
       if (r) setReactionCounts(r);
       setRevisions(revs ?? []);
 
@@ -415,8 +412,7 @@ export function ProposalDetailContent() {
     FAIL_NO_STRONG_MISSION_GOAL: 'No single goal scored strongly',
   };
   const structuralBreakdown: { factor: string; rationale?: string }[] = proposal.evaluation?.structural_breakdown ?? [];
-  const memberComments = beforeDecisionMode === 'MUTED' ? comments.filter((entry) => !entry.authorIsAi) : comments;
-  const visibleComments = showAll ? memberComments : memberComments.slice(0, 3);
+  const visibleComments = showAll ? comments : comments.slice(0, 3);
 
   // Proposer + admin role checks
   const isProposer = user?.walletAddress && proposal.proposer?.wallet === user.walletAddress;
@@ -1117,7 +1113,7 @@ export function ProposalDetailContent() {
                 <Text className="text-charcoal-800 font-semibold text-base">Community Discussion</Text>
               </View>
               <View className="bg-cream-100 rounded-full px-2 py-0.5">
-                <Text className="text-charcoal-500 text-xs">{memberComments.length}</Text>
+                <Text className="text-charcoal-500 text-xs">{comments.length}</Text>
               </View>
             </View>
 
@@ -1161,7 +1157,7 @@ export function ProposalDetailContent() {
             )}
 
             {/* Comment list */}
-            {memberComments.length === 0 ? (
+            {comments.length === 0 ? (
               <View className="py-6 items-center">
                 <MessageCircle size={32} color="#D1D5DB" />
                 <Text className="text-charcoal-400 text-sm mt-2">No comments yet. Be the first to weigh in.</Text>
@@ -1169,14 +1165,14 @@ export function ProposalDetailContent() {
             ) : (
               <>
                 {visibleComments.map(c => <CommentItem key={c.id} comment={c} />)}
-                {memberComments.length > 3 && (
+                {comments.length > 3 && (
                   <TouchableOpacity
                     onPress={() => setShowAll(v => !v)}
                     className="flex-row items-center justify-center gap-1 py-2"
                   >
                     {showAll ? <ChevronUp size={16} color="#FF6B00" /> : <ChevronDown size={16} color="#FF6B00" />}
                     <Text className="text-primary text-sm font-semibold">
-                      {showAll ? 'Show less' : `View all ${memberComments.length} comments`}
+                      {showAll ? 'Show less' : `View all ${comments.length} comments`}
                     </Text>
                   </TouchableOpacity>
                 )}

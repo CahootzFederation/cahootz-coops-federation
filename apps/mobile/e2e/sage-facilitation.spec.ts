@@ -2,7 +2,6 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
-import { withExclusiveAccountSetting } from "./support/exclusive";
 
 // Sage facilitates like an assistant community manager: code decides a thread needs it (members
 // disagree, the group puts it off, a vote is about to close), and Sage steps in once. Live model calls,
@@ -50,14 +49,6 @@ async function comment(page: Page, text: string) {
 
 function sageComments(page: Page) {
   return page.getByText("Sage", { exact: true }).locator("visible=true");
-}
-
-async function setBeforeDecisionMode(page: Page, mode: "Notify me" | "Mute") {
-  await page.goto("/sage-settings");
-  await expect(shown(page, "Sage's community rhythm")).toBeVisible({ timeout: 60_000 });
-  const choice = page.getByRole("radio", { name: `Before decisions: ${mode}` });
-  await choice.click();
-  await expect(choice).toBeChecked();
 }
 
 test("Sage lays out a disagreement, then brings the thread back after the group puts it off", { tag: "@sage" }, async ({ browser }) => {
@@ -116,7 +107,7 @@ test("Sage lays out a disagreement, then brings the thread back after the group 
   }
 });
 
-test("Before a vote closes, Sage posts one balanced summary of the discussion", { tag: "@sage" }, async ({ browser }) => withExclusiveAccountSetting("sage-rhythm-settings", async () => {
+test("Before a vote closes, Sage posts one balanced summary of the discussion", { tag: "@sage" }, async ({ browser }) => {
   test.setTimeout(300_000);
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const userA = await newSignedInPage(browser, USER_A_EMAIL);
@@ -127,9 +118,6 @@ test("Before a vote closes, Sage posts one balanced summary of the discussion", 
     // Fixture: a proposal open for voting that closes in 24 hours.
     proposalId = fixture("seed-votable", runId, USER_A_EMAIL).proposalId as string;
     const url = `/proposal-detail?id=${proposalId}&coopId=${COOP_ID}`;
-
-    // A subscribes to this ritual. B keeps the default: visible, with no alert.
-    await setBeforeDecisionMode(userA.page, "Notify me");
 
     // 1. Two members discuss it on the proposal page.
     for (const [member, text] of [
@@ -160,15 +148,6 @@ test("Before a vote closes, Sage posts one balanced summary of the discussion", 
     await userA.page.goto("/notifications");
     await expect(shown(userA.page, "Sage: Discussion summary before the vote")).toBeVisible({ timeout: 60_000 });
 
-    // A can mute just this ritual. Sage's comment disappears for A, while B still sees it.
-    await setBeforeDecisionMode(userA.page, "Mute");
-    await userA.page.goto(url);
-    await expect(userA.page.getByTestId("sage-proposal-comment").locator("visible=true")).toHaveCount(0);
-    await userB.page.goto(url);
-    const viewAllB = userB.page.getByText(/View all \d+ comments/).locator("visible=true").first();
-    if (await viewAllB.isVisible().catch(() => false)) await viewAllB.click();
-    await expect(userB.page.getByTestId("sage-proposal-comment").locator("visible=true")).toHaveCount(1);
-
     // 4. One summary per proposal: running the step again adds nothing.
     expect(fixture("pre-vote", proposalId).result).toBe("SKIPPED");
     await userB.page.reload();
@@ -180,4 +159,4 @@ test("Before a vote closes, Sage posts one balanced summary of the discussion", 
     await userA.context.close();
     await userB.context.close();
   }
-}));
+});

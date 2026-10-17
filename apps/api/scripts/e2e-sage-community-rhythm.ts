@@ -2,8 +2,7 @@
  * Deterministic fixture for apps/mobile/e2e/sage-community-rhythm.spec.ts. It stands in for the wake
  * cycle's calendar: it seeds records (a Need post by member B that nobody answered, and an event member A
  * hosted yesterday that B went to), then runs the real buildRhythm + publishRhythmPost for a category under
- * a unique E2E period key, so Sage posts in the Commons feed and alerts members who chose "Notify me".
- * Settings, the feed, muting and alerts are exercised through the real app.
+ * a unique E2E period key, so Sage posts in General and its notification uses the Community category.
  *
  *   tsx --import ./dotenv.config.js scripts/e2e-sage-community-rhythm.ts seed <runId> <emailA> <emailB>
  *   tsx --import ./dotenv.config.js scripts/e2e-sage-community-rhythm.ts publish <runId> <category> <n> <emailA>
@@ -37,13 +36,8 @@ async function member(email: string) {
 const needTitle = (runId: string) => `E2E ${runId} need a ladder for gutters`;
 const eventTitle = (runId: string) => `E2E ${runId} garden workday`;
 
-async function resetSettings(userIds: string[]) {
-  await db.sageRhythmPreference.deleteMany({ where: { userId: { in: userIds } } });
-  await db.user.updateMany({ where: { id: { in: userIds } }, data: { nameInSageAppreciation: false } });
-}
-
 async function cleanup(runId: string, emails: string[]) {
-  const users = await Promise.all(emails.map(member));
+  await Promise.all(emails.map(member));
   const actions = await db.commonsAction.findMany({
     where: { sourceType: RHYTHM_SOURCE, sourceId: { startsWith: `${COMMONS_COOP_ID}:` }, AND: [{ sourceId: { contains: `:e2e-${runId}-` } }] },
     select: { id: true, sourcePostId: true },
@@ -55,13 +49,11 @@ async function cleanup(runId: string, emails: string[]) {
   await db.commonsAction.deleteMany({ where: { id: { in: actions.map((action) => action.id) } } });
   // The seeded need and event posts (the event row cascades with its post).
   await db.commonsPost.deleteMany({ where: { coopId: COMMONS_COOP_ID, title: { in: [needTitle(runId), eventTitle(runId)] } } });
-  await resetSettings(users.map((user) => user.id));
   return { removed: actions.length };
 }
 
 async function seed(runId: string, emailA: string, emailB: string) {
   const [a, b] = await Promise.all([member(emailA), member(emailB)]);
-  await resetSettings([a.id, b.id]);
   const now = Date.now();
   const need = await db.commonsPost.create({
     data: {

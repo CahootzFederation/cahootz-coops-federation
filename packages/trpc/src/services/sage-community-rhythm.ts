@@ -16,20 +16,14 @@ import { checkSageOutput, cleanseUntrustedText } from "./untrusted-input.js";
  *
  * Every post is a fixed template filled from records: no model call, no model claims. It goes through
  * Sage's output check, posts at most once per Commons per period (a unique COMMUNITY_RHYTHM action key),
- * and only in Commons with enough active members that counts can't point at one person. Nobody in need
- * is ever named. A helper, host or contributor is named only if they turned on "Name me in Sage's
- * appreciation"; everyone else is a count.
- *
- * Each category is a member setting (SageRhythmPreference): FEED (default) shows the item with no alert,
- * NOTIFY adds an inbox alert and push, MUTED hides the item for that member and sends nothing.
+ * and only in Commons with enough active members that counts can't point at one person. Members are
+ * reported as counts, never named. General-feed notification delivery uses the account's Community
+ * notification setting; other Sage notifications use the single Sage notification setting.
  */
 export const SCHEDULED_RHYTHM_CATEGORIES = ["weekly_priorities", "midweek_open_work", "friday_appreciation", "monthly_review"] as const;
 export type ScheduledRhythmCategory = (typeof SCHEDULED_RHYTHM_CATEGORIES)[number];
 export const RHYTHM_CATEGORIES = [...SCHEDULED_RHYTHM_CATEGORIES, "before_decisions"] as const;
 export type RhythmCategory = (typeof RHYTHM_CATEGORIES)[number];
-export const RHYTHM_MODES = ["NOTIFY", "FEED", "MUTED"] as const;
-export type RhythmMode = (typeof RHYTHM_MODES)[number];
-export const DEFAULT_RHYTHM_MODE: RhythmMode = "FEED";
 export const RHYTHM_SOURCE = "community_rhythm";
 export const RHYTHM_NOTIFICATION_TYPE = "SAGE_RHYTHM";
 /** Below this many active members, counts could point at one person, so Sage posts no rhythm at all. */
@@ -504,20 +498,6 @@ export async function gatherActivity(coopId: string, from: Date, to: Date): Prom
   };
 }
 
-/** Names of contributors who opted in and are still active members here. Everyone else stays a count. */
-export async function consentedNames(coopId: string, userIds: Set<string>): Promise<string[]> {
-  if (!userIds.size) return [];
-  const users = await db.user.findMany({
-    where: {
-      id: { in: [...userIds] }, isBot: false, nameInSageAppreciation: true, deletedAt: null,
-      memberships: { some: { coopId, status: "ACTIVE" } },
-    },
-    orderBy: { name: "asc" },
-    select: { name: true, handle: true },
-  });
-  return users.map((user) => user.name?.trim() || user.handle?.trim() || "").filter(Boolean);
-}
-
 /** Deterministic "could stop" candidates for a month: unanswered rhythm posts, stuck proposals, unattended series. */
 export async function gatherStopCandidates(coopId: string, from: Date, to: Date): Promise<StopCandidate[]> {
   const stops: StopCandidate[] = [];
@@ -534,7 +514,7 @@ export async function gatherStopCandidates(coopId: string, from: Date, to: Date)
     if (postIds.length < 2) continue;
     const responders = await Promise.all(postIds.map((postId) => countQuestionResponders(postId)));
     if (responders.every((count) => !count)) {
-      stops.push({ text: `Sage's ${RHYTHM_LABELS[category].short} posts got no replies or reactions. If they aren't useful, mute them in Sage settings or say so here.` });
+      stops.push({ text: `Sage's ${RHYTHM_LABELS[category].short} posts got no replies or reactions. If they aren't useful, say so here.` });
     }
   }
   const weeklyActionIds = posts.flatMap((post) => {
@@ -586,26 +566,25 @@ function rhythmKey(coopId: string, category: ScheduledRhythmCategory, periodKey:
 
 export type RhythmResult = { category: ScheduledRhythmCategory; periodKey: string; posted: boolean; reason?: string; postId?: string; actionId?: string; notified?: number };
 
-/** Inbox alert and push for members who chose NOTIFY for this category. MUTED and FEED members get nothing. */
-export async function notifyRhythmSubscribers(
+/** Sends one notification to every active, non-bot member. Its type selects Community or Sage preferences. */
+export async function notifyActiveCommonsMembers(
   coopId: string,
-  category: RhythmCategory,
-  notification: { title: string; body: string; data: Record<string, string> },
+  notification: { type: string; title: string; body: string; data: Record<string, string> },
 ): Promise<number> {
-  const subscribers = await db.sageRhythmPreference.findMany({
-    where: { category, mode: "NOTIFY", user: { isBot: false, memberships: { some: { coopId, status: "ACTIVE" } } } },
+  const members = await db.userCoopMembership.findMany({
+    where: { coopId, status: "ACTIVE", user: { isBot: false } },
     select: { userId: true },
   });
   let notified = 0;
-  for (const { userId } of subscribers) {
+  for (const { userId } of members) {
     try {
       await createNotificationAndPush(db as never, {
-        userId, coopId, type: RHYTHM_NOTIFICATION_TYPE, title: notification.title, body: notification.body.slice(0, 140),
-        data: { ...notification.data, coopId, category },
+        userId, coopId, type: notification.type, title: notification.title, body: notification.body.slice(0, 140),
+        data: { ...notification.data, coopId },
       });
       notified++;
     } catch (error) {
-      console.error("Could not send a Sage rhythm alert", { coopId, category, error });
+      console.error("Could not send a Commons notification", { coopId, type: notification.type, error });
     }
   }
   return notified;
@@ -654,10 +633,11 @@ export async function publishRhythmPost(
     // sourcePostId now points at the post itself, so the admin page can remove it.
     await db.commonsAction.update({ where: { id: action.id }, data: { status: "PUBLISHED", sourcePostId: post.id } });
     await db.commonsActionAudit.create({ data: { actionId: action.id, eventType: "RHYTHM_POSTED", metadata: { resultEntityType: "CommonsPost", resultEntityId: post.id, category } } });
-    const notified = await notifyRhythmSubscribers(coopId, category, {
+    const notified = await notifyActiveCommonsMembers(coopId, {
+      type: RHYTHM_NOTIFICATION_TYPE,
       title: `Sage: ${text.title}`,
       body: text.body.split("\n").find(Boolean)!,
-      data: { postId: post.id },
+      data: { postId: post.id, category },
     });
     return { ...base, posted: true, postId: post.id, actionId: action.id, notified };
   } catch (error) {
@@ -688,8 +668,7 @@ export async function buildRhythm(
     const [activity, monday] = await Promise.all([
       gatherActivity(coopId, new Date(now.getTime() - 7 * DAY_MS), now), gatherMondayFollowUp(coopId, options.mondayPeriodKey ?? isoWeekKey(now), now),
     ]);
-    const names = await consentedNames(coopId, activity.contributorIds);
-    return { text: appreciationText(activity.counts, activity.goals, names, monday), extra: { counts: activity.counts, named: names.length, mondayPostId: monday?.postId } };
+    return { text: appreciationText(activity.counts, activity.goals, [], monday), extra: { counts: activity.counts, mondayPostId: monday?.postId } };
   }
   const [year, month] = periodKey.split("-").map(Number);
   const start = new Date(Date.UTC(year!, month! - 1, 1));
@@ -744,22 +723,4 @@ export async function runCommunityRhythm(coopId: string, now = new Date(), only?
     results.push(await publishRhythmPost(coopId, entry.category, entry.periodKey, built.text, built.extra));
   }
   return { results };
-}
-
-// ── Member settings ─────────────────────────────────────────────────────────
-
-export async function rhythmModesFor(userId: string): Promise<Record<RhythmCategory, RhythmMode>> {
-  const rows = await db.sageRhythmPreference.findMany({ where: { userId }, select: { category: true, mode: true } });
-  const modes = Object.fromEntries(RHYTHM_CATEGORIES.map((category) => [category, DEFAULT_RHYTHM_MODE])) as Record<RhythmCategory, RhythmMode>;
-  rows.forEach((row) => {
-    if (isRhythmCategory(row.category) && (RHYTHM_MODES as readonly string[]).includes(row.mode)) modes[row.category] = row.mode as RhythmMode;
-  });
-  return modes;
-}
-
-/** Feed classifications this member muted, for hiding those posts from their feeds. */
-export async function mutedRhythmClassifications(userId: string | null | undefined, client: { sageRhythmPreference: { findMany: typeof db.sageRhythmPreference.findMany } } = db): Promise<string[]> {
-  if (!userId) return [];
-  const rows = await client.sageRhythmPreference.findMany({ where: { userId, mode: "MUTED" }, select: { category: true } });
-  return rows.map((row) => row.category).filter(isRhythmCategory).map(rhythmClassification);
 }

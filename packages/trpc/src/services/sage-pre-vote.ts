@@ -8,7 +8,7 @@ import { AUTO_REPLY_MIN_CONFIDENCE, charterSnapshotKey } from "./commons-action-
 import { DecisionTrail, percent } from "./sage-decision-trail.js";
 import { checkRelevance, modelRelevanceJudge, type RelevanceJudge } from "./sage-grounding.js";
 import { sageAutonomyAllowed } from "./sage-autonomy.js";
-import { notifyRhythmSubscribers } from "./sage-community-rhythm.js";
+import { notifyActiveCommonsMembers } from "./sage-community-rhythm.js";
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
 import {
   SAGE_OUTPUT_MAX_CHARS, checkSageOutput, cleanseUntrustedText, describeInputFlags, describeOutputProblems, isSteeringAttempt, mergeFlags,
@@ -362,7 +362,8 @@ export async function publishPreVoteSummary(actionId: string, actor: string | nu
       return comment.id;
     });
     await db.commonsActionAudit.create({ data: { actionId: action.id, actorId: actor, eventType: actor ? "APPROVED_PUBLISHED" : "AUTO_PUBLISHED", metadata: { proposalCommentId: commentId } } });
-    await notifyRhythmSubscribers(proposal.coopId, "before_decisions", {
+    await notifyActiveCommonsMembers(proposal.coopId, {
+      type: "SAGE_PRE_VOTE",
       title: "Sage: Discussion summary before the vote",
       body: `A balanced summary is ready for ${proposal.title}.`,
       data: { proposalId: action.sourceId },

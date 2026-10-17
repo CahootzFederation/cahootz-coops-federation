@@ -108,12 +108,8 @@ async function cleanup(postId: string, proposalId: string, memberEmails: string[
   if (proposalId !== "-") {
     if (!proposalId.startsWith("prop_e2e_")) throw new Error("Only E2E proposals can be deleted");
     if (memberEmails.some((email) => !email.endsWith(TEST_EMAIL_SUFFIX))) throw new Error("Only seeded test accounts can be reset");
-    const members = memberEmails.length
-      ? await db.user.findMany({ where: { email: { in: memberEmails } }, select: { id: true } })
-      : [];
     await db.$transaction([
       db.notification.deleteMany({ where: { data: { path: ["proposalId"], equals: proposalId } } }),
-      db.sageRhythmPreference.deleteMany({ where: { userId: { in: members.map((member) => member.id) }, category: "before_decisions" } }),
       db.commonsAction.deleteMany({ where: { sourceType: PRE_VOTE_SOURCE, sourceId: proposalId } }),
       db.commonsContentScan.deleteMany({ where: { sourceType: PRE_VOTE_SOURCE, sourceId: proposalId } }),
       db.sageDecisionTrail.deleteMany({ where: { proposalId } }),

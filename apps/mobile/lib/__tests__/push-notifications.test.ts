@@ -38,6 +38,7 @@ describe("native push permissions", () => {
       .mockResolvedValue({
         pushEnabled: true,
         community: true,
+        sage: true,
         governance: true,
         payments: true,
         orders: true,
@@ -63,6 +64,7 @@ describe("native push permissions", () => {
       .mockResolvedValue({
         pushEnabled: false,
         community: true,
+        sage: true,
         governance: true,
         payments: true,
         orders: true,

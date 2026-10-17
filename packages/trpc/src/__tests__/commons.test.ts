@@ -68,10 +68,6 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
       findMany: vi.fn().mockResolvedValue([]),
       ...overrides.commonsPostMedia,
     },
-    sageRhythmPreference: {
-      findMany: vi.fn().mockResolvedValue([]),
-      ...overrides.sageRhythmPreference,
-    },
     event: {
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn(),
@@ -233,27 +229,6 @@ describe('commonsRouter', () => {
             { coopId: 'cahootz', circleId: 'general:cahootz' },
             { coopId: 'cahootz', circleId: null },
           ],
-        },
-      }),
-    );
-  });
-
-  it("leaves Sage rhythm categories the member muted out of their feed, keeping unclassified posts", async () => {
-    const db = makeDb({
-      sageRhythmPreference: { findMany: vi.fn().mockResolvedValue([{ category: 'midweek_open_work' }]) },
-    });
-
-    await callerFor(db, { 'x-session-token': 'token_1' }).listFeed({ coopId: 'cahootz' });
-
-    expect(db.sageRhythmPreference.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 'user_1', mode: 'MUTED' } }));
-    expect(db.commonsPost.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          OR: [
-            { coopId: 'cahootz', circleId: 'general:cahootz' },
-            { coopId: 'cahootz', circleId: null },
-          ],
-          classification: { notIn: ['sage_rhythm_midweek_open_work'] },
         },
       }),
     );

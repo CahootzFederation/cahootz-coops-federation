@@ -23,8 +23,8 @@ model User {
   status                       UserStatus              @default(PENDING)
   isBot                        Boolean                 @default(false) // true for platform bot accounts (e.g. Sage)
   showSageDecisionTrails       Boolean                 @default(false) // personal app setting: show Sage's decision trails on content this user can see
-  nameInSageAppreciation       Boolean                 @default(false) // personal app setting: Sage's Friday appreciation may name this member for verified actions
-  sageRhythmPreferences        SageRhythmPreference[]
+  nameInSageAppreciation       Boolean                 @default(false) // legacy, retained for migration compatibility; no longer used by the product
+  sageRhythmPreferences        SageRhythmPreference[]  // legacy rows retained but no longer read or written
   defaultCoopId                String? // member-selected Commons shown first after sign-in
   password                     String?
   phone                        String?                 @unique // E.164 format: +1XXXXXXXXXX
@@ -2343,6 +2343,7 @@ model NotificationPreference {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   pushEnabled Boolean  @default(true)
   community   Boolean  @default(true)
+  sage        Boolean  @default(true)
   governance  Boolean  @default(true)
   payments    Boolean  @default(true)
   orders      Boolean  @default(true)
@@ -2353,14 +2354,14 @@ model NotificationPreference {
   @@schema("public")
 }
 
-// A member's choice for one of Sage's rhythm post categories (sage-community-rhythm.ts).
-// No row means FEED: the post shows in the feed with no alert. NOTIFY adds an inbox alert and
-// push; MUTED hides the category's posts from this member's feeds and sends nothing.
+// Legacy per-rhythm preferences. The product now uses NotificationPreference.sage for all Sage
+// notifications outside General and NotificationPreference.community for Sage posts in General.
+// Rows are retained so the simplification does not destroy member data.
 model SageRhythmPreference {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category  String // weekly_priorities | midweek_open_work | friday_appreciation | monthly_review
-  mode      String // NOTIFY | FEED | MUTED
+  category  String
+  mode      String
   updatedAt DateTime @updatedAt
 
   @@id([userId, category])

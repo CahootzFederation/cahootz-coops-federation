@@ -11,9 +11,8 @@ const db = vi.hoisted(() => ({
   proposal: { findMany: vi.fn(), count: vi.fn() },
   proposalGoalScore: { findMany: vi.fn() },
   sageTask: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), count: vi.fn() },
-  sageRhythmPreference: { findMany: vi.fn() },
   user: { findMany: vi.fn() },
-  userCoopMembership: { count: vi.fn(), findUnique: vi.fn() },
+  userCoopMembership: { count: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
 }));
 const push = vi.hoisted(() => ({ createNotificationAndPush: vi.fn() }));
 vi.mock("@repo/db", () => ({ db }));
@@ -24,8 +23,8 @@ const rhythm = await import("../services/sage-community-rhythm.js");
 const { checkSageOutput } = await import("../services/untrusted-input.js");
 const { FULFILLED_TASK_OUTCOMES } = await import("../services/sage-tasks.js");
 const {
-  appreciationText, dueRhythms, EMPTY_ACTIVITY, gatherActivity, isoWeekKey, monthlyText, mutedRhythmClassifications,
-  openWorkText, prioritiesText, publishRhythmPost, runCommunityRhythm, consentedNames, explicitCommitment,
+  appreciationText, dueRhythms, EMPTY_ACTIVITY, gatherActivity, isoWeekKey, monthlyText,
+  openWorkText, prioritiesText, publishRhythmPost, runCommunityRhythm, explicitCommitment,
   gatherMondayFollowUp, gatherStopCandidates, hasActiveRhythmDiscussion, RHYTHM_MIN_ACTIVE_MEMBERS,
 } = rhythm;
 
@@ -51,7 +50,6 @@ beforeEach(() => {
   db.proposal.count.mockResolvedValue(0);
   push.createNotificationAndPush.mockResolvedValue({ id: "n-1" });
 });
-
 describe("the schedule", () => {
   it("keys weeks by ISO week", () => {
     expect(isoWeekKey(at("2026-10-16T12:00:00Z"))).toBe("2026-W42");
@@ -74,7 +72,6 @@ describe("the schedule", () => {
     expect(dueRhythms(at("2026-10-04T14:00:00Z")).some((entry) => entry.category === "monthly_review")).toBe(false);
   });
 });
-
 describe("Monday priorities", () => {
   const votingEndsAt = at("2026-10-15T18:00:00Z");
   const input = {
@@ -242,28 +239,20 @@ describe("verified activity", () => {
     expect(db.commonsActionAudit.findMany.mock.calls[0][0].where.eventType).toBe("HELP_CONFIRMED");
   });
 
-  it("names only members who opted in and are still active in this Commons", async () => {
-    db.user.findMany.mockResolvedValue([{ name: "Ana", handle: "ana" }, { name: null, handle: "bo" }]);
-    expect(await consentedNames("coop-1", new Set(["u1", "u2", "u3"]))).toEqual(["Ana", "bo"]);
-    const where = db.user.findMany.mock.calls[0][0].where;
-    expect(where.nameInSageAppreciation).toBe(true);
-    expect(where.memberships).toEqual({ some: { coopId: "coop-1", status: "ACTIVE" } });
-    expect(await consentedNames("coop-1", new Set())).toEqual([]);
-  });
 });
 
 describe("publishing", () => {
   const text = { title: "This week's appreciation", body: "• 1 event hosted" };
 
-  it("posts once in the Commons feed as Sage and alerts only members who chose Notify", async () => {
-    db.sageRhythmPreference.findMany.mockResolvedValue([{ userId: "subscriber" }]);
+  it("posts once in General as Sage and notifies active members through the Community category", async () => {
+    db.userCoopMembership.findMany.mockResolvedValue([{ userId: "member-1" }]);
     const result = await publishRhythmPost("coop-1", "friday_appreciation", "2026-W42", text);
     expect(result).toMatchObject({ posted: true, postId: "post-1", notified: 1 });
     const action = db.commonsAction.create.mock.calls[0][0].data;
     expect(action).toMatchObject({ type: "COMMUNITY_RHYTHM", sourceType: "community_rhythm", sourceId: "coop-1:friday_appreciation:2026-W42", contentHash: "friday_appreciation" });
     expect(db.commonsPost.create.mock.calls[0][0].data).toMatchObject({ circleId: "general:coop-1", authorId: "sage-bot", classification: "sage_rhythm_friday_appreciation" });
-    expect(db.sageRhythmPreference.findMany.mock.calls[0][0].where).toMatchObject({ category: "friday_appreciation", mode: "NOTIFY" });
-    expect(push.createNotificationAndPush.mock.calls[0][1]).toMatchObject({ userId: "subscriber", type: "SAGE_RHYTHM", data: { postId: "post-1", coopId: "coop-1" } });
+    expect(db.userCoopMembership.findMany.mock.calls[0][0].where).toMatchObject({ coopId: "coop-1", status: "ACTIVE", user: { isBot: false } });
+    expect(push.createNotificationAndPush.mock.calls[0][1]).toMatchObject({ userId: "member-1", type: "SAGE_RHYTHM", data: { postId: "post-1", coopId: "coop-1", category: "friday_appreciation" } });
     expect(db.commonsActionAudit.create).toHaveBeenCalledWith({ data: expect.objectContaining({ eventType: "RHYTHM_POSTED" }) });
   });
 
@@ -306,21 +295,5 @@ describe("publishing", () => {
     const result = await runCommunityRhythm("coop-1", FRIDAY);
     expect(result.results).toEqual([expect.objectContaining({ category: "friday_appreciation", posted: true })]);
     expect(db.commonsPost.create.mock.calls[0][0].data.content).toContain("1 event hosted");
-  });
-});
-
-describe("member settings", () => {
-  it("hides only the categories a member muted", async () => {
-    db.sageRhythmPreference.findMany.mockResolvedValue([{ category: "midweek_open_work" }, { category: "bogus" }]);
-    expect(await mutedRhythmClassifications("u1")).toEqual(["sage_rhythm_midweek_open_work"]);
-    expect(db.sageRhythmPreference.findMany.mock.calls[0][0].where).toEqual({ userId: "u1", mode: "MUTED" });
-    expect(await mutedRhythmClassifications(null)).toEqual([]);
-  });
-
-  it("defaults every category to the feed with no alert", async () => {
-    db.sageRhythmPreference.findMany.mockResolvedValue([{ category: "friday_appreciation", mode: "NOTIFY" }]);
-    expect(await rhythm.rhythmModesFor("u1")).toEqual({
-      weekly_priorities: "FEED", midweek_open_work: "FEED", friday_appreciation: "NOTIFY", monthly_review: "FEED", before_decisions: "FEED",
-    });
   });
 });

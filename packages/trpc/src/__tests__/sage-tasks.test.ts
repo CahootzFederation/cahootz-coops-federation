@@ -23,6 +23,8 @@ vi.mock("../services/sage-suggestion-follow-up.js", async (importOriginal) => ({
 
 const proactive = vi.hoisted(() => ({ LIMITED_RETRIES: 3, runProactiveTask: vi.fn(), promiseAlreadyKept: vi.fn() }));
 vi.mock("../services/sage-proactive.js", () => proactive);
+const revisitThread = vi.hoisted(() => vi.fn());
+vi.mock("../services/commons-action-agent.js", () => ({ revisitThread }));
 
 const tasks = await import("../services/sage-tasks.js");
 const { createSageTask, clampFollowUpDays, checkTaskOutcome, wakeTask, claimDueTasks, reminderText, runSageWakeCycle, dismissSageTask } = tasks;
@@ -239,5 +241,41 @@ describe("promises Sage made to a member", () => {
     db.sageTask.update.mockClear();
     await expect(wakeTask(promise({ attempts: 3 }), NOW)).resolves.toBe("ABANDONED");
     expect(db.sageTask.update).toHaveBeenCalledWith({ where: { id: "task-1" }, data: expect.objectContaining({ status: "ABANDONED" }) });
+  });
+});
+
+describe("bringing back a discussion the group put off", () => {
+  const revisit = (overrides: Record<string, unknown> = {}) => task({
+    subjectType: "thread_revisit", title: "Bring back: Tool library hours", reason: 'A member put the discussion off: "Let\'s revisit this next week"',
+    expected: "the group picks the discussion back up", ownerUserId: "member-1", ...overrides,
+  });
+
+  it("is done once any member picks the thread back up, and moot if the post is gone", async () => {
+    expect(await checkTaskOutcome(revisit(), NOW)).toEqual({ resolved: false });
+    expect(db.commonsComment.findFirst).toHaveBeenLastCalledWith({
+      where: { postId: "post-1", createdAt: { gt: new Date(NOW.getTime() - 3 * DAY) }, author: { isBot: false } }, select: { id: true },
+    });
+    db.commonsComment.findFirst.mockResolvedValueOnce({ id: "c9" });
+    expect(await checkTaskOutcome(revisit(), NOW)).toEqual({ resolved: true, outcome: "The group picked the discussion back up" });
+    db.commonsPost.findUnique.mockResolvedValueOnce(null);
+    expect(await checkTaskOutcome(revisit(), NOW)).toMatchObject({ resolved: true, moot: true });
+  });
+
+  it("comes back in the thread itself, once, instead of sending a push reminder", async () => {
+    revisitThread.mockResolvedValueOnce({ ran: true, reason: "Sage came back to the discussion" });
+    await expect(wakeTask(revisit(), NOW)).resolves.toBe("DONE");
+    expect(revisitThread).toHaveBeenCalledWith(expect.objectContaining({ id: "task-1", subjectType: "thread_revisit" }), { now: NOW });
+    expect(push).not.toHaveBeenCalled();
+    expect(db.sageTask.update).toHaveBeenCalledWith({ where: { id: "task-1" }, data: expect.objectContaining({ status: "DONE", outcome: "Sage came back to the discussion" }) });
+
+    revisitThread.mockResolvedValueOnce({ ran: false, reason: "Sage's monthly limit for this Commons is reached" });
+    await expect(wakeTask(revisit(), NOW)).resolves.toBe("ABANDONED");
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("doesn't come back when the group already picked it up", async () => {
+    db.commonsComment.findFirst.mockResolvedValueOnce({ id: "c9" });
+    await expect(wakeTask(revisit(), NOW)).resolves.toBe("DONE");
+    expect(revisitThread).not.toHaveBeenCalled();
   });
 });

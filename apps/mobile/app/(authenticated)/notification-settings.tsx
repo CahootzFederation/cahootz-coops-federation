@@ -175,6 +175,12 @@ export default function NotificationSettings() {
                           Turning this off stops them everywhere.
                         </Text>
                       )}
+                      {category === "sage" && (
+                        <Text style={s.text}>
+                          All Sage notifications outside General. Sage posts in
+                          General follow Community instead.
+                        </Text>
+                      )}
                     </View>
                     <PreferenceSwitch
                       label={notificationCategoryLabels[category]}

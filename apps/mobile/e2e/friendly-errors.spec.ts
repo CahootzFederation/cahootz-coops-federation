@@ -167,3 +167,37 @@ test("the proposals list hides a raw validation error and recovers with Try agai
     await context.close();
   }
 });
+
+// Stiff server wording ("Failed to…", "X not found", "Unauthorized") used to
+// reach members word for word. The screen's own sentence wins now.
+test("the proposals list shows its own sentence instead of a stiff server message", async ({
+  browser,
+}) => {
+  const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
+  const listProposals = procedure("proposal.list");
+
+  try {
+    await page.route(listProposals, (route) =>
+      fulfillTrpcError(route, {
+        message: "Failed to list proposals",
+        code: "INTERNAL_SERVER_ERROR",
+        httpStatus: 500,
+      }),
+    );
+    await page.goto("/proposals?coopId=cahootz");
+
+    await expect(shown(page, PROPOSALS_FALLBACK)).toBeVisible();
+    await expect(shown(page, /Failed to list proposals/)).toHaveCount(0);
+
+    await page.unroute(listProposals);
+    const reloaded = page.waitForResponse(
+      (response) => listProposals(new URL(response.url())) && response.ok(),
+    );
+    await tryAgain(page).click();
+    await reloaded;
+    await expect(shown(page, PROPOSALS_FALLBACK)).toHaveCount(0);
+    await expect(tryAgain(page)).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});

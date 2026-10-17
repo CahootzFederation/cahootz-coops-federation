@@ -198,15 +198,16 @@ async function loadFeedPosts(
   circleId?: string,
 ) {
   const coopIds = Array.isArray(coopId) ? coopId : [coopId];
+  const scope: Prisma.CommonsPostWhereInput = circleId
+    ? { coopId: coopIds[0], circleId }
+    : {
+        OR: coopIds.flatMap((id) => [
+          { coopId: id, circleId: generalCircleId(id) },
+          { coopId: id, circleId: null },
+        ]),
+      };
   const posts = await db.commonsPost.findMany({
-    where: circleId
-      ? { coopId: coopIds[0], circleId }
-      : {
-          OR: coopIds.flatMap((id) => [
-            { coopId: id, circleId: generalCircleId(id) },
-            { coopId: id, circleId: null },
-          ]),
-        },
+    where: scope,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -1080,6 +1081,7 @@ export const commonsRouter = router({
           activeCoopIds,
           input.limit,
           input.cursor,
+          undefined,
         );
 
         const coopConfigs = await context.db.coopConfig.findMany({
@@ -2939,11 +2941,11 @@ export const commonsRouter = router({
           media: { orderBy: { order: 'asc' } },
         },
       });
-      if (!post.circleId || post.circleId === generalCircleId(post.coopId)) {
-        await enqueueCommonsActionContent('commons_comment', comment.id).catch((error) =>
-          console.error('Could not enqueue Commons action scan for comment', { commentId: comment.id, error }),
-        );
-      }
+      // General feed comments get Sage's usual analysis; circle comments are checked for whether the
+      // thread needs facilitation (no model call unless it does).
+      await enqueueCommonsActionContent('commons_comment', comment.id).catch((error) =>
+        console.error('Could not enqueue Commons action scan for comment', { commentId: comment.id, error }),
+      );
 
       // A reply may be what Sage was waiting for: check the member's open follow-ups on this post now.
       void wakeTasksForReply(post.id, accountUser.id).catch((error) =>

@@ -35,14 +35,15 @@ function subjectUserId(ctx: ToolContext): string {
   return subject.userId;
 }
 
-function suggestionPayload(ctx: ToolContext): { title: string; body: string; suggestedStartAt?: string; suggestedDurationMinutes?: number; targetPostId?: string } {
-  const payload = ctx.action.payload as { title?: unknown; body?: unknown; suggestedStartAt?: unknown; suggestedDurationMinutes?: unknown; targetPostId?: unknown } | null;
+function suggestionPayload(ctx: ToolContext): { title: string; body: string; suggestedStartAt?: string; suggestedDurationMinutes?: number; targetPostId?: string; facilitationOf?: string } {
+  const payload = ctx.action.payload as { title?: unknown; body?: unknown; suggestedStartAt?: unknown; suggestedDurationMinutes?: unknown; targetPostId?: unknown; facilitationOf?: unknown } | null;
   return {
     title: typeof payload?.title === "string" ? payload.title : ctx.action.summary,
     body: typeof payload?.body === "string" ? payload.body : ctx.action.summary,
     suggestedStartAt: typeof payload?.suggestedStartAt === "string" ? payload.suggestedStartAt : undefined,
     suggestedDurationMinutes: typeof payload?.suggestedDurationMinutes === "number" ? payload.suggestedDurationMinutes : undefined,
     targetPostId: typeof payload?.targetPostId === "string" ? payload.targetPostId : undefined,
+    facilitationOf: typeof payload?.facilitationOf === "string" ? payload.facilitationOf : undefined,
   };
 }
 
@@ -100,9 +101,11 @@ async function createCommonsPost(ctx: ToolContext): Promise<ToolResult> {
 }
 
 /** A Sage-authored comment on one post in the suggestion's own Commons and circle. Re-checks scope at
- * execution time rather than trusting the stored payload, and keeps Sage to one comment per post. */
+ * execution time rather than trusting the stored payload, and keeps Sage to one comment per post. A
+ * facilitation comment (see sage-facilitation.ts) answers one comment in an active thread instead, so it
+ * is refused only if Sage has already spoken in the thread since that comment. */
 async function commentOnPost(ctx: ToolContext): Promise<ToolResult> {
-  const { body, targetPostId } = suggestionPayload(ctx);
+  const { body, targetPostId, facilitationOf } = suggestionPayload(ctx);
   if (!targetPostId) throw new ToolRefusal("No target post for this comment");
   const post = await db.commonsPost.findUnique({ where: { id: targetPostId }, select: { id: true, coopId: true, circleId: true } });
   const circleId = ctx.action.circleId ?? generalCircleId(ctx.action.coopId);
@@ -110,8 +113,15 @@ async function commentOnPost(ctx: ToolContext): Promise<ToolResult> {
     throw new ToolRefusal("Target post is outside this suggestion's Commons and circle");
   }
   const sage = await ensureSageBotUser(db, ctx.action.coopId);
-  const prior = await db.commonsComment.findFirst({ where: { postId: post.id, authorId: sage.id }, select: { id: true } });
-  if (prior) throw new ToolRefusal("Sage has already commented on this post");
+  if (facilitationOf) {
+    const trigger = await db.commonsComment.findUnique({ where: { id: facilitationOf }, select: { postId: true, createdAt: true } });
+    if (!trigger || trigger.postId !== post.id) throw new ToolRefusal("The comment Sage was answering is gone");
+    const since = await db.commonsComment.findFirst({ where: { postId: post.id, author: { isBot: true }, createdAt: { gt: trigger.createdAt } }, select: { id: true } });
+    if (since) throw new ToolRefusal("Sage has already spoken in this thread since then");
+  } else {
+    const prior = await db.commonsComment.findFirst({ where: { postId: post.id, authorId: sage.id }, select: { id: true } });
+    if (prior) throw new ToolRefusal("Sage has already commented on this post");
+  }
   const comment = await db.commonsComment.create({
     data: { postId: post.id, authorId: sage.id, content: body.slice(0, 2000) },
   });
@@ -132,10 +142,11 @@ export async function publishSageCommentAutonomously(actionId: string): Promise<
   const participants = await db.commonsActionParticipant.findMany({ where: { actionId } });
   try {
     const result = await commentOnPost({ action, participants });
-    const { targetPostId } = suggestionPayload({ action, participants });
+    const { targetPostId, facilitationOf } = suggestionPayload({ action, participants });
     try {
       await db.commonsAction.update({ where: { id: action.id }, data: {
-        status: "PUBLISHED", publishedCommentId: result.resultEntityId, replySourceKey: `commons_post:${targetPostId}`,
+        status: "PUBLISHED", publishedCommentId: result.resultEntityId,
+        replySourceKey: facilitationOf ? `commons_comment:${facilitationOf}` : `commons_post:${targetPostId}`,
       } });
     } catch (error) {
       // Another Sage path claimed this post concurrently (unique replySourceKey): withdraw ours.

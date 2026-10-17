@@ -10,12 +10,14 @@ const db = vi.hoisted(() => {
     coopConfig: { findFirst: vi.fn() },
     commonsAction: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     commonsActionAudit: { create: vi.fn() },
+    userCoopMembership: { findMany: vi.fn() },
     sageDecisionTrail: { create: vi.fn() },
   };
   client.$transaction = vi.fn((fn: (tx: unknown) => unknown) => fn(client));
   return client;
 });
 const autonomy = vi.hoisted(() => vi.fn());
+const push = vi.hoisted(() => ({ createNotificationAndPush: vi.fn() }));
 vi.mock("@repo/db", () => ({ db }));
 vi.mock("@openai/agents", () => {
   class MockAgent { constructor(public opts: unknown) {} }
@@ -24,6 +26,7 @@ vi.mock("@openai/agents", () => {
 vi.mock("../lib/bot.js", () => ({ ensureSageBotUser: vi.fn().mockResolvedValue({ id: "sage" }) }));
 vi.mock("../services/sage-autonomy.js", () => ({ sageAutonomyAllowed: autonomy }));
 vi.mock("../services/ai-cost.js", () => ({ recordAICost: vi.fn(), recordAgentResultCost: vi.fn() }));
+vi.mock("../services/push-notification-service.js", () => push);
 
 const {
   PRE_VOTE_FEATURE, SAGE_PROPOSAL_COMMENT_WALLET, checkPreVotePoints, createPreVoteAgent, proposalsNearingVote, publishPreVoteSummary,
@@ -77,6 +80,8 @@ beforeEach(() => {
   db.commonsAction.findUnique.mockImplementation(async () => ({ id: "action-1", type: "SUMMARIZE_DISCUSSION", status: "PENDING", sourceId: "prop-1",
     draftText: db.commonsAction.create.mock.calls.at(-1)?.[0].data.draftText ?? "summary", payload: {} }));
   db.commonsAction.update.mockResolvedValue({});
+  db.userCoopMembership.findMany.mockResolvedValue([{ userId: "member-1" }]);
+  push.createNotificationAndPush.mockResolvedValue({ id: "notification-1" });
   db.sageDecisionTrail.create.mockResolvedValue({ id: "trail-1" });
 });
 
@@ -104,9 +109,9 @@ describe("what a pre-vote summary may say", () => {
         { point: "Some want a bigger fridge.", quote: "a bigger fridge would be better" },
       ],
       unheardGroups: [
-        { point: "Tasha's neighbors", quote: "The last fridge on 5th got gross fast" },
-        { point: "@dev", quote: "families need it" },
-        { point: "neighbors with mobility needs", quote: "mobility needs were not discussed" },
+        { point: "Tasha's neighbors", quote: "Who cleans it?" },
+        { point: "@dev", quote: "I'm for a fridge" },
+        { point: "people outside the neighborhood", quote: "people outside the neighborhood" },
       ],
     }), SOURCES);
     expect(summary.agreed).toEqual([]);
@@ -140,7 +145,7 @@ describe("what a pre-vote summary may say", () => {
   it("tells the model never to say how to vote, and counts its calls toward the autonomy limit", () => {
     const instructions = String((createPreVoteAgent() as unknown as { opts: { instructions: string } }).opts.instructions);
     expect(instructions).toMatch(/Never say or hint how anyone should vote/);
-    expect(instructions).toMatch(/exact excerpt showing the proposal affects that group/);
+    expect(instructions).toMatch(/Never infer identity or claim to know who a commenter represents/);
     expect(AUTONOMOUS_SAGE_FEATURES).toContain(PRE_VOTE_FEATURE);
   });
 });
@@ -157,6 +162,7 @@ describe("posting the summary before the vote closes", () => {
       proposalId: "prop-1", authorWallet: SAGE_PROPOSAL_COMMENT_WALLET, authorName: "Sage", content: expect.stringMatching(/I'm not taking a side/),
     }) });
     expect(db.commonsAction.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "PUBLISHED", replySourceKey: "proposal_pre_vote:prop-1" }) }));
+    expect(push.createNotificationAndPush).toHaveBeenCalledWith(db, expect.objectContaining({ userId: "member-1", type: "SAGE_PRE_VOTE", data: { proposalId: "prop-1", coopId: "harbor" } }));
     const trail = db.sageDecisionTrail.create.mock.calls[0]![0].data;
     expect(trail).toMatchObject({ agent: "sage-pre-vote", proposalId: "prop-1", visibility: "COMMONS_MEMBERS" });
     expect(trail.steps).toEqual(expect.arrayContaining([expect.objectContaining({ label: "Posted the summary on the proposal's discussion", outcome: "PASS" })]));

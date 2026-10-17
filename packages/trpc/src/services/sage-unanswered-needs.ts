@@ -26,6 +26,35 @@ async function commonsName(coopId: string) {
   return config?.name || coopId;
 }
 
+/** Need/Ask posts in the Commons-wide feed, 48 hours to 14 days old, by members (oldest first). Some may have replies. */
+export async function findQuietNeedPosts(coopId: string, now: Date, postIds?: string[]) {
+  return db.commonsPost.findMany({
+    where: {
+      coopId,
+      ...(postIds ? { id: { in: postIds } } : {}),
+      OR: [{ tag: { in: ["Need", "Ask"] } }, { classification: "need" }],
+      AND: [{ OR: [{ circleId: null }, { circleId: `general:${coopId}` }] }],
+      createdAt: { gte: new Date(now.getTime() - NEED_MAX_AGE_DAYS * DAY_MS), lte: new Date(now.getTime() - NEED_QUIET_HOURS * HOUR_MS) },
+      author: { isBot: false },
+    },
+    orderBy: { createdAt: "asc" },
+    take: 50,
+    select: { id: true, title: true, content: true, authorId: true, createdAt: true },
+  });
+}
+
+async function hasReplyFromOthers(post: { id: string; authorId: string }) {
+  return !!(await db.commonsComment.findFirst({ where: { postId: post.id, authorId: { not: post.authorId } }, select: { id: true } }));
+}
+
+/** Needs nobody but the author has answered: the posts Sage asks helpers about, and lists (by title only) midweek. */
+export async function findUnansweredNeedPosts(coopId: string, now: Date, postIds?: string[]) {
+  const posts = await findQuietNeedPosts(coopId, now, postIds);
+  const unanswered = [];
+  for (const post of posts) if (!(await hasReplyFromOthers(post))) unanswered.push(post);
+  return unanswered;
+}
+
 export async function askHelpersForUnansweredNeeds(
   coopId: string, now = new Date(),
   /** Internal test control (E2E fixtures); never accepted by a public API. */
@@ -37,26 +66,13 @@ export async function askHelpersForUnansweredNeeds(
   let budget = NEED_ASKS_PER_COMMONS_PER_DAY - askedToday;
   if (budget <= 0) return { considered: 0, asked: 0 };
 
-  const posts = await db.commonsPost.findMany({
-    where: {
-      coopId,
-      ...(options.postIds ? { id: { in: options.postIds } } : {}),
-      OR: [{ tag: { in: ["Need", "Ask"] } }, { classification: "need" }],
-      AND: [{ OR: [{ circleId: null }, { circleId: `general:${coopId}` }] }],
-      createdAt: { gte: new Date(now.getTime() - NEED_MAX_AGE_DAYS * DAY_MS), lte: new Date(now.getTime() - NEED_QUIET_HOURS * HOUR_MS) },
-      author: { isBot: false },
-    },
-    orderBy: { createdAt: "asc" },
-    take: 50,
-    select: { id: true, title: true, content: true, authorId: true },
-  });
+  const posts = await findQuietNeedPosts(coopId, now, options.postIds);
 
   const name = await commonsName(coopId);
   let asked = 0;
   for (const post of posts) {
     if (budget <= 0) break;
-    const answered = await db.commonsComment.findFirst({ where: { postId: post.id, authorId: { not: post.authorId } }, select: { id: true } });
-    if (answered) continue;
+    if (await hasReplyFromOthers(post)) continue;
     const prior = await db.auditLog.findMany({
       where: { action: ASKED, resourceId: post.id }, orderBy: { occurredAt: "desc" }, select: { occurredAt: true, metadata: true },
     });

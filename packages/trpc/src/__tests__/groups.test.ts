@@ -344,7 +344,7 @@ describe('groupsRouter', () => {
         coopConfig: {
           findFirst: vi
             .fn()
-            .mockResolvedValue({ minScBalanceToCreateGroup: 10 }),
+            .mockResolvedValue({ minScBalanceToCreateGroup: 10, scTokenName: 'SoulCoin' }),
         },
       });
       vi.mocked(validateSCBalance).mockResolvedValueOnce(5);
@@ -353,6 +353,7 @@ describe('groupsRouter', () => {
         callerFor(db).create({ name: 'Block Club' }),
       ).rejects.toMatchObject({
         code: 'FORBIDDEN',
+        message: 'You need at least 10.00 SoulCoin to start a space. You have 5.00 SoulCoin.',
       });
       expect(db.group.create).not.toHaveBeenCalled();
     });
@@ -1064,7 +1065,7 @@ describe('groupsRouter', () => {
         userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null) },
       });
 
-      await expect(callerFor(db).joinPublic({ groupId: 'group_1' })).rejects.toThrow('Join this common first');
+      await expect(callerFor(db).joinPublic({ groupId: 'group_1' })).rejects.toThrow('Join this commons first');
       expect(db.groupMember.upsert).not.toHaveBeenCalled();
     });
   });

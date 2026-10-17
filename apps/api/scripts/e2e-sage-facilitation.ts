@@ -14,7 +14,7 @@
  *     Creates an E2E proposal that is open for voting and closes in 24 hours.
  *   tsx --import ./dotenv.config.js scripts/e2e-sage-facilitation.ts pre-vote <proposalId>
  *     Runs Sage's pre-vote summary for that proposal now (live model), as the wake step would.
- *   tsx --import ./dotenv.config.js scripts/e2e-sage-facilitation.ts cleanup <postId|-> <proposalId|->
+ *   tsx --import ./dotenv.config.js scripts/e2e-sage-facilitation.ts cleanup <postId|-> <proposalId|-> [memberEmail...]
  *     Deletes Sage's actions, tasks, trigger claims and trails for the E2E post and proposal, and the proposal.
  *
  * Prints one JSON line prefixed with "E2E_RESULT ". Refuses anything but E2E content and seeded test
@@ -99,7 +99,7 @@ async function preVote(proposalId: string) {
   return { result: await summarizeBeforeVote(proposalId) };
 }
 
-async function cleanup(postId: string, proposalId: string) {
+async function cleanup(postId: string, proposalId: string, memberEmails: string[] = []) {
   const result: Record<string, number> = {};
   if (postId !== "-") {
     await assertE2EPost(postId);
@@ -122,7 +122,9 @@ async function cleanup(postId: string, proposalId: string) {
   }
   if (proposalId !== "-") {
     if (!proposalId.startsWith("prop_e2e_")) throw new Error("Only E2E proposals can be deleted");
+    if (memberEmails.some((email) => !email.endsWith(TEST_EMAIL_SUFFIX))) throw new Error("Only seeded test accounts can be reset");
     await db.$transaction([
+      db.notification.deleteMany({ where: { data: { path: ["proposalId"], equals: proposalId } } }),
       db.commonsAction.deleteMany({ where: { sourceType: PRE_VOTE_SOURCE, sourceId: proposalId } }),
       db.commonsContentScan.deleteMany({ where: { sourceType: PRE_VOTE_SOURCE, sourceId: proposalId } }),
       db.sageDecisionTrail.deleteMany({ where: { proposalId } }),
@@ -135,14 +137,14 @@ async function cleanup(postId: string, proposalId: string) {
 
 async function main() {
   assertSafeEnvironment();
-  const [command, first, second] = process.argv.slice(2);
+  const [command, first, second, ...rest] = process.argv.slice(2);
   const result =
     command === "revisit-due" && first ? await revisitDue(first)
       : command === "claims" && first ? await claims(first)
       : command === "pending" && first ? await pending(first)
       : command === "seed-votable" && first && second ? await seedVotable(first, second)
       : command === "pre-vote" && first ? await preVote(first)
-      : command === "cleanup" && first && second ? await cleanup(first, second)
+      : command === "cleanup" && first && second ? await cleanup(first, second, rest)
       : (() => { throw new Error("Usage: e2e-sage-facilitation.ts revisit-due <postId> | seed-votable <runId> <email> | pre-vote <proposalId> | cleanup <postId|-> <proposalId|->"); })();
   console.log(`E2E_RESULT ${JSON.stringify(result)}`);
 }

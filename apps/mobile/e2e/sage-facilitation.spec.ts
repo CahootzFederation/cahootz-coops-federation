@@ -223,6 +223,8 @@ test("Before a vote closes, Sage posts one balanced summary of the discussion", 
       await expect(summary).toContainText("I'm not taking a side; how to vote is up to each of you.");
       await expect(summary).not.toContainText(/vote (yes|no|for|against)/i);
     }
+    await userA.page.goto("/notifications");
+    await expect(shown(userA.page, "Sage: Discussion summary before the vote")).toBeVisible({ timeout: 60_000 });
 
     // 4. One summary per proposal: running the step again adds nothing.
     expect(fixture("pre-vote", proposalId).result).toBe("SKIPPED");
@@ -231,7 +233,7 @@ test("Before a vote closes, Sage posts one balanced summary of the discussion", 
     if (await viewAll.isVisible().catch(() => false)) await viewAll.click();
     await expect(userA.page.getByTestId("sage-proposal-comment").locator("visible=true")).toHaveCount(1);
   } finally {
-    if (proposalId) fixture("cleanup", "-", proposalId);
+    if (proposalId) fixture("cleanup", "-", proposalId, USER_A_EMAIL, USER_B_EMAIL);
     await userA.context.close();
     await userB.context.close();
   }

@@ -272,7 +272,7 @@ export function ProposalDetailContent() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [id, routeCoopId, user?.walletAddress]);
+  }, [id, routeCoopId, sessionToken, user?.walletAddress]);
 
   useEffect(() => { load(); }, [load]);
 

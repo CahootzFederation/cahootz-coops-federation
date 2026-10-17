@@ -106,6 +106,16 @@ export interface TaskCheck {
   moot?: boolean;
 }
 
+/**
+ * Outcomes where the member who owned a follow-up did what they said they would, verified from app
+ * data. The Friday appreciation counts these as commitments fulfilled (sage-community-rhythm.ts).
+ */
+export const FULFILLED_TASK_OUTCOMES = {
+  replied: "The member replied in the thread",
+  draftFromThread: "A proposal draft was created from the thread",
+  draftSubmitted: "The draft was submitted",
+} as const;
+
 /** Decides from app data alone whether what Sage was waiting for has happened. */
 export async function checkTaskOutcome(task: Pick<SageTask, "id" | "kind" | "subjectType" | "subjectId" | "ownerUserId" | "postId" | "createdAt">, now = new Date()): Promise<TaskCheck> {
   if (task.subjectType === SUGGESTION_TASK_SUBJECT) return checkSuggestionReview(task, now);
@@ -138,7 +148,7 @@ export async function checkTaskOutcome(task: Pick<SageTask, "id" | "kind" | "sub
       const reply = await db.commonsComment.findFirst({
         where: { postId, authorId: task.ownerUserId, createdAt: { gt: task.createdAt } }, select: { id: true },
       });
-      if (reply) return { resolved: true, outcome: "The member replied in the thread" };
+      if (reply) return { resolved: true, outcome: FULFILLED_TASK_OUTCOMES.replied };
       const threadActions = await db.commonsAction.findMany({ where: { sourcePostId: postId }, select: { id: true } });
       const draft = threadActions.length
         ? await db.commonsProposalDraft.findFirst({
@@ -146,7 +156,7 @@ export async function checkTaskOutcome(task: Pick<SageTask, "id" | "kind" | "sub
             select: { id: true },
           })
         : null;
-      if (draft) return { resolved: true, outcome: "A proposal draft was created from the thread" };
+      if (draft) return { resolved: true, outcome: FULFILLED_TASK_OUTCOMES.draftFromThread };
     }
     return { resolved: false };
   }
@@ -172,7 +182,7 @@ export async function checkTaskOutcome(task: Pick<SageTask, "id" | "kind" | "sub
   if (task.subjectType === "proposal_draft") {
     const draft = await db.commonsProposalDraft.findUnique({ where: { id: task.subjectId }, select: { submittedAt: true } });
     if (!draft) return { resolved: true, moot: true, outcome: "The draft was deleted" };
-    if (draft.submittedAt) return { resolved: true, outcome: "The draft was submitted" };
+    if (draft.submittedAt) return { resolved: true, outcome: FULFILLED_TASK_OUTCOMES.draftSubmitted };
     return { resolved: false };
   }
   if (task.subjectType === "proposal") {

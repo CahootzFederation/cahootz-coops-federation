@@ -198,15 +198,16 @@ async function loadFeedPosts(
   circleId?: string,
 ) {
   const coopIds = Array.isArray(coopId) ? coopId : [coopId];
+  const scope: Prisma.CommonsPostWhereInput = circleId
+    ? { coopId: coopIds[0], circleId }
+    : {
+        OR: coopIds.flatMap((id) => [
+          { coopId: id, circleId: generalCircleId(id) },
+          { coopId: id, circleId: null },
+        ]),
+      };
   const posts = await db.commonsPost.findMany({
-    where: circleId
-      ? { coopId: coopIds[0], circleId }
-      : {
-          OR: coopIds.flatMap((id) => [
-            { coopId: id, circleId: generalCircleId(id) },
-            { coopId: id, circleId: null },
-          ]),
-        },
+    where: scope,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -1080,6 +1081,7 @@ export const commonsRouter = router({
           activeCoopIds,
           input.limit,
           input.cursor,
+          undefined,
         );
 
         const coopConfigs = await context.db.coopConfig.findMany({

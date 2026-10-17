@@ -354,7 +354,7 @@ export default function GroupDetailScreen() {
     Alert.alert(
       makePublic ? 'Make this circle public?' : 'Make this circle private?',
       makePublic
-        ? 'All existing posts and replies will become visible to members of this common. Only circle members can post or reply.'
+        ? 'All existing posts and replies will become visible to members of this commons. Only circle members can post or reply.'
         : 'Only current circle members will be able to see existing and future posts. Current members will stay in the circle.',
       [
         { text: 'Cancel', style: 'cancel' },
@@ -525,7 +525,7 @@ export default function GroupDetailScreen() {
             <Text className="mt-4 text-sm font-black text-gray-950">Privacy</Text>
             <Text className="mt-1 text-xs leading-5 text-gray-600">
               {group.privacy === 'public'
-                ? 'Members of this common can discover and read this circle. They must join before posting.'
+                ? 'Members of this commons can discover and read this circle. They must join before posting.'
                 : 'Only circle members can find, read, and post here.'}
             </Text>
             {group.isLeader ? (

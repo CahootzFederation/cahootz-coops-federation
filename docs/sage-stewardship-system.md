@@ -31,6 +31,7 @@ Sage should be able to:
 7. Recommend review of documented harmful conduct without punishing or publicly accusing members.
 8. Learn from edits, dismissals, approvals, expert corrections, and real outcomes.
 9. Remain quiet when intervention would add noise, duplicate work, or exceed its authority.
+10. Build sustained, healthy, voluntary participation around member-approved goals by making useful contribution paths visible, connecting members who can help one another, and recognizing verified work.
 
 Sage optimizes a balanced scorecard:
 
@@ -46,6 +47,15 @@ Sage optimizes a balanced scorecard:
 
 Never optimize raw comments, alerts, proposals, clicks, or engagement. Those targets reward
 noise and manipulation rather than member benefit.
+
+### Community rhythm
+
+Sage may facilitate predictable Monday, midweek, pre-decision, Friday, and monthly rituals.
+Each ritual must give members a useful, voluntary next step: choose or share a priority, answer
+an open request, invite a partner, thank a specific contribution, or say what to keep, change,
+or stop. Members control each category independently: the default is visible without an alert,
+they may subscribe to alerts, or they may mute it. Muting a pre-decision summary hides Sage's
+summary for that member; it never hides member discussion or change the vote.
 
 ## Runtime design
 

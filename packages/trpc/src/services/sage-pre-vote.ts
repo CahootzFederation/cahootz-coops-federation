@@ -8,6 +8,7 @@ import { AUTO_REPLY_MIN_CONFIDENCE, charterSnapshotKey } from "./commons-action-
 import { DecisionTrail, percent } from "./sage-decision-trail.js";
 import { checkRelevance, modelRelevanceJudge, type RelevanceJudge } from "./sage-grounding.js";
 import { sageAutonomyAllowed } from "./sage-autonomy.js";
+import { notifyActiveCommonsMembers } from "./sage-community-rhythm.js";
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
 import {
   SAGE_OUTPUT_MAX_CHARS, checkSageOutput, cleanseUntrustedText, describeInputFlags, describeOutputProblems, isSteeringAttempt, mergeFlags,
@@ -339,7 +340,7 @@ export async function publishPreVoteSummary(actionId: string, actor: string | nu
   if (!action || action.type !== "SUMMARIZE_DISCUSSION" || action.status !== "PENDING" || !action.draftText) {
     return { published: false, reason: "The summary is no longer pending" };
   }
-  const proposal = await db.proposal.findUnique({ where: { id: action.sourceId }, select: { status: true, votingEndsAt: true } });
+  const proposal = await db.proposal.findUnique({ where: { id: action.sourceId }, select: { status: true, votingEndsAt: true, coopId: true, title: true } });
   if (!proposal || proposal.status !== "VOTABLE" || !proposal.votingEndsAt || proposal.votingEndsAt <= now) {
     await db.commonsAction.update({ where: { id: action.id }, data: { status: "DISMISSED", reviewedBy: actor, reviewedAt: now } });
     return { published: false, reason: "Voting has already closed" };
@@ -357,6 +358,12 @@ export async function publishPreVoteSummary(actionId: string, actor: string | nu
       return comment.id;
     });
     await db.commonsActionAudit.create({ data: { actionId: action.id, actorId: actor, eventType: actor ? "APPROVED_PUBLISHED" : "AUTO_PUBLISHED", metadata: { proposalCommentId: commentId } } });
+    await notifyActiveCommonsMembers(proposal.coopId, {
+      type: "SAGE_PRE_VOTE",
+      title: "Sage: Discussion summary before the vote",
+      body: `A balanced summary is ready for ${proposal.title}.`,
+      data: { proposalId: action.sourceId },
+    }).catch((error) => console.error("Could not notify members about Sage's pre-vote summary", { proposalId: action.sourceId, error }));
     return { published: true };
   } catch (error) {
     if ((error as { code?: string }).code === "P2002") return { published: false, reason: "A summary is already posted on this proposal" };

@@ -147,7 +147,7 @@ describe("facilitating a Commons thread", () => {
     ]));
   });
 
-  it("adds only the deterministic social opening code approved for a harmless busy thread", async () => {
+  it("adds only the deterministic social opening approved for a harmless busy thread", async () => {
     useThread(fixtures.BUSY_THREAD, "c8");
     run.mockResolvedValue({ finalOutput: { items: [{ id: "c8", actions: [action({
       templateKey: "where-we-are",
@@ -160,10 +160,10 @@ describe("facilitating a Commons thread", () => {
     await processCommonsActionContent("commons_comment", "c8", { relevanceJudge: onTopic });
 
     const content = db.commonsComment.create.mock.calls[0]![0].data.content as string;
-    expect(content).toMatch(/^(You’ve surfaced the constraints clearly; here’s what still needs deciding\.|This thread has done a few laps; here’s the useful part\.)\n\n/);
-    expect(content.match(/constraints clearly|done a few laps/g)).toHaveLength(1);
+    expect(content).toMatch(/^(You’ve surfaced the constraints clearly|This thread has done a few laps)/);
+    expect(content.match(/You’ve surfaced|This thread has done/g)).toHaveLength(1);
     expect(trailRows()[0].steps).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: expect.stringMatching(/Used one brief (compliment|light humor) opening/) }),
+      expect.objectContaining({ label: expect.stringMatching(/^Used one brief (compliment|light humor) opening$/) }),
     ]));
   });
 

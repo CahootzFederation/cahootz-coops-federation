@@ -4,7 +4,9 @@ import { z } from 'zod';
 import type { Prisma } from '@repo/db';
 
 import type { AccountAuthenticatedContext, Context } from '../context.js';
-import { COMMUNITY_OBSERVER_POST_TYPES, getAgent } from '../agents/registry.js';
+import { COMMUNITY_OBSERVER_POST_TYPES, getAgent, runSageCommonsReply } from '../agents/registry.js';
+import { buildSageReplyTools } from '../agents/tools/member-action-tools.js';
+import { safeFirstName } from '../services/sage-reply-templates.js';
 import { auditLogEntry } from '../lib/audit.js';
 import { ensureSageBotUser, isSageUser } from '../lib/bot.js';
 import {
@@ -2716,20 +2718,22 @@ export const commonsRouter = router({
       if (sageMention && circleId === generalCircleId(input.coopId)) {
         try {
           const sage = await ensureSageBotUser(ctx.db, input.coopId);
-          const agent = getAgent('sage-commons-reply');
-          if (agent) {
-            await traceSageReply(
-              { kind: 'post', coopId: input.coopId, postId: post.id },
-              { message: encodedContent, threadCount: 0 },
-              (message) => agent.run({ coopId: input.coopId, message }),
-              async (reply) => {
-                const sageComment = await ctx.db.commonsComment.create({
-                  data: { postId: post.id, authorId: sage.id, content: reply },
-                });
-                await notifySageComment({ postId: post.id, commentId: sageComment.id });
-              },
-            );
-          }
+          const actions = buildSageReplyTools({ kind: 'thread', memberId: accountUser.id, coopId: input.coopId });
+          await traceSageReply(
+            { kind: 'post', coopId: input.coopId, postId: post.id },
+            { message: encodedContent, threadCount: 0, toolLog: actions.state.log },
+            (message) => runSageCommonsReply(
+              { coopId: input.coopId, message, channel: 'mention', memberName: safeFirstName(accountUser.name) ?? undefined },
+              undefined,
+              actions,
+            ),
+            async (reply) => {
+              const sageComment = await ctx.db.commonsComment.create({
+                data: { postId: post.id, authorId: sage.id, content: reply },
+              });
+              await notifySageComment({ postId: post.id, commentId: sageComment.id });
+            },
+          );
         } catch (err) {
           console.error('Sage auto-reply on createPost failed:', err);
         }
@@ -3036,35 +3040,37 @@ export const commonsRouter = router({
       ) {
         try {
           const sage = await ensureSageBotUser(ctx.db, post.coopId);
-          const agent = getAgent('sage-commons-reply');
-          if (agent) {
-            const priorComments = await ctx.db.commonsComment.findMany({
-              where: { postId: post.id, id: { not: comment.id } },
-              orderBy: { createdAt: 'asc' },
-              take: 10,
-              include: {
-                author: { select: { name: true, email: true, handle: true, isBot: true } },
-              },
-            });
-            const threadContext = [
-              `Original post: ${post.content}`,
-              ...priorComments.map(
-                (c) => `${displayName(c.author)}: ${c.content}`,
-              ),
-            ].join('\n');
+          const priorComments = await ctx.db.commonsComment.findMany({
+            where: { postId: post.id, id: { not: comment.id } },
+            orderBy: { createdAt: 'asc' },
+            take: 10,
+            include: {
+              author: { select: { name: true, email: true, handle: true, isBot: true } },
+            },
+          });
+          const threadContext = [
+            `Original post: ${post.content}`,
+            ...priorComments.map(
+              (c) => `${displayName(c.author)}: ${c.content}`,
+            ),
+          ].join('\n');
+          const actions = buildSageReplyTools({ kind: 'thread', memberId: accountUser.id, coopId: post.coopId });
 
-            await traceSageReply(
-              { kind: 'comment', coopId: post.coopId, postId: post.id, commentId: comment.id },
-              { message: encodedContent, threadContext, threadCount: priorComments.length + 1 },
-              (message, thread) => agent.run({ coopId: post.coopId, message, threadContext: thread }),
-              async (reply) => {
-                const sageComment = await ctx.db.commonsComment.create({
-                  data: { postId: post.id, authorId: sage.id, content: reply },
-                });
-                await notifySageComment({ postId: post.id, commentId: sageComment.id });
-              },
-            );
-          }
+          await traceSageReply(
+            { kind: 'comment', coopId: post.coopId, postId: post.id, commentId: comment.id },
+            { message: encodedContent, threadContext, threadCount: priorComments.length + 1, toolLog: actions.state.log },
+            (message, thread) => runSageCommonsReply(
+              { coopId: post.coopId, message, threadContext: thread, channel: 'mention', memberName: safeFirstName(accountUser.name) ?? undefined },
+              undefined,
+              actions,
+            ),
+            async (reply) => {
+              const sageComment = await ctx.db.commonsComment.create({
+                data: { postId: post.id, authorId: sage.id, content: reply },
+              });
+              await notifySageComment({ postId: post.id, commentId: sageComment.id });
+            },
+          );
         } catch (err) {
           console.error('Sage auto-reply on createComment failed:', err);
         }

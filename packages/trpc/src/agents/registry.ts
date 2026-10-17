@@ -6,7 +6,7 @@ import { proposalEngine, ProposalInputZ, ProposalOutputZ } from "@repo/validator
 import type { AgentToolContext } from "./tools/index.js";
 import { buildDbTools, buildQueryObservationsTool, buildSearchKnowledgeBaseTool } from "./tools/index.js";
 import { recordAgentResultCost, withCostedProposalRun } from "../services/ai-cost.js";
-import { sageReplyStyleInstructions } from "../services/sage-reply-templates.js";
+import { sagePersonalInstructions, sageReplyStyleInstructions } from "../services/sage-reply-templates.js";
 import { sageCorePrinciplesInstructions } from "../services/sage-principles.js";
 import { MEMBER_MEMORY_INSTRUCTIONS, memberMemoryPrompt } from "../services/sage-member-memory.js";
 
@@ -200,7 +200,8 @@ const SageCommonsReplyInputZ = z.object({
   coopId: z.string().min(1).describe("Which Commons' charter/mission to ground the reply in"),
   message: z.string().min(1).describe("The message that mentioned or was sent to Sage"),
   threadContext: z.string().optional().describe("Prior thread/comment/DM history, oldest-first, for continuity"),
-  channel: z.enum(["mention", "dm"]).optional().describe("Direct messages to Sage use a cheaper model than public @mentions"),
+  channel: z.enum(["mention", "dm"]).optional().describe("A public @mention in a thread, or a private DM. Same model and voice; only privacy rules differ"),
+  memberName: z.string().optional().describe("First name of the member Sage is replying to, so the reply is personal"),
   memberMemory: z.array(z.string()).optional().describe("DMs only: needs this member mentioned in check-ins, from memberMemoryLines"),
 });
 
@@ -215,17 +216,18 @@ const SageCommonsReplyOutputZ = z.object({
   }).optional(),
 });
 
-/** A member reaching out to Sage directly is a short, private chat, so it uses the cheapest model. */
-export const SAGE_DM_MODEL = "gpt-5-nano";
+/** Every Sage conversation reply, DM or @mention, uses the same model so they feel the same. */
+export const SAGE_REPLY_MODEL = "gpt-5.6-luna";
+/** Charter text beyond this is cut, the same bound the feed agent uses, so long charters can't blow up cost. */
+export const SAGE_REPLY_CHARTER_CHARS = 8000;
 
-export function sageReplyModel(channel: "mention" | "dm" | undefined) {
-  if (channel === "dm") return process.env.SAGE_DM_MODEL || SAGE_DM_MODEL;
-  return process.env.COMMONS_AI_MODEL || "gpt-5.2";
+export function sageReplyModel() {
+  return process.env.SAGE_REPLY_MODEL || SAGE_REPLY_MODEL;
 }
 
 export const SAGE_REPLY_FALLBACK = "I don't have a grounded answer for that in this Commons' charter right now.";
 
-/** Optional action tools for a private conversation (see buildMemberActionTools); @mentions get none. */
+/** Action tools for the reply (see buildSageReplyTools). DMs and @mentions both get them. */
 export interface SageReplyActions {
   tools: Tool[];
   instructions: string;
@@ -237,9 +239,10 @@ export async function runSageCommonsReply(
   actions?: SageReplyActions,
 ): Promise<z.infer<typeof SageCommonsReplyOutputZ>> {
   const { db } = await import("@repo/db");
-  const model = sageReplyModel(input.channel);
+  const model = sageReplyModel();
+  const isDm = input.channel === "dm";
   // Member memory is private to the member, so it is only ever used in their own DM with Sage.
-  const memberMemory = input.channel === "dm" ? input.memberMemory ?? [] : [];
+  const memberMemory = isDm ? input.memberMemory ?? [] : [];
 
   const coopConfig = await db.coopConfig.findFirst({
     where: { coopId: input.coopId, isActive: true },
@@ -252,7 +255,7 @@ export async function runSageCommonsReply(
     | undefined) ?? [];
 
   const commonsName = coopConfig?.name || input.coopId;
-  const charterText = coopConfig?.charterText?.trim();
+  const charterText = coopConfig?.charterText?.trim().slice(0, SAGE_REPLY_CHARTER_CHARS);
 
   const missionGoalsSummary = missionGoals.length
     ? missionGoals.map((g) => `- ${g.label}${g.description ? `: ${g.description}` : ""}`).join("\n")
@@ -261,9 +264,16 @@ export async function runSageCommonsReply(
   const agent = new Agent({
     name: "Sage",
     model,
+    modelSettings: {
+      maxTokens: 1200, reasoning: { effort: "low" }, text: { verbosity: "low" },
+      ...(actions?.tools.length ? { toolChoice: "auto" as const } : {}),
+    },
     instructions: [
       `You are Sage, the AI assistant for "${commonsName}", a specific Commons (cooperative community) inside the Cahootz platform.`,
-      "You were @-mentioned or messaged directly inside this Commons' social feed or DMs. Reply in a natural, concise, conversational tone appropriate for a social feed reply - not a long essay.",
+      isDm
+        ? "A member messaged you privately. Reply in a natural, concise, conversational tone - not a long essay."
+        : "A member @-mentioned you in this Commons' feed. Reply in a natural, concise, conversational tone - not a long essay. Other members can read this reply.",
+      sagePersonalInstructions(input.memberName),
       sageCorePrinciplesInstructions(),
       sageReplyStyleInstructions(),
       "Questions about rules, votes, proposals, membership, discipline or the Commons' own money: answer ONLY from this Commons' charter and mission goals below. If they don't cover it, say so plainly and briefly rather than guessing.",
@@ -279,7 +289,7 @@ export async function runSageCommonsReply(
       `${commonsName}'s mission goals:`,
       missionGoalsSummary,
     ].join("\n"),
-    ...(actions?.tools.length ? { tools: actions.tools, modelSettings: { toolChoice: "auto" as const } } : {}),
+    ...(actions?.tools.length ? { tools: actions.tools } : {}),
   });
 
   const prompt = [
@@ -346,7 +356,7 @@ export const agentRegistry: AgentDefinition[] = [
   {
     key: "sage-commons-reply",
     name: "Sage",
-    description: "The Commons' @-mention and DM bot. Answers grounded only in the specific Commons' own charter and mission goals (per coopId via CoopConfig).",
+    description: "The Commons' @-mention and DM bot. One model, voice and tool set for both; answers grounded only in the specific Commons' own charter and mission goals (per coopId via CoopConfig).",
     inputSchema: SageCommonsReplyInputZ,
     outputSchema: SageCommonsReplyOutputZ,
     run: runSageCommonsReply,

@@ -84,7 +84,8 @@ test("Sage remembers a need from a check-in, uses it, and forgets it when asked"
       await send(member.page, `${runId}: Otherwise the week was fine`);
       const trails = member.page.getByRole("button", { name: /Show Sage decision: Replied in the direct message/ }).locator("visible=true");
       await expect.poll(() => trails.count(), { timeout: 90_000 }).toBeGreaterThanOrEqual(2);
-      await member.page.getByRole("button", { name: /Show Sage decision: Replied in the direct message/ }).locator("visible=true").last().click();
+      // Trails are listed newest first (sage.listTrails), so the follow-up's trail is the first one.
+      await trails.first().click();
       await expect(shown(member.page, "1 need remembered from the member's check-ins").first()).toBeVisible();
       await expect(shown(member.page, new RegExp(`\\d{4}-\\d{2}-\\d{2}: ${summary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)).first()).toBeVisible();
 

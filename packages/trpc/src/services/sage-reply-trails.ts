@@ -49,7 +49,7 @@ function trailFor(source: SageReplySource, message: string, threadContext: strin
 
 export async function traceSageReply(
   source: SageReplySource,
-  input: { message: string; threadContext?: string; threadCount: number; remembered?: string[] },
+  input: { message: string; threadContext?: string; threadCount: number; remembered?: string[]; toolLog?: string[] },
   produce: (message: string, threadContext: string | undefined) => Promise<{ reply: string; grounding?: SageReplyGrounding }>,
   publish: (reply: string) => Promise<void>,
 ): Promise<void> {
@@ -100,8 +100,10 @@ export async function traceSageReply(
     if (grounding) {
       trail.step("EVIDENCE", grounding.charterChars
         ? `The charter (${grounding.charterChars.toLocaleString("en-US")} characters) and ${grounding.missionGoalCount} mission goals`
-        : `No charter text is configured; ${grounding.missionGoalCount} mission goals`, { detail: `Model ${grounding.model}. Sage replies have no other tools or memory.` });
+        : `No charter text is configured; ${grounding.missionGoalCount} mission goals`, { detail: `Model ${grounding.model}.` });
     }
+    // The same toolkit serves DMs and @mentions (buildSageReplyTools); record each lookup or action it took.
+    for (const entry of input.toolLog ?? []) trail.step("EVIDENCE", `Used a tool: ${entry}`);
     trail.step("CONSIDERED", "Drafted a reply", { outcome: "INFO", detail: reply });
     if (grounding) {
       trail.policy("The model gave an answer", !grounding.usedFallback,

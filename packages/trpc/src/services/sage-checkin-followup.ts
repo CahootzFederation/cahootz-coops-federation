@@ -3,12 +3,13 @@ import { Agent, run, type Tool } from "@openai/agents";
 import { recordAICost, recordAgentResultCost } from "./ai-cost.js";
 import { MEMBER_MEMORY_INSTRUCTIONS, memberMemoryPrompt } from "./sage-member-memory.js";
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
+import { sagePersonalInstructions } from "./sage-reply-templates.js";
 
 /**
  * Follow-ups to Sage's weekly check-in. A member who answers the check-in gets a short,
  * conversational reply instead of the charter-grounded Q&A agent, for a bounded number of
  * turns per check-in. The last allowed turn closes the conversation without a question;
- * after that the thread falls back to ordinary (cheap) Sage DM replies.
+ * after that the thread falls back to ordinary Sage DM replies.
  */
 export const CHECKIN_FOLLOWUP_AGENT = "sage-weekly-checkin-reply";
 export const CHECKIN_FOLLOWUP_MODEL = "gpt-5.6-luna";
@@ -28,6 +29,8 @@ export interface CheckinFollowupInput {
   toolInstructions?: string;
   /** Needs this member mentioned in earlier check-ins (memberMemoryLines), already bounded and scoped to them. */
   memberMemory?: string[];
+  /** The member's first name, so the reply is personal. */
+  memberName?: string;
 }
 
 /** Tool calls plus the final answer: enough to search, propose and reply, never an open-ended loop. */
@@ -59,6 +62,7 @@ export async function runCheckinFollowup(input: CheckinFollowupInput): Promise<{
     modelSettings: { maxTokens: 200, reasoning: { effort: "low" }, text: { verbosity: "low" } },
     instructions: [
       "You are Sage, continuing a private weekly check-in you started with a community member. They replied; you respond.",
+      sagePersonalInstructions(input.memberName),
       sageCorePrinciplesInstructions(),
       "Sound like a trusted community organizer. Respond to what they actually said, in plain words, under 60 words, no bullets.",
       closing

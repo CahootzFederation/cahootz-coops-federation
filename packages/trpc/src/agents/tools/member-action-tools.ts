@@ -7,6 +7,7 @@ import {
 } from "../../services/sage-member-actions.js";
 import { scheduleMemberCheckIn } from "../../services/sage-proactive.js";
 import { cleanseUntrustedText } from "../../services/untrusted-input.js";
+import { buildCommentTools } from "./comment-tools.js";
 import { findMembersForNeed } from "./specialist-tools.js";
 
 /**
@@ -21,6 +22,9 @@ import { findMembersForNeed } from "./specialist-tools.js";
  * - schedule_check_in: Sage promises to message the member back about something later, and does.
  *
  * Every tool returns { ok, ... } rather than throwing, so the model can explain a refusal to the member.
+ *
+ * buildSageReplyTools hands the same toolkit to a public @mention reply, minus what needs a private
+ * conversation (see there), so Sage can do nearly the same things in a thread as in a DM.
  */
 
 export interface MemberActionContext {
@@ -28,6 +32,11 @@ export interface MemberActionContext {
   /** The private conversation (DM group) where Sage is talking with the member. */
   conversationGroupId: string;
 }
+
+/** Where a Sage reply is going: the member's private DM with Sage, or a public thread in one Commons. */
+export type SageReplyPlace =
+  | { kind: "dm"; memberId: string; conversationGroupId: string; coopId: string }
+  | { kind: "thread"; memberId: string; coopId: string };
 
 export interface MemberActionState {
   /** Exact questions to append to the agent's reply, in order. Only the last one can be answered with "yes". */
@@ -46,13 +55,25 @@ export const MEMBER_ACTION_INSTRUCTIONS = [
   "After propose_post or suggest_introduction, the exact post or introduction and the yes/no question are shown right after your reply. So keep your reply to one short sentence, don't quote or restate the post, and don't ask for confirmation yourself. Never claim you posted or introduced anyone; that only happens after they say yes.",
 ].join("\n");
 
+/** The same toolkit in a public thread: what it finds can be read by everyone in this Commons. */
+export const THREAD_ACTION_INSTRUCTIONS = [
+  "You can look things up and act for this member with tools instead of only giving advice:",
+  "- search_opportunities when they need something (work, a ride, food, a skill). It only searches this Commons. Mention what you found in plain words.",
+  "- search_commons_documents, list_commons_resources and count_members_offering for facts the thread lacks (guides, what members have shared, how many could help).",
+  "- schedule_check_in whenever you say you'll check back with them about something, or they ask you to. You'll message them privately then, so you can honestly say you will.",
+  "This reply is public. Never mention their other Commons or anything private about them. If posting anonymously or an introduction would help, tell them to message you directly and you can set it up there.",
+].join("\n");
+
+/** Extra read-only lookups a DM reply shares with the public reply and the feed agent. */
+const DM_LOOKUP_INSTRUCTIONS = "- search_commons_documents, list_commons_resources and count_members_offering for facts about this Commons (guides, what members have shared, how many could help).";
+
 const snippet = (text: string | null | undefined, max = 160) => cleanseUntrustedText(text ?? "", { maxChars: max }).text;
 
 function searchWords(query: string): string[] {
   return [...new Set(query.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ").filter((word) => word.length > 2))].slice(0, 6);
 }
 
-export function buildMemberActionTools(ctx: MemberActionContext, state: MemberActionState = { asks: [], log: [] }) {
+export function buildMemberActionTools(ctx: MemberActionContext, state: MemberActionState = { asks: [], log: [] }, options: { onlyCoopId?: string; coopId?: string } = {}) {
   const listMyCommons = tool({
     name: "list_my_commons",
     description: "The Commons this member belongs to (coopId and name). Use it to choose or ask where to post.",
@@ -72,7 +93,7 @@ export function buildMemberActionTools(ctx: MemberActionContext, state: MemberAc
       coopId: z.string().nullable().default(null).describe("Limit to one of the member's Commons, or null for all of them"),
     }),
     execute: async ({ query, coopId }) => {
-      const commons = await memberCommons(ctx.memberId);
+      const commons = (await memberCommons(ctx.memberId)).filter((entry) => !options.onlyCoopId || entry.coopId === options.onlyCoopId);
       const scoped = coopId ? commons.filter((entry) => entry.coopId === coopId) : commons;
       const words = searchWords(query);
       if (!scoped.length || !words.length) return { ok: true, posts: [], stores: [], resources: [], events: [] };
@@ -172,13 +193,31 @@ export function buildMemberActionTools(ctx: MemberActionContext, state: MemberAc
       about: z.string().min(3).max(120).describe("A short phrase about them, never naming anyone else"),
     }),
     execute: async ({ days, about }) => {
-      const group = await db.group.findUnique({ where: { id: ctx.conversationGroupId }, select: { coopId: true } });
-      if (!group) return { ok: false, reason: "Conversation not found" };
-      const result = await scheduleMemberCheckIn({ memberId: ctx.memberId, coopId: group.coopId, about, days });
+      const coopId = options.coopId ?? (await db.group.findUnique({ where: { id: ctx.conversationGroupId }, select: { coopId: true } }))?.coopId;
+      if (!coopId) return { ok: false, reason: "Conversation not found" };
+      const result = await scheduleMemberCheckIn({ memberId: ctx.memberId, coopId, about, days });
       state.log.push(result.ok ? `Promised to check back in ${result.days} days: ${about}` : `Couldn't schedule a check-in: ${result.reason}`);
       return result.ok ? { ok: true, days: result.days } : result;
     },
   });
 
   return { tools: [listMyCommons, searchOpportunities, proposePost, suggestIntroduction, followUpLater, scheduleCheckIn], state };
+}
+
+/**
+ * The tools every Sage conversation reply gets, DM or public @mention. Both get the feed agent's read-only
+ * Commons lookups, search_opportunities and schedule_check_in. Only a DM also gets list_my_commons,
+ * propose_post, suggest_introduction and follow_up_later: each depends on the member's other Commons or on
+ * a private "yes" (handleConversationConfirmation), which a public thread can't give.
+ */
+export function buildSageReplyTools(place: SageReplyPlace) {
+  const state: MemberActionState = { asks: [], log: [] };
+  const lookups = buildCommentTools({ db, requestingUserId: place.memberId, coopId: place.coopId }, [], (summary) => state.log.push(summary));
+  if (place.kind === "dm") {
+    const actions = buildMemberActionTools({ memberId: place.memberId, conversationGroupId: place.conversationGroupId }, state);
+    return { tools: [...actions.tools, ...lookups], state: actions.state, instructions: `${MEMBER_ACTION_INSTRUCTIONS}\n${DM_LOOKUP_INSTRUCTIONS}` };
+  }
+  const actions = buildMemberActionTools({ memberId: place.memberId, conversationGroupId: "" }, state, { onlyCoopId: place.coopId, coopId: place.coopId });
+  const shared = new Set(["search_opportunities", "schedule_check_in"]);
+  return { tools: [...actions.tools.filter((entry) => shared.has(entry.name)), ...lookups], state: actions.state, instructions: THREAD_ACTION_INSTRUCTIONS };
 }

@@ -1959,7 +1959,7 @@ export default function CommonsAiEntry({
                   </Text>
                   <Text className="mt-1 text-xs leading-4 text-gray-700">
                     {feedCircleId
-                      ? 'Join this circle and its common to read and share posts here.'
+                      ? 'Join this circle and its commons to read and share posts here.'
                       : 'Apply from the Wall to see member posts, comment, and publish here.'}
                   </Text>
                 </View>
@@ -2755,7 +2755,7 @@ export default function CommonsAiEntry({
 
                   <View className="mb-2 mt-4 flex-row items-center justify-between">
                     <Text className="text-[11px] font-black uppercase tracking-wide text-stone-400">
-                      Circles in this common
+                      Circles in this commons
                     </Text>
                     <TouchableOpacity
                       onPress={() =>

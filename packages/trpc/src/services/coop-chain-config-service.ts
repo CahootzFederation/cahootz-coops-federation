@@ -72,6 +72,38 @@ export async function getChainConfig(coopId: string): Promise<ChainConfig> {
   return config as ChainConfig;
 }
 
+/** "FakeCoin" is the schema default, so it means the commons hasn't named its coin. */
+const UNSET_COIN_NAMES = new Set(['', 'FakeCoin']);
+
+/**
+ * The coin name members should see. Each commons names its own coin
+ * (`CoopConfig.scTokenName`); returns null when it hasn't picked one.
+ */
+export function coinNameFrom(scTokenName: string | null | undefined): string | null {
+  const name = scTokenName?.trim() ?? '';
+  return UNSET_COIN_NAMES.has(name) ? null : name;
+}
+
+/** Looks up a commons' coin name. Returns null when unset or unreadable. */
+export async function getCoinName(coopId: string): Promise<string | null> {
+  try {
+    const config = await db.coopConfig.findFirst({
+      where: { coopId, isActive: true },
+      orderBy: { version: 'desc' },
+      select: { scTokenName: true },
+    });
+    return coinNameFrom(config?.scTokenName);
+  } catch {
+    return null;
+  }
+}
+
+/** "2.50 SoulCoin", or "2.50 coins" when the commons hasn't named its coin. */
+export function formatCoinAmount(amount: number | string, coinName: string | null): string {
+  const shown = typeof amount === 'number' ? amount.toFixed(2) : amount;
+  return `${shown} ${coinName ?? 'coins'}`;
+}
+
 /**
  * Get SC token address for a coop
  */

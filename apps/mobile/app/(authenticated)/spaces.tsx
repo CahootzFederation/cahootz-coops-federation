@@ -467,7 +467,7 @@ export default function SpacesScreen() {
             <View className="mt-6 flex-row items-center justify-between">
               <View>
                 <Text className="text-base font-black text-gray-950">
-                  {coopId ? 'Circles in this common' : 'Your circles'}
+                  {coopId ? 'Circles in this commons' : 'Your circles'}
                 </Text>
                 {groupsError || isLoadingGroups ? null : (
                   <Text className="mt-0.5 text-xs font-semibold text-gray-500">
@@ -727,7 +727,7 @@ export default function SpacesScreen() {
                 <Users size={17} color={SPACES_THEME.primary} />
                 <View className="min-w-0 flex-1">
                   <Text className="text-sm font-black text-gray-950">
-                    Public to this common
+                    Public to this commons
                   </Text>
                   <Text className="mt-1 text-xs leading-5 text-gray-500">
                     Members can discover, read, and post in this circle.
@@ -805,7 +805,7 @@ export default function SpacesScreen() {
             </TouchableOpacity>
             <Text className="mt-3 text-center text-xs leading-5 text-gray-500">
               {privacy === 'public'
-                ? 'Your circle will appear to members of this common.'
+                ? 'Your circle will appear to members of this commons.'
                 : 'You will become the circle leader and can invite members next.'}
             </Text>
           </>

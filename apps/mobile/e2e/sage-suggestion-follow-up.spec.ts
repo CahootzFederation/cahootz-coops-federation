@@ -77,7 +77,7 @@ test("Sage reminds once about an unanswered suggestion, then closes it and tells
     steward("age-suggestion", actionId, runId);
     steward("suggestion-sweep");
     steward("suggestion-sweep");
-    const reminderBody = new RegExp(`E2E ${runId} help setting up bookkeeping.*needs your answer`);
+    const reminderBody = new RegExp(`would love your answer on .*E2E ${runId} help setting up bookkeeping`);
     await expect(async () => {
       await openAlerts(helper.page);
       await expect(helper.page.getByText(reminderBody).locator("visible=true")).toHaveCount(1, { timeout: 3_000 });
@@ -155,14 +155,14 @@ test("Sage closes a suggestion as soon as it no longer applies", async ({ browse
     steward("suggestion-sweep");
     await expect(async () => {
       await leader.page.reload();
-      await expect(shown(leader.page, "Sage closed this: the post it was about was deleted")).toBeVisible({ timeout: 3_000 });
+      await expect(shown(leader.page, "Sage closed this: the post it was about has been deleted")).toBeVisible({ timeout: 3_000 });
     }).toPass(SERVER_POLL);
     await expect(shown(leader.page, "Dismissed")).toBeVisible();
     await expect(leader.page.getByRole("button", { name: "Approve" })).toHaveCount(0);
 
     // 4. No reminder about a suggestion that no longer applies.
     await openAlerts(leader.page);
-    await expect(leader.page.getByText(new RegExp(`E2E ${runId} Answer the parking question.*needs your answer`)).locator("visible=true")).toHaveCount(0);
+    await expect(leader.page.getByText(new RegExp(`would love your answer on .*E2E ${runId} Answer the parking question`)).locator("visible=true")).toHaveCount(0);
   } finally {
     if (seeded) suggestions("cleanup", runId, circleId!);
     const leaderToken = await sessionTokenFor(leader.page).catch(() => null);

@@ -33,7 +33,8 @@ async function openSageSettings(page: Page) {
 // Sage's weekly rhythm: templated posts built from records, one per category per period. Member A opts in
 // to being named and to alerts for the Friday appreciation and the midweek list, sees both posts and alerts,
 // then mutes the midweek list: it disappears from A's feed and stops alerting A, while member B
-// (separate context, default settings) still sees it. The midweek list names the request, never who asked.
+// (separate context, default settings) still sees it. B volunteers on Monday through the real comment box;
+// midweek carries that commitment forward and creates a follow-up without naming B.
 test("Sage's rhythm posts follow each member's settings, and a muted category leaves only that member's feed", async ({ browser }) => withExclusiveAccountSetting("sage-rhythm-settings", async () => {
   test.setTimeout(300_000);
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -61,11 +62,20 @@ test("Sage's rhythm posts follow each member's settings, and a muted category le
     await expect(page.getByRole("radio", { name: "Friday appreciation: Notify me" })).toBeChecked({ timeout: 60_000 });
     await expect(page.getByRole("switch", { name: "Name me in Sage's Friday appreciation" })).toHaveAttribute("aria-checked", "true");
 
-    // 2. Sage posts this period's midweek list and Friday appreciation (the fixture stands in for the calendar).
+    // 2. Sage posts Monday's priorities. B explicitly volunteers in General through the real comment box.
+    const monday = fixture("publish", runId, "weekly_priorities", "0", USER_A_EMAIL);
+    await memberB.page.goto(`/${seeded.coopId}/posts/${monday.postId}`);
+    const commitment = `Priority 1: I'll take the first step for E2E ${runId}.`;
+    await memberB.page.getByPlaceholder("Write a comment...").locator("visible=true").first().fill(commitment);
+    await memberB.page.getByLabel("Send comment").locator("visible=true").first().click();
+    await expect(shown(memberB.page, commitment)).toBeVisible({ timeout: 60_000 });
+
+    // 3. Midweek revisits Monday's thread and records B's explicit offer; Friday carries open work forward.
     const midweek = fixture("publish", runId, "midweek_open_work", "1", USER_A_EMAIL);
     const friday = fixture("publish", runId, "friday_appreciation", "2", USER_A_EMAIL);
     expect(friday.alertedA).toBe(true);
     expect(midweek.alertedA).toBe(true);
+    expect(midweek.tasksCreated).toBe(1);
 
     // Post titles aren't shown in the app, so match the body. The appreciation names A (who opted in) for hosting, from records, and is labeled as Sage's.
     await page.goto(`/${seeded.coopId}/posts/${friday.postId}`);
@@ -78,6 +88,8 @@ test("Sage's rhythm posts follow each member's settings, and a muted category le
     await page.goto(`/${seeded.coopId}/posts/${midweek.postId}`);
     await expect(shown(page, listedNeed)).toBeVisible({ timeout: 60_000 });
     await expect(shown(page, "These requests haven't had a reply yet:")).toBeVisible();
+    await expect(shown(page, "From Monday's priorities:")).toBeVisible();
+    await expect(shown(page, /Priority 1 has a volunteer/)).toBeVisible();
     await expect(shown(page, new RegExp(`${seeded.nameB}`))).toHaveCount(0);
 
     // A's alert for the appreciation is in the inbox.
@@ -87,11 +99,11 @@ test("Sage's rhythm posts follow each member's settings, and a muted category le
       await expect(shown(page, "Sage: This week's appreciation")).toBeVisible();
     }).toPass({ timeout: 30_000 });
 
-    // 3. Both posts are in A's Commons feed (General).
+    // 4. Both posts are in A's Commons feed (General).
     await page.goto(generalFeed(seeded.coopId));
     await expect(shown(page, listedNeed)).toBeVisible({ timeout: 60_000 });
 
-    // 4. A mutes the midweek list. The choice persists, and the post leaves A's feed.
+    // 5. A mutes the midweek list. The choice persists, and the post leaves A's feed.
     await openSageSettings(page);
     const muteMidweek = page.getByRole("radio", { name: "Midweek open requests: Mute" });
     await muteMidweek.click();
@@ -102,11 +114,11 @@ test("Sage's rhythm posts follow each member's settings, and a muted category le
     await expect(shown(page, new RegExp(`Thank you, .*${seeded.nameA}`))).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText(listedNeed)).toHaveCount(0);
 
-    // 5. Muting is A's alone: B still sees the midweek list in their feed.
+    // 6. Muting is A's alone: B still sees the midweek list in their feed.
     await memberB.page.goto(generalFeed(seeded.coopId));
     await expect(shown(memberB.page, listedNeed)).toBeVisible({ timeout: 60_000 });
 
-    // 6. Muted also means no alert: the next midweek post doesn't alert A.
+    // 7. Muted also means no alert: the next midweek post doesn't alert A.
     const later = fixture("publish", runId, "midweek_open_work", "3", USER_A_EMAIL);
     expect(later.alertedA).toBe(false);
   } finally {

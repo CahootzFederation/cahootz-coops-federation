@@ -49,6 +49,7 @@ async function cleanup(runId: string, emails: string[]) {
     select: { id: true, sourcePostId: true },
   });
   const postIds = actions.map((action) => action.sourcePostId);
+  await db.sageTask.deleteMany({ where: { sourceActionId: { in: actions.map((action) => action.id) } } });
   await db.notification.deleteMany({ where: { type: RHYTHM_NOTIFICATION_TYPE, OR: postIds.map((postId) => ({ data: { path: ["postId"], equals: postId } })) } });
   await db.commonsPost.deleteMany({ where: { id: { in: postIds }, author: { isBot: true } } });
   await db.commonsAction.deleteMany({ where: { id: { in: actions.map((action) => action.id) } } });
@@ -92,13 +93,15 @@ async function publish(runId: string, category: string, n: string, emailA: strin
   const periodKey = `e2e-${runId}-${n}`;
   const need = await db.commonsPost.findFirst({ where: { coopId: COMMONS_COOP_ID, title: needTitle(runId) }, select: { id: true } });
   // Midweek lists only this run's need, so other local data can't push it out of the post.
-  const built = await buildRhythm(COMMONS_COOP_ID, category, periodKey, new Date(), { needPostIds: need ? [need.id] : [] });
+  const built = await buildRhythm(COMMONS_COOP_ID, category, periodKey, new Date(), {
+    needPostIds: need ? [need.id] : [], mondayPeriodKey: `e2e-${runId}-0`,
+  });
   const result = await publishRhythmPost(COMMONS_COOP_ID, category, periodKey, built.text, built.extra);
   if (!result.posted) throw new Error(`Sage didn't post: ${result.reason}`);
   const alertForA = await db.notification.findFirst({
     where: { userId: a.id, type: RHYTHM_NOTIFICATION_TYPE, data: { path: ["postId"], equals: result.postId } }, select: { id: true },
   });
-  return { postId: result.postId, title: built.text?.title, alertedA: !!alertForA };
+  return { postId: result.postId, title: built.text?.title, alertedA: !!alertForA, tasksCreated: built.extra.tasksCreated ?? 0 };
 }
 
 async function main() {

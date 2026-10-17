@@ -3,7 +3,7 @@ import { db } from "@repo/db";
 import { ensureSageBotUser } from "../lib/bot.js";
 import { createNotificationAndPush } from "./push-notification-service.js";
 import { countQuestionResponders } from "./sage-community-question.js";
-import { FULFILLED_TASK_OUTCOMES } from "./sage-tasks.js";
+import { createSageTask, FULFILLED_TASK_OUTCOMES } from "./sage-tasks.js";
 import { findUnansweredNeedPosts } from "./sage-unanswered-needs.js";
 import { checkSageOutput, cleanseUntrustedText } from "./untrusted-input.js";
 
@@ -134,11 +134,10 @@ export interface PrioritiesInput {
   goals: Array<{ label: string }>;
 }
 
-/** Monday: up to three priorities, one from each source first (closing vote, event, open requests, goal), then the rest. */
-export function prioritiesText(input: PrioritiesInput): RhythmText | null {
+/** The exact, safe lines selected for Monday's numbered list. Stored with the action for follow-through. */
+function selectedPriorityLines(input: PrioritiesInput): string[] {
   const proposals = input.proposals.flatMap((proposal) => {
     const title = safeTitle(proposal.title);
-    // Hook for the discussion-facilitation work: when a before-decision summary exists, point to it.
     return title ? [`Vote on '${title}' before voting closes ${DAY_FORMAT.format(proposal.votingEndsAt)}.${proposal.hasDecisionSummary ? " Read the discussion summary in the thread first." : ""}`] : [];
   });
   const events = input.events.flatMap((event) => {
@@ -153,16 +152,30 @@ export function prioritiesText(input: PrioritiesInput): RhythmText | null {
     return label ? [`Take one step toward our goal: ${label}.`] : [];
   });
   const firsts = [proposals[0], events[0], requests[0], goals[0]].filter((item): item is string => !!item);
-  const rest = [...proposals.slice(1), ...events.slice(1), ...goals.slice(1)];
-  const picked = [...firsts, ...rest].slice(0, 3);
+  return [...firsts, ...proposals.slice(1), ...events.slice(1), ...goals.slice(1)].slice(0, 3);
+}
+
+/** Monday: up to three priorities, one from each source first (closing vote, event, open requests, goal), then the rest. */
+export function prioritiesText(input: PrioritiesInput): RhythmText | null {
+  const picked = selectedPriorityLines(input);
   if (!picked.length) return null;
   const title = picked.length === 3 ? "This week's three priorities" : "This week's priorities";
-  return fit(title, [], picked.map((item, index) => `${index + 1}. ${item}`), ["", "Choose one if it fits, invite a partner, and share your first step in the comments."]);
+  return fit(title, [], picked.map((item, index) => `${index + 1}. ${item}`), ["", "Choose one if it fits. Reply with the priority number, what you'll do, and invite a partner."]);
+}
+
+export interface MondayFollowUp {
+  postId: string;
+  priorities: string[];
+  commitments: Array<{ priority: number | null; text: string }>;
+  unowned: Array<{ priority: number; text: string }>;
+  feedbackCount: number;
+  tasksCreated: number;
 }
 
 export interface OpenWorkInput {
   requests: Array<{ title: string }>;
   stalled: Array<{ title: string }>;
+  monday?: MondayFollowUp | null;
 }
 
 /** Midweek: open requests and stalled conversations by title only. Never who asked or who is in need. */
@@ -170,13 +183,29 @@ export function openWorkText(input: OpenWorkInput): RhythmText | null {
   const requests = [...new Set(input.requests.map((request) => safeTitle(request.title)).filter((title): title is string => !!title))].slice(0, 4);
   const stalled = [...new Set(input.stalled.map((item) => safeTitle(item.title)).filter((title): title is string => !!title))]
     .filter((title) => !requests.includes(title)).slice(0, 3);
-  if (!requests.length && !stalled.length) return null;
+  const mondayLines = input.monday ? (() => {
+    const owned = input.monday.priorities.flatMap((text, index) => {
+      const count = input.monday!.commitments.filter((item) => item.priority === index + 1).length;
+      return count ? [`• Priority ${index + 1} has ${count === 1 ? "a volunteer" : `${count} volunteers`}: ${text}`] : [];
+    });
+    const otherOffers = input.monday.commitments.filter((item) => !item.priority).length;
+    return [
+      "From Monday's priorities:",
+      ...owned,
+      ...(otherOffers ? [`• ${plural(otherOffers, "other volunteer made", "other volunteers made")} an offer without a priority number.`] : []),
+      ...input.monday.unowned.slice(0, 3).map((item) => `• Priority ${item.priority} still needs an owner: ${item.text}`),
+      ...(input.monday.feedbackCount ? [`• ${plural(input.monday.feedbackCount, "question or concern needs", "questions or concerns need")} a response.`] : []),
+    ];
+  })() : [];
+  if (!requests.length && !stalled.length && !mondayLines.length) return null;
   const lines = [
+    ...mondayLines,
+    ...(mondayLines.length && (requests.length || stalled.length) ? [""] : []),
     ...(requests.length ? ["These requests haven't had a reply yet:", ...requests.map((title) => `• '${title}'`)] : []),
     ...(requests.length && stalled.length ? [""] : []),
     ...(stalled.length ? ["These conversations are waiting on a next step:", ...stalled.map((title) => `• '${title}'`)] : []),
   ];
-  return fit("Still waiting for a hand", [], lines, ["", "Pick one up, or—with their permission—connect someone who can help. Reply on the original post so the requester gets an answer."]);
+  return fit("Still waiting for a hand", [], lines, ["", "Pick one up, or—with their permission—connect someone who can help. If you volunteered Monday, reply there when the next step is done."]);
 }
 
 export interface ActivityCounts {
@@ -207,9 +236,14 @@ function nameList(names: string[]) {
 }
 
 /** Friday: counts from verified records, goal movement, and the names of members who opted in. */
-export function appreciationText(counts: ActivityCounts, goals: GoalMovement[], names: string[]): RhythmText | null {
+export function appreciationText(counts: ActivityCounts, goals: GoalMovement[], names: string[], monday?: MondayFollowUp | null): RhythmText | null {
   const lines = ACTIVITY_LINES.filter((entry) => counts[entry.key] > 0).map((entry) => `• ${entry.line(counts[entry.key])}`);
-  if (!lines.length) return null;
+  const carry = monday ? [
+    `${plural(monday.commitments.length, "member has", "members have")} volunteered on Monday's priorities.`,
+    ...(monday.unowned.length ? [`${plural(monday.unowned.length, "priority still needs", "priorities still need")} an owner.`] : []),
+    ...(monday.feedbackCount ? [`${plural(monday.feedbackCount, "comment is", "comments are")} still waiting for a response.`] : []),
+  ] : [];
+  if (!lines.length && !carry.length) return null;
   const goalLines = goals.length && goals.every((goal) => !goal.proposals) ? ["• No proposals tied to our goals moved forward this week."] : goals.flatMap((goal) => {
     const label = safeTitle(goal.label, 60);
     if (!label) return [];
@@ -220,7 +254,8 @@ export function appreciationText(counts: ActivityCounts, goals: GoalMovement[], 
   return fit("This week's appreciation", ["Here's what members did for each other this week, counted from records in the app:"], [
     ...lines,
     ...(goalLines.length ? ["", "Toward our goals:", ...goalLines] : []),
-  ], ["", thanks, "Reply with a specific thank-you or a contribution the records missed.", "Members are named only if they turn it on in Sage settings."]);
+    ...(carry.length ? ["", "Still open from Monday:", ...carry.map((line) => `• ${line}`)] : []),
+  ], ["", thanks, "Reply with a specific thank-you, an update on an open priority, or a contribution the records missed.", "Members are named only if they turn it on in Sage settings."]);
 }
 
 export interface StopCandidate { text: string }
@@ -295,6 +330,70 @@ export async function gatherPriorities(coopId: string, now: Date): Promise<Prior
     events: events.map((event) => ({ title: event.post.title, startAt: event.startAt })),
     openRequests: requests.length,
     goals,
+  };
+}
+
+const COMMITMENT_RE = /\b(?:i(?:'|’)ll|i will|i(?:'|’)m going to|i am going to|count me in|i volunteer|i can (?:take|help|host|call|bring|write|draft|organize|lead|answer|contact|review|share|do|handle|own))\b/i;
+const OPEN_FEEDBACK_RE = /\?|\b(?:concern|disagree|missing|what about|how (?:will|do|can)|who (?:will|can)|cannot|can't|need an? (?:answer|decision))\b/i;
+
+/** Only first-person, explicit offers count as commitments. Agreement and "we should" do not. */
+export function explicitCommitment(raw: string): { text: string; priority: number | null } | null {
+  if (!COMMITMENT_RE.test(raw)) return null;
+  const text = cleanseUntrustedText(raw, { maxChars: 120 }).text.replace(/\s+/g, " ").replace(/[“”"]/g, "'").trim();
+  if (!text || !checkSageOutput(text).ok) return null;
+  const numbered = raw.match(/^\s*(?:#|priority\s*)?([1-3])\b/i) ?? raw.match(/\bpriority\s*#?([1-3])\b/i);
+  return { text, priority: numbered ? Number(numbered[1]) : null };
+}
+
+/**
+ * Reopens the current week's Monday thread from its audit record. Public replies are summarized without
+ * naming members. Explicit first-person offers become ledger tasks; vague support never becomes ownership.
+ */
+export async function gatherMondayFollowUp(coopId: string, periodKey: string, now = new Date()): Promise<MondayFollowUp | null> {
+  const action = await db.commonsAction.findUnique({
+    where: { sourceType_sourceId_contentHash_charterConfigId_position: rhythmKey(coopId, "weekly_priorities", periodKey) },
+    select: { id: true, sourcePostId: true, payload: true },
+  });
+  if (!action) return null;
+  const payload = action.payload as { priorities?: unknown } | null;
+  const priorities = Array.isArray(payload?.priorities)
+    ? payload!.priorities.flatMap((item) => typeof item === "string" && safeTitle(item, 180) ? [safeTitle(item, 180)!] : []).slice(0, 3)
+    : [];
+  if (!priorities.length) return null;
+  const comments = await db.commonsComment.findMany({
+    where: { postId: action.sourcePostId, author: { isBot: false } },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, authorId: true, content: true },
+  });
+  const commitments: MondayFollowUp["commitments"] = [];
+  let tasksCreated = 0;
+  for (const comment of comments) {
+    const commitment = explicitCommitment(comment.content);
+    if (!commitment) continue;
+    commitments.push(commitment);
+    const subjectId = `${action.sourcePostId}:${comment.id}`;
+    const existing = await db.sageTask.findFirst({
+      where: { coopId, subjectType: "commons_post", subjectId, ownerUserId: comment.authorId }, select: { id: true },
+    });
+    if (existing) continue;
+    const task = await createSageTask({
+      coopId, circleId: `general:${coopId}`, kind: "FOLLOW_UP",
+      title: "Follow through on Monday's priorities",
+      reason: "The member explicitly volunteered in Sage's Monday priorities thread.",
+      expected: commitment.text, ownerUserId: comment.authorId,
+      subjectType: "commons_post", subjectId,
+      postId: action.sourcePostId, sourceActionId: action.id, dueInDays: 5, createdBy: "SYSTEM",
+    }, now);
+    if (task.created) tasksCreated++;
+  }
+  const owned = new Set(commitments.flatMap((item) => item.priority ? [item.priority] : []));
+  return {
+    postId: action.sourcePostId,
+    priorities,
+    commitments,
+    unowned: priorities.flatMap((text, index) => owned.has(index + 1) ? [] : [{ priority: index + 1, text }]),
+    feedbackCount: comments.filter((comment) => !explicitCommitment(comment.content) && OPEN_FEEDBACK_RE.test(comment.content)).length,
+    tasksCreated,
   };
 }
 
@@ -438,6 +537,25 @@ export async function gatherStopCandidates(coopId: string, from: Date, to: Date)
       stops.push({ text: `Sage's ${RHYTHM_LABELS[category].short} posts got no replies or reactions. If they aren't useful, mute them in Sage settings or say so here.` });
     }
   }
+  const weeklyActionIds = posts.flatMap((post) => {
+    const category = (post.payload as { category?: unknown } | null)?.category;
+    return category === "weekly_priorities" ? [post.sourcePostId] : [];
+  });
+  if (weeklyActionIds.length) {
+    const comments = await db.commonsComment.findMany({
+      where: { postId: { in: weeklyActionIds }, createdAt: { lt: to }, author: { isBot: false } },
+      orderBy: { createdAt: "asc" }, select: { postId: true, content: true, createdAt: true },
+    });
+    const unansweredFeedback = comments.filter((comment, index) => OPEN_FEEDBACK_RE.test(comment.content)
+      && !comments.slice(index + 1).some((later) => later.postId === comment.postId && later.createdAt > comment.createdAt)).length;
+    if (unansweredFeedback) stops.push({
+      text: `${plural(unansweredFeedback, "question or concern in a Monday priority thread has", "questions or concerns in Monday priority threads have")} no later response. Carry them into next month.`,
+    });
+    const openCommitments = await db.sageTask.count({
+      where: { coopId, status: "OPEN", postId: { in: weeklyActionIds }, createdAt: { gte: from, lt: to } },
+    });
+    if (openCommitments) stops.push({ text: `${plural(openCommitments, "commitment from a Monday priority is", "commitments from Monday priorities are")} still open. Finish, reassign, or close them.` });
+  }
   const stuck = await db.proposal.count({ where: { coopId, status: "SUBMITTED", withdrawnAt: null, createdAt: { lt: new Date(to.getTime() - 30 * DAY_MS) } } });
   if (stuck) stops.push({ text: `${plural(stuck, "proposal has", "proposals have")} waited more than 30 days without reaching a vote. Revive or withdraw them.` });
   const series = await db.event.findMany({
@@ -502,7 +620,8 @@ export async function publishRhythmPost(
 ): Promise<RhythmResult> {
   const base = { category, periodKey };
   const check = text ? checkSageOutput(`${text.title}\n${text.body}`) : null;
-  const reason = !text ? "Nothing to post for this period" : !check!.ok ? "The post failed Sage's output check" : null;
+  const requestedSkip = typeof extra.skipReason === "string" ? extra.skipReason : null;
+  const reason = requestedSkip ?? (!text ? "Nothing to post for this period" : !check!.ok ? "The post failed Sage's output check" : null);
   const sage = await ensureSageBotUser(db, coopId);
   let action;
   try {
@@ -552,20 +671,25 @@ const MONTH_FORMAT = new Intl.DateTimeFormat("en-US", { month: "long", timeZone:
 
 /** Builds one ritual's text from records. `needPostIds` is an internal test control (E2E fixtures), never a public input. */
 export async function buildRhythm(
-  coopId: string, category: ScheduledRhythmCategory, periodKey: string, now: Date, options: { needPostIds?: string[] } = {},
+  coopId: string, category: ScheduledRhythmCategory, periodKey: string, now: Date,
+  options: { needPostIds?: string[]; mondayPeriodKey?: string } = {},
 ): Promise<{ text: RhythmText | null; extra: Record<string, unknown> }> {
   if (category === "weekly_priorities") {
     const input = await gatherPriorities(coopId, now);
-    return { text: prioritiesText(input), extra: { proposalIds: input.proposals.map((proposal) => proposal.id) } };
+    return { text: prioritiesText(input), extra: { proposalIds: input.proposals.map((proposal) => proposal.id), priorities: selectedPriorityLines(input) } };
   }
   if (category === "midweek_open_work") {
-    const input = await gatherOpenWork(coopId, now, options.needPostIds);
-    return { text: openWorkText(input), extra: { postIds: input.postIds } };
+    const [input, monday] = await Promise.all([
+      gatherOpenWork(coopId, now, options.needPostIds), gatherMondayFollowUp(coopId, options.mondayPeriodKey ?? isoWeekKey(now), now),
+    ]);
+    return { text: openWorkText({ ...input, monday }), extra: { postIds: input.postIds, mondayPostId: monday?.postId, commitments: monday?.commitments.length ?? 0, tasksCreated: monday?.tasksCreated ?? 0 } };
   }
   if (category === "friday_appreciation") {
-    const activity = await gatherActivity(coopId, new Date(now.getTime() - 7 * DAY_MS), now);
+    const [activity, monday] = await Promise.all([
+      gatherActivity(coopId, new Date(now.getTime() - 7 * DAY_MS), now), gatherMondayFollowUp(coopId, options.mondayPeriodKey ?? isoWeekKey(now), now),
+    ]);
     const names = await consentedNames(coopId, activity.contributorIds);
-    return { text: appreciationText(activity.counts, activity.goals, names), extra: { counts: activity.counts, named: names.length } };
+    return { text: appreciationText(activity.counts, activity.goals, names, monday), extra: { counts: activity.counts, named: names.length, mondayPostId: monday?.postId } };
   }
   const [year, month] = periodKey.split("-").map(Number);
   const start = new Date(Date.UTC(year!, month! - 1, 1));
@@ -578,6 +702,18 @@ export async function buildRhythm(
     text: monthlyText(MONTH_FORMAT.format(start), current.counts, previous.counts, stops),
     extra: { current: current.counts, previous: previous.counts, stops: stops.length },
   };
+}
+
+/** A recent member reply means the existing General discussion should keep breathing instead of being replaced. */
+export async function hasActiveRhythmDiscussion(coopId: string, category: ScheduledRhythmCategory, now: Date): Promise<boolean> {
+  return !!(await db.commonsPost.findFirst({
+    where: {
+      coopId, OR: generalFeed(coopId), classification: rhythmClassification(category),
+      createdAt: { gte: new Date(now.getTime() - (category === "monthly_review" ? 35 : 9) * DAY_MS) },
+      comments: { some: { createdAt: { gte: new Date(now.getTime() - 2 * DAY_MS) }, author: { isBot: false } } },
+    },
+    select: { id: true },
+  }));
 }
 
 /** The wake-cycle step: posts whichever rituals are due and not yet posted for their period. */
@@ -598,6 +734,12 @@ export async function runCommunityRhythm(coopId: string, now = new Date(), only?
   if ((await countActiveMembers(coopId)) < RHYTHM_MIN_ACTIVE_MEMBERS) return { skipped: "Too few active members", results: [] };
   const results: RhythmResult[] = [];
   for (const entry of pending) {
+    if (await hasActiveRhythmDiscussion(coopId, entry.category, now)) {
+      results.push(await publishRhythmPost(coopId, entry.category, entry.periodKey, null, {
+        skipReason: "The existing General discussion is still active",
+      }));
+      continue;
+    }
     const built = await buildRhythm(coopId, entry.category, entry.periodKey, now);
     results.push(await publishRhythmPost(coopId, entry.category, entry.periodKey, built.text, built.extra));
   }

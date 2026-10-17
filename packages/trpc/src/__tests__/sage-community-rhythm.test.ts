@@ -3,17 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
   commonsAction: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
   commonsActionAudit: { create: vi.fn(), findMany: vi.fn() },
-  commonsPost: { create: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
+  commonsPost: { create: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
   commonsComment: { findMany: vi.fn(), findFirst: vi.fn() },
   commonsResource: { findMany: vi.fn() },
   coopConfig: { findFirst: vi.fn() },
   event: { findMany: vi.fn() },
   proposal: { findMany: vi.fn(), count: vi.fn() },
   proposalGoalScore: { findMany: vi.fn() },
-  sageTask: { findMany: vi.fn() },
+  sageTask: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), count: vi.fn() },
   sageRhythmPreference: { findMany: vi.fn() },
   user: { findMany: vi.fn() },
-  userCoopMembership: { count: vi.fn() },
+  userCoopMembership: { count: vi.fn(), findUnique: vi.fn() },
 }));
 const push = vi.hoisted(() => ({ createNotificationAndPush: vi.fn() }));
 vi.mock("@repo/db", () => ({ db }));
@@ -25,7 +25,8 @@ const { checkSageOutput } = await import("../services/untrusted-input.js");
 const { FULFILLED_TASK_OUTCOMES } = await import("../services/sage-tasks.js");
 const {
   appreciationText, dueRhythms, EMPTY_ACTIVITY, gatherActivity, isoWeekKey, monthlyText, mutedRhythmClassifications,
-  openWorkText, prioritiesText, publishRhythmPost, runCommunityRhythm, consentedNames, RHYTHM_MIN_ACTIVE_MEMBERS,
+  openWorkText, prioritiesText, publishRhythmPost, runCommunityRhythm, consentedNames, explicitCommitment,
+  gatherMondayFollowUp, gatherStopCandidates, hasActiveRhythmDiscussion, RHYTHM_MIN_ACTIVE_MEMBERS,
 } = rhythm;
 
 const at = (iso: string) => new Date(iso);
@@ -39,9 +40,14 @@ beforeEach(() => {
   db.commonsAction.update.mockResolvedValue({});
   db.commonsActionAudit.create.mockResolvedValue({});
   db.commonsPost.create.mockResolvedValue({ id: "post-1" });
+  db.commonsPost.findFirst.mockResolvedValue(null);
   db.commonsComment.findFirst.mockResolvedValue(null);
   db.coopConfig.findFirst.mockResolvedValue({ isDemo: false, missionGoals: [] });
   db.userCoopMembership.count.mockResolvedValue(12);
+  db.userCoopMembership.findUnique.mockResolvedValue({ status: "ACTIVE" });
+  db.sageTask.create.mockResolvedValue({ id: "task-1" });
+  db.sageTask.findFirst.mockResolvedValue(null);
+  db.sageTask.count.mockResolvedValue(0);
   db.proposal.count.mockResolvedValue(0);
   push.createNotificationAndPush.mockResolvedValue({ id: "n-1" });
 });
@@ -115,6 +121,50 @@ describe("midweek open requests", () => {
     expect(checkSageOutput(`${text.title}\n${text.body}`).ok).toBe(true);
     expect(openWorkText({ requests: [], stalled: [] })).toBeNull();
   });
+
+  it("carries Monday's volunteers, unowned priorities, and unanswered feedback into the General update", () => {
+    const text = openWorkText({ requests: [], stalled: [], monday: {
+      postId: "monday-1", priorities: ["Call three members.", "Host the workday."],
+      commitments: [{ priority: 1, text: "Priority 1: I'll call three members." }],
+      unowned: [{ priority: 2, text: "Host the workday." }], feedbackCount: 1, tasksCreated: 1,
+    } })!;
+    expect(text.body).toContain("Priority 1 has a volunteer");
+    expect(text.body).toContain("Priority 2 still needs an owner: Host the workday.");
+    expect(text.body).toContain("1 question or concern needs a response.");
+  });
+});
+
+describe("closing Monday's loop", () => {
+  it("recognizes only explicit first-person offers and maps numbered priorities", () => {
+    expect(explicitCommitment("Priority 2: I'll host the workday.")).toEqual({ text: "Priority 2: I'll host the workday.", priority: 2 });
+    expect(explicitCommitment("We should host a workday.")).toBeNull();
+    expect(explicitCommitment("I agree with priority 1.")).toBeNull();
+    expect(explicitCommitment("I can see why this matters.")).toBeNull();
+  });
+
+  it("turns explicit offers into follow-up tasks and leaves the other priorities unowned", async () => {
+    db.commonsAction.findUnique.mockResolvedValueOnce({
+      id: "monday-action", sourcePostId: "monday-post",
+      payload: { priorities: ["Call three members.", "Host the workday."] },
+    });
+    db.commonsComment.findMany.mockResolvedValueOnce([
+      { id: "c1", authorId: "u1", content: "Priority 2: I can host the workday." },
+      { id: "c2", authorId: "u2", content: "Who can bring the supplies?" },
+    ]);
+    const followUp = await gatherMondayFollowUp("coop-1", "2026-W42", FRIDAY);
+    expect(followUp).toMatchObject({ tasksCreated: 1, feedbackCount: 1, unowned: [{ priority: 1, text: "Call three members." }] });
+    expect(db.sageTask.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      ownerUserId: "u1", postId: "monday-post", sourceActionId: "monday-action", createdBy: "SYSTEM",
+    }), select: { id: true } });
+  });
+
+  it("detects an active member discussion for the same ritual category", async () => {
+    db.commonsPost.findFirst.mockResolvedValueOnce({ id: "active-post" });
+    expect(await hasActiveRhythmDiscussion("coop-1", "weekly_priorities", FRIDAY)).toBe(true);
+    expect(db.commonsPost.findFirst.mock.calls[0][0].where).toMatchObject({
+      classification: "sage_rhythm_weekly_priorities", comments: { some: { author: { isBot: false } } },
+    });
+  });
 });
 
 describe("Friday appreciation", () => {
@@ -149,6 +199,17 @@ describe("the monthly review", () => {
     expect(text.body).toContain("What could stop:\n• 2 proposals have waited");
     expect(checkSageOutput(`${text.title}\n${text.body}`).ok).toBe(true);
     expect(monthlyText("September", EMPTY_ACTIVITY, EMPTY_ACTIVITY, [])).toBeNull();
+  });
+
+  it("carries a Monday question with no later reply into the monthly stop list", async () => {
+    db.commonsAction.findMany.mockResolvedValueOnce([{
+      sourcePostId: "monday-post", payload: { category: "weekly_priorities" },
+    }]);
+    db.commonsComment.findMany.mockResolvedValueOnce([
+      { postId: "monday-post", content: "Who can bring the supplies?", createdAt: at("2026-09-20T12:00:00Z") },
+    ]);
+    const stops = await gatherStopCandidates("coop-1", at("2026-09-01T00:00:00Z"), at("2026-10-01T00:00:00Z"));
+    expect(stops).toContainEqual({ text: "1 question or concern in a Monday priority thread has no later response. Carry them into next month." });
   });
 });
 
@@ -228,6 +289,16 @@ describe("publishing", () => {
     db.commonsAction.findUnique.mockResolvedValue({ id: "done" });
     expect(await runCommunityRhythm("coop-1", FRIDAY)).toEqual({ results: [] });
     expect(db.commonsAction.create).not.toHaveBeenCalled();
+  });
+
+  it("records a skip instead of replacing a same-category General discussion that is still active", async () => {
+    db.commonsPost.findFirst.mockResolvedValueOnce({ id: "active-friday-thread" });
+    const result = await runCommunityRhythm("coop-1", FRIDAY);
+    expect(result.results).toEqual([expect.objectContaining({
+      category: "friday_appreciation", posted: false, reason: "The existing General discussion is still active",
+    })]);
+    expect(db.commonsAction.create.mock.calls[0][0].data).toMatchObject({ status: "DISMISSED" });
+    expect(db.commonsPost.create).not.toHaveBeenCalled();
   });
 
   it("builds and posts the due ritual in a qualifying Commons", async () => {

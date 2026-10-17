@@ -285,6 +285,8 @@ test.describe("onboarding usability", () => {
       await expect(shown(page, /AI helper\. It's a computer program, not a person\./)).toBeVisible();
       await expect(shown(page, "What always waits for a person", { exact: true })).toBeVisible();
       await expect(shown(page, "What Sage remembers", { exact: true })).toBeVisible();
+      await expect(shown(page, "Sage helps the commons keep moving.", { exact: false })).toBeVisible();
+      await expect(shown(page, /In General, it shares Monday priorities, midweek open requests, Friday thanks, and a monthly review\./)).toBeVisible();
       await expect(shown(page, /spending or moving money, changing who is a member/)).toBeVisible();
 
       // "Got it" shrinks it to one line, remembered on this device.

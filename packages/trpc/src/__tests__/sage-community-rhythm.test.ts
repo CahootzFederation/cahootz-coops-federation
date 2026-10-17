@@ -167,23 +167,24 @@ describe("closing Monday's loop", () => {
 describe("Friday appreciation", () => {
   const counts = { ...EMPTY_ACTIVITY, helpConfirmed: 2, eventsHosted: 1, commitmentsKept: 3 };
 
-  it("shows only counts that happened, goal movement, and only the names it was given", () => {
-    const text = appreciationText(counts, [{ label: "Food access", proposals: 1 }, { label: "Housing", proposals: 0 }], ["Ana", "Bo"])!;
+  it("shows only verified Commons-level counts and goal movement, never member names", () => {
+    const text = appreciationText(counts, [{ label: "Food access", proposals: 1 }, { label: "Housing", proposals: 0 }])!;
     expect(text.body).toContain("• 2 times a member confirmed someone's help made a difference");
     expect(text.body).toContain("• 1 event hosted");
     expect(text.body).toContain("• 3 commitments kept");
     expect(text.body).not.toMatch(/requests? got an answer|resources? shared/);
     expect(text.body).toContain("• Food access: 1 proposal moved forward");
     expect(text.body).toContain("• Housing: nothing recorded this week");
-    expect(text.body).toContain("Thank you, Ana and Bo, and everyone else who showed up.");
+    expect(text.body).toContain("Thank you to everyone who showed up.");
+    expect(text.body).not.toContain("Sage settings");
     expect(checkSageOutput(`${text.title}\n${text.body}`).ok).toBe(true);
   });
 
-  it("thanks everyone without names when nobody opted in, and posts nothing in a quiet week", () => {
-    expect(appreciationText(counts, [], [])!.body).toContain("Thank you to everyone who showed up.");
-    expect(appreciationText(counts, [{ label: "Food access", proposals: 0 }, { label: "Housing", proposals: 0 }], [])!.body)
+  it("thanks everyone and posts nothing in a quiet week", () => {
+    expect(appreciationText(counts, [])!.body).toContain("Thank you to everyone who showed up.");
+    expect(appreciationText(counts, [{ label: "Food access", proposals: 0 }, { label: "Housing", proposals: 0 }])!.body)
       .toContain("Toward our goals:\n• No proposals tied to our goals moved forward this week.");
-    expect(appreciationText(EMPTY_ACTIVITY, [{ label: "Food access", proposals: 0 }], ["Ana"])).toBeNull();
+    expect(appreciationText(EMPTY_ACTIVITY, [{ label: "Food access", proposals: 0 }])).toBeNull();
   });
 });
 

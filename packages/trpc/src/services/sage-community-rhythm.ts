@@ -224,13 +224,8 @@ const ACTIVITY_LINES: Array<{ key: keyof ActivityCounts; line: (count: number) =
 
 export interface GoalMovement { label: string; proposals: number }
 
-function nameList(names: string[]) {
-  if (names.length <= 1) return names.join("");
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-}
-
-/** Friday: counts from verified records, goal movement, and the names of members who opted in. */
-export function appreciationText(counts: ActivityCounts, goals: GoalMovement[], names: string[], monday?: MondayFollowUp | null): RhythmText | null {
+/** Friday: Commons-level counts from verified records and movement toward shared goals. Never member names. */
+export function appreciationText(counts: ActivityCounts, goals: GoalMovement[], monday?: MondayFollowUp | null): RhythmText | null {
   const lines = ACTIVITY_LINES.filter((entry) => counts[entry.key] > 0).map((entry) => `• ${entry.line(counts[entry.key])}`);
   const carry = monday ? [
     `${plural(monday.commitments.length, "member has", "members have")} volunteered on Monday's priorities.`,
@@ -243,13 +238,11 @@ export function appreciationText(counts: ActivityCounts, goals: GoalMovement[], 
     if (!label) return [];
     return [`• ${label}: ${goal.proposals ? `${plural(goal.proposals, "proposal", "proposals")} moved forward` : "nothing recorded this week"}`];
   });
-  const shownNames = names.map((name) => safeTitle(name, 40)).filter((name): name is string => !!name).slice(0, 8);
-  const thanks = shownNames.length ? `Thank you, ${nameList(shownNames)}, and everyone else who showed up.` : "Thank you to everyone who showed up.";
   return fit("This week's appreciation", ["Here's what members did for each other this week, counted from records in the app:"], [
     ...lines,
     ...(goalLines.length ? ["", "Toward our goals:", ...goalLines] : []),
     ...(carry.length ? ["", "Still open from Monday:", ...carry.map((line) => `• ${line}`)] : []),
-  ], ["", thanks, "Reply with a specific thank-you, an update on an open priority, or a contribution the records missed.", "Members are named only if they turn it on in Sage settings."]);
+  ], ["", "Thank you to everyone who showed up.", "Reply with a specific thank-you, an update on an open priority, or a contribution the records missed."]);
 }
 
 export interface StopCandidate { text: string }
@@ -668,7 +661,7 @@ export async function buildRhythm(
     const [activity, monday] = await Promise.all([
       gatherActivity(coopId, new Date(now.getTime() - 7 * DAY_MS), now), gatherMondayFollowUp(coopId, options.mondayPeriodKey ?? isoWeekKey(now), now),
     ]);
-    return { text: appreciationText(activity.counts, activity.goals, [], monday), extra: { counts: activity.counts, mondayPostId: monday?.postId } };
+    return { text: appreciationText(activity.counts, activity.goals, monday), extra: { counts: activity.counts, mondayPostId: monday?.postId } };
   }
   const [year, month] = periodKey.split("-").map(Number);
   const start = new Date(Date.UTC(year!, month! - 1, 1));

@@ -20,7 +20,7 @@ const SECTIONS = [
   },
   {
     title: 'What Sage can do on its own',
-    body: 'Reply with helpful information, send you reminders and alerts, check back on plans, ask the whole commons an open question when a need keeps coming up, post a regular rhythm in General (Monday priorities, midweek open requests, a Friday thank-you counted from app records, and a monthly review), and close its own suggestions when nobody answers or they no longer apply.',
+    body: 'Sage helps the commons keep moving. It can answer questions, send reminders, and check back on plans. In General, it shares Monday priorities, midweek open requests, Friday thanks, and a monthly review. If a need keeps coming up, Sage may ask the whole commons about it. It can also close a suggestion when nobody answers or it no longer fits.',
   },
   {
     title: 'What Sage remembers',

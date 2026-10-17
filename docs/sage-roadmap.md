@@ -495,7 +495,7 @@ For every Sage behavior change:
   - **Schedule:** a wake-cycle step (`sage-wake-work.ts`, every 15 minutes through `sage-wake-sweep`, or in the API without Trigger). Times are UTC, with a two-day window per ritual (Mon–Tue, Wed–Thu, Fri–Sat; the month's days 1–3). The first day waits until 13:00 UTC.
   - **Removal:** a platform admin can remove a rhythm post from the web Commons AI actions page (**Remove Sage's post**, the same `remove-question` command). The action becomes `DISMISSED` with `RHYTHM_POST_REMOVED`.
   - **Discussion link:** `hasDecisionSummary(proposalId)` detects a published `SUMMARIZE_DISCUSSION` action, and Monday's line adds "Read the discussion summary in the thread first."
-  - The Meet Sage card's "What Sage can do on its own" now mentions the rhythm and that each one can be muted in Sage settings.
+  - The Meet Sage card explains Sage's independent work in short, plain sentences, including the rhythm it shares in General.
   - Verified so far:
     - `pnpm -F @repo/trpc test`: 938 passed, 30 skipped. New: `sage-community-rhythm.test.ts` and a feed-filter case in `commons.test.ts`; the focused rhythm and pre-vote run passed 30 tests.
     - The database, validators and tRPC packages build, and the mobile type-check is clean.

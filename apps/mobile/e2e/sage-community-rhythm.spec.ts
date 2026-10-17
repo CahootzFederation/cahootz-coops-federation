@@ -56,6 +56,7 @@ test("Sage's rhythm posts in General and close the Monday loop", async ({ browse
     await page.goto(`/${seeded.coopId}/posts/${friday.postId}`);
     await expect(shown(page, /Here's what members did for each other this week/)).toBeVisible({ timeout: 60_000 });
     await expect(shown(page, "Thank you to everyone who showed up.")).toBeVisible();
+    await expect(shown(page, /Members are named only if/)).toHaveCount(0);
     await expect(shown(page, /\d+ events? hosted/)).toBeVisible();
     await expect(page.getByLabel("AI helper, not a person").filter({ visible: true }).first()).toBeVisible();
 

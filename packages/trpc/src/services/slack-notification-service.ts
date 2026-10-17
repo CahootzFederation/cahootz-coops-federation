@@ -55,11 +55,25 @@ function safeSlackText(value: string, maxLength = 500): string {
     .replace(/@(channel|here|everyone)/gi, "@$1-disabled");
 }
 
+/** Host and database name only, so an alert shows which database it read without leaking credentials. */
+export function databaseLabel(url = process.env.DATABASE_URL): string {
+  if (!url) return "not set";
+  try {
+    const parsed = new URL(url);
+    const name = parsed.pathname.replace(/^\//, "");
+    return `${parsed.hostname}${name ? `/${name}` : ""}`;
+  } catch {
+    return "unreadable DATABASE_URL";
+  }
+}
+
 /** Loud, repeatable alert used by the hourly watchdog while an agent is not operational. */
 export async function sendAgentOperationalAlert(params: {
   checkedAt: Date;
   issues: AgentOperationalIssue[];
   environment?: string;
+  /** Which monitor sent this, e.g. "Trigger.dev watchdog" or "API backup monitor". */
+  source?: string;
 }): Promise<boolean> {
   const issueLines = params.issues.slice(0, 30).map((issue) => {
     const scope = issue.coopId ? ` (${safeSlackText(issue.coopId, 100)})` : "";
@@ -74,8 +88,10 @@ export async function sendAgentOperationalAlert(params: {
     attachments: [{
       color: "danger",
       fields: [
-        { title: "Environment", value: params.environment ?? process.env.NODE_ENV ?? "unknown", short: true },
+        { title: "Environment", value: process.env.RAILWAY_ENVIRONMENT_NAME ?? params.environment ?? process.env.NODE_ENV ?? "unknown", short: true },
         { title: "Issue count", value: String(params.issues.length), short: true },
+        { title: "Sent by", value: params.source ?? "unknown", short: true },
+        { title: "Database", value: safeSlackText(databaseLabel(), 200), short: true },
         { title: "Checked at", value: params.checkedAt.toISOString(), short: false },
         { title: "Alert behavior", value: "This alert repeats every watchdog run until every issue is cleared.", short: false },
       ],

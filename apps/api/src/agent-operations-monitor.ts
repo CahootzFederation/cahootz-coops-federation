@@ -1,4 +1,4 @@
-import { getAgentOperationalSnapshot } from "@repo/trpc/services/agent-operations";
+import { getAgentOperationalSnapshot, isPrimaryProductionDeployment } from "@repo/trpc/services/agent-operations";
 import { sendAgentOperationalAlert } from "@repo/trpc/services/slack-notification-service";
 
 import { env } from "./env.js";
@@ -17,6 +17,7 @@ async function checkAgentOperations() {
       checkedAt: snapshot.checkedAt,
       issues: snapshot.issues,
       environment: env.NODE_ENV,
+      source: "API backup monitor",
     });
     if (!delivered)
       console.error(
@@ -27,6 +28,7 @@ async function checkAgentOperations() {
     const delivered = await sendAgentOperationalAlert({
       checkedAt: new Date(),
       environment: env.NODE_ENV,
+      source: "API backup monitor",
       issues: [
         {
           agentId: "agent-health-inspection",
@@ -46,10 +48,10 @@ async function checkAgentOperations() {
 /**
  * Redundant production monitor. Trigger.dev runs the primary hourly task; the
  * API repeats the check on a staggered interval so a Trigger outage does not
- * also silence agent-health alerts.
+ * also silence agent-health alerts. Railway PR and dev copies never run it.
  */
 export function startAgentOperationsMonitor() {
-  if (env.NODE_ENV !== "production" || firstCheck || interval)
+  if (!isPrimaryProductionDeployment() || firstCheck || interval)
     return false;
   firstCheck = setTimeout(
     () => void checkAgentOperations(),

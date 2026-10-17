@@ -29,6 +29,7 @@ export const sageWeeklyOutreachSweep = schedules.task({
       }).catch(() => undefined);
       await sendAgentOperationalAlert({
         checkedAt,
+        source: "Trigger.dev outreach sweep",
         issues: [
           {
             agentId: "sage-weekly-outreach",

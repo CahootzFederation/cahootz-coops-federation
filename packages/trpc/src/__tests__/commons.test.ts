@@ -253,7 +253,7 @@ describe('commonsRouter', () => {
             { coopId: 'cahootz', circleId: 'general:cahootz' },
             { coopId: 'cahootz', circleId: null },
           ],
-          AND: [{ OR: [{ classification: null }, { classification: { notIn: ['sage_rhythm_midweek_open_work'] } }] }],
+          classification: { notIn: ['sage_rhythm_midweek_open_work'] },
         },
       }),
     );

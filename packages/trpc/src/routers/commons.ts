@@ -199,7 +199,7 @@ async function loadFeedPosts(
   hiddenClassifications: string[] = [],
 ) {
   const coopIds = Array.isArray(coopId) ? coopId : [coopId];
-  const scope = circleId
+  const scope: Prisma.CommonsPostWhereInput = circleId
     ? { coopId: coopIds[0], circleId }
     : {
         OR: coopIds.flatMap((id) => [
@@ -207,14 +207,11 @@ async function loadFeedPosts(
           { coopId: id, circleId: null },
         ]),
       };
+  const where: Prisma.CommonsPostWhereInput = hiddenClassifications.length
+    ? { ...scope, classification: { notIn: hiddenClassifications } }
+    : scope;
   const posts = await db.commonsPost.findMany({
-    where: hiddenClassifications.length
-      ? {
-          ...scope,
-          // A plain notIn would also drop posts with no classification (SQL NULL).
-          AND: [{ OR: [{ classification: null }, { classification: { notIn: hiddenClassifications } }] }],
-        }
-      : scope,
+    where,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),

@@ -111,11 +111,11 @@ const MATH_PATTERNS: RegExp[] = [
 
 /** Fixed replies for refused messages. No model call is made. */
 export const SAGE_INPUT_REFUSAL_REPLIES: Record<SageInputRefusal, string> = {
-  TOO_LONG: "That's a lot to take in at once. I'm here for questions about your Commons and how you're doing. Could you tell me what you need in a few sentences?",
-  CODE: "That looks like code, so I can't help with it here. I'm here for questions about your Commons and how you're doing. What do you need, in a sentence or two?",
-  MATH: "I can't work through math problems here. I'm here for questions about your Commons and how you're doing. What's on your mind?",
-  NOT_CONVERSATIONAL: "I couldn't read that as a message. I'm here for questions about your Commons and how you're doing. Could you put it in your own words?",
-  STEERING: "I can only help with questions about this Commons, its charter and its goals.",
+  TOO_LONG: "That's a lot to take in at once! Can you tell me what you need in a few sentences?",
+  CODE: "That looks like code, and that's not really my thing. I'm better with questions about our Commons, or how you're doing. What do you need?",
+  MATH: "Math homework isn't something I can help with, sorry. Ask me anything about our Commons, though. What's on your mind?",
+  NOT_CONVERSATIONAL: "Hmm, I didn't quite follow that. Can you tell me in your own words?",
+  STEERING: "That's not something I can help with. Ask me anything about our Commons, its charter or its goals, though.",
 };
 
 /** Deterministic check run before any Sage reply model call. Returns null when the message may go through. */

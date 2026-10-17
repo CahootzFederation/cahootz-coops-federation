@@ -82,7 +82,7 @@ test("Sage reminds once about an unanswered suggestion, then closes it and tells
       await openAlerts(helper.page);
       await expect(helper.page.getByText(reminderBody).locator("visible=true")).toHaveCount(1, { timeout: 3_000 });
     }).toPass(SERVER_POLL);
-    await expect(shown(helper.page, "Sage is still waiting on you")).toBeVisible();
+    await expect(shown(helper.page, "Got a sec?")).toBeVisible();
     await shown(helper.page, reminderBody).click();
     await expect(helper.page).toHaveURL(new RegExp(`/sage/${actionId}`));
     await expect(helper.page.getByRole("button", { name: "Approve" })).toBeVisible();
@@ -104,7 +104,7 @@ test("Sage reminds once about an unanswered suggestion, then closes it and tells
       await openAlerts(need.page);
       await expect(need.page.getByText(closedBody).locator("visible=true")).toHaveCount(1, { timeout: 3_000 });
     }).toPass(SERVER_POLL);
-    await expect(shown(need.page, "Sage closed a suggestion")).toBeVisible();
+    await expect(shown(need.page, "Sage closed this one")).toBeVisible();
     await shown(need.page, closedBody).click();
     await expect(need.page).toHaveURL(new RegExp(`/sage/${actionId}`));
     await expect(shown(need.page, "Sage closed this: nobody answered after Sage's reminder")).toBeVisible();

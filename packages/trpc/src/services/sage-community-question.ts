@@ -87,7 +87,7 @@ export function communityQuestionText(themeKey: string, goalLabels: string[] = [
   if (!question) return null;
   const body = `${question.ask}\n\n${CLOSING}`;
   const goal = goalLabels.map((label) => cleanseUntrustedText(label, { maxChars: 80 }).text).find(Boolean);
-  const withGoal = goal ? `${question.ask}\n\nThis connects to our goal: ${goal}.\n\n${CLOSING}` : body;
+  const withGoal = goal ? `${question.ask}\n\nThis ties right into one of our goals: ${goal}.\n\n${CLOSING}` : body;
   return { title: question.title, label: question.label, body: goal && checkSageOutput(withGoal).ok ? withGoal : body };
 }
 

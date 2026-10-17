@@ -39,9 +39,15 @@ export interface MemberMemoryItem {
 
 type MemberSignalDetails = { themeKey?: unknown; stance?: unknown; relevantCoopIds?: unknown; sourceDate?: unknown; summaryKind?: unknown };
 
+/** "2026-10-10" → "Oct 10". Memory only holds recent notes, so the year isn't needed. */
+function shortDate(sourceDate: string): string {
+  const date = new Date(`${sourceDate}T12:00:00Z`);
+  return Number.isNaN(date.getTime()) ? sourceDate : date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
 function describe(item: MemberMemoryItem): string {
   const where = item.commonsName ? ` (${item.commonsName})` : "";
-  return `${item.sourceDate}: ${item.summary}${where}`;
+  return `${shortDate(item.sourceDate)}: ${item.summary}${where}`;
 }
 
 /**
@@ -199,8 +205,8 @@ function themeMatches(item: MemberMemoryItem, words: string): boolean {
   return wanted.some((word) => theme.includes(word) || extra.some((alias) => word.startsWith(alias)));
 }
 
-const LIST_FOOTER = "Say \"forget 1\" (or another number), \"forget that\" for the newest, or \"forget everything\". I use these in our private conversations, and count them without your name in anonymous patterns for your Commons once enough members share the same need.";
-const NOTHING_KEPT = "I'm not keeping anything about you right now. When you mention a need in a check-in, I keep a short note of it, tell you when I do, and forget it whenever you ask.";
+const LIST_FOOTER = "Say \"forget 1\" (or another number), \"forget that\" for the newest, or \"forget everything\". I only bring these up in our private chats. When enough members mention the same need, I count it in group totals for your Commons, without your name.";
+const NOTHING_KEPT = "I'm not keeping anything about you right now. When you mention a need in a check-in, I jot down a short note, tell you when I do, and forget it whenever you ask.";
 
 /**
  * Answers a memory request in code: lists what Sage remembers, or forgets what the member names.
@@ -230,7 +236,7 @@ export async function handleMemberMemoryRequest(input: {
     // "forget about the weather" names nothing Sage keeps: let the conversation carry on as usual.
     if (typeof target === "object") return null;
     if (!items.length) return { reply: NOTHING_KEPT };
-    return { reply: `I couldn't tell which one you meant. ${["Here's what I remember:", ...items.map((item, i) => `${i + 1}. ${describe(item)}`)].join("\n")}\n\nSay "forget" and its number.` };
+    return { reply: `I'm not sure which one you meant. ${["Here's what I remember:", ...items.map((item, i) => `${i + 1}. ${describe(item)}`)].join("\n")}\n\nSay "forget" and its number.` };
   }
 
   const ids = chosen.flatMap((item) => item.rowIds);
@@ -248,5 +254,5 @@ export async function handleMemberMemoryRequest(input: {
 
   const what = target === "all" ? `everything I remembered about you (${chosen.length === 1 ? "1 thing" : `${chosen.length} things`})`
     : chosen.map((item) => `"${item.summary}"`).join(" and ");
-  return { reply: `Done. I've forgotten ${what}. I won't bring it up again, and it's no longer counted in any anonymous Commons-wide pattern from the next daily update.` };
+  return { reply: `Done, I've forgotten ${what}. I won't bring it up again, and it'll drop out of any group totals by tomorrow.` };
 }

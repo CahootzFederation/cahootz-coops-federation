@@ -42,7 +42,7 @@ describe("the question's text", () => {
   });
 
   it("names the matching mission goal, and drops it if it fails the output check", () => {
-    expect(communityQuestionText("transportation_access", ["Transportation access"])!.body).toContain("This connects to our goal: Transportation access.");
+    expect(communityQuestionText("transportation_access", ["Transportation access"])!.body).toContain("This ties right into one of our goals: Transportation access.");
     expect(communityQuestionText("transportation_access", ["see https://example.com"])!.body).not.toContain("goal");
   });
 });

@@ -6,11 +6,13 @@ const db = vi.hoisted(() => ({
   userCoopMembership: { findMany: vi.fn() },
   coopConfig: { findMany: vi.fn() },
   auditLog: { create: vi.fn() },
+  user: { findUnique: vi.fn() },
 }));
 const recordObservation = vi.hoisted(() => vi.fn());
 vi.mock("@repo/db", () => ({ db }));
 vi.mock("../services/ai-memory.js", () => ({ recordObservation }));
-vi.mock("../services/sage-responsibility.js", () => ({ routeSageAlert: vi.fn() }));
+const routeSageAlert = vi.hoisted(() => vi.fn());
+vi.mock("../services/sage-responsibility.js", () => ({ routeSageAlert }));
 
 import {
   classifyPrivateSignal, handlePrivateCheckinSignal, memoryNotice, privateSafetyReply, summarizeNeed, themeSummary,
@@ -91,6 +93,21 @@ describe("saving a need without asking", () => {
     expect(recordObservation).not.toHaveBeenCalled();
     expect(write).not.toHaveBeenCalled();
     expect(actions()).toEqual(expect.arrayContaining(["SAGE_PRIVATE_SENSITIVE_EXCLUDED", "SAGE_PRIVATE_SAFETY_DETECTED", "SAGE_PRIVATE_SAFETY_RESPONSE_OFFERED"]));
+  });
+
+  it("tells the member to call emergency services, and only a yes right after Sage's offer asks a person to reach out", async () => {
+    expect(privateSafetyReply()).toContain("please call your local emergency number");
+    expect(privateSafetyReply()).toContain("I won't share anything without your OK");
+    routeSageAlert.mockResolvedValue({ status: "ROUTED" });
+    expect((await reply("yes")).safetyReply).toBeNull();
+    // The current offer, and one sent with the older wording, both count.
+    for (const offer of [privateSafetyReply(), "If you want, tell me whether you'd like help identifying a trusted person or support role in your Commons to contact."]) {
+      db.groupComment.findMany.mockResolvedValueOnce([{ authorId: "sage", content: offer }]);
+      const consented = await reply("yes");
+      expect(consented.safetyReply).toBe("Thanks for trusting me with this. I've privately asked someone who can help to reach out to you. I didn't pass on what you told me.");
+    }
+    expect(routeSageAlert).toHaveBeenCalledTimes(2);
+    expect(actions().filter((action) => action === "SAGE_PRIVATE_SAFETY_CONTACT_CONSENTED")).toHaveLength(2);
   });
 
   it("drops the note when the model flags it as sensitive or its summary matches a sensitive pattern", async () => {

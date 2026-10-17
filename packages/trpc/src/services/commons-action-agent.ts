@@ -284,8 +284,8 @@ async function invitePerson(resourceId: string, item: SourceItem, action: Action
   if (!updated.count) return "Not invited: an invitation was already sent";
   await createNotificationAndPush(db, {
     userId: target.id, coopId: item.coopId, type: "RESOURCE_INVITATION",
-    title: "Would you like to be listed as a resource?",
-    body: action.resourceTitle || "A Commons member suggested your skills as a resource.",
+    title: "Want to be listed as someone folks can ask for help?",
+    body: action.resourceTitle || "A member thinks your skills could really help people here.",
     data: { resourceId, coopId: item.coopId },
   });
   return "Invited them to be listed as a resource";
@@ -452,7 +452,7 @@ async function createProposalDraft(item: SourceItem, actionId: string, title: st
   await db.commonsAction.update({ where: { id: actionId }, data: { status: "APPROVED" } });
   await createNotificationAndPush(db, {
     userId: item.sourceAuthorId, coopId: item.coopId, type: "PROPOSAL_DRAFT_READY",
-    title: "A proposal draft is ready", body: "Review and edit this Commons suggestion before you submit it.",
+    title: "Your proposal draft is ready", body: "I turned your idea into a draft. Change anything you like and send it when you're ready.",
     data: { draftId: draft.id, coopId: item.coopId },
   }).catch((error) => console.error("Could not notify proposal author", error));
   trail.taken("Created an editable proposal draft for the author", "PASS");
@@ -595,7 +595,7 @@ async function analyzeBatch(items: SourceItem[], config: CoopConfig, autoReply: 
     for (const claim of claimed) {
       const actions = byId.get(claim.item.sourceId) ?? [];
       const trail = itemTrail(claim.item, trigger).step("EVIDENCE",
-        `The active charter (version ${config.version}) and ${missionGoals(config).length} mission goals`);
+        `Checked our charter (version ${config.version}) and our ${missionGoals(config).length} goals`);
       for (const lookup of lookups) trail.step("EVIDENCE", `Looked up: ${lookup.summary}`, { detail: lookup.detail });
       const { item: modelItem, check: inputCheck } = cleansed.get(claim.item.sourceId)!;
       trail.policy("The member's text has no instructions aimed at Sage", !isSteeringAttempt(inputCheck.flags),
@@ -612,8 +612,8 @@ async function analyzeBatch(items: SourceItem[], config: CoopConfig, autoReply: 
     })));
     for (const claim of claimed) {
       await itemTrail(claim.item, trigger)
-        .taken("Analysis failed", "FAIL", error instanceof Error ? error.message : String(error), true)
-        .setOutcome("Analysis failed").save();
+        .taken("Something went wrong, so Sage didn't act", "FAIL", error instanceof Error ? error.message : String(error), true)
+        .setOutcome("Something went wrong, so Sage didn't act").save();
     }
     throw error;
   }

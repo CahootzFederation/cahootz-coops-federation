@@ -165,7 +165,7 @@ async function draftProposal(ctx: ToolContext): Promise<ToolResult> {
   });
   await createNotificationAndPush(db, {
     userId: authorId, coopId: ctx.action.coopId, type: "PROPOSAL_DRAFT_READY",
-    title: "A proposal draft is ready", body: "Sage drafted this from your circle. Edit it before you submit it.",
+    title: "Your proposal draft is ready", body: "Sage drafted this from what your circle talked about. Change anything you like and send it when you're ready.",
     data: { draftId: draft.id, coopId: ctx.action.coopId },
   }).catch((error) => console.error("Could not notify proposal draft owner", error));
   return { resultEntityType: "CommonsProposalDraft", resultEntityId: draft.id };
@@ -290,7 +290,7 @@ async function shareWin(ctx: ToolContext): Promise<ToolResult> {
   const helper = await db.user.findUnique({ where: { id: helperId }, select: { name: true, handle: true } });
   const name = helper?.name?.trim() || helper?.handle?.trim();
   if (!name) throw new ToolRefusal("The helper has no name to thank");
-  const content = `Shout-out to ${name} for showing up for another member through Sage. This is what the Commons is for.`;
+  const content = `Big thanks to ${name} for stepping up for another member. This is what we're here for.`;
   if (!checkSageOutput(content).ok) throw new ToolRefusal("The shout-out failed Sage's output check");
   const sage = await ensureSageBotUser(db, ctx.action.coopId);
   const post = await db.commonsPost.create({

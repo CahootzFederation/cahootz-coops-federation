@@ -54,7 +54,7 @@ describe("did the introduction help?", () => {
     expect(db.commonsActionReview.create.mock.calls[0]![0].data.presentationData).toMatchObject({ capability: "thank_helper", conversationGroupId: "dm-needer" });
     const sent = proactive.sendProactiveSageMessage.mock.calls[0]![0];
     expect(sent).toMatchObject({ userId: "needer", kind: "thanks-ask", key: "intro1" });
-    expect(sent.content).toBe("Did connecting with the member I introduced you to help with a ride to the clinic? Reply yes or no.");
+    expect(sent.content).toBe("Did the person I introduced you to help with a ride to the clinic? A quick yes or no is perfect.");
   });
 
   it("waits when the member is at the weekly limit, and skips introductions that didn't happen", async () => {
@@ -131,7 +131,7 @@ describe("thanking and sharing", () => {
     await executeSageAction("share1");
     const post = db.commonsPost.create.mock.calls[0]![0].data;
     expect(post).toMatchObject({ coopId: "harbor", authorId: "sage", tag: "Win", title: "Thank you, Pat Lee" });
-    expect(post.content).toBe("Shout-out to Pat Lee for showing up for another member through Sage. This is what the Commons is for.");
+    expect(post.content).toBe("Big thanks to Pat Lee for stepping up for another member. This is what we're here for.");
     expect(post.content).not.toContain("clinic");
   });
 

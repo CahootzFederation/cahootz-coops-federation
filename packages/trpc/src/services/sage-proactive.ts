@@ -146,7 +146,7 @@ export async function runProactiveTask(task: SageTask, now = new Date()): Promis
     if (!about) return "SKIPPED";
     const sent = await sendProactiveSageMessage({
       userId: task.ownerUserId, kind: "promise", key: task.id, now,
-      content: `Checking back like I said: ${about.charAt(0).toLowerCase()}${about.slice(1)}?`,
+      content: `Checking back like I promised: ${about.charAt(0).toLowerCase()}${about.slice(1)}?`,
     });
     return sent.status === "LIMITED" ? "LIMITED" : "SENT";
   }

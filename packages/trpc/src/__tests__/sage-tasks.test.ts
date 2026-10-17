@@ -147,8 +147,8 @@ describe("waking a suggestion follow-up", () => {
     suggestions.checkSuggestionReview.mockResolvedValueOnce({ resolved: false });
     await expect(wakeTask(suggestionTask(), NOW)).resolves.toBe("REMINDED");
     expect(push).toHaveBeenCalledWith(db, expect.objectContaining({
-      userId: "member-1", type: "SAGE_SUGGESTION_REMINDER", title: "Sage is still waiting on you",
-      body: "\"Fund a shared tool library\" needs your answer.",
+      userId: "member-1", type: "SAGE_SUGGESTION_REMINDER", title: "Got a sec?",
+      body: "Sage would love your answer on \"Fund a shared tool library\" when you have a minute.",
       data: { taskId: "task-1", coopId: "harbor", actionId: "action-1" },
     }));
     expect(db.sageTask.update).toHaveBeenCalledWith({ where: { id: "task-1" }, data: expect.objectContaining({ nextWakeAt: new Date(NOW.getTime() + 4 * DAY) }) });

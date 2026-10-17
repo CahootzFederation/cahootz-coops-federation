@@ -56,7 +56,7 @@ P0 proactive-suggestion slice (branch `claude/sage-stewart-system-plan-5f647c`, 
 - Decision trails cover the proposal engine (create, resubmit and apply-alternative, including the rewrite), proposal comment evaluation, and Sage's @mention and DM replies, alongside the Commons feed and circle trend agents. Each trail has an `agent` and an optional `proposalId`.
   - Proposal-review trails record every goal and structural score, risk flags, missing information, alternatives, each scoring gate and compliance check, the auto-approve and council budget tiers, and the decision. The result is the proposal's live status.
   - Comment-evaluation trails flag a label that contradicts its own score; the engine trusts the model's label. They also note that only the first 2,000 characters of the charter are used.
-  - Sage-reply trails record the thread, what the reply was grounded on, and whether the model fell back to its standard "no grounded answer". @mentions in circles, which Sage doesn't answer, are recorded with the reason.
+  - Sage-reply trails record the thread, what the reply was grounded on, and whether the model fell back to its ready-made "I'm not sure" reply. @mentions in circles, which Sage doesn't answer, are recorded with the reason.
   - The proposal page and the direct message with Sage show these trails when the member's setting is on. A DM's trail is visible only to the two people in it. The admin page can filter trails by agent.
 - Sage-comment alerts: whenever Sage comments on a post, the post's author and everyone else who commented get a `SAGE_COMMENT` alert. This covers Commons auto-replies, admin-approved replies, comments Sage posts by itself or with the leader's approval, and @mention replies. Bots are never alerted, circle posts alert only current circle members, and Commons posts alert only active members. The alert opens the post at Sage's comment. Welcome-lounge shout-outs keep their own alerts.
 - Steering defenses (`untrusted-input.ts`). Every member-written text is cleansed before it reaches a model: Commons items, circle conversations, Sage @mention and DM messages and threads, proposals (create, resubmit, applied alternatives) and proposal comments. Cleansing removes hidden and zero-width characters and fake structure markers, normalizes lookalike Unicode, collapses padding and caps length. Instruction-like text aimed at the AI is flagged.
@@ -66,7 +66,7 @@ P0 proactive-suggestion slice (branch `claude/sage-stewart-system-plan-5f647c`, 
   - Anything Sage publishes is checked first: no links, @mentions, claimed real-world actions or echoed instructions, and at most 1,200 characters. Autonomous comments that fail go to review; member-requested replies are cleaned, or replaced with a safe standard reply.
   - Every check is recorded in the decision trail. Detection is pattern-based, so a determined attacker can still phrase around it. The structural limits (review, no auto-approval, output checks) are the real protection.
 - Fixed a sign-in bounce in the web admin portal: the first sign-in always returned to the login page, because the layout redirected on its stale pre-login state.
-- Reply voice and templates (`sage-reply-templates.ts`). All Sage replies and comments share one voice: a trusted organizer who says "we", asks the member for something specific, uses plain words, and only offers what Sage can do (draft a proposal, ask a question, suggest connecting people).
+- Reply voice and templates (`sage-reply-templates.ts`). All Sage replies and comments share one voice: a friendly, sharp member of the Commons who says "we", asks the member for something specific, uses plain words, and only offers what Sage can do (draft a proposal, ask a question, suggest connecting people). The tone itself lives in `SAGE_VOICE` (`sage-principles.ts`), which every Sage agent loads with the core principles.
   - Templates are suggestions, never a required format. The first is **Action plan**: a position, then "Here's what we can do:" with bullets of steps for the member, then "Once you've done that, I can …".
   - The feed and circle agents pick a template and fill its parts, and code renders the text, so the format is exact. The @mention and DM agent follows the shape in plain text.
   - To add a template, add an entry to `SAGE_REPLY_TEMPLATES`.
@@ -282,6 +282,23 @@ Known limitations:
 - `search_commons_documents` reads `KnowledgeDocument`, but no mobile or web screen calls `knowledgeBase.uploadDocument` yet, so in practice it finds nothing until documents are added. It reads only COMMONS and PUBLIC documents (plus CIRCLE ones for a circle), never PRIVATE ones. The older `search_knowledge_base` agent tool still applies no visibility filter.
 - Not yet built: learning from how leaders edit suggested comments before approving them (see Next).
 
+### P1 — Personable, plain voice (2026-10-16)
+
+Goal: everything Sage says sounds like a friendly, sharp neighbor, not a system, a consultant or a form (AGENT.md, "Voice: Personable and Plain"; suggestions in `docs/voice-audit.md` on the `claude/sage-relatable-tone-e3a226` branch).
+
+Status (2026-10-16): built; unit tests, type-check and the E2E runs listed under Verification below.
+
+- **One shared voice block.** `SAGE_VOICE` sits next to the core principles in `sage-principles.ts` and is returned by `sageCorePrinciplesInstructions()`, so the reply agent, Commons Action, Trend, Steward, check-in follow-up and weekly check-in agents all get it. It asks for everyday words, short sentences, contractions and "we/you", allows a little warmth, rules out fake excitement and over-apologizing, gives one short example reply, and says a friendly tone never softens a fact, a risk, a cost or a "no". The per-agent "trusted community organizer" lines are gone. `SAGE_VOICE_RULES` no longer says "No greetings or sign-offs" or "Lead with your position"; it says to open with what Sage thinks and why, like talking to a neighbor, and to skip formal greetings. The reply agent is now framed as "a friendly organizer who helps out in {Commons}", and it still says it's an AI if asked. The trend agent's posts are "direct but friendly", and Community Observer summaries read like a quick catch-up.
+- **Canned text rewritten** (no model calls): the reply fallback, input refusals, the safety reply and its two follow-ups, the memory list, footer, date format ("Oct 10") and "forget" reply, the promised check-back, introduction offers and the "did it help?" ask, the resource invitation, the proposal-draft-ready notifications, the thanks shout-out, suggestion reminders and closing reasons, the community-question goal line, weekly check-in and follow-up fallbacks, and the decision-trail steps members can read ("Checked our charter (version N) and our N goals", "Sent a ready-made reply", "Something went wrong, so Sage didn't act").
+- **Meaning kept.** The safety reply still tells the member to call their local emergency number, says Sage can't send help itself, and shares nothing without their OK. A "yes" after the offer is still matched in code; the match now accepts the new wording and the old one (`SAFETY_OFFER_MARKERS`), so offers sent before this change still work. The memory footer still says notes are only used in private chats and counted, without a name, in Commons-wide totals once enough members share a need. Yes/no parsing, consent gates and approval paths are unchanged.
+
+Known limitations:
+
+- The model-written need summaries are still third-person fragments ("needs rides to work on weekdays"); changing that would mix two styles in stored memory, so it waits for a migration of existing rows.
+- The proposal engine and newsletter prompts don't load `SAGE_VOICE` yet, and their score/rubric language still reaches members. That's the next voice item.
+- A few yes/no asks in `sage-member-actions.ts` (introduction from a profile match, the helper's shout-out consent) still end with "Reply yes or no."
+- Tone is the live model's choice; tests check the instructions and the fixed text, not how warm each model reply reads.
+
 ### P2 — Cost optimization and budget administration
 
 Goal: measure value per useful outcome and prevent surprise spending.
@@ -358,6 +375,7 @@ For every Sage behavior change:
 - 2026-10-04: Specialists (Cadence, Guardian, Bridge, Ledger) are read-only tools the one steward model calls, not separate agents.
 - 2026-10-04: New autonomous actions (follow-ups, routed alerts, introduction offers) go live within the monthly limit and safety checks. No conduct review or disciplinary action. Ledger reads proposal budgets only.
 - 2026-10-05: Members are told plainly who Sage is.
+- 2026-10-16: Sage's voice is a platform rule loaded with the core principles: a friendly, sharp member of the Commons, plain words, never softening a fact or a "no". Tone changes never loosen consent, privacy, governance or money rules.
   - The Sage screen shows a "Meet Sage" card (`apps/mobile/components/sage-intro.tsx`) until it's dismissed. It says Sage is an AI helper and not a person, what it does on its own (replies, reminders and alerts, checking back), and what always waits for a person (proposals, money, membership, group decisions). It also says Sage can make mistakes.
   - Sage settings always shows the card, and the suggestion and alert pages carry a one-line version.
   - This is copy only; no autonomy changed. If the Autonomy Boundaries change, update this card in the same change. Verified by `onboarding-usability.spec.ts` (TESTING.md journey 42).
@@ -374,7 +392,7 @@ For every Sage behavior change:
     - A held message is audited as `SAGE_PROACTIVE_LIMITED`. A check-in skipped by the limit makes no model call.
   - **Promises:** `schedule_check_in` is in the member toolkit, so every agent that has it can use it (check-in follow-ups, DMs). The steward review has `schedule_member_check_in`, at most 3 per review.
     - One open promise per member (`SageTask` subject `member_conversation`).
-    - When due, it's closed if the member already talked with Sage since. Otherwise Sage sends "Checking back like I said: …?" with no model call.
+    - When due, it's closed if the member already talked with Sage since. Otherwise Sage sends "Checking back like I promised: …?" with no model call.
     - At the limit it waits a day, up to 3 times. Trails are admin-only.
   - **Unanswered needs:** a wake step (`sage-unanswered-needs.ts`). A Need/Ask feed post 48 hours to 14 days old with no reply from anyone but its author gets one likely helper (`findMembersForNeed`) asked privately to take a look.
     - Limits: at most 2 helpers per post, a week apart; at most 1 need per helper per week; at most 5 asks per Commons per day.

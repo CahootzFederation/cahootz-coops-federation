@@ -311,7 +311,7 @@ export const commonsActionsAdminRouter = router({
       await ctx.db.commonsAction.update({ where: { id: action.id }, data: { status: "APPROVED", reviewedBy: actor, reviewedAt: new Date() } });
       await createNotificationAndPush(ctx.db, {
         userId: action.sourceAuthorId, coopId, type: "PROPOSAL_DRAFT_READY",
-        title: "A proposal draft is ready", body: "Review and edit this Commons suggestion before you submit it.",
+        title: "Your proposal draft is ready", body: "Sage turned your idea into a draft. Change anything you like and send it when you're ready.",
         data: { draftId: draft.id, coopId },
       }).catch((error) => console.error("Could not notify proposal author", error));
     } else if (FINAL_REVIEW_TYPE_BY_ACTION_TYPE[action.type]) {

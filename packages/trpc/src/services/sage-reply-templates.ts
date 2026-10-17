@@ -209,6 +209,26 @@ export function sageReplyStyleInstructions(options: { structured?: boolean; temp
   ].filter(Boolean).join("\n");
 }
 
+/**
+ * Every Sage reply is to one person: the member who wrote. Shared by DMs, @mentions, check-in follow-ups
+ * and the feed agent's replies so they all sound like Sage knows who it's talking to.
+ */
+export function sagePersonalInstructions(memberName?: string | null): string {
+  const name = safeFirstName(memberName);
+  return [
+    name
+      ? `You're replying to ${name}. Talk to them directly: use their first name once when it fits naturally (not every time), and answer their own situation, not a general audience.`
+      : "Talk directly to the member who wrote, about their own situation, not a general audience.",
+    "Pick up on what they told you so they can tell you were listening. Never invent personal details.",
+  ].join("\n");
+}
+
+/** A member's name is member-written text: keep one word of letters only, so it can't carry instructions. */
+export function safeFirstName(name?: string | null): string | null {
+  const first = (name ?? "").trim().split(/\s+/)[0]?.replace(/[^\p{L}'-]/gu, "").slice(0, 30);
+  return first && /\p{L}/u.test(first) ? first : null;
+}
+
 /** How Sage follows through on something it offered earlier in the same thread. */
 export const SAGE_FOLLOW_THROUGH_RULE =
   "The thread may include Sage's own earlier comments. If Sage offered to do something once a member provided information, and this item provides it, follow through now (for example, include MAKE_PROPOSAL with a draft built from the details they gave; its evidence is still the charter or goal passage the proposal serves, not the member's words). Don't ask again for information they already gave. Don't say a draft was created; the member is notified when it's ready.";

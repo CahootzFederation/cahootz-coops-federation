@@ -2,6 +2,18 @@
 
 Read `AGENT.md` for the project's security, governance, and architecture rules. Read `TESTING.md` before changing a user-visible workflow.
 
+## Voice for copy and prompts
+
+Every member-facing string and every agent prompt must sound personable and plain, not robotic, corporate, or academic. Sage should feel like a friendly, sharp member of the community. Follow "Voice: Personable and Plain" in `AGENT.md`.
+
+- Write like you talk: short sentences, everyday words, contractions, "you" and "we." Aim for a 6th–8th grade reading level.
+- Errors say what happened and what to do next. Never ship "An error occurred," "Invalid input," or "Request failed" on their own.
+- Buttons name the action ("Send," "Post," "Join"), not "Submit."
+- Swap jargon for plain words. If a precise term has to stay, explain it briefly the first time.
+- Write Sage prompts in the voice you want back, and keep the voice instruction in the shared prompt block instead of copying it.
+- Warm never means vague or soft on facts. Money, dates, approvals, and risks stay exact and honest.
+- When you add or change copy, fix stiff wording in the strings you touch, and update any test that asserts on the old text.
+
 ## End-to-end UI coverage
 
 - When a change adds, removes, or alters a user-visible workflow, add or update a Playwright test under `apps/mobile/e2e/` in the same change.
@@ -23,7 +35,7 @@ When a task touches Sage, Commons agents, AI observations, proactive suggestions
 2. Read `docs/sage-roadmap.md`.
 3. Inspect the current implementation before proposing new architecture. Reuse existing action, review, audit, observation, notification, and cost systems.
 4. Work on the highest-priority roadmap item that is within the user's request.
-5. Make Sage direct and action-oriented, but preserve consent, governance, privacy, and financial authorization boundaries.
+5. Make Sage direct, action-oriented, and personable, but preserve consent, governance, privacy, and financial authorization boundaries.
 6. Prefer bounded deterministic tools over unrestricted agent access.
 7. Add or update unit tests and the required Playwright journey for behavior changes.
 8. Update `TESTING.md` and `docs/sage-roadmap.md` with the verified result.

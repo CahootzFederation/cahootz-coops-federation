@@ -9,8 +9,8 @@ vi.mock("@repo/db", () => ({ db }));
 vi.mock("../services/sage-tasks.js", () => ({ createSageTask }));
 
 const {
-  FACILITATION_COOLDOWN_HOURS, claimFacilitation, detectFacilitation, facilitationInstruction, factualQuestion, isDeferral, revisitDays,
-  revisitSignal, scheduleThreadRevisit, threadUpTo,
+  FACILITATION_COOLDOWN_HOURS, applySocialFacilitation, claimFacilitation, detectFacilitation, facilitationInstruction, factualQuestion,
+  isDeferral, revisitDays, revisitSignal, scheduleThreadRevisit, socialFacilitationFor, threadUpTo,
 } = await import("../services/sage-facilitation.js");
 const { SAGE_REPLY_TEMPLATES } = await import("../services/sage-reply-templates.js");
 const fixtures = await import("./fixtures/facilitation-threads.js");
@@ -65,6 +65,11 @@ describe("when a thread needs Sage", () => {
     // Three comments in, the garden thread was still just people saying when they're free.
     expect(detectFacilitation(threadUpTo(fixtures.BUSY_THREAD, "c3"), NOW).signal).toBeNull();
     expect(detectFacilitation(threadUpTo(fixtures.BUSY_THREAD, "c8"), NOW).signal?.kind).toBe("busy_thread");
+  });
+
+  it("waits for a real back-and-forth before calling a disagreement", () => {
+    expect(detectFacilitation(threadUpTo(fixtures.DISAGREEMENT, "c2"), NOW).signal).toBeNull();
+    expect(detectFacilitation(threadUpTo(fixtures.DISAGREEMENT, "c3"), NOW).signal?.kind).toBe("disagreement");
   });
 });
 
@@ -154,10 +159,38 @@ describe("questions and deferrals", () => {
 describe("what the model is told", () => {
   it("names the template and never asks Sage to take a side", () => {
     expect(facilitationInstruction(detectFacilitation(fixtures.DISAGREEMENT, NOW).signal!)).toMatch(/Trade-off template.*Don't take a side/);
-    expect(facilitationInstruction(detectFacilitation(fixtures.NARROW_DECISION, NOW).signal!)).toMatch(/groups \(never individuals\)/);
+    expect(facilitationInstruction(detectFacilitation(fixtures.NARROW_DECISION, NOW).signal!)).toMatch(/affected group only when the thread or a checked source explicitly supports it/);
     expect(facilitationInstruction(detectFacilitation(fixtures.BUSY_THREAD, NOW).signal!)).toMatch(/Where we are/);
     expect(facilitationInstruction(detectFacilitation(fixtures.READY_FOR_PROPOSAL, NOW).signal!)).toMatch(/MAKE_PROPOSAL/);
     expect(facilitationInstruction(detectFacilitation(fixtures.UNANSWERED_QUESTION, NOW).signal!)).toMatch(/what time the library closes/);
     expect(facilitationInstruction(detectFacilitation(fixtures.DEFERRAL, NOW).signal!)).toMatch(/Don't comment/);
+  });
+});
+
+describe("social facilitation", () => {
+  it("recognizes concrete progress without overdoing it", () => {
+    const signal = detectFacilitation(fixtures.READY_FOR_PROPOSAL, NOW).signal!;
+    expect(signal.social).toMatchObject({ style: "compliment" });
+    const text = applySocialFacilitation("Here is the draft.", signal);
+    expect(text).toMatch(/^You’ve turned this from an idea into a concrete plan/);
+    expect(applySocialFacilitation(text, signal)).toBe(text);
+  });
+
+  it("uses either a compliment or light humor for a harmless busy thread", () => {
+    expect(socialFacilitationFor(fixtures.BUSY_THREAD, { kind: "busy_thread" } as any).social?.style)
+      .toMatch(/^(compliment|light_humor)$/);
+  });
+
+  it("keeps disagreement and representation prompts neutral", () => {
+    for (const thread of [fixtures.DISAGREEMENT, fixtures.NARROW_DECISION]) {
+      const signal = detectFacilitation(thread, NOW).signal!;
+      expect(signal.social).toBeUndefined();
+      expect(signal.socialRestricted).toMatch(/neutral/);
+    }
+  });
+
+  it("keeps sensitive topics neutral even when the thread is busy", () => {
+    const sensitive = { ...fixtures.BUSY_THREAD, content: "We need to discuss an eviction and housing emergency." };
+    expect(socialFacilitationFor(sensitive, { kind: "busy_thread" } as any)).toMatchObject({ socialRestricted: expect.stringMatching(/sensitive/) });
   });
 });

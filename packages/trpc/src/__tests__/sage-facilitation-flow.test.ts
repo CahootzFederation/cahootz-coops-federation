@@ -147,6 +147,26 @@ describe("facilitating a Commons thread", () => {
     ]));
   });
 
+  it("adds only the deterministic social opening approved for a harmless busy thread", async () => {
+    useThread(fixtures.BUSY_THREAD, "c8");
+    run.mockResolvedValue({ finalOutput: { items: [{ id: "c8", actions: [action({
+      templateKey: "where-we-are",
+      templateLead: "This is about finding a workable time for the garden workday.",
+      templateSteps: ["Agreed: the workday should happen before frost.", "Still open: a time people can attend safely."],
+      templateOffer: "Which two-hour window works for the most people?",
+      evidence: "We should do a workday at the community garden before frost",
+    })] }] } });
+
+    await processCommonsActionContent("commons_comment", "c8", { relevanceJudge: onTopic });
+
+    const content = db.commonsComment.create.mock.calls[0]![0].data.content as string;
+    expect(content).toMatch(/^(You’ve surfaced the constraints clearly|This thread has done a few laps)/);
+    expect(content.match(/You’ve surfaced|This thread has done/g)).toHaveLength(1);
+    expect(trailRows()[0].steps).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: expect.stringMatching(/^Used one brief (compliment|light humor) opening$/) }),
+    ]));
+  });
+
   it("holds a comment when the group defers, and schedules the revisit instead", async () => {
     useThread(fixtures.DEFERRAL, "c2");
     run.mockResolvedValue({ finalOutput: { items: [{ id: "c2", actions: [action({ templateKey: "", draftText: "Sounds good!", evidence: "once we know the volunteer schedule" })] }] } });

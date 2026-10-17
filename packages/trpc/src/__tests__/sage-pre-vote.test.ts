@@ -56,7 +56,10 @@ function output(overrides: Record<string, unknown> = {}) {
     agreed: [{ point: "Members agree the neighborhood needs a fridge that's open late.", quote: "Our block has nothing open late" }],
     debated: [{ point: "Whether to spend $1200 now or start with a one-month trial.", quote: "start with a one-month trial at the rec center" }],
     missingFacts: [{ point: "Who restocks and cleans the fridge.", quote: "Who restocks the fridge?" }],
-    unheardGroups: ["members who'd do the restocking", "families on the block"],
+    unheardGroups: [
+      { point: "members who'd do the restocking", quote: "who restocks it" },
+      { point: "families on the block", quote: "families need it" },
+    ],
     confidence: 0.85,
     ...overrides,
   };
@@ -105,7 +108,11 @@ describe("what a pre-vote summary may say", () => {
         { point: "It needs 60% to pass under the charter.", quote: "Members vote on spending" },
         { point: "Some want a bigger fridge.", quote: "a bigger fridge would be better" },
       ],
-      unheardGroups: ["Tasha's neighbors", "@dev"],
+      unheardGroups: [
+        { point: "Tasha's neighbors", quote: "Who cleans it?" },
+        { point: "@dev", quote: "I'm for a fridge" },
+        { point: "people outside the neighborhood", quote: "people outside the neighborhood" },
+      ],
     }), SOURCES);
     expect(summary.agreed).toEqual([]);
     expect(summary.debated).toEqual([]);
@@ -128,7 +135,7 @@ describe("what a pre-vote summary may say", () => {
       "• Whether to spend $1200 now or start with a one-month trial.",
       "Facts we don't have yet:",
       "• Who restocks and cleans the fridge.",
-      "Not heard from yet: members who'd do the restocking; families on the block. If that's you, add your view before voting closes.",
+      "Affected perspectives the discussion hasn't addressed yet: members who'd do the restocking; families on the block. If this affects you, add your view before voting closes.",
     ].join("\n"));
     const long = { agreed: ["x".repeat(150), "y".repeat(150)], debated: ["z".repeat(150), "w".repeat(150)], missingFacts: ["v".repeat(150), "u".repeat(150)],
       unheardGroups: ["a".repeat(60), "b".repeat(60)], quotes: [], dropped: [] };
@@ -138,7 +145,7 @@ describe("what a pre-vote summary may say", () => {
   it("tells the model never to say how to vote, and counts its calls toward the autonomy limit", () => {
     const instructions = String((createPreVoteAgent() as unknown as { opts: { instructions: string } }).opts.instructions);
     expect(instructions).toMatch(/Never say or hint how anyone should vote/);
-    expect(instructions).toMatch(/Groups only, never a person's name/);
+    expect(instructions).toMatch(/Never infer identity or claim to know who a commenter represents/);
     expect(AUTONOMOUS_SAGE_FEATURES).toContain(PRE_VOTE_FEATURE);
   });
 });

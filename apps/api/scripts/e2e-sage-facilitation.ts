@@ -8,6 +8,8 @@
  *     Prints the task's status.
  *   tsx --import ./dotenv.config.js scripts/e2e-sage-facilitation.ts claims <postId>
  *     Lists the facilitation triggers code claimed for the thread (kind:commentId).
+ *   tsx --import ./dotenv.config.js scripts/e2e-sage-facilitation.ts pending <postId>
+ *     The circle leader's pending Sage suggestions on the thread (comments Sage wasn't confident enough to post itself).
  *   tsx --import ./dotenv.config.js scripts/e2e-sage-facilitation.ts seed-votable <runId> <proposerEmail>
  *     Creates an E2E proposal that is open for voting and closes in 24 hours.
  *   tsx --import ./dotenv.config.js scripts/e2e-sage-facilitation.ts pre-vote <proposalId>
@@ -62,6 +64,15 @@ async function claims(postId: string) {
   return { claims: rows.map((row) => row.contentHash) };
 }
 
+async function pending(postId: string) {
+  await assertE2EPost(postId);
+  const rows = await db.commonsAction.findMany({
+    where: { sourcePostId: postId, type: "SUGGEST_ACTION", status: "PENDING", reviews: { some: { reviewType: "APPROVE_SUGGESTION", status: "PENDING" } } },
+    orderBy: { createdAt: "asc" }, select: { id: true },
+  });
+  return { actionIds: rows.map((row) => row.id) };
+}
+
 async function seedVotable(runId: string, proposerEmail: string) {
   if (!/^[a-z0-9-]+$/i.test(runId)) throw new Error(`Invalid run id ${runId}`);
   if (!proposerEmail.endsWith(TEST_EMAIL_SUFFIX)) throw new Error("Only seeded test accounts can propose");
@@ -76,7 +87,7 @@ async function seedVotable(runId: string, proposerEmail: string) {
       budgetCurrency: "USD", budgetAmount: 1200, engineVersion: "proposal-engine@2.0.0", status: "VOTABLE",
       votingEndsAt: new Date(Date.now() + 24 * 3_600_000), coopId: COOP_ID,
       rawText: `Proposal Title: ${title}\nSummary: Stock a shared fridge at the community center.\nBudget Requested: $1200`,
-      decision: "advance", decisionReasons: [], missingData: [{ field: "maintenance", question: "Who restocks the fridge?", severity: "SOFT" }],
+      decision: "advance", decisionReasons: [], missingData: [{ field: "maintenance", question: "Who restocks the fridge?", why_needed: "Restocking is an ongoing cost.", severity: "SOFT" }],
     },
     select: { id: true },
   });
@@ -95,7 +106,11 @@ async function cleanup(postId: string, proposalId: string, memberEmails: string[
     const tasks = await db.sageTask.findMany({ where: { coopId: COOP_ID, postId }, select: { id: true } });
     const actions = await db.commonsAction.findMany({ where: { sourcePostId: postId }, select: { id: true } });
     await db.$transaction([
-      db.notification.deleteMany({ where: { OR: [{ data: { path: ["postId"], equals: postId } }, ...tasks.map((task) => ({ data: { path: ["taskId"], equals: task.id } }))] } }),
+      db.notification.deleteMany({ where: { OR: [
+        { data: { path: ["postId"], equals: postId } },
+        ...tasks.map((task) => ({ data: { path: ["taskId"], equals: task.id } })),
+        ...actions.map((action) => ({ data: { path: ["actionId"], equals: action.id } })),
+      ] } }),
       db.sageTask.deleteMany({ where: { id: { in: tasks.map((task) => task.id) } } }),
       db.commonsProposalDraft.deleteMany({ where: { actionId: { in: actions.map((action) => action.id) } } }),
       db.commonsAction.deleteMany({ where: { id: { in: actions.map((action) => action.id) } } }),
@@ -126,6 +141,7 @@ async function main() {
   const result =
     command === "revisit-due" && first ? await revisitDue(first)
       : command === "claims" && first ? await claims(first)
+      : command === "pending" && first ? await pending(first)
       : command === "seed-votable" && first && second ? await seedVotable(first, second)
       : command === "pre-vote" && first ? await preVote(first)
       : command === "cleanup" && first && second ? await cleanup(first, second, rest)

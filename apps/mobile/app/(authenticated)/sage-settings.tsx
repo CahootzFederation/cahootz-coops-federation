@@ -74,6 +74,7 @@ export default function SageSettingsScreen() {
           <Text accessibilityLiveRegion="polite" style={{ fontSize: 13, color: '#047857' }}>Saved.</Text>
         ) : null}
       </View>
+
     </ScrollView>
   );
 }

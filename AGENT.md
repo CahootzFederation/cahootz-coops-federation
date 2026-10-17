@@ -37,6 +37,7 @@ When implementing Sage, move the system toward these capabilities:
 6. Follow up on accepted actions and verify whether the intended result occurred.
 7. Operate continuously through event-driven work, scheduled reviews, and durable state.
 8. Keep inference and operating costs visible, bounded, and configurable.
+9. Help every Commons build sustained, healthy, voluntary engagement around member-approved goals by making useful ways to participate visible, connecting people who can help one another, and recognizing verified contributions. Never maximize raw activity, pressure participation, or manufacture interaction.
 
 ### Communication Standard
 
@@ -716,5 +717,6 @@ If you encounter a situation not covered in this guide:
 **This is a living document. Update it as the project evolves and new patterns emerge.**
 
 **Version History:**
+- v1.3 (2026-10-16): Make sustained, voluntary, goal-directed participation an explicit product goal for every Commons, without engagement manipulation
 - v1.2 (2026-10-03): Add Sage constitutional operating-agent direction, autonomy boundaries, memory rules, cost controls, and evaluation requirements
 - v1.0 (2026-06-13): Create Cahootz Repo

@@ -27,7 +27,8 @@ const WAKE_BATCH = 50;
 
 // REVIEW_SUGGESTION / suggestion_review tasks are created by sage-suggestion-follow-up.ts, not createSageTask.
 export type SageTaskKind = "FOLLOW_UP" | "REVIEW_STALE_DRAFT" | "DEADLINE_REMINDER";
-export type SageTaskSubject = "commons_post" | "proposal_draft" | "proposal" | "event" | "member_post" | "member_conversation" | "introduction_outcome";
+export type SageTaskSubject = "commons_post" | "proposal_draft" | "proposal" | "event" | "member_post" | "member_conversation" | "introduction_outcome"
+  | "thread_revisit";
 
 /** Tasks whose due action is outreach to the member (a kept promise, "did it help?"), not a reminder. */
 const OUTREACH_SUBJECTS = new Set(["member_conversation", "introduction_outcome"]);
@@ -105,6 +106,16 @@ export interface TaskCheck {
   moot?: boolean;
 }
 
+/**
+ * Outcomes where the member who owned a follow-up did what they said they would, verified from app
+ * data. The Friday appreciation counts these as commitments fulfilled (sage-community-rhythm.ts).
+ */
+export const FULFILLED_TASK_OUTCOMES = {
+  replied: "The member replied in the thread",
+  draftFromThread: "A proposal draft was created from the thread",
+  draftSubmitted: "The draft was submitted",
+} as const;
+
 /** Decides from app data alone whether what Sage was waiting for has happened. */
 export async function checkTaskOutcome(task: Pick<SageTask, "id" | "kind" | "subjectType" | "subjectId" | "ownerUserId" | "postId" | "createdAt">, now = new Date()): Promise<TaskCheck> {
   if (task.subjectType === SUGGESTION_TASK_SUBJECT) return checkSuggestionReview(task, now);
@@ -119,6 +130,16 @@ export async function checkTaskOutcome(task: Pick<SageTask, "id" | "kind" | "sub
     if (!intro || intro.status !== "APPROVED") return { resolved: true, moot: true, outcome: "The introduction didn't go ahead" };
     return { resolved: false };
   }
+  if (task.subjectType === "thread_revisit") {
+    // A discussion the group put off: done once any member picks the thread back up.
+    const postId = task.postId ?? task.subjectId;
+    const post = await db.commonsPost.findUnique({ where: { id: postId }, select: { id: true } });
+    if (!post) return { resolved: true, moot: true, outcome: "The post was deleted" };
+    const resumed = await db.commonsComment.findFirst({
+      where: { postId, createdAt: { gt: task.createdAt }, author: { isBot: false } }, select: { id: true },
+    });
+    return resumed ? { resolved: true, outcome: "The group picked the discussion back up" } : { resolved: false };
+  }
   if (task.subjectType === "commons_post") {
     const postId = task.postId ?? task.subjectId;
     const post = await db.commonsPost.findUnique({ where: { id: postId }, select: { id: true } });
@@ -127,7 +148,7 @@ export async function checkTaskOutcome(task: Pick<SageTask, "id" | "kind" | "sub
       const reply = await db.commonsComment.findFirst({
         where: { postId, authorId: task.ownerUserId, createdAt: { gt: task.createdAt } }, select: { id: true },
       });
-      if (reply) return { resolved: true, outcome: "The member replied in the thread" };
+      if (reply) return { resolved: true, outcome: FULFILLED_TASK_OUTCOMES.replied };
       const threadActions = await db.commonsAction.findMany({ where: { sourcePostId: postId }, select: { id: true } });
       const draft = threadActions.length
         ? await db.commonsProposalDraft.findFirst({
@@ -135,7 +156,7 @@ export async function checkTaskOutcome(task: Pick<SageTask, "id" | "kind" | "sub
             select: { id: true },
           })
         : null;
-      if (draft) return { resolved: true, outcome: "A proposal draft was created from the thread" };
+      if (draft) return { resolved: true, outcome: FULFILLED_TASK_OUTCOMES.draftFromThread };
     }
     return { resolved: false };
   }
@@ -161,7 +182,7 @@ export async function checkTaskOutcome(task: Pick<SageTask, "id" | "kind" | "sub
   if (task.subjectType === "proposal_draft") {
     const draft = await db.commonsProposalDraft.findUnique({ where: { id: task.subjectId }, select: { submittedAt: true } });
     if (!draft) return { resolved: true, moot: true, outcome: "The draft was deleted" };
-    if (draft.submittedAt) return { resolved: true, outcome: "The draft was submitted" };
+    if (draft.submittedAt) return { resolved: true, outcome: FULFILLED_TASK_OUTCOMES.draftSubmitted };
     return { resolved: false };
   }
   if (task.subjectType === "proposal") {
@@ -252,6 +273,16 @@ export async function wakeTask(task: SageTask, now = new Date()): Promise<"DONE"
       await trail.taken(done ? "Reached out to the member" : "Didn't reach out", done ? "PASS" : "INFO")
         .result(done ? "Sent" : "Stopped", done ? "PASS" : "INFO", "None.").setOutcome(done ? "Sage reached out" : "Outreach skipped").save();
       return done ? "DONE" : "ABANDONED";
+    }
+    if (task.subjectType === "thread_revisit") {
+      // Sage brings the discussion back in the thread itself (one facilitation comment), not with a push.
+      const { revisitThread } = await import("./commons-action-agent.js");
+      const revisit = await revisitThread(task, { now });
+      await finishTask(task, revisit.ran ? "DONE" : "ABANDONED", revisit.reason, revisit.ran ? "RESOLVED" : "ABANDONED");
+      await trail.taken(revisit.ran ? "Came back to the discussion in the thread" : "Didn't come back to the discussion", revisit.ran ? "PASS" : "INFO", revisit.reason)
+        .result(revisit.ran ? "Done" : "Stopped", revisit.ran ? "PASS" : "INFO", "None. Sage brings a deferred discussion back once.")
+        .setOutcome(revisit.ran ? "Brought a deferred discussion back" : "Deferred discussion not revisited").save();
+      return revisit.ran ? "DONE" : "ABANDONED";
     }
     const canRemind = trail.policy(`Under the reminder limit (${task.maxAttempts})`, task.attempts < task.maxAttempts,
       `${task.attempts} sent so far`);

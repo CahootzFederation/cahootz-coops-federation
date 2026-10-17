@@ -17,6 +17,7 @@ async function checkAgentOperations() {
       checkedAt: snapshot.checkedAt,
       issues: snapshot.issues,
       environment: env.NODE_ENV,
+      source: "API backup monitor",
     });
     if (!delivered)
       console.error(
@@ -27,6 +28,7 @@ async function checkAgentOperations() {
     const delivered = await sendAgentOperationalAlert({
       checkedAt: new Date(),
       environment: env.NODE_ENV,
+      source: "API backup monitor",
       issues: [
         {
           agentId: "agent-health-inspection",

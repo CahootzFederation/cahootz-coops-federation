@@ -439,6 +439,7 @@ const gracefulShutdown = async (signal: string) => {
     await sendAgentOperationalAlert({
       checkedAt: new Date(),
       environment: env.NODE_ENV,
+      source: 'API shutdown',
       issues: [{
         agentId: 'api-and-local-agent-loops',
         state: 'OFF',

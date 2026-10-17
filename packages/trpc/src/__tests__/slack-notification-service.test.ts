@@ -38,6 +38,27 @@ describe("agent Slack operations alerts", () => {
     expect(body.text).toContain("@channel-disabled model failed");
   });
 
+  it("names the monitor and the database it read, without credentials", async () => {
+    vi.stubEnv("SLACK_WEBHOOK_URL", "https://hooks.slack.test/agent-health");
+    vi.stubEnv("DATABASE_URL", "postgresql://admin:s3cret@db.example.com:5432/cahootz?sslmode=require");
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await sendAgentOperationalAlert({
+      checkedAt: new Date("2026-10-17T01:49:53Z"),
+      source: "API backup monitor",
+      issues: [{ agentId: "sage-weekly-outreach", state: "FAILED", reason: "missing" }],
+    });
+
+    const raw = fetchMock.mock.calls[0]![1].body as string;
+    const fields = (JSON.parse(raw) as { attachments: Array<{ fields: Array<{ title: string; value: string }> }> })
+      .attachments[0]!.fields;
+    expect(fields).toContainEqual(expect.objectContaining({ title: "Sent by", value: "API backup monitor" }));
+    expect(fields).toContainEqual(expect.objectContaining({ title: "Database", value: "db.example.com/cahootz" }));
+    expect(raw).not.toContain("s3cret");
+    expect(raw).not.toContain("admin");
+  });
+
   it("reports each outreach recipient and escalates model fallbacks", async () => {
     vi.stubEnv("SLACK_WEBHOOK_URL", "https://hooks.slack.test/outreach");
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });

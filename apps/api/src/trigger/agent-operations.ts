@@ -17,6 +17,7 @@ export const agentOperationsWatchdog = schedules.task({
       const checkedAt = new Date();
       const delivered = await sendAgentOperationalAlert({
         checkedAt,
+        source: "Trigger.dev watchdog",
         issues: [
           {
             agentId: "agent-health-inspection",
@@ -45,6 +46,7 @@ export const agentOperationsWatchdog = schedules.task({
     const delivered = await sendAgentOperationalAlert({
       checkedAt: snapshot.checkedAt,
       issues: snapshot.issues,
+      source: "Trigger.dev watchdog",
     });
     if (!delivered)
       throw new Error(

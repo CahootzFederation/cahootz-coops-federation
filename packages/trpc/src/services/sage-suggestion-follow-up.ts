@@ -1,6 +1,7 @@
 import { db, type CommonsAction, type CommonsActionReview } from "@repo/db";
 
 import { createNotificationAndPush } from "./push-notification-service.js";
+import { RESPONSIBILITY_CATEGORIES, stillResponsible, type ResponsibilityCategory } from "./sage-responsibility.js";
 import { titlesNearlyIdentical } from "./sage-titles.js";
 
 /**
@@ -60,7 +61,16 @@ export async function suggestionNoLongerApplies(review: Pick<CommonsActionReview
     if (!stillInCircle && circle.leaderId !== review.userId) return "The person we asked has left the circle";
   }
 
-  const payload = (action.payload ?? {}) as { capability?: unknown; title?: unknown; targetPostId?: unknown; suggestedStartAt?: unknown };
+  const payload = (action.payload ?? {}) as { capability?: unknown; title?: unknown; targetPostId?: unknown; suggestedStartAt?: unknown; routedTo?: unknown; proposalId?: unknown };
+  // A held reply or summary sent to an admin closes once that person no longer holds the role.
+  if (review.reviewType === "APPROVE_SUGGESTION" && typeof payload.routedTo === "string" && RESPONSIBILITY_CATEGORIES.includes(payload.routedTo as ResponsibilityCategory)
+    && !await stillResponsible(action.coopId, payload.routedTo as ResponsibilityCategory, review.userId)) {
+    return "The person we asked isn't an admin here anymore";
+  }
+  if (action.type === "SUMMARIZE_DISCUSSION") {
+    const proposal = await db.proposal.findUnique({ where: { id: action.sourceId }, select: { status: true, votingEndsAt: true } });
+    if (!proposal || proposal.status !== "VOTABLE" || !proposal.votingEndsAt || proposal.votingEndsAt <= now) return "Voting has already closed";
+  }
   if (typeof payload.targetPostId === "string") {
     const post = await db.commonsPost.findUnique({ where: { id: payload.targetPostId }, select: { id: true } });
     if (!post) return "The post it was about has been deleted";

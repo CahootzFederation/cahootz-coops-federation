@@ -13,6 +13,8 @@ const db = vi.hoisted(() => {
     commonsActionReview: { updateMany: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     commonsActionAudit: { create: vi.fn() },
     sageTask: { findMany: vi.fn(), update: vi.fn(), create: vi.fn() },
+    adminRole: { findFirst: vi.fn() },
+    proposal: { findUnique: vi.fn() },
     $transaction: vi.fn(),
   };
   client.$transaction.mockImplementation((fn: (tx: typeof client) => unknown) => fn(client));
@@ -86,6 +88,25 @@ describe("deciding whether a waiting suggestion still applies", () => {
     const ride = action({ type: "RIDE_MATCH_PROPOSAL", sourceType: "circle_message", sourceId: "msg-1", payload: null });
     await expect(suggestionNoLongerApplies(review({ reviewType: "PROVIDE_CONTEXT", userId: "maya" }), ride, NOW)).resolves.toBe("Sage no longer suggests ride matches");
     expect(db.userCoopMembership.count).not.toHaveBeenCalled();
+  });
+
+  it("closes a held feed reply once the admin asked to approve it no longer holds the role", async () => {
+    const feedReply = action({ circleId: null, sourceType: "commons_post", payload: { capability: "comment_on_post", title: "Reply", targetPostId: "post-1", routedTo: "COMMONS_ADMIN" } });
+    db.adminRole.findFirst.mockResolvedValueOnce({ id: "role-1" });
+    await expect(suggestionNoLongerApplies(review({ userId: "leader-1" }), feedReply, NOW)).resolves.toBeNull();
+    expect(db.adminRole.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ coopId: "harbor", userId: "leader-1", revokedAt: null }) }));
+    db.adminRole.findFirst.mockResolvedValueOnce(null);
+    await expect(suggestionNoLongerApplies(review({ userId: "leader-1" }), feedReply, NOW)).resolves.toBe("The person we asked isn't an admin here anymore");
+  });
+
+  it("closes a held pre-vote summary once voting has closed", async () => {
+    const summary = action({ type: "SUMMARIZE_DISCUSSION", circleId: null, sourceType: "proposal_pre_vote", sourceId: "prop-1",
+      payload: { capability: "post_pre_vote_summary", title: "Summary", routedTo: "GOVERNANCE", proposalId: "prop-1" } });
+    db.adminRole.findFirst.mockResolvedValue({ id: "role-1" });
+    db.proposal.findUnique.mockResolvedValueOnce({ status: "VOTABLE", votingEndsAt: new Date(NOW.getTime() + DAY) });
+    await expect(suggestionNoLongerApplies(review(), summary, NOW)).resolves.toBeNull();
+    db.proposal.findUnique.mockResolvedValueOnce({ status: "VOTABLE", votingEndsAt: new Date(NOW.getTime() - 1) });
+    await expect(suggestionNoLongerApplies(review(), summary, NOW)).resolves.toBe("Voting has already closed");
   });
 
   it("closes an event whose suggested time passed, and a proposal the leader already drafted", async () => {

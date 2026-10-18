@@ -2,7 +2,7 @@ import { db } from "@repo/db";
 
 import { enqueueSageTrendDetect } from "./sage-dispatch.js";
 
-export const CIRCLE_WINDOW_MESSAGE_LIMIT = 40;
+export const CIRCLE_WINDOW_MESSAGE_LIMIT = 15;
 
 /** Open/extend the current analysis window for a circle, or close it once it hits the message cap.
  * Serialized per circle with a transaction-scoped advisory lock: without it, two messages arriving

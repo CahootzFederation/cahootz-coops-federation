@@ -20,6 +20,8 @@ function conflict(message: string): never {
 }
 
 const CONTEXT_MESSAGE_LIMIT = 30;
+/** Action types whose review shows a capability and the exact text Sage would post. */
+const SUGGESTION_TYPES = new Set<string>(["SUGGEST_ACTION", "SUMMARIZE_DISCUSSION"]);
 
 function authorName(author: { name: string | null; handle: string | null }) {
   return author.name || (author.handle ? `@${author.handle}` : "A member");
@@ -320,8 +322,8 @@ export const sageRouter = router({
       return {
         suggestion: {
           id: action.id, coopId: action.coopId, title: action.summary, status: action.status, circleId: action.circleId,
-          capability: action.type === "SUGGEST_ACTION" && typeof payload?.capability === "string" ? payload.capability : null,
-          proposedText: action.type === "SUGGEST_ACTION" && typeof payload?.body === "string" ? payload.body : null,
+          capability: SUGGESTION_TYPES.has(action.type) && typeof payload?.capability === "string" ? payload.capability : null,
+          proposedText: SUGGESTION_TYPES.has(action.type) && typeof payload?.body === "string" ? payload.body : null,
           // Sage's stated reason stays visible after the review is answered.
           reason: typeof reason === "string" ? reason : null,
           result: typeof result?.resultEntityType === "string" && typeof result.resultEntityId === "string"

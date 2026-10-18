@@ -17,12 +17,13 @@ export const SAGE_UNSAFE_REPLY = "I can't give a good answer to that here. A Com
  * traceSageReply wraps it, records what Sage read, what it was grounded on, the reply it drafted and
  * where it posted, and rethrows any failure after recording it so the caller's handling still applies.
  *
- * Mentions in the general Commons feed are visible to that Commons' members; a direct message's trail
- * is visible only to the two people in it (circle visibility on the DM's private group).
+ * Mentions in the general Commons feed are visible to that Commons' members; a mention in a circle only
+ * to that circle's members; a direct message's trail only to the two people in it (circle visibility on
+ * the DM's private group).
  */
 export type SageReplySource =
-  | { kind: "post"; coopId: string; postId: string }
-  | { kind: "comment"; coopId: string; postId: string; commentId: string }
+  | { kind: "post"; coopId: string; postId: string; circleId?: string | null }
+  | { kind: "comment"; coopId: string; postId: string; commentId: string; circleId?: string | null }
   | { kind: "dm"; coopId: string; groupId: string; messageId: string };
 
 export interface SageReplyGrounding {
@@ -34,13 +35,14 @@ export interface SageReplyGrounding {
 
 function trailFor(source: SageReplySource, message: string, threadContext: string | undefined) {
   const isDm = source.kind === "dm";
+  const circleId = isDm ? source.groupId : source.circleId ?? null;
   return new DecisionTrail({
     agent: "sage-reply", coopId: source.coopId,
-    circleId: isDm ? source.groupId : null,
+    circleId,
     sourceType: isDm ? "sage_dm" : "sage_mention",
     sourceId: source.kind === "post" ? source.postId : source.kind === "comment" ? source.commentId : source.messageId,
     trigger: isDm ? "SAGE_DM" : "SAGE_MENTION",
-    visibility: isDm ? "CIRCLE" : "COMMONS_MEMBERS",
+    visibility: circleId ? "CIRCLE" : "COMMONS_MEMBERS",
     observed: { content: message, context: threadContext },
     relatedPostIds: isDm ? [] : [source.postId],
   }).step("OBSERVED", source.kind === "post" ? "Read a post that @mentioned Sage"
@@ -66,7 +68,7 @@ export async function traceSageReply(
   if (source.kind === "dm") trail.policy("The sender is in this direct message with Sage", true);
   else {
     trail.policy("The sender is an active member of this Commons", true);
-    trail.policy("Sage replies to @mentions in the general Commons feed", true);
+    trail.policy(source.circleId ? "Sage replies to @mentions in this Commons' circles, with no tools" : "Sage replies to @mentions in the general Commons feed", true);
   }
   // Only the new message decides this; earlier turns are context, and Sage's own replies are in them.
   const steering = isSteeringAttempt(message.flags);
@@ -127,13 +129,13 @@ export async function traceSageReply(
   }
 }
 
-/** Sage doesn't reply to @mentions in circles; recording that answers "why didn't Sage reply?". */
+/** Sage doesn't reply to @mentions outside this Commons' own circles; recording that answers "why didn't Sage reply?". */
 export async function recordSkippedCircleMention(source: { coopId: string; circleId: string; postId: string; sourceId: string; kind: "post" | "comment" }, message: string) {
   const trail = new DecisionTrail({
     agent: "sage-reply", coopId: source.coopId, circleId: source.circleId,
     sourceType: "sage_mention", sourceId: source.sourceId, trigger: "SAGE_MENTION", visibility: "CIRCLE",
     observed: { content: message }, relatedPostIds: [source.postId],
   }).step("OBSERVED", source.kind === "post" ? "Read a circle post that @mentioned Sage" : "Read a circle comment that @mentioned Sage");
-  trail.policy("Sage replies to @mentions in the general Commons feed", false, "This was in a circle. Circle activity is read in batches by circle analysis instead.");
-  await trail.taken("Didn't reply", "INFO").result("No reply", "INFO", "None.").setOutcome("Didn't reply: @mentions in circles aren't answered").save();
+  trail.policy("Sage replies to @mentions in this Commons' feed and circles", false, "This circle isn't one Sage answers in.");
+  await trail.taken("Didn't reply", "INFO").result("No reply", "INFO", "None.").setOutcome("Didn't reply: Sage doesn't answer here").save();
 }

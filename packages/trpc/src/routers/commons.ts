@@ -274,6 +274,12 @@ async function requireCircleAccess(
   return { ...publicCircle, isMember: false };
 }
 
+/** Sage answers an @mention in this Commons' own circles (welcome lounges included), never in a direct message. */
+async function sageAnswersInCircle(db: any, coopId: string, circleId: string): Promise<boolean> {
+  const group = await db.group.findUnique({ where: { id: circleId }, select: { coopId: true, kind: true } });
+  return group?.coopId === coopId && group.kind !== DIRECT_KIND;
+}
+
 export async function requireCircleMembership(
   db: any,
   userId: string,
@@ -2707,15 +2713,17 @@ export const commonsRouter = router({
       }
 
       const sageMention = mentionedUsers.find(isSageUser);
-      if (sageMention && circleId === generalCircleId(input.coopId)) {
+      const postInFeed = circleId === generalCircleId(input.coopId);
+      if (sageMention && (postInFeed || await sageAnswersInCircle(ctx.db, input.coopId, circleId))) {
         try {
           const sage = await ensureSageBotUser(ctx.db, input.coopId);
-          const actions = buildSageReplyTools({ kind: 'thread', memberId: accountUser.id, coopId: input.coopId });
+          // In a private circle Sage only talks: no tools, so nothing from the circle leaves it.
+          const actions = postInFeed ? buildSageReplyTools({ kind: 'thread', memberId: accountUser.id, coopId: input.coopId }) : undefined;
           await traceSageReply(
-            { kind: 'post', coopId: input.coopId, postId: post.id },
-            { message: encodedContent, threadCount: 0, toolLog: actions.state.log },
+            { kind: 'post', coopId: input.coopId, postId: post.id, circleId: postInFeed ? null : circleId },
+            { message: encodedContent, threadCount: 0, toolLog: actions?.state.log },
             (message) => runSageCommonsReply(
-              { coopId: input.coopId, message, channel: 'mention', memberName: safeFirstName(accountUser.name) ?? undefined },
+              { coopId: input.coopId, message, channel: postInFeed ? 'mention' : 'circle', memberName: safeFirstName(accountUser.name) ?? undefined },
               undefined,
               actions,
             ),
@@ -3026,9 +3034,10 @@ export const commonsRouter = router({
       }
 
       const sageMention = mentionedUsers.find(isSageUser);
+      const commentInFeed = !post.circleId || post.circleId === generalCircleId(post.coopId);
       if (
         sageMention &&
-        (!post.circleId || post.circleId === generalCircleId(post.coopId))
+        (commentInFeed || await sageAnswersInCircle(ctx.db, post.coopId, post.circleId!))
       ) {
         try {
           const sage = await ensureSageBotUser(ctx.db, post.coopId);
@@ -3046,13 +3055,14 @@ export const commonsRouter = router({
               (c) => `${displayName(c.author)}: ${c.content}`,
             ),
           ].join('\n');
-          const actions = buildSageReplyTools({ kind: 'thread', memberId: accountUser.id, coopId: post.coopId });
+          // In a private circle Sage only talks: no tools, so nothing from the circle leaves it.
+          const actions = commentInFeed ? buildSageReplyTools({ kind: 'thread', memberId: accountUser.id, coopId: post.coopId }) : undefined;
 
           await traceSageReply(
-            { kind: 'comment', coopId: post.coopId, postId: post.id, commentId: comment.id },
-            { message: encodedContent, threadContext, threadCount: priorComments.length + 1, toolLog: actions.state.log },
+            { kind: 'comment', coopId: post.coopId, postId: post.id, commentId: comment.id, circleId: commentInFeed ? null : post.circleId },
+            { message: encodedContent, threadContext, threadCount: priorComments.length + 1, toolLog: actions?.state.log },
             (message, thread) => runSageCommonsReply(
-              { coopId: post.coopId, message, threadContext: thread, channel: 'mention', memberName: safeFirstName(accountUser.name) ?? undefined },
+              { coopId: post.coopId, message, threadContext: thread, channel: commentInFeed ? 'mention' : 'circle', memberName: safeFirstName(accountUser.name) ?? undefined },
               undefined,
               actions,
             ),

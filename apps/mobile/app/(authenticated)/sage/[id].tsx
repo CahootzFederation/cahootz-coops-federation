@@ -86,6 +86,7 @@ function labelForReviewType(reviewType: string, capability: string | null) {
     if (capability === 'post_for_member') return 'Sage can post this for you';
     if (capability === 'thank_helper') return 'Did the introduction help?';
     if (capability === 'share_win') return 'Share a shout-out for your help?';
+    if (capability === 'post_pre_vote_summary') return 'Sage wrote a summary before the vote';
     return 'Sage has an idea';
   }
   return 'Confirm details';
@@ -98,6 +99,7 @@ function approvalConsequence(capability: string | null) {
   if (capability === 'post_for_member') return 'Approving posts this in your Commons from Sage, without your name. Sage tells you privately when someone replies.';
   if (capability === 'thank_helper') return 'Approving tells Sage it helped. Sage thanks the person who helped you; you are not named.';
   if (capability === 'share_win') return 'Approving posts a short thank-you naming you in the Commons. The member you helped is not named or described.';
+  if (capability === 'post_pre_vote_summary') return "Approving posts this summary as Sage on the proposal's discussion while the vote is open. It doesn't say how to vote.";
   return null;
 }
 

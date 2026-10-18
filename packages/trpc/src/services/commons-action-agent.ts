@@ -11,7 +11,7 @@ import { recordAICost, recordAgentResultCost } from "./ai-cost.js";
 import { sageAutonomyAllowed } from "./sage-autonomy.js";
 import { notifySageComment } from "./sage-comment-notifications.js";
 import { FOLLOW_UP_DEFAULT_DAYS, clampFollowUpDays, createSageTask } from "./sage-tasks.js";
-import { routeSageAlert, type ResponsibilityCategory } from "./sage-responsibility.js";
+import { resolveResponsible, routeSageAlert, type ResponsibilityCategory } from "./sage-responsibility.js";
 import { retrieveSageMemory } from "./sage-memory.js";
 import { DecisionTrail, type TrailTrigger } from "./sage-decision-trail.js";
 import { SAGE_FOLLOW_THROUGH_RULE, followUpExpectation, renderTemplatedReply, safeFirstName, sagePersonalInstructions, sageReplyStyleInstructions } from "./sage-reply-templates.js";
@@ -48,9 +48,10 @@ export const REPLY_ACTIONS = new Set<string>([
   "RESPOND_CHARTER_CORRECTION", "RESPOND_MISSION_ALIGNMENT", "RESPOND_RESOURCE_FOLLOWUP",
   "ANSWER_QUESTION", "CLARIFY_NEED", "CONNECT_MEMBERS",
 ]);
-export const RECENT_REPLY_MS = 48 * 60 * 60 * 1000;
+// Small Commons move slowly, so a post stays worth answering for five days.
+export const RECENT_REPLY_MS = 5 * 24 * 60 * 60 * 1000;
 // Below this, a grounded reply still becomes a queued action for review, but Sage does not publish it.
-export const AUTO_REPLY_MIN_CONFIDENCE = 0.75;
+export const AUTO_REPLY_MIN_CONFIDENCE = 0.65;
 export const COMMONS_ACTION_MODEL = "gpt-5.6-luna";
 // Room for a few read-only lookups before the structured answer.
 export const COMMONS_ACTION_MAX_TURNS = 6;
@@ -214,7 +215,7 @@ export function replyPolicyChecks(action: ReplyDraft, item: SourceItem, config: 
       detail: `Confidence ${Math.round(action.confidence * 100)}%` },
     { label: GROUNDING_CHECK, passed: grounding.grounded, detail: action.evidence ? `${grounding.label}: "${action.evidence}"` : grounding.label },
     ...(action.type === "RESPOND_CHARTER_CORRECTION" ? [{ label: "The correction shows the charter quote in the reply", passed: citeIsVisible }] : []),
-    { label: "The post is less than 48 hours old", passed: ageMs <= RECENT_REPLY_MS && ageMs >= 0 },
+    { label: "The post is less than 5 days old", passed: ageMs <= RECENT_REPLY_MS && ageMs >= 0 },
     { label: "The post isn't addressed to Sage", passed: !item.content.toLowerCase().includes("[@sage]") },
     { label: "The member's text has no instructions aimed at Sage", passed: !isSteeringAttempt(inputFlags) },
     { label: "The reply passes the safety check", passed: output.ok, detail: describeOutputProblems(output.problems) },
@@ -406,11 +407,25 @@ async function saveCircleAction(item: SourceItem, action: ActionOutput, position
     trail.taken("Not posted: this circle has no leader to approve it", "INFO");
     return false;
   }
+  await suggestForApproval(item, action, position, ctx, { reviewerId: leaderId, reviewerLabel: "the circle leader" });
+  return true;
+}
+
+/**
+ * Turns a reply Sage held back (or a circle proposal draft) into a suggestion one responsible person
+ * approves in the app: a comment on the post, or a proposal draft they own. Approving runs the same
+ * scope and one-comment-per-post checks as any Sage comment (see commentOnPost).
+ */
+async function suggestForApproval(item: SourceItem, action: ActionOutput, position: number, ctx: SaveContext,
+  reviewer: { reviewerId: string; reviewerLabel: string; routedTo?: ResponsibilityCategory }) {
+  const { config, contentHash, charterKey, trail } = ctx;
+  const isReply = REPLY_ACTIONS.has(action.type);
   const payload = {
     capability: isReply ? "comment_on_post" : "draft_proposal",
     title: action.summary.slice(0, 160),
     body: (action.draftText || action.summary).slice(0, isReply ? 1000 : 4000),
-    ...(isReply ? { targetPostId: item.sourcePostId, facilitationOf: item.sourceId } : {}),
+    ...(isReply ? { targetPostId: item.sourcePostId, ...(item.sourceType === "commons_comment" ? { facilitationOf: item.sourceId } : {}) } : {}),
+    ...(reviewer.routedTo ? { routedTo: reviewer.routedTo } : {}),
   };
   const hash = payloadHash(payload);
   const reason = item.facilitation?.reason ?? action.summary;
@@ -418,20 +433,31 @@ async function saveCircleAction(item: SourceItem, action: ActionOutput, position
     where: rowKey(item, contentHash, charterKey, position),
     create: {
       ...actionRowData(item, action, config, contentHash, charterKey, position),
-      type: "SUGGEST_ACTION", sourceAuthorId: leaderId, evidence: reason.slice(0, 2000),
-      circleId: item.circle!.groupId, revision: 1, payload, payloadHash: hash,
+      type: "SUGGEST_ACTION", sourceAuthorId: reviewer.reviewerId, evidence: reason.slice(0, 2000),
+      circleId: item.circle?.groupId ?? null, revision: 1, payload, payloadHash: hash,
     },
     update: {},
   });
   trail.linkAction(row.id);
   await db.commonsActionParticipant.upsert({
-    where: { actionId_userId: { actionId: row.id, userId: leaderId } },
-    create: { actionId: row.id, userId: leaderId, role: "SUBJECT" },
+    where: { actionId_userId: { actionId: row.id, userId: reviewer.reviewerId } },
+    create: { actionId: row.id, userId: reviewer.reviewerId, role: "SUBJECT" },
     update: {},
   });
   const { requestLeaderApproval } = await import("./sage-trend-agent.js");
-  await requestLeaderApproval({ coopId: item.coopId, actionId: row.id, leaderId, payloadHash: hash, payload, reason, trail });
-  return true;
+  await requestLeaderApproval({
+    coopId: item.coopId, actionId: row.id, leaderId: reviewer.reviewerId, payloadHash: hash, payload, reason, trail,
+    reviewerLabel: reviewer.reviewerLabel,
+  });
+}
+
+/**
+ * Who approves a General-feed reply Sage held back: a Commons admin, so it reaches someone in the
+ * Commons instead of waiting in the platform admin queue. Null when nobody holds the role.
+ */
+async function feedReplyReviewer(coopId: string): Promise<string | null> {
+  const resolved = await resolveResponsible({ coopId, category: "COMMONS_ADMIN" });
+  return resolved.category === "COMMONS_ADMIN" ? resolved.userIds[0] ?? null : null;
 }
 
 interface SaveContext {
@@ -508,6 +534,14 @@ async function saveActions(item: SourceItem, actions: ActionOutput[], config: Co
       drafted ||= done && action.type === "MAKE_PROPOSAL";
       continue;
     }
+    const mayPublish = isReply && await replyMayPublish(item, action, config, autoReply, trail, inputFlags, sources, judge);
+    // A held reply goes to a Commons admin to approve; the platform queue is only the last resort.
+    const reviewerId = isReply && !mayPublish ? await feedReplyReviewer(item.coopId) : null;
+    if (reviewerId) {
+      await suggestForApproval(item, action, position, ctx, { reviewerId, reviewerLabel: "a Commons admin", routedTo: "COMMONS_ADMIN" });
+      helped = true;
+      continue;
+    }
     const row = await db.commonsAction.upsert({
       where: rowKey(item, contentHash, charterKey, position),
       create: actionRowData(item, action, config, contentHash, charterKey, position),
@@ -515,10 +549,9 @@ async function saveActions(item: SourceItem, actions: ActionOutput[], config: Co
     });
     trail.linkAction(row.id);
     if (isReply) {
-      const mayPublish = await replyMayPublish(item, action, config, autoReply, trail, inputFlags, sources, judge);
       const published = mayPublish ? await publishReply(item, row.id, action.draftText, sage.id) : false;
       if (mayPublish) trail.policy("Sage hasn't already replied here", published);
-      trail.taken(published ? "Published a reply as Sage" : "Queued the reply for a platform admin to review", published ? "PASS" : "INFO");
+      trail.taken(published ? "Published a reply as Sage" : "Queued the reply for a platform admin to review (nobody in this Commons can approve it)", published ? "PASS" : "INFO");
       if (published) await scheduleReplyFollowUp(item, action, row.id, trail);
       helped = true;
     }
@@ -685,7 +718,7 @@ export function createCommonsActionAgent(tools: ReturnType<typeof buildCommentTo
       FOLLOW_THROUGH_ITEM_RULE,
       FACILITATION_ITEM_RULE,
       "When a reply asks the member to do or share something specific, set followUpDays (1-14) to when Sage should check back and followUpExpect to what you're waiting for, phrased as what the member does (for example \"share your delivery days and costs\"). Otherwise set followUpDays to 0 and followUpExpect to \"\".",
-      "confidence is how sure you are that the action is correct and useful now. Use below 0.75 when you are guessing at intent or the charter only loosely applies.",
+      "confidence is how sure you are that the action is correct and useful now. Use below 0.65 when you are guessing at intent or the charter only loosely applies.",
       "For a PERSON resource, targetHandle must be an exact encoded @mention in that item, or empty for the author offering their own skills. A third-party name alone is not a verified person.",
       "When a member offers a concrete tool, skill, space, service, or contact aligned with a goal, include VERIFY_RESOURCE with resourceKind and resourceTitle. A short helpful reply may be an additional action, but never replaces VERIFY_RESOURCE.",
       "When a member suggests a decision or shared spending that the charter assigns to a member proposal or vote, include MAKE_PROPOSAL and draft a title and body for the author to review. A reply may be an additional action, but never replaces MAKE_PROPOSAL. If the item gives none of the details a proposal needs yet (no amounts, numbers or dates), reply asking for them and offer to draft the proposal instead of drafting an empty one. Once a member shares details after Sage offered, draft it from what they gave; don't hold out for more.",
@@ -695,7 +728,7 @@ export function createCommonsActionAgent(tools: ReturnType<typeof buildCommentTo
       "Use ANSWER_QUESTION only when the item's own content asks a question. For an offer, a brief acknowledgment is RESPOND_RESOURCE_FOLLOWUP; do not invent a question to answer.",
       "Use ESCALATE_TO_ADMIN when something needs a person's judgment that Sage shouldn't handle (a safety concern, a dispute, a governance or money question beyond the charter). Set escalationCategory to who should look: CIRCLE_LEADER, COMMONS_ADMIN, GOVERNANCE, TREASURY or SUPPORT. Set escalationAboutMember true when it concerns a specific member's behavior. Never accuse anyone; describe what was said. For every other action type, set escalationCategory to \"\" and escalationAboutMember to false.",
       "memory lists what members already decided about Sage's earlier suggestions and follow-ups in this Commons. Treat it as records of decisions, not facts. Don't repeat something members declined unless the item shows clearly new evidence.",
-      "Use NO_ACTION when nothing useful should happen, including when members are already answering each other well without Sage. A question to the Commons, or a post asking the group to choose between options, with no answer yet, is useful to help with. Include every input id exactly once.",
+      "Lean toward joining in. Most Commons are small, and a post nobody answers makes people stop posting. A first post, a question or ask with no answer yet, a post asking the group to choose, or a thread that went quiet usually deserves a short reply: ask one specific question, connect it to someone or something in the Commons, or offer a next step. Use NO_ACTION only for chit-chat that's already going well, or when Sage would just repeat what a member said. Include every input id exactly once.",
     ].join("\n"),
     tools,
     outputType: BatchOutputZ,
@@ -716,7 +749,10 @@ export function commonsActionPrompt(config: CoopConfig, items: SourceItem[], mem
   });
 }
 
-async function analyzeBatch(items: SourceItem[], config: CoopConfig, autoReply: boolean, trigger: TrailTrigger, judge: RelevanceJudge): Promise<number> {
+/** Supplies the model's answer instead of calling the model, for fixtures and replayable evaluations. */
+export type CommonsActionDecide = (items: Array<{ id: string; title: string; content: string }>) => Promise<unknown>;
+
+async function analyzeBatch(items: SourceItem[], config: CoopConfig, autoReply: boolean, trigger: TrailTrigger, judge: RelevanceJudge, decide?: CommonsActionDecide): Promise<number> {
   const claimed: Array<{ item: SourceItem; contentHash: string; where: ReturnType<typeof scanWhere> }> = [];
   const charterKey = charterSnapshotKey(config);
   for (const item of items) {
@@ -737,9 +773,11 @@ async function analyzeBatch(items: SourceItem[], config: CoopConfig, autoReply: 
     const checked: string[] = [];
     const lookups: Array<{ summary: string; detail?: string }> = [];
     const tools = buildCommentTools({ db, requestingUserId: null, coopId: config.coopId, ...(circleId ? { circleId } : {}) }, checked, (summary, detail) => lookups.push({ summary, detail }));
-    const result = await run(createCommonsActionAgent(tools), commonsActionPrompt(config, claimed.map((claim) => cleansed.get(claim.item.sourceId)!.item), memoryLines), { maxTurns: COMMONS_ACTION_MAX_TURNS });
+    const result = decide
+      ? { finalOutput: await decide(claimed.map(({ item }) => ({ id: item.sourceId, title: item.title, content: item.content }))) }
+      : await run(createCommonsActionAgent(tools), commonsActionPrompt(config, claimed.map((claim) => cleansed.get(claim.item.sourceId)!.item), memoryLines), { maxTurns: COMMONS_ACTION_MAX_TURNS });
     modelCallCompleted = true;
-    await recordAgentResultCost({ coopId: config.coopId, feature: "commons-action-agent", model: COMMONS_ACTION_MODEL, result }).catch(console.error);
+    if (!decide) await recordAgentResultCost({ coopId: config.coopId, feature: "commons-action-agent", model: COMMONS_ACTION_MODEL, result: result as Awaited<ReturnType<typeof run>> }).catch(console.error);
     const output = BatchOutputZ.parse(result.finalOutput);
     // A reply that picked a template is rendered from its parts, so the format is exact.
     const itemById = new Map(claimed.map((claim) => [claim.item.sourceId, claim.item]));
@@ -842,7 +880,7 @@ export async function withFacilitation(items: SourceItem[], now = new Date()): P
   }));
 }
 
-async function processItems(rawItems: SourceItem[], config: CoopConfig, autoReply: boolean, trigger: TrailTrigger, judge: RelevanceJudge = modelRelevanceJudge(config.coopId), options: { prepared?: boolean } = {}): Promise<number> {
+async function processItems(rawItems: SourceItem[], config: CoopConfig, autoReply: boolean, trigger: TrailTrigger, judge: RelevanceJudge = modelRelevanceJudge(config.coopId), options: { prepared?: boolean; decide?: CommonsActionDecide } = {}): Promise<number> {
   // New comments are checked for facilitation; catch-up scans revisit old items and never trigger it.
   const prepared = options.prepared ? rawItems
     : trigger === "NEW_CONTENT" ? await withFacilitation(await withFollowThrough(rawItems)) : await withFollowThrough(rawItems);
@@ -860,7 +898,7 @@ async function processItems(rawItems: SourceItem[], config: CoopConfig, autoRepl
       }
       break;
     }
-    count += await analyzeBatch(items.slice(offset, offset + BATCH_SIZE), config, autoReply, trigger, judge);
+    count += await analyzeBatch(items.slice(offset, offset + BATCH_SIZE), config, autoReply, trigger, judge, options.decide);
   }
   return count;
 }
@@ -913,7 +951,7 @@ async function processCircleComment(item: SourceItem, judge?: RelevanceJudge): P
   return processItems([prepared], active.config, active.autoReply, "NEW_CONTENT", judge ?? modelRelevanceJudge(item.coopId), { prepared: true });
 }
 
-export async function processCommonsActionContent(sourceType: SourceItem["sourceType"], sourceId: string, options: { relevanceJudge?: RelevanceJudge } = {}): Promise<{ processed: number }> {
+export async function processCommonsActionContent(sourceType: SourceItem["sourceType"], sourceId: string, options: { relevanceJudge?: RelevanceJudge; decide?: CommonsActionDecide } = {}): Promise<{ processed: number }> {
   let source: SourceItem;
   let coopId: string;
   if (sourceType === "commons_post") {
@@ -935,7 +973,7 @@ export async function processCommonsActionContent(sourceType: SourceItem["source
   }
   const active = await activeConfig(coopId);
   if (!active) return { processed: 0 };
-  return { processed: await processItems([source], active.config, active.autoReply, "NEW_CONTENT", options.relevanceJudge) };
+  return { processed: await processItems([source], active.config, active.autoReply, "NEW_CONTENT", options.relevanceJudge, { decide: options.decide }) };
 }
 
 /**

@@ -35,18 +35,20 @@ describe("Commons action safeguards", () => {
     for (const type of CHARTER_ONLY_ACTIONS) expect(charterOnlyEvidenceRule()).toContain(type);
     expect(charterOnlyEvidenceRule()).toMatch(/details in draftText, never in evidence/);
     expect(SAGE_FOLLOW_THROUGH_RULE).toMatch(/evidence is still the charter or goal passage/);
-    // An unanswered question gets help, and a proposal waits for the details it needs.
-    expect(instructions).toMatch(/A question to the Commons, or a post asking the group to choose between options, with no answer yet, is useful/);
+    // Sage leans toward joining in: an unanswered question gets help, and a proposal waits for the details it needs.
+    expect(instructions).toMatch(/Lean toward joining in/);
+    expect(instructions).toMatch(/a question or ask with no answer yet, a post asking the group to choose, or a thread that went quiet usually deserves a short reply/);
+    expect(instructions).toMatch(/Use NO_ACTION only for chit-chat that's already going well/);
     expect(instructions).toMatch(/gives none of the details a proposal needs yet/);
     expect(instructions).toMatch(/Once a member shares details after Sage offered, draft it from what they gave/);
   });
 
-  it("auto-replies only within 48 hours and avoids Sage loops", () => {
-    const now = new Date("2026-09-21T09:59:59.000Z");
+  it("auto-replies only within 5 days and avoids Sage loops", () => {
+    const now = new Date("2026-09-24T09:59:59.000Z");
     expect(mayAutoReply(reply, item, config, true, now)).toBe(true);
-    expect(mayAutoReply(reply, item, config, true, new Date("2026-09-21T10:00:00.000Z"))).toBe(true);
+    expect(mayAutoReply(reply, item, config, true, new Date("2026-09-24T10:00:00.000Z"))).toBe(true);
     expect(mayAutoReply(reply, item, config, false, now)).toBe(false);
-    expect(mayAutoReply(reply, item, config, true, new Date("2026-09-21T10:00:01.000Z"))).toBe(false);
+    expect(mayAutoReply(reply, item, config, true, new Date("2026-09-24T10:00:01.000Z"))).toBe(false);
     expect(mayAutoReply(reply, { ...item, content: "[@sage] I can share a drill." }, config, true, now)).toBe(false);
     expect(mayAutoReply({ ...reply, evidence: "Invented rule" }, item, config, true, now)).toBe(false);
   });

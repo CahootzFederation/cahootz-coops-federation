@@ -39,7 +39,8 @@ vi.mock("../services/sage-autonomy.js", () => ({ sageAutonomyAllowed: vi.fn().mo
 vi.mock("../services/sage-memory.js", () => ({ retrieveSageMemory: vi.fn().mockResolvedValue([]) }));
 vi.mock("../services/ai-cost.js", () => ({ recordAICost: vi.fn().mockResolvedValue(undefined), recordAgentResultCost: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../agents/tools/comment-tools.js", () => ({ buildCommentTools: vi.fn().mockReturnValue([]) }));
-vi.mock("../services/sage-responsibility.js", () => ({ routeSageAlert: vi.fn() }));
+const resolveResponsible = vi.hoisted(() => vi.fn());
+vi.mock("../services/sage-responsibility.js", () => ({ routeSageAlert: vi.fn(), resolveResponsible }));
 vi.mock("../services/sage-trend-agent.js", () => ({ requestLeaderApproval }));
 vi.mock("../services/sage-tasks.js", () => ({ createSageTask, clampFollowUpDays: (days: number) => days || 3, FOLLOW_UP_DEFAULT_DAYS: 3 }));
 
@@ -103,6 +104,7 @@ beforeEach(() => {
   db.group.findUnique.mockResolvedValue({ coopId: "harbor", kind: "STANDARD", leaderId: "leader-1" });
   db.sageDecisionTrail.create.mockResolvedValue({ id: "trail-1" });
   createSageTask.mockResolvedValue({ created: true, taskId: "task-1" });
+  resolveResponsible.mockResolvedValue({ category: "PLATFORM_ADMIN", userIds: [], skipped: ["COMMONS_ADMIN"] });
 });
 
 afterEach(() => {
@@ -204,9 +206,27 @@ describe("facilitating a Commons thread", () => {
     await processCommonsActionContent("commons_comment", "c4", { relevanceJudge: offTopic });
 
     expect(db.commonsComment.create).not.toHaveBeenCalled();
+    // Nobody in this Commons holds an admin role, so the platform queue is the last resort.
     expect(trailRows()[0].steps).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: "Queued the reply for a platform admin to review" }),
+      expect.objectContaining({ label: "Queued the reply for a platform admin to review (nobody in this Commons can approve it)" }),
     ]));
+  });
+
+  it("asks a Commons admin to approve a held feed reply instead of the platform queue", async () => {
+    useThread(fixtures.DISAGREEMENT, "c4");
+    resolveResponsible.mockResolvedValue({ category: "COMMONS_ADMIN", userIds: ["admin-1"], skipped: [] });
+    run.mockResolvedValue({ finalOutput: { items: [{ id: "c4", actions: [action({ confidence: 0.5 })] }] } });
+
+    await processCommonsActionContent("commons_comment", "c4", { relevanceJudge: onTopic });
+
+    expect(db.commonsComment.create).not.toHaveBeenCalled();
+    expect(resolveResponsible).toHaveBeenCalledWith({ coopId: "harbor", category: "COMMONS_ADMIN" });
+    expect(db.commonsAction.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({
+      type: "SUGGEST_ACTION", circleId: null, sourceAuthorId: "admin-1",
+      payload: expect.objectContaining({ capability: "comment_on_post", targetPostId: "post-1", facilitationOf: "c4", routedTo: "COMMONS_ADMIN" }),
+    }) }));
+    expect(db.commonsActionParticipant.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: { actionId: "action-1", userId: "admin-1", role: "SUBJECT" } }));
+    expect(requestLeaderApproval).toHaveBeenCalledWith(expect.objectContaining({ leaderId: "admin-1", reviewerLabel: "a Commons admin" }));
   });
 });
 

@@ -7,13 +7,13 @@ import { checkSageOutput, cleanseUntrustedText } from "./untrusted-input.js";
 
 /**
  * Needs nobody answered. A Need or Ask post in a Commons feed that has had no reply from anyone but its
- * author for 48 hours: Sage privately asks one member whose profile fits to take a look. The post is
+ * author for 24 hours: Sage privately asks one member whose profile fits to take a look. The post is
  * already public, so nothing private is shared; the helper answers on the post if they can.
  *
  * Deterministic, no model call. Every ask is outreach, so it counts toward the helper's weekly limit.
  */
 
-export const NEED_QUIET_HOURS = 48;
+export const NEED_QUIET_HOURS = 24;
 export const NEED_MAX_AGE_DAYS = 14;
 export const HELPERS_PER_NEED = 2;
 export const NEED_ASKS_PER_COMMONS_PER_DAY = 5;
@@ -26,7 +26,7 @@ async function commonsName(coopId: string) {
   return config?.name || coopId;
 }
 
-/** Need/Ask posts in the Commons-wide feed, 48 hours to 14 days old, by members (oldest first). Some may have replies. */
+/** Need/Ask posts in the Commons-wide feed, 24 hours to 14 days old, by members (oldest first). Some may have replies. */
 export async function findQuietNeedPosts(coopId: string, now: Date, postIds?: string[]) {
   return db.commonsPost.findMany({
     where: {

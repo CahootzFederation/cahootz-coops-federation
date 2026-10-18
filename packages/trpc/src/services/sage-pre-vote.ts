@@ -8,6 +8,8 @@ import { AUTO_REPLY_MIN_CONFIDENCE, charterSnapshotKey } from "./commons-action-
 import { DecisionTrail, percent } from "./sage-decision-trail.js";
 import { checkRelevance, modelRelevanceJudge, type RelevanceJudge } from "./sage-grounding.js";
 import { sageAutonomyAllowed } from "./sage-autonomy.js";
+import { payloadHash } from "./sage-payload-hash.js";
+import { resolveResponsible } from "./sage-responsibility.js";
 import { notifyActiveCommonsMembers } from "./sage-community-rhythm.js";
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
 import {
@@ -23,15 +25,17 @@ import {
  * discussion or the proposal, says nothing about how to vote, names no one, and states no rule (rules
  * belong to the charter). Code renders the text, so the format and the "not taking a side" line are
  * fixed. It publishes on its own only with the Commons' Auto-reply switch on, confidence of at least
- * 0.75, a passing output check, no steering attempt in the discussion, and the independent relevance
- * check; otherwise it waits for a platform admin. One summary per proposal, ever.
+ * 0.65, a passing output check, no steering attempt in the discussion, and the independent relevance
+ * check; otherwise a governance or Commons admin approves it in the app. One summary per proposal, ever.
  */
 
 export const PRE_VOTE_FEATURE = "sage-pre-vote";
 export const PRE_VOTE_MODEL = "gpt-5.6-luna";
 export const PRE_VOTE_WINDOW_HOURS = 48;
-export const PRE_VOTE_MIN_COMMENTS = 2;
+export const PRE_VOTE_MIN_COMMENTS = 1;
 export const PRE_VOTE_SOURCE = "proposal_pre_vote";
+/** The approval capability for a held summary (see commons-action-tools.ts). */
+export const PRE_VOTE_CAPABILITY = "post_pre_vote_summary";
 const PRE_VOTE_SCAN_KEY = "sage-pre-vote:v1";
 /** The wallet stamped on Sage's proposal comments; real wallets are 0x addresses. */
 export const SAGE_PROPOSAL_COMMENT_WALLET = "sage:bot";
@@ -318,7 +322,9 @@ export async function summarizeBeforeVote(proposalId: string, options: { decide?
       await finishClaim(proposalId, "SUCCESS");
       return posted.published ? "PUBLISHED" : "HELD";
     }
-    trail.taken("Queued the summary for a platform admin to review", "INFO");
+    const reviewer = await askReviewerToApprove(action.id, proposal.coopId, proposal.title, text,
+      "The vote closes soon. A short, balanced summary helps everyone see where the discussion landed before they vote.", trail);
+    if (!reviewer) trail.taken("Queued the summary for a platform admin to review (nobody in this Commons can approve it)", "INFO");
     await trail.setOutcome("Summary waiting for review").save();
     await finishClaim(proposalId, "SUCCESS");
     return "HELD";
@@ -335,6 +341,35 @@ export async function summarizeBeforeVote(proposalId: string, options: { decide?
  * a held one (`actor`). Refused once voting has closed or a summary is already up, so a proposal gets
  * at most one.
  */
+/**
+ * A held summary goes to a governance admin (or a Commons admin) to approve in the app, instead of
+ * waiting in the platform admin queue. Approving posts it through publishPreVoteSummary, which still
+ * checks the vote is open and keeps one summary per proposal. Returns the reviewer, or null.
+ */
+async function askReviewerToApprove(actionId: string, coopId: string, proposalTitle: string, text: string, reason: string, trail: DecisionTrail): Promise<string | null> {
+  const resolved = await resolveResponsible({ coopId, category: "GOVERNANCE" });
+  const reviewerId = resolved.category === "PLATFORM_ADMIN" ? null : resolved.userIds[0];
+  if (!reviewerId) return null;
+  const action = await db.commonsAction.findUnique({ where: { id: actionId }, select: { payload: true } });
+  const payload = {
+    ...((action?.payload ?? {}) as Record<string, unknown>),
+    capability: PRE_VOTE_CAPABILITY, title: `Summary before the vote on "${proposalTitle}"`.slice(0, 160), body: text, routedTo: resolved.category,
+  };
+  const hash = payloadHash(payload);
+  await db.commonsAction.update({ where: { id: actionId }, data: { payload: payload as Prisma.InputJsonValue, payloadHash: hash, revision: 1 } });
+  await db.commonsActionParticipant.upsert({
+    where: { actionId_userId: { actionId, userId: reviewerId } },
+    create: { actionId, userId: reviewerId, role: "SUBJECT" },
+    update: {},
+  });
+  const { requestLeaderApproval } = await import("./sage-trend-agent.js");
+  await requestLeaderApproval({
+    coopId, actionId, leaderId: reviewerId, payloadHash: hash, payload, reason, trail,
+    reviewerLabel: resolved.category === "GOVERNANCE" ? "a governance admin" : "a Commons admin",
+  });
+  return reviewerId;
+}
+
 export async function publishPreVoteSummary(actionId: string, actor: string | null, now = new Date()): Promise<{ published: boolean; reason?: string }> {
   const action = await db.commonsAction.findUnique({ where: { id: actionId } });
   if (!action || action.type !== "SUMMARIZE_DISCUSSION" || action.status !== "PENDING" || !action.draftText) {

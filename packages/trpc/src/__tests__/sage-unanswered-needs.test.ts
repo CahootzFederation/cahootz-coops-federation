@@ -31,11 +31,11 @@ beforeEach(() => {
 });
 
 describe("needs nobody answered", () => {
-  it("looks only at quiet Need/Ask posts 48 hours to 14 days old in the feed, not bots", async () => {
+  it("looks only at quiet Need/Ask posts 24 hours to 14 days old in the feed, not bots", async () => {
     await askHelpersForUnansweredNeeds("harbor", now);
     const where = db.commonsPost.findMany.mock.calls[0]![0].where;
     expect(where.OR).toEqual([{ tag: { in: ["Need", "Ask"] } }, { classification: "need" }]);
-    expect(where.createdAt.lte.toISOString()).toBe("2026-10-11T12:00:00.000Z");
+    expect(where.createdAt.lte.toISOString()).toBe("2026-10-12T12:00:00.000Z");
     expect(where.createdAt.gte.toISOString()).toBe("2026-09-29T12:00:00.000Z");
     expect(where.author).toEqual({ isBot: false });
   });

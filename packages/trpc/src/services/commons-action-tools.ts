@@ -330,6 +330,14 @@ export async function scheduleIntroductionOutcome(action: Pick<CommonsAction, "i
   });
 }
 
+/** Posts a pre-vote summary a governance or Commons admin approved. The vote must still be open. */
+async function postPreVoteSummary(ctx: ToolContext): Promise<ToolResult> {
+  const { publishPreVoteSummary } = await import("./sage-pre-vote.js");
+  const posted = await publishPreVoteSummary(ctx.action.id, subjectUserId(ctx));
+  if (!posted.published) throw new ToolRefusal(posted.reason ?? "The summary wasn't posted");
+  return { resultEntityType: "Proposal", resultEntityId: ctx.action.sourceId };
+}
+
 const TOOL_REGISTRY: Record<string, (ctx: ToolContext) => Promise<ToolResult>> = {
   create_private_circle: createPrivateCircle,
   create_event: createEvent,
@@ -340,15 +348,17 @@ const TOOL_REGISTRY: Record<string, (ctx: ToolContext) => Promise<ToolResult>> =
   post_for_member: postForMember,
   thank_helper: thankHelper,
   share_win: shareWin,
+  post_pre_vote_summary: postPreVoteSummary,
 };
 
 // Tools whose result announces itself: Sage-authored posts and comments are visible in the feed, and a
 // proposal draft sends its own "draft is ready" alert. A generic "your suggestion is done" alert on top
 // of those would be redundant noise.
-const SELF_ANNOUNCING_TOOL_KEYS = new Set(["create_circle_post", "create_commons_post", "comment_on_post", "draft_proposal", "post_for_member", "thank_helper", "share_win"]);
+const SELF_ANNOUNCING_TOOL_KEYS = new Set(["create_circle_post", "create_commons_post", "comment_on_post", "draft_proposal", "post_for_member", "thank_helper", "share_win", "post_pre_vote_summary"]);
 
 const TOOL_KEY_BY_ACTION_TYPE: Partial<Record<CommonsAction["type"], string>> = {
   CONNECT_MEMBERS: "create_private_circle",
+  SUMMARIZE_DISCUSSION: "post_pre_vote_summary",
 };
 
 // The reviewType whose approval actually authorizes execution, per action type. SUGGEST_ACTION resolves
@@ -356,6 +366,7 @@ const TOOL_KEY_BY_ACTION_TYPE: Partial<Record<CommonsAction["type"], string>> = 
 export const FINAL_REVIEW_TYPE_BY_ACTION_TYPE: Partial<Record<CommonsAction["type"], string>> = {
   SUGGEST_ACTION: "APPROVE_SUGGESTION",
   CONNECT_MEMBERS: "ACCEPT_INTRODUCTION",
+  SUMMARIZE_DISCUSSION: "APPROVE_SUGGESTION",
 };
 
 /** Open vocabulary for SUGGEST_ACTION: the model names any capability it thinks fits in payload.capability,
@@ -397,7 +408,8 @@ export async function executeSageAction(actionId: string): Promise<void> {
 
   try {
     const result = await tool({ action, participants });
-    await db.commonsAction.update({ where: { id: action.id }, data: { status: "APPROVED", reviewedAt: new Date() } });
+    // A posted pre-vote summary is recorded as PUBLISHED by publishPreVoteSummary; it keeps that state.
+    if (action.type !== "SUMMARIZE_DISCUSSION") await db.commonsAction.update({ where: { id: action.id }, data: { status: "APPROVED", reviewedAt: new Date() } });
     await db.commonsActionAudit.create({ data: { actionId: action.id, eventType: "ACTION_EXECUTED", metadata: { ...result } } });
     await scheduleIntroductionOutcome(action, participants).catch((error) => console.error("Could not schedule the introduction check", error));
     if (!SELF_ANNOUNCING_TOOL_KEYS.has(toolKey!)) {

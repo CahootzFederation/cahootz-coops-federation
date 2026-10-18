@@ -22,9 +22,10 @@ import { createSageTask } from "./sage-tasks.js";
  */
 
 export const FACILITATION_COOLDOWN_HOURS = 12;
-export const BUSY_THREAD_COMMENTS = 8;
-export const BUSY_THREAD_PARTICIPANTS = 4;
-export const PROPOSAL_SUPPORTERS = 3;
+// Set for small Commons, where a thread with a handful of people is already a busy one.
+export const BUSY_THREAD_COMMENTS = 5;
+export const BUSY_THREAD_PARTICIPANTS = 3;
+export const PROPOSAL_SUPPORTERS = 2;
 export const DISAGREEMENT_MIN_COMMENTS = 3;
 export const THREAD_ENTRY_LIMIT = 60;
 export const DEFAULT_REVISIT_DAYS = 3;

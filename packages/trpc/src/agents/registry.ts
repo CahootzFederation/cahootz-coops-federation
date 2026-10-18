@@ -201,7 +201,7 @@ const SageCommonsReplyInputZ = z.object({
   coopId: z.string().min(1).describe("Which Commons' charter/mission to ground the reply in"),
   message: z.string().min(1).describe("The message that mentioned or was sent to Sage"),
   threadContext: z.string().optional().describe("Prior thread/comment/DM history, oldest-first, for continuity"),
-  channel: z.enum(["mention", "dm"]).optional().describe("A public @mention in a thread, or a private DM. Same model and voice; only privacy rules differ"),
+  channel: z.enum(["mention", "circle", "dm"]).optional().describe("An @mention in the Commons feed, an @mention in a private circle, or a private DM. Same model and voice; only privacy rules differ"),
   memberName: z.string().optional().describe("First name of the member Sage is replying to, so the reply is personal"),
   memberMemory: z.array(z.string()).optional().describe("DMs only: needs this member mentioned in check-ins, from memberMemoryLines"),
 });
@@ -273,7 +273,9 @@ export async function runSageCommonsReply(
       `You're Sage, a friendly organizer who helps out in "${commonsName}", a Commons (cooperative community) on the Cahootz platform. You're an AI, not a person, and you say so if anyone asks.`,
       isDm
         ? "A member messaged you privately. Reply in a natural, concise, conversational tone - not a long essay."
-        : "A member @-mentioned you in this Commons' feed. Reply in a natural, concise, conversational tone - not a long essay. Other members can read this reply.",
+        : input.channel === "circle"
+          ? "A member @-mentioned you in one of this Commons' circles. Reply in a natural, concise, conversational tone - not a long essay. Everyone in this circle can read your reply. Use only this conversation, the charter and the mission goals; don't bring in anything from other circles or private messages."
+          : "A member @-mentioned you in this Commons' feed. Reply in a natural, concise, conversational tone - not a long essay. Other members can read this reply.",
       sagePersonalInstructions(input.memberName),
       sageCorePrinciplesInstructions(),
       sageReplyStyleInstructions(),

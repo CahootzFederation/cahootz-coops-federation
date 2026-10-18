@@ -62,9 +62,10 @@ describe("when a thread needs Sage", () => {
   });
 
   it("reads the thread as it stood when the comment arrived", () => {
-    // Three comments in, the garden thread was still just people saying when they're free.
-    expect(detectFacilitation(threadUpTo(fixtures.BUSY_THREAD, "c3"), NOW).signal).toBeNull();
-    expect(detectFacilitation(threadUpTo(fixtures.BUSY_THREAD, "c8"), NOW).signal?.kind).toBe("busy_thread");
+    // Two comments in, the garden thread was still just people saying when they're free. By the
+    // third, four people have answered with four different times: in a small Commons, that's busy.
+    expect(detectFacilitation(threadUpTo(fixtures.BUSY_THREAD, "c2"), NOW).signal).toBeNull();
+    expect(detectFacilitation(threadUpTo(fixtures.BUSY_THREAD, "c3"), NOW).signal?.kind).toBe("busy_thread");
   });
 
   it("waits for a real back-and-forth before calling a disagreement", () => {

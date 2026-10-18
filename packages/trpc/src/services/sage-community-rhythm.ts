@@ -27,7 +27,7 @@ export type RhythmCategory = (typeof RHYTHM_CATEGORIES)[number];
 export const RHYTHM_SOURCE = "community_rhythm";
 export const RHYTHM_NOTIFICATION_TYPE = "SAGE_RHYTHM";
 /** Below this many active members, counts could point at one person, so Sage posts no rhythm at all. */
-export const RHYTHM_MIN_ACTIVE_MEMBERS = 5;
+export const RHYTHM_MIN_ACTIVE_MEMBERS = 3;
 /** The first day of each window waits until this UTC hour (morning in the Americas); the catch-up day doesn't. */
 export const RHYTHM_POST_HOUR_UTC = 13;
 /** A proposal counts toward a mission goal when its score for that goal is at least this. */

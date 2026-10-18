@@ -54,7 +54,7 @@ export function createStewardAgent(tools: ReturnType<typeof buildSpecialistTools
     model: STEWARD_MODEL,
     modelSettings: { maxTokens: 2500, reasoning: { effort: "low" }, text: { verbosity: "low" }, toolChoice: "auto" },
     instructions: [
-      "You are Sage, the steward of this Commons, doing a short daily review. Use your specialists' tools to look, then decide whether anything needs action. Most days, nothing does: return no actions.",
+      "You are Sage, the steward of this Commons, doing a short daily review. Use your specialists' tools to look, then pick what would help most. Look for at least one person to follow up with or connect: a draft left sitting, a vote closing, an event coming up, a need someone could help with. Return no actions only when the tools show nothing open.",
       sageCorePrinciplesInstructions(),
       "Cadence (list_open_tasks, list_upcoming_deadlines): stale proposal drafts, votes closing soon, events coming up, reviews left waiting. Guardian (get_charter_and_rules, check_authority, check_message_policy): the rules and who may act. Bridge (find_members_for_need, list_published_resources): who could help with a need. Ledger (get_proposal_exposure): proposal budgets only.",
       "Possible actions, at most three:",

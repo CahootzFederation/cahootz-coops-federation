@@ -1,6 +1,6 @@
 # Sage product roadmap
 
-Last updated: 2026-10-16
+Last updated: 2026-10-17
 
 ## North star
 
@@ -350,6 +350,57 @@ Known limitations:
 - In the Commons feed, Sage may still reply to individual comments as before; the 12-hour cooldown applies only to facilitation.
 - A circle leader who approves a facilitation comment late may post it after the thread moved on; the existing suggestion follow-up closes it if Sage commented in the thread since.
 - A failed pre-vote run isn't retried for that proposal.
+
+### P1 — Speaking up in small Commons (2026-10-17)
+
+Goal: Sage was running but almost never reached members. The local health check showed nearly every decision as "Did nothing" or "Daily review: nothing needed", and only 5 Sage notifications in 14 days. Its prompts told it to stay quiet, every held reply waited in a platform admin queue that members never see, and the triggers were set for a busy community.
+
+Status (2026-10-17): built and verified; see Verification below.
+
+- **Held replies reach someone in the Commons.**
+  - A General-feed reply that misses any auto-publish check (confidence, Auto-reply switch, grounding, age, safety, steering, relevance) becomes a `comment_on_post` suggestion for a Commons admin (`resolveResponsible`, `COMMONS_ADMIN`), the same approve-in-the-app flow circle leaders already had. The admin gets "Sage has a suggestion for you".
+  - A held pre-vote summary goes to a governance admin, falling back to a Commons admin. Approving it runs the new `post_pre_vote_summary` capability, which posts through `publishPreVoteSummary`, so the open-vote check and the one-summary-per-proposal rule still apply.
+  - The platform admin queue is now only the last resort, when nobody in the Commons holds the role.
+  - The suggestion follow-up closes these suggestions when the person asked no longer holds the role, or when the vote has closed. The 3-day reminder and 7-day close apply as before.
+- **Less "do nothing".**
+  - The feed agent now leans toward joining in: a first post, an unanswered question, a choice, or a stalled thread usually gets a short reply. NO_ACTION is for chit-chat that's going well or when Sage would just repeat someone.
+  - The trend agent treats one clear unmet need, an unanswered question, or a quiet circle as worth a suggestion.
+  - The steward looks for at least one person to follow up with or connect, and returns nothing only when its tools show nothing open.
+  - Every gate is unchanged. Only the default stance moved.
+- **Lower thresholds:**
+  - auto-publish confidence: 0.75 → 0.65
+  - oldest post Sage replies to: 48 hours → 5 days
+  - trend confidence: 0.6 → 0.5
+  - busy thread: 8 comments, or 4 people → 5 comments, or 3 people with 4 comments
+  - ready for a proposal: 3 supporters → 2
+  - weekly rhythm: 5 active members → 3
+  - unanswered need: quiet for 48 hours → 24 hours
+  - pre-vote summary: 2 comments → 1
+  - circle window: 40 items → 15. This matters only without Trigger.dev; in production, Trigger closes a window after 10 quiet minutes.
+- **@Sage in a circle gets an answer.** Mentions in a post or comment in a Commons circle, welcome lounges included, now get a reply in the thread. Sage gets no tools there, its prompt says only the circle can read the reply and not to bring in anything from other circles or DMs, and the trail is circle-visible. These are member-requested and don't count toward the autonomy limit, the same as feed mentions.
+- `processCommonsActionContent` takes an optional `decide` that supplies the model's answer, for fixtures and replayable evaluations (like `replayTrendWindow`).
+- `scripts/sage-health-check.sql` is a read-only check for any environment (see TESTING.md).
+- **Unchanged:**
+  - Approvals for votes, money, membership and the charter.
+  - Charter grounding for rules, money or membership.
+  - Output safety, steering and relevance checks.
+  - Consent-first introductions.
+  - The 7-per-week outreach cap and the 12-hour facilitation cooldown.
+  - The community question's 5-contributor minimum, which keeps anonymous patterns anonymous.
+  - The $5 and 2,000-call monthly autonomy limits. At about $0.0006 a call, even 10x more activity is cents a month.
+
+Verification:
+
+- `pnpm -F @repo/trpc test`: 966 passed. `@repo/trpc` and `@cahootz/mobile` type-check passed.
+- Playwright, local stack: the new `sage-held-reply.spec.ts` (journey 70) and `sage-circle-mention.spec.ts` (journey 71, live model) passed.
+- The smoke suite and the affected `@sage` journeys (`sage-trend`, `sage-facilitation`, `sage-steward`, `sage-suggestion-follow-up`, `sage-stewardship`, `sage-reply-parity`, `sage-decision-comments`) were not completed locally; that run was stopped. `emoji-reactions` failed once with a navigation `ERR_ABORTED` before it was stopped. CI runs the full suite on `main`.
+
+Remaining:
+
+- Whether the live model now replies more often in production is unmeasured. Run `scripts/sage-health-check.sql` against production a week after release and compare "Did nothing" against `SAGE_COMMENT` and `SAGE_SUGGESTION_NEEDS_YOU` counts.
+- Commons admins still have no queue screen. A held reply reaches them only as an alert and the Sage hub's Needs you tab.
+- Lowering the age limit to 5 days means the daily catch-up scan can reply to older posts it missed, so a backlog could produce a burst of replies the first day.
+- Production's Trigger.dev environment still needs `OPENAI_API_KEY` set by hand. Nothing checks it in the Trigger runtime.
 
 ### P2 — Cost optimization and budget administration
 

@@ -25,9 +25,60 @@ type DbClient = {
     }) => Promise<NotificationPreferences | null>;
   };
   pushDevice: {
-    findMany: (args: any) => Promise<Array<{ expoPushToken: string }>>;
+    findMany: (args: any) => Promise<Array<{ id?: string; expoPushToken: string }>>;
+    updateMany?: (args: any) => Promise<unknown>;
+  };
+  pushTicket?: {
+    createMany: (args: any) => Promise<unknown>;
   };
 };
+
+export const EXPO_PUSH_SEND_URL = "https://exp.host/--/api/v2/push/send";
+
+const KNOWN_EXPO_ERRORS = [
+  "DeviceNotRegistered",
+  "InvalidCredentials",
+  "MessageTooBig",
+  "MessageRateExceeded",
+  "MismatchSenderId",
+  "UNAUTHORIZED",
+  "PUSH_TOO_MANY_NOTIFICATIONS",
+  "PUSH_TOO_MANY_EXPERIENCE_IDS",
+];
+
+/** Provider messages can contain device tokens; keep only known error codes. */
+export function safeExpoErrorCode(code?: string) {
+  return KNOWN_EXPO_ERRORS.includes(code || "") ? code! : "UnknownProviderError";
+}
+
+/** Expo headers, with the access token when the project has push security turned on. */
+export function expoPushHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Accept-Encoding": "gzip, deflate",
+    "Content-Type": "application/json",
+  };
+  if (process.env.EXPO_ACCESS_TOKEN)
+    headers.Authorization = `Bearer ${process.env.EXPO_ACCESS_TOKEN}`;
+  return headers;
+}
+
+/** Turn off devices Apple/Google say no longer exist, so we stop sending to them. */
+export async function disableDeadDevices(
+  db: { pushDevice: { updateMany?: (args: any) => Promise<unknown> } },
+  deviceIds: string[],
+) {
+  if (!deviceIds.length || !db.pushDevice.updateMany) return;
+  try {
+    await db.pushDevice.updateMany({
+      where: { id: { in: deviceIds } },
+      data: { enabled: false },
+    });
+    console.info("[push] Disabled unregistered devices", { count: deviceIds.length });
+  } catch {
+    console.warn("[push] Could not disable unregistered devices", { count: deviceIds.length });
+  }
+}
 
 function chunk<T>(items: T[], size: number) {
   const chunks: T[][] = [];
@@ -71,13 +122,15 @@ export async function createNotificationAndPush(
     return notification;
   }
 
+  // A phone belongs to the member, not to one Commons. The token is unique, so it
+  // only remembers the Commons the member opened last; filtering on coopId here
+  // silently dropped every push from their other Commons.
   const devices = await db.pushDevice.findMany({
     where: {
       userId: payload.userId,
-      coopId: payload.coopId,
       enabled: true,
     },
-    select: { expoPushToken: true },
+    select: { id: true, expoPushToken: true },
   });
 
   console.info("[push] Matching enabled devices", { ...logContext, count: devices.length });
@@ -92,15 +145,16 @@ export async function createNotificationAndPush(
     channelId: "commons",
   }));
 
-  for (const batch of chunk(messages, 100)) {
+  const tickets: Array<{ deviceId?: string; status: string; expoTicketId?: string; errorCode?: string }> = [];
+  const deadDevices: string[] = [];
+  for (const [batchIndex, batch] of chunk(messages, 100).entries()) {
+    const batchDevices = devices.slice(batchIndex * 100, batchIndex * 100 + batch.length);
+    const failBatch = (errorCode: string) =>
+      batchDevices.forEach((device) => tickets.push({ deviceId: device.id, status: "ERROR", errorCode }));
     try {
-      const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      const response = await fetch(EXPO_PUSH_SEND_URL, {
         method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Accept-Encoding": "gzip, deflate",
-          "Content-Type": "application/json",
-        },
+        headers: expoPushHeaders(),
         body: JSON.stringify(batch),
       });
 
@@ -115,40 +169,53 @@ export async function createNotificationAndPush(
         }>;
         errors?: Array<{ code?: string }>;
       };
-      // Provider messages can contain device tokens; log only known error codes.
-      const safeCode = (code?: string) =>
-        [
-          "DeviceNotRegistered",
-          "InvalidCredentials",
-          "MessageTooBig",
-          "MessageRateExceeded",
-          "MismatchSenderId",
-          "UNAUTHORIZED",
-          "PUSH_TOO_MANY_NOTIFICATIONS",
-          "PUSH_TOO_MANY_EXPERIENCE_IDS",
-        ].includes(code || "")
-          ? code
-          : "UnknownProviderError";
       for (const error of result.errors || [])
         console.warn("[push] Expo request rejected", {
           ...logContext,
-          code: safeCode(error.code),
+          code: safeExpoErrorCode(error.code),
         });
-      if (!response.ok) continue;
-      for (const ticket of result.data || []) {
-        if (ticket.status === "error")
-          console.warn("[push] Expo ticket rejected", {
-            ...logContext,
-            code: safeCode(ticket.details?.error),
-          });
-        else if (ticket.status === "ok")
+      if (!response.ok || !result.data) {
+        failBatch(result.errors?.[0]?.code ? safeExpoErrorCode(result.errors[0].code) : `HttpError${response.status ?? ""}`);
+        continue;
+      }
+      // Expo returns one ticket per message, in the same order.
+      result.data.forEach((ticket, index) => {
+        const deviceId = batchDevices[index]?.id;
+        if (ticket.status === "ok") {
           console.info(
             "[push] Expo accepted notification (delivery not yet confirmed)",
             { ...logContext, receiptId: ticket.id },
           );
-      }
+          tickets.push({ deviceId, status: "PENDING", expoTicketId: ticket.id });
+          return;
+        }
+        const code = safeExpoErrorCode(ticket.details?.error);
+        console.warn("[push] Expo ticket rejected", { ...logContext, code });
+        tickets.push({ deviceId, status: "ERROR", errorCode: code });
+        if (code === "DeviceNotRegistered" && deviceId) deadDevices.push(deviceId);
+      });
     } catch {
       console.warn("[push] Expo request or response processing failed", logContext);
+      failBatch("RequestFailed");
+    }
+  }
+
+  await disableDeadDevices(db, deadDevices);
+  if (db.pushTicket && tickets.length) {
+    try {
+      await db.pushTicket.createMany({
+        data: tickets.map((ticket) => ({
+          notificationId: notification.id,
+          deviceId: ticket.deviceId ?? "unknown",
+          coopId: payload.coopId,
+          type: payload.type,
+          status: ticket.status,
+          expoTicketId: ticket.expoTicketId ?? null,
+          errorCode: ticket.errorCode ?? null,
+        })),
+      });
+    } catch {
+      console.warn("[push] Could not record push results", logContext);
     }
   }
   return notification;

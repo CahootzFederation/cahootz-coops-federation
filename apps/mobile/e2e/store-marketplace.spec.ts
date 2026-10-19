@@ -1,13 +1,19 @@
-import { expect, test, type Frame } from '@playwright/test';
+import type { Frame, Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+
 import { enterFeed, newSignedInPage } from './support/auth';
 
 const USER_A_EMAIL = process.env.E2E_USER_A_EMAIL || 'releaseclick1@test.cahootz.local';
 
-test('member can open the restored Shop and start a shop application', async ({ browser }) => {
+async function openMarketplace(page: Page) {
+  await page.goto('/store?coopId=cahootz');
+  await expect(page.getByText('Shop together', { exact: true })).toBeVisible();
+}
+
+test('member can open the marketplace directly and start a shop application', async ({ browser }) => {
   const member = await newSignedInPage(browser, USER_A_EMAIL);
   try {
-    await member.page.getByRole('tab', { name: 'Shop' }).click();
-    await expect(member.page.getByText('Shop together', { exact: true })).toBeVisible();
+    await openMarketplace(member.page);
     await expect(member.page.getByText('Fund your commons', { exact: true })).toHaveCount(0);
     // Funding badges are listed like any other shop's products.
     await expect(member.page.getByText('Commons shops', { exact: true })).toBeVisible();
@@ -17,7 +23,7 @@ test('member can open the restored Shop and start a shop application', async ({ 
     await expect(member.page).toHaveURL(/apply-store/);
     await member.page.goBack();
 
-    await member.page.getByRole('tab', { name: 'Shop' }).click();
+    await openMarketplace(member.page);
     await member.page.getByLabel('Search marketplace').fill('E2E no matching shop');
     await expect(member.page.getByText('Nothing matched that search', { exact: true })).toBeVisible();
   } finally {
@@ -25,14 +31,16 @@ test('member can open the restored Shop and start a shop application', async ({ 
   }
 });
 
-test('signed-out visitors do not see the Shop and are sent to sign in from a direct link', async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 430, height: 932 } });
+test('signed-out visitors do not see the Board and are sent to sign in from a marketplace link', async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 430, height: 932 },
+  });
   const page = await context.newPage();
   try {
     await enterFeed(page);
     const nav = page.getByRole('tablist', { name: 'Main navigation' });
     await expect(nav.getByRole('tab', { name: 'Commons' })).toBeVisible();
-    await expect(nav.getByRole('tab', { name: 'Shop' })).toHaveCount(0);
+    await expect(nav.getByRole('tab', { name: 'Board' })).toHaveCount(0);
 
     await page.getByLabel('Open menu').click();
     await expect(page.getByText('Sign In', { exact: true })).toBeVisible();
@@ -47,10 +55,10 @@ test('signed-out visitors do not see the Shop and are sent to sign in from a dir
   }
 });
 
-test('member chooses a funding badge, opens the cart, and reaches checkout', { tag: "@smoke" }, async ({ browser }) => {
+test('member chooses a funding badge, opens the cart, and reaches checkout', { tag: '@smoke' }, async ({ browser }) => {
   const member = await newSignedInPage(browser, USER_A_EMAIL);
   try {
-    await member.page.getByRole('tab', { name: 'Shop' }).click();
+    await openMarketplace(member.page);
     await member.page.getByLabel('Add Seed Supporter to cart').click();
     // A badge can only be bought once, so the row swaps its + for an "In cart" tag.
     await expect(member.page.getByLabel('Seed Supporter is in your cart')).toBeVisible();
@@ -75,15 +83,17 @@ test('member chooses a funding badge, opens the cart, and reaches checkout', { t
   }
 });
 
-test('member of several commons can switch the Shop to another commons and see its shops', async ({ browser }) => {
+test('member of several commons can switch the Marketplace to another commons and see its shops', async ({ browser }) => {
   // Fixture: seed:e2e-marketplace joins User A to "E2E Market Commons" and
   // gives it one payment-ready member shop.
   const member = await newSignedInPage(browser, USER_A_EMAIL);
   try {
-    await member.page.getByRole('tab', { name: 'Shop' }).click();
+    await openMarketplace(member.page);
     // Chips show each commons' name (never its id/slug) right under the title.
     // (The fixture's slug is "E2E Market"; the Cahootz commons' id and slug are "cahootz".)
-    const switchTo = member.page.getByLabel('Shop E2E Market Commons', { exact: true });
+    const switchTo = member.page.getByLabel('Shop E2E Market Commons', {
+      exact: true,
+    });
     await expect(switchTo).toHaveText('E2E Market Commons');
     await expect(member.page.getByRole('button', { name: /^Shop cahootz$/ })).toHaveCount(0);
     const title = await member.page.getByText('Shop together', { exact: true }).boundingBox();
@@ -109,7 +119,11 @@ test('member of several commons can switch the Shop to another commons and see i
 
     await member.page.getByText('E2E Second Commons Tote', { exact: true }).click();
     await expect(member.page).toHaveURL(/store-detail/);
-    await expect(member.page.getByText('Member shop in the E2E second commons.', { exact: true })).toBeVisible();
+    await expect(
+      member.page.getByText('Member shop in the E2E second commons.', {
+        exact: true,
+      }),
+    ).toBeVisible();
   } finally {
     await member.context.close();
   }
@@ -122,7 +136,7 @@ test('funding badge checkout uses Stripe test mode when a ready official shop is
   test.setTimeout(120_000);
   const member = await newSignedInPage(browser, USER_A_EMAIL);
   try {
-    await member.page.getByRole('tab', { name: 'Shop' }).click();
+    await openMarketplace(member.page);
     await member.page.getByRole('tab', { name: 'stores' }).click();
     await expect(member.page.getByLabel('Open Cahootz Funding Shop')).toBeVisible();
     await member.page.getByRole('tab', { name: 'products' }).click();
@@ -138,12 +152,23 @@ test('funding badge checkout uses Stripe test mode when a ready official shop is
     // Stripe renders more than one "Secure payment input frame"; use the one
     // that actually holds the card fields.
     let stripeFrame: Frame | undefined;
-    await expect.poll(async () => {
-      for (const frame of member.page.frames()) {
-        if (await frame.locator('input[name="number"]').count().catch(() => 0)) stripeFrame = frame;
-      }
-      return !!stripeFrame;
-    }, { timeout: 30_000 }).toBe(true);
+    await expect
+      .poll(
+        async () => {
+          for (const frame of member.page.frames()) {
+            if (
+              await frame
+                .locator('input[name="number"]')
+                .count()
+                .catch(() => 0)
+            )
+              stripeFrame = frame;
+          }
+          return !!stripeFrame;
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true);
     await stripeFrame!.getByLabel('Card number').fill('4242424242424242');
     await stripeFrame!.getByLabel('Expiration date').fill('12 / 34');
     await stripeFrame!.getByLabel('Security code').fill('123');

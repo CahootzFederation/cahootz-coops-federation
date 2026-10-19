@@ -227,10 +227,10 @@ export default function AccountProfileScreen() {
       href: '/(authenticated)/sage-settings',
     },
     {
-      label: 'Commons Marketplace',
-      description: 'Member stores and shared offers',
+      label: 'Community Board',
+      description: 'Board posts and links to real Commons tools',
       icon: Store,
-      href: '/(tabs)/store',
+      href: '/(tabs)/board',
     },
     {
       label: 'Governance Proposals',

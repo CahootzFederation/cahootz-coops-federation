@@ -46,7 +46,8 @@ test('the board only lists its selected existing community features', { tag: '@s
     await expect(member.page.getByLabel('Open Circles')).toHaveCount(0);
     await expect(member.page.getByLabel('Open Verified resources')).toBeVisible();
     await expect(member.page.getByLabel('Open Proposals & votes')).toHaveCount(0);
-    await expect(member.page.getByLabel('Open Shop & sell')).toBeVisible();
+    await expect(member.page.getByLabel('Marketplace preview')).toBeVisible();
+    await expect(member.page.getByLabel('Browse marketplace')).toBeVisible();
     await expect(member.page.getByLabel('Open Projects & working groups')).toHaveCount(0);
     await expect(member.page.getByLabel('Open Notices & local news')).toHaveCount(0);
     await expect(member.page.getByLabel('Open Decisions & governance')).toHaveCount(0);
@@ -62,7 +63,12 @@ test('the board only lists its selected existing community features', { tag: '@s
     await member.page.goto('/board?coopId=cahootz');
     await expect(member.page.getByText('Find your way around', { exact: true })).toBeVisible();
 
-    await member.page.getByLabel('Open Shop & sell').click();
+    await member.page.getByLabel('Open a shop').click();
+    await expect(member.page).toHaveURL(/apply-store/);
+    await member.page.goBack();
+    await expect(member.page.getByLabel('Marketplace preview')).toBeVisible();
+
+    await member.page.getByLabel('Browse marketplace').click();
     await expect(member.page.getByText('Shop together', { exact: true })).toBeVisible();
     await expect(member.page.getByLabel('Open a shop')).toBeVisible();
     await expect(member.page.getByLabel('Add Seed Supporter to cart')).toBeVisible();

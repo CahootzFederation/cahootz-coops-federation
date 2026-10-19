@@ -77,13 +77,14 @@ test("a circle member chooses which circle activity notifies them", async ({
     expect(groupId).toBeTruthy();
     await trpcPost("groups.joinByCode", sessionTokenB!, { inviteCode });
 
-    // B opens circle settings: "Only @mentions" is the default.
+    // B chooses a starting preference before exercising changes.
     await openCircleSettings(userB.page, groupId!);
     const allActivity = userB.page.getByRole("radio", { name: "All activity" });
     const onlyMentions = userB.page.getByRole("radio", {
       name: "Only @mentions",
     });
     const nothing = userB.page.getByRole("radio", { name: "Nothing" });
+    await onlyMentions.click();
     await expect(onlyMentions).toBeChecked();
 
     await allActivity.click();
@@ -102,6 +103,13 @@ test("a circle member chooses which circle activity notifies them", async ({
       await userB.page.reload();
       await expect(userB.page.getByText(circleAlert)).toHaveCount(1);
     }).toPass({ timeout: 20_000 });
+
+    const alertCard = userB.page.getByRole("button").filter({ hasText: circleAlert });
+    await expect(alertCard.getByText(/^From \S.+/)).toBeVisible();
+    await userB.page.reload();
+    await expect(alertCard.getByText(/^From \S.+/)).toBeVisible();
+    await alertCard.click();
+    await expect(userB.page.getByText(firstPost, { exact: true }).first()).toBeVisible();
 
     // B mutes the circle; A's next post creates no alert.
     await openCircleSettings(userB.page, groupId!);

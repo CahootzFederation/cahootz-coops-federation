@@ -54,7 +54,7 @@ The current Playwright suite covers:
 4. User B reloads, sees the post, opens it, and submits a comment.
 5. User A reloads, opens the post, and sees User B's comment.
 6. The generated post is removed after the assertions so repeat runs do not fill the feed.
-7. Signing in lands on Circle View (the Commons tab's landing screen), which names the active Commons and offers a dropdown to switch Commons; choosing an unlocked Commons from the directory, app drawer, or post-board header drawer opens that Commons' circle list. Opening a post board keeps Commons selected, shows no stack-style back button (including after reload), and tapping Commons returns directly to Circle View without duplicating the bottom tab bar. The post board's drawer shows a single Home row (no Conversation or Circles rows) that returns to Circle View.
+7. Signing in lands on Circle View (the Commons tab's landing screen), which names the active Commons and offers a dropdown to switch Commons; choosing an unlocked Commons from the directory, app drawer, or post-board header drawer opens that Commons' circle list. Opening a post board keeps Commons selected and shows no stack-style back button (including after reload). Tapping the already-selected Commons tab while reading a circle is a no-op: the circle stays open and Circle View is not added to the root navigation stack. The post board's drawer shows a single Home row (no Conversation or Circles rows) that returns to Circle View, and tapping Commons from Circle View does not duplicate the bottom tab bar.
 8. A signed-in member can join a welcome lounge from Circle View's dashed "Join a welcome lounge" card and lands in that lounge's real feed.
 9. A signed-in member opens the commons info page from the drawer's info button (its only entry point) and switches between the Overview, Community, and Governance tabs, each showing real member-only data (mission priorities, this month's activity stats, estimated AI spending with Sage's autonomous usage against its monthly dollar and call limits and its Active/Paused status, people, circles, and governance thresholds/proposals).
 10. Two separately signed-in members can join a welcome lounge from Circle View, land in its real feed, and see the same Sage-authored welcome thread prompting introductions.
@@ -255,3 +255,5 @@ Do not release until all of these are true:
 - Every failed test has an owner and a release decision recorded; flaky tests are treated as failures until explained and fixed.
 
 Record the build number, commit, date, devices, operating systems, tester, result, and links to failure artifacts for each release candidate.
+
+Commons-scoped inbox alerts show “From [Commons name]” when the source has a configured name, including Sage alerts. `circle-notifications.spec.ts` checks the source label before and after reload and opens the source post from that card.

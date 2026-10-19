@@ -29,7 +29,9 @@ async function trpcPost(path: string, sessionToken: string, body: unknown) {
 }
 
 async function openCircleSettings(page: Page, groupId: string) {
-  await page.goto(`/${COOP_ID}/posts?circleId=${groupId}`);
+  await page.goto(`/${COOP_ID}/posts?circleId=${groupId}`, {
+    waitUntil: "domcontentloaded",
+  });
   await page.getByLabel("Circle settings and members").click();
   await expect(
     page.getByRole("radiogroup", { name: "Circle notifications" }),
@@ -37,7 +39,9 @@ async function openCircleSettings(page: Page, groupId: string) {
 }
 
 async function postInCircle(page: Page, groupId: string, text: string) {
-  await page.goto(`/${COOP_ID}/posts?circleId=${groupId}`);
+  await page.goto(`/${COOP_ID}/posts?circleId=${groupId}`, {
+    waitUntil: "domcontentloaded",
+  });
   const composer = page.getByRole("textbox", {
     name: "Share what's happening...",
   });
@@ -48,138 +52,177 @@ async function postInCircle(page: Page, groupId: string, text: string) {
   await expect(page.getByText(text, { exact: true }).first()).toBeVisible();
 }
 
-test("a circle member chooses which circle activity notifies them", async ({
-  browser,
-}) => {
-  // Two sign-ins plus two circle posts can exceed the default 90s budget.
-  test.setTimeout(150_000);
-  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const circleName = `E2E Notify Circle ${runId}`;
-  const highlightedPost = `E2E highlight pinned ${runId}`;
-  const firstPost = `E2E notify first ${runId}`;
-  const mutedPost = `E2E notify muted ${runId}`;
-  const circleAlert = new RegExp(`posted in ${circleName}\\.`);
-  const highlightAlert = new RegExp(`pinned a post in ${circleName}\\.`);
+for (const scenario of ["highlights", "source", "muting"] as const) {
+  test(
+    scenario === "highlights"
+      ? "a circle member receives pinned highlights without routine post alerts"
+      : scenario === "source"
+        ? "a circle member sees the source Commons and opens a post alert"
+        : "a circle member mutes routine post alerts",
+    async ({ browser }) => {
+      // Keep highlights, source labels, and muting independent: repeated
+      // development-bundle loads take 7–15 seconds per navigation in CI.
+      test.setTimeout(150_000);
+      const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const circleName = `E2E Notify Circle ${runId}`;
+      const highlightedPost = `E2E highlight pinned ${runId}`;
+      const firstPost = `E2E notify first ${runId}`;
+      const mutedPost = `E2E notify muted ${runId}`;
+      const circleAlert = new RegExp(`posted in ${circleName}\\.`);
+      const highlightAlert = new RegExp(`pinned a post in ${circleName}\\.`);
 
-  const userA = await newSignedInPage(browser, USER_A_EMAIL);
-  const userB = await newSignedInPage(browser, USER_B_EMAIL);
-  let groupId: string | undefined;
+      const userA = await newSignedInPage(browser, USER_A_EMAIL);
+      const userB = await newSignedInPage(browser, USER_B_EMAIL);
+      let groupId: string | undefined;
 
-  try {
-    const sessionTokenA = await sessionTokenFor(userA.page);
-    const sessionTokenB = await sessionTokenFor(userB.page);
-    expect(sessionTokenA).toBeTruthy();
-    expect(sessionTokenB).toBeTruthy();
+      try {
+        const sessionTokenA = await sessionTokenFor(userA.page);
+        const sessionTokenB = await sessionTokenFor(userB.page);
+        expect(sessionTokenA).toBeTruthy();
+        expect(sessionTokenB).toBeTruthy();
 
-    const created = await trpcPost("groups.create", sessionTokenA!, {
-      name: circleName,
-      privacy: "private",
-    });
-    groupId = created?.result?.data?.group?.id;
-    const inviteCode = created?.result?.data?.group?.inviteCode;
-    expect(groupId).toBeTruthy();
-    await trpcPost("groups.joinByCode", sessionTokenB!, { inviteCode });
+        const created = await trpcPost("groups.create", sessionTokenA!, {
+          name: circleName,
+          privacy: "private",
+        });
+        groupId = created?.result?.data?.group?.id;
+        const inviteCode = created?.result?.data?.group?.inviteCode;
+        expect(groupId).toBeTruthy();
+        await trpcPost("groups.joinByCode", sessionTokenB!, { inviteCode });
 
-    // B opens circle settings: "Highlights" is the default for new members.
-    await openCircleSettings(userB.page, groupId!);
-    const allActivity = userB.page.getByRole("radio", { name: "All activity" });
-    const highlights = userB.page.getByRole("radio", { name: "Highlights" });
-    const onlyMentions = userB.page.getByRole("radio", {
-      name: "Only @mentions",
-    });
-    const nothing = userB.page.getByRole("radio", { name: "Nothing" });
-    await expect(highlights).toBeChecked();
+        // B opens circle settings: "Highlights" is the default for new members.
+        await openCircleSettings(userB.page, groupId!);
+        const allActivity = userB.page.getByRole("radio", {
+          name: "All activity",
+        });
+        const highlights = userB.page.getByRole("radio", {
+          name: "Highlights",
+        });
+        const onlyMentions = userB.page.getByRole("radio", {
+          name: "Only @mentions",
+        });
+        const nothing = userB.page.getByRole("radio", { name: "Nothing" });
+        await expect(highlights).toBeChecked();
 
-    // Routine activity stays quiet on Highlights; pinning the post alerts B.
-    await postInCircle(userA.page, groupId!, highlightedPost);
-    await userA.page.getByLabel("Pin post").click();
-    await expect(userA.page.getByText("Pinned", { exact: true })).toBeVisible();
-    await userB.page.goto("/notifications");
-    await expect(async () => {
-      await userB.page.reload();
-      await expect(userB.page.getByText(highlightAlert)).toHaveCount(1);
-      await expect(userB.page.getByText(circleAlert)).toHaveCount(0);
-    }).toPass({ timeout: 20_000 });
+        if (scenario === "highlights") {
+          // Routine activity stays quiet on Highlights; pinning the post alerts B.
+          await postInCircle(userA.page, groupId!, highlightedPost);
+          await userA.page.getByLabel("Pin post").click();
+          await expect(
+            userA.page.getByText("Pinned", { exact: true }),
+          ).toBeVisible();
+          await userB.page
+            .getByRole("tab", { name: "Alerts", exact: true })
+            .click();
+          await expect(async () => {
+            await userB.page
+              .getByRole("button", { name: "Refresh", exact: true })
+              .click();
+            await expect(userB.page.getByText(highlightAlert)).toHaveCount(1);
+            await expect(userB.page.getByText(circleAlert)).toHaveCount(0);
+          }).toPass({ timeout: 20_000 });
 
-    await openCircleSettings(userB.page, groupId!);
-    await allActivity.click();
-    await expect(allActivity).toBeChecked();
-    await userB.page.reload();
-    await expect(allActivity).toBeChecked();
-    await expect(highlights).not.toBeChecked();
-    await expect(onlyMentions).not.toBeChecked();
-
-    // A posts; B (on "All activity") gets a circle alert.
-    await postInCircle(userA.page, groupId!, firstPost);
-    await userB.page.goto("/notifications");
-    await expect(
-      userB.page.getByText("Alerts", { exact: true }).first(),
-    ).toBeVisible();
-    await expect(async () => {
-      await userB.page.reload();
-      await expect(userB.page.getByText(circleAlert)).toHaveCount(1);
-    }).toPass({ timeout: 20_000 });
-
-    const alertCard = userB.page.getByRole("button").filter({ hasText: circleAlert });
-    await expect(alertCard.getByText(/^From \S.+/)).toBeVisible();
-    await userB.page.reload();
-    await expect(alertCard.getByText(/^From \S.+/)).toBeVisible();
-    await alertCard.click();
-    await expect(userB.page.getByText(firstPost, { exact: true }).first()).toBeVisible();
-
-    // B mutes the circle; A's next post creates no alert.
-    await openCircleSettings(userB.page, groupId!);
-    await nothing.click();
-    await expect(nothing).toBeChecked();
-    await userB.page.reload();
-    await expect(nothing).toBeChecked();
-
-    await postInCircle(userA.page, groupId!, mutedPost);
-    await userB.page.waitForTimeout(2_000);
-    await userB.page.goto("/notifications");
-    await expect(
-      userB.page.getByText("Alerts", { exact: true }).first(),
-    ).toBeVisible();
-    await expect(userB.page.getByText(circleAlert)).toHaveCount(1);
-  } finally {
-    const sessionTokenA = await sessionTokenFor(userA.page).catch(() => null);
-    const sessionTokenB = await sessionTokenFor(userB.page).catch(() => null);
-    if (sessionTokenA && groupId) {
-      const input = encodeURIComponent(
-        JSON.stringify({ coopId: COOP_ID, circleId: groupId, limit: 20 }),
-      );
-      const feed = await fetch(
-        `${API_BASE_URL}/trpc/commons.listFeed?input=${input}`,
-        { headers: { "x-session-token": sessionTokenA } },
-      ).then((res) => res.json());
-      const posts: Array<{ id: string; body: string }> = [
-        ...(feed?.result?.data?.pinnedPost
-          ? [feed.result.data.pinnedPost]
-          : []),
-        ...(feed?.result?.data?.posts ?? []),
-      ];
-      for (const post of posts) {
-        if (
-          post.body === highlightedPost ||
-          post.body === firstPost ||
-          post.body === mutedPost
-        ) {
-          await trpcPost("commons.deletePost", sessionTokenA, {
-            postId: post.id,
-          }).catch(() => {});
+          return;
         }
+
+        await allActivity.click();
+        await expect(allActivity).toBeChecked();
+        await userB.page.reload({ waitUntil: "domcontentloaded" });
+        await expect(allActivity).toBeChecked();
+        await expect(highlights).not.toBeChecked();
+        await expect(onlyMentions).not.toBeChecked();
+
+        // A posts; B (on "All activity") gets a circle alert.
+        await postInCircle(userA.page, groupId!, firstPost);
+        await userB.page
+          .getByRole("tab", { name: "Alerts", exact: true })
+          .click();
+        await expect(
+          userB.page.getByText("Alerts", { exact: true }).first(),
+        ).toBeVisible();
+        await expect(async () => {
+          await userB.page
+            .getByRole("button", { name: "Refresh", exact: true })
+            .click();
+          await expect(userB.page.getByText(circleAlert)).toHaveCount(1);
+        }).toPass({ timeout: 20_000 });
+
+        if (scenario === "source") {
+          const alertCard = userB.page
+            .getByRole("button")
+            .filter({ hasText: circleAlert });
+          await expect(alertCard.getByText(/^From \S.+/)).toBeVisible();
+          await userB.page.reload({ waitUntil: "domcontentloaded" });
+          await expect(alertCard.getByText(/^From \S.+/)).toBeVisible();
+          await alertCard.click();
+          await expect(
+            userB.page.getByText(firstPost, { exact: true }).first(),
+          ).toBeVisible();
+
+          return;
+        }
+
+        // B mutes the circle; A's next post creates no alert.
+        await openCircleSettings(userB.page, groupId!);
+        await nothing.click();
+        await expect(nothing).toBeChecked();
+        await userB.page.reload({ waitUntil: "domcontentloaded" });
+        await expect(nothing).toBeChecked();
+
+        await postInCircle(userA.page, groupId!, mutedPost);
+        await userB.page.waitForTimeout(2_000);
+        await userB.page
+          .getByRole("tab", { name: "Alerts", exact: true })
+          .click();
+        await expect(
+          userB.page.getByText("Alerts", { exact: true }).first(),
+        ).toBeVisible();
+        await expect(userB.page.getByText(circleAlert)).toHaveCount(1);
+      } finally {
+        const sessionTokenA = await sessionTokenFor(userA.page).catch(
+          () => null,
+        );
+        const sessionTokenB = await sessionTokenFor(userB.page).catch(
+          () => null,
+        );
+        if (sessionTokenA && groupId) {
+          const input = encodeURIComponent(
+            JSON.stringify({ coopId: COOP_ID, circleId: groupId, limit: 20 }),
+          );
+          const feed = await fetch(
+            `${API_BASE_URL}/trpc/commons.listFeed?input=${input}`,
+            { headers: { "x-session-token": sessionTokenA } },
+          ).then((res) => res.json());
+          const posts: { id: string; body: string }[] = [
+            ...(feed?.result?.data?.pinnedPost
+              ? [feed.result.data.pinnedPost]
+              : []),
+            ...(feed?.result?.data?.posts ?? []),
+          ];
+          for (const post of posts) {
+            if (
+              post.body === highlightedPost ||
+              post.body === firstPost ||
+              post.body === mutedPost
+            ) {
+              await trpcPost("commons.deletePost", sessionTokenA, {
+                postId: post.id,
+              }).catch(() => {});
+            }
+          }
+        }
+        if (groupId && sessionTokenB) {
+          await trpcPost("groups.leave", sessionTokenB, { groupId }).catch(
+            () => {},
+          );
+        }
+        if (groupId && sessionTokenA) {
+          await trpcPost("groups.leave", sessionTokenA, { groupId }).catch(
+            () => {},
+          );
+        }
+        await Promise.all([userA.context.close(), userB.context.close()]);
       }
-    }
-    if (groupId && sessionTokenB) {
-      await trpcPost("groups.leave", sessionTokenB, { groupId }).catch(
-        () => {},
-      );
-    }
-    if (groupId && sessionTokenA) {
-      await trpcPost("groups.leave", sessionTokenA, { groupId }).catch(
-        () => {},
-      );
-    }
-    await Promise.all([userA.context.close(), userB.context.close()]);
-  }
-});
+    },
+  );
+}

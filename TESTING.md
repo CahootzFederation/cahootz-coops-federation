@@ -349,3 +349,5 @@ Do not release until all of these are true:
 Record the build number, commit, date, devices, operating systems, tester, result, and links to failure artifacts for each release candidate.
 
 Commons-scoped inbox alerts show “From [Commons name]” when the source has a configured name, including Sage alerts. `circle-notifications.spec.ts` checks the source label before and after reload and opens the source post from that card.
+
+Circle notifications use three independent two-user journeys: Highlights verifies that pinning alerts members while routine posts stay quiet; source alerts verify Commons labels, reload persistence, and opening the source post; muting verifies that All activity delivers posts until the member chooses Nothing. Splitting them keeps repeated development-bundle loads within each journey’s time limit. The journeys use the Alerts tab and Refresh button between screens, retain explicit reload checks, and assert the rendered UI after navigation.

@@ -4,7 +4,6 @@ import React from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Modal,
   RefreshControl,
   ScrollView,
@@ -27,8 +26,6 @@ import {
   Plus,
   Search,
   ShoppingBag,
-  ShoppingCart,
-  Store,
   Vote,
   X,
 } from 'lucide-react-native';
@@ -36,7 +33,6 @@ import {
 import MarketplaceLane from '@/components/marketplace-lane';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
-import { useCart } from '@/contexts/cart-context';
 import { api, resolveCoopId } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
 
@@ -46,18 +42,6 @@ type CountedLane = Exclude<ApiBoardLane, 'all'>;
 type BoardPostType = 'Ask' | 'Offer' | 'Update';
 type BoardCommons = { id: string; name: string };
 type LaneCounts = Record<CountedLane, number>;
-type MarketplacePreviewProduct = {
-  id: string;
-  name: string;
-  imageUrl?: string | null;
-  priceUSD: number;
-  store: { id: string; name: string };
-};
-type MarketplaceShop = {
-  name: string;
-  status?: string | null;
-  application?: { status?: string | null } | null;
-};
 
 const FALLBACK_COMMONS_ID = 'cahootz';
 const emptyCounts: LaneCounts = { needs: 0, offers: 0, events: 0 };
@@ -131,7 +115,6 @@ export default function BoardScreen() {
   const params = useLocalSearchParams<{ coopId?: string; lane?: string }>();
   const { width } = useWindowDimensions();
   const { user, sessionToken, isLoading: authLoading } = useAuth();
-  const { totalItems } = useCart();
   const sessionCoopId = resolveCoopId() === 'error-no-coop-id' ? FALLBACK_COMMONS_ID : resolveCoopId();
   const [commons, setCommons] = React.useState<BoardCommons[]>([]);
   const [coopId, setCoopId] = React.useState(params.coopId || sessionCoopId);
@@ -147,10 +130,6 @@ export default function BoardScreen() {
   const [title, setTitle] = React.useState('');
   const [body, setBody] = React.useState('');
   const [publishing, setPublishing] = React.useState(false);
-  const [marketplaceProducts, setMarketplaceProducts] = React.useState<MarketplacePreviewProduct[]>([]);
-  const [marketplaceShop, setMarketplaceShop] = React.useState<MarketplaceShop | null>(null);
-  const [marketplaceLoading, setMarketplaceLoading] = React.useState(true);
-  const [marketplaceError, setMarketplaceError] = React.useState(false);
 
   React.useEffect(() => setLane(normalizedLane(params.lane)), [params.lane]);
   React.useEffect(() => {
@@ -194,25 +173,6 @@ export default function BoardScreen() {
     }
   }, [coopId, lane, query, sessionToken]);
 
-  const loadMarketplacePreview = React.useCallback(async () => {
-    if (!sessionToken) return;
-    setMarketplaceError(false);
-    try {
-      const [productResult, shopResult] = await Promise.all([
-        api.getProducts({ coopId, limit: 3 }),
-        user?.walletAddress
-          ? api.getMyStores(user.walletAddress).then((stores) => stores?.[0] ?? null).catch(() => null)
-          : Promise.resolve(null),
-      ]);
-      setMarketplaceProducts((productResult?.products ?? []).slice(0, 3));
-      setMarketplaceShop(shopResult);
-    } catch (previewError) {
-      console.error('Failed to load marketplace preview:', previewError);
-      setMarketplaceProducts([]);
-      setMarketplaceError(true);
-    }
-  }, [coopId, sessionToken, user?.walletAddress]);
-
   React.useEffect(() => {
     if (lane === 'marketplace') return;
     setLoading(true);
@@ -220,15 +180,9 @@ export default function BoardScreen() {
     return () => clearTimeout(timer);
   }, [lane, load, query]);
 
-  React.useEffect(() => {
-    if (lane !== 'index') return;
-    setMarketplaceLoading(true);
-    loadMarketplacePreview().finally(() => setMarketplaceLoading(false));
-  }, [lane, loadMarketplacePreview]);
-
   const refresh = async () => {
     setRefreshing(true);
-    await Promise.all([load(), lane === 'index' ? loadMarketplacePreview() : Promise.resolve()]);
+    await load();
     setRefreshing(false);
   };
 
@@ -377,17 +331,9 @@ export default function BoardScreen() {
         {isIndex && !query ? (
           <BoardIndex
             counts={laneCounts}
-            marketplaceError={marketplaceError}
-            marketplaceLoading={marketplaceLoading}
-            marketplaceProducts={marketplaceProducts}
-            marketplaceShop={marketplaceShop}
-            marketplaceTotalItems={totalItems}
             twoColumns={width >= 720}
             onSelectLane={selectLane}
             onOpenResources={() => router.push({ pathname: '/(authenticated)/commons-resources', params: { coopId } } as any)}
-            onOpenCart={() => router.push('/(authenticated)/cart' as any)}
-            onOpenProduct={(productId) => router.push(`/product-detail?id=${productId}` as any)}
-            onOpenShop={() => router.push(marketplaceShop ? ('/my-stores' as any) : ('/apply-store' as any))}
             onQuickPost={(type) => resetComposer(type)}
             onCreateEvent={() => router.push({ pathname: '/[coopId]/events/create', params: { coopId } })}
           />
@@ -427,19 +373,11 @@ export default function BoardScreen() {
     </SafeAreaView>
   );
 }
-function BoardIndex({ counts, marketplaceError, marketplaceLoading, marketplaceProducts, marketplaceShop, marketplaceTotalItems, twoColumns, onSelectLane, onOpenResources, onOpenCart, onOpenProduct, onOpenShop, onQuickPost, onCreateEvent }: {
+function BoardIndex({ counts, twoColumns, onSelectLane, onOpenResources, onQuickPost, onCreateEvent }: {
   counts: LaneCounts;
-  marketplaceError: boolean;
-  marketplaceLoading: boolean;
-  marketplaceProducts: MarketplacePreviewProduct[];
-  marketplaceShop: MarketplaceShop | null;
-  marketplaceTotalItems: number;
   twoColumns: boolean;
   onSelectLane: (lane: BoardLane) => void;
   onOpenResources: () => void;
-  onOpenCart: () => void;
-  onOpenProduct: (productId: string) => void;
-  onOpenShop: () => void;
   onQuickPost: (type: BoardPostType) => void;
   onCreateEvent: () => void;
 }) {
@@ -454,8 +392,9 @@ function BoardIndex({ counts, marketplaceError, marketplaceLoading, marketplaceP
       ],
     },
     {
-      title: 'Community',
+      title: 'Community exchange',
       rows: [
+        { label: 'Marketplace', note: 'Buy from member-run stores or start your own', icon: ShoppingBag, tone: tokens.orange, action: () => onSelectLane('marketplace') },
         { label: 'Verified resources', note: 'Resources Sage found and an admin published', icon: BookOpen, tone: tokens.ochre, action: onOpenResources },
       ],
     },
@@ -473,19 +412,6 @@ function BoardIndex({ counts, marketplaceError, marketplaceLoading, marketplaceP
         </View>
       </View>
 
-      <MarketplacePreview
-        error={marketplaceError}
-        loading={marketplaceLoading}
-        products={marketplaceProducts}
-        shop={marketplaceShop}
-        totalItems={marketplaceTotalItems}
-        twoColumns={twoColumns}
-        onBrowse={() => onSelectLane('marketplace')}
-        onOpenCart={onOpenCart}
-        onOpenProduct={onOpenProduct}
-        onOpenShop={onOpenShop}
-      />
-
       <Text accessibilityRole="header" style={{ marginTop: 22, color: tokens.ink, fontSize: 18, fontWeight: '900' }}>Browse the board</Text>
       <View style={{ marginTop: 8, flexDirection: twoColumns ? 'row' : 'column', flexWrap: 'wrap', columnGap: 24 }}>
         {groups.map((group) => (
@@ -496,86 +422,6 @@ function BoardIndex({ counts, marketplaceError, marketplaceLoading, marketplaceP
             </View>
           </View>
         ))}
-      </View>
-    </View>
-  );
-}
-
-function MarketplacePreview({ error, loading, products, shop, totalItems, twoColumns, onBrowse, onOpenCart, onOpenProduct, onOpenShop }: {
-  error: boolean;
-  loading: boolean;
-  products: MarketplacePreviewProduct[];
-  shop: MarketplaceShop | null;
-  totalItems: number;
-  twoColumns: boolean;
-  onBrowse: () => void;
-  onOpenCart: () => void;
-  onOpenProduct: (productId: string) => void;
-  onOpenShop: () => void;
-}) {
-  const shopStatus = !shop
-    ? null
-    : shop.status === 'APPROVED'
-      ? 'Live and accepting orders'
-      : shop.application?.status === 'APPROVED'
-        ? 'Approved · finish payment setup'
-        : 'Application under commons review';
-  const visibleProducts = products.slice(0, twoColumns ? 3 : 2);
-
-  return (
-    <View accessibilityLabel="Marketplace preview" style={{ marginTop: 22, borderTopWidth: 3, borderTopColor: tokens.orange, borderBottomWidth: 1, borderBottomColor: tokens.rule, backgroundColor: tokens.sheetWarm, paddingHorizontal: 12, paddingTop: 14, paddingBottom: 16 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-        <View style={{ minWidth: 0, flex: 1 }}>
-          <Text accessibilityRole="header" style={{ color: tokens.ink, fontSize: 20, lineHeight: 24, fontWeight: '900' }}>Marketplace</Text>
-          <Text style={{ marginTop: 3, maxWidth: 520, color: tokens.inkSoft, fontSize: 13, lineHeight: 19 }}>Buy from community stores or open your own.</Text>
-        </View>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Open shopping cart" onPress={onOpenCart} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: tokens.rule, borderRadius: 8, backgroundColor: tokens.sheet, paddingHorizontal: 10 }}>
-          <ShoppingCart size={18} color={tokens.ink} />
-          <Text numberOfLines={1} style={{ marginLeft: 6, color: tokens.ink, fontSize: 12, fontWeight: '900' }}>Cart{totalItems ? ` · ${totalItems}` : ''}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {shop ? (
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Manage my shop" onPress={onOpenShop} style={{ marginTop: 12, minHeight: 54, flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderBottomWidth: 1, borderColor: tokens.rule, paddingVertical: 7 }}>
-          <View style={{ width: 36, height: 36, marginRight: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: tokens.orangePale }}><Store size={18} color={tokens.orange} /></View>
-          <View style={{ minWidth: 0, flex: 1 }}>
-            <Text numberOfLines={1} style={{ color: tokens.ink, fontSize: 13, fontWeight: '900' }}>{shop.name}</Text>
-            <Text numberOfLines={1} style={{ marginTop: 2, color: tokens.muted, fontSize: 11 }}>{shopStatus}</Text>
-          </View>
-          <ChevronRight size={17} color={tokens.muted} />
-        </TouchableOpacity>
-      ) : null}
-
-      <View style={{ marginTop: 13, flexDirection: twoColumns ? 'row' : 'column', flexWrap: 'wrap', gap: 8 }}>
-        {loading
-          ? [0, 1].map((key) => <View key={key} style={{ width: twoColumns ? '48%' : '100%', height: 78, backgroundColor: tokens.sheet, opacity: 0.7 }} />)
-          : visibleProducts.map((product) => (
-              <TouchableOpacity key={product.id} accessibilityRole="button" accessibilityLabel={`View ${product.name}`} onPress={() => onOpenProduct(product.id)} style={{ width: twoColumns ? '48%' : '100%', minHeight: 78, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: tokens.rule, backgroundColor: tokens.sheet, padding: 8 }}>
-                <View style={{ width: 58, height: 58, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: tokens.orangePale }}>
-                  {product.imageUrl ? <Image source={{ uri: product.imageUrl }} resizeMode="cover" style={{ width: '100%', height: '100%' }} /> : <ShoppingBag size={23} color={tokens.orange} />}
-                </View>
-                <View style={{ minWidth: 0, flex: 1, paddingHorizontal: 10 }}>
-                  <Text numberOfLines={1} style={{ color: tokens.ink, fontSize: 13, fontWeight: '900' }}>{product.name}</Text>
-                  <Text numberOfLines={1} style={{ marginTop: 2, color: tokens.muted, fontSize: 11 }}>{product.store.name}</Text>
-                  <Text style={{ marginTop: 5, color: tokens.orange, fontSize: 13, fontWeight: '900' }}>${product.priceUSD.toLocaleString('en-US', { maximumFractionDigits: 0 })}</Text>
-                </View>
-                <ChevronRight size={17} color={tokens.muted} />
-              </TouchableOpacity>
-            ))}
-      </View>
-
-      {!loading && error ? <Text style={{ marginTop: 12, color: tokens.danger, fontSize: 13, fontWeight: '700' }}>The shop preview couldn’t load. Open Marketplace to try again.</Text> : null}
-      {!loading && !error && products.length === 0 ? <Text style={{ marginTop: 12, color: tokens.muted, fontSize: 13 }}>No products are listed in this commons yet.</Text> : null}
-
-      <View style={{ marginTop: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Browse marketplace" onPress={onBrowse} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', borderRadius: 7, backgroundColor: tokens.ink, paddingHorizontal: 13 }}>
-          <ShoppingBag size={17} color={tokens.sheet} />
-          <Text numberOfLines={1} style={{ marginLeft: 7, color: tokens.sheet, fontSize: 13, fontWeight: '900' }}>Browse market</Text>
-        </TouchableOpacity>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel={shop ? 'Manage my shop' : 'Open a shop'} onPress={onOpenShop} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: tokens.ink, borderRadius: 7, backgroundColor: tokens.sheet, paddingHorizontal: 13 }}>
-          {shop ? <Store size={17} color={tokens.ink} /> : <Plus size={17} color={tokens.ink} />}
-          <Text numberOfLines={1} style={{ marginLeft: 7, color: tokens.ink, fontSize: 13, fontWeight: '900' }}>{shop ? 'Manage shop' : 'Open shop'}</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );

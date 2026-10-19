@@ -298,7 +298,7 @@ export const authRouter = router({
         const email = normalizeEmail(input.email);
         const isCommonsLogin = !input.coopId || input.coopId === COMMONS_COOP_ID;
 
-        let user = await context.db.user.findUnique({
+        const findUser = () => context.db.user.findUnique({
           where: { email },
           select: {
             id: true,
@@ -317,31 +317,23 @@ export const authRouter = router({
             },
           },
         });
+        let user = await findUser();
 
         if (!user && isCommonsLogin) {
-          user = await context.db.user.create({
-            data: {
-              email,
-              roles: ["member"],
-              status: "ACTIVE",
-            },
-            select: {
-              id: true,
-              status: true,
-              deletedAt: true,
-              walletAddress: true,
-              wallets: {
-                where: { isPrimary: true },
-                select: { address: true },
-                take: 1,
+          try {
+            await context.db.user.create({
+              data: {
+                email,
+                roles: ["member"],
+                status: "ACTIVE",
               },
-              memberships: {
-                where: { coopId: COMMONS_COOP_ID },
-                select: { status: true },
-                take: 1,
-              },
-            },
-          });
+            });
+          } catch (error) {
+            // A second code request for the same new email (a double tap) can
+            // create the account first. Use theirs instead of failing.
+            if ((error as { code?: string })?.code !== "P2002") throw error;
+          }
+          user = await findUser();
         }
 
         if (!user) {

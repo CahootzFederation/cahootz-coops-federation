@@ -97,7 +97,8 @@ test("Sage shows it is thinking while it writes a reply in Messages", async ({ b
       await expect(member.page.getByText(note)).toBeVisible();
 
       await expect(member.page.getByText("Sage is thinking…")).toBeHidden({ timeout: 120_000 });
-      await expect(member.page.getByText(note)).toHaveCount(1);
+      // Exact, so the conversation list's "You: …" preview doesn't count: one bubble, not two.
+      await expect(member.page.getByText(note, { exact: true })).toHaveCount(1);
 
       await member.page.unroute("**/trpc/groups.sendDirect*");
       await member.page.reload();

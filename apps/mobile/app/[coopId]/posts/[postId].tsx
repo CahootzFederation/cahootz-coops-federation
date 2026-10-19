@@ -56,6 +56,14 @@ const THEME = {
   border: '#E5E7EB',
 };
 
+// Posts made without a title get one cut from their first sentence. Showing
+// that as a heading would just repeat the start of the body, so skip it.
+function hasOwnTitle(title: string | undefined, body: string | undefined) {
+  const heading = (title || '').trim();
+  if (!heading) return false;
+  return !(body || '').trim().replace(/\s+/g, ' ').startsWith(heading);
+}
+
 export default function CommonsPostDetailScreen() {
   const params = useLocalSearchParams<{ coopId?: string; postId?: string; commentId?: string; focus?: string }>();
   const coopId = params.coopId || 'cahootz';
@@ -375,7 +383,9 @@ export default function CommonsPostDetailScreen() {
 
     try {
       await Share.share({
-        message: `${post.title}\n\n${post.body}\n\n${post.group}`,
+        message: [hasOwnTitle(post.title, post.body) ? post.title : null, post.body, post.group]
+          .filter(Boolean)
+          .join('\n\n'),
       });
     } catch (caughtError) {
       console.error('Failed to share post:', caughtError);
@@ -506,9 +516,11 @@ export default function CommonsPostDetailScreen() {
               <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: THEME.primarySoft }}>
                 <Text className="text-[10px] font-black uppercase tracking-wider" style={{ color: THEME.primary }}>{post.tag}</Text>
               </View>
-              <Text accessibilityRole="header" className="mt-2 text-2xl font-black leading-8 text-gray-950">
-                {post.title}
-              </Text>
+              {hasOwnTitle(post.title, post.body) ? (
+                <Text accessibilityRole="header" className="mt-2 text-2xl font-black leading-8 text-gray-950">
+                  {post.title}
+                </Text>
+              ) : null}
             </View>
             {post.body ? (
               <MentionText

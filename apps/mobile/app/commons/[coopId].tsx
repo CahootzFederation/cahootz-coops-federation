@@ -1165,7 +1165,7 @@ function OverviewTab({
         ) : null}
       </View>
 
-      <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
+      <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4" accessibilityLabel="What we're building toward">
         <View className="mb-1 flex-row items-center justify-between">
           <View className="flex-row items-center gap-2">
             <Target size={19} color={THEME.primary} />

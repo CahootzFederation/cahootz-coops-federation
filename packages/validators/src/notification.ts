@@ -61,6 +61,7 @@ export const notificationCategoryTypes: Record<
     "SAGE_SUGGESTION_DONE",
     "SAGE_SUGGESTION_CLOSED",
     "SAGE_PRE_VOTE",
+    "SAGE_AMENDMENT_READY",
   ],
   governance: [
     "PROPOSAL_CREATED",

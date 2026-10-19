@@ -362,11 +362,16 @@ export async function claimDueTasks(options: { coopId?: string; taskIds?: string
  */
 export async function scheduleDeadlineTasks(coopId: string, now = new Date()): Promise<number> {
   const stale = await db.commonsProposalDraft.findMany({
-    where: { coopId, submittedAt: null, createdAt: { lte: new Date(now.getTime() - STALE_DRAFT_DAYS * DAY_MS) } },
+    // A Sage idea counts from when a member took it on; one nobody has taken on has no one to remind.
+    where: { coopId, submittedAt: null, authorId: { not: null }, OR: [
+      { ideaPostId: null, createdAt: { lte: new Date(now.getTime() - STALE_DRAFT_DAYS * DAY_MS) } },
+      { claimedAt: { lte: new Date(now.getTime() - STALE_DRAFT_DAYS * DAY_MS) } },
+    ] },
     select: { id: true, authorId: true, title: true }, take: 50,
   });
   let created = 0;
   for (const draft of stale) {
+    if (!draft.authorId) continue;
     const result = await createSageTask({
       coopId, kind: "REVIEW_STALE_DRAFT", title: draft.title, ownerUserId: draft.authorId,
       reason: `This proposal draft hasn't been submitted for ${STALE_DRAFT_DAYS} days.`,

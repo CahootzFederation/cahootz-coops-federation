@@ -32,6 +32,8 @@ export interface ProposalTrailContext {
   inputCheck?: InputCheck;
   /** True when auto-approval was withheld because the text tried to instruct the reviewer. */
   autoApproveBlocked?: boolean;
+  /** True when auto-approval was withheld because the proposal came from a Sage idea or changes the charter or goals. */
+  memberVoteRequired?: boolean;
 }
 
 const DECISION_LABEL: Record<string, string> = {
@@ -130,6 +132,8 @@ export function buildProposalEngineTrail(output: ProposalOutput, context: Propos
       output.budget.amountRequested < context.aiAutoApproveThresholdUSD, `Budget ${money(output.budget.amountRequested, output.budget.currency)}`);
     if (context.autoApproveBlocked) {
       trail.step("POLICY", "Auto-approval withheld because the text tried to instruct the reviewer: council vote instead", { outcome: "FAIL" });
+    } else if (context.memberVoteRequired) {
+      trail.step("POLICY", "Started as a Sage idea or changes our charter or goals, so members vote on it", { outcome: "INFO" });
     } else if (output.budget.amountRequested >= context.aiAutoApproveThresholdUSD) {
       trail.step("POLICY", output.budget.amountRequested < context.councilVoteThresholdUSD
         ? `Under the full-vote limit (${money(context.councilVoteThresholdUSD, "USD")}): council vote`

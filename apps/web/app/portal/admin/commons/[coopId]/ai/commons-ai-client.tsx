@@ -66,6 +66,8 @@ export default function CommonsAIClient({ apiUrl, token }: { apiUrl: string; tok
   const [busy, setBusy] = useState(false);
   const [openTrailId, setOpenTrailId] = useState<string | null>(null);
   const [trailAgent, setTrailAgent] = useState("");
+  const [skipWriterLimits, setSkipWriterLimits] = useState(false);
+  const [writerResult, setProposalWriterResult] = useState<string | null>(null);
   const endpoint = `${apiUrl}/commonsActionsAdmin`;
   const refresh = useCallback(async () => {
     const input = encodeURIComponent(JSON.stringify({ coopId, ...(trailAgent ? { trailAgent } : {}) }));
@@ -93,6 +95,18 @@ export default function CommonsAIClient({ apiUrl, token }: { apiUrl: string; tok
       setError(cause instanceof Error ? cause.message : String(cause));
       return null;
     } finally { setBusy(false); }
+  }
+  async function runProposalWriterNow() {
+    setProposalWriterResult(null);
+    const result = await command({ command: "proposal-writer", skipLimits: skipWriterLimits });
+    if (!result) return;
+    setProposalWriterResult(proposalWriterSummary(result));
+    const trailId = typeof result.trailId === "string" ? result.trailId : null;
+    if (trailId) {
+      setTrailAgent("");
+      setOpenTrailId(trailId);
+      setTimeout(() => document.getElementById(`trail-${trailId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    }
   }
   async function analyzeCircle(groupId: string) {
     const result = await command({ command: "analyze-circle", groupId });
@@ -131,6 +145,18 @@ export default function CommonsAIClient({ apiUrl, token }: { apiUrl: string; tok
             <button disabled={busy || circle.pendingMessages < 1} aria-label={`Analyze ${circleName} now`} onClick={() => void analyzeCircle(circle.id)} className="rounded-md border border-orange-300/60 px-3 py-1.5 text-sm font-semibold text-orange-200 disabled:opacity-40">Analyze now</button>
           </li>;
         })}</ul> : <p className="mt-3 text-sm text-slate-400">No circles yet.</p>}
+      </section>
+      <section className="rounded-lg border border-white/10 bg-white/5 p-5" aria-label="Sage proposal writer">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <strong>Sage proposal writer</strong>
+          <button disabled={busy} onClick={() => void runProposalWriterNow()} className="rounded-md border border-orange-300/60 px-3 py-1.5 text-sm font-semibold text-orange-200 disabled:opacity-50">Run the proposal writer</button>
+        </div>
+        <p className="mt-1 text-sm text-slate-400">Twice a week Sage checks each charter goal. When one is behind or nobody has proposed anything for it yet, it may write a proposal and put it up for a member vote, or decide not to and say why. Run it now to get a new Commons started or to try something out. It uses the same rules and checks, and counts toward the autonomy limit (a proposal costs about $0.09).</p>
+        <label className="mt-3 flex items-center gap-2 text-sm text-slate-300">
+          <input type="checkbox" checked={skipWriterLimits} disabled={busy} onChange={(event) => setSkipWriterLimits(event.target.checked)} className="h-4 w-4 accent-orange-300" />
+          Skip the weekly limits (how many proposals a week, the first-week limit, and the 30-day wait per goal)
+        </label>
+        {writerResult && <p role="status" className="mt-3 rounded-md border border-white/10 bg-slate-950/60 p-3 text-sm text-slate-200">{writerResult}</p>}
       </section>
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -228,17 +254,18 @@ export default function CommonsAIClient({ apiUrl, token }: { apiUrl: string; tok
               <p className="mt-1 whitespace-pre-wrap break-words text-slate-300">{action.parentPost.content}</p>
             </div>}
             {action.source ? <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-orange-200">{action.type === "ASK_COMMONS" ? "Sage's question to the Commons" : action.type === "COMMUNITY_RHYTHM" ? "Sage's community rhythm post" : `Original ${action.sourceType === "commons_comment" ? "comment" : "post"}`} · {action.source.author.name || (action.source.author.handle ? `@${action.source.author.handle}` : "Member")} · {new Date(action.source.createdAt).toLocaleString()}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-orange-200">{action.type === "ASK_COMMONS" ? "Sage's question to the Commons" : action.type === "COMMUNITY_RHYTHM" ? "Sage's community rhythm post" : action.type === "PROPOSE_IDEA" ? "Sage's proposal idea" : `Original ${action.sourceType === "commons_comment" ? "comment" : "post"}`} · {action.source.author.name || (action.source.author.handle ? `@${action.source.author.handle}` : "Member")} · {new Date(action.source.createdAt).toLocaleString()}</p>
               <p className="mt-1 whitespace-pre-wrap break-words text-slate-200">{action.source.content}</p>
-            </div> : <p className="text-slate-400">{action.type === "ASK_COMMONS" ? "Sage's question was removed." : action.type === "COMMUNITY_RHYTHM" ? "Not in the feed: removed, or Sage had nothing to post." : `Original ${action.sourceType === "commons_comment" ? "comment" : "post"} is no longer available.`}</p>}
+            </div> : <p className="text-slate-400">{action.type === "ASK_COMMONS" ? "Sage's question was removed." : action.type === "PROPOSE_IDEA" ? "Sage's idea post was removed." : action.type === "COMMUNITY_RHYTHM" ? "Not in the feed: removed, or Sage had nothing to post." : `Original ${action.sourceType === "commons_comment" ? "comment" : "post"} is no longer available.`}</p>}
           </div>
           <p>{action.summary}</p>{action.evidence && <p className="border-l-2 border-orange-300/60 pl-3 text-slate-300">Evidence: {action.evidence}</p>}
-          {action.draftText && action.status !== "PENDING" && action.type !== "ASK_COMMONS" && action.type !== "COMMUNITY_RHYTHM" && <div className="rounded-md border border-white/10 bg-slate-950/60 p-3"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{action.type === "MAKE_PROPOSAL" ? "Proposal starter" : "Agent reply"}</p><p className="mt-1 whitespace-pre-wrap break-words">{action.draftText}</p></div>}
+          {action.draftText && action.status !== "PENDING" && action.type !== "ASK_COMMONS" && action.type !== "COMMUNITY_RHYTHM" && <div className="rounded-md border border-white/10 bg-slate-950/60 p-3"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{action.type === "MAKE_PROPOSAL" || action.type === "PROPOSE_IDEA" ? "Proposal starter" : "Agent reply"}</p><p className="mt-1 whitespace-pre-wrap break-words">{action.draftText}</p></div>}
           {action.draftText && action.status === "PENDING" && <textarea aria-label={`Draft for ${action.type}`} value={drafts[action.id] ?? action.draftText} onChange={(event) => setDrafts((current) => ({ ...current, [action.id]: event.target.value }))} className="min-h-20 w-full rounded border border-white/20 bg-slate-900 p-2 text-white" />}
           {action.generatedDraftText && action.generatedDraftText !== action.draftText && <details className="text-slate-300"><summary className="cursor-pointer text-xs text-orange-200">Original AI draft</summary><p className="mt-2 whitespace-pre-wrap break-words">{action.generatedDraftText}</p></details>}
-          {action.status === "PENDING" && action.type !== "ASK_COMMONS" && action.type !== "COMMUNITY_RHYTHM" && <div className="flex flex-wrap gap-2"><button disabled={busy} onClick={() => void command({ command: "approve", actionId: action.id })} className="rounded bg-orange-300 px-3 py-1 font-semibold text-slate-950">Approve</button><button disabled={busy || !action.draftText} onClick={() => void command({ command: "edit-draft", actionId: action.id, draftText: drafts[action.id] ?? action.draftText })} className="rounded bg-white/10 px-3 py-1">Save draft</button><button disabled={busy} onClick={() => void command({ command: "dismiss", actionId: action.id })} className="rounded bg-white/10 px-3 py-1">Dismiss</button></div>}
+          {action.status === "PENDING" && action.type !== "ASK_COMMONS" && action.type !== "COMMUNITY_RHYTHM" && action.type !== "PROPOSE_IDEA" && <div className="flex flex-wrap gap-2"><button disabled={busy} onClick={() => void command({ command: "approve", actionId: action.id })} className="rounded bg-orange-300 px-3 py-1 font-semibold text-slate-950">Approve</button><button disabled={busy || !action.draftText} onClick={() => void command({ command: "edit-draft", actionId: action.id, draftText: drafts[action.id] ?? action.draftText })} className="rounded bg-white/10 px-3 py-1">Save draft</button><button disabled={busy} onClick={() => void command({ command: "dismiss", actionId: action.id })} className="rounded bg-white/10 px-3 py-1">Dismiss</button></div>}
           {action.publishedCommentId && <button disabled={busy} onClick={() => void command({ command: "remove-reply", actionId: action.id })} className="rounded border border-red-400/40 px-3 py-1 text-red-200">Remove bot reply</button>}
           {action.type === "ASK_COMMONS" && action.status === "PUBLISHED" && <button disabled={busy} onClick={() => void command({ command: "remove-question", actionId: action.id })} className="rounded border border-red-400/40 px-3 py-1 text-red-200">Remove Sage's question</button>}
+          {action.type === "PROPOSE_IDEA" && action.status === "PUBLISHED" && <button disabled={busy} onClick={() => void command({ command: "remove-question", actionId: action.id })} className="rounded border border-red-400/40 px-3 py-1 text-red-200">Remove Sage's idea</button>}
           {action.type === "COMMUNITY_RHYTHM" && action.status === "PUBLISHED" && <button disabled={busy} onClick={() => void command({ command: "remove-question", actionId: action.id })} className="rounded border border-red-400/40 px-3 py-1 text-red-200">Remove Sage's post</button>}
           {(action.type === "MAKE_PROPOSAL" || ["RESPOND_CHARTER_CORRECTION", "RESPOND_MISSION_ALIGNMENT", "RESPOND_RESOURCE_FOLLOWUP", "ANSWER_QUESTION", "CLARIFY_NEED", "CONNECT_MEMBERS"].includes(action.type)) && (() => {
             const edit = feedbackEdits[action.id] ?? feedbackValue(action);
@@ -299,7 +326,20 @@ const AGENT_LABELS: Record<string, string> = {
   "commons-action-agent": "Commons feed", "sage-trend": "Circle trends",
   "proposal-engine": "Proposal review", "comment-evaluation": "Comment evaluation", "sage-reply": "Sage replies",
   cadence: "Follow-ups", guardian: "Routing", steward: "Steward review",
+  "sage-pre-vote": "Before the vote", "sage-proposal-writer": "Proposal writer",
 };
+
+/** One plain line about what the proposal writer did. The trail below has every step. */
+function proposalWriterSummary(result: Record<string, unknown>): string {
+  const reasons = Array.isArray(result.reasons) ? result.reasons.filter((reason): reason is string => typeof reason === "string") : [];
+  if (result.status === "PROPOSED") {
+    return result.proposalId
+      ? "Sage wrote a proposal and put it up for a vote. Members were told. The trail below shows how it decided."
+      : "The proposal review sent Sage's proposal back, so Sage posted it as an idea a member can take on.";
+  }
+  if (result.status === "NO_PROPOSAL") return `No proposal this time: ${reasons.join("; ") || "Sage decided not to."}`;
+  return `Didn't run: ${typeof result.reason === "string" ? result.reason : "nothing to check"}.`;
+}
 const OPEN_TASK = new Set(["OPEN", "WAITING"]);
 
 function TrailCard({ trail, open, onToggle }: { trail: Trail; open: boolean; onToggle: () => void }) {

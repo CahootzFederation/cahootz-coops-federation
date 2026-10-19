@@ -64,7 +64,10 @@ export function buildCadenceTools(ctx: AgentToolContext, log?: SpecialistLog) {
           select: { id: true, title: true, votingEndsAt: true },
         }),
         ctx.db.commonsProposalDraft.findMany({
-          where: { coopId: ctx.coopId, submittedAt: null, createdAt: { lte: new Date(now.getTime() - 7 * DAY_MS) } }, take: 20,
+          where: { coopId: ctx.coopId, submittedAt: null, authorId: { not: null }, OR: [
+            { ideaPostId: null, createdAt: { lte: new Date(now.getTime() - 7 * DAY_MS) } },
+            { claimedAt: { lte: new Date(now.getTime() - 7 * DAY_MS) } },
+          ] }, take: 20,
           select: { id: true, title: true, authorId: true, createdAt: true },
         }),
         ctx.db.commonsActionReview.findMany({

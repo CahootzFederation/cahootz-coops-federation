@@ -19,6 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
+import { GoalSignalsCard, VotedAmendmentsCard } from '@/components/sage-goal-cards';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
@@ -888,6 +889,7 @@ export default function CommonsDetailScreen() {
                     })
                   }
                   isFamily={isFamily}
+                  sageGoals={isMember && sessionToken ? { coopId, sessionToken } : undefined}
                   onEditFamilySetup={
                     isFamily && directoryItem?.isSteward
                       ? () =>
@@ -1128,6 +1130,7 @@ function OverviewTab({
   onBrowseResources,
   isFamily,
   onEditFamilySetup,
+  sageGoals,
 }: {
   config: CoopConfigDetail;
   stats: ActivityStats | null;
@@ -1138,6 +1141,8 @@ function OverviewTab({
   isFamily?: boolean;
   /** A family steward's way into setting up or changing the goals and agreement. */
   onEditFamilySetup?: () => void;
+  /** Members only: what Sage counts for each goal, and passed changes waiting for a steward. */
+  sageGoals?: { coopId: string; sessionToken: string };
 }) {
   return (
     <>
@@ -1219,6 +1224,9 @@ function OverviewTab({
           </TouchableOpacity>
         ) : null}
       </View>
+
+      {sageGoals ? <VotedAmendmentsCard {...sageGoals} /> : null}
+      {sageGoals && config.missionGoals.length > 0 ? <GoalSignalsCard {...sageGoals} /> : null}
 
       <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
         <Text className="mb-3 text-lg font-black text-gray-950">

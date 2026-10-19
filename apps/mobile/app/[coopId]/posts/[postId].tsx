@@ -42,6 +42,7 @@ import { ApiError, friendlyError } from '@/lib/friendly-error';
 import { LoadError } from '@/components/load-error';
 import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
 import { SageDecisionTrails } from '@/components/sage-decision-trail';
+import { ProposalIdeaCard } from '@/components/proposal-idea-card';
 import { ReactionBar } from '@/components/reaction-bar';
 import { keyboardScrollProps } from '@/lib/keyboard';
 
@@ -559,6 +560,10 @@ export default function CommonsPostDetailScreen() {
                 <Text className="text-sm font-bold text-stone-700">Share</Text>
               </TouchableOpacity>
             </View>
+
+            {post.id && post.authorIsAi && post.classification === 'sage_proposal_idea' ? (
+              <ProposalIdeaCard postId={post.id} coopId={post.coopId || coopId} sessionToken={sessionToken} canAct={circleIsMember !== false} />
+            ) : null}
 
             {error ? <Text className="mt-3 text-sm font-semibold text-red-600">{error}</Text> : null}
 

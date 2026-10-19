@@ -58,6 +58,8 @@ export const ProposalInputZ = z.object({
   }).optional().nullable(),
   region: RegionZ.optional().nullable(),
   coopId: z.string().optional(),
+  /** The member's Sage draft this proposal is sent from, if any. Sage ideas and charter or goals changes always go to a member vote. */
+  commonsDraftId: z.string().min(1).optional(),
 });
 
 // ── EVALUATION SCHEMAS (new scoring model) ────────────────────────────────────

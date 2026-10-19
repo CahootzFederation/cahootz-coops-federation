@@ -373,6 +373,46 @@ export interface EventDetail extends EventSummary {
   };
 }
 
+export type ProposalDraftKind = 'GENERAL' | 'PROGRAM' | 'SPENDING' | 'CHARTER_AMENDMENT' | 'GOALS_AMENDMENT';
+
+export interface CommonsProposalDraft {
+  id: string;
+  coopId: string;
+  title: string;
+  body: string;
+  kind: ProposalDraftKind;
+  goalKey?: string | null;
+  budgetAmount?: number | null;
+  /** Charter change: { find, replace }. Goals change: { missionGoals }. */
+  proposedChanges?: { find?: string; replace?: string; missionGoals?: Array<{ label: string; priorityWeight: number; description?: string }> } | null;
+  ideaPostId?: string | null;
+}
+
+export interface ProposalIdea {
+  draftId: string;
+  coopId: string;
+  kind: ProposalDraftKind;
+  takenBy: string | null;
+  takenByMe: boolean;
+  submittedProposalId: string | null;
+}
+
+export interface GoalSignals {
+  canEdit: boolean;
+  catalog: Array<{ key: string; label: string; measures: string }>;
+  goals: Array<{ key: string; label: string; chosenBy: 'sage' | 'steward'; signals: Array<{ key: string; label: string }> }> | null;
+}
+
+export interface VotedAmendment {
+  id: string;
+  section: string;
+  reason: string;
+  proposalId: string;
+  before: unknown;
+  after: unknown;
+  proposedAt: string;
+}
+
 export interface CommonsPost {
   id: string;
   createdAt?: string;
@@ -4561,9 +4601,58 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.myProposalDrafts`, {
       headers: createApiHeaders(null, sessionToken),
     });
-    return readTrpcResult<Array<{ id: string; coopId: string; title: string; body: string }>>(
-      response, 'Could not load proposal drafts',
-    );
+    return readTrpcResult<CommonsProposalDraft[]>(response, "We couldn't load your drafts.");
+  },
+
+  /** The proposal idea behind one of Sage's idea posts, and who has taken it on. */
+  async getProposalIdeaForPost(postId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ postId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.proposalIdeaForPost?input=${input}`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<ProposalIdea | null>(response, "We couldn't load this idea.");
+  },
+
+  async claimProposalIdea(postId: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.claimProposalIdea`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ postId }),
+    });
+    return readTrpcResult<{ draftId: string; coopId: string }>(response, "We couldn't give you this idea. Try again.");
+  },
+
+  /** What Sage counts for each charter goal. */
+  async getGoalSignals(coopId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.goalSignals?input=${input}`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<GoalSignals>(response, "We couldn't load what Sage counts for our goals.");
+  },
+
+  async setGoalSignals(coopId: string, goalKey: string, signals: string[], sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.setGoalSignals`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ coopId, goalKey, signals }),
+    });
+    return readTrpcResult<{ saved: boolean }>(response, "We couldn't save that. Try again.");
+  },
+
+  /** Charter and goals changes members voted through, waiting for a steward. Empty for everyone else. */
+  async getPendingVotedAmendments(coopId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.pendingVotedAmendments?input=${input}`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<VotedAmendment[]>(response, "We couldn't load changes waiting for a steward.");
+  },
+
+  async applyVotedAmendment(coopId: string, amendmentId: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.applyVotedAmendment`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ coopId, amendmentId }),
+    });
+    return readTrpcResult<{ version: number }>(response, "We couldn't apply that change. Try again.");
   },
 
   async getProposalActionSummary(coopId: string, walletAddress: string) {
@@ -4939,11 +5028,11 @@ export const api = {
   /**
    * Submit a new proposal (authenticated — requires wallet)
    */
-  async createProposal(text: string, walletAddress: string, coopId?: string) {
+  async createProposal(text: string, walletAddress: string, coopId?: string, commonsDraftId?: string) {
     const response = await fetch(`${API_BASE_URL}/trpc/proposal.create`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ text, coopId: coopId || resolveCoopId() }),
+      body: JSON.stringify({ text, coopId: coopId || resolveCoopId(), ...(commonsDraftId ? { commonsDraftId } : {}) }),
     });
     const result = await response.json();
     if (result.error)

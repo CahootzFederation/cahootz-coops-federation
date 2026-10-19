@@ -628,7 +628,7 @@ export function ProposalDetailContent() {
                 <Text className="text-charcoal-800 font-medium text-sm">
                   {proposal.proposer?.displayName || walletShort(proposal.proposer?.wallet)}
                 </Text>
-                <Text className="text-charcoal-400 text-xs capitalize">{proposal.proposer?.role}</Text>
+                <Text className="text-charcoal-400 text-xs capitalize">{proposal.proposer?.role === 'bot' ? 'AI helper' : proposal.proposer?.role}</Text>
               </View>
               <View className="items-end">
                 <Text className="text-charcoal-400 text-xs">Submitted</Text>

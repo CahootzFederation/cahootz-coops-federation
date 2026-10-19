@@ -9,6 +9,7 @@ import { FINAL_REVIEW_TYPE_BY_ACTION_TYPE } from "../services/commons-action-too
 import { closeCircleWindowNow } from "../services/circle-window.js";
 import { presentTrails } from "../services/sage-decision-trail.js";
 import { runSageWakeCycle } from "../services/sage-tasks.js";
+import { runProposalWriter } from "../services/sage-proposal-writer.js";
 import { wakeCycleWork } from "../services/sage-wake-work.js";
 import { getSageAutonomyUsage } from "../services/sage-autonomy.js";
 import { notifySageComment } from "../services/sage-comment-notifications.js";
@@ -25,6 +26,7 @@ const Command = z.discriminatedUnion("command", [
   Scoped.extend({ command: z.literal("scan") }),
   Scoped.extend({ command: z.literal("analyze-circle"), groupId: z.string().min(1) }),
   Scoped.extend({ command: z.literal("wake") }),
+  Scoped.extend({ command: z.literal("proposal-writer"), skipLimits: z.boolean().default(false) }),
   Scoped.extend({ command: z.literal("dismiss"), actionId: z.string().min(1) }),
   Scoped.extend({ command: z.literal("edit-draft"), actionId: z.string().min(1), draftText: z.string().trim().max(2000) }),
   Scoped.extend({ command: z.literal("approve"), actionId: z.string().min(1) }),
@@ -199,6 +201,16 @@ export const commonsActionsAdminRouter = router({
       const result = await runSageWakeCycle(coopId, "MANUAL", new Date(), (id) => wakeCycleWork(id));
       return result.skipped ? conflict("A wake run for this Commons is already in progress.") : result;
     }
+    if (input.command === "proposal-writer") {
+      // Runs Sage's proposal writer now: to onboard a Commons, or to try something out. Same rules and checks as
+      // the twice-a-week run, so it may well decide not to propose; the trail says why.
+      const startedAt = new Date();
+      const result = await runProposalWriter(coopId, { now: startedAt, admin: { actor, skipLimits: input.skipLimits } });
+      const trail = await ctx.db.sageDecisionTrail.findFirst({
+        where: { coopId, agent: "sage-proposal-writer", createdAt: { gte: startedAt } }, orderBy: { createdAt: "desc" }, select: { id: true },
+      });
+      return { ...result, trailId: trail?.id ?? null };
+    }
     if (input.command === "analyze-circle") {
       const group = await ctx.db.group.findUnique({ where: { id: input.groupId }, select: { coopId: true, kind: true } });
       if (!group || group.coopId !== coopId || group.kind === "DIRECT") throw new TRPCError({ code: "NOT_FOUND", message: "Circle not found" });
@@ -264,13 +276,15 @@ export const commonsActionsAdminRouter = router({
       return { success: true };
     }
     if (input.command === "remove-question") {
-      // Sage's open question and its rhythm posts (priorities, open requests, appreciation, monthly review).
-      if ((action.type !== "ASK_COMMONS" && action.type !== "COMMUNITY_RHYTHM") || action.status !== "PUBLISHED") conflict("Only a published Sage question or rhythm post can be removed");
+      // Sage's open question, its rhythm posts (priorities, open requests, appreciation, monthly review), and its proposal ideas.
+      if (!["ASK_COMMONS", "COMMUNITY_RHYTHM", "PROPOSE_IDEA"].includes(action.type) || action.status !== "PUBLISHED") conflict("Only a published Sage question, rhythm post or idea can be removed");
       await ctx.db.$transaction(async (tx) => {
         // sourcePostId is the question post itself; only Sage's own post in this Commons is deleted.
         await tx.commonsPost.deleteMany({ where: { id: action.sourcePostId, coopId, author: { isBot: true } } });
+        // An idea nobody has taken on goes with its post; a member's claimed draft stays theirs.
+        if (action.type === "PROPOSE_IDEA") await tx.commonsProposalDraft.deleteMany({ where: { actionId: action.id, authorId: null } });
         await tx.commonsAction.update({ where: { id: action.id }, data: { status: "DISMISSED", reviewedBy: actor, reviewedAt: new Date() } });
-        await tx.commonsActionAudit.create({ data: { actionId: action.id, eventType: action.type === "COMMUNITY_RHYTHM" ? "RHYTHM_POST_REMOVED" : "QUESTION_REMOVED", metadata: { by: actor } } });
+        await tx.commonsActionAudit.create({ data: { actionId: action.id, eventType: action.type === "COMMUNITY_RHYTHM" ? "RHYTHM_POST_REMOVED" : action.type === "PROPOSE_IDEA" ? "IDEA_REMOVED" : "QUESTION_REMOVED", metadata: { by: actor } } });
       });
       return { success: true };
     }

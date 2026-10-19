@@ -10,7 +10,6 @@ import { friendlyError } from '@/lib/friendly-error';
 import { keyboardInsetScrollProps } from '@/lib/keyboard';
 import { ArrowLeft, BadgeCheck, Check, ChevronRight, Minus, Plus, Search, ShoppingBag, ShoppingCart, Store } from 'lucide-react-native';
 
-type ShopCommons = { id: string; name: string };
 const FALLBACK_COMMONS_ID = 'cahootz';
 
 type StoreItem = {
@@ -66,13 +65,12 @@ const money = (value: number) => `$${value.toLocaleString('en-US', { maximumFrac
 
 export default function MarketplaceLane({ initialCoopId }: { initialCoopId?: string }) {
   const params = useLocalSearchParams<{ coopId?: string }>();
-  const { user, sessionToken, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { addItem, items: cartItems, updateQuantity, totalItems } = useCart();
-  // Members can belong to several commons, and each commons has its own
-  // funding shop and member stores. The session's coop is only a default.
+  // Marketplace inherits the Commons chosen in the main app. It stays scoped
+  // to that route instead of offering a second, competing Commons switcher.
   const sessionCoopId = resolveCoopId() === 'error-no-coop-id' ? FALLBACK_COMMONS_ID : resolveCoopId();
-  const [commons, setCommons] = React.useState<ShopCommons[]>([]);
-  const [coopId, setCoopId] = React.useState(initialCoopId || params.coopId || sessionCoopId);
+  const coopId = initialCoopId || params.coopId || sessionCoopId;
   const [stores, setStores] = React.useState<StoreItem[]>([]);
   const [products, setProducts] = React.useState<ProductItem[]>([]);
   const [myStore, setMyStore] = React.useState<any>(null);
@@ -83,31 +81,6 @@ export default function MarketplaceLane({ initialCoopId }: { initialCoopId?: str
   const [refreshing, setRefreshing] = React.useState(false);
   // Set when shops or products fail to load, so a failure never looks like an empty market.
   const [loadError, setLoadError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (!sessionToken) return;
-    let mounted = true;
-    api
-      .listCommonsDirectory(sessionToken)
-      .then((result) => {
-        if (!mounted) return;
-        const active = result.coops.filter((item) => item.accessStatus === 'ACTIVE').map((item) => ({ id: item.id, name: item.name || item.shortName }));
-        const requestedId = initialCoopId || params.coopId || sessionCoopId;
-        const requestedName = user?.coop?.id === requestedId ? user.coop.name : requestedId === FALLBACK_COMMONS_ID ? 'Cahootz' : 'Your commons';
-        const withDefault = active.some((item) => item.id === FALLBACK_COMMONS_ID)
-          ? active
-          : [{ id: FALLBACK_COMMONS_ID, name: user?.coop?.id === FALLBACK_COMMONS_ID ? user.coop.name : 'Cahootz' }, ...active];
-        const choices = withDefault.some((item) => item.id === requestedId)
-          ? withDefault
-          : [{ id: requestedId, name: requestedName }, ...withDefault];
-        setCommons(choices);
-        setCoopId((current) => (choices.some((item) => item.id === current) ? current : requestedId));
-      })
-      .catch((error) => console.error('Failed to load shop commons:', error));
-    return () => {
-      mounted = false;
-    };
-  }, [initialCoopId, params.coopId, sessionCoopId, sessionToken, user?.coop?.id, user?.coop?.name]);
 
   const load = React.useCallback(async () => {
     let failure: unknown = null;
@@ -212,32 +185,6 @@ export default function MarketplaceLane({ initialCoopId }: { initialCoopId?: str
           <Text className="mt-1 text-3xl font-black" style={{ color: colors.ink }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
             Shop together
           </Text>
-          {/* Which commons you're shopping sits right under the title. */}
-          {commons.length > 1 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-3" contentContainerStyle={{ gap: 8 }}>
-              {commons.map((item) => {
-                const selected = item.id === coopId;
-                return (
-                  <TouchableOpacity
-                    key={item.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Shop ${item.name}`}
-                    accessibilityState={{ selected }}
-                    onPress={() => setCoopId(item.id)}
-                    className="rounded-full border px-4 py-2"
-                    style={{
-                      backgroundColor: selected ? colors.ink : '#FFFFFF',
-                      borderColor: selected ? colors.ink : colors.line,
-                    }}
-                  >
-                    <Text className="text-xs font-black" style={{ color: selected ? '#FFFFFF' : colors.ink }}>
-                      {item.name}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          ) : null}
           {myStore ? (
             <TouchableOpacity onPress={() => router.push('/my-stores' as any)} className="mt-4 flex-row items-center rounded-2xl border bg-white p-3" style={{ borderColor: colors.line }}>
               <View className="h-9 w-9 items-center justify-center rounded-xl" style={{ backgroundColor: colors.orangeSoft }}>

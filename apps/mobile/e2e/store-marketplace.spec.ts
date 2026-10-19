@@ -89,25 +89,18 @@ test('member chooses a funding badge, opens the cart, and reaches checkout', { t
   }
 });
 
-test('member of several commons can switch the Marketplace to another commons and see its shops', async ({ browser }) => {
+test('Marketplace inherits the Commons selected before it opens', async ({ browser }) => {
   // Fixture: seed:e2e-marketplace joins User A to "E2E Market Commons" and
   // gives it one payment-ready member shop.
   const member = await newSignedInPage(browser, USER_A_EMAIL);
   try {
-    await openMarketplace(member.page);
-    // Chips show each commons' name (never its id/slug) right under the title.
-    // (The fixture's slug is "E2E Market"; the Cahootz commons' id and slug are "cahootz".)
-    const switchTo = member.page.getByLabel('Shop E2E Market Commons', {
-      exact: true,
-    });
-    await expect(switchTo).toHaveText('E2E Market Commons');
-    await expect(member.page.getByRole('button', { name: /^Shop cahootz$/ })).toHaveCount(0);
-    const title = await member.page.getByText('Shop together', { exact: true }).boundingBox();
-    const chip = await switchTo.boundingBox();
-    const search = await member.page.getByLabel('Search marketplace').boundingBox();
-    expect(chip!.y).toBeGreaterThan(title!.y + title!.height - 1);
-    expect(chip!.y + chip!.height).toBeLessThan(search!.y);
-    await switchTo.click();
+    await member.page.goto('/board?coopId=cahootz');
+    await member.page.getByLabel('Board E2E Market Commons').click();
+    await expect(member.page.getByText('Community board · E2E Market Commons', { exact: true })).toBeVisible();
+    await member.page.getByLabel('Open Marketplace').click();
+    await expect(member.page.getByText('Shop together', { exact: true })).toBeVisible();
+    await expect(member.page.getByLabel('Shop E2E Market Commons')).toHaveCount(0);
+
     await member.page.getByRole('tab', { name: 'stores' }).click();
     await expect(member.page.getByLabel('Open E2E Second Commons Shop')).toBeVisible();
 

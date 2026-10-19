@@ -117,7 +117,13 @@ test('member of several commons can switch the Marketplace to another commons an
     await member.page.getByLabel('Remove one E2E Second Commons Tote').click();
     await expect(member.page.getByLabel('Add E2E Second Commons Tote to cart')).toBeVisible();
 
-    await member.page.getByText('E2E Second Commons Tote', { exact: true }).click();
+    await member.page.getByLabel('View E2E Second Commons Tote').click();
+    await expect(member.page).toHaveURL(/\/product-detail\?id=/);
+    await expect(member.page.getByText('Availability', { exact: true })).toBeVisible();
+    await expect(member.page.getByText('Available', { exact: true })).toBeVisible();
+    await expect(member.page.getByText('Fulfillment', { exact: true })).toBeVisible();
+    await expect(member.page.getByText('Delivery', { exact: true })).toBeVisible();
+    await member.page.getByLabel('Open E2E Second Commons Shop').click();
     await expect(member.page).toHaveURL(/store-detail/);
     await expect(
       member.page.getByText('Member shop in the E2E second commons.', {

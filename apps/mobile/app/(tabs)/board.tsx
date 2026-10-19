@@ -386,7 +386,7 @@ export default function BoardScreen() {
             onSelectLane={selectLane}
             onOpenResources={() => router.push({ pathname: '/(authenticated)/commons-resources', params: { coopId } } as any)}
             onOpenCart={() => router.push('/(authenticated)/cart' as any)}
-            onOpenProduct={(storeId) => router.push(`/store-detail?id=${storeId}` as any)}
+            onOpenProduct={(productId) => router.push(`/product-detail?id=${productId}` as any)}
             onOpenShop={() => router.push(marketplaceShop ? ('/my-stores' as any) : ('/apply-store' as any))}
             onQuickPost={(type) => resetComposer(type)}
             onCreateEvent={() => router.push({ pathname: '/[coopId]/events/create', params: { coopId } })}
@@ -438,7 +438,7 @@ function BoardIndex({ counts, marketplaceError, marketplaceLoading, marketplaceP
   onSelectLane: (lane: BoardLane) => void;
   onOpenResources: () => void;
   onOpenCart: () => void;
-  onOpenProduct: (storeId: string) => void;
+  onOpenProduct: (productId: string) => void;
   onOpenShop: () => void;
   onQuickPost: (type: BoardPostType) => void;
   onCreateEvent: () => void;
@@ -510,7 +510,7 @@ function MarketplacePreview({ error, loading, products, shop, totalItems, twoCol
   twoColumns: boolean;
   onBrowse: () => void;
   onOpenCart: () => void;
-  onOpenProduct: (storeId: string) => void;
+  onOpenProduct: (productId: string) => void;
   onOpenShop: () => void;
 }) {
   const shopStatus = !shop
@@ -550,7 +550,7 @@ function MarketplacePreview({ error, loading, products, shop, totalItems, twoCol
         {loading
           ? [0, 1].map((key) => <View key={key} style={{ width: twoColumns ? '48%' : '100%', height: 78, backgroundColor: tokens.sheet, opacity: 0.7 }} />)
           : visibleProducts.map((product) => (
-              <TouchableOpacity key={product.id} accessibilityRole="button" accessibilityLabel={`View ${product.name}`} onPress={() => onOpenProduct(product.store.id)} style={{ width: twoColumns ? '48%' : '100%', minHeight: 78, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: tokens.rule, backgroundColor: tokens.sheet, padding: 8 }}>
+              <TouchableOpacity key={product.id} accessibilityRole="button" accessibilityLabel={`View ${product.name}`} onPress={() => onOpenProduct(product.id)} style={{ width: twoColumns ? '48%' : '100%', minHeight: 78, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: tokens.rule, backgroundColor: tokens.sheet, padding: 8 }}>
                 <View style={{ width: 58, height: 58, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: tokens.orangePale }}>
                   {product.imageUrl ? <Image source={{ uri: product.imageUrl }} resizeMode="cover" style={{ width: '100%', height: '100%' }} /> : <ShoppingBag size={23} color={tokens.orange} />}
                 </View>

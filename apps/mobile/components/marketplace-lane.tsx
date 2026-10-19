@@ -285,7 +285,7 @@ export default function MarketplaceLane({ initialCoopId }: { initialCoopId?: str
           </Text>
           {mode === 'products'
             ? filteredProducts.map((product) => (
-                <TouchableOpacity key={product.id} onPress={() => router.push(`/store-detail?id=${product.store.id}` as any)} className="mb-3 flex-row rounded-2xl border bg-white p-3" style={{ borderColor: colors.line }}>
+                <TouchableOpacity key={product.id} accessibilityLabel={`View ${product.name}`} onPress={() => router.push(`/product-detail?id=${product.id}` as any)} className="mb-3 flex-row rounded-2xl border bg-white p-3" style={{ borderColor: colors.line }}>
                   <View className="h-20 w-20 overflow-hidden rounded-xl" style={{ backgroundColor: colors.orangeSoft }}>
                     {product.imageUrl ? (
                       <Image source={{ uri: product.imageUrl }} className="h-full w-full" />

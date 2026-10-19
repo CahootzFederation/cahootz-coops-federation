@@ -115,7 +115,7 @@ export function WelcomeIntroPrompt({
           </TouchableOpacity>
         </View>
         {showPrimer ? (
-          <PushPermissionPrimer sessionToken={sessionToken} coopId={coopId} onDone={() => setShowPrimer(false)} />
+          <PushPermissionPrimer sessionToken={sessionToken} onDone={() => setShowPrimer(false)} />
         ) : null}
       </View>
     );

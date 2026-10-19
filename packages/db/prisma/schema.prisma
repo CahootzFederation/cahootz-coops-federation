@@ -2408,8 +2408,8 @@ model PushDevice {
   id     String @id @default(cuid())
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  coopId String @default("cahootz")
 
+  /// A phone belongs to a member, not a Commons: pushes from every Commons they're in go here.
   expoPushToken String  @unique
   platform      String
   deviceName    String?
@@ -2421,7 +2421,6 @@ model PushDevice {
   updatedAt        DateTime @updatedAt
 
   @@index([userId, enabled])
-  @@index([coopId, enabled])
   @@schema("public")
 }
 

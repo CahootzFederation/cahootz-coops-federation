@@ -2735,7 +2735,6 @@ export const api = {
     data: {
       expoPushToken: string;
       platform: string;
-      coopId?: string;
       deviceName?: string | null;
       appVersion?: string | null;
     },

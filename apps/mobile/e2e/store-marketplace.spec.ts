@@ -19,6 +19,12 @@ test('member can open the marketplace directly and start a shop application', as
     await expect(member.page.getByText('Commons shops', { exact: true })).toBeVisible();
     await expect(member.page.getByLabel('Add Seed Supporter to cart')).toBeVisible();
 
+    await member.page.getByLabel('Back to community board').click();
+    await expect(member.page).toHaveURL(/\/board\?coopId=cahootz$/);
+    await expect(member.page.getByText('Find your way around', { exact: true })).toBeVisible();
+    await member.page.getByLabel('Open Marketplace').click();
+    await expect(member.page.getByText('Shop together', { exact: true })).toBeVisible();
+
     await member.page.getByLabel('Open a shop').click();
     await expect(member.page).toHaveURL(/apply-store/);
     await member.page.goBack();

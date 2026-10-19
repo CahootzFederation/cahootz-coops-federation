@@ -8,7 +8,7 @@ import { useCart } from '@/contexts/cart-context';
 import { api, resolveCoopId } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
 import { keyboardInsetScrollProps } from '@/lib/keyboard';
-import { BadgeCheck, Check, ChevronRight, Minus, Plus, Search, ShoppingBag, ShoppingCart, Store } from 'lucide-react-native';
+import { ArrowLeft, BadgeCheck, Check, ChevronRight, Minus, Plus, Search, ShoppingBag, ShoppingCart, Store } from 'lucide-react-native';
 
 type ShopCommons = { id: string; name: string };
 const FALLBACK_COMMONS_ID = 'cahootz';
@@ -183,20 +183,17 @@ export default function MarketplaceLane({ initialCoopId }: { initialCoopId?: str
       <ScrollView {...keyboardInsetScrollProps} className="flex-1" showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.orange} />} contentContainerStyle={{ paddingBottom: 112 }}>
         <View className="px-4 pb-3 pt-2">
           <View className="flex-row items-center justify-between">
-            <View className="flex-1 pr-2">
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel="Back to community board"
-                onPress={() => router.replace({ pathname: '/(tabs)/board', params: { coopId } } as any)}
-              >
-                <Text className="text-[11px] font-black uppercase tracking-widest" style={{ color: colors.orange }}>
-                  Community board · Marketplace
-                </Text>
-              </TouchableOpacity>
-              <Text className="mt-0.5 text-3xl font-black" style={{ color: colors.ink }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                Shop together
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Back to community board"
+              onPress={() => router.replace({ pathname: '/(tabs)/board', params: { coopId } } as any)}
+              className="min-h-11 flex-row items-center pr-3"
+            >
+              <ArrowLeft size={17} strokeWidth={2.4} color={colors.orange} />
+              <Text className="ml-1.5 text-xs font-black" style={{ color: colors.orange }}>
+                Community board
               </Text>
-            </View>
+            </TouchableOpacity>
             <View className="flex-row gap-2">
               <TouchableOpacity accessibilityLabel="Shopping cart" onPress={() => router.push('/(authenticated)/cart' as any)} className="relative h-11 w-11 items-center justify-center rounded-2xl border bg-white" style={{ borderColor: colors.line }}>
                 <ShoppingCart size={21} color={colors.ink} />
@@ -212,6 +209,9 @@ export default function MarketplaceLane({ initialCoopId }: { initialCoopId?: str
               </TouchableOpacity>
             </View>
           </View>
+          <Text className="mt-1 text-3xl font-black" style={{ color: colors.ink }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+            Shop together
+          </Text>
           {/* Which commons you're shopping sits right under the title. */}
           {commons.length > 1 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-3" contentContainerStyle={{ gap: 8 }}>

@@ -26,6 +26,10 @@ The target operating loop is:
 - AI-generated memory is an interpretation with sources and confidence, not a verified fact.
 - Autonomous model usage stops at the configured per-Commons cost or call limit.
 
+## Alert source context (2026-10-19)
+
+The account Alerts screen shows the configured source Commons name for Commons-scoped alerts, including Sage post comments and targeted alerts. Names come from the stored Commons ID, never generated prose; unknown names are omitted.
+
 ## Current foundation
 
 Already present in the repository:

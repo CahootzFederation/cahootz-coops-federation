@@ -65,6 +65,17 @@ test("Commons tab lands on Circle View, and a post board stays inside the tab", 
     await page.reload();
     await expect(page.getByLabel("Back to Circle View")).toHaveCount(0);
 
+    // Commons is already selected while a circle is open. Tapping the
+    // selected tab is a no-op: it must not leave the circle or put Circle
+    // View onto the root navigation stack.
+    const circleUrl = page.url();
+    await page.getByLabel("Commons", { exact: true }).click();
+    await expect(page).toHaveURL(circleUrl);
+    await expect(page.getByText("Post board", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "Share what's happening..." }),
+    ).toBeVisible();
+
     // The post board has its own header drawer. Its Commons rows must open
     // Circle View rather than swapping one post board for another.
     await page.getByLabel("Open menu").click();
@@ -87,8 +98,8 @@ test("Commons tab lands on Circle View, and a post board stays inside the tab", 
     await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Share what's happening..." })).toHaveCount(0);
 
-    // Tapping Commons again from Circle View should not push a second copy
-    // of the screen or duplicate the bottom tab bar.
+    // Tapping Commons from Circle View is also a no-op and must not
+    // duplicate the bottom tab bar.
     await page.getByLabel("Commons", { exact: true }).click();
     await expect(page.getByLabel("Commons", { exact: true })).toHaveCount(1);
   } finally {
@@ -261,8 +272,12 @@ test("two signed-in members see Sage's introduction thread in their welcome loun
       }
     }
 
+    const loungeUrl = pageA.url();
     await pageA.getByLabel("Commons", { exact: true }).click();
-    await expect(pageA.getByText(/^Welcome Lounge \d+$/)).toBeVisible();
+    await expect(pageA).toHaveURL(loungeUrl);
+    await expect(
+      pageA.getByRole("textbox", { name: "Share what's happening..." }),
+    ).toBeVisible();
   } finally {
     await Promise.all([contextA.close(), contextB.close()]);
   }

@@ -419,6 +419,9 @@ export default function NotificationScreen({
                 <Text style={s.text}>{timeAgo(notification.createdAt)}</Text>
                 {!notification.read && <Text style={s.buttonText}>Unread</Text>}
               </View>
+              {notification.commonsName ? (
+                <Text style={s.buttonText}>From {notification.commonsName}</Text>
+              ) : null}
               <Text style={s.heading}>{notification.title}</Text>
               <Text style={s.text}>{notification.body}</Text>
               {notificationDestination(notification) ? (

@@ -10,11 +10,8 @@ async function sessionTokenFor(page: Page) {
 }
 
 async function openNeeds(page: Page) {
-  await page.goto('/board?coopId=cahootz&lane=needs');
+  await page.goto('/board?coopId=e2e-private-shared&lane=needs');
   await expect(page.getByText('Needs & questions', { exact: true })).toBeVisible();
-  const sharedCommons = page.getByLabel('Board E2E Shared Private Commons');
-  await expect(sharedCommons).toBeVisible();
-  await sharedCommons.click();
   await expect(page.getByText('Community board · E2E Shared Private Commons', { exact: true })).toBeVisible();
 }
 
@@ -30,6 +27,23 @@ async function deletePost(sessionToken: string | null, postId: string | undefine
   });
   expect(response.ok).toBe(true);
 }
+
+test('Board has no Commons switcher and keeps its source after reload', async ({ browser }) => {
+  const member = await newSignedInPage(browser, USER_A_EMAIL);
+  try {
+    await member.page.goto('/board?coopId=e2e-market');
+    await expect(member.page.getByText('Community board · E2E Market Commons', { exact: true })).toBeVisible();
+    await expect(member.page.getByRole('button', { name: /^Board / })).toHaveCount(0);
+    await member.page.reload();
+    await expect(member.page.getByText('Community board · E2E Market Commons', { exact: true })).toBeVisible();
+    await expect(member.page.getByRole('button', { name: /^Board / })).toHaveCount(0);
+    await member.page.getByLabel('Open Needs & questions').click();
+    await expect(member.page.getByText('Needs & questions', { exact: true })).toBeVisible();
+    await expect(member.page.getByRole('button', { name: /^Board / })).toHaveCount(0);
+  } finally {
+    await member.context.close();
+  }
+});
 
 test('the board only lists its selected existing community features', { tag: '@smoke' }, async ({ browser }) => {
   const member = await newSignedInPage(browser, USER_A_EMAIL);

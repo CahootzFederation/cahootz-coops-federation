@@ -27,9 +27,8 @@ export function AppBottomNavigation() {
   const hasUnread = (unreadQuery.data?.count ?? 0) > 0;
 
   const screen: string = segments[segments.length - 1] || '';
-  const { entry, coopId } = useGlobalSearchParams<{
+  const { entry } = useGlobalSearchParams<{
     entry?: string | string[];
-    coopId?: string | string[];
   }>();
   const active = screen === 'notifications' || screen === 'notification-settings'
     ? 'Alerts'
@@ -55,17 +54,9 @@ export function AppBottomNavigation() {
         const selected = active === label;
         const color = selected ? '#FF6B00' : '#64748B';
         const onPress = () => {
-          // A post board is a destination inside the Commons tab, not a
-          // detail screen stacked on top of Circle View. The tab always
-          // returns to Circle View for the same Commons directly.
-          if (label === 'Commons' && screen === 'posts') {
-            const activeCoopId = Array.isArray(coopId) ? coopId[0] : coopId;
-            router.replace({
-              pathname: href,
-              params: activeCoopId ? { coopId: activeCoopId } : undefined,
-            });
-            return;
-          }
+          // Circle feeds are destinations inside the already-selected
+          // Commons tab. Re-selecting that tab must not add Circle View to
+          // the root stack or discard the circle someone is reading.
           if (label === 'Commons' && selected) {
             return;
           }

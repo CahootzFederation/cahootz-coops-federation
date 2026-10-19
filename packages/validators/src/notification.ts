@@ -159,6 +159,7 @@ export type NotificationCursor = z.infer<typeof notificationCursorSchema>;
 export interface AccountNotification {
   id: string;
   coopId: string;
+  commonsName?: string | null;
   type: string;
   title: string;
   body: string;

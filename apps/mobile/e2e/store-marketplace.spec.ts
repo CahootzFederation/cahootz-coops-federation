@@ -94,8 +94,7 @@ test('Marketplace inherits the Commons selected before it opens', async ({ brows
   // gives it one payment-ready member shop.
   const member = await newSignedInPage(browser, USER_A_EMAIL);
   try {
-    await member.page.goto('/board?coopId=cahootz');
-    await member.page.getByLabel('Board E2E Market Commons').click();
+    await member.page.goto('/board?coopId=e2e-market');
     await expect(member.page.getByText('Community board · E2E Market Commons', { exact: true })).toBeVisible();
     await member.page.getByLabel('Open Marketplace').click();
     await expect(member.page.getByText('Shop together', { exact: true })).toBeVisible();

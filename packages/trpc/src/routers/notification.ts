@@ -120,10 +120,22 @@ export const notificationRouter = router({
       const hasMore = rows.length > input.limit;
       const notifications = rows.slice(0, input.limit);
       const last = notifications.at(-1);
+      const configs = await ctx.db.coopConfig.findMany({
+        where: { coopId: { in: [...new Set(notifications.map((n) => n.coopId))] }, isActive: true },
+        orderBy: { version: "desc" },
+        select: { coopId: true, name: true },
+      });
+      const commonsNames = new Map<string, string>();
+      for (const config of configs) {
+        if (!commonsNames.has(config.coopId) && config.name?.trim()) {
+          commonsNames.set(config.coopId, config.name.trim());
+        }
+      }
       return {
         notifications: notifications.map((n) => ({
           id: n.id,
           coopId: n.coopId,
+          commonsName: commonsNames.get(n.coopId) || null,
           type: n.type,
           title: n.title,
           body: n.body,

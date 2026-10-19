@@ -28,9 +28,11 @@ export function notificationDestination(
       pathname: "/(authenticated)/commons-invites",
       params: { coopId: id("coopId") || notification.coopId },
     };
+  // A charter or goals change members passed: the Commons page, where a steward applies it.
   if (
     notification.type === "COMMONS_ACCESS_DECLINED" ||
-    notification.type === "FAMILY_SETUP_UPDATED"
+    notification.type === "FAMILY_SETUP_UPDATED" ||
+    notification.type === "SAGE_AMENDMENT_READY"
   )
     return {
       pathname: "/commons/[coopId]",

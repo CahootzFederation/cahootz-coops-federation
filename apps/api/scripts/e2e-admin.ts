@@ -8,6 +8,8 @@
  *     The admin still signs in through the real login page.
  *   tsx --import ./dotenv.config.js scripts/e2e-admin.ts reset-limits <coopId>
  *     Puts the Commons' Sage autonomy limits back to the defaults.
+ *   tsx --import ./dotenv.config.js scripts/e2e-admin.ts outreach-cleanup <memberEmail>
+ *     Deletes the Sage check-ins an admin sent this test member by hand, and their message alerts.
  *
  * Prints one JSON line prefixed with "E2E_RESULT ". Refuses production and non-local databases.
  */
@@ -45,13 +47,31 @@ async function resetLimits(coopId: string) {
   return { reset: true };
 }
 
+async function outreachCleanup(email: string) {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized.endsWith("@test.cahootz.local")) throw new Error("Only seeded test accounts are allowed");
+  const user = await db.user.findUnique({ where: { email: normalized }, select: { id: true } });
+  if (!user) return { deleted: 0 };
+  const comments = await db.groupComment.findMany({
+    where: { systemKey: { startsWith: `sage-weekly:${user.id}:manual-` } }, select: { id: true, groupId: true, createdAt: true },
+  });
+  for (const comment of comments) {
+    await db.notification.deleteMany({
+      where: { userId: user.id, type: "DIRECT_MESSAGE", createdAt: { gte: comment.createdAt }, data: { path: ["groupId"], equals: comment.groupId } },
+    });
+  }
+  await db.groupComment.deleteMany({ where: { id: { in: comments.map((comment) => comment.id) } } });
+  return { deleted: comments.length };
+}
+
 async function main() {
   assertSafeEnvironment();
   const [command, first] = process.argv.slice(2);
   const result =
     command === "login-code" && first ? await loginCode(first)
       : command === "reset-limits" && first ? await resetLimits(first)
-        : (() => { throw new Error("Usage: e2e-admin.ts login-code <email> | reset-limits <coopId>"); })();
+        : command === "outreach-cleanup" && first ? await outreachCleanup(first)
+          : (() => { throw new Error("Usage: e2e-admin.ts login-code <email> | reset-limits <coopId> | outreach-cleanup <memberEmail>"); })();
   console.log(`E2E_RESULT ${JSON.stringify(result)}`);
 }
 

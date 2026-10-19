@@ -18,6 +18,7 @@ import { router } from 'expo-router';
 import { ArrowRight, HandHeart, Lightbulb, MessageCircle, MessagesSquare, UserCircle, Users } from 'lucide-react-native';
 
 import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
+import { InviteContactsCard } from '@/components/invite-contacts-card';
 import { OnboardingFamilyChoices, isFamilyInvitation } from '@/components/onboarding-family-choices';
 
 import { useAuth } from '@/contexts/auth-context';
@@ -30,6 +31,7 @@ import {
 import { track } from '@/lib/analytics';
 import { friendlyError } from '@/lib/friendly-error';
 import { secureStorage } from '@/lib/secure-storage';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 const MIN_SELF_DESCRIPTION = 40;
 const MIN_SIGNAL_ITEMS = 1;
@@ -66,7 +68,7 @@ const appIntroItems = [
   },
 ] as const;
 
-type WizardStep = 'intro' | 'profile' | 'circles';
+type WizardStep = 'intro' | 'profile' | 'invite' | 'circles';
 type ListFieldName = 'interests' | 'resourcesOffered' | 'resourcesNeeded';
 type OptionalFieldName = 'goals' | 'businessSummary' | 'locationSummary';
 
@@ -172,6 +174,14 @@ export default function ProfileOnboardingScreen() {
   const [introCarouselIndex, setIntroCarouselIndex] = useState(0);
   const introCardWidth = Math.max(width - 40, 280);
 
+  // Seeing the intro once is enough: record it as soon as it's shown, so
+  // whichever way someone leaves (Continue, sign in, app close) they don't
+  // get the intro again after logging in.
+  useEffect(() => {
+    if (!firstStepChosen || wizardStep !== 'intro') return;
+    void markAnonymousProfileIntroSeen().catch(() => {});
+  }, [firstStepChosen, wizardStep]);
+
   useEffect(() => {
     if (wizardStep !== 'intro') return;
 
@@ -275,6 +285,13 @@ export default function ProfileOnboardingScreen() {
     router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
   };
 
+  // Leaving the profile form: drop its "Almost there" error so it doesn't
+  // follow the newcomer onto the next step.
+  const goToInviteStep = () => {
+    setError('');
+    setWizardStep('invite');
+  };
+
   const handleSkip = async () => {
     if (isSaving) return;
 
@@ -285,7 +302,7 @@ export default function ProfileOnboardingScreen() {
       // account-only actions on it (join a welcome table) require signing
       // in, same as any other authenticated action in the app.
       void markAnonymousProfileIntroSeen();
-      setWizardStep('circles');
+      goToInviteStep();
       return;
     }
 
@@ -294,7 +311,7 @@ export default function ProfileOnboardingScreen() {
       // Skipping the profile form only skips the form - still show the
       // newcomer-home step so people get a real first action, matching
       // "Skip" on the circles step itself for opting out of that too.
-      setWizardStep('circles');
+      goToInviteStep();
     } catch (err) {
       console.error('Profile onboarding skip failed:', err);
       setError('Could not skip right now. Try again.');
@@ -477,7 +494,7 @@ export default function ProfileOnboardingScreen() {
         });
 
         void markAnonymousProfileIntroSeen();
-        setWizardStep('circles');
+        goToInviteStep();
         return;
       }
 
@@ -500,7 +517,7 @@ export default function ProfileOnboardingScreen() {
       // (contexts/auth-context.tsx). Calling it now would blow past this
       // step the instant it renders.
       setProfileResult(result);
-      setWizardStep('circles');
+      goToInviteStep();
     } catch (err) {
       console.error('Profile onboarding save failed:', err);
       setError(friendlyError(err, "We couldn't save your profile."));
@@ -598,6 +615,33 @@ export default function ProfileOnboardingScreen() {
     );
   }
 
+  if (wizardStep === 'invite') {
+    return (
+      <SafeAreaView style={circlesStyles.screen}>
+        <ScrollView contentContainerStyle={circlesStyles.content}>
+          <Text style={circlesStyles.eyebrow}>Bring people with you</Text>
+          <Text style={circlesStyles.title}>Invite people you know</Text>
+          <Text style={circlesStyles.subtitle}>
+            Cahootz works best with the people you already count on. Invite a friend or relative to
+            join you. You can always do this later.
+          </Text>
+          <InviteContactsCard source="onboarding" />
+        </ScrollView>
+
+        <View style={introStyles.footer}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setWizardStep('circles')}
+            style={introStyles.submitButton}
+          >
+            <Text style={introStyles.submitText}>Next</Text>
+            <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.6} />
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (wizardStep === 'circles') {
     return (
       <SafeAreaView style={circlesStyles.screen}>
@@ -683,8 +727,8 @@ export default function ProfileOnboardingScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
+          {...keyboardScrollProps}
           ref={scrollRef}
-          keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.content}
         >
           <View style={styles.profileIntro}>

@@ -1,11 +1,12 @@
 import { db, type CommonsAction, type CommonsActionReview } from "@repo/db";
 
 import { createNotificationAndPush } from "./push-notification-service.js";
+import { RESPONSIBILITY_CATEGORIES, stillResponsible, type ResponsibilityCategory } from "./sage-responsibility.js";
 import { titlesNearlyIdentical } from "./sage-titles.js";
 
 /**
- * Follow-through on Sage's suggestions that wait on someone (a circle leader's approval, a ride
- * detail, an introduction's yes). Every waiting answer gets one task in the wake loop, so Sage:
+ * Follow-through on Sage's suggestions that wait on someone (a circle leader's approval, an
+ * introduction's yes). Every waiting answer gets one task in the wake loop, so Sage:
  *
  * - closes the suggestion as soon as it no longer applies, judged from app data only (the post or
  *   circle is gone, someone left, the time passed, the work was already done) - no model call;
@@ -31,33 +32,48 @@ const ANSWERED: Record<string, string> = {
   EXPIRED: "The suggestion was closed", SUPERSEDED: "The suggestion changed",
 };
 
+/** Suggestion kinds Sage no longer makes. Any still waiting are closed rather than left unanswerable. */
+const RETIRED_ACTION_TYPES: Partial<Record<CommonsAction["type"], string>> = {
+  RIDE_MATCH_PROPOSAL: "Sage no longer suggests ride matches",
+};
+
+export function retiredSuggestionReason(action: Pick<CommonsAction, "type">): string | null {
+  return RETIRED_ACTION_TYPES[action.type] ?? null;
+}
+
 /**
  * Why a waiting suggestion no longer applies, or null while it still does. Deterministic checks on
  * app data; the reasons are shown to the people involved, so they never name another member.
  */
 export async function suggestionNoLongerApplies(review: Pick<CommonsActionReview, "userId" | "reviewType">, action: CommonsAction, now = new Date()): Promise<string | null> {
+  const retired = retiredSuggestionReason(action);
+  if (retired) return retired;
   const participants = await db.commonsActionParticipant.findMany({ where: { actionId: action.id }, select: { userId: true } });
   const people = [...new Set([review.userId, ...participants.map((participant) => participant.userId)])];
   const active = await db.userCoopMembership.count({ where: { coopId: action.coopId, userId: { in: people }, status: "ACTIVE" } });
-  if (active < people.length) return "Someone it involved is no longer an active member of this Commons";
+  if (active < people.length) return "Someone it involved isn't an active member here anymore";
 
   if (action.circleId) {
     const circle = await db.group.findUnique({ where: { id: action.circleId }, select: { leaderId: true } });
-    if (!circle) return "The circle was deleted";
-    if (review.reviewType === "APPROVE_SUGGESTION" && circle.leaderId !== review.userId) return "The circle has a new leader";
+    if (!circle) return "The circle it was for has been deleted";
+    if (review.reviewType === "APPROVE_SUGGESTION" && circle.leaderId !== review.userId) return "The circle has a new leader now";
     const stillInCircle = await db.groupMember.findUnique({ where: { groupId_userId: { groupId: action.circleId, userId: review.userId } }, select: { id: true } });
-    if (!stillInCircle && circle.leaderId !== review.userId) return "The person asked left the circle";
+    if (!stillInCircle && circle.leaderId !== review.userId) return "The person we asked has left the circle";
   }
 
-  if (action.sourceType === "circle_message") {
-    const message = await db.groupComment.findUnique({ where: { id: action.sourceId }, select: { id: true } });
-    if (!message) return "The message it came from was deleted";
+  const payload = (action.payload ?? {}) as { capability?: unknown; title?: unknown; targetPostId?: unknown; suggestedStartAt?: unknown; routedTo?: unknown; proposalId?: unknown };
+  // A held reply or summary sent to an admin closes once that person no longer holds the role.
+  if (review.reviewType === "APPROVE_SUGGESTION" && typeof payload.routedTo === "string" && RESPONSIBILITY_CATEGORIES.includes(payload.routedTo as ResponsibilityCategory)
+    && !await stillResponsible(action.coopId, payload.routedTo as ResponsibilityCategory, review.userId)) {
+    return "The person we asked isn't an admin here anymore";
   }
-
-  const payload = (action.payload ?? {}) as { capability?: unknown; title?: unknown; targetPostId?: unknown; suggestedStartAt?: unknown };
+  if (action.type === "SUMMARIZE_DISCUSSION") {
+    const proposal = await db.proposal.findUnique({ where: { id: action.sourceId }, select: { status: true, votingEndsAt: true } });
+    if (!proposal || proposal.status !== "VOTABLE" || !proposal.votingEndsAt || proposal.votingEndsAt <= now) return "Voting has already closed";
+  }
   if (typeof payload.targetPostId === "string") {
     const post = await db.commonsPost.findUnique({ where: { id: payload.targetPostId }, select: { id: true } });
-    if (!post) return "The post it was about was deleted";
+    if (!post) return "The post it was about has been deleted";
     if (payload.capability === "comment_on_post") {
       const sageComment = await db.commonsComment.findFirst({
         where: { postId: payload.targetPostId, createdAt: { gt: action.createdAt }, author: { isBot: true } }, select: { id: true },
@@ -67,7 +83,7 @@ export async function suggestionNoLongerApplies(review: Pick<CommonsActionReview
   }
   if (typeof payload.suggestedStartAt === "string") {
     const startAt = new Date(payload.suggestedStartAt);
-    if (!Number.isNaN(startAt.getTime()) && startAt <= now) return "The suggested time has passed";
+    if (!Number.isNaN(startAt.getTime()) && startAt <= now) return "The time it suggested has already passed";
   }
   if (payload.capability === "draft_proposal" && typeof payload.title === "string") {
     const drafts = await db.commonsProposalDraft.findMany({
@@ -75,7 +91,7 @@ export async function suggestionNoLongerApplies(review: Pick<CommonsActionReview
       select: { title: true }, take: 20,
     });
     const title = payload.title;
-    if (drafts.some((draft) => titlesNearlyIdentical(draft.title, title))) return "A proposal draft on this already exists";
+    if (drafts.some((draft) => titlesNearlyIdentical(draft.title, title))) return "There's already a proposal draft for this";
   }
   return null;
 }
@@ -111,7 +127,7 @@ export async function closeSuggestion(actionId: string, reason: string, kind: "N
   for (const { userId } of action ? waiting : []) {
     await createNotificationAndPush(db, {
       userId, coopId: action!.coopId, type: "SAGE_SUGGESTION_CLOSED", push: false,
-      title: "Sage closed a suggestion", body: `"${action!.summary.slice(0, 120)}" won't go ahead. ${reason}.`,
+      title: "Sage closed this one", body: `"${action!.summary.slice(0, 120)}" won't go ahead. ${reason}.`,
       data: { actionId },
     }).catch((error) => console.error("Could not tell a member Sage closed a suggestion", error));
   }
@@ -143,8 +159,8 @@ export async function checkSuggestionReview(task: { id: string; subjectId: strin
 /** The reminder for a suggestion nobody has answered, built from the task - no model call. */
 export function suggestionReminderText(title: string): { title: string; body: string } {
   return {
-    title: "Sage is still waiting on you",
-    body: `"${title.slice(0, 120)}" needs your answer.`,
+    title: "Got a sec?",
+    body: `Sage would love your answer on "${title.slice(0, 120)}" when you have a minute.`,
   };
 }
 

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const notificationCategories = [
   "community",
+  "sage",
   "governance",
   "payments",
   "orders",
@@ -12,6 +13,7 @@ export type NotificationCategory = (typeof notificationCategories)[number];
 export const notificationCategoryLabels: Record<NotificationCategory, string> =
   {
     community: "Community",
+    sage: "Sage",
     governance: "Governance",
     payments: "Payments & rewards",
     orders: "Orders & stores",
@@ -24,13 +26,7 @@ export const notificationCategoryTypes: Record<
 > = {
   community: [
     "COMMONS_COMMENT",
-    "SAGE_COMMENT",
-    "SAGE_REMINDER",
-    "SAGE_ALERT",
-    "SAGE_SUGGESTION_NEEDS_YOU",
-    "SAGE_SUGGESTION_REMINDER",
-    "SAGE_SUGGESTION_DONE",
-    "SAGE_SUGGESTION_CLOSED",
+    "SAGE_RHYTHM",
     "COMMONS_SUPPORT",
     "COMMONS_COMMENT_LIKE",
     "PERSONAL_PAGE_COMMENT",
@@ -38,6 +34,7 @@ export const notificationCategoryTypes: Record<
     "MENTION",
     "CIRCLE_POST",
     "CIRCLE_COMMENT",
+    "CIRCLE_HIGHLIGHT",
     "NEW_FOLLOWER",
     "EVENT_REMINDER",
     "WELCOME_LOUNGE_JOIN",
@@ -54,6 +51,17 @@ export const notificationCategoryTypes: Record<
     "COMMONS_MEMBER_JOINED",
     "CIRCLE_MEMBER_JOINED",
     "DIRECT_MESSAGE",
+  ],
+  sage: [
+    "SAGE_COMMENT",
+    "SAGE_REMINDER",
+    "SAGE_ALERT",
+    "SAGE_SUGGESTION_NEEDS_YOU",
+    "SAGE_SUGGESTION_REMINDER",
+    "SAGE_SUGGESTION_DONE",
+    "SAGE_SUGGESTION_CLOSED",
+    "SAGE_PRE_VOTE",
+    "SAGE_AMENDMENT_READY",
   ],
   governance: [
     "PROPOSAL_CREATED",
@@ -105,6 +113,7 @@ export function notificationCategory(type: string): NotificationCategory {
 export const notificationPreferencesSchema = z.object({
   pushEnabled: z.boolean(),
   community: z.boolean(),
+  sage: z.boolean(),
   governance: z.boolean(),
   payments: z.boolean(),
   orders: z.boolean(),
@@ -117,19 +126,25 @@ export type NotificationPreferences = z.infer<
 export const defaultNotificationPreferences: NotificationPreferences = {
   pushEnabled: true,
   community: true,
+  sage: true,
   governance: true,
   payments: true,
   orders: true,
   onboarding: true,
   other: true,
 };
-export const circleNotificationLevels = ["ALL", "MENTIONS", "NONE"] as const;
+export const circleNotificationLevels = [
+  "ALL",
+  "HIGHLIGHTS",
+  "MENTIONS",
+  "NONE",
+] as const;
 export const circleNotificationLevelSchema = z.enum(circleNotificationLevels);
 export type CircleNotificationLevel = z.infer<
   typeof circleNotificationLevelSchema
 >;
 export const defaultCircleNotificationLevel: CircleNotificationLevel =
-  "MENTIONS";
+  "HIGHLIGHTS";
 export function parseCircleNotificationLevel(
   value: string | null | undefined,
 ): CircleNotificationLevel {

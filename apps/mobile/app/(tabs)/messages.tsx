@@ -1,6 +1,6 @@
 // Hallmark - pre-emit critique: P4 H4 E4 S4 R4 V4
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
   CheckCheck,
@@ -14,6 +14,7 @@ import {
 
 import { Text } from '@/components/ui/text';
 import { MentionText } from '@/components/mention-text';
+import { keyboardAvoidingBehavior, keyboardScrollProps } from '@/lib/keyboard';
 import {
   api,
   type DirectMember,
@@ -22,6 +23,7 @@ import {
   type DirectThread,
 } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import { SageAvatar } from '@/components/sage-avatar';
 import { SageDecisionTrails } from '@/components/sage-decision-trail';
 import { LoadError } from '@/components/load-error';
 import { friendlyError } from '@/lib/friendly-error';
@@ -53,7 +55,7 @@ function threadToConversation(thread: DirectThread): Conversation {
 
 function memberToConversation(member: DirectMember): Conversation {
   return {
-    person: { id: member.id, name: member.name, handle: member.handle },
+    person: { id: member.id, name: member.name, handle: member.handle, isSage: member.isSage },
     groupId: null,
     preview: 'Start a private conversation',
     lastMessageAt: null,
@@ -79,6 +81,9 @@ export default function MessagesScreen() {
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  // Shown as a faded bubble until the send returns. A Sage reply is written
+  // inside the send request, so Sage shows as thinking while isSending.
+  const [pendingBody, setPendingBody] = useState<string | null>(null);
   const [messageDraft, setMessageDraft] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   // Sending failed (shown above the conversation).
@@ -218,20 +223,29 @@ export default function MessagesScreen() {
     if (!content || !selected || !sessionToken || isSending) return;
 
     setIsSending(true);
+    setPendingBody(content);
+    setMessageDraft('');
+    let sent = false;
     try {
       const groupId =
         selected.groupId ?? (await api.openDirectThread(selected.person.id, sessionToken)).groupId;
       const result = await api.sendDirectMessage(groupId, content, sessionToken);
+      sent = true;
       setMessages((current) => [...current, result.message]);
-      setMessageDraft('');
+      setPendingBody(null);
       setDmError('');
       await loadThreads();
       // Picks up an immediate reply (e.g. from Sage) in the same round trip.
       await loadMessages(groupId);
     } catch (error) {
       console.error('Failed to send direct message:', error);
-      setDmError(friendlyError(error, "We couldn't send your message. It's still in the box."));
+      if (!sent) {
+        // Put the note back unless they've already started typing another one.
+        setMessageDraft((current) => current || content);
+        setDmError(friendlyError(error, "We couldn't send your message. It's still in the box."));
+      }
     } finally {
+      setPendingBody(null);
       setIsSending(false);
     }
   };
@@ -269,7 +283,7 @@ export default function MessagesScreen() {
   }
 
   return (
-    <View className="flex-1 bg-stone-50">
+    <KeyboardAvoidingView className="flex-1 bg-stone-50" behavior={keyboardAvoidingBehavior}>
       <View className="px-5 pt-14 pb-4" style={{ backgroundColor: '#12362D' }}>
         <View className="flex-row items-center justify-between">
           <View>
@@ -302,7 +316,11 @@ export default function MessagesScreen() {
         </View>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 24 }}>
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 24 }}
+        {...keyboardScrollProps}
+      >
         <View className="border-b border-stone-200 bg-white px-5 py-3">
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View className="flex-row gap-3">
@@ -319,9 +337,13 @@ export default function MessagesScreen() {
                     activeOpacity={0.75}
                   >
                     <View className="mb-2 flex-row items-center gap-2">
-                      <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
-                        <Text className="font-black text-stone-700">{conversation.person.name.slice(0, 1)}</Text>
-                      </View>
+                      {conversation.person.isSage ? (
+                        <SageAvatar size={36} />
+                      ) : (
+                        <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
+                          <Text className="font-black text-stone-700">{conversation.person.name.slice(0, 1)}</Text>
+                        </View>
+                      )}
                       <View className="flex-1">
                         <Text className="font-bold text-gray-900" numberOfLines={1}>
                           {conversation.person.name}
@@ -384,9 +406,13 @@ export default function MessagesScreen() {
           ) : (
           <View className="rounded-xl border border-stone-200 bg-white">
             <View className="flex-row items-center gap-3 border-b border-stone-100 p-4">
-              <View className="h-11 w-11 items-center justify-center rounded-xl bg-emerald-100">
-                <Text className="font-black text-emerald-900">{selected.person.name.slice(0, 1)}</Text>
-              </View>
+              {selected.person.isSage ? (
+                <SageAvatar size={44} motion="blink" />
+              ) : (
+                <View className="h-11 w-11 items-center justify-center rounded-xl bg-emerald-100">
+                  <Text className="font-black text-emerald-900">{selected.person.name.slice(0, 1)}</Text>
+                </View>
+              )}
               <View className="flex-1">
                 <Text className="font-black text-gray-900">{selected.person.name}</Text>
                 <View className="flex-row items-center gap-1">
@@ -433,6 +459,23 @@ export default function MessagesScreen() {
                   </View>
                 </View>
               ))}
+              {pendingBody ? (
+                <View className="max-w-[86%] self-end rounded-xl bg-emerald-800 px-4 py-3" style={{ opacity: 0.7 }}>
+                  <MentionText
+                    content={pendingBody}
+                    style={{ fontSize: 14, lineHeight: 20, color: '#FFFFFF' }}
+                    mentionClassName="font-bold text-white underline"
+                  />
+                </View>
+              ) : null}
+              {isSending && selected.person.isSage ? (
+                <View className="flex-row items-center gap-2 self-start">
+                  <SageAvatar size={32} motion="thinking" />
+                  <View className="rounded-xl bg-stone-100 px-4 py-3">
+                    <Text className="text-sm text-gray-500">Sage is thinking…</Text>
+                  </View>
+                </View>
+              ) : null}
             </View>
 
             {selectedGroupId ? (
@@ -440,31 +483,6 @@ export default function MessagesScreen() {
                 <SageDecisionTrails filter={{ circleId: selectedGroupId }} sessionToken={sessionToken} refreshKey={messages.length} hideWhenEmpty />
               </View>
             ) : null}
-
-            <View className="border-t border-stone-100 p-3">
-              <View className="flex-row items-end gap-2">
-                <TextInput
-                  value={messageDraft}
-                  onChangeText={setMessageDraft}
-                  placeholder={`Message ${selected.person.name}`}
-                  accessibilityLabel={`Message ${selected.person.name}`}
-                  placeholderTextColor="#78716C"
-                  multiline
-                  className="min-h-11 flex-1 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-base text-gray-900"
-                  style={{ maxHeight: 96, textAlignVertical: 'top' }}
-                />
-                <TouchableOpacity
-                  onPress={sendMessage}
-                  disabled={isSending}
-                  accessibilityLabel="Send message"
-                  className="h-11 w-11 items-center justify-center rounded-xl bg-red-600"
-                  style={{ opacity: isSending ? 0.6 : 1 }}
-                  activeOpacity={0.8}
-                >
-                  {isSending ? <ActivityIndicator size="small" color="white" /> : <Send size={18} color="white" />}
-                </TouchableOpacity>
-              </View>
-            </View>
           </View>
           )}
 
@@ -496,6 +514,35 @@ export default function MessagesScreen() {
           </View>
         </View>
       </ScrollView>
-    </View>
+
+      {selected ? (
+        // Pinned below the conversation so it rides up with the keyboard and
+        // Send is always reachable; dragging the conversation down hides the keyboard.
+        <View className="border-t border-stone-200 bg-white px-4 py-3">
+          <View className="flex-row items-end gap-2">
+            <TextInput
+              value={messageDraft}
+              onChangeText={setMessageDraft}
+              placeholder={`Message ${selected.person.name}`}
+              accessibilityLabel={`Message ${selected.person.name}`}
+              placeholderTextColor="#78716C"
+              multiline
+              className="min-h-11 flex-1 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-base text-gray-900"
+              style={{ maxHeight: 96, textAlignVertical: 'top' }}
+            />
+            <TouchableOpacity
+              onPress={sendMessage}
+              disabled={isSending}
+              accessibilityLabel="Send message"
+              className="h-11 w-11 items-center justify-center rounded-xl bg-red-600"
+              style={{ opacity: isSending ? 0.6 : 1 }}
+              activeOpacity={0.8}
+            >
+              {isSending ? <ActivityIndicator size="small" color="white" /> : <Send size={18} color="white" />}
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
+    </KeyboardAvoidingView>
   );
 }

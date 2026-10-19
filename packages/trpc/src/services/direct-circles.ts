@@ -3,14 +3,19 @@ import { randomBytes } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 
 import type { AccountAuthenticatedContext } from '../context.js';
-import { getAgent } from '../agents/registry.js';
+import { runSageCommonsReply } from '../agents/registry.js';
+import { buildSageReplyTools } from '../agents/tools/member-action-tools.js';
+import { safeFirstName } from './sage-reply-templates.js';
 import { auditLogEntry } from '../lib/audit.js';
 import { isSageUser } from '../lib/bot.js';
 import { COMMONS_COOP_ID, ensureCommonsMembership } from '../lib/commons.js';
 import { encodeMentions } from '../lib/mentions.js';
 import { createNotificationAndPush } from './push-notification-service.js';
 import { traceSageReply } from './sage-reply-trails.js';
-import { handlePrivateCheckinSignal } from './sage-private-signals.js';
+import { checkinFollowupAllowed, runCheckinFollowup } from './sage-checkin-followup.js';
+import { handleConversationConfirmation } from './sage-member-actions.js';
+import { handlePrivateCheckinSignal, relevantCommonsForCheckin } from './sage-private-signals.js';
+import { handleMemberMemoryRequest, loadMemberMemory, memberMemoryLines, memberMemoryScopeForDm, parseMemberMemoryRequest } from './sage-member-memory.js';
 
 // A direct message is a private circle with exactly two members. It reuses
 // circle membership for access control and GroupComment for messages, but
@@ -19,16 +24,16 @@ import { handlePrivateCheckinSignal } from './sage-private-signals.js';
 export const DIRECT_KIND = 'DIRECT';
 
 type Db = AccountAuthenticatedContext['db'];
-type Person = { id: string; name: string | null; email: string; handle: string | null };
+type Person = { id: string; name: string | null; email: string; handle: string | null; isBot: boolean; roles: string[] };
 
-const personSelect = { id: true, name: true, email: true, handle: true } as const;
+const personSelect = { id: true, name: true, email: true, handle: true, isBot: true, roles: true } as const;
 
 function displayName(user: { name: string | null; email: string }) {
   return user.name || user.email.split('@')[0] || 'Member';
 }
 
 function personSummary(user: Person) {
-  return { id: user.id, name: displayName(user), handle: user.handle };
+  return { id: user.id, name: displayName(user), handle: user.handle, isSage: isSageUser(user) };
 }
 
 export function directKeyFor(coopId: string, userIdA: string, userIdB: string) {
@@ -105,7 +110,7 @@ export async function openDirectCircle(
 
   const other = await db.user.findUnique({
     where: { id: otherUserId },
-    select: { ...personSelect, deletedAt: true, isBot: true, roles: true },
+    select: { ...personSelect, deletedAt: true },
   });
   if (!other || other.deletedAt || (other.isBot && !isSageUser(other))) {
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Member not found.' });
@@ -196,7 +201,7 @@ export async function sendDirectCircleMessage(
   const otherId = participantIds(group.directKey).find((id) => id !== sender.id)!;
   const other = await db.user.findUnique({
     where: { id: otherId },
-    select: { ...personSelect, deletedAt: true, isBot: true, roles: true },
+    select: { ...personSelect, deletedAt: true },
   });
   if (!other || other.deletedAt) {
     throw new TRPCError({ code: 'NOT_FOUND', message: 'Member not found.' });
@@ -253,6 +258,7 @@ async function replyAsSage(
 ) {
   const { group, sender, sage, message } = input;
   try {
+    const memoryRequest = parseMemberMemoryRequest(message.content) !== null;
     const privateSignal = await handlePrivateCheckinSignal({
       groupId: group.id,
       coopId: group.coopId,
@@ -260,14 +266,88 @@ async function replyAsSage(
       messageId: message.id,
       content: message.content,
       createdAt: message.createdAt,
+      memoryRequest,
     });
     if (privateSignal.safetyReply) {
       await db.groupComment.create({ data: { groupId: group.id, authorId: sage.id, content: privateSignal.safetyReply } });
       await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
       return;
     }
-    const agent = getAgent('sage-commons-reply');
-    if (!agent) return;
+    // "What do you remember about me?" and "forget that" are answered in code, no model call.
+    if (memoryRequest) {
+      const lastSage = await db.groupComment.findFirst({
+        where: { groupId: group.id, authorId: sage.id, createdAt: { lt: message.createdAt } },
+        orderBy: { createdAt: 'desc' }, select: { content: true },
+      });
+      const memoryAnswer = await handleMemberMemoryRequest({ memberId: sender.id, content: message.content, lastSageMessage: lastSage?.content });
+      if (memoryAnswer) {
+        await db.groupComment.create({ data: { groupId: group.id, authorId: sage.id, content: memoryAnswer.reply } });
+        await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
+        return;
+      }
+    }
+    // A plain yes or no to Sage's latest ask (a post or an introduction) is handled in code, no model call.
+    const confirmed = await handleConversationConfirmation({
+      conversationGroupId: group.id, memberId: sender.id, sageId: sage.id, content: message.content,
+    });
+    if (confirmed) {
+      if (confirmed.reply) {
+        await db.groupComment.create({ data: { groupId: group.id, authorId: sage.id, content: confirmed.reply } });
+        await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
+      }
+      await confirmed.afterReply?.();
+      return;
+    }
+    // Sage can act for the member here. Asks it makes are added after its reply, past the reply's safety
+    // check, so the member sees exactly what a "yes" would do.
+    const actions = buildSageReplyTools({ kind: 'dm', memberId: sender.id, conversationGroupId: group.id, coopId: group.coopId });
+    const publish = async (reply: string) => {
+      const asks = actions.state.asks.slice(-1);
+      // When Sage saved a need from this reply it says so, last, so "forget that" refers to it.
+      const parts = [reply, ...asks, ...(privateSignal.memoryNotice ? [privateSignal.memoryNotice] : [])];
+      const content = parts.join('\n\n');
+      await db.groupComment.create({
+        data: { groupId: group.id, authorId: sage.id, content },
+      });
+      await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
+    };
+    // Needs this member mentioned in earlier check-ins. This is their own private conversation, so it's the
+    // one place besides the weekly check-in where that memory is used, scoped by memberMemoryScopeForDm.
+    const checkin = privateSignal.checkin;
+    const memoryScope = memberMemoryScopeForDm({
+      dmCoopId: group.coopId, platformCoopId: COMMONS_COOP_ID, inCheckin: Boolean(checkin),
+      checkinCoopIds: checkin && group.coopId === COMMONS_COOP_ID ? await relevantCommonsForCheckin(sender.id, checkin.content) : [],
+    });
+    const remembered = !memoryScope ? [] : memberMemoryLines(await loadMemberMemory({
+      memberId: sender.id, purpose: 'sage dm reply', focusCoopId: memoryScope.focusCoopId, before: message.createdAt,
+    }).catch(() => []));
+    // Replies to a weekly check-in get a short conversational follow-up, a few turns per check-in.
+    if (checkin) {
+      const since = await db.groupComment.findMany({
+        where: { groupId: group.id, id: { notIn: [checkin.id, message.id] }, createdAt: { gt: checkin.createdAt } },
+        orderBy: { createdAt: 'asc' },
+        take: 20,
+      });
+      const followupsSent = since.filter((m) => m.authorId === sage.id).length;
+      if (checkinFollowupAllowed(followupsSent)) {
+        const threadContext = since
+          .map((m) => `${m.authorId === sender.id ? displayName(sender) : 'Sage'}: ${m.content}`)
+          .join('\n');
+        await traceSageReply(
+          { kind: 'dm', coopId: group.coopId, groupId: group.id, messageId: message.id },
+          { message: message.content, threadContext, threadCount: since.length, remembered, toolLog: actions.state.log },
+          async (cleanMessage, thread) => {
+            const out = await runCheckinFollowup({
+              coopId: group.coopId, checkin: checkin.content, threadContext: thread, message: cleanMessage, followupsSent,
+              tools: actions.tools, toolInstructions: actions.instructions, memberMemory: remembered, memberName: safeFirstName(sender.name) ?? undefined,
+            });
+            return { reply: out.reply, grounding: { charterChars: 0, missionGoalCount: 0, model: out.model, usedFallback: out.usedFallback } };
+          },
+          publish,
+        );
+        return;
+      }
+    }
     const prior = await db.groupComment.findMany({
       where: { groupId: group.id, id: { not: message.id } },
       orderBy: { createdAt: 'desc' },
@@ -279,15 +359,13 @@ async function replyAsSage(
       .join('\n');
     await traceSageReply(
       { kind: 'dm', coopId: group.coopId, groupId: group.id, messageId: message.id },
-      { message: message.content, threadContext, threadCount: prior.length },
-      (cleanMessage, thread) => agent.run({ coopId: group.coopId, message: cleanMessage, threadContext: thread }),
-      async (reply) => {
-        const content = privateSignal.consentQuestion ? `${reply}\n\n${privateSignal.consentQuestion}` : reply;
-        await db.groupComment.create({
-          data: { groupId: group.id, authorId: sage.id, content },
-        });
-        await db.group.update({ where: { id: group.id }, data: { lastActivityAt: new Date() } });
-      },
+      { message: message.content, threadContext, threadCount: prior.length, remembered, toolLog: actions.state.log },
+      (cleanMessage, thread) => runSageCommonsReply(
+        { coopId: group.coopId, message: cleanMessage, threadContext: thread, channel: 'dm', memberMemory: remembered, memberName: safeFirstName(sender.name) ?? undefined },
+        undefined,
+        actions,
+      ),
+      publish,
     );
   } catch (error) {
     console.error('Sage DM auto-reply failed:', error);

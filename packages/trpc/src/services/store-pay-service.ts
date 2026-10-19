@@ -6,6 +6,7 @@
 import { db, PaymentRequestStatus } from "@repo/db";
 import { sendToSoulaanUser, MEMBER_PAYMENT_FEE_USD } from "./p2p-service.js";
 import { awardStoreTransactionReward } from "./wallet-service.js";
+import { formatCoinAmount, getCoinName } from "./coop-chain-config-service.js";
 
 // ─────────────────────────────────────────────────────────
 // Short Code Generation
@@ -378,14 +379,15 @@ export async function payRequest(params: PayRequestParams): Promise<PayRequestRe
   }
 
   // Create notification for store owner
-  const scMessage = scReward.storeReward > 0 ? ` (+${scReward.storeReward.toFixed(2)} SC)` : '';
+  const coinName = await getCoinName(request.store.coopId);
+  const scMessage = scReward.storeReward > 0 ? `, plus ${formatCoinAmount(scReward.storeReward, coinName)}` : '';
   await db.notification.create({
     data: {
       userId: request.store.ownerId,
       coopId: request.store.coopId,
       type: 'STORE_PAYMENT_RECEIVED',
-      title: 'Payment Received!',
-      body: `You received $${amount.toFixed(2)}${scMessage}${request.description ? ` for "${request.description}"` : ''}`,
+      title: 'You got paid',
+      body: `You got $${amount.toFixed(2)}${scMessage}${request.description ? ` for "${request.description}"` : ''}.`,
       data: {
         paymentRequestId: request.id,
         transferId: transferResult.transferId,
@@ -403,8 +405,8 @@ export async function payRequest(params: PayRequestParams): Promise<PayRequestRe
         userId: payerId,
         coopId: request.store.coopId,
         type: 'SC_REWARD_EARNED',
-        title: 'SC Reward Earned!',
-        body: `You earned ${scReward.customerReward.toFixed(2)} SC for shopping at ${request.store.name}`,
+        title: `You earned ${coinName ?? 'coins'}`,
+        body: `You got ${formatCoinAmount(scReward.customerReward, coinName)} for shopping at ${request.store.name}. Thanks for buying from a member.`,
         data: {
           transferId: transferResult.transferId,
           storeName: request.store.name,
@@ -483,14 +485,15 @@ export async function payByStoreCode(params: PayByCodeParams): Promise<PayReques
   }
 
   // Create notification for store owner
-  const scMessage = scReward.storeReward > 0 ? ` (+${scReward.storeReward.toFixed(2)} SC)` : '';
+  const coinName = await getCoinName(store.coopId);
+  const scMessage = scReward.storeReward > 0 ? `, plus ${formatCoinAmount(scReward.storeReward, coinName)}` : '';
   await db.notification.create({
     data: {
       userId: store.ownerId,
       coopId: store.coopId,
       type: 'STORE_PAYMENT_RECEIVED',
-      title: 'Payment Received!',
-      body: `You received $${amount.toFixed(2)}${scMessage}${note ? ` - "${note}"` : ''}`,
+      title: 'You got paid',
+      body: `You got $${amount.toFixed(2)}${scMessage}${note ? ` for "${note}"` : ''}.`,
       data: {
         transferId: transferResult.transferId,
         amount,
@@ -507,8 +510,8 @@ export async function payByStoreCode(params: PayByCodeParams): Promise<PayReques
         userId: payerId,
         coopId: store.coopId,
         type: 'SC_REWARD_EARNED',
-        title: 'SC Reward Earned!',
-        body: `You earned ${scReward.customerReward.toFixed(2)} SC for shopping at ${store.name}`,
+        title: `You earned ${coinName ?? 'coins'}`,
+        body: `You got ${formatCoinAmount(scReward.customerReward, coinName)} for shopping at ${store.name}. Thanks for buying from a member.`,
         data: {
           transferId: transferResult.transferId,
           storeName: store.name,

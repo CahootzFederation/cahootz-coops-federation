@@ -5,27 +5,13 @@ export function useLocalFallback(): boolean {
   const triggerKey = process.env.TRIGGER_SECRET_KEY?.trim();
   const wrongLocalKey = Boolean(triggerKey && process.env.NODE_ENV !== "production" && !triggerKey.startsWith("tr_dev_"));
   if (wrongLocalKey && !warnedAboutLocalTriggerKey) {
-    console.warn("Sage ride-match jobs are running in the API because the local Trigger key is not a development key. Set a tr_dev_ key to use trigger dev.");
+    console.warn("Sage jobs are running in the API because the local Trigger key is not a development key. Set a tr_dev_ key to use trigger dev.");
     warnedAboutLocalTriggerKey = true;
   }
   return !triggerKey || wrongLocalKey;
 }
 
-/** Dispatch ride-match detection for a closed circle window. The CommonsContentScan claim prevents repeat analysis. */
-export async function enqueueSageRideMatchDetect(windowId: string): Promise<void> {
-  if (useLocalFallback()) {
-    const { processRideMatchWindow } = await import("./sage-ride-match-agent.js");
-    await processRideMatchWindow(windowId);
-    return;
-  }
-  const { tasks } = await import("@trigger.dev/sdk");
-  await tasks.trigger("sage-ride-match-detect", { windowId }, {
-    idempotencyKey: `sage-ride-match-detect:${windowId}`,
-    idempotencyKeyTTL: "24h",
-  });
-}
-
-/** Dispatch trend detection for a closed circle window, independent of ride-match detection on the same window. */
+/** Dispatch trend detection for a closed circle window. */
 export async function enqueueSageTrendDetect(windowId: string): Promise<void> {
   if (useLocalFallback()) {
     const { processTrendWindow } = await import("./sage-trend-agent.js");

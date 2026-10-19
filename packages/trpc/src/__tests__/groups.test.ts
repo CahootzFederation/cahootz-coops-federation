@@ -344,7 +344,7 @@ describe('groupsRouter', () => {
         coopConfig: {
           findFirst: vi
             .fn()
-            .mockResolvedValue({ minScBalanceToCreateGroup: 10 }),
+            .mockResolvedValue({ minScBalanceToCreateGroup: 10, scTokenName: 'SoulCoin' }),
         },
       });
       vi.mocked(validateSCBalance).mockResolvedValueOnce(5);
@@ -353,6 +353,7 @@ describe('groupsRouter', () => {
         callerFor(db).create({ name: 'Block Club' }),
       ).rejects.toMatchObject({
         code: 'FORBIDDEN',
+        message: 'You need at least 10.00 SoulCoin to start a space. You have 5.00 SoulCoin.',
       });
       expect(db.group.create).not.toHaveBeenCalled();
     });
@@ -650,7 +651,13 @@ describe('groupsRouter', () => {
         data: { status: 'ACCEPTED', respondedAt: expect.any(Date) },
       });
       expect(db.groupMember.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ create: { groupId: 'group_1', userId: ACTIVE_USER.id } }),
+        expect.objectContaining({
+          create: {
+            groupId: 'group_1',
+            userId: ACTIVE_USER.id,
+            notificationLevel: 'HIGHLIGHTS',
+          },
+        }),
       );
     });
 
@@ -966,7 +973,7 @@ describe('groupsRouter', () => {
       expect(threads).toEqual([
         expect.objectContaining({
           groupId: 'dm_1',
-          person: { id: OTHER_USER.id, name: 'Bob', handle: 'bob' },
+          person: { id: OTHER_USER.id, name: 'Bob', handle: 'bob', isSage: false },
           preview: 'see you there',
           lastMessageFromMe: false,
           unreadCount: 2,
@@ -1035,7 +1042,11 @@ describe('groupsRouter', () => {
 
       expect(result.joined).toBe(true);
       expect(db.groupMember.upsert).toHaveBeenCalledWith(expect.objectContaining({
-        create: { groupId: 'group_1', userId: ACTIVE_USER.id },
+        create: {
+          groupId: 'group_1',
+          userId: ACTIVE_USER.id,
+          notificationLevel: 'HIGHLIGHTS',
+        },
       }));
     });
 
@@ -1054,7 +1065,7 @@ describe('groupsRouter', () => {
         userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null) },
       });
 
-      await expect(callerFor(db).joinPublic({ groupId: 'group_1' })).rejects.toThrow('Join this common first');
+      await expect(callerFor(db).joinPublic({ groupId: 'group_1' })).rejects.toThrow('Join this commons first');
       expect(db.groupMember.upsert).not.toHaveBeenCalled();
     });
   });
@@ -1540,10 +1551,14 @@ describe('groupsRouter', () => {
         }),
       );
       expect(db.groupMember.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { groupId: 'wt_1', userId: 'guide_1', role: 'GUIDE' } }),
+        expect.objectContaining({
+          data: { groupId: 'wt_1', userId: 'guide_1', role: 'GUIDE', notificationLevel: 'HIGHLIGHTS' },
+        }),
       );
       expect(db.groupMember.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' } }),
+        expect.objectContaining({
+          data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER', notificationLevel: 'HIGHLIGHTS' },
+        }),
       );
       expect(db.commonsPost.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -1576,7 +1591,9 @@ describe('groupsRouter', () => {
 
       expect(db.groupMember.create).toHaveBeenCalledTimes(1);
       expect(db.groupMember.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' } }),
+        expect.objectContaining({
+          data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER', notificationLevel: 'HIGHLIGHTS' },
+        }),
       );
       expect(db.group.create).not.toHaveBeenCalled();
       expect(db.commonsPost.create).not.toHaveBeenCalled();
@@ -1755,7 +1772,9 @@ describe('groupsRouter', () => {
       // Only the NEWCOMER row is created - no GUIDE membership when unguided.
       expect(db.groupMember.create).toHaveBeenCalledTimes(1);
       expect(db.groupMember.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' } }),
+        expect.objectContaining({
+          data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER', notificationLevel: 'HIGHLIGHTS' },
+        }),
       );
       expect(result.welcomeTableNumber).toBe(1);
     });

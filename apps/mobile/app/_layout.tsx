@@ -1,4 +1,4 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -13,7 +13,6 @@ import "../global.css"
 import { PortalHost } from '@rn-primitives/portal';
 import Toast from 'react-native-toast-message';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { NotificationResponseHandler } from '@/components/notification-response-handler';
 import { InAppAlertPopup } from '@/components/in-app-alert-popup';
 import { PendingInvitationResume } from '@/components/pending-invitation-resume';
@@ -25,6 +24,7 @@ import { PaymentConfirmationProvider } from '@/components/payment-confirmation-p
 import StripeWrapper from '@/components/providers/StripeWrapper';
 import { toastConfig } from '@/lib/toast-config';
 import * as Sentry from '@sentry/react-native';
+import { colorScheme as nativeWindColorScheme } from 'nativewind';
 
 Sentry.init({
   dsn: 'https://659be33460f9e6586e39aeb0f5b8b012@o4511715053797376.ingest.us.sentry.io/4512028976283648',
@@ -135,7 +135,11 @@ function ObserveInteractiveMarker() {
 }
 
 function RootLayout() {
-  const colorScheme = useColorScheme();
+  // Native configuration starts iOS and Android in light mode. This keeps
+  // NativeWind aligned on web and after app-state changes as well.
+  useEffect(() => {
+    nativeWindColorScheme.set('light');
+  }, []);
 
   // Handle deep links
   useEffect(() => {
@@ -167,7 +171,7 @@ function RootLayout() {
             <PendingInvitationResume />
             <CartProvider>
               <PaymentConfirmationProvider>
-                <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+                <ThemeProvider value={DefaultTheme}>
                   <View style={{ flex: 1 }}>
                     <View style={{ flex: 1, minHeight: 0 }}>
                       <Stack screenOptions={{ headerShown: false }} />
@@ -175,7 +179,7 @@ function RootLayout() {
                     <AppBottomNavigation />
                     <InAppAlertPopup />
                   </View>
-                  <StatusBar style="auto" />
+                  <StatusBar style="dark" />
                   <PortalHost />
                   <Toast config={toastConfig} />
                 </ThemeProvider>

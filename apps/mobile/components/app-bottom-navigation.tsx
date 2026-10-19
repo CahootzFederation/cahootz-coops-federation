@@ -1,5 +1,5 @@
 import { router, useGlobalSearchParams, useSegments } from 'expo-router';
-import { Bell, LayoutGrid, Store, UserCircle } from 'lucide-react-native';
+import { Bell, LayoutGrid, PanelsTopLeft, UserCircle } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -8,7 +8,7 @@ import { api } from '@/lib/api';
 
 const destinations = [
   { label: 'Commons', href: '/(tabs)' as const, icon: LayoutGrid },
-  { label: 'Shop', href: '/(tabs)/store' as const, icon: Store },
+  { label: 'Board', href: '/(tabs)/board' as const, icon: PanelsTopLeft },
   { label: 'Alerts', href: '/(tabs)/notifications' as const, icon: Bell },
   { label: 'You', href: '/(tabs)/wallet' as const, icon: UserCircle },
 ];
@@ -32,8 +32,8 @@ export function AppBottomNavigation() {
   }>();
   const active = screen === 'notifications' || screen === 'notification-settings'
     ? 'Alerts'
-    : ['store', 'store-detail', 'cart', 'checkout'].includes(screen)
-        ? 'Shop'
+    : ['board', 'store', 'store-detail', 'cart', 'checkout'].includes(screen)
+        ? 'Board'
       : ['wallet', 'profile', 'personal-page', 'export-wallet', 'withdraw'].includes(screen)
         ? 'You'
         : screen === '(tabs)' || screen === 'index' || screen === '' || screen === 'posts'
@@ -48,8 +48,8 @@ export function AppBottomNavigation() {
   return (
     <View accessibilityRole="tablist" accessibilityLabel="Main navigation" style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
       {destinations
-        // The marketplace (cart, checkout, shops) is members-only.
-        .filter(({ label }) => isAuthenticated || label !== 'Shop')
+        // The board and its marketplace are members-only.
+        .filter(({ label }) => isAuthenticated || label !== 'Board')
         .map(({ label, href, icon: Icon }) => {
         const selected = active === label;
         const color = selected ? '#FF6B00' : '#64748B';

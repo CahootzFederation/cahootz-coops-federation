@@ -33,6 +33,7 @@ import {
   CheckCircle2,
   Mail,
 } from 'lucide-react-native';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const DEMO_COOP_ID = 'demo';
 const DEMO_LOGIN_EMAIL = 'demo@cahootz.coop';
@@ -705,7 +706,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
       </View>
 
       {/* Scrollable Commons List */}
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingHorizontal: 24, paddingVertical: 16 }}>
+      <ScrollView {...keyboardInsetScrollProps} className="flex-1" contentContainerStyle={{ paddingHorizontal: 24, paddingVertical: 16 }}>
         <View className="w-full max-w-md mx-auto">
           <View className="mb-4">
             {renderWaitlistCard()}
@@ -817,7 +818,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
     if (!selectedCoop) return null;
 
     return (
-      <ScrollView className="flex-1 bg-background">
+      <ScrollView {...keyboardInsetScrollProps} className="flex-1 bg-background">
         <View className="min-h-screen flex-1 p-6">
           <View className="w-full max-w-md mx-auto">
             {/* Header */}
@@ -908,7 +909,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
     const selectedCoop = coopsWithIcons.find(c => c.id === selectedCoopId);
     
     return (
-    <ScrollView className="flex-1 bg-background">
+    <ScrollView {...keyboardInsetScrollProps} className="flex-1 bg-background">
       <View className="min-h-screen flex-1 justify-center p-6">
         <View className="w-full max-w-md mx-auto">
           {/* Header */}
@@ -1014,7 +1015,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
     const selectedCoop = coopsWithIcons.find(c => c.id === selectedCoopId);
     
     return (
-    <ScrollView className="flex-1 bg-background">
+    <ScrollView {...keyboardInsetScrollProps} className="flex-1 bg-background">
       <View className="min-h-screen flex-1 justify-center p-6">
         <View className="w-full max-w-md mx-auto">
           {/* Header */}
@@ -1084,7 +1085,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
     const apiUrl = getApiUrl();
 
     return (
-      <ScrollView className="flex-1 bg-background">
+      <ScrollView {...keyboardInsetScrollProps} className="flex-1 bg-background">
         <View className="min-h-screen flex-1 justify-center p-6">
           <View className="w-full max-w-md mx-auto">
             {/* Header */}
@@ -1163,7 +1164,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
     const selectedCoop = coopsWithIcons.find(c => c.id === selectedCoopId);
 
     return (
-    <ScrollView className="flex-1 bg-background">
+    <ScrollView {...keyboardInsetScrollProps} className="flex-1 bg-background">
       <View className="min-h-screen flex-1 justify-center p-6">
         <View className="w-full max-w-md mx-auto">
           {/* Header */}
@@ -1260,7 +1261,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
     const selectedCoop = coopsWithIcons.find(c => c.id === selectedCoopId);
     
     return (
-    <ScrollView className="flex-1 bg-background">
+    <ScrollView {...keyboardInsetScrollProps} className="flex-1 bg-background">
       <View className="min-h-screen flex-1 justify-center p-6">
         <View className="w-full max-w-md mx-auto">
           {/* Header */}
@@ -1353,7 +1354,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
   };
 
   const renderLogin = () => (
-    <ScrollView className="flex-1 bg-background">
+    <ScrollView {...keyboardInsetScrollProps} className="flex-1 bg-background">
       <View className="min-h-screen flex-1 justify-center p-6">
         <View className="w-full max-w-md mx-auto">
           {onBack && (
@@ -1380,7 +1381,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             </Text>
           </View>
 
-          <Card className="bg-white border-border">
+          <Card className="bg-white border-border" testID="login-form-card">
             <CardContent className="p-6">
               <View className="gap-5">
                 {/* Email */}

@@ -64,7 +64,7 @@ function receiptRow(page: Page, label: string, value: string | RegExp) {
   return page.getByLabel(pattern).filter({ visible: true }).first();
 }
 
-test("a past payment opens a receipt from History, and the receipt survives a reload", async ({ browser }) => {
+test("a past payment opens a receipt from History, and the receipt survives a reload", { tag: "@smoke" }, async ({ browser }) => {
   const member = await newSignedInPage(browser, USER_A_EMAIL);
   const { page } = member;
   const runId = `r${Date.now().toString(36)}`;

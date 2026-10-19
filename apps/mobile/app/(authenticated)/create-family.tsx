@@ -9,6 +9,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type FamilySetupInput } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -355,7 +356,7 @@ export default function CreateFamilyScreen() {
       );
       router.replace({
         pathname: '/(authenticated)/commons-invites',
-        params: { coopId: result.coopId },
+        params: { coopId: result.coopId, created: '1' },
       } as any);
     } catch (err) {
       console.error('Failed to create family commons:', err);
@@ -378,7 +379,7 @@ export default function CreateFamilyScreen() {
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
       <ScrollView
-        keyboardShouldPersistTaps="handled"
+        {...keyboardInsetScrollProps}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 }}
       >
         <View className="mb-4 flex-row items-center">

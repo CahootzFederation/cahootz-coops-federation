@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Modal, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
@@ -19,8 +19,10 @@ import {
   Info,
   LogOut,
   MessageCircle,
+  MessageSquareWarning,
   RotateCcw,
   Scale,
+  Star,
   Store,
   Home,
   UserCircle,
@@ -44,6 +46,7 @@ const DRAWER_SECTIONS = [
   { label: 'Personal Page', icon: UserCircle, action: '/(authenticated)/personal-page', requiresAuth: true },
   { label: 'Commons Stores & Shops', icon: Store, action: '/(tabs)/store', requiresAuth: true },
   { label: 'Messages & Direct Chat', icon: MessageCircle, action: '/(tabs)/messages' },
+  { label: 'Report a Problem or Idea', icon: MessageSquareWarning, action: '/(authenticated)/feedback', requiresAuth: true },
 ];
 
 // Shared "hamburger" drawer - same navigation surface (switch commons, explore
@@ -70,6 +73,12 @@ export default function AppDrawer({
   const [directoryError, setDirectoryError] = useState('');
   const [directoryReloadKey, setDirectoryReloadKey] = useState(0);
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  // iOS can't present a modal over another one, so the admin panel opens
+  // only after the drawer's modal has finished dismissing.
+  const openAdminAfterDismiss = useRef(false);
+  const previewWelcomeAfterDismiss = useRef(false);
+  const [defaultSavingId, setDefaultSavingId] = useState<string | null>(null);
+  const [defaultError, setDefaultError] = useState('');
   // Signing out means asking for a new email code to get back in, so it takes a second tap.
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const hasAccountSession = isAuthenticated && !!sessionToken;
@@ -105,13 +114,14 @@ export default function AppDrawer({
   const activeCommonsForDrawer =
     memberCommons.length > 0
       ? memberCommons
-      : [{ ...DEFAULT_COMMONS_PROFILE, accessStatus: 'ACTIVE' as const, isMember: true, isLocked: false, canApply: false }];
+      : [{ ...DEFAULT_COMMONS_PROFILE, accessStatus: 'ACTIVE' as const, isMember: true, isDefault: false, isLocked: false, canApply: false }];
 
   const commonsItems = activeCommonsForDrawer.map((commons) => ({
     id: commons.id,
     label: commons.name,
     accessStatus: commons.accessStatus,
     isMember: commons.isMember,
+    isDefault: commons.isDefault,
     icon: commons.name.slice(0, 1).toUpperCase(),
     iconEmoji: 'iconEmoji' in commons ? commons.iconEmoji : null,
     iconColor: 'iconColor' in commons ? commons.iconColor : null,
@@ -153,6 +163,25 @@ export default function AppDrawer({
     router.replace({ pathname: '/(tabs)', params: { coopId } } as any);
   };
 
+  const makeDefaultCommons = async (coopId: string) => {
+    if (!sessionToken || defaultSavingId) return;
+    setDefaultSavingId(coopId);
+    setDefaultError('');
+    try {
+      await api.setDefaultCommons(coopId, sessionToken);
+      setMemberCommons((items) =>
+        items
+          .map((item) => ({ ...item, isDefault: item.id === coopId }))
+          .sort((a, b) => Number(b.isDefault) - Number(a.isDefault)),
+      );
+    } catch (error) {
+      console.error('Failed to save default commons:', error);
+      setDefaultError(friendlyError(error, "We couldn't save your default Commons."));
+    } finally {
+      setDefaultSavingId(null);
+    }
+  };
+
   const openSignIn = () => {
     onClose();
     router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
@@ -165,15 +194,40 @@ export default function AppDrawer({
     router.replace('/' as any);
   };
 
+  const openAdminPanel = () => {
+    if (Platform.OS === 'ios') {
+      openAdminAfterDismiss.current = true;
+      onClose();
+    } else {
+      setAdminPanelOpen(true);
+    }
+  };
+
+  // Same iOS rule: signing out and routing while the admin panel is still
+  // dismissing gets dropped, so on iOS this runs from the panel's onDismiss.
   const handlePreviewWelcomeScreen = async () => {
     setAdminPanelOpen(false);
     onClose();
+    if (Platform.OS === 'ios') {
+      previewWelcomeAfterDismiss.current = true;
+      return;
+    }
     await previewWelcomeScreen();
   };
 
   return (
     <>
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={onClose}
+        onDismiss={() => {
+          if (!openAdminAfterDismiss.current) return;
+          openAdminAfterDismiss.current = false;
+          setAdminPanelOpen(true);
+        }}
+      >
       <View className="flex-1 flex-row bg-black/35">
         <View className="w-4/5 bg-white pt-14">
           <View className="border-b border-stone-200 px-4 pb-3">
@@ -218,26 +272,32 @@ export default function AppDrawer({
                 />
               </View>
             ) : null}
+            {defaultError ? (
+              <Text className="mb-3 text-sm font-semibold text-red-600">{defaultError}</Text>
+            ) : null}
             <View className="mb-3 overflow-hidden rounded-2xl border border-stone-200 bg-white">
               {drawerItems.map((item) => {
                 const isActive = item.id === activeCommonsId || (item.id === 'cahootz' && activeCommonsId === 'cahootz');
                 return (
-                  <TouchableOpacity
+                  <View
                     key={item.id}
-                    onPress={() =>
-                      item.id === PERSONAL_PAGE_DESTINATION_ID
-                        ? goTo(item.action)
-                        : switchCommons(item.id)
-                    }
-                    className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-3"
+                    className="flex-row items-center border-b border-stone-100 pr-3"
                     style={isActive ? { backgroundColor: THEME.primarySoft } : undefined}
-                    activeOpacity={0.75}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      item.id === PERSONAL_PAGE_DESTINATION_ID ? undefined : `View ${item.label} circles`
-                    }
                   >
-                    {'iconEmoji' in item ? (
+                    <TouchableOpacity
+                      onPress={() =>
+                        item.id === PERSONAL_PAGE_DESTINATION_ID
+                          ? goTo(item.action)
+                          : switchCommons(item.id)
+                      }
+                      className="min-w-0 flex-1 flex-row items-center gap-2.5 px-3 py-3"
+                      activeOpacity={0.75}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        item.id === PERSONAL_PAGE_DESTINATION_ID ? undefined : `View ${item.label} circles`
+                      }
+                    >
+                      {'iconEmoji' in item ? (
                       <IconAvatar
                         emoji={item.iconEmoji}
                         color={item.iconColor || (isActive ? THEME.primary : '#F5F5F4')}
@@ -255,22 +315,23 @@ export default function AppDrawer({
                           {item.icon}
                         </Text>
                       </View>
-                    )}
-                    <View className="min-w-0 flex-1">
-                      <Text className="text-sm font-black text-gray-900" numberOfLines={1}>
-                        {item.label}
-                      </Text>
-                      <Text
-                        className="text-xs font-semibold"
-                        style={{ color: item.accessStatus === 'ACTIVE' ? '#059669' : '#6B7280' }}
-                      >
-                        {item.id === PERSONAL_PAGE_DESTINATION_ID
-                          ? 'Your page'
-                          : hasAccountSession && 'isMember' in item && item.isMember
-                            ? (isActive ? 'Active Member' : 'Member')
-                            : 'Public commons'}
-                      </Text>
-                    </View>
+                      )}
+                      <View className="min-w-0 flex-1">
+                        <Text className="text-sm font-black text-gray-900" numberOfLines={1}>
+                          {item.label}
+                        </Text>
+                        <Text
+                          className="text-xs font-semibold"
+                          style={{ color: item.accessStatus === 'ACTIVE' ? '#059669' : '#6B7280' }}
+                        >
+                          {item.id === PERSONAL_PAGE_DESTINATION_ID
+                            ? 'Your page'
+                            : hasAccountSession && 'isMember' in item && item.isMember
+                              ? (isActive ? 'Active Member' : 'Member')
+                              : 'Public commons'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
                     {item.id !== PERSONAL_PAGE_DESTINATION_ID ? (
                       <TouchableOpacity
                         onPress={() => goTo(`/commons/${item.id}`)}
@@ -281,12 +342,38 @@ export default function AppDrawer({
                         <Info size={15} color="#57534E" />
                       </TouchableOpacity>
                     ) : null}
+                    {item.id !== PERSONAL_PAGE_DESTINATION_ID && 'isMember' in item && item.isMember ? (
+                      <TouchableOpacity
+                        onPress={(event) => {
+                          makeDefaultCommons(item.id);
+                        }}
+                        disabled={item.isDefault || defaultSavingId !== null}
+                        className="h-8 w-8 items-center justify-center rounded-full"
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          item.isDefault
+                            ? `${item.label} is your default commons`
+                            : `Make ${item.label} your default commons`
+                        }
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        {defaultSavingId === item.id ? (
+                          <ActivityIndicator size="small" color={THEME.primary} />
+                        ) : (
+                          <Star
+                            size={17}
+                            color={item.isDefault ? '#D97706' : '#A8A29E'}
+                            fill={item.isDefault ? '#FBBF24' : 'transparent'}
+                          />
+                        )}
+                      </TouchableOpacity>
+                    ) : null}
                     {isActive ? (
                       <CheckCircle2 size={17} color={THEME.primary} />
                     ) : (
                       <ChevronRight size={15} color="#A8A29E" />
                     )}
-                  </TouchableOpacity>
+                  </View>
                 );
               })}
             </View>
@@ -465,7 +552,7 @@ export default function AppDrawer({
 
             {__DEV__ && (
               <TouchableOpacity
-                onPress={() => setAdminPanelOpen(true)}
+                onPress={openAdminPanel}
                 className="mt-2 flex-row items-center justify-center gap-2 rounded-2xl bg-stone-100 py-3"
                 activeOpacity={0.8}
               >
@@ -487,6 +574,11 @@ export default function AppDrawer({
           transparent
           animationType="fade"
           onRequestClose={() => setAdminPanelOpen(false)}
+          onDismiss={() => {
+            if (!previewWelcomeAfterDismiss.current) return;
+            previewWelcomeAfterDismiss.current = false;
+            void previewWelcomeScreen();
+          }}
         >
           <View className="flex-1 flex-row bg-black/35">
             <View className="w-4/5 bg-white pt-14">

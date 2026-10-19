@@ -12,7 +12,7 @@ const USER_B_EMAIL =
 // cover that navigation change plus the new welcome-lounge workflow, both
 // added in this change; see AGENTS.md's e2e-coverage requirement.
 
-test("Commons tab lands on Circle View, and a post board stays inside the tab", async ({
+test("Commons tab lands on Circle View, and a post board stays inside the tab", { tag: "@smoke" }, async ({
   browser,
 }) => {
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
@@ -90,6 +90,10 @@ test("Commons tab lands on Circle View, and a post board stays inside the tab", 
     await page.getByLabel("Open menu").filter({ visible: true }).click();
     await expect(page.getByText("Conversation", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Circles", { exact: true })).toHaveCount(0);
+    // The circle list starts with real circles: no General / "Default
+    // conversation" row (Circle View already shows General first).
+    await expect(page.getByText("Default conversation", { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("Open General", { exact: true })).toHaveCount(0);
     await page.getByLabel(`Go home to ${activeCommonsName} circles`).filter({ visible: true }).click();
     await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Share what's happening..." })).toHaveCount(0);
@@ -279,7 +283,7 @@ test("two signed-in members see Sage's introduction thread in their welcome loun
   }
 });
 
-test("signed-out visitors see a sign-in card in place of the welcome lounge", async ({ browser }) => {
+test("signed-out visitors see a sign-in card in place of the welcome lounge", { tag: "@smoke" }, async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 430, height: 932 } });
   const page = await context.newPage();
   try {

@@ -1,5 +1,6 @@
-import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+
 import { newSignedInPage } from "./support/auth";
 
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
@@ -54,9 +55,11 @@ test("a circle member chooses which circle activity notifies them", async ({
   test.setTimeout(150_000);
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const circleName = `E2E Notify Circle ${runId}`;
+  const highlightedPost = `E2E highlight pinned ${runId}`;
   const firstPost = `E2E notify first ${runId}`;
   const mutedPost = `E2E notify muted ${runId}`;
   const circleAlert = new RegExp(`posted in ${circleName}\\.`);
+  const highlightAlert = new RegExp(`pinned a post in ${circleName}\\.`);
 
   const userA = await newSignedInPage(browser, USER_A_EMAIL);
   const userB = await newSignedInPage(browser, USER_B_EMAIL);
@@ -77,20 +80,33 @@ test("a circle member chooses which circle activity notifies them", async ({
     expect(groupId).toBeTruthy();
     await trpcPost("groups.joinByCode", sessionTokenB!, { inviteCode });
 
-    // B chooses a starting preference before exercising changes.
+    // B opens circle settings: "Highlights" is the default for new members.
     await openCircleSettings(userB.page, groupId!);
     const allActivity = userB.page.getByRole("radio", { name: "All activity" });
+    const highlights = userB.page.getByRole("radio", { name: "Highlights" });
     const onlyMentions = userB.page.getByRole("radio", {
       name: "Only @mentions",
     });
     const nothing = userB.page.getByRole("radio", { name: "Nothing" });
-    await onlyMentions.click();
-    await expect(onlyMentions).toBeChecked();
+    await expect(highlights).toBeChecked();
 
+    // Routine activity stays quiet on Highlights; pinning the post alerts B.
+    await postInCircle(userA.page, groupId!, highlightedPost);
+    await userA.page.getByLabel("Pin post").click();
+    await expect(userA.page.getByText("Pinned", { exact: true })).toBeVisible();
+    await userB.page.goto("/notifications");
+    await expect(async () => {
+      await userB.page.reload();
+      await expect(userB.page.getByText(highlightAlert)).toHaveCount(1);
+      await expect(userB.page.getByText(circleAlert)).toHaveCount(0);
+    }).toPass({ timeout: 20_000 });
+
+    await openCircleSettings(userB.page, groupId!);
     await allActivity.click();
     await expect(allActivity).toBeChecked();
     await userB.page.reload();
     await expect(allActivity).toBeChecked();
+    await expect(highlights).not.toBeChecked();
     await expect(onlyMentions).not.toBeChecked();
 
     // A posts; B (on "All activity") gets a circle alert.
@@ -136,10 +152,18 @@ test("a circle member chooses which circle activity notifies them", async ({
         `${API_BASE_URL}/trpc/commons.listFeed?input=${input}`,
         { headers: { "x-session-token": sessionTokenA } },
       ).then((res) => res.json());
-      const posts: Array<{ id: string; body: string }> =
-        feed?.result?.data?.posts ?? [];
+      const posts: Array<{ id: string; body: string }> = [
+        ...(feed?.result?.data?.pinnedPost
+          ? [feed.result.data.pinnedPost]
+          : []),
+        ...(feed?.result?.data?.posts ?? []),
+      ];
       for (const post of posts) {
-        if (post.body === firstPost || post.body === mutedPost) {
+        if (
+          post.body === highlightedPost ||
+          post.body === firstPost ||
+          post.body === mutedPost
+        ) {
           await trpcPost("commons.deletePost", sessionTokenA, {
             postId: post.id,
           }).catch(() => {});

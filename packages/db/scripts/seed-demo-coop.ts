@@ -39,38 +39,10 @@ async function main() {
   });
 
   if (existingConfig) {
+    // Never rename or re-style an existing co-op; only keep it hidden from the directory.
     await prisma.coopConfig.update({
       where: { id: existingConfig.id },
-      data: {
-        isActive: true,
-        isDemo: true,
-        name: "Cahootz Demo Co-op",
-        slug: "cahootz-demo",
-        tagline: "A safe sandbox for exploring Cahootz",
-        description:
-          "A hidden demo workspace with sample membership access for reviewers and guided product demos.",
-        displayMission:
-          "Show how Cahootz helps co-ops onboard members, coordinate commerce, and govern shared decisions.",
-        displayFeatures: [
-          {
-            title: "Member Home",
-            description: "Explore the member dashboard, profile, activity, and co-op context.",
-          },
-          {
-            title: "Co-op Commerce",
-            description: "See how stores, products, orders, and payments fit into one co-op workspace.",
-          },
-          {
-            title: "Governance",
-            description: "Review proposal and participation flows without touching live co-op data.",
-          },
-        ],
-        eligibility: "Demo access only.",
-        bgColor: "bg-slate-800",
-        accentColor: "bg-gold-600",
-        displayOrder: 9999,
-        ...baseConfig,
-      },
+      data: { isActive: true, isDemo: true },
     });
   } else {
     await prisma.coopConfig.create({
@@ -115,9 +87,6 @@ async function main() {
     update: {
       isDemo: true,
       isPublished: false,
-      name: "Cahootz Demo Co-op",
-      tagline: "A safe sandbox for exploring Cahootz",
-      updatedBy: "system:demo-seed",
     },
     create: {
       coopId: DEMO_COOP_ID,

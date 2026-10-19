@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
+  Platform,
   ScrollView,
   Share,
   TextInput,
@@ -12,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as Linking from 'expo-linking';
-import { ArrowLeft, Compass, Link2, Lock, Send, Shield, Target } from 'lucide-react-native';
+import { ArrowLeft, BookUser, Compass, Link2, Lock, Send, Shield, Target } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
@@ -20,7 +21,9 @@ import { api, type CommonsInvitationOverview, type FamilySetupView } from '@/lib
 import { ApiError, friendlyError } from '@/lib/friendly-error';
 import { LoadError } from '@/components/load-error';
 import { ConfirmSheet } from '@/components/confirm-sheet';
+import { contactToInviteTarget, loadContactPicker } from '@/lib/contact-invite';
 import { GUIDE_EXPLANATION, StewardHelp, guidePowersFor, stewardPowersFor } from '@/components/role-help';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -90,7 +93,8 @@ function SmallButton({
  * invitation is only an invitation to apply.
  */
 export default function CommonsInvitesScreen() {
-  const { coopId } = useLocalSearchParams<{ coopId?: string }>();
+  const { coopId, created } = useLocalSearchParams<{ coopId?: string; created?: string }>();
+  const pickContact = useMemo(() => loadContactPicker(Platform.OS), []);
   const { sessionToken } = useAuth();
   const [overview, setOverview] = useState<CommonsInvitationOverview | null>(null);
   const [familySetup, setFamilySetup] = useState<FamilySetupView | null>(null);
@@ -204,6 +208,38 @@ export default function CommonsInvitesScreen() {
     }
   };
 
+  // Fills the form from one picked contact. Email is preferred because a
+  // verified email lets family join directly; a phone number still works
+  // but a steward confirms it.
+  const chooseFromContacts = async () => {
+    if (!pickContact) return;
+    setFormError('');
+    setFormNotice('');
+    try {
+      const picked = await pickContact();
+      if (!picked) return;
+      const target = contactToInviteTarget(picked);
+      if (!target.email && !target.phone) {
+        setFormError("That contact doesn't have an email or phone number.");
+        return;
+      }
+      setRecipientName(target.name);
+      if (target.email) {
+        setContactType('EMAIL');
+        setContact(target.email);
+      } else {
+        setContactType('PHONE');
+        setContact(target.phone!);
+      }
+    } catch (err) {
+      setFormError(
+        err instanceof Error && err.message === 'CONTACTS_PERMISSION_DENIED'
+          ? 'Allow contacts access in Settings to choose from your contacts.'
+          : "We couldn't open your contacts.",
+      );
+    }
+  };
+
   const createShareLink = () =>
     run('share-link', async () => {
       const result = await api.createCommonsShareLink(coopId!, sessionToken!);
@@ -281,6 +317,7 @@ export default function CommonsInvitesScreen() {
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
       <ScrollView
+        {...keyboardInsetScrollProps}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 48 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(); }} />}
       >
@@ -314,6 +351,16 @@ export default function CommonsInvitesScreen() {
           </View>
         ) : null}
 
+        {created === '1' && isFamily ? (
+          <View className="mb-3 rounded-2xl border p-4" style={{ borderColor: THEME.primaryBorder, backgroundColor: THEME.primarySoft }}>
+            <Text className="text-base font-black text-gray-950">Your family is ready</Text>
+            <Text className="mt-1 text-sm leading-5 text-gray-700">
+              Now bring them in. {pickContact ? 'Choose someone from your contacts, or type' : 'Type'} their email
+              below, or share a link they can use to ask to join.
+            </Text>
+          </View>
+        ) : null}
+
         <View className="rounded-2xl border border-gray-200 bg-white p-4">
           <Text className="text-lg font-black text-gray-950">
             {isFamily ? (canInviteDirectly ? 'Invite family' : 'Recommend someone') : 'Invite someone to apply'}
@@ -331,6 +378,18 @@ export default function CommonsInvitesScreen() {
             </Text>
           ) : null}
           <StewardHelp />
+
+          {pickContact ? (
+            <TouchableOpacity
+              onPress={() => void chooseFromContacts()}
+              accessibilityRole="button"
+              className="mt-3 flex-row items-center justify-center gap-2 rounded-xl border py-3"
+              style={{ borderColor: THEME.primaryBorder, backgroundColor: THEME.primarySoft }}
+            >
+              <BookUser size={16} color={THEME.primary} />
+              <Text className="font-black" style={{ color: THEME.primary }}>Choose from contacts</Text>
+            </TouchableOpacity>
+          ) : null}
 
           <View className="mt-3 flex-row rounded-xl border border-gray-200 p-1">
             {(['EMAIL', 'PHONE'] as const).map((type) => (

@@ -29,6 +29,7 @@ import { getWebUrl } from '@/lib/config';
 import { resolveBrandColor, withAlpha } from '@/lib/brand-colors';
 import CommercePaymentConfirmation from '@/components/commerce-payment-confirmation';
 import { apiError, friendlyError } from '@/lib/friendly-error';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 interface CheckoutHybridProps {
   storeId: string;
@@ -414,7 +415,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <ScrollView className="flex-1">
+      <ScrollView {...keyboardInsetScrollProps} className="flex-1">
         {/* Header */}
         <View className="flex-row items-center justify-between px-6 py-4 bg-white border-b border-gray-200">
           <TouchableOpacity onPress={() => router.back()}>

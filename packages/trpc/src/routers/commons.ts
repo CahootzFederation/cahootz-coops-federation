@@ -1,11 +1,12 @@
-import { Agent, run } from '@openai/agents';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
 import type { Prisma } from '@repo/db';
 
 import type { AccountAuthenticatedContext, Context } from '../context.js';
-import { COMMUNITY_OBSERVER_POST_TYPES, getAgent } from '../agents/registry.js';
+import { COMMUNITY_OBSERVER_POST_TYPES, getAgent, runSageCommonsReply } from '../agents/registry.js';
+import { buildSageReplyTools } from '../agents/tools/member-action-tools.js';
+import { safeFirstName } from '../services/sage-reply-templates.js';
 import { auditLogEntry } from '../lib/audit.js';
 import { ensureSageBotUser, isSageUser } from '../lib/bot.js';
 import {
@@ -25,7 +26,6 @@ import {
   publicProcedure,
 } from '../procedures/index.js';
 import { recordObservation } from '../services/ai-memory.js';
-import { recordAgentResultCost } from '../services/ai-cost.js';
 import { enqueueCommonsActionContent } from '../services/commons-action-dispatch.js';
 import {
   DIRECT_KIND,
@@ -35,7 +35,7 @@ import {
   sendDirectCircleMessage,
 } from '../services/direct-circles.js';
 import { createNotificationAndPush } from '../services/push-notification-service.js';
-import { notifyCircleActivity } from '../services/circle-notifications.js';
+import { notifyCircleActivity, notifyCircleHighlight } from '../services/circle-notifications.js';
 import { notifyNewCommentReaction, notifyNewPostReaction } from '../services/comment-reactions.js';
 import {
   LIKE_EMOJI,
@@ -48,6 +48,7 @@ import { FUNDING_BADGE_BY_TIER } from '../services/funding-badge-service.js';
 import { getSageAutonomyUsage } from '../services/sage-autonomy.js';
 import { touchCircleWindow } from '../services/circle-window.js';
 import { wakeTasksForReply } from '../services/sage-tasks.js';
+import { relayReplyToMember } from '../services/sage-member-actions.js';
 import { recordSkippedCircleMention, traceSageReply } from '../services/sage-reply-trails.js';
 import { notifySageComment } from '../services/sage-comment-notifications.js';
 import {
@@ -78,7 +79,18 @@ const postTagSchema = z.enum([
   'Opportunity',
 ]);
 
+const boardLaneSchema = z.enum(['all', 'needs', 'offers', 'events']);
+const BOARD_TAGS_BY_LANE = {
+  all: ['Thought', 'Ask', 'Offer', 'Event', 'Project', 'Proposal', 'Update', 'Decision', 'Social', 'Win', 'Need', 'Idea', 'Vote', 'Resource', 'Opportunity'],
+  needs: ['Ask', 'Need'],
+  offers: ['Offer', 'Resource', 'Opportunity'],
+  events: ['Event'],
+} as const;
+
 const postMediaTypeSchema = z.enum(['image', 'video']);
+
+// Photos and videos one post may carry (the mobile composer uses the same cap).
+const MAX_POST_MEDIA = 10;
 
 const uploadedPostMediaSchema = z.object({
   pathname: z.string().min(1).max(1024),
@@ -194,15 +206,16 @@ async function loadFeedPosts(
   circleId?: string,
 ) {
   const coopIds = Array.isArray(coopId) ? coopId : [coopId];
+  const scope: Prisma.CommonsPostWhereInput = circleId
+    ? { coopId: coopIds[0], circleId }
+    : {
+        OR: coopIds.flatMap((id) => [
+          { coopId: id, circleId: generalCircleId(id) },
+          { coopId: id, circleId: null },
+        ]),
+      };
   const posts = await db.commonsPost.findMany({
-    where: circleId
-      ? { coopId: coopIds[0], circleId }
-      : {
-          OR: coopIds.flatMap((id) => [
-            { coopId: id, circleId: generalCircleId(id) },
-            { coopId: id, circleId: null },
-          ]),
-        },
+    where: scope,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -228,6 +241,7 @@ async function loadFeedPosts(
           rsvps: { select: { userId: true, status: true } },
         },
       },
+      ...POST_REACTIONS_INCLUDE,
       _count: { select: { comments: true, supports: true } },
     },
   });
@@ -266,6 +280,12 @@ async function requireCircleAccess(
     });
   }
   return { ...publicCircle, isMember: false };
+}
+
+/** Sage answers an @mention in this Commons' own circles (welcome lounges included), never in a direct message. */
+async function sageAnswersInCircle(db: any, coopId: string, circleId: string): Promise<boolean> {
+  const group = await db.group.findUnique({ where: { id: circleId }, select: { coopId: true, kind: true } });
+  return group?.coopId === coopId && group.kind !== DIRECT_KIND;
 }
 
 export async function requireCircleMembership(
@@ -371,7 +391,7 @@ export function personHandle(user: {
   );
 }
 
-function mapPersonalPagePost(record: any) {
+function mapPersonalPagePost(record: any, viewerId?: string | null) {
   return {
     id: record.id,
     authorId: record.authorId,
@@ -383,6 +403,8 @@ function mapPersonalPagePost(record: any) {
     createdAt: record.createdAt.toISOString(),
     replies: record._count?.comments ?? record.comments?.length ?? 0,
     support: record._count?.supports ?? 0,
+    // Every emoji reaction, ❤️ (the like) first, when the query loaded them.
+    reactions: mapPostReactions(record.supports ?? [], record.reactions ?? [], viewerId),
     media: Array.isArray(record.media) ? record.media : [],
     comments:
       record.comments?.map((comment: any) => ({
@@ -500,11 +522,14 @@ async function findUserByPersonalHandle(db: any, handle: string) {
       email: true,
       handle: true,
       name: true,
+      nickname: true,
       selfDescription: true,
       avatarUrl: true,
       avatarEmoji: true,
       avatarColor: true,
       createdAt: true,
+      isBot: true,
+      roles: true,
     },
   });
 }
@@ -730,6 +755,35 @@ export function mapEventSummary(record: any, viewerId?: string) {
   };
 }
 
+// Every reaction on a post, oldest first so chips keep the order each emoji
+// was first used. A post's ❤️ is its like, stored as CommonsPostSupport rows.
+const POST_REACTIONS_INCLUDE = {
+  reactions: {
+    select: { emoji: true, userId: true },
+    orderBy: { createdAt: 'asc' },
+    take: 1000,
+  },
+  supports: {
+    select: { userId: true },
+    orderBy: { createdAt: 'asc' },
+    take: 1000,
+  },
+} as const;
+
+// One chip per emoji with ❤️ (the like) first, so the app can show likes as
+// an ordinary reaction. Older app builds hide the ❤️ chip and keep using
+// `support` for their separate like button.
+function mapPostReactions(
+  supports: ReadonlyArray<{ userId: string }>,
+  reactions: ReadonlyArray<{ emoji: string; userId: string }>,
+  viewerId?: string | null,
+) {
+  return summarizeReactions(
+    [...supports.map((support) => ({ emoji: LIKE_EMOJI, userId: support.userId })), ...reactions],
+    viewerId,
+  );
+}
+
 // A comment's reactions: the like (❤️) count and the viewer's like, kept as
 // separate fields for older app builds, plus one chip per emoji.
 function mapCommentReactions(rows: Array<{ emoji: string; userId: string }>, viewerId?: string | null) {
@@ -775,6 +829,47 @@ async function togglePostSupport(
   return true;
 }
 
+async function findPersonalPagePostForReaction(db: Context['db'], postId: string) {
+  const post = await db.personalPagePost.findUnique({
+    where: { id: postId },
+    select: { id: true, authorId: true },
+  });
+  if (!post) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Post not found.' });
+  }
+  return post;
+}
+
+// Toggles a member's like (support) on a personal page post and alerts the
+// author to a new like. Returns whether the post is now liked.
+async function togglePersonalPageSupport(
+  db: Context['db'],
+  post: { id: string; authorId: string },
+  userId: string,
+): Promise<boolean> {
+  const existing = await db.personalPagePostSupport.findUnique({
+    where: { postId_userId: { postId: post.id, userId } },
+  });
+  if (existing) {
+    await db.personalPagePostSupport.delete({ where: { id: existing.id } });
+    return false;
+  }
+
+  await db.personalPagePostSupport.create({ data: { postId: post.id, userId } });
+
+  if (post.authorId && post.authorId !== userId) {
+    void createNotificationAndPush(db, {
+      userId: post.authorId,
+      coopId: COMMONS_COOP_ID,
+      type: 'PERSONAL_PAGE_SUPPORT',
+      title: 'Someone liked your post',
+      body: 'A member liked what you shared on your page.',
+      data: { postId: post.id },
+    });
+  }
+  return true;
+}
+
 function mapPostWithGroup(record: any, groupName: string, viewerId?: string) {
   return {
     id: record.id,
@@ -794,8 +889,9 @@ function mapPostWithGroup(record: any, groupName: string, viewerId?: string) {
     classification: record.classification ?? 'social',
     replies: record._count?.comments ?? record.comments?.length ?? 0,
     support: record._count?.supports ?? record.supports?.length ?? 0,
-    // Emoji reactions other than the like; only loaded on the post detail.
-    reactions: summarizeReactions(record.reactions ?? [], viewerId),
+    // Every emoji reaction, ❤️ included, when the query loaded them
+    // (POST_REACTIONS_INCLUDE: the feed, pinned post and post detail).
+    reactions: mapPostReactions(record.supports ?? [], record.reactions ?? [], viewerId),
     pledges: undefined as string | undefined,
     isPinned: record.isPinned ?? false,
     event: record.event ? mapEventSummary(record.event, viewerId) : undefined,
@@ -893,6 +989,7 @@ export async function resolveOptionalAccountUser(context: Context) {
       email: true,
       name: true,
       phone: true,
+      defaultCoopId: true,
       deletedAt: true,
     },
   });
@@ -942,6 +1039,7 @@ export function aiSpendCategory(feature: string) {
   if (feature.startsWith('proposal-')) return 'Proposal reviews';
   if (feature.startsWith('newsletter-')) return 'Newsletter';
   if (feature.startsWith('knowledge-')) return 'Knowledge base';
+  // Both agents were removed on 2026-10-14; their past cost events still need a label.
   if (feature === 'commons-assistant' || feature === 'commons-recommender') {
     return 'Assistant';
   }
@@ -953,75 +1051,6 @@ export function aiSpendCategory(feature: string) {
     return 'Sage';
   }
   return 'Other';
-}
-
-function fallbackAiResponse(prompt: string) {
-  const lower = prompt.toLowerCase();
-
-  if (lower.includes('vote')) {
-    return [
-      'Start with the decision: what exactly should members choose?',
-      'Then define options, deadline, eligible voters, budget impact, and who reports back.',
-    ].join('\n');
-  }
-
-  if (
-    lower.includes('cost') ||
-    lower.includes('fund') ||
-    lower.includes('money') ||
-    lower.includes('$')
-  ) {
-    return [
-      'Break this into money, time, space, tools, and people.',
-      'A good next step is a small pledge list before turning it into a proposal.',
-    ].join('\n');
-  }
-
-  if (
-    lower.includes('proposal') ||
-    lower.includes('plan') ||
-    lower.includes('help')
-  ) {
-    return [
-      'This can become a Commons thread first.',
-      'Ask people to name the need, who is affected, what help exists, and the smallest useful pilot.',
-    ].join('\n');
-  }
-
-  return [
-    'I can help you turn this into action.',
-    'Try framing it as: need, people affected, helpers, resources, decision needed, and first step.',
-  ].join('\n');
-}
-
-async function runCommonsAi(prompt: string, coopId?: string) {
-  if (!process.env.OPENAI_API_KEY) {
-    return fallbackAiResponse(prompt);
-  }
-
-  try {
-    const agent = new Agent({
-      name: 'Cahootz Commons Assistant',
-      model: process.env.COMMONS_AI_MODEL || 'gpt-5.2',
-      instructions: [
-        'You are the general AI assistant inside Cahootz Commons, a community social network for coordinating help, proposals, votes, and shared resources.',
-        'Answer in plain language and move conversation toward practical community action.',
-        'When useful, organize answers into need, helpers, resources, decision, and next step.',
-        'Do not pretend an anonymous visitor is a logged-in member.',
-      ].join('\n'),
-    });
-    const runResult = await run(agent, prompt);
-    await recordAgentResultCost({ coopId, feature: 'commons-assistant', model: process.env.COMMONS_AI_MODEL || 'gpt-5.2', result: runResult }).catch(console.error);
-    const result = runResult as unknown as {
-      finalOutput?: string;
-      output?: string;
-    };
-
-    return result.finalOutput || result.output || fallbackAiResponse(prompt);
-  } catch (error) {
-    console.error('Commons AI failed:', error);
-    return fallbackAiResponse(prompt);
-  }
 }
 
 export const commonsRouter = router({
@@ -1066,6 +1095,7 @@ export const commonsRouter = router({
           activeCoopIds,
           input.limit,
           input.cursor,
+          undefined,
         );
 
         const coopConfigs = await context.db.coopConfig.findMany({
@@ -1181,6 +1211,7 @@ export const commonsRouter = router({
             },
             media: { orderBy: { order: 'asc' } },
             event: { include: eventInclude },
+            ...POST_REACTIONS_INCLUDE,
             _count: { select: { comments: true, supports: true } },
           },
         }),
@@ -1216,6 +1247,87 @@ export const commonsRouter = router({
         pinnedPost,
         upcomingEvents,
         nextCursor,
+      };
+    }),
+
+  listBoardItems: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        coopId: z.string().min(1).default(COMMONS_COOP_ID),
+        lane: boardLaneSchema.default('all'),
+        query: z.string().trim().max(120).optional(),
+        cursor: z.string().optional(),
+        limit: z.number().int().min(1).max(50).default(30),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      await requireActiveCommonsMembership(ctx.db, accountUser.id, input.coopId);
+
+      const now = new Date();
+      const tags = [...BOARD_TAGS_BY_LANE[input.lane]];
+      const query = input.query?.trim();
+      const generalWhere = { OR: [{ circleId: generalCircleId(input.coopId) }, { circleId: null }] };
+      const currentEventWhere = { OR: [{ tag: { not: 'Event' } }, { event: { is: { endAt: { gte: now } } } }] };
+      const queryWhere = query
+        ? {
+            OR: [
+              { title: { contains: query, mode: 'insensitive' as const } },
+              { content: { contains: query, mode: 'insensitive' as const } },
+              { author: { is: { name: { contains: query, mode: 'insensitive' as const } } } },
+              { author: { is: { handle: { contains: query, mode: 'insensitive' as const } } } },
+            ],
+          }
+        : null;
+      const sharedAnd = [generalWhere, currentEventWhere, ...(queryWhere ? [queryWhere] : [])];
+
+      const [posts, ...counts] = await Promise.all([
+        ctx.db.commonsPost.findMany({
+          where: {
+            coopId: input.coopId,
+            AND: [...sharedAnd, { tag: { in: tags } }],
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: input.limit + 1,
+          ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+          include: {
+            author: { select: { name: true, email: true, handle: true, isBot: true } },
+            comments: {
+              orderBy: { createdAt: 'asc' },
+              take: 2,
+              include: { author: { select: { name: true, email: true, handle: true, isBot: true } } },
+            },
+            media: { orderBy: { order: 'asc' } },
+            event: {
+              include: {
+                hosts: { include: { user: { select: { id: true, name: true, email: true, handle: true } } } },
+                rsvps: { select: { userId: true, status: true } },
+              },
+            },
+            _count: { select: { comments: true, supports: true } },
+            ...POST_REACTIONS_INCLUDE,
+          },
+        }),
+        ...(['needs', 'offers', 'events'] as const).map((lane) =>
+          ctx.db.commonsPost.count({
+            where: {
+              coopId: input.coopId,
+              AND: [...sharedAnd, { tag: { in: [...BOARD_TAGS_BY_LANE[lane]] } }],
+            },
+          }),
+        ),
+      ]);
+
+      const hasMore = posts.length > input.limit;
+      const page = hasMore ? posts.slice(0, input.limit) : posts;
+      const coop = await loadCoopSummary(ctx.db, input.coopId);
+      return {
+        coop,
+        items: page.map((post: any) => mapPostWithGroup(post, coop.name, accountUser.id)),
+        laneCounts: Object.fromEntries(
+          (['needs', 'offers', 'events'] as const).map((lane, index) => [lane, counts[index] ?? 0]),
+        ),
+        nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
       };
     }),
 
@@ -1334,7 +1446,7 @@ export const commonsRouter = router({
           },
           orderBy: { createdAt: 'desc' },
           take: input.limit,
-          select: { id: true, name: true, email: true, handle: true },
+          select: { id: true, name: true, email: true, handle: true, isBot: true, roles: true },
         }),
         canReadPosts
           ? context.db.commonsPost.findMany({
@@ -1382,9 +1494,39 @@ export const commonsRouter = router({
           id: user.id,
           name: displayName(user),
           handle: personHandle(user),
+          isSage: isSageUser(user),
         })),
         posts: posts.map((post: any) => mapPostWithGroup(post, coop.name)),
       };
+    }),
+
+  setDefaultCommons: accountAuthenticatedProcedure
+    .input(z.object({ coopId: z.string().trim().min(1).max(120) }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const membership = await context.db.userCoopMembership.findUnique({
+        where: {
+          userId_coopId: {
+            userId: context.accountUser.id,
+            coopId: input.coopId,
+          },
+        },
+        select: { status: true },
+      });
+
+      if (membership?.status !== 'ACTIVE') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Join this Commons before making it your default.',
+        });
+      }
+
+      await context.db.user.update({
+        where: { id: context.accountUser.id },
+        data: { defaultCoopId: input.coopId },
+      });
+
+      return { defaultCoopId: input.coopId };
     }),
 
   listDirectory: publicProcedure.query(async ({ ctx }) => {
@@ -1486,6 +1628,8 @@ export const commonsRouter = router({
     });
 
     const sortedCoops = [...visibleCoops].sort((a: any, b: any) => {
+      if (a.coopId === accountUser?.defaultCoopId) return -1;
+      if (b.coopId === accountUser?.defaultCoopId) return 1;
       if (a.coopId === COMMONS_COOP_ID) return -1;
       if (b.coopId === COMMONS_COOP_ID) return 1;
       return 0;
@@ -1531,6 +1675,8 @@ export const commonsRouter = router({
           joinPolicy,
           isPrivate: !!coop.isPrivate || joinPolicy === 'INVITE_ONLY',
           isMember: accessStatus === 'ACTIVE',
+          isDefault:
+            accessStatus === 'ACTIVE' && coop.coopId === accountUser?.defaultCoopId,
           isSteward:
             membership?.status === 'ACTIVE' &&
             ((membership?.roles as string[] | undefined) || []).some((role) =>
@@ -1567,8 +1713,9 @@ export const commonsRouter = router({
 
       const [activeMembers, discussionsThisMonth, openVotes] =
         await Promise.all([
+          // Sage's membership is for mentions; it isn't a member.
           context.db.userCoopMembership.count({
-            where: { coopId: input.coopId, status: 'ACTIVE' },
+            where: { coopId: input.coopId, status: 'ACTIVE', user: { isBot: false } },
           }),
           context.db.groupComment.count({
             where: {
@@ -1659,9 +1806,22 @@ export const commonsRouter = router({
       };
     }),
 
-  /** A preview slice of active members for the info page's People row. */
+  /**
+   * Active people in a Commons, for the info page's People row (recent
+   * joiners) and the full member list (by name, searchable, paged). Sage and
+   * other bot accounts hold a membership so they resolve in mentions, but
+   * they aren't people, so they're never listed or counted here.
+   */
   listMembers: accountAuthenticatedProcedure
-    .input(z.object({ coopId: z.string().min(1), limit: z.number().min(1).max(50).default(8) }))
+    .input(
+      z.object({
+        coopId: z.string().min(1),
+        limit: z.number().min(1).max(100).default(8),
+        offset: z.number().int().min(0).default(0),
+        sort: z.enum(['recent', 'name']).default('recent'),
+        search: z.string().trim().max(80).optional(),
+      }),
+    )
     .query(async ({ input, ctx }) => {
       const context = ctx as AccountAuthenticatedContext;
       await requireActiveCommonsMembership(
@@ -1670,24 +1830,46 @@ export const commonsRouter = router({
         input.coopId,
       );
 
+      const userFilter: Prisma.UserWhereInput = { isBot: false, deletedAt: null };
+      if (input.search) {
+        userFilter.OR = [
+          { name: { contains: input.search, mode: 'insensitive' } },
+          { handle: { contains: input.search, mode: 'insensitive' } },
+        ];
+      }
+      const where: Prisma.UserCoopMembershipWhereInput = {
+        coopId: input.coopId,
+        status: 'ACTIVE',
+        user: userFilter,
+      };
+
       const [memberships, totalCount] = await Promise.all([
         context.db.userCoopMembership.findMany({
-          where: { coopId: input.coopId, status: 'ACTIVE' },
-          orderBy: { joinedAt: 'desc' },
+          where,
+          orderBy:
+            input.sort === 'name'
+              ? [{ user: { name: 'asc' } }, { joinedAt: 'asc' }, { id: 'asc' }]
+              : { joinedAt: 'desc' },
+          skip: input.offset,
           take: input.limit,
-          select: { user: { select: { id: true, name: true, email: true, handle: true } } },
+          select: {
+            roles: true,
+            user: { select: { id: true, name: true, email: true, handle: true } },
+          },
         }),
-        context.db.userCoopMembership.count({
-          where: { coopId: input.coopId, status: 'ACTIVE' },
-        }),
+        context.db.userCoopMembership.count({ where }),
       ]);
 
       return {
         totalCount,
-        members: memberships.map(({ user }: any) => ({
+        hasMore: input.offset + memberships.length < totalCount,
+        members: memberships.map(({ user, roles }: any) => ({
           id: user.id,
           name: displayName(user),
           handle: personHandle(user),
+          isSteward: ((roles as string[] | undefined) || []).some((role) =>
+            STEWARD_ROLES.includes(role),
+          ),
         })),
       };
     }),
@@ -2044,11 +2226,7 @@ export const commonsRouter = router({
               },
             },
           },
-          reactions: {
-            select: { emoji: true, userId: true },
-            orderBy: { createdAt: 'asc' },
-            take: 1000,
-          },
+          ...POST_REACTIONS_INCLUDE,
           _count: { select: { comments: true, supports: true } },
         },
       });
@@ -2095,63 +2273,6 @@ export const commonsRouter = router({
       };
     }),
 
-  ask: publicProcedure
-    .input(
-      z.object({
-        prompt: z.string().min(1).max(4000),
-        postId: z.string().optional(),
-      }),
-    )
-    .mutation(async ({ input, ctx }) => {
-      let context = '';
-      let contextCoopId: string | undefined;
-
-      if (input.postId) {
-        const post = await ctx.db.commonsPost.findUnique({
-          where: { id: input.postId },
-          include: {
-            comments: {
-              orderBy: { createdAt: 'asc' },
-              take: 10,
-              include: {
-                author: { select: { name: true, email: true, handle: true, isBot: true } },
-              },
-            },
-          },
-        });
-
-        const accountUser = await resolveOptionalAccountUser(ctx as Context);
-        if (
-          post &&
-          (await canReadPostCircle(ctx.db, accountUser?.id, post)) &&
-          (post.coopId === COMMONS_COOP_ID ||
-            (accountUser &&
-              (await hasActiveCommonsMembership(
-                ctx.db,
-                accountUser.id,
-                post.coopId,
-              ))))
-        ) {
-          contextCoopId = post.coopId;
-          context = [
-            `Thread title: ${post.title}`,
-            `Thread body: ${post.content}`,
-            'Recent comments:',
-            ...post.comments.map(
-              (comment) => `${displayName(comment.author)}: ${comment.content}`,
-            ),
-          ].join('\n');
-        }
-      }
-
-      const answer = await runCommonsAi(
-        [input.prompt, context ? `\nContext:\n${context}` : ''].join(''),
-        contextCoopId,
-      );
-
-      return { answer };
-    }),
-
   getPersonalPage: publicProcedure
     .input(
       z.object({
@@ -2162,7 +2283,7 @@ export const commonsRouter = router({
     )
     .query(async ({ input, ctx }) => {
       const context = ctx as Context;
-      const handle = input.handle.toLowerCase().replace(/[^a-z0-9]+/g, '');
+      const handle = input.handle.toLowerCase().replace(/[^a-z0-9_-]+/g, '');
       const user = await findUserByPersonalHandle(ctx.db, handle);
 
       if (!user) {
@@ -2188,6 +2309,7 @@ export const commonsRouter = router({
                   author: { select: { name: true, email: true, handle: true, isBot: true } },
                 },
               },
+              ...POST_REACTIONS_INCLUDE,
               _count: { select: { comments: true, supports: true } },
             },
           }),
@@ -2223,11 +2345,13 @@ export const commonsRouter = router({
         profile: {
           id: user.id,
           name: displayName(user),
+          nickname: user.nickname,
           handle: personHandle(user),
           bio: user.selfDescription,
           avatarUrl: user.avatarUrl,
           avatarEmoji: user.avatarEmoji,
           avatarColor: user.avatarColor,
+          isSage: isSageUser(user),
           createdAt: user.createdAt.toISOString(),
           followerCount,
           followingCount,
@@ -2235,7 +2359,7 @@ export const commonsRouter = router({
           viewerIsFollowing,
           commons,
         },
-        posts: posts.map(mapPersonalPagePost),
+        posts: posts.map((post: any) => mapPersonalPagePost(post, viewerUser?.id)),
         nextCursor,
       };
     }),
@@ -2246,7 +2370,7 @@ export const commonsRouter = router({
         .object({
           content: z.string().trim().max(5000).default(''),
           tag: postTagSchema.nullable().optional(),
-          media: z.array(uploadedPostMediaSchema).max(4).default([]),
+          media: z.array(uploadedPostMediaSchema).max(MAX_POST_MEDIA).default([]),
         })
         .refine((input) => input.content.length > 0 || input.media.length > 0, {
           message: 'Write something or attach media before posting.',
@@ -2485,50 +2609,81 @@ export const commonsRouter = router({
     .input(z.object({ postId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const { accountUser } = ctx as AccountAuthenticatedContext;
-      const post = await ctx.db.personalPagePost.findUnique({
-        where: { id: input.postId },
-        select: { authorId: true },
-      });
+      const post = await findPersonalPagePostForReaction(ctx.db, input.postId);
+      const supported = await togglePersonalPageSupport(ctx.db, post, accountUser.id);
+      return { supported };
+    }),
 
-      if (!post) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Post not found.',
+  // A member's emoji reaction on a personal page post. "❤️" is the post's
+  // like, so it goes through the same support row (and alert) as
+  // togglePersonalPagePostSupport. Mirrors togglePostReaction.
+  togglePersonalPagePostReaction: accountAuthenticatedProcedure
+    .input(z.object({ postId: z.string().min(1), emoji: reactionEmojiSchema }))
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      const post = await findPersonalPagePostForReaction(ctx.db, input.postId);
+
+      let reacted: boolean;
+      if (input.emoji === LIKE_EMOJI) {
+        reacted = await togglePersonalPageSupport(ctx.db, post, accountUser.id);
+      } else {
+        const mine = await ctx.db.personalPagePostReaction.findMany({
+          where: { postId: post.id, userId: accountUser.id },
+          select: { id: true, emoji: true },
         });
+        const existing = mine.find((reaction) => reaction.emoji === input.emoji);
+        if (existing) {
+          await ctx.db.personalPagePostReaction.delete({ where: { id: existing.id } });
+          reacted = false;
+        } else {
+          if (mine.length >= MAX_REACTIONS_PER_MEMBER) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `You can add up to ${MAX_REACTIONS_PER_MEMBER} reactions to one post.`,
+            });
+          }
+          let created = true;
+          try {
+            await ctx.db.personalPagePostReaction.create({
+              data: { postId: post.id, userId: accountUser.id, emoji: input.emoji },
+            });
+          } catch (error) {
+            // A double tap raced us; the reaction exists either way.
+            if ((error as { code?: string } | undefined)?.code !== 'P2002') throw error;
+            created = false;
+          }
+          reacted = true;
+          // One alert per member per post, not one per emoji.
+          if (created && mine.length === 0 && post.authorId !== accountUser.id) {
+            void createNotificationAndPush(ctx.db, {
+              userId: post.authorId,
+              coopId: COMMONS_COOP_ID,
+              type: 'PERSONAL_PAGE_SUPPORT',
+              title: `Someone reacted ${input.emoji} to your post`,
+              body: 'A member reacted to what you shared on your page.',
+              data: { postId: post.id },
+            });
+          }
+        }
       }
 
-      const existing = await ctx.db.personalPagePostSupport.findUnique({
-        where: {
-          postId_userId: {
-            postId: input.postId,
-            userId: accountUser.id,
-          },
-        },
-      });
-
-      if (existing) {
-        await ctx.db.personalPagePostSupport.delete({
-          where: { id: existing.id },
-        });
-        return { supported: false };
-      }
-
-      await ctx.db.personalPagePostSupport.create({
-        data: { postId: input.postId, userId: accountUser.id },
-      });
-
-      if (post.authorId && post.authorId !== accountUser.id) {
-        void createNotificationAndPush(ctx.db, {
-          userId: post.authorId,
-          coopId: COMMONS_COOP_ID,
-          type: 'PERSONAL_PAGE_SUPPORT',
-          title: 'Someone liked your post',
-          body: 'A member liked what you shared on your page.',
-          data: { postId: input.postId },
-        });
-      }
-
-      return { supported: true };
+      const [rows, supports, support] = await Promise.all([
+        ctx.db.personalPagePostReaction.findMany({
+          where: { postId: post.id },
+          ...POST_REACTIONS_INCLUDE.reactions,
+        }),
+        ctx.db.personalPagePostSupport.findMany({
+          where: { postId: post.id },
+          ...POST_REACTIONS_INCLUDE.supports,
+        }),
+        ctx.db.personalPagePostSupport.count({ where: { postId: post.id } }),
+      ]);
+      return {
+        emoji: input.emoji,
+        reacted,
+        support,
+        reactions: mapPostReactions(supports, rows, accountUser.id),
+      };
     }),
 
   createPost: accountAuthenticatedProcedure
@@ -2540,7 +2695,7 @@ export const commonsRouter = router({
           title: z.string().trim().min(1).max(120).optional(),
           content: z.string().trim().max(5000).default(''),
           tag: postTagSchema.default('Social'),
-          media: z.array(uploadedPostMediaSchema).max(4).default([]),
+          media: z.array(uploadedPostMediaSchema).max(MAX_POST_MEDIA).default([]),
         })
         .refine((input) => input.content.length > 0 || input.media.length > 0, {
           message: 'Write something or attach media before posting.',
@@ -2647,23 +2802,27 @@ export const commonsRouter = router({
       }
 
       const sageMention = mentionedUsers.find(isSageUser);
-      if (sageMention && circleId === generalCircleId(input.coopId)) {
+      const postInFeed = circleId === generalCircleId(input.coopId);
+      if (sageMention && (postInFeed || await sageAnswersInCircle(ctx.db, input.coopId, circleId))) {
         try {
           const sage = await ensureSageBotUser(ctx.db, input.coopId);
-          const agent = getAgent('sage-commons-reply');
-          if (agent) {
-            await traceSageReply(
-              { kind: 'post', coopId: input.coopId, postId: post.id },
-              { message: encodedContent, threadCount: 0 },
-              (message) => agent.run({ coopId: input.coopId, message }),
-              async (reply) => {
-                const sageComment = await ctx.db.commonsComment.create({
-                  data: { postId: post.id, authorId: sage.id, content: reply },
-                });
-                await notifySageComment({ postId: post.id, commentId: sageComment.id });
-              },
-            );
-          }
+          // In a private circle Sage only talks: no tools, so nothing from the circle leaves it.
+          const actions = postInFeed ? buildSageReplyTools({ kind: 'thread', memberId: accountUser.id, coopId: input.coopId }) : undefined;
+          await traceSageReply(
+            { kind: 'post', coopId: input.coopId, postId: post.id, circleId: postInFeed ? null : circleId },
+            { message: encodedContent, threadCount: 0, toolLog: actions?.state.log },
+            (message) => runSageCommonsReply(
+              { coopId: input.coopId, message, channel: postInFeed ? 'mention' : 'circle', memberName: safeFirstName(accountUser.name) ?? undefined },
+              undefined,
+              actions,
+            ),
+            async (reply) => {
+              const sageComment = await ctx.db.commonsComment.create({
+                data: { postId: post.id, authorId: sage.id, content: reply },
+              });
+              await notifySageComment({ postId: post.id, commentId: sageComment.id });
+            },
+          );
         } catch (err) {
           console.error('Sage auto-reply on createPost failed:', err);
         }
@@ -2772,6 +2931,17 @@ export const commonsRouter = router({
         }),
       ]);
 
+      await notifyCircleHighlight(ctx.db, {
+        coopId: post.coopId,
+        circleId: post.circleId!,
+        postId: post.id,
+        actorId: accountUser.id,
+      }).catch(() =>
+        console.error('[push] circle highlight notification failed', {
+          postId: post.id,
+        }),
+      );
+
       return { success: true };
     }),
 
@@ -2868,15 +3038,19 @@ export const commonsRouter = router({
           media: { orderBy: { order: 'asc' } },
         },
       });
-      if (!post.circleId || post.circleId === generalCircleId(post.coopId)) {
-        await enqueueCommonsActionContent('commons_comment', comment.id).catch((error) =>
-          console.error('Could not enqueue Commons action scan for comment', { commentId: comment.id, error }),
-        );
-      }
+      // General feed comments get Sage's usual analysis; circle comments are checked for whether the
+      // thread needs facilitation (no model call unless it does).
+      await enqueueCommonsActionContent('commons_comment', comment.id).catch((error) =>
+        console.error('Could not enqueue Commons action scan for comment', { commentId: comment.id, error }),
+      );
 
       // A reply may be what Sage was waiting for: check the member's open follow-ups on this post now.
       void wakeTasksForReply(post.id, accountUser.id).catch((error) =>
         console.error('Could not wake Sage follow-ups', { postId: post.id, error }),
+      );
+      // A reply to a post Sage made for a member goes back to that member privately.
+      void relayReplyToMember(comment.id).catch((error) =>
+        console.error('Could not relay a reply to the member', { commentId: comment.id, error }),
       );
       const isCirclePost =
         !!post.circleId && post.circleId !== generalCircleId(post.coopId);
@@ -2949,41 +3123,45 @@ export const commonsRouter = router({
       }
 
       const sageMention = mentionedUsers.find(isSageUser);
+      const commentInFeed = !post.circleId || post.circleId === generalCircleId(post.coopId);
       if (
         sageMention &&
-        (!post.circleId || post.circleId === generalCircleId(post.coopId))
+        (commentInFeed || await sageAnswersInCircle(ctx.db, post.coopId, post.circleId!))
       ) {
         try {
           const sage = await ensureSageBotUser(ctx.db, post.coopId);
-          const agent = getAgent('sage-commons-reply');
-          if (agent) {
-            const priorComments = await ctx.db.commonsComment.findMany({
-              where: { postId: post.id, id: { not: comment.id } },
-              orderBy: { createdAt: 'asc' },
-              take: 10,
-              include: {
-                author: { select: { name: true, email: true, handle: true, isBot: true } },
-              },
-            });
-            const threadContext = [
-              `Original post: ${post.content}`,
-              ...priorComments.map(
-                (c) => `${displayName(c.author)}: ${c.content}`,
-              ),
-            ].join('\n');
+          const priorComments = await ctx.db.commonsComment.findMany({
+            where: { postId: post.id, id: { not: comment.id } },
+            orderBy: { createdAt: 'asc' },
+            take: 10,
+            include: {
+              author: { select: { name: true, email: true, handle: true, isBot: true } },
+            },
+          });
+          const threadContext = [
+            `Original post: ${post.content}`,
+            ...priorComments.map(
+              (c) => `${displayName(c.author)}: ${c.content}`,
+            ),
+          ].join('\n');
+          // In a private circle Sage only talks: no tools, so nothing from the circle leaves it.
+          const actions = commentInFeed ? buildSageReplyTools({ kind: 'thread', memberId: accountUser.id, coopId: post.coopId }) : undefined;
 
-            await traceSageReply(
-              { kind: 'comment', coopId: post.coopId, postId: post.id, commentId: comment.id },
-              { message: encodedContent, threadContext, threadCount: priorComments.length + 1 },
-              (message, thread) => agent.run({ coopId: post.coopId, message, threadContext: thread }),
-              async (reply) => {
-                const sageComment = await ctx.db.commonsComment.create({
-                  data: { postId: post.id, authorId: sage.id, content: reply },
-                });
-                await notifySageComment({ postId: post.id, commentId: sageComment.id });
-              },
-            );
-          }
+          await traceSageReply(
+            { kind: 'comment', coopId: post.coopId, postId: post.id, commentId: comment.id, circleId: commentInFeed ? null : post.circleId },
+            { message: encodedContent, threadContext, threadCount: priorComments.length + 1, toolLog: actions?.state.log },
+            (message, thread) => runSageCommonsReply(
+              { coopId: post.coopId, message, threadContext: thread, channel: commentInFeed ? 'mention' : 'circle', memberName: safeFirstName(accountUser.name) ?? undefined },
+              undefined,
+              actions,
+            ),
+            async (reply) => {
+              const sageComment = await ctx.db.commonsComment.create({
+                data: { postId: post.id, authorId: sage.id, content: reply },
+              });
+              await notifySageComment({ postId: post.id, commentId: sageComment.id });
+            },
+          );
         } catch (err) {
           console.error('Sage auto-reply on createComment failed:', err);
         }
@@ -3245,12 +3423,14 @@ export const commonsRouter = router({
         }
       }
 
-      const [rows, support] = await Promise.all([
+      const [rows, supports, support] = await Promise.all([
         ctx.db.commonsPostReaction.findMany({
           where: { postId: post.id },
-          select: { emoji: true, userId: true },
-          orderBy: { createdAt: 'asc' },
-          take: 1000,
+          ...POST_REACTIONS_INCLUDE.reactions,
+        }),
+        ctx.db.commonsPostSupport.findMany({
+          where: { postId: post.id },
+          ...POST_REACTIONS_INCLUDE.supports,
         }),
         ctx.db.commonsPostSupport.count({ where: { postId: post.id } }),
       ]);
@@ -3258,7 +3438,7 @@ export const commonsRouter = router({
         emoji: input.emoji,
         reacted,
         support,
-        reactions: summarizeReactions(rows, accountUser.id),
+        reactions: mapPostReactions(supports, rows, accountUser.id),
       };
     }),
 
@@ -3328,7 +3508,7 @@ export const commonsRouter = router({
       orderBy: { lastActiveAt: 'desc' },
       take: 50,
       include: {
-        user: { select: { id: true, name: true, email: true, handle: true } },
+        user: { select: { id: true, name: true, email: true, handle: true, isBot: true, roles: true } },
       },
     });
 
@@ -3337,6 +3517,7 @@ export const commonsRouter = router({
         id: membership.user.id,
         name: displayName(membership.user),
         handle: personHandle(membership.user),
+        isSage: isSageUser(membership.user),
         role: 'Cahootz Commons',
       })),
     };

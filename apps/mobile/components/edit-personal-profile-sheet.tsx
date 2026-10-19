@@ -18,6 +18,7 @@ import { PersonAvatar } from '@/components/person-avatar';
 import { Text } from '@/components/ui/text';
 import { api, type PersonalPageProfile } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 const BIO_MAX_LENGTH = 5000;
 const PRIMARY = '#FF6B00';
@@ -153,7 +154,7 @@ export function EditPersonalProfileSheet({
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView {...keyboardScrollProps} showsVerticalScrollIndicator={false}>
             <View className="mb-4 items-center">
               <PersonAvatar
                 name={name}

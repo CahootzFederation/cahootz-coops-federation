@@ -85,18 +85,18 @@ describe("analytics with a key", () => {
     expect(PostHog).toHaveBeenCalledWith("phc_test", expect.objectContaining({ host: "https://ph.example.test" }));
   });
 
-  it("identifies by internal id with only the coop id attached, once per user", () => {
+  it("identifies by internal id with email on the person profile, once per user", () => {
     init();
-    analytics.identify("user-1", { coopId: "cahootz" });
-    analytics.identify("user-1", { coopId: "cahootz" });
+    analytics.identify("user-1", { coopId: "cahootz", email: "Person@Example.com" });
+    analytics.identify("user-1", { coopId: "cahootz", email: "Person@Example.com" });
 
     expect(mockClient.identify).toHaveBeenCalledTimes(1);
-    expect(mockClient.identify).toHaveBeenCalledWith("user-1", { coop_id: "cahootz" });
+    expect(mockClient.identify).toHaveBeenCalledWith("user-1", { coop_id: "cahootz", email: "person@example.com" });
     expect(mockClient.register).toHaveBeenCalledWith({ coop_id: "cahootz" });
 
     analytics.reset();
     expect(mockClient.reset).toHaveBeenCalledTimes(1);
-    analytics.identify("user-1", { coopId: "cahootz" });
+    analytics.identify("user-1", { coopId: "cahootz", email: "person@example.com" });
     expect(mockClient.identify).toHaveBeenCalledTimes(2);
   });
 

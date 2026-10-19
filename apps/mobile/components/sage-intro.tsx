@@ -1,7 +1,7 @@
 import React from 'react';
 import { TouchableOpacity, View } from 'react-native';
-import { Sparkles } from 'lucide-react-native';
 
+import { SageAvatar } from '@/components/sage-avatar';
 import { Text } from '@/components/ui/text';
 import { secureStorage } from '@/lib/secure-storage';
 
@@ -20,7 +20,11 @@ const SECTIONS = [
   },
   {
     title: 'What Sage can do on its own',
-    body: 'Reply with helpful information, send you reminders and alerts, check back on plans, and close its own suggestions when nobody answers or they no longer apply.',
+    body: 'Reply with helpful information, send you reminders and alerts, check back on plans, ask the whole commons an open question when a need keeps coming up, post a regular rhythm in General (Monday priorities, midweek open requests, a Friday thank-you counted from app records, and a monthly review), and close its own suggestions when nobody answers or they no longer apply.',
+  },
+  {
+    title: 'What Sage remembers',
+    body: 'Needs you mention in your check-ins, as a short private note, never your exact words. It uses them only in your own chats with Sage, and counts them without your name toward patterns in your commons. Ask Sage "What do you remember about me?" to see them, or say "forget everything" anytime.',
   },
   {
     title: 'What always waits for a person',
@@ -89,7 +93,7 @@ export function SageIntro({ dismissible = true }: { dismissible?: boolean }) {
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Sparkles size={20} color={THEME.primary} />
+        <SageAvatar size={32} />
         <Text accessibilityRole="header" style={{ fontSize: 18, fontWeight: '800', color: THEME.ink }}>
           Meet Sage
         </Text>

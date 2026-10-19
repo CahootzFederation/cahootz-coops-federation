@@ -1,7 +1,7 @@
 import type { CommonsPost } from '@/lib/api';
 
 export function personHandleFromName(name?: string | null) {
-  const handle = (name || 'member').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const handle = (name || 'member').toLowerCase().replace(/[^a-z0-9_-]+/g, '');
   return handle || 'member';
 }
 

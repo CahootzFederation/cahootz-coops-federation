@@ -28,8 +28,11 @@ import {
   CommonsMediaTile,
   COMPOSER_MEDIA_TILE_SIZE,
   FEED_MEDIA_TILE_SIZE,
+  MAX_POST_MEDIA_ATTACHMENTS,
 } from '@/components/commons-media-viewer';
 import { EventCard, UpcomingEventsModule } from '@/components/event-card';
+import { ReactionBar } from '@/components/reaction-bar';
+import { reportPostFailure, uploadPostMedia } from '@/lib/post-media-upload';
 import { WelcomeIntroPrompt } from '@/components/welcome-intro-prompt';
 import { LoadError } from '@/components/load-error';
 import { MentionComposerInput } from '@/components/mention-composer-input';
@@ -38,6 +41,7 @@ import { PostTypeSelector } from '@/components/post-type-selector';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { AiBadge } from '@/components/ai-badge';
+import { SageAvatar } from '@/components/sage-avatar';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
@@ -75,7 +79,6 @@ import {
   ChevronRight,
   Compass,
   FileText,
-  Heart,
   Home,
   Image as ImageIcon,
   Info,
@@ -83,9 +86,9 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  MessageSquareWarning,
   Pin,
   Plus,
-  Repeat2,
   RotateCcw,
   Scale,
   Search,
@@ -99,6 +102,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react-native';
+import { keyboardInsetScrollProps, keyboardScrollProps } from '@/lib/keyboard';
 
 // Hallmark - pre-emit critique: P4 H4 E4 S4 R4 V4
 
@@ -110,6 +114,22 @@ type ComposerNotice = {
 type SuggestionStatus = 'idle' | 'submitting' | 'success' | 'error';
 type ComposerMedia = Omit<CommonsPostMedia, 'pathname' | 'url' | 'id'> & {
   uri: string;
+};
+/**
+ * A post that has left the composer but isn't saved yet. The composer clears
+ * as soon as the member taps Post; uploads and the save run in the background,
+ * and a failure keeps everything here so the member can retry.
+ */
+type OutgoingPost = {
+  /** Feed card id while it uploads; null when no card is shown for it. */
+  pendingPostId: string | null;
+  destination: { id: string; name: string };
+  circleId?: string;
+  circleName: string | null;
+  feedKey: string;
+  content: string;
+  tag: SelectedPostType;
+  media: ComposerMedia[];
 };
 type FirstStepAction = {
   label: string;
@@ -143,7 +163,6 @@ const DEFAULT_COMMONS_PROFILE: CommonsProfile = {
     'A social commons for conversation, resources, and coordinated action.',
 };
 
-const MAX_MEDIA_ATTACHMENTS = 4;
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
 const ALLOWED_POST_MEDIA_MIMES = new Set([
@@ -177,6 +196,12 @@ const DRAWER_SECTIONS = [
     label: 'Messages & Direct Chat',
     icon: MessageCircle,
     action: '/(tabs)/messages',
+  },
+  {
+    label: 'Report a Problem or Idea',
+    icon: MessageSquareWarning,
+    action: '/(authenticated)/feedback',
+    requiresAuth: true,
   },
 ];
 
@@ -251,15 +276,26 @@ export default function CommonsAiEntry({
   const [joinCircleError, setJoinCircleError] = useState('');
   const [circleFeedAuthorized, setCircleFeedAuthorized] =
     useState(!feedCircleId);
-  const [isPosting, setIsPosting] = useState(false);
-  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  // Pending feed cards whose upload or save failed; they offer Retry/Discard.
+  const [failedPendingPostIds, setFailedPendingPostIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const outgoingPostsRef = useRef(new Map<string, OutgoingPost>());
+  const failedPendingPostIdsRef = useRef(failedPendingPostIds);
+  failedPendingPostIdsRef.current = failedPendingPostIds;
+  const lastPostTapAtRef = useRef(0);
   const [selectedMediaItems, setSelectedMediaItems] = useState<ComposerMedia[]>(
     [],
   );
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const selectedMediaItemsRef = useRef(selectedMediaItems);
+  selectedMediaItemsRef.current = selectedMediaItems;
   const [selectedPostType, setSelectedPostType] =
     useState<SelectedPostType>(DEFAULT_POST_TYPE);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [reactingPostId, setReactingPostId] = useState<string | null>(null);
   const [pinningPostId, setPinningPostId] = useState<string | null>(null);
   const [rsvpPendingEventId, setRsvpPendingEventId] = useState<string | null>(null);
   const [composerNotice, setComposerNotice] = useState<ComposerNotice>(null);
@@ -301,8 +337,8 @@ export default function CommonsAiEntry({
     ? feedCoopId
     : commonsProfile.id || DEFAULT_COMMONS_PROFILE.id;
   const drawerCirclePreview = useMemo(
-    () => buildDrawerCirclePreview(currentDrawerCoopId, drawerCircles),
-    [currentDrawerCoopId, drawerCircles],
+    () => buildDrawerCirclePreview(drawerCircles),
+    [drawerCircles],
   );
   const hiddenCircleCount = hiddenDrawerCircleCount(drawerCircles);
   const hasCirclePreviewRoom = shouldShowCreateCircle(drawerCircles);
@@ -441,6 +477,16 @@ export default function CommonsAiEntry({
     scrollToPostIdRef.current = null;
     postedItemLayoutRef.current = null;
     feedListOffsetYRef.current = null;
+    // The pending cards go with the old feed. Posts still uploading carry on
+    // without a card; ones that already failed go back to the composer.
+    outgoingPostsRef.current.forEach((outgoing, pendingPostId) => {
+      outgoing.pendingPostId = null;
+      if (failedPendingPostIdsRef.current.has(pendingPostId)) {
+        restoreOutgoingPostToComposer(outgoing, "We couldn't post that.");
+      }
+    });
+    outgoingPostsRef.current.clear();
+    setFailedPendingPostIds(new Set());
     setFeedPosts([]);
     setPinnedPost(null);
     setUpcomingEvents([]);
@@ -719,9 +765,137 @@ export default function CommonsAiEntry({
     setAccountPromptOpen(true);
   };
 
+  const markPendingPostFailed = (pendingPostId: string, failed: boolean) => {
+    setFailedPendingPostIds((current) => {
+      if (current.has(pendingPostId) === failed) return current;
+      const next = new Set(current);
+      if (failed) next.add(pendingPostId);
+      else next.delete(pendingPostId);
+      return next;
+    });
+  };
+
+  const finishOutgoingPost = (outgoing: OutgoingPost) => {
+    outgoing.media.forEach(revokeComposerMediaUri);
+    if (outgoing.pendingPostId) {
+      outgoingPostsRef.current.delete(outgoing.pendingPostId);
+      markPendingPostFailed(outgoing.pendingPostId, false);
+    }
+  };
+
+  // Hand a failed post with no feed card back to the composer, unless the
+  // member has already started the next one.
+  const restoreOutgoingPostToComposer = (outgoing: OutgoingPost, message: string) => {
+    const composerIsEmpty =
+      !draftRef.current.trim() && selectedMediaItemsRef.current.length === 0;
+    if (composerIsEmpty) {
+      setDraft(outgoing.content);
+      setSelectedPostType(outgoing.tag);
+      setSelectedMediaItems(outgoing.media);
+      setComposerNotice({ type: 'error', body: `${message} Your post is back in the box below.` });
+      return;
+    }
+    outgoing.media.forEach(revokeComposerMediaUri);
+    setComposerNotice({ type: 'error', body: message });
+  };
+
+  const publishOutgoingPost = async (outgoing: OutgoingPost, token: string) => {
+    if (outgoing.pendingPostId) markPendingPostFailed(outgoing.pendingPostId, false);
+    let stage: 'upload' | 'save' = 'upload';
+    const isPersonalPageDestination =
+      outgoing.destination.id === PERSONAL_PAGE_DESTINATION_ID;
+    try {
+      const uploadResourceId = isPersonalPageDestination
+        ? 'personal-page'
+        : outgoing.destination.id;
+      const uploadedMedia = await uploadPostMedia(uploadResourceId, outgoing.media);
+      stage = 'save';
+
+      if (isPersonalPageDestination) {
+        await api.createPersonalPagePost(
+          { content: outgoing.content, tag: outgoing.tag, media: uploadedMedia },
+          token,
+        );
+        finishOutgoingPost(outgoing);
+        setComposerNotice({ type: 'success', body: 'Posted to your Personal Page.' });
+        return;
+      }
+
+      const result = await api.createCommonsPost(
+        {
+          content: outgoing.content,
+          coopId: outgoing.destination.id,
+          circleId: outgoing.circleId,
+          tag: outgoing.tag,
+          media: uploadedMedia,
+        },
+        token,
+      );
+      const { pendingPostId } = outgoing;
+      const stillOnPostingFeed = activeFeedKeyRef.current === outgoing.feedKey;
+      const belongsInCurrentFeed =
+        stillOnPostingFeed &&
+        (feedCoopId === 'all'
+          ? !result.post.circleId ||
+            result.post.circleId === `general:${result.post.coopId}`
+          : postsForCircle([result.post], feedCoopId, feedCircleId).length > 0);
+      if (stillOnPostingFeed) {
+        if (belongsInCurrentFeed && pendingPostId && scrollToPostIdRef.current === pendingPostId) {
+          scrollToPostIdRef.current = result.post.id;
+          postedItemLayoutRef.current = null;
+        }
+        setFeedPosts((current) => {
+          const withoutPending = current.filter((post) => post.id !== pendingPostId);
+          return belongsInCurrentFeed
+            ? mergeFeedPosts([result.post], withoutPending)
+            : withoutPending;
+        });
+      }
+      finishOutgoingPost(outgoing);
+      setComposerNotice(
+        stillOnPostingFeed && !belongsInCurrentFeed
+          ? { type: 'error', body: 'The post was saved, but the server did not place it in this feed. Check General before posting again.' }
+          : { type: 'success', body: `Posted to ${outgoing.circleId ? outgoing.circleName || 'this circle' : outgoing.destination.name}.` },
+      );
+    } catch (error) {
+      console.error('Failed to publish post:', error);
+      reportPostFailure(error, {
+        stage,
+        destination: isPersonalPageDestination ? 'personal-page' : 'commons',
+        media: outgoing.media,
+      });
+      const message = friendlyError(error, "We couldn't post that.");
+      const { pendingPostId } = outgoing;
+      if (pendingPostId && activeFeedKeyRef.current === outgoing.feedKey) {
+        // Keep the card (with its text and media) so the member can retry.
+        markPendingPostFailed(pendingPostId, true);
+        setComposerNotice({ type: 'error', body: message });
+        return;
+      }
+      if (pendingPostId) outgoingPostsRef.current.delete(pendingPostId);
+      restoreOutgoingPostToComposer(outgoing, message);
+    }
+  };
+
+  const retryOutgoingPost = (pendingPostId: string) => {
+    const outgoing = outgoingPostsRef.current.get(pendingPostId);
+    if (!outgoing) return;
+    void requireAccount((token) => publishOutgoingPost(outgoing, token));
+  };
+
+  const discardOutgoingPost = (pendingPostId: string) => {
+    const outgoing = outgoingPostsRef.current.get(pendingPostId);
+    if (outgoing) finishOutgoingPost(outgoing);
+    if (scrollToPostIdRef.current === pendingPostId) scrollToPostIdRef.current = null;
+    setFeedPosts((current) => current.filter((post) => post.id !== pendingPostId));
+    setComposerNotice(null);
+  };
+
   const postDraft = () => {
     const trimmed = draft.trim();
-    if (isPosting || isUploadingMedia) return;
+    // The composer clears on tap, so a quick double tap would otherwise
+    // complain that the (now empty) box has nothing to post.
+    if (Date.now() - lastPostTapAtRef.current < 800) return;
     if (!trimmed && selectedMediaItems.length === 0) {
       setComposerNotice({
         type: 'error',
@@ -742,149 +916,88 @@ export default function CommonsAiEntry({
       return;
     }
 
+    const destination = {
+      id: selectedComposerCommons.id,
+      name: selectedComposerCommons.name,
+    };
+    const media = selectedMediaItems;
+    const tag = selectedPostType;
+
     void requireAccount(async (token) => {
-      setIsPosting(true);
-      setComposerNotice(null);
+      lastPostTapAtRef.current = Date.now();
+      const isPersonalPageDestination = destination.id === PERSONAL_PAGE_DESTINATION_ID;
       let pendingPostId: string | null = null;
-      try {
-        const isPersonalPageDestination =
-          selectedComposerCommons.id === PERSONAL_PAGE_DESTINATION_ID;
-        const postingFeedKey = activeFeedKeyRef.current;
-        if (!isPersonalPageDestination) {
-          const targetCircleId = feedCircleId || `general:${selectedComposerCommons.id}`;
-          pendingPostId = `pending:${Date.now()}:${Math.random()}`;
-          const pendingPost: CommonsPost = {
-            id: pendingPostId,
-            createdAt: new Date().toISOString(),
-            coopId: selectedComposerCommons.id,
-            circleId: targetCircleId,
-            authorId: user?.id,
-            author: accountName,
-            authorHandle: accountHandle,
-            group: feedCircleId ? circleName || 'Circle' : selectedComposerCommons.name,
-            time: 'Posting…',
-            title: trimmed.slice(0, 120),
-            body: trimmed,
-            tag: selectedPostType || 'Social',
-            replies: 0,
-            support: 0,
-            media: [],
-            comments: [],
-          };
-          if (feedCoopId === 'all' || postsForCircle([pendingPost], feedCoopId, feedCircleId).length > 0) {
-            scrollToPostIdRef.current = pendingPostId;
-            postedItemLayoutRef.current = null;
-            setFeedPosts((current) => mergeFeedPosts([pendingPost], current));
-          }
+      if (!isPersonalPageDestination) {
+        const targetCircleId = feedCircleId || `general:${destination.id}`;
+        const candidateId = `pending:${Date.now()}:${Math.random()}`;
+        const pendingPost: CommonsPost = {
+          id: candidateId,
+          createdAt: new Date().toISOString(),
+          coopId: destination.id,
+          circleId: targetCircleId,
+          authorId: user?.id,
+          author: accountName,
+          authorHandle: accountHandle,
+          group: feedCircleId ? circleName || 'Circle' : destination.name,
+          time: 'Posting…',
+          title: trimmed.slice(0, 120),
+          body: trimmed,
+          tag: tag || 'Social',
+          replies: 0,
+          support: 0,
+          // Local previews; the card shows them while the files upload.
+          media: media.map((item) => ({
+            pathname: '',
+            url: item.uri,
+            mediaType: item.mediaType,
+            mimeType: item.mimeType,
+            width: item.width,
+            height: item.height,
+          })),
+          comments: [],
+        };
+        if (feedCoopId === 'all' || postsForCircle([pendingPost], feedCoopId, feedCircleId).length > 0) {
+          pendingPostId = candidateId;
+          scrollToPostIdRef.current = pendingPostId;
+          postedItemLayoutRef.current = null;
+          setFeedPosts((current) => mergeFeedPosts([pendingPost], current));
         }
-        const uploadResourceId = isPersonalPageDestination
-          ? 'personal-page'
-          : selectedComposerCommons.id;
-        const uploadedMedia = selectedMediaItems.length
-          ? await (async () => {
-              setIsUploadingMedia(true);
-              setComposerNotice({
-                type: 'info',
-                body: `Uploading ${selectedMediaItems.length} attachment${selectedMediaItems.length === 1 ? '' : 's'}...`,
-              });
-              return Promise.all(
-                selectedMediaItems.map((media) =>
-                  api.uploadCommonsPostMedia({
-                    coopId: uploadResourceId,
-                    uri: media.uri,
-                    fileName: media.fileName,
-                    mimeType: media.mimeType,
-                    mediaType: media.mediaType,
-                    width: media.width,
-                    height: media.height,
-                    durationMs: media.durationMs,
-                    sizeBytes: media.sizeBytes,
-                  }),
-                ),
-              );
-            })()
-          : [];
-
-        if (isPersonalPageDestination) {
-          await api.createPersonalPagePost(
-            {
-              content: trimmed,
-              tag: selectedPostType,
-              media: uploadedMedia,
-            },
-            token,
-          );
-          setNextStepHidden(true);
-          setDraft('');
-          setSelectedPostType(DEFAULT_POST_TYPE);
-          clearSelectedMedia();
-          setComposerNotice({
-            type: 'success',
-            body: 'Posted to your Personal Page.',
-          });
-          return;
-        }
-
-        const result = await api.createCommonsPost(
-          {
-            content: trimmed,
-            coopId: selectedComposerCommons.id,
-            circleId: feedCircleId,
-            tag: selectedPostType,
-            media: uploadedMedia,
-          },
-          token,
-        );
-        const belongsInCurrentFeed =
-          activeFeedKeyRef.current === postingFeedKey &&
-          (feedCoopId === 'all'
-            ? !result.post.circleId ||
-              result.post.circleId === `general:${result.post.coopId}`
-            : postsForCircle([result.post], feedCoopId, feedCircleId).length > 0);
-        if (activeFeedKeyRef.current === postingFeedKey) {
-          if (belongsInCurrentFeed && pendingPostId) {
-            scrollToPostIdRef.current = result.post.id;
-            postedItemLayoutRef.current = null;
-          }
-          setFeedPosts((current) => {
-            const withoutPending = current.filter((post) => post.id !== pendingPostId);
-            return belongsInCurrentFeed
-              ? mergeFeedPosts([result.post], withoutPending)
-              : withoutPending;
-          });
-        }
-        setNextStepHidden(true);
-        setDraft('');
-        setSelectedPostType(DEFAULT_POST_TYPE);
-        clearSelectedMedia();
-        setComposerNotice(
-          activeFeedKeyRef.current === postingFeedKey && !belongsInCurrentFeed
-            ? { type: 'error', body: 'The post was saved, but the server did not place it in this feed. Check General before posting again.' }
-            : { type: 'success', body: `Posted to ${feedCircleId ? circleName || 'this circle' : selectedComposerCommons.name}.` },
-        );
-      } catch (error) {
-        if (pendingPostId) {
-          if (scrollToPostIdRef.current === pendingPostId) scrollToPostIdRef.current = null;
-          setFeedPosts((current) => current.filter((post) => post.id !== pendingPostId));
-        }
-        console.error('Failed to publish post:', error);
-        const message = friendlyError(error, "We couldn't post that.");
-        setAuthError(message);
-        setComposerNotice({ type: 'error', body: message });
-      } finally {
-        setIsUploadingMedia(false);
-        setIsPosting(false);
       }
+
+      const outgoing: OutgoingPost = {
+        pendingPostId,
+        destination,
+        circleId: feedCircleId,
+        circleName,
+        feedKey: activeFeedKeyRef.current,
+        content: trimmed,
+        tag,
+        media,
+      };
+      if (pendingPostId) outgoingPostsRef.current.set(pendingPostId, outgoing);
+
+      // Clear the composer right away so the member can keep going. The
+      // media URIs now belong to the outgoing post, so they aren't revoked.
+      setNextStepHidden(true);
+      setDraft('');
+      setSelectedPostType(DEFAULT_POST_TYPE);
+      setSelectedMediaItems([]);
+      setComposerNotice(
+        pendingPostId
+          ? null
+          : { type: 'info', body: `Posting to ${destination.name}…` },
+      );
+      await publishOutgoingPost(outgoing, token);
     });
   };
 
   const pickPostMedia = async () => {
     try {
-      const remainingSlots = MAX_MEDIA_ATTACHMENTS - selectedMediaItems.length;
+      const remainingSlots = MAX_POST_MEDIA_ATTACHMENTS - selectedMediaItems.length;
       if (remainingSlots <= 0) {
         setComposerNotice({
           type: 'error',
-          body: `You can attach up to ${MAX_MEDIA_ATTACHMENTS} media items.`,
+          body: `You can attach up to ${MAX_POST_MEDIA_ATTACHMENTS} media items.`,
         });
         return;
       }
@@ -906,6 +1019,10 @@ export default function CommonsAiEntry({
         selectionLimit: remainingSlots,
         quality: 0.85,
         videoMaxDuration: 120,
+        // Re-encode videos to 720p H.264 so a phone video fits the 100 MB
+        // limit and uploads in reasonable time (the default keeps the
+        // original, often hundreds of MB).
+        videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
       });
 
       if (result.canceled || !result.assets[0]) return;
@@ -974,16 +1091,11 @@ export default function CommonsAiEntry({
     });
   };
 
-  const clearSelectedMedia = () => {
-    selectedMediaItems.forEach(revokeComposerMediaUri);
-    setSelectedMediaItems([]);
-  };
-
   const addComposerMedia = (mediaItems: ComposerMedia[]) => {
     if (mediaItems.length === 0) return;
 
     setSelectedMediaItems((current) => {
-      const remainingSlots = MAX_MEDIA_ATTACHMENTS - current.length;
+      const remainingSlots = MAX_POST_MEDIA_ATTACHMENTS - current.length;
       const accepted = mediaItems.slice(0, remainingSlots);
       const rejected = mediaItems.slice(remainingSlots);
       rejected.forEach(revokeComposerMediaUri);
@@ -991,7 +1103,7 @@ export default function CommonsAiEntry({
       if (rejected.length > 0) {
         setComposerNotice({
           type: 'error',
-          body: `You can attach up to ${MAX_MEDIA_ATTACHMENTS} media items.`,
+          body: `You can attach up to ${MAX_POST_MEDIA_ATTACHMENTS} media items.`,
         });
       } else {
         setComposerNotice(null);
@@ -1070,29 +1182,26 @@ export default function CommonsAiEntry({
       );
     }
   };
-  const supportPost = (post: CommonsPost) => {
+  const reactToPost = (post: CommonsPost, emoji: string) => {
+    if (reactingPostId) return;
     void requireAccount(async (token) => {
+      setReactingPostId(post.id);
       try {
-        const result = await api.toggleCommonsSupport(post.id, token);
-        setFeedPosts((current) =>
-          current.map((item) =>
-            item.id === post.id
-              ? {
-                  ...item,
-                  support: Math.max(
-                    0,
-                    item.support + (result.supported ? 1 : -1),
-                  ),
-                }
-              : item,
-          ),
-        );
+        const result = await api.togglePostReaction(post.id, emoji, token);
+        const withResult = (item: CommonsPost) =>
+          item.id === post.id
+            ? { ...item, support: result.support, reactions: result.reactions }
+            : item;
+        setFeedPosts((current) => current.map(withResult));
+        setPinnedPost((current) => (current ? withResult(current) : current));
       } catch (error) {
-        console.error('Failed to support post:', error);
+        console.error('Failed to save post reaction:', error);
         Alert.alert(
-          "Couldn't save your support",
-          friendlyError(error, "We couldn't save your support for this post."),
+          "Couldn't save your reaction",
+          friendlyError(error, "We couldn't save your reaction to this post."),
         );
+      } finally {
+        setReactingPostId(null);
       }
     });
   };
@@ -1691,17 +1800,12 @@ export default function CommonsAiEntry({
             </TouchableOpacity>
             <TouchableOpacity
               onPress={postDraft}
-              disabled={isPosting || isUploadingMedia}
               className="h-8 w-8 items-center justify-center rounded-full"
               style={{ backgroundColor: SOCIAL_THEME.primary }}
               activeOpacity={0.82}
               accessibilityLabel="Post"
             >
-              {isPosting || isUploadingMedia ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Send size={16} color="#FFFFFF" fill="#FFFFFF" />
-              )}
+              <Send size={16} color="#FFFFFF" fill="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </View>
@@ -1788,10 +1892,10 @@ export default function CommonsAiEntry({
       <View className="bg-white px-4 py-3">{renderComposer()}</View>
 
       <ScrollView
+        {...keyboardScrollProps}
         ref={scrollRef}
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 28 }}
-        keyboardShouldPersistTaps="handled"
         onScroll={handleFeedScroll}
         scrollEventThrottle={200}
       >
@@ -1855,7 +1959,7 @@ export default function CommonsAiEntry({
                   </Text>
                   <Text className="mt-1 text-xs leading-4 text-gray-700">
                     {feedCircleId
-                      ? 'Join this circle and its common to read and share posts here.'
+                      ? 'Join this circle and its commons to read and share posts here.'
                       : 'Apply from the Wall to see member posts, comment, and publish here.'}
                   </Text>
                 </View>
@@ -1896,12 +2000,67 @@ export default function CommonsAiEntry({
                     className="rounded-[28px] border bg-white p-4"
                     style={{ borderColor: SOCIAL_THEME.border }}
                   >
-                    <View className="flex-row items-center gap-2">
-                      <ActivityIndicator size="small" color={SOCIAL_THEME.primary} />
-                      <Text className="text-xs font-bold text-slate-500">Posting to {post.group}…</Text>
-                    </View>
+                    {failedPendingPostIds.has(post.id) ? (
+                      <Text className="text-xs font-bold text-red-600">
+                        Not posted to {post.group}
+                      </Text>
+                    ) : (
+                      <View className="flex-row items-center gap-2">
+                        <ActivityIndicator size="small" color={SOCIAL_THEME.primary} />
+                        <Text className="text-xs font-bold text-slate-500">
+                          {post.media.length > 0
+                            ? `Uploading ${post.media.length} ${post.media.length === 1 ? 'attachment' : 'attachments'} to ${post.group}…`
+                            : `Posting to ${post.group}…`}
+                        </Text>
+                      </View>
+                    )}
                     {post.body ? (
                       <Text className="mt-3 text-sm leading-5 text-gray-800">{post.body}</Text>
+                    ) : null}
+                    {post.media.length > 0 ? (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        className="mt-3"
+                      >
+                        <View className="flex-row gap-2">
+                          {post.media.map((media, index) => (
+                            <View
+                              key={`${media.url}-${index}`}
+                              className="overflow-hidden rounded-xl bg-gray-200"
+                              style={{
+                                opacity: failedPendingPostIds.has(post.id) ? 1 : 0.6,
+                              }}
+                            >
+                              <CommonsMediaTile
+                                media={media}
+                                size={COMPOSER_MEDIA_TILE_SIZE}
+                              />
+                            </View>
+                          ))}
+                        </View>
+                      </ScrollView>
+                    ) : null}
+                    {failedPendingPostIds.has(post.id) ? (
+                      <View className="mt-3 flex-row gap-2">
+                        <TouchableOpacity
+                          onPress={() => retryOutgoingPost(post.id)}
+                          className="rounded-full px-4 py-2"
+                          style={{ backgroundColor: SOCIAL_THEME.primary }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Retry post"
+                        >
+                          <Text className="text-xs font-black text-white">Retry</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => discardOutgoingPost(post.id)}
+                          className="rounded-full border border-gray-200 bg-white px-4 py-2"
+                          accessibilityRole="button"
+                          accessibilityLabel="Discard post"
+                        >
+                          <Text className="text-xs font-black text-gray-700">Discard</Text>
+                        </TouchableOpacity>
+                      </View>
                     ) : null}
                   </View>
                 );
@@ -1929,13 +2088,17 @@ export default function CommonsAiEntry({
                           event.stopPropagation();
                           openPersonPage(post.author, post.authorHandle);
                         }}
-                        className="h-11 w-11 items-center justify-center rounded-full bg-slate-200"
+                        className={`h-11 w-11 items-center justify-center rounded-full ${post.authorIsAi ? '' : 'bg-slate-200'}`}
                         activeOpacity={0.75}
                         accessibilityLabel={`Open ${post.author}'s personal page`}
                       >
-                        <Text className="text-base font-black text-slate-600">
-                          {personInitials(post.author)}
-                        </Text>
+                        {post.authorIsAi ? (
+                          <SageAvatar size={44} />
+                        ) : (
+                          <Text className="text-base font-black text-slate-600">
+                            {personInitials(post.author)}
+                          </Text>
+                        )}
                       </TouchableOpacity>
                       <View className="min-w-0 flex-1">
                         <TouchableOpacity
@@ -2157,38 +2320,35 @@ export default function CommonsAiEntry({
 
                   {!post.event ? (
                     <View className="p-4 pt-3">
-                      <View className="flex-row items-center justify-between gap-2">
-                        <TouchableOpacity
-                          onPress={(event) => {
-                            event.stopPropagation();
-                            supportPost(post);
-                          }}
-                          disabled={Boolean(feedCircleId && circleIsMember === false)}
-                          className="flex-row items-center gap-1.5"
-                          style={{ opacity: feedCircleId && circleIsMember === false ? 0.4 : 1 }}
+                      {/* Reactions (❤️ included) and the comment count. Taps
+                          here react instead of opening the post. */}
+                      <View className="flex-row items-start justify-between gap-3">
+                        <View
+                          className="min-w-0 flex-1"
+                          onStartShouldSetResponder={() => true}
+                          onTouchEnd={(event) => event.stopPropagation()}
+                          // @ts-expect-error onClick exists on react-native-web views
+                          onClick={(event: { stopPropagation: () => void }) => event.stopPropagation()}
                         >
-                          <Heart
-                            size={19}
-                            color={SOCIAL_THEME.primary}
-                            fill={SOCIAL_THEME.primary}
+                          <ReactionBar
+                            reactions={post.reactions ?? []}
+                            onToggle={(emoji) => reactToPost(post, emoji)}
+                            disabled={
+                              Boolean(feedCircleId && circleIsMember === false) ||
+                              reactingPostId === post.id
+                            }
+                            targetLabel={`${post.author}'s post`}
                           />
-                          <Text className="text-sm font-black text-slate-800">
-                            {post.support}
-                          </Text>
-                        </TouchableOpacity>
-                        <View className="flex-row items-center gap-1.5">
-                          <MessageCircle size={19} color="#334155" />
+                        </View>
+                        <View
+                          className="flex-row items-center gap-1.5 pt-0.5"
+                          accessibilityLabel={`${post.replies} ${post.replies === 1 ? 'comment' : 'comments'}`}
+                        >
+                          <MessageCircle size={17} color="#334155" />
                           <Text className="text-sm font-semibold text-slate-700">
                             {post.replies}
                           </Text>
                         </View>
-                        <View className="flex-row items-center gap-1.5">
-                          <Repeat2 size={18} color="#334155" />
-                          <Text className="text-sm font-semibold text-slate-700">
-                            {Math.max(0, Math.round(post.replies / 2))}
-                          </Text>
-                        </View>
-                        <Bookmark size={19} color="#334155" />
                       </View>
 
                       {firstComment ? (
@@ -2595,7 +2755,7 @@ export default function CommonsAiEntry({
 
                   <View className="mb-2 mt-4 flex-row items-center justify-between">
                     <Text className="text-[11px] font-black uppercase tracking-wide text-stone-400">
-                      Circles in this common
+                      Circles in this commons
                     </Text>
                     <TouchableOpacity
                       onPress={() =>
@@ -2629,16 +2789,10 @@ export default function CommonsAiEntry({
                         {drawerCirclePreview.map((circle) => (
                           <TouchableOpacity
                             key={circle.id}
-                            onPress={() =>
-                              circle.kind === 'main'
-                                ? goToDrawerItem(activeDrawerCommons.action)
-                                : goToCircleFeed(activeDrawerCommons.id, circle.id)
-                            }
+                            onPress={() => goToCircleFeed(activeDrawerCommons.id, circle.id)}
                             className="flex-row items-center gap-2.5 border-b border-stone-100 px-3 py-2.5"
                             style={
-                              (circle.kind === 'main' && !feedCircleId) ||
-                              (circle.kind !== 'main' &&
-                                circle.id === feedCircleId)
+                              circle.id === feedCircleId
                                 ? {
                                     backgroundColor: SOCIAL_THEME.primarySoft,
                                   }
@@ -2649,19 +2803,9 @@ export default function CommonsAiEntry({
                           >
                             <View
                               className="h-8 w-8 items-center justify-center rounded-full"
-                              style={{
-                                backgroundColor:
-                                  circle.kind === 'main'
-                                    ? SOCIAL_THEME.primarySoft
-                                    : '#F5F5F4',
-                              }}
+                              style={{ backgroundColor: '#F5F5F4' }}
                             >
-                              {circle.kind === 'main' ? (
-                                <MessageCircle
-                                  size={14}
-                                  color={SOCIAL_THEME.primary}
-                                />
-                              ) : circle.kind === 'public' ? (
+                              {circle.kind === 'public' ? (
                                 <Users size={13} color="#57534E" />
                               ) : (
                                 <Lock size={13} color="#57534E" />
@@ -2678,14 +2822,10 @@ export default function CommonsAiEntry({
                                 className="text-[10px] font-semibold text-stone-500"
                                 numberOfLines={1}
                               >
-                                {circle.kind === 'main'
-                                  ? 'Default conversation'
-                                  : `${circle.kind === 'public' ? 'Public · ' : ''}${circle.memberCount} ${circle.memberCount === 1 ? 'member' : 'members'}${circle.isLeader ? ' · leader' : ''}`}
+                                {`${circle.kind === 'public' ? 'Public · ' : ''}${circle.memberCount} ${circle.memberCount === 1 ? 'member' : 'members'}${circle.isLeader ? ' · leader' : ''}`}
                               </Text>
                             </View>
-                            {(circle.kind === 'main' && !feedCircleId) ||
-                            (circle.kind !== 'main' &&
-                              circle.id === feedCircleId) ? (
+                            {circle.id === feedCircleId ? (
                               <CheckCircle2
                                 size={14}
                                 color={SOCIAL_THEME.primary}
@@ -2961,8 +3101,8 @@ export default function CommonsAiEntry({
             </View>
 
             <ScrollView
+              {...keyboardScrollProps}
               contentContainerStyle={{ padding: 20, paddingBottom: 28 }}
-              keyboardShouldPersistTaps="handled"
             >
               <View className="rounded-xl border border-gray-200 bg-white p-4">
                 <Text className="font-black text-gray-950">
@@ -3127,8 +3267,8 @@ export default function CommonsAiEntry({
           </View>
 
           <ScrollView
+            {...keyboardInsetScrollProps}
             contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-            keyboardShouldPersistTaps="handled"
           >
             {searchError ? (
               <Text className="mb-3 text-sm font-semibold text-red-600">
@@ -3172,11 +3312,15 @@ export default function CommonsAiEntry({
                       }`}
                       activeOpacity={0.75}
                     >
-                      <View className="h-9 w-9 items-center justify-center rounded-full bg-slate-200">
-                        <Text className="text-sm font-black text-slate-600">
-                          {personInitials(person.name)}
-                        </Text>
-                      </View>
+                      {person.isSage ? (
+                        <SageAvatar size={36} />
+                      ) : (
+                        <View className="h-9 w-9 items-center justify-center rounded-full bg-slate-200">
+                          <Text className="text-sm font-black text-slate-600">
+                            {personInitials(person.name)}
+                          </Text>
+                        </View>
+                      )}
                       <View className="min-w-0 flex-1">
                         <Text
                           className="text-sm font-black text-gray-950"

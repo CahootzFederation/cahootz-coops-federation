@@ -10,7 +10,7 @@ import type { CommonsPostTag } from './post-types';
 // Uses native fetch API - no additional dependencies required
 
 import { getApiUrl, getWebUrl, networkConfig } from './config';
-import { apiError, httpError } from './friendly-error';
+import { ApiError, apiError, httpError } from './friendly-error';
 import { coopConfig } from './coop-config';
 
 /**
@@ -193,6 +193,7 @@ export interface EmailCodeAuthResult {
     email: string;
     handle: string;
     name: string | null;
+    nickname: string | null;
     roles: string[];
     status: string;
     walletAddress: string | null;
@@ -299,6 +300,12 @@ export interface SupporterBadge {
   color: string;
 }
 
+// Match the API's /api/upload/presigned limits.
+export const UPLOAD_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+export const POST_VIDEO_MAX_BYTES = 100 * 1024 * 1024;
+
+export type FeedbackCategory = 'BUG' | 'COMPLAINT' | 'IDEA' | 'OTHER';
+
 export interface CommonsPostMedia {
   id?: string;
   pathname: string;
@@ -366,6 +373,46 @@ export interface EventDetail extends EventSummary {
   };
 }
 
+export type ProposalDraftKind = 'GENERAL' | 'PROGRAM' | 'SPENDING' | 'CHARTER_AMENDMENT' | 'GOALS_AMENDMENT';
+
+export interface CommonsProposalDraft {
+  id: string;
+  coopId: string;
+  title: string;
+  body: string;
+  kind: ProposalDraftKind;
+  goalKey?: string | null;
+  budgetAmount?: number | null;
+  /** Charter change: { find, replace }. Goals change: { missionGoals }. */
+  proposedChanges?: { find?: string; replace?: string; missionGoals?: Array<{ label: string; priorityWeight: number; description?: string }> } | null;
+  ideaPostId?: string | null;
+}
+
+export interface ProposalIdea {
+  draftId: string;
+  coopId: string;
+  kind: ProposalDraftKind;
+  takenBy: string | null;
+  takenByMe: boolean;
+  submittedProposalId: string | null;
+}
+
+export interface GoalSignals {
+  canEdit: boolean;
+  catalog: Array<{ key: string; label: string; measures: string }>;
+  goals: Array<{ key: string; label: string; chosenBy: 'sage' | 'steward'; signals: Array<{ key: string; label: string }> }> | null;
+}
+
+export interface VotedAmendment {
+  id: string;
+  section: string;
+  reason: string;
+  proposalId: string;
+  before: unknown;
+  after: unknown;
+  proposedAt: string;
+}
+
 export interface CommonsPost {
   id: string;
   createdAt?: string;
@@ -398,6 +445,16 @@ export interface SearchPerson {
   id: string;
   name: string;
   handle: string;
+  /** True for a Commons' Sage account, which shows its own face. */
+  isSage?: boolean;
+}
+
+/** An active person in a Commons. Bot accounts such as Sage are never listed. */
+export interface CommonsMember {
+  id: string;
+  name: string;
+  handle: string;
+  isSteward: boolean;
 }
 
 export interface PrivateGroupSummary {
@@ -471,7 +528,7 @@ export interface CircleInvitation {
   invitedAt: string;
 }
 
-export type CircleNotificationLevel = 'ALL' | 'MENTIONS' | 'NONE';
+export type CircleNotificationLevel = 'ALL' | 'HIGHLIGHTS' | 'MENTIONS' | 'NONE';
 
 export interface PrivateGroupComment {
   id: string;
@@ -490,11 +547,14 @@ export interface GroupCreateRequirements {
 export interface PersonalPageProfile {
   id: string;
   name: string;
+  nickname?: string | null;
   handle: string;
   bio?: string | null;
   avatarUrl?: string | null;
   avatarEmoji?: string | null;
   avatarColor?: string | null;
+  /** True for a Commons' Sage account, which shows its own face. */
+  isSage?: boolean;
   createdAt: string;
   followerCount: number;
   followingCount: number;
@@ -535,6 +595,8 @@ export interface PersonalPageFeedPost {
   createdAt: string;
   replies: number;
   support: number;
+  /** Every emoji reaction, ❤️ (the like) first. */
+  reactions?: ReactionSummary[];
   media: CommonsPostMedia[];
   comments: PersonalPageComment[];
 }
@@ -558,6 +620,7 @@ export interface CommonsDirectoryItem extends CommonsProfile {
   joinPolicy?: CommonsJoinPolicy;
   isPrivate?: boolean;
   isMember: boolean;
+  isDefault?: boolean;
   isSteward?: boolean;
   isLocked: boolean;
   canApply: boolean;
@@ -821,6 +884,8 @@ export interface DirectPerson {
   id: string;
   name: string;
   handle: string | null;
+  /** True for a Commons' Sage account, which shows its own face. */
+  isSage?: boolean;
 }
 
 export interface DirectMessage {
@@ -836,6 +901,8 @@ export interface DirectMember {
   name: string;
   handle: string;
   role: string;
+  /** True for a Commons' Sage account, which shows its own face. */
+  isSage?: boolean;
 }
 
 async function readTrpcResult<T>(
@@ -1003,6 +1070,33 @@ export const api = {
     }>(response, 'Failed to load Commons feed');
   },
 
+  async listBoardItems(
+    data: {
+      coopId: string;
+      lane: 'all' | 'needs' | 'offers' | 'events';
+      query?: string;
+      limit?: number;
+      cursor?: string | null;
+    },
+    sessionToken: string,
+  ) {
+    const input = encodeURIComponent(JSON.stringify({
+      ...data,
+      limit: data.limit ?? 30,
+      ...(data.cursor ? { cursor: data.cursor } : {}),
+    }));
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.listBoardItems?input=${input}`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<{
+      coop: CommonsProfile;
+      items: CommonsPost[];
+      laneCounts: Record<'needs' | 'offers' | 'events', number>;
+      nextCursor: string | null;
+    }>(response, 'Failed to load the community board');
+  },
+
   async listCircleMedia(
     coopId: string,
     circleId: string,
@@ -1103,6 +1197,19 @@ export const api = {
     return readTrpcResult<{ coops: CommonsDirectoryItem[] }>(
       response,
       'Failed to load commons',
+    );
+  },
+
+  async setDefaultCommons(coopId: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.setDefaultCommons`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ coopId }),
+    });
+
+    return readTrpcResult<{ defaultCoopId: string }>(
+      response,
+      'Failed to save default commons',
     );
   },
 
@@ -1390,8 +1497,17 @@ export const api = {
     coopId: string,
     sessionToken?: string | null,
     limit = 8,
+    options: { offset?: number; sort?: 'recent' | 'name'; search?: string } = {},
   ) {
-    const input = encodeURIComponent(JSON.stringify({ coopId, limit }));
+    const input = encodeURIComponent(
+      JSON.stringify({
+        coopId,
+        limit,
+        offset: options.offset,
+        sort: options.sort,
+        search: options.search?.trim() || undefined,
+      }),
+    );
     const response = await fetch(
       `${API_BASE_URL}/trpc/commons.listMembers?input=${input}`,
       {
@@ -1402,23 +1518,9 @@ export const api = {
 
     return readTrpcResult<{
       totalCount: number;
-      members: { id: string; name: string; handle: string }[];
+      hasMore: boolean;
+      members: CommonsMember[];
     }>(response, 'Failed to load commons members');
-  },
-
-  async askCommonsAi(prompt: string, postId?: string) {
-    const response = await fetch(`${API_BASE_URL}/trpc/commons.ask`, {
-      method: 'POST',
-      headers: {
-        ...networkConfig.defaultHeaders,
-      },
-      body: JSON.stringify({ prompt, postId }),
-    });
-
-    return readTrpcResult<{ answer: string }>(
-      response,
-      'Failed to ask Cahootz AI',
-    );
   },
 
   async suggestCommons(
@@ -1444,6 +1546,28 @@ export const api = {
       response,
       'Could not send the commons suggestion',
     );
+  },
+
+  /** A member's complaint, bug report or idea; the team sees it in Slack. */
+  async submitFeedback(
+    data: {
+      category: FeedbackCategory;
+      message: string;
+      screenshotUrls: string[];
+      screen?: string;
+      coopId?: string;
+      platform?: string;
+      appVersion?: string;
+    },
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/feedback.submit`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{ id: string }>(response, 'Could not send your feedback');
   },
 
   async createCommonsPost(
@@ -1723,25 +1847,6 @@ export const api = {
     );
   },
 
-  async togglePersonalPageSupport(
-    postId: string,
-    sessionToken?: string | null,
-  ) {
-    const response = await fetch(
-      `${API_BASE_URL}/trpc/commons.togglePersonalPagePostSupport`,
-      {
-        method: 'POST',
-        headers: createApiHeaders(null, sessionToken),
-        body: JSON.stringify({ postId }),
-      },
-    );
-
-    return readTrpcResult<{ supported: boolean }>(
-      response,
-      'Failed to update like',
-    );
-  },
-
   async editComment(
     data: { commentId: string; content: string },
     sessionToken?: string | null,
@@ -1811,8 +1916,8 @@ export const api = {
 
   async uploadCommonsPostMedia(data: {
     coopId: string;
-    /** Blob folder; profile photos use 'profile'. */
-    uploadType?: 'post' | 'profile';
+    /** Blob folder; profile photos use 'profile', feedback screenshots 'feedback'. */
+    uploadType?: 'post' | 'profile' | 'feedback';
     uri: string;
     fileName?: string | null;
     mimeType: string;
@@ -1853,6 +1958,19 @@ export const api = {
 
     const fileResponse = await fetch(data.uri);
     const fileBlob = await fileResponse.blob();
+    // iOS often omits a video's size at pick time, so check the real file
+    // before sending it; storage would otherwise reject it partway through.
+    const maxBytes =
+      data.mediaType === 'video' && (data.uploadType || 'post') === 'post'
+        ? POST_VIDEO_MAX_BYTES
+        : UPLOAD_IMAGE_MAX_BYTES;
+    if (fileBlob.size > maxBytes) {
+      const kind = data.mediaType === 'video' ? 'video' : 'photo';
+      throw new ApiError(
+        `That ${kind} is ${Math.ceil(fileBlob.size / 1024 / 1024)} MB. Each ${kind} must be under ${Math.round(maxBytes / 1024 / 1024)} MB.`,
+        { code: 'PAYLOAD_TOO_LARGE', httpStatus: 413 },
+      );
+    }
     const uploadResponse = await fetch(tokenData.uploadUrl, {
       method: 'PUT',
       headers: {
@@ -1864,7 +1982,13 @@ export const api = {
     });
 
     if (!uploadResponse.ok) {
-      throw httpError(uploadResponse.status);
+      // Keep storage's own reason (expired token, size, content type) for
+      // error reports; the member still sees friendly wording.
+      const detail = await uploadResponse.text().catch(() => '');
+      throw new ApiError(
+        `Upload to storage failed (status: ${uploadResponse.status}) ${detail.slice(0, 300)}`.trim(),
+        { httpStatus: uploadResponse.status },
+      );
     }
 
     const blobResult = await uploadResponse.json();
@@ -1998,6 +2122,21 @@ export const api = {
   /** Toggles one emoji on a post; ❤️ is the post's like. */
   async togglePostReaction(postId: string, emoji: string, sessionToken?: string | null) {
     const response = await fetch(`${API_BASE_URL}/trpc/commons.togglePostReaction`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ postId, emoji }),
+    });
+
+    return readTrpcResult<{
+      emoji: string;
+      reacted: boolean;
+      support: number;
+      reactions: ReactionSummary[];
+    }>(response, 'Could not update your reaction');
+  },
+
+  async togglePersonalPagePostReaction(postId: string, emoji: string, sessionToken?: string | null) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.togglePersonalPagePostReaction`, {
       method: 'POST',
       headers: createApiHeaders(null, sessionToken),
       body: JSON.stringify({ postId, emoji }),
@@ -2574,6 +2713,22 @@ export const api = {
         'sessionToken' | 'coop'
       >;
     }>(response, 'Could not save your profile');
+  },
+
+  async updateIdentity(
+    data: { name: string; nickname: string | null; handle: string },
+    sessionToken?: string | null,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/user.updateIdentity`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(data),
+    });
+
+    return readTrpcResult<{ name: string; nickname: string | null; handle: string }>(
+      response,
+      'Could not save your identity',
+    );
   },
 
   async registerPushDevice(
@@ -4446,9 +4601,58 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.myProposalDrafts`, {
       headers: createApiHeaders(null, sessionToken),
     });
-    return readTrpcResult<Array<{ id: string; coopId: string; title: string; body: string }>>(
-      response, 'Could not load proposal drafts',
-    );
+    return readTrpcResult<CommonsProposalDraft[]>(response, "We couldn't load your drafts.");
+  },
+
+  /** The proposal idea behind one of Sage's idea posts, and who has taken it on. */
+  async getProposalIdeaForPost(postId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ postId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.proposalIdeaForPost?input=${input}`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<ProposalIdea | null>(response, "We couldn't load this idea.");
+  },
+
+  async claimProposalIdea(postId: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.claimProposalIdea`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ postId }),
+    });
+    return readTrpcResult<{ draftId: string; coopId: string }>(response, "We couldn't give you this idea. Try again.");
+  },
+
+  /** What Sage counts for each charter goal. */
+  async getGoalSignals(coopId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.goalSignals?input=${input}`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<GoalSignals>(response, "We couldn't load what Sage counts for our goals.");
+  },
+
+  async setGoalSignals(coopId: string, goalKey: string, signals: string[], sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.setGoalSignals`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ coopId, goalKey, signals }),
+    });
+    return readTrpcResult<{ saved: boolean }>(response, "We couldn't save that. Try again.");
+  },
+
+  /** Charter and goals changes members voted through, waiting for a steward. Empty for everyone else. */
+  async getPendingVotedAmendments(coopId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.pendingVotedAmendments?input=${input}`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<VotedAmendment[]>(response, "We couldn't load changes waiting for a steward.");
+  },
+
+  async applyVotedAmendment(coopId: string, amendmentId: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commonsActions.applyVotedAmendment`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ coopId, amendmentId }),
+    });
+    return readTrpcResult<{ version: number }>(response, "We couldn't apply that change. Try again.");
   },
 
   async getProposalActionSummary(coopId: string, walletAddress: string) {
@@ -4615,12 +4819,11 @@ export const api = {
     reviewId: string,
     response_: 'APPROVE' | 'DECLINE' | 'ESCALATE',
     sessionToken: string,
-    payload?: Record<string, unknown>,
   ) {
     const response = await fetch(`${API_BASE_URL}/trpc/sage.respondToReview`, {
       method: 'POST',
       headers: createApiHeaders(null, sessionToken),
-      body: JSON.stringify({ reviewId, response: response_, ...(payload ? { payload } : {}) }),
+      body: JSON.stringify({ reviewId, response: response_ }),
     });
     return readTrpcResult<{ success: boolean }>(response, 'Could not send your response');
   },
@@ -4825,11 +5028,11 @@ export const api = {
   /**
    * Submit a new proposal (authenticated — requires wallet)
    */
-  async createProposal(text: string, walletAddress: string, coopId?: string) {
+  async createProposal(text: string, walletAddress: string, coopId?: string, commonsDraftId?: string) {
     const response = await fetch(`${API_BASE_URL}/trpc/proposal.create`, {
       method: 'POST',
       headers: createApiHeaders(walletAddress),
-      body: JSON.stringify({ text, coopId: coopId || resolveCoopId() }),
+      body: JSON.stringify({ text, coopId: coopId || resolveCoopId(), ...(commonsDraftId ? { commonsDraftId } : {}) }),
     });
     const result = await response.json();
     if (result.error)

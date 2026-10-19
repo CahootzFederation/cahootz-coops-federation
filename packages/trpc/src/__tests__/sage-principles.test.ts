@@ -19,12 +19,12 @@ vi.mock("@openai/agents", () => {
 });
 vi.mock("@repo/db", () => ({ db }));
 
-const { SAGE_CORE_PRINCIPLES, SAGE_DEFAULTS_TO_AVOID, sageCorePrinciplesInstructions } = await import("../services/sage-principles.js");
+const { SAGE_CORE_PRINCIPLES, SAGE_DEFAULTS_TO_AVOID, SAGE_VOICE, sageCorePrinciplesInstructions } = await import("../services/sage-principles.js");
 const { createCommonsActionAgent } = await import("../services/commons-action-agent.js");
 const { createTrendDetectorAgent } = await import("../services/sage-trend-agent.js");
 const { createStewardAgent } = await import("../services/sage-steward.js");
-const { createRideMatchDetectorAgent } = await import("../services/sage-ride-match-agent.js");
 const { getAgent } = await import("../agents/registry.js");
+const { createProposalWriterAgent } = await import("../services/sage-proposal-writer.js");
 
 beforeEach(() => {
   built.length = 0;
@@ -45,12 +45,19 @@ describe("Sage's core principles", () => {
     createCommonsActionAgent();
     createTrendDetectorAgent();
     createStewardAgent([]);
-    createRideMatchDetectorAgent();
+    createProposalWriterAgent();
     db.coopConfig.findFirst.mockResolvedValue({ name: "Harbor", charterText: "Members share tools.", missionGoals: [] });
     await getAgent("sage-commons-reply")!.run({ coopId: "harbor", message: "Library or homes for the potluck?" });
 
-    expect(built.map((agent) => agent.name)).toEqual(["Commons Action Observer", "Sage Trend Observer", "Sage Steward", "Sage Ride Match Observer", "Sage"]);
+    expect(built.map((agent) => agent.name)).toEqual(["Commons Action Observer", "Sage Trend Observer", "Sage Steward", "Sage Proposal Writer", "Sage"]);
     for (const agent of built) expect(agent.instructions, agent.name).toContain(sageCorePrinciplesInstructions());
+  });
+
+  it("carry one plain, friendly voice that never softens a fact or a no", () => {
+    const text = sageCorePrinciplesInstructions();
+    for (const line of SAGE_VOICE) expect(text).toContain(line);
+    expect(text).toContain("friendly, sharp member of this Commons");
+    expect(text).toContain("Never let a friendly tone soften a fact, a risk, a cost or a \"no\"");
   });
 
   it("don't depend on a Commons' configuration", () => {

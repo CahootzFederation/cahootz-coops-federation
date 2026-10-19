@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
   circleNotificationLevelSchema,
+  defaultCircleNotificationLevel,
   parseCircleNotificationLevel,
 } from '@repo/validators/notification';
 
@@ -26,6 +27,7 @@ import {
 import { createNotificationAndPush } from '../services/push-notification-service.js';
 import { notifyCircleMemberJoined } from '../services/member-join-notifications.js';
 import { touchCircleWindow } from '../services/circle-window.js';
+import { coinNameFrom, formatCoinAmount } from '../services/coop-chain-config-service.js';
 import { validateSCBalance } from '../services/sc-validation-service.js';
 import { enterChat, getChattingCounts, leaveChat, refreshChatPresence } from '../services/circle-presence.js';
 import { assignWelcomeTable, getNewcomerCounts } from '../services/welcome-tables.js';
@@ -151,7 +153,7 @@ export const groupsRouter = router({
           select: { status: true },
         });
         if (membership?.status !== 'ACTIVE') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this common to see its circles.' });
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this commons to see its circles.' });
         }
       }
 
@@ -240,7 +242,7 @@ export const groupsRouter = router({
       const config = await context.db.coopConfig.findFirst({
         where: { coopId, isActive: true },
         orderBy: { version: 'desc' },
-        select: { minScBalanceToCreateGroup: true },
+        select: { minScBalanceToCreateGroup: true, scTokenName: true },
       });
       const minScBalance = config?.minScBalanceToCreateGroup ?? 0;
 
@@ -249,7 +251,7 @@ export const groupsRouter = router({
         if (currentBalance < minScBalance) {
           throw new TRPCError({
             code: 'FORBIDDEN',
-            message: `You need at least ${minScBalance} SC to create a space (current balance: ${currentBalance.toFixed(2)} SC).`,
+            message: `You need at least ${formatCoinAmount(minScBalance, coinNameFrom(config?.scTokenName))} to start a space. You have ${formatCoinAmount(currentBalance, coinNameFrom(config?.scTokenName))}.`,
           });
         }
       }
@@ -278,7 +280,11 @@ export const groupsRouter = router({
         });
 
         await tx.groupMember.create({
-          data: { groupId: created.id, userId },
+          data: {
+            groupId: created.id,
+            userId,
+            notificationLevel: defaultCircleNotificationLevel,
+          },
         });
 
         await tx.auditLog.create({
@@ -352,7 +358,7 @@ export const groupsRouter = router({
       const config = await context.db.coopConfig.findFirst({
         where: { coopId, isActive: true },
         orderBy: { version: 'desc' },
-        select: { minScBalanceToCreateGroup: true },
+        select: { minScBalanceToCreateGroup: true, scTokenName: true },
       });
       const minScBalance = config?.minScBalanceToCreateGroup ?? 0;
 
@@ -662,7 +668,7 @@ export const groupsRouter = router({
       }
 
       if (!(await isCommonsMember(context.db, userId, invite.group.coopId))) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this common first.' });
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this commons first.' });
       }
 
       await context.db.$transaction([
@@ -672,7 +678,11 @@ export const groupsRouter = router({
         }),
         context.db.groupMember.upsert({
           where: { groupId_userId: { groupId: invite.groupId, userId } },
-          create: { groupId: invite.groupId, userId },
+          create: {
+            groupId: invite.groupId,
+            userId,
+            notificationLevel: defaultCircleNotificationLevel,
+          },
           update: {},
         }),
         context.db.auditLog.create({
@@ -754,7 +764,11 @@ export const groupsRouter = router({
       await context.db.$transaction([
         context.db.groupMember.upsert({
           where: { groupId_userId: { groupId: group.id, userId } },
-          create: { groupId: group.id, userId },
+          create: {
+            groupId: group.id,
+            userId,
+            notificationLevel: defaultCircleNotificationLevel,
+          },
           update: {},
         }),
         context.db.auditLog.create({
@@ -789,7 +803,7 @@ export const groupsRouter = router({
           select: { status: true },
         });
         if (commonMembership?.status !== 'ACTIVE') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this common first.' });
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this commons first.' });
         }
       }
       const existing = await context.db.groupMember.findUnique({
@@ -799,7 +813,11 @@ export const groupsRouter = router({
         await context.db.$transaction([
           context.db.groupMember.upsert({
             where: { groupId_userId: { groupId: group.id, userId } },
-            create: { groupId: group.id, userId },
+            create: {
+              groupId: group.id,
+              userId,
+              notificationLevel: defaultCircleNotificationLevel,
+            },
             update: {},
           }),
           context.db.auditLog.create({

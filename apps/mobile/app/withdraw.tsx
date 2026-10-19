@@ -14,6 +14,7 @@ import { api } from '~/lib/api';
 import { useAuth } from '~/contexts/auth-context';
 import { authenticateForPayment } from '~/lib/biometric';
 import { friendlyError } from '~/lib/friendly-error';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 interface BankAccount {
   id: string;
@@ -201,7 +202,7 @@ export default function WithdrawScreen() {
           </View>
         </View>
 
-        <ScrollView className="flex-1">
+        <ScrollView {...keyboardInsetScrollProps} className="flex-1">
           <View className="p-4">
             {balanceFormatted && (
               <View className="bg-white rounded-xl p-4 mb-4 border border-gray-200">

@@ -2,6 +2,7 @@ import type {
   ApplicationQuestion,
   CommonsAccessStatus,
   CommonsDirectoryItem,
+  CommonsMember,
   CoopConfigDetail,
   PrivateGroupSummary,
   ProposalSummary,
@@ -18,6 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
+import { GoalSignalsCard, VotedAmendmentsCard } from '@/components/sage-goal-cards';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
@@ -42,6 +44,7 @@ import {
   Vote,
   UserPlus,
 } from 'lucide-react-native';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -103,7 +106,7 @@ type AISpending = {
 
 type MembersPreview = {
   totalCount: number;
-  members: { id: string; name: string; handle: string }[];
+  members: CommonsMember[];
 };
 
 type InfoTab = 'overview' | 'community' | 'governance';
@@ -625,6 +628,7 @@ export default function CommonsDetailScreen() {
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
       <ScrollView
+        {...keyboardInsetScrollProps}
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 32 }}
       >
@@ -885,6 +889,7 @@ export default function CommonsDetailScreen() {
                     })
                   }
                   isFamily={isFamily}
+                  sageGoals={isMember && sessionToken ? { coopId, sessionToken } : undefined}
                   onEditFamilySetup={
                     isFamily && directoryItem?.isSteward
                       ? () =>
@@ -902,6 +907,12 @@ export default function CommonsDetailScreen() {
                   membersPreview={membersPreview}
                   isSteward={!!directoryItem?.isSteward}
                   circles={circles}
+                  onSeeAllMembers={() =>
+                    router.push({
+                      pathname: '/(authenticated)/commons-members',
+                      params: { coopId, coopName: name },
+                    } as any)
+                  }
                   onOpenCircle={(circle) =>
                     router.push(
                       `/${coopId}/posts?circleId=${circle.id}` as any,
@@ -977,7 +988,7 @@ export default function CommonsDetailScreen() {
               </View>
             ) : (
               <ScrollView
-                keyboardShouldPersistTaps="handled"
+                {...keyboardInsetScrollProps}
                 showsVerticalScrollIndicator={false}
               >
                 <View className="mb-4 flex-row items-start justify-between gap-3">
@@ -1119,6 +1130,7 @@ function OverviewTab({
   onBrowseResources,
   isFamily,
   onEditFamilySetup,
+  sageGoals,
 }: {
   config: CoopConfigDetail;
   stats: ActivityStats | null;
@@ -1129,6 +1141,8 @@ function OverviewTab({
   isFamily?: boolean;
   /** A family steward's way into setting up or changing the goals and agreement. */
   onEditFamilySetup?: () => void;
+  /** Members only: what Sage counts for each goal, and passed changes waiting for a steward. */
+  sageGoals?: { coopId: string; sessionToken: string };
 }) {
   return (
     <>
@@ -1210,6 +1224,9 @@ function OverviewTab({
           </TouchableOpacity>
         ) : null}
       </View>
+
+      {sageGoals ? <VotedAmendmentsCard {...sageGoals} /> : null}
+      {sageGoals && config.missionGoals.length > 0 ? <GoalSignalsCard {...sageGoals} /> : null}
 
       <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
         <Text className="mb-3 text-lg font-black text-gray-950">
@@ -1383,21 +1400,34 @@ function CommunityTab({
   membersPreview,
   isSteward,
   circles,
+  onSeeAllMembers,
   onOpenCircle,
   onSeeAllCircles,
 }: {
   membersPreview: MembersPreview | null;
   isSteward: boolean;
   circles: PrivateGroupSummary[];
+  onSeeAllMembers: () => void;
   onOpenCircle: (circle: PrivateGroupSummary) => void;
   onSeeAllCircles: () => void;
 }) {
   return (
     <>
       <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
-        <View className="mb-3 flex-row items-center gap-2">
-          <Users size={19} color={THEME.primary} />
-          <Text className="text-lg font-black text-gray-950">People</Text>
+        <View className="mb-3 flex-row items-center justify-between">
+          <View className="flex-row items-center gap-2">
+            <Users size={19} color={THEME.primary} />
+            <Text className="text-lg font-black text-gray-950">People</Text>
+          </View>
+          <TouchableOpacity
+            onPress={onSeeAllMembers}
+            accessibilityRole="button"
+            accessibilityLabel="See all members"
+          >
+            <Text className="text-sm font-black" style={{ color: THEME.primary }}>
+              See all
+            </Text>
+          </TouchableOpacity>
         </View>
         {membersPreview ? (
           <>
@@ -1417,9 +1447,12 @@ function CommunityTab({
                 </PersonLink>
               ))}
             </View>
-            <Text className="mt-3 text-sm font-bold text-gray-500">
-              {membersPreview.totalCount} members
-            </Text>
+            <TouchableOpacity onPress={onSeeAllMembers} activeOpacity={0.72}>
+              <Text className="mt-3 text-sm font-bold text-gray-500">
+                {membersPreview.totalCount}{' '}
+                {membersPreview.totalCount === 1 ? 'member' : 'members'}
+              </Text>
+            </TouchableOpacity>
           </>
         ) : (
           <ActivityIndicator color={THEME.primary} />

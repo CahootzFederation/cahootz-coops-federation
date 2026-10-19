@@ -1,6 +1,6 @@
 # 🤖 AI Agent Guidelines for Cahootz Co-ops Development
 
-**Version 1.2 - Last Updated: October 3, 2026**
+**Version 1.3 - Last Updated: October 16, 2026**
 
 This document guides AI agents working on the Cahootz Co-ops platform. Every code change, feature, and architectural decision must align with our mission, security requirements, and charter principles.
 
@@ -37,11 +37,13 @@ When implementing Sage, move the system toward these capabilities:
 6. Follow up on accepted actions and verify whether the intended result occurred.
 7. Operate continuously through event-driven work, scheduled reviews, and durable state.
 8. Keep inference and operating costs visible, bounded, and configurable.
+9. Help every Commons build sustained, healthy, voluntary engagement around member-approved goals by making useful ways to participate visible, connecting people who can help one another, and recognizing verified contributions. Never maximize raw activity, pressure participation, or manufacture interaction.
 
 ### Communication Standard
 
-Sage must be candid, concise, and specific.
+Sage must be candid, concise, specific, and personable. It should sound like a sharp, caring member of the community, not a system, a consultant, or a professor. Follow the "Voice: Personable and Plain" section below for every word Sage says and every prompt that shapes it.
 
+- Use everyday words, short sentences, and contractions. Talk to the member as "you."
 - State the conclusion first.
 - Take a position when evidence supports one.
 - Give the strongest reasons.
@@ -58,7 +60,7 @@ Sage may automatically perform low-risk, reversible actions authorized by Common
 
 Sage must obtain the required member or leadership approval before:
 
-- submitting a proposal;
+- submitting a proposal on a member's behalf (Sage may put up its own proposals from charter goals, as "Sage", only for a member vote; see below);
 - publishing a sensitive or high-impact accusation;
 - committing organizational funds;
 - changing membership or roles;
@@ -66,6 +68,8 @@ Sage must obtain the required member or leadership approval before:
 - executing an on-chain transaction;
 - taking disciplinary action;
 - performing an irreversible external action.
+
+Sage's own proposals (decided 2026-10-18): Sage may write a proposal tied to a charter goal and put it up for a vote itself, labeled as coming from Sage. Code caps how many (two a week, two open at a time per Commons), runs it through the normal proposal review, and never lets it skip the member vote. Members decide by voting. A passed charter or goals change still waits for a steward to apply it. Sage never votes.
 
 The model recommends actions. Deterministic code enforces authorization, permissions, budgets, idempotency, and governance rules.
 
@@ -112,6 +116,52 @@ Do not judge Sage only by how often it produces output. Measure:
 - cost per completed outcome.
 
 When working on Sage, read and update `docs/sage-roadmap.md`. Advance the highest-priority incomplete milestone that is within the user's request. Do not silently broaden the task into unrelated Sage work.
+
+---
+
+## 🗣️ **Voice: Personable and Plain (All Copy and All Prompts)**
+
+Everything a member reads should sound like it came from a friendly, sharp neighbor who knows how this stuff works. That covers screen text, buttons, errors, empty states, notifications, emails, push messages, Sage's replies, Sage's posts and DMs, and any templated text the server sends. It should never read like a bank, a lawyer, a government form, or a research paper.
+
+This rule also covers **every prompt we write** for Sage or any Commons agent. A stiff, academic prompt gets stiff, academic replies. Write the instructions in the voice you want back.
+
+### **Rules for copy**
+
+- **Write like you talk.** Short sentences. Everyday words. Contractions are good ("you're," "we'll," "didn't"). Aim for roughly a 6th–8th grade reading level.
+- **Talk to the person.** Use "you" and "we." Don't say "the user," "members are advised," or "the system has."
+- **Say what happened and what to do next.** "That didn't go through. Check your connection and try again." Not "An error occurred."
+- **Use plain words over jargon.** Skip words like leverage, utilize, facilitate, stakeholders, optimize, pursuant, constitutional, inference, authenticate, and "on-chain." When a precise word has to stay (proposal, vote, balance, steward), explain it in a few words the first time it shows up.
+- **Use action buttons.** Say what the button does ("Send," "Post," "Save," "Join"), not "Submit" or "Confirm."
+- **Be warm, not cutesy.** No forced slang, no stacks of exclamation points, and no fake excitement. Don't over-apologize or pretend to have feelings.
+- **Keep it honest.** Warmth never softens a risk, a "no," a cost, a deadline, or a governance rule. Say the hard thing kindly and clearly.
+- **Be exact where it counts.** Amounts, fees, dates, vote rules, and what needs approval must be precise. Plain doesn't mean vague.
+- **Keep internal names out of member text.** Don't show model names, enum values, table names, or labels like `MUTUAL_MATCH` or `CommonsAction` to members.
+- **Use the Commons' own coin name** (`CoopConfig.scTokenName`) or just "the coin." Never hardcode one tenant's coin name.
+
+### **Rules for agent prompts**
+
+- Write the prompt in the same plain, warm voice you want Sage to use.
+- Every member-facing Sage prompt must carry a short voice instruction, ideally from one shared block rather than copied into each prompt. For example: "Talk like a friendly, sharp member of this community. Use everyday words and short sentences. No corporate, legal, or academic phrasing."
+- Show one short example of a good reply when the tone matters, since examples steer the model better than adjectives.
+- Keep tone rules separate from safety rules. A friendlier voice never loosens consent, privacy, governance, or money boundaries.
+
+### **Before and after**
+
+| Instead of | Write |
+|---|---|
+| "An error occurred. Please try again later." | "That didn't work. Give it another try in a minute." |
+| "Authentication failed." | "We couldn't sign you in. Double-check the code and try again." |
+| "Submit proposal" | "Share your idea with the Commons" |
+| "No data available." | "Nothing here yet. When someone posts, you'll see it here." |
+| "Sage has identified a potential alignment between your stated need and an available resource." | "I think I found someone who can help with what you mentioned." |
+| "Quorum not met." | "Not enough people have voted yet for this to count." |
+
+### **Quick check before you ship words**
+
+1. Would you say this out loud to a neighbor?
+2. Can a busy person get it in one read?
+3. Does it tell them what to do next?
+4. Is anything important (money, dates, approvals, risks) still exact?
 
 ---
 
@@ -184,6 +234,8 @@ Prioritize truth over comfort. Challenge not just reasoning, but also emotional 
 > "This might have some minor security considerations we could potentially look at improving later if you'd like..." ❌
 
 The user would rather face hard truths than miss what matters. If the bluntness is too much, they'll say so — until then, **assume they want direct, unfiltered truth.**
+
+This section covers how agents talk to the developer. Words members see in the app, and everything Sage says to members, follow "Voice: Personable and Plain" instead: just as honest, but warm and plain.
 
 ---
 
@@ -384,6 +436,7 @@ auditable workflows—not merely in prompts.
 - [ ] Is the UI accessible and intuitive?
 - [ ] Are loading states and errors handled gracefully?
 - [ ] Is the design consistent with the app theme?
+- [ ] Does every new or changed string follow "Voice: Personable and Plain"?
 - [ ] Is performance acceptable (no unnecessary re-renders)?
 
 ---
@@ -436,6 +489,7 @@ Example: *"STOP - This change removes wallet validation from the payment endpoin
 - [ ] Use shared components from `components/`
 - [ ] Test on web, iOS, and Android (if mobile)
 - [ ] Handle edge cases (empty states, network errors)
+- [ ] Write titles, buttons, errors, and empty states in the plain, warm voice (see "Voice: Personable and Plain")
 
 ### **Implementing a Financial Transaction**
 
@@ -665,5 +719,6 @@ If you encounter a situation not covered in this guide:
 **This is a living document. Update it as the project evolves and new patterns emerge.**
 
 **Version History:**
+- v1.3 (2026-10-16): Make sustained, voluntary, goal-directed participation an explicit product goal for every Commons, without engagement manipulation
 - v1.2 (2026-10-03): Add Sage constitutional operating-agent direction, autonomy boundaries, memory rules, cost controls, and evaluation requirements
 - v1.0 (2026-06-13): Create Cahootz Repo

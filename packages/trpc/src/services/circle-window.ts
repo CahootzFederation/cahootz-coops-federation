@@ -1,8 +1,8 @@
 import { db } from "@repo/db";
 
-import { enqueueSageRideMatchDetect, enqueueSageTrendDetect } from "./sage-dispatch.js";
+import { enqueueSageTrendDetect } from "./sage-dispatch.js";
 
-export const CIRCLE_WINDOW_MESSAGE_LIMIT = 40;
+export const CIRCLE_WINDOW_MESSAGE_LIMIT = 15;
 
 /** Open/extend the current analysis window for a circle, or close it once it hits the message cap.
  * Serialized per circle with a transaction-scoped advisory lock: without it, two messages arriving
@@ -25,10 +25,7 @@ export async function touchCircleWindow(groupId: string, coopId: string): Promis
     return null;
   });
   // Dispatch after commit so detection never reads a window that isn't CLOSED yet.
-  if (closedWindowId) {
-    await enqueueSageRideMatchDetect(closedWindowId);
-    await enqueueSageTrendDetect(closedWindowId);
-  }
+  if (closedWindowId) await enqueueSageTrendDetect(closedWindowId);
 }
 
 /** Closes a circle's open window now, before it reaches the message cap, so Sage reads what's there.
@@ -42,9 +39,6 @@ export async function closeCircleWindowNow(groupId: string): Promise<{ windowId:
     await tx.circleAgentWindow.update({ where: { id: open.id }, data: { status: "CLOSED", closedAt: now, lastMessageAt: now } });
     return { windowId: open.id, messageCount: open.messageCount };
   });
-  if (closed) {
-    await enqueueSageRideMatchDetect(closed.windowId);
-    await enqueueSageTrendDetect(closed.windowId);
-  }
+  if (closed) await enqueueSageTrendDetect(closed.windowId);
   return closed;
 }

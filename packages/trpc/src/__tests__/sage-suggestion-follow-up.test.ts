@@ -6,7 +6,6 @@ const db = vi.hoisted(() => {
     userCoopMembership: { count: vi.fn() },
     group: { findUnique: vi.fn() },
     groupMember: { findUnique: vi.fn() },
-    groupComment: { findUnique: vi.fn() },
     commonsPost: { findUnique: vi.fn() },
     commonsComment: { findFirst: vi.fn() },
     commonsProposalDraft: { findMany: vi.fn() },
@@ -14,6 +13,8 @@ const db = vi.hoisted(() => {
     commonsActionReview: { updateMany: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     commonsActionAudit: { create: vi.fn() },
     sageTask: { findMany: vi.fn(), update: vi.fn(), create: vi.fn() },
+    adminRole: { findFirst: vi.fn() },
+    proposal: { findUnique: vi.fn() },
     $transaction: vi.fn(),
   };
   client.$transaction.mockImplementation((fn: (tx: typeof client) => unknown) => fn(client));
@@ -50,7 +51,6 @@ beforeEach(() => {
   db.userCoopMembership.count.mockResolvedValue(1);
   db.group.findUnique.mockResolvedValue({ leaderId: "leader-1" });
   db.groupMember.findUnique.mockResolvedValue({ id: "m1" });
-  db.groupComment.findUnique.mockResolvedValue({ id: "msg-1" });
   db.commonsPost.findUnique.mockResolvedValue({ id: "post-1" });
   db.commonsComment.findFirst.mockResolvedValue(null);
   db.commonsProposalDraft.findMany.mockResolvedValue([]);
@@ -68,31 +68,53 @@ describe("deciding whether a waiting suggestion still applies", () => {
   });
 
   it.each([
-    ["someone left the Commons", () => db.userCoopMembership.count.mockResolvedValue(0), "Someone it involved is no longer an active member of this Commons"],
-    ["the circle was deleted", () => db.group.findUnique.mockResolvedValue(null), "The circle was deleted"],
-    ["the circle has a new leader", () => db.group.findUnique.mockResolvedValue({ leaderId: "someone-else" }), "The circle has a new leader"],
-    ["the target post was deleted", () => db.commonsPost.findUnique.mockResolvedValue(null), "The post it was about was deleted"],
+    ["someone left the Commons", () => db.userCoopMembership.count.mockResolvedValue(0), "Someone it involved isn't an active member here anymore"],
+    ["the circle was deleted", () => db.group.findUnique.mockResolvedValue(null), "The circle it was for has been deleted"],
+    ["the circle has a new leader", () => db.group.findUnique.mockResolvedValue({ leaderId: "someone-else" }), "The circle has a new leader now"],
+    ["the target post was deleted", () => db.commonsPost.findUnique.mockResolvedValue(null), "The post it was about has been deleted"],
     ["Sage already commented there", () => db.commonsComment.findFirst.mockResolvedValue({ id: "c1" }), "Sage already commented on that post"],
   ])("closes when %s", async (_label, arrange, reason) => {
     arrange();
     await expect(suggestionNoLongerApplies(review(), action(), NOW)).resolves.toBe(reason);
   });
 
-  it("closes a ride match whose message was deleted, and one whose member left the circle", async () => {
-    const ride = action({ type: "RIDE_MATCH_PROPOSAL", sourceType: "circle_message", sourceId: "msg-1", payload: null });
+  it("closes when the person asked left the circle", async () => {
     db.commonsActionParticipant.findMany.mockResolvedValue([{ userId: "maya" }]);
-    db.groupComment.findUnique.mockResolvedValueOnce(null);
-    await expect(suggestionNoLongerApplies(review({ reviewType: "PROVIDE_CONTEXT", userId: "maya" }), ride, NOW)).resolves.toBe("The message it came from was deleted");
     db.groupMember.findUnique.mockResolvedValueOnce(null);
-    await expect(suggestionNoLongerApplies(review({ reviewType: "PROVIDE_CONTEXT", userId: "maya" }), ride, NOW)).resolves.toBe("The person asked left the circle");
+    await expect(suggestionNoLongerApplies(review({ reviewType: "ACCEPT_INTRODUCTION", userId: "maya" }), action(), NOW)).resolves.toBe("The person we asked has left the circle");
+  });
+
+  it("closes a ride match still waiting from before Sage stopped suggesting them", async () => {
+    const ride = action({ type: "RIDE_MATCH_PROPOSAL", sourceType: "circle_message", sourceId: "msg-1", payload: null });
+    await expect(suggestionNoLongerApplies(review({ reviewType: "PROVIDE_CONTEXT", userId: "maya" }), ride, NOW)).resolves.toBe("Sage no longer suggests ride matches");
+    expect(db.userCoopMembership.count).not.toHaveBeenCalled();
+  });
+
+  it("closes a held feed reply once the admin asked to approve it no longer holds the role", async () => {
+    const feedReply = action({ circleId: null, sourceType: "commons_post", payload: { capability: "comment_on_post", title: "Reply", targetPostId: "post-1", routedTo: "COMMONS_ADMIN" } });
+    db.adminRole.findFirst.mockResolvedValueOnce({ id: "role-1" });
+    await expect(suggestionNoLongerApplies(review({ userId: "leader-1" }), feedReply, NOW)).resolves.toBeNull();
+    expect(db.adminRole.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ coopId: "harbor", userId: "leader-1", revokedAt: null }) }));
+    db.adminRole.findFirst.mockResolvedValueOnce(null);
+    await expect(suggestionNoLongerApplies(review({ userId: "leader-1" }), feedReply, NOW)).resolves.toBe("The person we asked isn't an admin here anymore");
+  });
+
+  it("closes a held pre-vote summary once voting has closed", async () => {
+    const summary = action({ type: "SUMMARIZE_DISCUSSION", circleId: null, sourceType: "proposal_pre_vote", sourceId: "prop-1",
+      payload: { capability: "post_pre_vote_summary", title: "Summary", routedTo: "GOVERNANCE", proposalId: "prop-1" } });
+    db.adminRole.findFirst.mockResolvedValue({ id: "role-1" });
+    db.proposal.findUnique.mockResolvedValueOnce({ status: "VOTABLE", votingEndsAt: new Date(NOW.getTime() + DAY) });
+    await expect(suggestionNoLongerApplies(review(), summary, NOW)).resolves.toBeNull();
+    db.proposal.findUnique.mockResolvedValueOnce({ status: "VOTABLE", votingEndsAt: new Date(NOW.getTime() - 1) });
+    await expect(suggestionNoLongerApplies(review(), summary, NOW)).resolves.toBe("Voting has already closed");
   });
 
   it("closes an event whose suggested time passed, and a proposal the leader already drafted", async () => {
     const event = action({ payload: { capability: "create_event", title: "Cleanup", suggestedStartAt: new Date(NOW.getTime() - 3_600_000).toISOString() } });
-    await expect(suggestionNoLongerApplies(review(), event, NOW)).resolves.toBe("The suggested time has passed");
+    await expect(suggestionNoLongerApplies(review(), event, NOW)).resolves.toBe("The time it suggested has already passed");
     db.commonsProposalDraft.findMany.mockResolvedValueOnce([{ title: "Shared tool libraries" }]);
     const draft = action({ payload: { capability: "draft_proposal", title: "Shared tool library" } });
-    await expect(suggestionNoLongerApplies(review(), draft, NOW)).resolves.toBe("A proposal draft on this already exists");
+    await expect(suggestionNoLongerApplies(review(), draft, NOW)).resolves.toBe("There's already a proposal draft for this");
   });
 });
 
@@ -128,7 +150,7 @@ describe("the wake loop's check on one follow-up", () => {
     db.commonsActionReview.findUnique.mockResolvedValue({ ...review(), action: action() });
     db.commonsPost.findUnique.mockResolvedValue(null);
     await expect(checkSuggestionReview({ id: "t1", subjectId: "r1" }, NOW))
-      .resolves.toEqual({ resolved: true, moot: true, outcome: "Closed: the post it was about was deleted" });
+      .resolves.toEqual({ resolved: true, moot: true, outcome: "Closed: the post it was about has been deleted" });
     expect(db.commonsActionAudit.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ eventType: "AUTO_CLOSED" }) }));
   });
 

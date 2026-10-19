@@ -21,6 +21,7 @@
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:fast": "playwright test --grep-invert @sage",
+    "test:e2e:smoke": "playwright test --grep @smoke",
     "ios": "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 expo run:ios"
   },
   "jest": {
@@ -65,6 +66,7 @@
     "expo-camera": "~55.0.23",
     "expo-clipboard": "^55.0.17",
     "expo-constants": "~55.0.17",
+    "expo-contacts": "~55.0.18",
     "expo-dev-client": "~55.0.40",
     "expo-device": "~55.0.21",
     "expo-file-system": "~55.0.26",
@@ -80,6 +82,7 @@
     "expo-observe": "~0.2.6",
     "expo-router": "~55.0.18",
     "expo-secure-store": "^55.0.18",
+    "expo-sms": "~55.0.18",
     "expo-splash-screen": "~55.0.25",
     "expo-status-bar": "~55.0.6",
     "expo-symbols": "~55.0.9",

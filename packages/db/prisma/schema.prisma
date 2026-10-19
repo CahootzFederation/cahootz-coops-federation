@@ -18,10 +18,14 @@ model User {
   email                        String                  @unique
   handle                       String?                 @unique
   name                         String?
+  nickname                     String?
   roles                        String[]                @default(["member"]) // member, business, admin, governor, sage (platform bot)
   status                       UserStatus              @default(PENDING)
   isBot                        Boolean                 @default(false) // true for platform bot accounts (e.g. Sage)
   showSageDecisionTrails       Boolean                 @default(false) // personal app setting: show Sage's decision trails on content this user can see
+  nameInSageAppreciation       Boolean                 @default(false) // legacy, retained for migration compatibility; no longer used by the product
+  sageRhythmPreferences        SageRhythmPreference[]  // legacy rows retained but no longer read or written
+  defaultCoopId                String? // member-selected Commons shown first after sign-in
   password                     String?
   phone                        String?                 @unique // E.164 format: +1XXXXXXXXXX
   walletAddress                String?                 @unique // DEPRECATED: Use Wallet model instead
@@ -64,9 +68,9 @@ model User {
   businesses                 Business[]
   onrampTransactions         OnrampTransaction[] // UC-era: preserved for future reactivation
   paymentMethods             PaymentMethod[]
-  sentTransfers              P2PTransfer[]             @relation("sender") // UC-era: preserved
-  receivedTransfers          P2PTransfer[]             @relation("recipient") // UC-era: preserved
-  pendingTransfersSent       PendingTransfer[]         @relation("sender") // UC-era: preserved
+  sentTransfers              P2PTransfer[]              @relation("sender") // UC-era: preserved
+  receivedTransfers          P2PTransfer[]              @relation("recipient") // UC-era: preserved
+  pendingTransfersSent       PendingTransfer[]          @relation("sender") // UC-era: preserved
   bankAccounts               BankAccount[]
   withdrawals                Withdrawal[] // UC-era: preserved
   notifications              Notification[]
@@ -82,31 +86,33 @@ model User {
   commonsComments            CommonsComment[]
   commonsPostSupports        CommonsPostSupport[]
   commonsSuggestions         CommonsSuggestion[]
-  sentDirectMessages         DirectMessage[]           @relation("DirectMessageSender")
-  receivedDirectMessages     DirectMessage[]           @relation("DirectMessageReceiver")
-  following                  Follow[]                  @relation("Follower")
-  followers                  Follow[]                  @relation("Following")
+  sentDirectMessages         DirectMessage[]            @relation("DirectMessageSender")
+  receivedDirectMessages     DirectMessage[]            @relation("DirectMessageReceiver")
+  following                  Follow[]                   @relation("Follower")
+  followers                  Follow[]                   @relation("Following")
   personalPagePostComments   PersonalPagePostComment[]
   personalPagePostSupports   PersonalPagePostSupport[]
-  groupsLed                  Group[]                   @relation("GroupLeader")
+  groupsLed                  Group[]                    @relation("GroupLeader")
   groupMemberships           GroupMember[]
-  groupInvitesReceived       GroupInvite[]             @relation("GroupInvitee")
-  groupInvitesSent           GroupInvite[]             @relation("GroupInviter")
+  groupInvitesReceived       GroupInvite[]              @relation("GroupInvitee")
+  groupInvitesSent           GroupInvite[]              @relation("GroupInviter")
   groupComments              GroupComment[]
   uploadedKnowledgeDocuments KnowledgeDocument[]
-  verifiedAIObservations     AIObservation[]           @relation("AIObservationVerifier")
-  welcomeTableConfigsGuiding WelcomeTableConfig[]      @relation("WelcomeTableGuide")
+  verifiedAIObservations     AIObservation[]            @relation("AIObservationVerifier")
+  welcomeTableConfigsGuiding WelcomeTableConfig[]       @relation("WelcomeTableGuide")
   welcomeIntros              WelcomeIntro[]
   commonsCommentReactions    CommonsCommentReaction[]
   commonsPostReactions       CommonsPostReaction[]
   circleChatPresence         CircleChatPresence[]
-  eventsCreated              Event[]                   @relation("EventCreatedBy")
+  eventsCreated              Event[]                    @relation("EventCreatedBy")
   eventHosting               EventHost[]
   eventRSVPs                 EventRSVP[]
   eventReminders             EventReminder[]
-  pinnedPosts                CommonsPost[]             @relation("CommonsPostPinnedBy")
+  pinnedPosts                CommonsPost[]              @relation("CommonsPostPinnedBy")
   onboardingDripSends        OnboardingDripSend[]
-  commonsInvitationsSent     CommonsInvitation[]       @relation("CommonsInvitationInviter")
+  commonsInvitationsSent     CommonsInvitation[]        @relation("CommonsInvitationInviter")
+  appFeedback                AppFeedback[]
+  personalPagePostReactions  PersonalPagePostReaction[]
 
   @@index([deletedAt])
   @@schema("public")
@@ -1034,8 +1040,9 @@ model PersonalPagePost {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  comments PersonalPagePostComment[]
-  supports PersonalPagePostSupport[]
+  comments  PersonalPagePostComment[]
+  supports  PersonalPagePostSupport[]
+  reactions PersonalPagePostReaction[]
 
   @@index([authorId, createdAt])
   @@schema("public")
@@ -1066,6 +1073,23 @@ model PersonalPagePostSupport {
   createdAt DateTime         @default(now())
 
   @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId, createdAt])
+  @@schema("public")
+}
+
+/// Emoji reactions on a personal page post other than ❤️, which is the
+/// post's like (PersonalPagePostSupport). Mirrors CommonsPostReaction.
+model PersonalPagePostReaction {
+  id        String           @id @default(cuid())
+  postId    String
+  post      PersonalPagePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime         @default(now())
+
+  @@unique([postId, userId, emoji])
   @@index([postId])
   @@index([userId, createdAt])
   @@schema("public")
@@ -1124,8 +1148,12 @@ enum CommonsActionType {
   CONNECT_MEMBERS
   ESCALATE_TO_ADMIN
   NO_ACTION
-  RIDE_MATCH_PROPOSAL
+  RIDE_MATCH_PROPOSAL // retired 2026-10-14; kept so existing rows stay readable
   SUGGEST_ACTION
+  ASK_COMMONS // Sage's open question to the whole Commons about a community pattern
+  COMMUNITY_RHYTHM // Sage's weekly/monthly rhythm post (priorities, open work, appreciation, monthly review)
+  SUMMARIZE_DISCUSSION // Sage's balanced summary of a proposal's discussion before voting closes
+  PROPOSE_IDEA // Sage's proposal idea for a charter goal, posted for any member to take on
 
   @@schema("public")
 }
@@ -1340,23 +1368,35 @@ model CommonsResource {
   @@schema("public")
 }
 
+// A proposal draft Sage wrote. Drafts from a thread belong to the member Sage drafted it for. Ideas Sage
+// starts on its own from a charter goal (kind PROGRAM, SPENDING, CHARTER_AMENDMENT, GOALS_AMENDMENT) are
+// posted to the whole Commons with no author; the first member who takes it on becomes the author.
+// Nothing reaches a vote until that member submits it, and a Sage idea never skips the member vote.
 model CommonsProposalDraft {
   id                  String    @id @default(cuid())
   actionId            String    @unique
   coopId              String
-  authorId            String
+  authorId            String? // null while a Sage idea is open for anyone to take on
   title               String
   body                String    @db.Text
+  kind                String    @default("GENERAL") // GENERAL | PROGRAM | SPENDING | CHARTER_AMENDMENT | GOALS_AMENDMENT
+  goalKey             String? // the mission goal a Sage idea addresses
+  budgetAmount        Float? // only a figure members gave; null means whoever takes it on fills it in
+  proposedChanges     Json? // amendments: { find, replace } for the charter, or { missionGoals } for goals
+  originObservationId String? // the goal_gap observation that led to the idea
+  ideaPostId          String?   @unique // Sage's post offering the idea to the Commons
+  claimedAt           DateTime?
   submittedAt         DateTime?
-  submittedProposalId String?
+  submittedProposalId String?   @unique
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
   @@index([authorId, coopId])
+  @@index([coopId, kind, createdAt])
   @@schema("public")
 }
 
-// One record per Sage analysis (a Commons post or comment, a circle window, a ride-match window),
+// One record per Sage analysis (a Commons post or comment, a circle window),
 // including analyses where Sage decided to do nothing. Steps up to "action taken" are written when
 // Sage decides; result and follow-up are read live from the linked CommonsActions.
 // Something Sage is waiting on or will check back about: a promise it made, an answer it asked
@@ -1456,11 +1496,11 @@ model SageAlert {
 
 model SageDecisionTrail {
   id             String   @id @default(cuid())
-  agent          String // commons-action-agent | sage-trend | sage-ride-match | proposal-engine | comment-evaluation | sage-reply
+  agent          String // commons-action-agent | sage-trend | proposal-engine | comment-evaluation | sage-reply (old rows: sage-ride-match)
   coopId         String
   circleId       String?
   proposalId     String?
-  sourceType     String // commons_post | commons_comment | circle_window | circle_ride_match | proposal | proposal_comment | sage_mention | sage_dm
+  sourceType     String // commons_post | commons_comment | circle_window | proposal | proposal_comment | sage_mention | sage_dm (old rows: circle_ride_match)
   sourceId       String
   trigger        String // NEW_CONTENT | SCHEDULED_SCAN | ADMIN_SCAN | CIRCLE_WINDOW_FULL | ADMIN_ANALYZE | PROPOSAL_SUBMITTED | PROPOSAL_RESUBMITTED | PROPOSAL_ALTERNATIVE_APPLIED | PROPOSAL_COMMENT | SAGE_MENTION | SAGE_DM
   visibility     String // COMMONS_MEMBERS | CIRCLE | ADMINS
@@ -1637,7 +1677,7 @@ model GroupMember {
   role              String    @default("MEMBER") // "MEMBER" | "GUIDE" | "NEWCOMER"
   // Last time this member read the circle's messages; drives DM unread counts.
   lastReadAt        DateTime?
-  notificationLevel String    @default("MENTIONS") // "ALL" | "MENTIONS" | "NONE"
+  notificationLevel String    @default("HIGHLIGHTS") // "ALL" | "HIGHLIGHTS" | "MENTIONS" | "NONE"
 
   @@unique([groupId, userId])
   @@index([userId])
@@ -2289,11 +2329,34 @@ model Notification {
   @@schema("public")
 }
 
+/// A member's in-app complaint, bug report or idea, with optional screenshots.
+/// Saved first, then posted to the team's Slack channel.
+model AppFeedback {
+  id             String    @id @default(cuid())
+  userId         String?
+  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  category       String // BUG, COMPLAINT, IDEA, OTHER
+  message        String
+  screenshotUrls String[]
+  /// Where the member was when they opened the form (route path).
+  screen         String?
+  coopId         String?
+  platform       String?
+  appVersion     String?
+  slackSentAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+  @@schema("public")
+}
+
 model NotificationPreference {
   userId      String   @id
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   pushEnabled Boolean  @default(true)
   community   Boolean  @default(true)
+  sage        Boolean  @default(true)
   governance  Boolean  @default(true)
   payments    Boolean  @default(true)
   orders      Boolean  @default(true)
@@ -2301,6 +2364,21 @@ model NotificationPreference {
   onboarding  Boolean  @default(true) // New-member "getting started" drip; off skips the drip entirely
   updatedAt   DateTime @updatedAt
 
+  @@schema("public")
+}
+
+// Legacy per-rhythm preferences. The product now uses NotificationPreference.sage for all Sage
+// notifications outside General and NotificationPreference.community for Sage posts in General.
+// Rows are retained so the simplification does not destroy member data.
+model SageRhythmPreference {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  String
+  mode      String
+  updatedAt DateTime @updatedAt
+
+  @@id([userId, category])
+  @@index([category, mode])
   @@schema("public")
 }
 
@@ -3407,20 +3485,6 @@ model SCBalanceCache {
   syncedAt    DateTime @default(now())
 
   @@index([walletId, syncedAt])
-  @@schema("public")
-}
-
-// ── Feature Flags ──────────────────────────────────────────
-
-model FeatureFlag {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  enabled     Boolean  @default(false)
-  description String?
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
   @@schema("public")
 }
 

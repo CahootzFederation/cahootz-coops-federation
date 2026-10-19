@@ -7,6 +7,8 @@ import React from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   TextInput,
   TouchableOpacity,
@@ -33,6 +35,7 @@ import {
   Plus,
   Users,
 } from 'lucide-react-native';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 const SPACES_THEME = {
   paper: '#F8FAFC',
@@ -70,6 +73,7 @@ export default function SpacesScreen() {
   const [invitesError, setInvitesError] = React.useState<string | null>(null);
   const [name, setName] = React.useState('');
   const [purpose, setPurpose] = React.useState('');
+  const purposeInputRef = React.useRef<TextInput>(null);
   const [privacy, setPrivacy] = React.useState<'public' | 'private'>('public');
   const [iconEmoji, setIconEmoji] = React.useState<string | null>(null);
   const [iconColor, setIconColor] = React.useState<string | null>(null);
@@ -340,10 +344,16 @@ export default function SpacesScreen() {
         </View>
       </View>
 
+      {/* Lift the form above the keyboard and let a drag put it away, so the
+          Create button stays reachable after typing the purpose. */}
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
       <ScrollView
+        {...keyboardScrollProps}
         className="flex-1"
         contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
-        keyboardShouldPersistTaps="handled"
       >
         {activeView === 'circles' ? (
           <>
@@ -457,7 +467,7 @@ export default function SpacesScreen() {
             <View className="mt-6 flex-row items-center justify-between">
               <View>
                 <Text className="text-base font-black text-gray-950">
-                  {coopId ? 'Circles in this common' : 'Your circles'}
+                  {coopId ? 'Circles in this commons' : 'Your circles'}
                 </Text>
                 {groupsError || isLoadingGroups ? null : (
                   <Text className="mt-0.5 text-xs font-semibold text-gray-500">
@@ -656,6 +666,9 @@ export default function SpacesScreen() {
                 placeholderTextColor={SPACES_THEME.muted}
                 maxLength={120}
                 autoFocus={mode === 'create'}
+                returnKeyType="next"
+                submitBehavior="submit"
+                onSubmitEditing={() => purposeInputRef.current?.focus()}
                 className="mt-3 min-h-12 rounded-2xl border bg-gray-50 px-3 text-sm text-gray-900"
                 style={{ borderColor: SPACES_THEME.border }}
               />
@@ -670,12 +683,22 @@ export default function SpacesScreen() {
                 Explain what members will talk about or build together.
               </Text>
               <TextInput
+                ref={purposeInputRef}
                 value={purpose}
                 onChangeText={setPurpose}
                 placeholder="What brings this circle together?"
                 placeholderTextColor={SPACES_THEME.muted}
                 maxLength={2000}
                 multiline
+                // Return closes the keyboard instead of adding a line, so the
+                // Create button below is never trapped under the keyboard.
+                returnKeyType="done"
+                submitBehavior="blurAndSubmit"
+                // React Native Web reads blurOnSubmit instead, and needs
+                // onSubmitEditing to keep Return from adding a newline.
+                blurOnSubmit
+                onSubmitEditing={() => purposeInputRef.current?.blur()}
+                accessibilityLabel="Circle purpose"
                 className="mt-3 min-h-28 rounded-2xl border bg-gray-50 px-3 py-3 text-sm text-gray-900"
                 style={{
                   borderColor: SPACES_THEME.border,
@@ -704,7 +727,7 @@ export default function SpacesScreen() {
                 <Users size={17} color={SPACES_THEME.primary} />
                 <View className="min-w-0 flex-1">
                   <Text className="text-sm font-black text-gray-950">
-                    Public to this common
+                    Public to this commons
                   </Text>
                   <Text className="mt-1 text-xs leading-5 text-gray-500">
                     Members can discover, read, and post in this circle.
@@ -782,12 +805,13 @@ export default function SpacesScreen() {
             </TouchableOpacity>
             <Text className="mt-3 text-center text-xs leading-5 text-gray-500">
               {privacy === 'public'
-                ? 'Your circle will appear to members of this common.'
+                ? 'Your circle will appear to members of this commons.'
                 : 'You will become the circle leader and can invite members next.'}
             </Text>
           </>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <EmojiColorPicker
         visible={iconPickerOpen}

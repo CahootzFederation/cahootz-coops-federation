@@ -3,6 +3,7 @@ import { router } from "../trpc.js";
 import { userRouter } from "./user.js";
 import { proposalRouter } from "./proposal.js";
 import { healthRouter } from "./health.js";
+import { feedbackRouter } from "./feedback.js";
 import { applicationRouter } from "./application.js";
 import { authRouter } from "./auth.js";
 import { anonymousProfileRouter } from "./anonymous-profile.js";
@@ -47,6 +48,7 @@ export const appRouter = router({
   anonymousProfile: anonymousProfileRouter,
   proposal: proposalRouter,
   health: healthRouter,
+  feedback: feedbackRouter,
   application: applicationRouter,
   auth: authRouter,
   admin: adminRouter,

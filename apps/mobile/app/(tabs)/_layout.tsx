@@ -1,6 +1,6 @@
 import { Platform, useWindowDimensions } from "react-native";
 import { Tabs } from "expo-router";
-import { Bell, LayoutGrid, Store, UserCircle } from "lucide-react-native";
+import { Bell, LayoutGrid, PanelsTopLeft, UserCircle } from "lucide-react-native";
 
 export default function TabLayout() {
   const { fontScale } = useWindowDimensions();
@@ -45,10 +45,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="store"
+        name="board"
         options={{
-          title: "Shop",
-          tabBarIcon: ({ color, size }) => <Store size={size} color={color} />,
+          title: "Board",
+          tabBarIcon: ({ color, size }) => <PanelsTopLeft size={size} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -77,6 +77,7 @@ export default function TabLayout() {
       <Tabs.Screen name="events" options={{ href: null }} />
       <Tabs.Screen name="history" options={{ href: null }} />
       <Tabs.Screen name="buy" options={{ href: null }} />
+      <Tabs.Screen name="store" options={{ href: null }} />
     </Tabs>
   );
 }

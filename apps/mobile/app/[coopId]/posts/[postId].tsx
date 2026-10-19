@@ -14,9 +14,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import {
   ArrowLeft,
   Award,
-  CheckCircle2,
   CornerDownRight,
-  Heart,
   ImagePlus,
   Pencil,
   Send,
@@ -35,6 +33,7 @@ import {
 } from '@/components/commons-media-viewer';
 import { Text } from '@/components/ui/text';
 import { AiBadge } from '@/components/ai-badge';
+import { SageAvatar } from '@/components/sage-avatar';
 import { MentionText } from '@/components/mention-text';
 import { MentionComposerInput } from '@/components/mention-composer-input';
 import { useAuth } from '@/contexts/auth-context';
@@ -43,8 +42,9 @@ import { ApiError, friendlyError } from '@/lib/friendly-error';
 import { LoadError } from '@/components/load-error';
 import { personDisplayHandle, personHandleFromName, personInitials } from '@/lib/social-profile';
 import { SageDecisionTrails } from '@/components/sage-decision-trail';
+import { ProposalIdeaCard } from '@/components/proposal-idea-card';
 import { ReactionBar } from '@/components/reaction-bar';
-import { LIKE_EMOJI } from '@/lib/emoji-catalog';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -138,39 +138,8 @@ export default function CommonsPostDetailScreen() {
     };
   }, [authLoading, coopId, postId, sessionToken, reloadKey]);
 
-  const supportPost = async () => {
-    if (!post) return;
-    if (circleIsMember === false) {
-      setError('Join this circle before liking posts.');
-      return;
-    }
-    if (!sessionToken) {
-      setError('Sign in to like posts.');
-      return;
-    }
-
-    try {
-      const result = await api.toggleCommonsSupport(post.id, sessionToken);
-      setPost((current) =>
-        current
-          ? {
-              ...current,
-              support: Math.max(0, current.support + (result.supported ? 1 : -1)),
-            }
-          : current
-      );
-    } catch (caughtError) {
-      console.error('Failed to support post:', caughtError);
-      setError(friendlyError(caughtError, "We couldn't save your like."));
-    }
-  };
-
   const [isReactingToPost, setIsReactingToPost] = useState(false);
   const togglePostReaction = async (emoji: string) => {
-    if (emoji === LIKE_EMOJI) {
-      await supportPost();
-      return;
-    }
     if (!post || !sessionToken || isReactingToPost) return;
     setIsReactingToPost(true);
     try {
@@ -406,7 +375,7 @@ export default function CommonsPostDetailScreen() {
 
     try {
       await Share.share({
-        message: `${post.body}\n\n${post.group}`,
+        message: `${post.title}\n\n${post.body}\n\n${post.group}`,
       });
     } catch (caughtError) {
       console.error('Failed to share post:', caughtError);
@@ -462,7 +431,7 @@ export default function CommonsPostDetailScreen() {
           </TouchableOpacity>
           <View className="min-w-0 flex-1">
             <Text className="text-xs font-black uppercase text-gray-500">{coop?.name || 'Commons'}</Text>
-            <Text className="text-xl font-black text-gray-950" numberOfLines={1}>Post</Text>
+            <Text className="text-xl font-black text-gray-950" numberOfLines={1}>{post?.tag || 'Post'}</Text>
           </View>
           <TouchableOpacity
             onPress={sharePost}
@@ -484,7 +453,7 @@ export default function CommonsPostDetailScreen() {
         </View>
       </View>
 
-      <ScrollView ref={scrollRef} className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 28 }} keyboardShouldPersistTaps="handled">
+      <ScrollView {...keyboardScrollProps} ref={scrollRef} className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 28 }}>
         {isLoading ? (
           <View className="mt-12 items-center gap-3">
             <ActivityIndicator color={THEME.primary} />
@@ -506,11 +475,15 @@ export default function CommonsPostDetailScreen() {
             <View className="flex-row items-center gap-3">
               <TouchableOpacity
                 onPress={() => openPersonPage(post.author, post.authorHandle)}
-                className="h-11 w-11 items-center justify-center rounded-full bg-slate-200"
+                className={`h-11 w-11 items-center justify-center rounded-full ${post.authorIsAi ? '' : 'bg-slate-200'}`}
                 activeOpacity={0.75}
                 accessibilityLabel={`Open ${post.author}'s personal page`}
               >
-                <Text className="text-base font-black text-slate-600">{personInitials(post.author)}</Text>
+                {post.authorIsAi ? (
+                  <SageAvatar size={44} />
+                ) : (
+                  <Text className="text-base font-black text-slate-600">{personInitials(post.author)}</Text>
+                )}
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => openPersonPage(post.author, post.authorHandle)}
@@ -528,6 +501,14 @@ export default function CommonsPostDetailScreen() {
                 </Text>
               </TouchableOpacity>
               <UserCircle size={20} color={THEME.primary} />
+            </View>
+            <View className="mt-4 items-start">
+              <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: THEME.primarySoft }}>
+                <Text className="text-[10px] font-black uppercase tracking-wider" style={{ color: THEME.primary }}>{post.tag}</Text>
+              </View>
+              <Text accessibilityRole="header" className="mt-2 text-2xl font-black leading-8 text-gray-950">
+                {post.title}
+              </Text>
             </View>
             {post.body ? (
               <MentionText
@@ -557,10 +538,6 @@ export default function CommonsPostDetailScreen() {
 
             <View className="mt-4 flex-row items-center gap-4">
               <Text className="text-xs font-semibold text-stone-600">
-                <Text className="font-black" style={{ color: THEME.primary }}>{post.support}</Text>{' '}
-                {post.support === 1 ? 'like' : 'likes'}
-              </Text>
-              <Text className="text-xs font-semibold text-stone-600">
                 <Text className="font-black text-stone-800">{post.replies}</Text>{' '}
                 {post.replies === 1 ? 'comment' : 'comments'}
               </Text>
@@ -578,15 +555,15 @@ export default function CommonsPostDetailScreen() {
             ) : null}
 
             <View className="mt-4 flex-row border-y border-stone-100 py-2">
-              <TouchableOpacity onPress={supportPost} disabled={circleIsMember === false} className="flex-1 flex-row items-center justify-center gap-2 py-2" style={{ opacity: circleIsMember === false ? 0.4 : 1 }}>
-                <CheckCircle2 size={16} color={THEME.primary} />
-                <Text className="text-sm font-bold text-stone-700">Like</Text>
-              </TouchableOpacity>
               <TouchableOpacity onPress={sharePost} className="flex-1 flex-row items-center justify-center gap-2 py-2">
                 <Share2 size={16} color="#78716C" />
                 <Text className="text-sm font-bold text-stone-700">Share</Text>
               </TouchableOpacity>
             </View>
+
+            {post.id && post.authorIsAi && post.classification === 'sage_proposal_idea' ? (
+              <ProposalIdeaCard postId={post.id} coopId={post.coopId || coopId} sessionToken={sessionToken} canAct={circleIsMember !== false} />
+            ) : null}
 
             {error ? <Text className="mt-3 text-sm font-semibold text-red-600">{error}</Text> : null}
 
@@ -711,32 +688,7 @@ export default function CommonsPostDetailScreen() {
                           onToggle={(emoji) => void toggleCommentReaction(comment.id, emoji)}
                           disabled={!sessionToken || circleIsMember === false || reactingCommentId === comment.id}
                           targetLabel={`${comment.author}'s comment`}
-                        >
-                          <TouchableOpacity
-                            onPress={() => void toggleCommentReaction(comment.id)}
-                            disabled={!sessionToken || circleIsMember === false || reactingCommentId === comment.id}
-                            className="flex-row items-center gap-1 rounded-full px-2 py-1"
-                            style={{
-                              backgroundColor: comment.viewerReacted ? THEME.primarySoft : 'transparent',
-                              opacity: !sessionToken || circleIsMember === false ? 0.5 : 1,
-                            }}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: !!comment.viewerReacted }}
-                            accessibilityLabel={`${comment.viewerReacted ? 'Remove your like from' : 'Like'} ${comment.author}'s comment, ${comment.reactionCount ?? 0} ${(comment.reactionCount ?? 0) === 1 ? 'like' : 'likes'}`}
-                          >
-                            <Heart
-                              size={13}
-                              color={comment.viewerReacted ? THEME.primary : THEME.muted}
-                              fill={comment.viewerReacted ? THEME.primary : 'transparent'}
-                            />
-                            <Text
-                              className="text-[11px] font-bold"
-                              style={{ color: comment.viewerReacted ? THEME.primary : '#78716C' }}
-                            >
-                              {comment.reactionCount ?? 0}
-                            </Text>
-                          </TouchableOpacity>
-                        </ReactionBar>
+                        />
                       </View>
                     ) : null}
                   </View>

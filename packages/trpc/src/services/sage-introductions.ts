@@ -1,7 +1,7 @@
 import { db } from "@repo/db";
 
 import { createNotificationAndPush } from "./push-notification-service.js";
-import { payloadHash } from "./sage-ride-match-agent.js";
+import { payloadHash } from "./sage-payload-hash.js";
 
 /**
  * Consent-first introductions (Bridge). Sage proposes connecting a member who needs something with a
@@ -45,7 +45,7 @@ export async function createIntroductionSuggestion(input: {
       participants: { create: [{ userId: input.needUserId, role: "SUBJECT" }, { userId: input.helperUserId, role: "HELPER" }] },
       reviews: { create: {
         userId: input.needUserId, reviewType: "ACCEPT_INTRODUCTION", payloadHash: hash, status: "PENDING",
-        presentationData: { message: `Sage can introduce you to a member whose profile says they can help with: ${input.needSummary.slice(0, 200)}. Want the introduction? Nothing is shared until you both say yes.` },
+        presentationData: { message: `I found someone here who might be able to help with ${input.needSummary.slice(0, 200).replace(/[.!?]+$/, "")}. Want me to introduce you? Nothing's shared unless you both say yes.` },
       } },
       auditEvents: { create: { eventType: "SUGGESTION_CREATED", metadata: { kind: "introduction" } } },
     },
@@ -70,7 +70,7 @@ export async function askIntroductionHelper(actionId: string): Promise<boolean> 
   await db.commonsActionReview.create({
     data: {
       actionId, userId: helper.userId, reviewType: "ACCEPT_INTRODUCTION", payloadHash: action.payloadHash, status: "PENDING",
-      presentationData: { message: `A member could use help with: ${needSummary}. Your profile says you might be able to help. Want to be introduced? If you both agree, you'll get a private circle together.` },
+      presentationData: { message: `A member could use a hand with ${needSummary.replace(/[.!?]+$/, "")}, and your profile says that's something you can help with. Want me to introduce you? If you both say yes, you'll get a private circle together.` },
     },
   });
   await createNotificationAndPush(db, {

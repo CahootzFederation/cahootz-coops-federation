@@ -13,6 +13,8 @@ import {
 } from "../services/proposal-trails.js";
 import type { DecisionTrail } from "../services/sage-decision-trail.js";
 import { cleanseUntrustedText, isSteeringAttempt, mergeFlags, type CleansedText } from "../services/untrusted-input.js";
+import { AMENDMENT_KINDS, draftRequiresVote, queueAmendmentForProposal } from "../services/sage-proposal-writer.js";
+import { announceProposalVote } from "../services/proposal-notifications.js";
 
 /** Flags from both the original and the rewritten text, with the rewritten text as what the engine reads. */
 function mergeFlagsWithText(original: CleansedText, rewritten: CleansedText): CleansedText {
@@ -100,6 +102,17 @@ async function userIdForWallet(db: any, walletAddress: string) {
   return user?.id as string | undefined;
 }
 
+/** A proposal sent from a Sage idea, or one that changes the charter or goals, always goes to a member vote, including after a rewrite. */
+async function proposalNeedsMemberVote(db: any, proposalId: string): Promise<boolean> {
+  const draft = await db.commonsProposalDraft.findUnique({ where: { submittedProposalId: proposalId }, select: { kind: true, ideaPostId: true } });
+  return Boolean(draft && (draft.ideaPostId || AMENDMENT_KINDS.has(draft.kind)));
+}
+
+/** Marks a member's Sage draft as sent, once. */
+async function markDraftSubmitted(db: any, draftId: string, proposalId: string) {
+  await db.commonsProposalDraft.updateMany({ where: { id: draftId, submittedAt: null }, data: { submittedAt: new Date(), submittedProposalId: proposalId } });
+}
+
 async function requireProposalMembership(db: any, walletAddress: string, coopId: string) {
   const userId = await userIdForWallet(db, walletAddress);
 
@@ -129,6 +142,247 @@ async function requireProposalMembership(db: any, walletAddress: string, coopId:
     });
   }
 }
+
+
+/**
+ * Runs a proposal through the engine and saves it. Members reach this through `proposal.create`; Sage
+ * calls it directly for the proposals it puts up from charter goals (with `memberVoteRequired`, so the
+ * engine's no-vote approval never applies). Callers check who may propose.
+ */
+export async function createProposalFromText(db: any, params: {
+  walletAddress: string;
+  coopId: string;
+  input: z.infer<typeof ProposalInputZ>;
+  /** Never auto-approve: a Sage idea, or a charter or goals change. */
+  memberVoteRequired: boolean;
+  /** The Sage draft this proposal is sent from, marked sent once the proposal is saved. */
+  markDraftId?: string;
+  /** Cost feature for the engine run; Sage's own runs count toward its autonomy limit. */
+  costFeature?: string;
+  /** Tell members it's open for a vote (default). Sage announces its own only once it decides to keep it. */
+  announce?: boolean;
+}): Promise<ProposalOutput> {
+  const { walletAddress, coopId, input } = params;
+  // Fetch active CoopConfig
+  let configData: CoopConfigData | undefined;
+  let aiAutoApproveThreshold = 500;
+  let councilVoteThreshold = 5000;
+  const coopConfig = await db.coopConfig.findFirst({
+    where: { coopId, isActive: true },
+    orderBy: { version: "desc" },
+  });
+
+  if (coopConfig) {
+    aiAutoApproveThreshold = coopConfig.aiAutoApproveThresholdUSD ?? 500;
+    councilVoteThreshold = coopConfig.councilVoteThresholdUSD ?? 5000;
+
+    configData = {
+      charterText: coopConfig.charterText,
+      missionGoals: coopConfig.missionGoals as Array<{ key: string; label: string; priorityWeight: number; description?: string }>,
+      structuralWeights: coopConfig.structuralWeights as { feasibility: number; risk: number; accountability: number },
+      scoreMix: coopConfig.scoreMix as { missionWeight: number; structuralWeight: number },
+      screeningPassThreshold: coopConfig.screeningPassThreshold,
+      proposalCategories: coopConfig.proposalCategories as Array<{ key: string; label: string; isActive: boolean }>,
+      sectorExclusions: (coopConfig.sectorExclusions as Array<string | { value: string; description?: string }>)
+        .map(e => typeof e === "string" ? { value: e } : e),
+      quorumPercent: coopConfig.quorumPercent,
+      approvalThresholdPercent: coopConfig.approvalThresholdPercent,
+      votingWindowDays: coopConfig.votingWindowDays,
+      scorerAgents: ((coopConfig as any).scorerAgents as any[] | undefined) ?? [],
+      strongGoalThreshold: (coopConfig as any).strongGoalThreshold ?? 0.70,
+      missionMinThreshold: (coopConfig as any).missionMinThreshold ?? 0.50,
+      structuralGate: (coopConfig as any).structuralGate ?? 0.65,
+    };
+
+    // Attach historical expert calibration so domain agents learn from past corrections
+    configData.expertCalibration = await fetchExpertCalibration(db, coopId);
+  }
+
+  // Member-written text is cleansed before the engine reads it; the original is what gets stored.
+  const proposalInputCheck = cleanseUntrustedText(input.text, { maxChars: 10_000 });
+
+  // Process proposal through AI engine — save raw proposal first if engine fails
+  let processedProposal: Awaited<ReturnType<typeof proposalEngine.processProposal>> | null = null;
+  let aiError: unknown = null;
+  const engineStart = Date.now();
+  try {
+    processedProposal = await withCostedProposalRun(coopId, params.costFeature ?? "proposal-engine", () => proposalEngine.processProposal({ ...input, text: proposalInputCheck.text }, configData));
+    await recordAIEvaluation({
+      agentKey: "proposal-engine",
+      agentName: "Proposal Engine",
+      entityType: "Proposal",
+      entityId: processedProposal.id,
+      input: { rawText: input.text },
+      output: processedProposal,
+      durationMs: Date.now() - engineStart,
+    }).catch((logErr) => console.error("Failed to log AIEvaluation for proposal-engine:", logErr));
+  } catch (err) {
+    aiError = err;
+    console.error(`⚠️ [proposal.create] AI engine failed — saving raw proposal for async review:`, err);
+    await recordAIEvaluation({
+      agentKey: "proposal-engine",
+      agentName: "Proposal Engine",
+      entityType: "Proposal",
+      input: { rawText: input.text },
+      status: "ERROR",
+      error: err instanceof Error ? err.message : String(err),
+      durationMs: Date.now() - engineStart,
+    }).catch((logErr) => console.error("Failed to log AIEvaluation error for proposal-engine:", logErr));
+  }
+
+  if (aiError || !processedProposal) {
+    // Save raw proposal with SUBMITTED status so it can be re-evaluated async
+    const titleMatch = input.text.match(/Proposal Title:\s*(.+)/i);
+    const summaryMatch = input.text.match(/Summary:\s*(.+)/i);
+    const budgetMatch = input.text.match(/Budget Requested:\s*\$?([\d,\.]+)/i);
+    const categoryMatch = input.text.match(/Category Key:\s*(.+)/i);
+
+    const fallbackTitle = titleMatch?.[1]?.trim() ?? 'Untitled Proposal';
+    const fallbackSummary = summaryMatch?.[1]?.trim() ?? input.text.slice(0, 200);
+    const fallbackBudget = parseFloat((budgetMatch?.[1] ?? '0').replace(/,/g, '')) || 0;
+    const fallbackCategoryKey = categoryMatch?.[1]?.trim() ?? 'other';
+
+    const savedProposal = await db.proposal.create({
+      data: {
+        title: fallbackTitle,
+        summary: fallbackSummary,
+        category: normalizeDbCategory(fallbackCategoryKey),
+        categoryKey: fallbackCategoryKey,
+        proposerWallet: walletAddress,
+        proposerRole: ProposerRole.MEMBER,
+        regionCode: 'US',
+        regionName: 'United States',
+        budgetCurrency: Currency.USD,
+        budgetAmount: fallbackBudget,
+        quorumPercent: coopConfig?.quorumPercent ?? 60,
+        approvalThresholdPercent: coopConfig?.approvalThresholdPercent ?? 51,
+        votingWindowDays: coopConfig?.votingWindowDays ?? 7,
+        engineVersion: '0.0.0-pending',
+        status: ProposalStatus.SUBMITTED,
+        councilRequired: false,
+        evaluation: undefined,
+        charterVersionId: coopConfig?.id ?? undefined,
+        coopId,
+        rawText: input.text,
+        decision: 'pending',
+        decisionReasons: [],
+      },
+      include: { kpis: true, auditChecks: true },
+    });
+    await saveProposalTrail(() => buildProposalEngineFailureTrail(
+      { coopId, proposalId: savedProposal.id, trigger: "PROPOSAL_SUBMITTED", rawText: input.text }, aiError,
+    ));
+    if (params.markDraftId) await markDraftSubmitted(db, params.markDraftId, savedProposal.id);
+
+    return mapDbToOutput(savedProposal);
+  }
+
+  // Determine final status using 3-tier approval logic:
+  //   Tier 1: budget < aiAutoApproveThreshold  → AI auto-approved, no vote needed
+  //   Tier 2: budget < councilVoteThreshold     → council vote required
+  //   Tier 3: budget >= councilVoteThreshold    → full coop vote (councilRequired=true, stays votable)
+  const budget = processedProposal.budget.amountRequested;
+  let finalStatus: ProposalStatus;
+  let councilRequired = false;
+
+  if (processedProposal.decision === "advance") {
+    if (budget < aiAutoApproveThreshold) {
+      finalStatus = ProposalStatus.APPROVED; // Tier 1: AI auto-approve
+    } else if (budget < councilVoteThreshold) {
+      finalStatus = ProposalStatus.VOTABLE;  // Tier 2: council vote
+      councilRequired = true;
+    } else {
+      finalStatus = ProposalStatus.VOTABLE;  // Tier 3: full coop vote
+      councilRequired = true;
+    }
+  } else {
+    finalStatus = processedProposal.status.toUpperCase() as ProposalStatus;
+  }
+  // Text that tries to instruct the reviewer never gets the no-vote auto-approval.
+  const autoApproveBlocked = isSteeringAttempt(proposalInputCheck.flags) && finalStatus === ProposalStatus.APPROVED;
+  if (autoApproveBlocked) {
+    finalStatus = ProposalStatus.VOTABLE;
+    councilRequired = true;
+  }
+  const memberVoteRequired = params.memberVoteRequired && finalStatus === ProposalStatus.APPROVED;
+  if (memberVoteRequired) {
+    finalStatus = ProposalStatus.VOTABLE;
+    councilRequired = true;
+  }
+
+  // Save to database with enhanced fields
+  const savedProposal = await db.proposal.create({
+    data: {
+      id: processedProposal.id,
+      title: processedProposal.title,
+      summary: processedProposal.summary,
+      category: normalizeDbCategory(processedProposal.category),
+      proposerWallet: walletAddress,
+      proposerRole: (processedProposal.proposer.role || "member").toUpperCase() as ProposerRole,
+      proposerDisplayName: processedProposal.proposer.displayName,
+      regionCode: processedProposal.region.code,
+      regionName: processedProposal.region.name,
+      budgetCurrency: processedProposal.budget.currency.toUpperCase() as Currency,
+      budgetAmount: processedProposal.budget.amountRequested,
+      quorumPercent: processedProposal.governance.quorumPercent,
+      approvalThresholdPercent: processedProposal.governance.approvalThresholdPercent,
+      votingWindowDays: processedProposal.governance.votingWindowDays,
+      engineVersion: processedProposal.audit.engineVersion,
+      status: finalStatus,
+      votingEndsAt: votingEndsAtFor(finalStatus, processedProposal.governance.votingWindowDays),
+      councilRequired,
+      // New evaluation model
+      evaluation: processedProposal.evaluation as any,
+      charterVersionId: coopConfig?.id ?? undefined,
+      // Enhanced fields
+      coopId,
+      rawText: input.text,
+      categoryKey: processedProposal.category,
+      alternatives: processedProposal.alternatives ?? undefined,
+      bestAlternative: processedProposal.bestAlternative ?? undefined,
+      decision: processedProposal.decision,
+      decisionReasons: processedProposal.decisionReasons ?? [],
+      missingData: processedProposal.missing_data ?? undefined,
+      auditChecks: {
+        createMany: {
+          data: processedProposal.audit.checks.map((check: any) => ({
+            name: check.name,
+            passed: check.passed,
+            note: check.note,
+          })),
+        },
+      },
+    },
+    include: {
+      kpis: true,
+      auditChecks: true,
+    },
+  });
+
+  // Members hear about it as soon as it's open for a vote.
+  if (finalStatus === ProposalStatus.VOTABLE && params.announce !== false) announceProposalVote(savedProposal.id, db);
+
+  // Fetch complete proposal
+  const completeProposal = await db.proposal.findUnique({
+    where: { id: savedProposal.id },
+    include: {
+      kpis: true,
+      auditChecks: true
+    }
+  });
+
+  if (params.markDraftId) await markDraftSubmitted(db, params.markDraftId, savedProposal.id);
+
+  // Save initial revision snapshot (revision 1)
+  await saveRevision(db, savedProposal.id, 1, processedProposal, finalStatus, input.text, configData);
+  const createdProposal = processedProposal;
+  await saveProposalTrail(() => buildProposalEngineTrail(createdProposal, {
+    coopId, proposalId: savedProposal.id, trigger: "PROPOSAL_SUBMITTED", rawText: input.text,
+    ...proposalTrailSettings(coopConfig, configData), finalStatus, councilRequired,
+    inputCheck: proposalInputCheck, autoApproveBlocked, memberVoteRequired,
+  }));
+
+  return mapDbToOutput(completeProposal);}
 
 export const proposalRouter = router({
   /**
@@ -186,216 +440,13 @@ export const proposalRouter = router({
       
       const coopId = input.coopId;
       await requireProposalMembership(ctx.db, walletAddress, coopId);
+      // A Sage idea, or any charter or goals change, always goes to a member vote.
+      const voteRequired = await draftRequiresVote(input.commonsDraftId, (await userIdForWallet(ctx.db, walletAddress)) ?? null);
 
-      // Fetch active CoopConfig
-      let configData: CoopConfigData | undefined;
-      let aiAutoApproveThreshold = 500;
-      let councilVoteThreshold = 5000;
-      const coopConfig = await ctx.db.coopConfig.findFirst({
-        where: { coopId, isActive: true },
-        orderBy: { version: "desc" },
+      return createProposalFromText(ctx.db, {
+        walletAddress, coopId, input,
+        memberVoteRequired: Boolean(voteRequired), markDraftId: voteRequired?.draftId,
       });
-
-      if (coopConfig) {
-        aiAutoApproveThreshold = coopConfig.aiAutoApproveThresholdUSD ?? 500;
-        councilVoteThreshold = coopConfig.councilVoteThresholdUSD ?? 5000;
-
-        configData = {
-          charterText: coopConfig.charterText,
-          missionGoals: coopConfig.missionGoals as Array<{ key: string; label: string; priorityWeight: number; description?: string }>,
-          structuralWeights: coopConfig.structuralWeights as { feasibility: number; risk: number; accountability: number },
-          scoreMix: coopConfig.scoreMix as { missionWeight: number; structuralWeight: number },
-          screeningPassThreshold: coopConfig.screeningPassThreshold,
-          proposalCategories: coopConfig.proposalCategories as Array<{ key: string; label: string; isActive: boolean }>,
-          sectorExclusions: (coopConfig.sectorExclusions as Array<string | { value: string; description?: string }>)
-            .map(e => typeof e === "string" ? { value: e } : e),
-          quorumPercent: coopConfig.quorumPercent,
-          approvalThresholdPercent: coopConfig.approvalThresholdPercent,
-          votingWindowDays: coopConfig.votingWindowDays,
-          scorerAgents: ((coopConfig as any).scorerAgents as any[] | undefined) ?? [],
-          strongGoalThreshold: (coopConfig as any).strongGoalThreshold ?? 0.70,
-          missionMinThreshold: (coopConfig as any).missionMinThreshold ?? 0.50,
-          structuralGate: (coopConfig as any).structuralGate ?? 0.65,
-        };
-
-        // Attach historical expert calibration so domain agents learn from past corrections
-        configData.expertCalibration = await fetchExpertCalibration(ctx.db, coopId);
-      }
-
-      // Member-written text is cleansed before the engine reads it; the original is what gets stored.
-      const proposalInputCheck = cleanseUntrustedText(input.text, { maxChars: 10_000 });
-
-      // Process proposal through AI engine — save raw proposal first if engine fails
-      let processedProposal: Awaited<ReturnType<typeof proposalEngine.processProposal>> | null = null;
-      let aiError: unknown = null;
-      const engineStart = Date.now();
-      try {
-        processedProposal = await withCostedProposalRun(coopId, "proposal-engine", () => proposalEngine.processProposal({ ...input, text: proposalInputCheck.text }, configData));
-        await recordAIEvaluation({
-          agentKey: "proposal-engine",
-          agentName: "Proposal Engine",
-          entityType: "Proposal",
-          entityId: processedProposal.id,
-          input: { rawText: input.text },
-          output: processedProposal,
-          durationMs: Date.now() - engineStart,
-        }).catch((logErr) => console.error("Failed to log AIEvaluation for proposal-engine:", logErr));
-      } catch (err) {
-        aiError = err;
-        console.error(`⚠️ [proposal.create] AI engine failed — saving raw proposal for async review:`, err);
-        await recordAIEvaluation({
-          agentKey: "proposal-engine",
-          agentName: "Proposal Engine",
-          entityType: "Proposal",
-          input: { rawText: input.text },
-          status: "ERROR",
-          error: err instanceof Error ? err.message : String(err),
-          durationMs: Date.now() - engineStart,
-        }).catch((logErr) => console.error("Failed to log AIEvaluation error for proposal-engine:", logErr));
-      }
-
-      if (aiError || !processedProposal) {
-        // Save raw proposal with SUBMITTED status so it can be re-evaluated async
-        const titleMatch = input.text.match(/Proposal Title:\s*(.+)/i);
-        const summaryMatch = input.text.match(/Summary:\s*(.+)/i);
-        const budgetMatch = input.text.match(/Budget Requested:\s*\$?([\d,\.]+)/i);
-        const categoryMatch = input.text.match(/Category Key:\s*(.+)/i);
-
-        const fallbackTitle = titleMatch?.[1]?.trim() ?? 'Untitled Proposal';
-        const fallbackSummary = summaryMatch?.[1]?.trim() ?? input.text.slice(0, 200);
-        const fallbackBudget = parseFloat((budgetMatch?.[1] ?? '0').replace(/,/g, '')) || 0;
-        const fallbackCategoryKey = categoryMatch?.[1]?.trim() ?? 'other';
-
-        const savedProposal = await ctx.db.proposal.create({
-          data: {
-            title: fallbackTitle,
-            summary: fallbackSummary,
-            category: normalizeDbCategory(fallbackCategoryKey),
-            categoryKey: fallbackCategoryKey,
-            proposerWallet: walletAddress,
-            proposerRole: ProposerRole.MEMBER,
-            regionCode: 'US',
-            regionName: 'United States',
-            budgetCurrency: Currency.USD,
-            budgetAmount: fallbackBudget,
-            quorumPercent: coopConfig?.quorumPercent ?? 60,
-            approvalThresholdPercent: coopConfig?.approvalThresholdPercent ?? 51,
-            votingWindowDays: coopConfig?.votingWindowDays ?? 7,
-            engineVersion: '0.0.0-pending',
-            status: ProposalStatus.SUBMITTED,
-            councilRequired: false,
-            evaluation: undefined,
-            charterVersionId: coopConfig?.id ?? undefined,
-            coopId,
-            rawText: input.text,
-            decision: 'pending',
-            decisionReasons: [],
-          },
-          include: { kpis: true, auditChecks: true },
-        });
-        await saveProposalTrail(() => buildProposalEngineFailureTrail(
-          { coopId, proposalId: savedProposal.id, trigger: "PROPOSAL_SUBMITTED", rawText: input.text }, aiError,
-        ));
-
-        return mapDbToOutput(savedProposal);
-      }
-
-      // Determine final status using 3-tier approval logic:
-      //   Tier 1: budget < aiAutoApproveThreshold  → AI auto-approved, no vote needed
-      //   Tier 2: budget < councilVoteThreshold     → council vote required
-      //   Tier 3: budget >= councilVoteThreshold    → full coop vote (councilRequired=true, stays votable)
-      const budget = processedProposal.budget.amountRequested;
-      let finalStatus: ProposalStatus;
-      let councilRequired = false;
-
-      if (processedProposal.decision === "advance") {
-        if (budget < aiAutoApproveThreshold) {
-          finalStatus = ProposalStatus.APPROVED; // Tier 1: AI auto-approve
-        } else if (budget < councilVoteThreshold) {
-          finalStatus = ProposalStatus.VOTABLE;  // Tier 2: council vote
-          councilRequired = true;
-        } else {
-          finalStatus = ProposalStatus.VOTABLE;  // Tier 3: full coop vote
-          councilRequired = true;
-        }
-      } else {
-        finalStatus = processedProposal.status.toUpperCase() as ProposalStatus;
-      }
-      // Text that tries to instruct the reviewer never gets the no-vote auto-approval.
-      const autoApproveBlocked = isSteeringAttempt(proposalInputCheck.flags) && finalStatus === ProposalStatus.APPROVED;
-      if (autoApproveBlocked) {
-        finalStatus = ProposalStatus.VOTABLE;
-        councilRequired = true;
-      }
-
-      // Save to database with enhanced fields
-      const savedProposal = await ctx.db.proposal.create({
-        data: {
-          id: processedProposal.id,
-          title: processedProposal.title,
-          summary: processedProposal.summary,
-          category: normalizeDbCategory(processedProposal.category),
-          proposerWallet: walletAddress,
-          proposerRole: (processedProposal.proposer.role || "member").toUpperCase() as ProposerRole,
-          proposerDisplayName: processedProposal.proposer.displayName,
-          regionCode: processedProposal.region.code,
-          regionName: processedProposal.region.name,
-          budgetCurrency: processedProposal.budget.currency.toUpperCase() as Currency,
-          budgetAmount: processedProposal.budget.amountRequested,
-          quorumPercent: processedProposal.governance.quorumPercent,
-          approvalThresholdPercent: processedProposal.governance.approvalThresholdPercent,
-          votingWindowDays: processedProposal.governance.votingWindowDays,
-          engineVersion: processedProposal.audit.engineVersion,
-          status: finalStatus,
-          votingEndsAt: votingEndsAtFor(finalStatus, processedProposal.governance.votingWindowDays),
-          councilRequired,
-          // New evaluation model
-          evaluation: processedProposal.evaluation as any,
-          charterVersionId: coopConfig?.id ?? undefined,
-          // Enhanced fields
-          coopId,
-          rawText: input.text,
-          categoryKey: processedProposal.category,
-          alternatives: processedProposal.alternatives ?? undefined,
-          bestAlternative: processedProposal.bestAlternative ?? undefined,
-          decision: processedProposal.decision,
-          decisionReasons: processedProposal.decisionReasons ?? [],
-          missingData: processedProposal.missing_data ?? undefined,
-          auditChecks: {
-            createMany: {
-              data: processedProposal.audit.checks.map((check: any) => ({
-                name: check.name,
-                passed: check.passed,
-                note: check.note,
-              })),
-            },
-          },
-        },
-        include: {
-          kpis: true,
-          auditChecks: true,
-        },
-      });
-
-      // Fetch complete proposal
-      const completeProposal = await ctx.db.proposal.findUnique({
-        where: { id: savedProposal.id },
-        include: {
-          kpis: true,
-          auditChecks: true
-        }
-      });
-
-      // Save initial revision snapshot (revision 1)
-      await saveRevision(ctx.db, savedProposal.id, 1, processedProposal, finalStatus, input.text, configData);
-      const createdProposal = processedProposal;
-      await saveProposalTrail(() => buildProposalEngineTrail(createdProposal, {
-        coopId, proposalId: savedProposal.id, trigger: "PROPOSAL_SUBMITTED", rawText: input.text,
-        ...proposalTrailSettings(coopConfig, configData), finalStatus, councilRequired,
-        inputCheck: proposalInputCheck, autoApproveBlocked,
-      }));
-
-      return mapDbToOutput(completeProposal);
     }),
 
   /**
@@ -505,6 +556,14 @@ export const proposalRouter = router({
         data: updateData,
         include: { kpis: true, auditChecks: true }
       });
+      if (newStatus === ProposalStatus.VOTABLE) announceProposalVote(updated.id, ctx.db);
+      // A charter or goals change members voted through waits for a steward to apply it.
+      if ((newStatus === ProposalStatus.APPROVED || newStatus === ProposalStatus.FUNDED) && updated.coopId) {
+        const draft = await ctx.db.commonsProposalDraft.findUnique({ where: { submittedProposalId: updated.id }, select: { kind: true, proposedChanges: true } });
+        if (draft && AMENDMENT_KINDS.has(draft.kind)) {
+          await queueAmendmentForProposal(updated.coopId, { id: updated.id, title: updated.title }, draft).catch((error) => console.error("Could not queue the voted amendment", error));
+        }
+      }
 
       return mapDbToOutput(updated);
     }),
@@ -818,6 +877,11 @@ export const proposalRouter = router({
         finalStatus = ProposalStatus.VOTABLE;
         councilRequired = true;
       }
+      const memberVoteRequired = finalStatus === ProposalStatus.APPROVED && await proposalNeedsMemberVote(ctx.db, input.proposalId);
+      if (memberVoteRequired) {
+        finalStatus = ProposalStatus.VOTABLE;
+        councilRequired = true;
+      }
 
       // Delete old audit checks and rebuild
       await ctx.db.proposalAuditCheck.deleteMany({ where: { proposalId: input.proposalId } });
@@ -859,6 +923,9 @@ export const proposalRouter = router({
         },
         include: { kpis: true, auditChecks: true },
       });
+
+      // A rewrite that opens it for a vote tells members (once per proposal).
+      if (finalStatus === ProposalStatus.VOTABLE) announceProposalVote(input.proposalId, ctx.db);
 
       // Save revision snapshot for this resubmission
       const revCount = await ctx.db.proposalRevision.count({ where: { proposalId: input.proposalId } });
@@ -995,6 +1062,11 @@ export const proposalRouter = router({
         finalStatus = ProposalStatus.VOTABLE;
         councilRequired = true;
       }
+      const memberVoteRequired = finalStatus === ProposalStatus.APPROVED && await proposalNeedsMemberVote(ctx.db, input.proposalId);
+      if (memberVoteRequired) {
+        finalStatus = ProposalStatus.VOTABLE;
+        councilRequired = true;
+      }
 
       await ctx.db.proposalAuditCheck.deleteMany({ where: { proposalId: input.proposalId } });
 
@@ -1035,6 +1107,9 @@ export const proposalRouter = router({
         },
         include: { kpis: true, auditChecks: true },
       });
+
+      // A rewrite that opens it for a vote tells members (once per proposal).
+      if (finalStatus === ProposalStatus.VOTABLE) announceProposalVote(input.proposalId, ctx.db);
 
       // Save revision snapshot for this alternative application
       const revCount = await ctx.db.proposalRevision.count({ where: { proposalId: input.proposalId } });

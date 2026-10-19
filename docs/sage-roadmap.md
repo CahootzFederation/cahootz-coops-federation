@@ -402,6 +402,97 @@ Remaining:
 - Lowering the age limit to 5 days means the daily catch-up scan can reply to older posts it missed, so a backlog could produce a burst of replies the first day.
 - Production's Trigger.dev environment still needs `OPENAI_API_KEY` set by hand. Nothing checks it in the Trigger runtime.
 
+### P1 — Sage proposals from charter goals (2026-10-18)
+
+Goal: as Sage learns how a Commons is doing, it writes proposals itself and puts them up for a vote: programs, ways to spend money, and changes to the charter or goals. Every proposal ties to the charter, members decide by voting, and Sage can decide not to propose. New and small Commons especially get proposals, since that's when a starting push helps most.
+
+Status (2026-10-18): built and verified locally; see Verification below.
+
+- **The goal check** (`services/sage-goal-ideas.ts`, a wake-cycle step). It runs at most twice a week per Commons: once Monday–Wednesday and once Thursday–Sunday (UTC), claimed through `CommonsContentScan`.
+- **What Sage counts** (`services/sage-goal-signals.ts`).
+  - Goals are free text, so code keeps a fixed list of 10 signals it can count from members' own records: talking, people taking part, events, orders at member stores, payments between members, new members, needs answered, deciding together, resources shared, and help that worked.
+  - Each goal is matched to 0–3 signals once per charter version (one `gpt-5-nano` call that can only pick from the list, with keywords as the fallback). The match is saved as a `goal_signal_map` observation visible to members.
+  - A steward can change a goal's picks on the Commons page, and the pick carries over to later charter versions while the goal keeps its name.
+- **When a goal counts as behind.** Each counts as a `goal_gap` observation (one per goal, refreshed each check, marked `UNSUPPORTED` when the gap closes) holding the exact numbers and Sage's last decision.
+  - **Not started:** nobody has proposed anything for the goal yet (no proposal about it other than withdrawn ones, and no Sage idea). This is how a brand-new or small Commons gets starter proposals before there's any history to compare.
+  - **Dropped:** compared with the Commons' own normal (the latest two weeks against up to four earlier two-week periods), the usual was at least 3 and the latest fell 40% or more.
+  - **Nothing for six weeks.**
+  - **Members asked:** members publicly answered Sage's open question about a pattern tied to the goal.
+- **Deciding not to.** Code says no before any model call when:
+  - there are no active members;
+  - Sage already put up 2 proposals this week, or 1 in a Commons' first week with Sage proposals. At launch nearly every Commons has goals nobody has proposed anything for, so each starts with one proposal instead of a pile;
+  - 2 of Sage's proposals are still being voted on;
+  - 2 sent-back ideas are still waiting for someone to take them on;
+  - the monthly AI limit is reached;
+  - for one goal: Sage proposed something for it in the last 30 days, a proposal or draft for it is open, or members turned one down in the last 60 days.
+
+  A new or small Commons isn't blocked. Otherwise one `gpt-5.6-luna` call either writes a single proposal or says `NO_PROPOSAL` with a reason. Every reason for a no goes to the decision trail (agent `sage-goal-check`, visible to members) and onto the gap observation.
+- **Code's checks on the proposal.**
+  - The goal must be one code left open.
+  - Confidence must be at least 0.6.
+  - The proposal must quote the charter or a goal exactly.
+  - Every number, including in new charter wording, must appear in the evidence. Counts of 12 or less without a $ are allowed.
+  - A spending proposal keeps only a cost a member gave.
+  - A charter change must replace exactly one passage that exists once. A goals change is cleaned into a list of 1–8 goals whose weights add up to 1.
+  - It must pass the output check.
+- **Sage puts it up for a vote.**
+  - `createProposalFromText` (moved out of `proposal.create` so members and Sage share one path) sends Sage's text through the normal proposal review. The text includes the exact charter or goals change and any cost a member gave.
+  - It's saved as Sage (`proposerWallet: sage:bot`, role `BOT`, shown as "AI helper") and always lands in a member vote, never the engine's no-vote approval.
+  - Sage then posts it in General (`sage_proposal_idea`, a `PROPOSE_IDEA` action) with the goal, the numbers, and "It only happens if members say yes." The post's card opens the proposal.
+  - The review's cost is recorded as `sage-goal-proposal` and counts toward the autonomy limit.
+- **Members are told there's a vote** (`services/proposal-notifications.ts`). This covers every proposal, not just Sage's.
+  - It fires when a proposal opens for a vote: at creation, after a rewrite (resubmit or applied alternative), or when an admin opens it.
+  - Every active member except the proposer gets "New vote: {title}" with who put it up and when voting closes. Tapping it opens the proposal.
+  - It's sent once per proposal, uses the Governance category (`PROPOSAL_CREATED`, which existed but was never sent), and push respects each member's settings.
+  - Sage's own proposal is announced only after Sage decides to keep it, so nobody is asked to vote on one it withdrew.
+- **When the review sends it back,** Sage withdraws its proposal and posts the idea for a member to take on instead. Sage keeps a proposal only when the review advances it. A send-back is any other result: revise, needs more information, blocked, or the review didn't run. The review lands a "revise" as votable, but its own text says the proposal isn't strong enough yet; the first live run got exactly that.
+  - The first member to tap "Take this on" owns the draft and edits the reasons, while the charter or goals change itself stays fixed.
+  - A proposal they send from it also always goes to a vote, including after a resubmit or an applied alternative.
+- **Steward applies a passed change.** When such a proposal becomes `APPROVED` or `FUNDED` (or at the next wake), code creates one pending `CoopConfigAudit` (`changedBy: proposal:<id>`) and notifies the stewards (`SAGE_AMENDMENT_READY`, Sage category).
+  - Stewards see "Changes members passed" on the Commons page and apply it with one tap. That makes one new config version, re-reads memory, and is recorded as `APPLIED` with a sequence.
+  - If the charter changed since the vote, nothing is applied and the stewards are asked to apply it by hand.
+- **Sage may now do on its own:**
+  - measure goals and record gap observations;
+  - match goals to signals;
+  - write a proposal and put it up for a member vote, at most 2 a week and 2 open at a time;
+  - withdraw its own proposal when the review sends it back.
+- **Still needs people:** the member vote decides every Sage proposal, and a steward applies a passed charter or goals change. Sage never votes.
+- **Memory:** one `goal_gap` row per goal per Commons (60-day expiry, refreshed, closed when the gap closes) and one `goal_signal_map` per charter version (older ones `SUPERSEDED`). Both hold public activity counts only, and both are visible to members.
+- **Cost:**
+  - Goal check: at most one luna call per check, about $0.0015.
+  - Goal matching: one nano call per charter version, about $0.0002.
+  - Proposal review: one full run per proposal Sage puts up. That's several gpt-5.2 calls, some with web search. Measured live on 2026-10-18: about $0.087 for one proposal (7 calls, about $0.012 each).
+  - Also measured: goal checks averaged $0.0005 (9 runs), and goal matching $0.0002 (10 runs).
+  - At the cap of 2 a week, that's under $1 per Commons per month, inside the default $5 autonomy limit.
+  - All three features (`sage-goal-check`, `sage-goal-map`, `sage-goal-proposal`) count toward the limit, and nothing runs once it's reached.
+
+Verification:
+
+- Unit tests:
+  - `sage-goal-signals.test.ts`: gap math, matching, steward picks, and keywords that no longer read "share news" as lending.
+  - `sage-goal-ideas.test.ts`: periods; every "no" rule, including that a one-member Commons is allowed; the proposal checks; proposal text; full checks that put a proposal up, say no, drop a made-up cost, withdraw a sent-back proposal and fall back to an open idea, and give a brand-new Commons a starter proposal; claiming; queueing and applying amendments.
+  - `proposal-sage-ideas.test.ts`: Sage's own proposal is saved as Sage, goes to a vote, and its review counts toward Sage's limit. A $0 Sage idea is never approved without a vote.
+  - `sage-principles.test.ts` includes the goal-check agent, and a notification-route test was added.
+- A live run on a cloned database: the real goal check found the quiet stretch, wrote the observation and posted. It caught two problems, both fixed: keywords matched "share news" to resources shared, and a test run id in a title was rightly refused as an unbacked number.
+- The local API's wake loop then ran the whole thing live, with the real model and the real proposal review. Sage wrote "Open weekly check-in thread" for the quiet "More communication" goal, it was saved as Sage's, and it went to a vote. The review graded it "revise" (59%), which is why Sage now keeps only proposals the review advances.
+- A photo walkthrough of the flow turned up two more fixes:
+  - After a steward applied a charter change, "What Sage counts" went blank until the next check, because maps are per charter version. It now shows the last matches for goals that kept their key, and a steward can edit them right away.
+  - The fixture didn't clear proposals the wake loop had put up in its Commons, and didn't stop the loop running there mid-test.
+- Playwright on a local stack (cloned database, API :3011, web :8091): `sage-goal-ideas.spec.ts` (journey 72) has two tests. In the first, the member gets the new-vote alert, Sage's proposal goes up for a vote, and the steward applies the passed change. In the second, a sent-back proposal sends no alert and a member takes it on. Both passed in 3 of 3 runs. The smoke suite passed 18 of 18. With the new-vote alert in place, the specs that create proposals or check alerts also passed: `proposal-form`, `governance-confirmations`, `circle-notifications` and `proposal-navigation`. `commons-info-page.spec.ts` and `sage-stewardship.spec.ts` passed on an earlier version of this change.
+- `pnpm -F @repo/trpc test`: 1013 passed, 31 skipped. Mobile Jest: 121 passed. `@repo/trpc` and `@cahootz/mobile` type-checks pass.
+
+Remaining:
+
+- The review cost is measured from one live proposal only. Check `AICostEvent` rows with feature `sage-goal-proposal` after release.
+- Sage doesn't yet revise a proposal the review sent back (using its reasons) before handing it to members. The first live proposal was a "revise".
+- No steward control yet to pull a Sage proposal from a vote; members vote it down, or an admin withdraws it. Worth adding if Sage's proposals miss.
+- Votes still move to Approved through the admin `updateStatus` or council path. There's no automatic tally, so a passed amendment waits until someone records the result.
+- The model's decision quality (whether it says no often enough, and whether its proposals pass) is unmeasured. Watch `goal_gap.lastDecision` and the pass rate of `sage:bot` proposals.
+- A sent-back idea nobody takes on stops counting toward its limit after 21 days, but its post stays up.
+- Keyword matching (the fallback with no model) is crude. A steward can correct it.
+- New-vote alerts go to every active member one at a time, like the rhythm posts. Fine for today's Commons sizes; a very large Commons would want a batched send.
+- An admin can remove a Sage post from the Commons AI page (a sent-back idea nobody took on is removed with it). That path has no automated test.
+
 ### P2 — Cost optimization and budget administration
 
 Goal: measure value per useful outcome and prevent surprise spending.
@@ -601,6 +692,9 @@ For every Sage behavior change:
   - Cost: luna is $0.20 / $1.20 per million input/output tokens. Measured locally on 2026-10-16: 6 `sage-reply` calls averaged $0.0006 (about 2,500 input and 50–90 output tokens, some with a tool call). An @mention was an estimated $0.010 on gpt-5.2; a DM was about $0.0004 on nano. Replies stay recorded under `sage-reply` and member-requested, so they keep working after the autonomy limit.
   - Verified (2026-10-16, local stack): the full `@repo/trpc` suite (with `sage-reply-tools.test.ts` and new cases in `sage-checkin-followup.test.ts`), the smoke set (18 passed), journey 67 (`sage-reply-parity.spec.ts`), `agent-decision-trails`, `sage-decision-comments` and `sage-member-memory`. `sage-member-memory` had failed at "1 need remembered" on main too: the DM trail list is newest-first, but the spec opened the last (oldest) trail; it now opens the first. `sage-member-post` failed because a leftover 2026-10-15 E2E introduction between the two fixture accounts put them in the 30-day cooldown, so no introduction was offered.
   - Limitations: whether a reply actually uses the name, or calls a tool, is the model's choice and isn't asserted in E2E. A `schedule_check_in` from a public @mention is delivered in the member's DM with Sage.
+- 2026-10-18: Sage starts proposals from charter goals. Decided with the user: ideas run up to twice a week per Commons at launch; Sage must be able to decide no, and records why; every idea ties to the charter, and a goal falling behind (for example "more communication" with nobody talking) is saved as an observation that leads to an idea. An idea is posted to the whole Commons and the first member to take it on owns it; it never goes to one steward. A passed charter or goals change waits for a steward's one-tap apply and is never applied automatically. Goals are measured with a fixed list of countable signals matched per goal (model picks, keywords as fallback, steward can change it), used right away. The user chose this over letting the model choose its own measurements with counting tools.
+- 2026-10-18 (same day, later): Sage writes the proposal and submits it itself, for a member vote, instead of waiting for a member to take the idea on. The user asked for this directly; AGENT.md's autonomy boundaries now carve out Sage's own charter-goal proposals (still never approved without a vote; a passed charter or goals change still needs a steward). New and small Commons get proposals too: the age and three-member minimums were removed, and a goal nobody has proposed anything for counts as behind. A proposal the review sends back is withdrawn and offered as an open idea instead.
+- 2026-10-18 (later): Every proposal that opens for a vote now notifies the Commons' members ("New vote: …"), not only Sage's, so people know to vote. A Commons' first week with Sage proposals is capped at one, so the launch doesn't hand every Commons two votes at once.
 
 ## Completed milestones
 

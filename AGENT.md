@@ -60,7 +60,7 @@ Sage may automatically perform low-risk, reversible actions authorized by Common
 
 Sage must obtain the required member or leadership approval before:
 
-- submitting a proposal;
+- submitting a proposal on a member's behalf (Sage may put up its own proposals from charter goals, as "Sage", only for a member vote; see below);
 - publishing a sensitive or high-impact accusation;
 - committing organizational funds;
 - changing membership or roles;
@@ -68,6 +68,8 @@ Sage must obtain the required member or leadership approval before:
 - executing an on-chain transaction;
 - taking disciplinary action;
 - performing an irreversible external action.
+
+Sage's own proposals (decided 2026-10-18): Sage may write a proposal tied to a charter goal and put it up for a vote itself, labeled as coming from Sage. Code caps how many (two a week, two open at a time per Commons), runs it through the normal proposal review, and never lets it skip the member vote. Members decide by voting. A passed charter or goals change still waits for a steward to apply it. Sage never votes.
 
 The model recommends actions. Deterministic code enforces authorization, permissions, budgets, idempotency, and governance rules.
 

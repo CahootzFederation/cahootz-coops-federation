@@ -41,9 +41,9 @@ export interface TrailObserved {
 }
 
 export type TrailAgent = "commons-action-agent" | "sage-trend" | "proposal-engine" | "comment-evaluation" | "sage-reply"
-  | "cadence" | "guardian" | "steward" | "sage-pre-vote";
+  | "cadence" | "guardian" | "steward" | "sage-pre-vote" | "sage-goal-check";
 export type TrailSourceType = "commons_post" | "commons_comment" | "circle_window"
-  | "proposal" | "proposal_comment" | "sage_mention" | "sage_dm" | "sage_task" | "sage_alert" | "commons_review";
+  | "proposal" | "proposal_comment" | "sage_mention" | "sage_dm" | "sage_task" | "sage_alert" | "commons_review" | "goal_check";
 export type TrailTrigger = "NEW_CONTENT" | "SCHEDULED_SCAN" | "ADMIN_SCAN" | "CIRCLE_WINDOW_FULL" | "ADMIN_ANALYZE"
   | "PROPOSAL_SUBMITTED" | "PROPOSAL_RESUBMITTED" | "PROPOSAL_ALTERNATIVE_APPLIED" | "PROPOSAL_COMMENT" | "SAGE_MENTION" | "SAGE_DM"
   | "SAGE_WAKE" | "ESCALATION";
@@ -235,6 +235,7 @@ const AGENT_LABEL: Record<string, string> = {
   guardian: "Routing",
   steward: "Steward review",
   "sage-pre-vote": "Before the vote",
+  "sage-goal-check": "Goal check",
 };
 export const TRAIL_AGENTS = Object.keys(AGENT_LABEL);
 

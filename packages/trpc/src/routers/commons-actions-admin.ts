@@ -264,13 +264,15 @@ export const commonsActionsAdminRouter = router({
       return { success: true };
     }
     if (input.command === "remove-question") {
-      // Sage's open question and its rhythm posts (priorities, open requests, appreciation, monthly review).
-      if ((action.type !== "ASK_COMMONS" && action.type !== "COMMUNITY_RHYTHM") || action.status !== "PUBLISHED") conflict("Only a published Sage question or rhythm post can be removed");
+      // Sage's open question, its rhythm posts (priorities, open requests, appreciation, monthly review), and its proposal ideas.
+      if (!["ASK_COMMONS", "COMMUNITY_RHYTHM", "PROPOSE_IDEA"].includes(action.type) || action.status !== "PUBLISHED") conflict("Only a published Sage question, rhythm post or idea can be removed");
       await ctx.db.$transaction(async (tx) => {
         // sourcePostId is the question post itself; only Sage's own post in this Commons is deleted.
         await tx.commonsPost.deleteMany({ where: { id: action.sourcePostId, coopId, author: { isBot: true } } });
+        // An idea nobody has taken on goes with its post; a member's claimed draft stays theirs.
+        if (action.type === "PROPOSE_IDEA") await tx.commonsProposalDraft.deleteMany({ where: { actionId: action.id, authorId: null } });
         await tx.commonsAction.update({ where: { id: action.id }, data: { status: "DISMISSED", reviewedBy: actor, reviewedAt: new Date() } });
-        await tx.commonsActionAudit.create({ data: { actionId: action.id, eventType: action.type === "COMMUNITY_RHYTHM" ? "RHYTHM_POST_REMOVED" : "QUESTION_REMOVED", metadata: { by: actor } } });
+        await tx.commonsActionAudit.create({ data: { actionId: action.id, eventType: action.type === "COMMUNITY_RHYTHM" ? "RHYTHM_POST_REMOVED" : action.type === "PROPOSE_IDEA" ? "IDEA_REMOVED" : "QUESTION_REMOVED", metadata: { by: actor } } });
       });
       return { success: true };
     }

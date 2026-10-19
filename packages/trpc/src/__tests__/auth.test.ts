@@ -159,6 +159,28 @@ describe('auth.requestLoginCode', () => {
     expect(sendLoginCode).toHaveBeenCalledWith('alice@example.com', '123456', undefined);
   });
 
+  it('uses the account a simultaneous request just created instead of failing', async () => {
+    const createdElsewhere = {
+      id: 'new_user_2',
+      status: 'ACTIVE',
+      deletedAt: null,
+      walletAddress: null,
+      wallets: [],
+      memberships: [],
+    };
+    const db = makeDb({
+      user: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(createdElsewhere) },
+    });
+    db.user.create.mockRejectedValue(Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }));
+
+    const result = await callerFor(db).requestLoginCode({ email: 'twice@example.com' });
+
+    expect(result.success).toBe(true);
+    expect(db.loginCode.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ email: 'twice@example.com', code: '123456' }),
+    });
+  });
+
   it('creates a Commons account when email does not exist', async () => {
     const createdUser = {
       id: 'new_user_1',
@@ -169,9 +191,9 @@ describe('auth.requestLoginCode', () => {
       memberships: [],
     };
     const db = makeDb({
-      user: { findUnique: vi.fn().mockResolvedValue(null) },
+      user: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(createdUser) },
     });
-    db.user.create.mockResolvedValue(createdUser);
+    db.user.create.mockResolvedValue({ id: createdUser.id });
 
     const result = await callerFor(db).requestLoginCode({ email: 'nobody@example.com' });
 

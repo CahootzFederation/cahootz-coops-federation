@@ -231,7 +231,10 @@ export default function MessagesScreen() {
         selected.groupId ?? (await api.openDirectThread(selected.person.id, sessionToken)).groupId;
       const result = await api.sendDirectMessage(groupId, content, sessionToken);
       sent = true;
-      setMessages((current) => [...current, result.message]);
+      // A poll may have already picked it up while the send was in flight.
+      setMessages((current) =>
+        current.some((message) => message.id === result.message.id) ? current : [...current, result.message],
+      );
       setPendingBody(null);
       setDmError('');
       await loadThreads();

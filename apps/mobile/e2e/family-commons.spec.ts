@@ -250,11 +250,13 @@ test.describe("family commons", () => {
 
       // The family's page shows its goals, weighted as A set them.
       await steward.page.goto(`/commons/${familyPath}`);
-      await expect(shown(steward.page, "What we're building toward")).toBeVisible();
-      await expect(shown(steward.page, customGoal, { exact: true })).toBeVisible();
-      await expect(shown(steward.page, "Keep the family home in the family", { exact: true })).toBeVisible();
-      await expect(shown(steward.page, "60%", { exact: true })).toBeVisible();
-      await expect(shown(steward.page, "40%", { exact: true })).toBeVisible();
+      // Sage's "What Sage counts" card lists the same goals, so look inside the goals card.
+      const goals = steward.page.getByLabel("What we're building toward").filter({ visible: true });
+      await expect(goals).toBeVisible();
+      await expect(goals.getByText(customGoal, { exact: true })).toBeVisible();
+      await expect(goals.getByText("Keep the family home in the family", { exact: true })).toBeVisible();
+      await expect(goals.getByText("60%", { exact: true })).toBeVisible();
+      await expect(goals.getByText("40%", { exact: true })).toBeVisible();
 
       // Now that someone here isn't a steward, stewards can't change the
       // setup on their own anymore.

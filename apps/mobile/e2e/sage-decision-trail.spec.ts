@@ -93,7 +93,7 @@ test("a member who turns on decision trails sees how Sage decided, and others do
         await expect(shown(leader.page, stage)).toBeVisible();
       }
       await expect(shown(leader.page, /^Read \d+ posts, comments and messages in E2E Trail circle/)).toBeVisible();
-      await expect(shown(leader.page, "Confident enough to comment without approval (75%+)")).toBeVisible();
+      await expect(shown(leader.page, "Confident enough to comment without approval (65%+)")).toBeVisible();
       await expect(shown(leader.page, "Not a repeat of a recent suggestion in this circle")).toBeVisible();
       await expect(shown(leader.page, "Published")).toBeVisible();
 

@@ -220,11 +220,6 @@ export default function BoardScreen() {
     router.setParams({ lane: next === 'index' ? undefined : next } as any);
   };
 
-  const selectCommons = (nextCoopId: string) => {
-    setCoopId(nextCoopId);
-    router.setParams({ coopId: nextCoopId } as any);
-  };
-
   const resetComposer = (type: BoardPostType | null = null) => {
     setPostType(type);
     setTitle('');
@@ -315,25 +310,6 @@ export default function BoardScreen() {
             </TouchableOpacity>
           </View>
 
-          {commons.length > 1 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 14 }} contentContainerStyle={{ gap: 8 }}>
-              {commons.map((item) => {
-                const selected = item.id === coopId;
-                return (
-                  <TouchableOpacity
-                    key={item.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Board ${item.name}`}
-                    accessibilityState={{ selected }}
-                    onPress={() => selectCommons(item.id)}
-                    style={{ minHeight: 44, justifyContent: 'center', borderBottomWidth: selected ? 3 : 1, borderBottomColor: selected ? tokens.orange : tokens.rule, paddingHorizontal: 10 }}
-                  >
-                    <Text style={{ color: selected ? tokens.ink : tokens.muted, fontSize: 13, fontWeight: selected ? '800' : '600' }}>{item.name}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          ) : null}
         </View>
 
         <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>

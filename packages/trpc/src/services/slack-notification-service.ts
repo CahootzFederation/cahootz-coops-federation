@@ -140,6 +140,60 @@ export async function sendSageOutreachDailyReport(params: {
   });
 }
 
+/** What to do about each Expo error code, in plain words. */
+const PUSH_FIX_HINTS: Record<string, string> = {
+  DeviceNotRegistered: "The app was deleted or the token went stale. We turned that device off; nothing to fix.",
+  InvalidCredentials: "Apple/Google push keys are missing or wrong in Expo. Re-upload them with `eas credentials`.",
+  MismatchSenderId: "The Android FCM key in Expo doesn't match the app build. Re-upload it with `eas credentials`.",
+  UNAUTHORIZED: "Expo push security is on. Set EXPO_ACCESS_TOKEN on the API and Trigger.dev.",
+  MessageTooBig: "A push was over 4KB. Shorten the title, body, or data for that notification type.",
+  MessageRateExceeded: "We sent too fast to one device. Space out that notification type.",
+  PUSH_TOO_MANY_EXPERIENCE_IDS: "Tokens from more than one Expo project were sent together. Check the app's projectId.",
+  ReceiptMissing: "Expo never reported back on these. Check status.expo.dev and try again.",
+  RequestFailed: "We couldn't reach Expo. Check the API network and status.expo.dev.",
+};
+
+/** Posts failed phone pushes to Slack, grouped by error, with what to do about each. */
+export async function sendPushDeliveryAlert(params: {
+  checkedAt: Date;
+  summary: {
+    total: number;
+    byCode: Array<{ code: string; count: number }>;
+    byType: Array<{ type: string; count: number }>;
+    byCoop: Array<{ coopId: string; count: number }>;
+  };
+  delivered: number;
+  receiptLookupFailed?: boolean;
+}): Promise<boolean> {
+  const { summary } = params;
+  const codeLines = summary.byCode.slice(0, 10).map(({ code, count }) => {
+    const hint = PUSH_FIX_HINTS[code] ?? (code.startsWith("HttpError")
+      ? "Expo rejected the request. Check the API logs for [push] Expo HTTP error."
+      : "Unrecognized error. Check the API logs for [push] lines.");
+    return `• *${safeSlackText(code, 60)}* × ${count} — ${hint}`;
+  });
+  if (params.receiptLookupFailed)
+    codeLines.push("• *Receipt lookup failed* — We couldn't read delivery results from Expo. We'll retry next run.");
+  // Dead devices clean themselves up, so only page the channel for something we need to fix.
+  const needsFix = params.receiptLookupFailed || summary.byCode.some(({ code }) => code !== "DeviceNotRegistered");
+  const list = (rows: Array<{ label: string; count: number }>) =>
+    rows.slice(0, 8).map(({ label, count }) => `${safeSlackText(label, 60)}: ${count}`).join("\n") || "none";
+
+  return sendSlackNotification({
+    text: `${needsFix ? "<!channel> 🚨 " : "📵 "}*${summary.total} phone push${summary.total === 1 ? "" : "es"} didn't go out*\n${codeLines.join("\n")}`,
+    attachments: [{
+      color: needsFix ? "danger" : "warning",
+      fields: [
+        { title: "By notification type", value: list(summary.byType.map((row) => ({ label: row.type, count: row.count }))), short: true },
+        { title: "By Commons", value: list(summary.byCoop.map((row) => ({ label: row.coopId, count: row.count }))), short: true },
+        { title: "Delivered since last check", value: String(params.delivered), short: true },
+        { title: "Environment", value: process.env.RAILWAY_ENVIRONMENT_NAME ?? process.env.NODE_ENV ?? "unknown", short: true },
+        { title: "Checked at", value: params.checkedAt.toISOString(), short: false },
+      ],
+    }],
+  });
+}
+
 export async function sendApplicationSubmittedNotification(params: {
   coopId: string;
   coopName?: string;

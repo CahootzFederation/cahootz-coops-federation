@@ -32,7 +32,7 @@ import {
 } from "@repo/validators/notification";
 
 export default function NotificationSettings() {
-  const { sessionToken, user } = useAuth();
+  const { sessionToken } = useAuth();
   const insets = useSafeAreaInsets();
   const client = useQueryClient();
   const [permission, setPermission] = useState("Checking device permission…");
@@ -70,11 +70,9 @@ export default function NotificationSettings() {
     setDeviceBusy(true);
     setDeviceError("");
     try {
-      await registerForNativePushNotifications(
-        sessionToken,
-        user?.coop?.id || "cahootz",
-        { source: "notification_settings" },
-      );
+      await registerForNativePushNotifications(sessionToken, {
+        source: "notification_settings",
+      });
       await refreshPermission();
     } catch (error) {
       console.error(

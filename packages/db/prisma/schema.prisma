@@ -24,7 +24,7 @@ model User {
   isBot                        Boolean                 @default(false) // true for platform bot accounts (e.g. Sage)
   showSageDecisionTrails       Boolean                 @default(false) // personal app setting: show Sage's decision trails on content this user can see
   nameInSageAppreciation       Boolean                 @default(false) // legacy, retained for migration compatibility; no longer used by the product
-  sageRhythmPreferences        SageRhythmPreference[]  // legacy rows retained but no longer read or written
+  sageRhythmPreferences        SageRhythmPreference[] // legacy rows retained but no longer read or written
   defaultCoopId                String? // member-selected Commons shown first after sign-in
   password                     String?
   phone                        String?                 @unique // E.164 format: +1XXXXXXXXXX
@@ -2408,8 +2408,8 @@ model PushDevice {
   id     String @id @default(cuid())
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  coopId String @default("cahootz")
 
+  /// A phone belongs to a member, not a Commons: pushes from every Commons they're in go here.
   expoPushToken String  @unique
   platform      String
   deviceName    String?
@@ -2421,7 +2421,30 @@ model PushDevice {
   updatedAt        DateTime @updatedAt
 
   @@index([userId, enabled])
-  @@index([coopId, enabled])
+  @@schema("public")
+}
+
+/// One Expo push attempt for one device. Expo accepts a push first ("ticket") and reports
+/// whether Apple/Google delivered it ~15 minutes later ("receipt"); a monitor reads receipts,
+/// turns off dead devices, and posts failures to Slack. No token or message text is stored.
+model PushTicket {
+  id             String    @id @default(cuid())
+  notificationId String
+  deviceId       String
+  coopId         String
+  type           String
+  /// "PENDING" (accepted, waiting on receipt) | "DELIVERED" | "ERROR" | "EXPIRED"
+  status         String
+  /// Expo ticket id used to look up the receipt.
+  expoTicketId   String?
+  /// Known Expo error code only, e.g. DeviceNotRegistered, InvalidCredentials, HttpError.
+  errorCode      String?
+  checkedAt      DateTime?
+  alertedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([status, createdAt])
+  @@index([alertedAt, status])
   @@schema("public")
 }
 

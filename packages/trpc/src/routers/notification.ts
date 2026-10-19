@@ -20,7 +20,8 @@ export const notificationRouter = router({
       z.object({
         expoPushToken: z.string().min(10).max(300),
         platform: z.string().min(1).max(40),
-        coopId: z.string().min(1).default("cahootz"),
+        /** Ignored. Older app builds still send it; a phone isn't tied to one Commons. */
+        coopId: z.string().optional(),
         deviceName: z.string().max(120).nullable().optional(),
         appVersion: z.string().max(40).nullable().optional(),
       }),
@@ -34,7 +35,6 @@ export const notificationRouter = router({
         where: { expoPushToken: input.expoPushToken },
         create: {
           userId: context.accountUser.id,
-          coopId: input.coopId,
           expoPushToken: input.expoPushToken,
           platform: input.platform,
           deviceName: input.deviceName || null,
@@ -42,7 +42,6 @@ export const notificationRouter = router({
         },
         update: {
           userId: context.accountUser.id,
-          coopId: input.coopId,
           platform: input.platform,
           deviceName: input.deviceName || null,
           appVersion: input.appVersion || null,

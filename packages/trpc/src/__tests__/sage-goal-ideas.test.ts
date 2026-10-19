@@ -349,6 +349,22 @@ describe("a goal check", () => {
     expect(db.commonsPost.create).not.toHaveBeenCalled();
   });
 
+  it("lets a platform admin run it now, on its own keys, and optionally skip the weekly limits", async () => {
+    db.commonsContentScan.create.mockRejectedValue(new Error("already claimed"));
+    // A first-week Commons that already has its one Sage proposal this week.
+    db.commonsProposalDraft.count.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => where.authorId === null ? 0 : 1);
+    const blocked = await runGoalCheck("harbor", { now: NOW, decide: vi.fn(), admin: { actor: "admin@cahootz", skipLimits: false } });
+    expect(blocked).toMatchObject({ status: "NO_PROPOSAL", reasons: [expect.stringMatching(/first proposal here/)] });
+    expect(db.sageDecisionTrail.create.mock.calls[0]![0].data).toMatchObject({ trigger: "ADMIN_GOAL_CHECK" });
+
+    const submit = votable();
+    const result = await runGoalCheck("harbor", { now: NOW, decide: vi.fn().mockResolvedValue(idea()), submit, admin: { actor: "admin@cahootz", skipLimits: true } });
+    expect(result).toMatchObject({ status: "PROPOSED", proposalId: "prop-sage-1" });
+    expect(db.commonsAction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ replySourceKey: `goal_idea:harbor:2026-W42-b-admin-${NOW.getTime()}` }) });
+    const steps = db.sageDecisionTrail.create.mock.calls[1]![0].data.steps as Array<{ label: string; adminOnly?: boolean }>;
+    expect(steps).toEqual(expect.arrayContaining([expect.objectContaining({ label: "A platform admin ran this check now and skipped the weekly limits", adminOnly: true })]));
+  });
+
   it("runs once per half-week and skips a Commons with no goals", async () => {
     db.commonsContentScan.create.mockRejectedValue(new Error("unique"));
     await expect(runGoalCheck("harbor", { now: NOW, decide: vi.fn() })).resolves.toEqual({ status: "SKIPPED", reason: "Already checked this half of the week" });

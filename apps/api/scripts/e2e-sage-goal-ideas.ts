@@ -13,6 +13,9 @@
  *   tsx --import ./dotenv.config.js scripts/e2e-sage-goal-ideas.ts approve <proposalId>
  *     Stands in for the member vote: marks Sage's proposal approved, then runs the real code that
  *     queues the change for a steward.
+ *   tsx --import ./dotenv.config.js scripts/e2e-sage-goal-ideas.ts reset <runId>
+ *     Resets the E2E Commons (members, charter, goals, nothing left from earlier runs) without running a
+ *     goal check, for the admin journey that runs one from the portal.
  *   tsx --import ./dotenv.config.js scripts/e2e-sage-goal-ideas.ts charter
  *   tsx --import ./dotenv.config.js scripts/e2e-sage-goal-ideas.ts cleanup <runId>
  *
@@ -138,6 +141,16 @@ function reviewStandIn(runId: string, mode: "vote" | "sent-back"): IdeaSubmit {
   };
 }
 
+async function reset(runId: string) {
+  if (!/^[a-z0-9-]+$/i.test(runId)) throw new Error(`Invalid run id ${runId}`);
+  const [userA, userB] = await Promise.all([testUser(USER_A_EMAIL), testUser(USER_B_EMAIL)]);
+  await ensureCommons();
+  await ensureMember(userA.id, ["member", "steward"]);
+  await ensureMember(userB.id, ["member"]);
+  await clearCommons();
+  return { coopId: COOP_ID };
+}
+
 async function seed(runId: string, mode: "vote" | "sent-back") {
   if (!/^[a-z0-9-]+$/i.test(runId)) throw new Error(`Invalid run id ${runId}`);
   const [userA, userB] = await Promise.all([testUser(USER_A_EMAIL), testUser(USER_B_EMAIL)]);
@@ -191,9 +204,10 @@ async function main() {
   const result = command === "seed" && first ? await seed(first, second === "sent-back" ? "sent-back" : "vote")
     : command === "approve" && first ? await approve(first)
       : command === "charter" ? await charter()
+      : command === "reset" && first ? await reset(first)
         : command === "cleanup" && first ? (await clearCommons(), await ensureCommons(), { cleaned: true })
           : null;
-  if (!result) throw new Error("Usage: e2e-sage-goal-ideas.ts seed <runId> [vote|sent-back] | approve <proposalId> | charter | cleanup <runId>");
+  if (!result) throw new Error("Usage: e2e-sage-goal-ideas.ts seed <runId> [vote|sent-back] | reset <runId> | approve <proposalId> | charter | cleanup <runId>");
   console.log(`E2E_RESULT ${JSON.stringify(result)}`);
 }
 

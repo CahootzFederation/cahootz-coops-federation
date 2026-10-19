@@ -221,6 +221,12 @@ Journeys 11-13 require the `Event`/`EventHost`/`EventRSVP`/`EventReminder` table
     - The math, the rules (including one proposal in a Commons' first week), the proposal checks, starter proposals for new Commons, the sent-back fallback, claiming, the steward-only apply and the vote gate are unit-tested in `sage-goal-signals.test.ts`, `sage-goal-ideas.test.ts` and `proposal-sage-ideas.test.ts`. The new-vote alert (text, proposer left out, once per proposal, only when votable) is in `proposal-notifications.test.ts`.
     - Needs migration `20261018000000_sage_goal_proposal_ideas`.
     - The post screen doesn't show a post's title (that's how it already works), so the journey checks the pitch there and the title on the proposal and the draft.
+73. A platform admin runs Sage's goal check now from the web Commons AI page (`admin-commons-ai.spec.ts`, second test, untagged, no live model). It needs the same web-portal setup as journey 36.
+    - `e2e-sage-goal-ideas.ts reset` resets the E2E-only Commons from journey 72 without running a check.
+    - The admin signs in through the real login page, sets the Commons' monthly USD limit to 0, ticks "Skip the weekly limits" and clicks "Check goals now".
+    - The real goal check runs every rule and says no without a model call. The admin sees "No proposal this time: … spending limit …", and the new trail opens with the admin-only step "A platform admin ran this check now and skipped the weekly limits", the trigger "A platform admin's "Check goals now"", and each goal Sage looked at.
+    - After a reload the trail is still listed. Cleanup resets the limits and the Commons.
+    - Admin runs (their own keys, skipping the weekly limits, the trail marker) are unit-tested in `sage-goal-ideas.test.ts`. The admin command is in `commons-actions-admin.test.ts`.
 
 The post-signup wizard used by every sign-in helper now has three steps (intro, profile, and a "find your way in" step offering a welcome lounge) - `e2e/support/auth.ts` is the single place that clicks through all three, so a future wizard change only needs updating there. A signed-in person who already saw the intro on that device starts at the profile step, so after a sign-in the helper waits for whichever step appears first.
 

@@ -46,7 +46,7 @@ export type TrailSourceType = "commons_post" | "commons_comment" | "circle_windo
   | "proposal" | "proposal_comment" | "sage_mention" | "sage_dm" | "sage_task" | "sage_alert" | "commons_review" | "goal_check";
 export type TrailTrigger = "NEW_CONTENT" | "SCHEDULED_SCAN" | "ADMIN_SCAN" | "CIRCLE_WINDOW_FULL" | "ADMIN_ANALYZE"
   | "PROPOSAL_SUBMITTED" | "PROPOSAL_RESUBMITTED" | "PROPOSAL_ALTERNATIVE_APPLIED" | "PROPOSAL_COMMENT" | "SAGE_MENTION" | "SAGE_DM"
-  | "SAGE_WAKE" | "ESCALATION";
+  | "SAGE_WAKE" | "ESCALATION" | "ADMIN_GOAL_CHECK";
 export type TrailVisibility = "COMMONS_MEMBERS" | "CIRCLE" | "ADMINS";
 
 const MAX_LABEL = 300;
@@ -215,6 +215,7 @@ const TRIGGER_LABEL: Record<string, string> = {
   ADMIN_SCAN: "A platform admin's manual scan",
   CIRCLE_WINDOW_FULL: "40 new items in the circle",
   ADMIN_ANALYZE: "A platform admin's \"Analyze now\"",
+  ADMIN_GOAL_CHECK: "A platform admin's \"Check goals now\"",
   PROPOSAL_SUBMITTED: "A proposal was submitted",
   PROPOSAL_RESUBMITTED: "The proposer edited and resubmitted",
   PROPOSAL_ALTERNATIVE_APPLIED: "The proposer applied a suggested alternative",

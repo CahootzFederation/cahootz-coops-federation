@@ -46,10 +46,10 @@ export function GoalSignalsCard({ coopId, sessionToken }: { coopId: string; sess
         <Text className="text-lg font-black text-gray-950">What Sage counts</Text>
       </View>
       <Text className="mt-1 text-sm leading-5 text-gray-600">
-        Twice a week Sage checks each goal against how things usually go here. If one falls behind or hasn't started, Sage may write a proposal and put it up for a vote.
+        Twice a week Sage checks each goal against how things usually go here. If one falls behind or hasn&apos;t started, Sage may write a proposal and put it up for a vote.
       </Text>
       {!data.goals ? (
-        <Text className="mt-3 text-sm text-gray-600">Sage hasn't matched our goals yet. It will at its next check.</Text>
+        <Text className="mt-3 text-sm text-gray-600">Sage hasn&apos;t matched our goals yet. It will at its next check.</Text>
       ) : (
         <View className="mt-3 gap-3">
           {data.goals.map((goal) => (

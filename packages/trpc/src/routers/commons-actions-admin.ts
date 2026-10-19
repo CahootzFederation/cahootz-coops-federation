@@ -9,6 +9,7 @@ import { FINAL_REVIEW_TYPE_BY_ACTION_TYPE } from "../services/commons-action-too
 import { closeCircleWindowNow } from "../services/circle-window.js";
 import { presentTrails } from "../services/sage-decision-trail.js";
 import { runSageWakeCycle } from "../services/sage-tasks.js";
+import { runGoalCheck } from "../services/sage-goal-ideas.js";
 import { wakeCycleWork } from "../services/sage-wake-work.js";
 import { getSageAutonomyUsage } from "../services/sage-autonomy.js";
 import { notifySageComment } from "../services/sage-comment-notifications.js";
@@ -25,6 +26,7 @@ const Command = z.discriminatedUnion("command", [
   Scoped.extend({ command: z.literal("scan") }),
   Scoped.extend({ command: z.literal("analyze-circle"), groupId: z.string().min(1) }),
   Scoped.extend({ command: z.literal("wake") }),
+  Scoped.extend({ command: z.literal("goal-check"), skipLimits: z.boolean().default(false) }),
   Scoped.extend({ command: z.literal("dismiss"), actionId: z.string().min(1) }),
   Scoped.extend({ command: z.literal("edit-draft"), actionId: z.string().min(1), draftText: z.string().trim().max(2000) }),
   Scoped.extend({ command: z.literal("approve"), actionId: z.string().min(1) }),
@@ -198,6 +200,16 @@ export const commonsActionsAdminRouter = router({
       // Runs the wake-and-wait loop for this Commons now instead of waiting for the schedule.
       const result = await runSageWakeCycle(coopId, "MANUAL", new Date(), (id) => wakeCycleWork(id));
       return result.skipped ? conflict("A wake run for this Commons is already in progress.") : result;
+    }
+    if (input.command === "goal-check") {
+      // Runs Sage's goal check now: to onboard a Commons, or to try something out. Same rules and checks as
+      // the twice-a-week run, so it may well decide not to propose; the trail says why.
+      const startedAt = new Date();
+      const result = await runGoalCheck(coopId, { now: startedAt, admin: { actor, skipLimits: input.skipLimits } });
+      const trail = await ctx.db.sageDecisionTrail.findFirst({
+        where: { coopId, agent: "sage-goal-check", createdAt: { gte: startedAt } }, orderBy: { createdAt: "desc" }, select: { id: true },
+      });
+      return { ...result, trailId: trail?.id ?? null };
     }
     if (input.command === "analyze-circle") {
       const group = await ctx.db.group.findUnique({ where: { id: input.groupId }, select: { coopId: true, kind: true } });

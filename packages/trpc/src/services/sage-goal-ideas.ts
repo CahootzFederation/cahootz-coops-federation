@@ -511,20 +511,46 @@ export async function runGoalCheckIfDue(coopId: string, now = new Date()) {
   return runGoalCheck(coopId, { now });
 }
 
-export async function runGoalCheck(coopId: string, options: { now?: Date; decide?: IdeaDecide; submit?: IdeaSubmit; matcher?: GoalMatcher | null; force?: boolean } = {}): Promise<GoalCheckResult> {
+export interface GoalCheckOptions {
+  now?: Date;
+  decide?: IdeaDecide;
+  submit?: IdeaSubmit;
+  matcher?: GoalMatcher | null;
+  /** Run even if this half-week's check already ran (fixtures). */
+  force?: boolean;
+  /**
+   * A platform admin ran it now (to onboard a Commons or try something out). It always runs, gets its own
+   * keys so it never collides with the scheduled check, and is marked in the trail. `skipLimits` skips the
+   * how-many limits (per week, first week, open proposals and ideas, the 30-day goal cooldown). Every other
+   * rule still applies: the spending limit, an already open or recently rejected proposal for the goal, and
+   * all of code's checks on the proposal.
+   */
+  admin?: { actor: string; skipLimits: boolean };
+}
+
+export async function runGoalCheck(coopId: string, options: GoalCheckOptions = {}): Promise<GoalCheckResult> {
   const now = options.now ?? new Date();
-  const period = goalCheckPeriod(now);
+  const scheduledPeriod = goalCheckPeriod(now);
+  // An admin run is keyed on its own, so it can run as often as needed and never blocks the schedule.
+  const period = options.admin ? `${scheduledPeriod}-admin-${now.getTime()}` : scheduledPeriod;
+  const skipLimits = Boolean(options.admin?.skipLimits);
   const config = await db.coopConfig.findFirst({ where: { coopId, isActive: true }, orderBy: { version: "desc" } });
   if (!config) return { status: "SKIPPED", reason: "No charter" };
   if (config.isDemo) return { status: "SKIPPED", reason: "Demo Commons" };
   const goals = parseGoals(config.missionGoals);
   if (!goals.length) return { status: "SKIPPED", reason: "No goals in the charter" };
-  if (!options.force && !(await claimPeriod(coopId, period))) return { status: "SKIPPED", reason: "Already checked this half of the week" };
+  if (!options.force && !options.admin && !(await claimPeriod(coopId, period))) return { status: "SKIPPED", reason: "Already checked this half of the week" };
 
   const trail = new DecisionTrail({
-    agent: "sage-goal-check", coopId, sourceType: "goal_check", sourceId: `${coopId}:${period}`, trigger: "SAGE_WAKE", visibility: "COMMONS_MEMBERS",
+    agent: "sage-goal-check", coopId, sourceType: "goal_check", sourceId: `${coopId}:${period}`,
+    trigger: options.admin ? "ADMIN_GOAL_CHECK" : "SAGE_WAKE", visibility: "COMMONS_MEMBERS",
     observed: { title: "Our charter goals", content: goals.map((goal) => goal.label).join("; ") },
   }).step("OBSERVED", `Checked how we're doing on our ${goals.length} goal${goals.length === 1 ? "" : "s"} (charter version ${config.version})`);
+  if (options.admin) {
+    trail.step("EVIDENCE", skipLimits ? "A platform admin ran this check now and skipped the weekly limits" : "A platform admin ran this check now", {
+      outcome: "INFO", detail: `Run by ${options.admin.actor}`, adminOnly: true,
+    });
+  }
 
   try {
     const autonomyAllowed = await sageAutonomyAllowed(coopId);
@@ -584,14 +610,17 @@ export async function runGoalCheck(coopId: string, options: { now?: Date; decide
       db.commonsProposalDraft.findFirst({ where: { coopId, ideaPostId: { not: null } }, orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
     ]);
     const firstWeek = !firstIdea || now.getTime() - firstIdea.createdAt.getTime() < 7 * DAY_MS;
-    const blocked = commonsBlockers({ activeMembers, ideasThisWeek, firstWeek, openSageProposals, openIdeas, autonomyAllowed });
+    const blocked = commonsBlockers(skipLimits
+      ? { activeMembers, ideasThisWeek: 0, firstWeek: false, openSageProposals: 0, openIdeas: 0, autonomyAllowed }
+      : { activeMembers, ideasThisWeek, firstWeek, openSageProposals, openIdeas, autonomyAllowed });
     for (const reason of blocked) trail.policy(reason, false);
     if (blocked.length) return finishNo(blocked);
 
     const candidates: GoalAssessment[] = [];
     const goalReasons: string[] = [];
     for (const assessment of gapped) {
-      const reasons = goalBlockers(await goalGate(coopId, assessment.goal.key, now), now);
+      const gate = await goalGate(coopId, assessment.goal.key, now);
+      const reasons = goalBlockers(skipLimits ? { ...gate, lastIdeaAt: null } : gate, now);
       trail.policy(`"${assessment.goal.label}" is open for an idea`, !reasons.length, reasons.join("\n") || undefined);
       if (reasons.length) goalReasons.push(`${assessment.goal.label}: ${reasons.join("; ")}`);
       else candidates.push(assessment);

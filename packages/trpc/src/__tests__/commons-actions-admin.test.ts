@@ -92,6 +92,27 @@ describe("Commons admin API authentication", () => {
     vi.doUnmock("../services/circle-window.js");
   });
 
+  it("lets a platform admin run Sage's goal check now, and returns what it did and its trail", async () => {
+    const runGoalCheck = vi.fn().mockResolvedValue({ status: "NO_PROPOSAL", reasons: ["Every goal we can check looks on track"], gaps: 0 });
+    vi.doMock("../services/sage-goal-ideas.js", () => ({ runGoalCheck, runGoalCheckIfDue: vi.fn() }));
+    vi.resetModules();
+    const { commonsActionsAdminRouter: freshRouter } = await import("../routers/commons-actions-admin.js");
+    const { issueCommonsAdminToken: freshIssue } = await import("../lib/commons-admin-token.js");
+    const token = freshIssue({ userId: "platform-user", email: "platform@example.com" });
+    const db = {
+      user: { findUnique: vi.fn().mockResolvedValue({ deletedAt: null, status: "ACTIVE" }) },
+      coopConfig: { findFirst: vi.fn().mockResolvedValue({ id: "config-1" }) },
+      sageDecisionTrail: { findFirst: vi.fn().mockResolvedValue({ id: "trail-goal" }) },
+    };
+    const caller = freshRouter.createCaller({ db, req: { headers: { authorization: `Bearer ${token}` } } } as never);
+    await expect(caller.command({ coopId: "harbor", command: "goal-check", skipLimits: true }))
+      .resolves.toEqual({ status: "NO_PROPOSAL", reasons: ["Every goal we can check looks on track"], gaps: 0, trailId: "trail-goal" });
+    expect(runGoalCheck).toHaveBeenCalledWith("harbor", expect.objectContaining({ admin: { actor: "platform@example.com", skipLimits: true } }));
+    await caller.command({ coopId: "harbor", command: "goal-check" });
+    expect(runGoalCheck).toHaveBeenLastCalledWith("harbor", expect.objectContaining({ admin: { actor: "platform@example.com", skipLimits: false } }));
+    vi.doUnmock("../services/sage-goal-ideas.js");
+  });
+
   it("includes the original comment and its parent post in review actions", async () => {
     const token = issueCommonsAdminToken({ userId: "platform-user", email: "platform@example.com" });
     const now = new Date("2026-09-20T12:00:00Z");

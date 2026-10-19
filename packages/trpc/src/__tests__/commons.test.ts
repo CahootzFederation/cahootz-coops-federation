@@ -57,6 +57,7 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
       ...overrides.commonsInvitation,
     },
     commonsPost: {
+      count: vi.fn().mockResolvedValue(0),
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn(),
       findFirst: vi.fn().mockResolvedValue(null),
@@ -232,6 +233,47 @@ describe('commonsRouter', () => {
         },
       }),
     );
+  });
+
+  describe('community board', () => {
+    it('requires a signed-in member and scopes Needs to actionable General posts', async () => {
+      const db = makeDb();
+
+      await expect(callerFor(db).listBoardItems({ coopId: 'cahootz', lane: 'needs' })).rejects.toThrow();
+
+      const result = await callerFor(db, { 'x-session-token': 'token_1' }).listBoardItems({
+        coopId: 'cahootz',
+        lane: 'needs',
+      });
+
+      expect(result.items).toEqual([]);
+      expect(result.laneCounts).toEqual({
+        needs: 0,
+        offers: 0,
+        events: 0,
+      });
+      expect(db.commonsPost.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({
+          coopId: 'cahootz',
+          AND: expect.arrayContaining([
+            { OR: [{ circleId: 'general:cahootz' }, { circleId: null }] },
+            { tag: { in: ['Ask', 'Need'] } },
+          ]),
+        }),
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 31,
+      }));
+    });
+
+    it('rejects board access outside a member commons', async () => {
+      const db = makeDb({ userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null) } });
+
+      await expect(callerFor(db, { 'x-session-token': 'token_1' }).listBoardItems({
+        coopId: 'artists',
+        lane: 'all',
+      })).rejects.toThrow('Join this commons');
+      expect(db.commonsPost.findMany).not.toHaveBeenCalled();
+    });
   });
 
   it('requires circle membership before opening a circle feed', async () => {

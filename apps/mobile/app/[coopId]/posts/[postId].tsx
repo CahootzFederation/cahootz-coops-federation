@@ -375,7 +375,7 @@ export default function CommonsPostDetailScreen() {
 
     try {
       await Share.share({
-        message: `${post.body}\n\n${post.group}`,
+        message: `${post.title}\n\n${post.body}\n\n${post.group}`,
       });
     } catch (caughtError) {
       console.error('Failed to share post:', caughtError);
@@ -431,7 +431,7 @@ export default function CommonsPostDetailScreen() {
           </TouchableOpacity>
           <View className="min-w-0 flex-1">
             <Text className="text-xs font-black uppercase text-gray-500">{coop?.name || 'Commons'}</Text>
-            <Text className="text-xl font-black text-gray-950" numberOfLines={1}>Post</Text>
+            <Text className="text-xl font-black text-gray-950" numberOfLines={1}>{post?.tag || 'Post'}</Text>
           </View>
           <TouchableOpacity
             onPress={sharePost}
@@ -501,6 +501,14 @@ export default function CommonsPostDetailScreen() {
                 </Text>
               </TouchableOpacity>
               <UserCircle size={20} color={THEME.primary} />
+            </View>
+            <View className="mt-4 items-start">
+              <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: THEME.primarySoft }}>
+                <Text className="text-[10px] font-black uppercase tracking-wider" style={{ color: THEME.primary }}>{post.tag}</Text>
+              </View>
+              <Text accessibilityRole="header" className="mt-2 text-2xl font-black leading-8 text-gray-950">
+                {post.title}
+              </Text>
             </View>
             {post.body ? (
               <MentionText

@@ -79,6 +79,14 @@ const postTagSchema = z.enum([
   'Opportunity',
 ]);
 
+const boardLaneSchema = z.enum(['all', 'needs', 'offers', 'events']);
+const BOARD_TAGS_BY_LANE = {
+  all: ['Thought', 'Ask', 'Offer', 'Event', 'Project', 'Proposal', 'Update', 'Decision', 'Social', 'Win', 'Need', 'Idea', 'Vote', 'Resource', 'Opportunity'],
+  needs: ['Ask', 'Need'],
+  offers: ['Offer', 'Resource', 'Opportunity'],
+  events: ['Event'],
+} as const;
+
 const postMediaTypeSchema = z.enum(['image', 'video']);
 
 // Photos and videos one post may carry (the mobile composer uses the same cap).
@@ -1239,6 +1247,87 @@ export const commonsRouter = router({
         pinnedPost,
         upcomingEvents,
         nextCursor,
+      };
+    }),
+
+  listBoardItems: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        coopId: z.string().min(1).default(COMMONS_COOP_ID),
+        lane: boardLaneSchema.default('all'),
+        query: z.string().trim().max(120).optional(),
+        cursor: z.string().optional(),
+        limit: z.number().int().min(1).max(50).default(30),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      await requireActiveCommonsMembership(ctx.db, accountUser.id, input.coopId);
+
+      const now = new Date();
+      const tags = [...BOARD_TAGS_BY_LANE[input.lane]];
+      const query = input.query?.trim();
+      const generalWhere = { OR: [{ circleId: generalCircleId(input.coopId) }, { circleId: null }] };
+      const currentEventWhere = { OR: [{ tag: { not: 'Event' } }, { event: { is: { endAt: { gte: now } } } }] };
+      const queryWhere = query
+        ? {
+            OR: [
+              { title: { contains: query, mode: 'insensitive' as const } },
+              { content: { contains: query, mode: 'insensitive' as const } },
+              { author: { is: { name: { contains: query, mode: 'insensitive' as const } } } },
+              { author: { is: { handle: { contains: query, mode: 'insensitive' as const } } } },
+            ],
+          }
+        : null;
+      const sharedAnd = [generalWhere, currentEventWhere, ...(queryWhere ? [queryWhere] : [])];
+
+      const [posts, ...counts] = await Promise.all([
+        ctx.db.commonsPost.findMany({
+          where: {
+            coopId: input.coopId,
+            AND: [...sharedAnd, { tag: { in: tags } }],
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: input.limit + 1,
+          ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+          include: {
+            author: { select: { name: true, email: true, handle: true, isBot: true } },
+            comments: {
+              orderBy: { createdAt: 'asc' },
+              take: 2,
+              include: { author: { select: { name: true, email: true, handle: true, isBot: true } } },
+            },
+            media: { orderBy: { order: 'asc' } },
+            event: {
+              include: {
+                hosts: { include: { user: { select: { id: true, name: true, email: true, handle: true } } } },
+                rsvps: { select: { userId: true, status: true } },
+              },
+            },
+            _count: { select: { comments: true, supports: true } },
+            ...POST_REACTIONS_INCLUDE,
+          },
+        }),
+        ...(['needs', 'offers', 'events'] as const).map((lane) =>
+          ctx.db.commonsPost.count({
+            where: {
+              coopId: input.coopId,
+              AND: [...sharedAnd, { tag: { in: [...BOARD_TAGS_BY_LANE[lane]] } }],
+            },
+          }),
+        ),
+      ]);
+
+      const hasMore = posts.length > input.limit;
+      const page = hasMore ? posts.slice(0, input.limit) : posts;
+      const coop = await loadCoopSummary(ctx.db, input.coopId);
+      return {
+        coop,
+        items: page.map((post: any) => mapPostWithGroup(post, coop.name, accountUser.id)),
+        laneCounts: Object.fromEntries(
+          (['needs', 'offers', 'events'] as const).map((lane, index) => [lane, counts[index] ?? 0]),
+        ),
+        nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
       };
     }),
 

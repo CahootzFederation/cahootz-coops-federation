@@ -1070,6 +1070,33 @@ export const api = {
     }>(response, 'Failed to load Commons feed');
   },
 
+  async listBoardItems(
+    data: {
+      coopId: string;
+      lane: 'all' | 'needs' | 'offers' | 'events';
+      query?: string;
+      limit?: number;
+      cursor?: string | null;
+    },
+    sessionToken: string,
+  ) {
+    const input = encodeURIComponent(JSON.stringify({
+      ...data,
+      limit: data.limit ?? 30,
+      ...(data.cursor ? { cursor: data.cursor } : {}),
+    }));
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.listBoardItems?input=${input}`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<{
+      coop: CommonsProfile;
+      items: CommonsPost[];
+      laneCounts: Record<'needs' | 'offers' | 'events', number>;
+      nextCursor: string | null;
+    }>(response, 'Failed to load the community board');
+  },
+
   async listCircleMedia(
     coopId: string,
     circleId: string,

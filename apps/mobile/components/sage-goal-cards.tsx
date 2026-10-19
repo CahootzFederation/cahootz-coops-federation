@@ -33,7 +33,7 @@ export function GoalSignalsCard({ coopId, sessionToken }: { coopId: string; sess
       await api.setGoalSignals(coopId, goalKey, picked, sessionToken);
       await client.invalidateQueries({ queryKey: ['goal-signals', coopId] });
       setEditing(null);
-      setMessage('Saved. Sage will use this at its next goal check.');
+      setMessage('Saved. Sage will use this next time it checks our goals.');
     } catch (error) {
       setMessage(friendlyError(error, "We couldn't save that. Try again."));
     } finally { setBusy(false); }

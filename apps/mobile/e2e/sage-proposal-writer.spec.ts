@@ -6,7 +6,7 @@ import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 
 function fixture(...args: string[]) {
-  const output = execFileSync("pnpm", ["--silent", "-F", "@cahootz/api", "exec", "tsx", "--import", "./dotenv.config.js", "scripts/e2e-sage-goal-ideas.ts", ...args], {
+  const output = execFileSync("pnpm", ["--silent", "-F", "@cahootz/api", "exec", "tsx", "--import", "./dotenv.config.js", "scripts/e2e-sage-proposal-writer.ts", ...args], {
     cwd: REPO_ROOT, encoding: "utf8", timeout: 120_000,
   });
   const line = output.split("\n").reverse().find((entry) => entry.startsWith("E2E_RESULT "));
@@ -24,7 +24,7 @@ const PITCH = /Let's make a Monday check-in thread part of how we work/;
 test.describe.configure({ mode: "serial" });
 
 // Sage checks a Commons' charter goals twice a week. Eight weeks of steady talk followed by two quiet weeks
-// is a real gap on "More communication" (the fixture runs the real goal check with a fixed model reply and
+// is a real gap on "More communication" (the fixture runs the real proposal writer with a fixed model reply and
 // a stand-in for the paid proposal review). Sage writes the proposal and puts it up for a vote itself, and
 // members get a "New vote" alert (the real notification code; it goes to everyone for any proposal). Once
 // members pass it (the fixture stands in for the vote count), only a steward can apply it, with one tap.

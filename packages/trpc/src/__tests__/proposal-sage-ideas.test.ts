@@ -29,8 +29,8 @@ vi.mock("../services/admin-verification.js", () => ({ checkAdminStatusWithRole: 
 vi.mock("../services/ai-evaluation-log.js", () => ({ recordAIEvaluation: vi.fn().mockResolvedValue(undefined) }));
 const costedRun = vi.hoisted(() => vi.fn((_coopId: string, _feature: string, fn: () => unknown) => fn()));
 vi.mock("../services/ai-cost.js", () => ({ withCostedProposalRun: costedRun }));
-vi.mock("../services/sage-goal-ideas.js", async () => {
-  const actual = await vi.importActual<typeof import("../services/sage-goal-ideas.js")>("../services/sage-goal-ideas.js");
+vi.mock("../services/sage-proposal-writer.js", async () => {
+  const actual = await vi.importActual<typeof import("../services/sage-proposal-writer.js")>("../services/sage-proposal-writer.js");
   return { ...actual, queueAmendmentForProposal };
 });
 

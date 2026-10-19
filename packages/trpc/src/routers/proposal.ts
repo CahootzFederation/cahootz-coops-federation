@@ -13,7 +13,7 @@ import {
 } from "../services/proposal-trails.js";
 import type { DecisionTrail } from "../services/sage-decision-trail.js";
 import { cleanseUntrustedText, isSteeringAttempt, mergeFlags, type CleansedText } from "../services/untrusted-input.js";
-import { AMENDMENT_KINDS, draftRequiresVote, queueAmendmentForProposal } from "../services/sage-goal-ideas.js";
+import { AMENDMENT_KINDS, draftRequiresVote, queueAmendmentForProposal } from "../services/sage-proposal-writer.js";
 import { announceProposalVote } from "../services/proposal-notifications.js";
 
 /** Flags from both the original and the rewritten text, with the rewritten text as what the engine reads. */

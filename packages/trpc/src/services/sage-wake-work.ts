@@ -2,7 +2,7 @@
  * Work each wake cycle does for a Commons after its due tasks: following up on waiting suggestions
  * (closing ones that no longer apply or went unanswered), expiring routed alerts, keeping memory
  * current, asking a likely helper about needs nobody answered, the weekly community rhythm posts, the
- * twice-weekly goal check, and the steward's review. Each step is isolated so one failure doesn't stop the others.
+ * twice-weekly proposal writer, and the steward's review. Each step is isolated so one failure doesn't stop the others.
  */
 import { expireSageAlerts } from "./sage-responsibility.js";
 import { runCommunityRhythm } from "./sage-community-rhythm.js";
@@ -10,7 +10,7 @@ import { maintainSageMemory } from "./sage-memory.js";
 import { runStewardReview } from "./sage-steward.js";
 import { followUpOnSuggestions } from "./sage-suggestion-follow-up.js";
 import { summarizeProposalsNearingVote } from "./sage-pre-vote.js";
-import { runGoalCheckIfDue } from "./sage-goal-ideas.js";
+import { runProposalWriterIfDue } from "./sage-proposal-writer.js";
 import { askHelpersForUnansweredNeeds } from "./sage-unanswered-needs.js";
 
 type Step = { name: string; run: (coopId: string, now: Date) => Promise<unknown> };
@@ -29,7 +29,7 @@ const steps: Step[] = [
   // Twice a week per Commons (Mon–Wed and Thu–Sun, claimed once each): measure the charter goals, note any
   // falling behind, and share at most one proposal idea, or record why not. Also queues changes members
   // voted through for a steward. At most one model call, within the monthly limit.
-  { name: "goal check", run: runGoalCheckIfDue },
+  { name: "proposal writer", run: runProposalWriterIfDue },
   // At most once a day per Commons (the steward checks its own last run), and only within the monthly limit.
   { name: "steward review", run: (coopId, now) => runStewardReview(coopId, now) },
 ];

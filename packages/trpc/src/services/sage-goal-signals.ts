@@ -200,7 +200,7 @@ function capitalize(text: string): string {
 export const GOAL_MAP_FEATURE = "sage-goal-map";
 export const GOAL_MAP_MODEL = "gpt-5-nano";
 export const GOAL_MAP_TYPE = "goal_signal_map";
-export const GOAL_CHECK_AGENT_KEY = "sage-goal-check";
+export const PROPOSAL_WRITER_AGENT_KEY = "sage-proposal-writer";
 
 export interface MissionGoal { key: string; label: string; priorityWeight?: number; description?: string }
 
@@ -285,7 +285,7 @@ export async function currentGoalSignalMap(coopId: string, config: { id: string;
 
 /**
  * What Sage counts for the current goals, for showing members. Right after a charter change the new
- * version has no map until the next goal check, so goals that kept their key show their last matches.
+ * version has no map until the next proposal-writer run, so goals that kept their key show their last matches.
  */
 export async function displayGoalSignalMap(coopId: string, config: { id: string; version: number; missionGoals: unknown }) {
   const current = await currentGoalSignalMap(coopId, config);
@@ -363,7 +363,7 @@ export async function ensureGoalSignalMap(
     await recordObservation({
       type: GOAL_MAP_TYPE, scopeType: "commons", scopeId: coopId, confidence: usedModel ? 0.7 : 0.5,
       summary: "What Sage counts for each of our goals",
-      details: map, visibility: "COMMONS_MEMBERS", systemKey: goalMapKey(coopId, config), generatedByAgentKey: GOAL_CHECK_AGENT_KEY,
+      details: map, visibility: "COMMONS_MEMBERS", systemKey: goalMapKey(coopId, config), generatedByAgentKey: PROPOSAL_WRITER_AGENT_KEY,
     });
   } catch (error) {
     // Two runs raced; the other one's map wins.
@@ -389,12 +389,12 @@ export async function setGoalSignals(coopId: string, config: { id: string; versi
     if (carried) {
       const row = await recordObservation({
         type: GOAL_MAP_TYPE, scopeType: "commons", scopeId: coopId, confidence: 0.5, summary: "What Sage counts for each of our goals",
-        details: carried, visibility: "COMMONS_MEMBERS", systemKey: goalMapKey(coopId, config), generatedByAgentKey: GOAL_CHECK_AGENT_KEY,
+        details: carried, visibility: "COMMONS_MEMBERS", systemKey: goalMapKey(coopId, config), generatedByAgentKey: PROPOSAL_WRITER_AGENT_KEY,
       }).catch(() => null);
       current = row ? { id: row.id, map: carried } : await currentGoalSignalMap(coopId, config);
     }
   }
-  if (!current) return { updated: false as const, reason: "Sage hasn't matched our goals yet. Try again after its next goal check." };
+  if (!current) return { updated: false as const, reason: "Sage hasn't matched our goals yet. Try again after Sage next checks our goals." };
   if (!current.map.goals.some((goal) => goal.key === goalKey)) return { updated: false as const, reason: "That goal isn't in our current charter." };
   const choice = cleanSignalChoice(signals);
   const map: GoalSignalMap = {

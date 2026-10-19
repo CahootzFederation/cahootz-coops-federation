@@ -6,7 +6,7 @@ import { requireActiveCommonsMembership } from "./commons.js";
 import { getMembership, isStewardMembership } from "../services/commons-membership.js";
 import {
   applyVotedAmendment, claimProposalIdea, pendingVotedAmendments, proposalIdeaForPost,
-} from "../services/sage-goal-ideas.js";
+} from "../services/sage-proposal-writer.js";
 import { GOAL_SIGNAL_KEYS, GOAL_SIGNALS, displayGoalSignalMap, setGoalSignals } from "../services/sage-goal-signals.js";
 
 async function requireSteward(db: any, userId: string, coopId: string) {

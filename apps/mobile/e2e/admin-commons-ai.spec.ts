@@ -136,13 +136,13 @@ test("a platform admin manages Sage limits, repeats, decision trails and Analyze
   }
 });
 
-// A platform admin runs Sage's goal check now from the Commons AI page (to get a new Commons started or to
+// A platform admin runs Sage's proposal writer now from the Commons AI page (to get a new Commons started or to
 // try something out). With the Commons' AI limit at $0 the real check runs every rule and says no without a
 // model call, so the journey costs nothing: the admin sees why and the trail opens, marked as an admin run.
-test("a platform admin runs Sage's goal check now and sees what it decided", async ({ browser }) => {
+test("a platform admin runs Sage's proposal writer now and sees what it decided", async ({ browser }) => {
   test.setTimeout(300_000);
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const { coopId } = fixture("e2e-sage-goal-ideas.ts", "reset", runId);
+  const { coopId } = fixture("e2e-sage-proposal-writer.ts", "reset", runId);
   const adminContext = await browser.newContext();
   const admin = await adminContext.newPage();
   try {
@@ -162,19 +162,19 @@ test("a platform admin runs Sage's goal check now and sees what it decided", asy
     await limits.getByRole("button", { name: "Save limits" }).click();
     await expect(limits.getByText("Paused", { exact: true })).toBeVisible();
 
-    const goalCheck = admin.getByRole("region", { name: "Goal check" });
-    await goalCheck.getByLabel(/Skip the weekly limits/).check();
-    await goalCheck.getByRole("button", { name: "Check goals now" }).click();
-    await expect(goalCheck.getByRole("status")).toHaveText(/No proposal this time: .*Sage's monthly AI spending limit for this Commons is reached/, { timeout: 60_000 });
+    const writer = admin.getByRole("region", { name: "Sage proposal writer" });
+    await writer.getByLabel(/Skip the weekly limits/).check();
+    await writer.getByRole("button", { name: "Run the proposal writer" }).click();
+    await expect(writer.getByRole("status")).toHaveText(/No proposal this time: .*Sage's monthly AI spending limit for this Commons is reached/, { timeout: 60_000 });
     // The new trail opens: an admin run, with every goal Sage looked at.
     await expect(admin.getByText("A platform admin ran this check now and skipped the weekly limits").first()).toBeVisible();
     await expect(admin.getByText(/"More communication": looks behind/).first()).toBeVisible();
-    await expect(admin.getByText(/A platform admin's "Check goals now"/).first()).toBeVisible();
+    await expect(admin.getByText(/A platform admin's "Run the proposal writer"/).first()).toBeVisible();
     await admin.reload();
     await expect(admin.getByRole("button", { name: /No proposal this time/ }).first()).toBeVisible({ timeout: 60_000 });
   } finally {
     fixture("e2e-admin.ts", "reset-limits", coopId);
-    fixture("e2e-sage-goal-ideas.ts", "cleanup", runId);
+    fixture("e2e-sage-proposal-writer.ts", "cleanup", runId);
     await adminContext.close();
   }
 });

@@ -54,9 +54,9 @@ vi.mock("../services/sage-goal-signals.js", async () => {
 });
 
 const {
-  applyCharterChange, applyVotedAmendment, checkIdea, claimProposalIdea, commonsBlockers, draftRequiresVote, goalBlockers, goalCheckPeriod,
-  normalizeNewGoals, proposalTextFor, queueAmendmentForProposal, renderIdeaPost, runGoalCheck, unbackedNumbers, NOT_STARTED_LINE,
-} = await import("../services/sage-goal-ideas.js");
+  applyCharterChange, applyVotedAmendment, checkIdea, claimProposalIdea, commonsBlockers, draftRequiresVote, goalBlockers, proposalWriterPeriod,
+  normalizeNewGoals, proposalTextFor, queueAmendmentForProposal, renderIdeaPost, runProposalWriter, unbackedNumbers, NOT_STARTED_LINE,
+} = await import("../services/sage-proposal-writer.js");
 const { AUTONOMOUS_SAGE_FEATURES } = await vi.importActual<typeof import("../services/sage-autonomy.js")>("../services/sage-autonomy.js");
 
 const NOW = new Date("2026-10-15T15:00:00Z"); // a Thursday
@@ -136,14 +136,14 @@ beforeEach(() => {
 
 describe("when Sage checks goals", () => {
   it("runs at most twice a week: Monday to Wednesday, and Thursday to Sunday", () => {
-    expect(goalCheckPeriod(new Date("2026-10-12T09:00:00Z"))).toBe("2026-W42-a");
-    expect(goalCheckPeriod(new Date("2026-10-14T23:00:00Z"))).toBe("2026-W42-a");
-    expect(goalCheckPeriod(new Date("2026-10-15T00:30:00Z"))).toBe("2026-W42-b");
-    expect(goalCheckPeriod(new Date("2026-10-18T12:00:00Z"))).toBe("2026-W42-b");
+    expect(proposalWriterPeriod(new Date("2026-10-12T09:00:00Z"))).toBe("2026-W42-a");
+    expect(proposalWriterPeriod(new Date("2026-10-14T23:00:00Z"))).toBe("2026-W42-a");
+    expect(proposalWriterPeriod(new Date("2026-10-15T00:30:00Z"))).toBe("2026-W42-b");
+    expect(proposalWriterPeriod(new Date("2026-10-18T12:00:00Z"))).toBe("2026-W42-b");
   });
 
   it("counts its model calls toward the monthly autonomy limit", () => {
-    expect(AUTONOMOUS_SAGE_FEATURES).toEqual(expect.arrayContaining(["sage-goal-check", "sage-goal-map", "sage-goal-proposal"]));
+    expect(AUTONOMOUS_SAGE_FEATURES).toEqual(expect.arrayContaining(["sage-proposal-writer", "sage-goal-map", "sage-goal-proposal"]));
   });
 });
 
@@ -243,18 +243,18 @@ describe("code's checks on Sage's idea", () => {
   });
 });
 
-describe("a goal check", () => {
+describe("a proposal-writer run", () => {
   it("notes a quiet Commons in memory, writes a proposal and puts it up for a vote", async () => {
     const decide = vi.fn().mockResolvedValue(idea());
     const submit = votable();
-    const result = await runGoalCheck("harbor", { now: NOW, decide, submit });
+    const result = await runProposalWriter("harbor", { now: NOW, decide, submit });
 
     expect(result).toEqual({ status: "PROPOSED", ideaPostId: "idea-post-1", draftId: "draft-1", proposalId: "prop-sage-1", gaps: 1 });
     expect(submit).toHaveBeenCalledWith({ coopId: "harbor", text: expect.stringMatching(/^Proposal Title: Start a weekly check-in thread\n\nWhat: a weekly Monday check-in thread/) });
     expect(db.commonsProposalDraft.update).toHaveBeenCalledWith({ where: { id: "draft-1" }, data: expect.objectContaining({ ideaPostId: "idea-post-1", submittedProposalId: "prop-sage-1" }) });
     expect(db.proposal.updateMany).not.toHaveBeenCalled();
     expect(announce).toHaveBeenCalledWith("prop-sage-1");
-    expect(db.commonsContentScan.create).toHaveBeenCalledWith({ data: expect.objectContaining({ sourceType: "sage_goal_check", contentHash: "2026-W42-b" }) });
+    expect(db.commonsContentScan.create).toHaveBeenCalledWith({ data: expect.objectContaining({ sourceType: "sage_proposal_writer", contentHash: "2026-W42-b" }) });
     expect(recordObservation).toHaveBeenCalledWith(expect.objectContaining({
       type: "goal_gap", systemKey: "goal_gap:harbor:more_communication", visibility: "COMMONS_MEMBERS",
       summary: expect.stringContaining('Goal "More communication" looks behind. Posts and comments members write: 4 in the last two weeks'),
@@ -271,13 +271,13 @@ describe("a goal check", () => {
     }), select: { id: true } });
     expect(db.commonsAction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ type: "PROPOSE_IDEA", replySourceKey: "goal_idea:harbor:2026-W42-b" }) });
     const trail = db.sageDecisionTrail.create.mock.calls[0]![0].data;
-    expect(trail).toMatchObject({ agent: "sage-goal-check", visibility: "COMMONS_MEMBERS", outcome: "Put up a proposal for a vote", relatedPostIds: ["idea-post-1"] });
+    expect(trail).toMatchObject({ agent: "sage-proposal-writer", visibility: "COMMONS_MEMBERS", outcome: "Put up a proposal for a vote", relatedPostIds: ["idea-post-1"] });
   });
 
   it("withdraws a proposal the review sent back, and shares it as an idea a member can take on", async () => {
     // The review lands a "revise" as votable, but it's saying the proposal isn't strong enough yet.
     const submit = vi.fn().mockResolvedValue({ id: "prop-sage-2", status: "votable", decision: "revise", decisionReasons: ["Scored below the minimum to move forward"] });
-    const result = await runGoalCheck("harbor", { now: NOW, decide: vi.fn().mockResolvedValue(idea()), submit });
+    const result = await runProposalWriter("harbor", { now: NOW, decide: vi.fn().mockResolvedValue(idea()), submit });
     expect(result).toMatchObject({ status: "PROPOSED", proposalId: null });
     expect(db.proposal.updateMany).toHaveBeenCalledWith({ where: { id: "prop-sage-2", proposerWallet: "sage:bot" }, data: expect.objectContaining({ status: "WITHDRAWN", withdrawnBy: "sage:bot" }) });
     expect(db.commonsPost.create.mock.calls[0]![0].data.content).toContain('Tap "Take this on"');
@@ -291,7 +291,7 @@ describe("a goal check", () => {
     db.commonsAction.create.mockResolvedValue({ id: "action-2" });
     db.commonsProposalDraft.create.mockResolvedValue({ id: "draft-2" });
     const failing = vi.fn().mockRejectedValue(new Error("engine down"));
-    await expect(runGoalCheck("harbor", { now: NOW, decide: vi.fn().mockResolvedValue(idea()), submit: failing, force: true })).resolves.toMatchObject({ status: "PROPOSED", proposalId: null });
+    await expect(runProposalWriter("harbor", { now: NOW, decide: vi.fn().mockResolvedValue(idea()), submit: failing, force: true })).resolves.toMatchObject({ status: "PROPOSED", proposalId: null });
   });
 
   it("gives a brand-new Commons a starter proposal for a goal nobody has proposed anything for", async () => {
@@ -301,7 +301,7 @@ describe("a goal check", () => {
     readSignal.mockImplementation(async (_coopId: string, key: string) => ({ key, current: 1, history: [] }));
     const decide = vi.fn().mockResolvedValue(idea());
     const submit = votable();
-    const result = await runGoalCheck("harbor", { now: NOW, decide, submit });
+    const result = await runProposalWriter("harbor", { now: NOW, decide, submit });
     expect(result).toMatchObject({ status: "PROPOSED", proposalId: "prop-sage-1", gaps: 1 });
     const prompt = JSON.parse(decide.mock.calls[0]![0]);
     expect(prompt.candidates).toEqual([expect.objectContaining({ goalKey: "more_communication", notStartedYet: true, numbers: [NOT_STARTED_LINE] })]);
@@ -311,7 +311,7 @@ describe("a goal check", () => {
   it("records the model's decision not to propose, with its reason", async () => {
     db.aIObservation.findUnique.mockImplementation(async ({ where }: { where: { id?: string; systemKey?: string } }) => where.id ? { details: { goalKey: "more_communication" } } : null);
     const decide = vi.fn().mockResolvedValue(idea({ decision: "NO_PROPOSAL", reason: "Looks like a slow stretch after the fair." }));
-    const result = await runGoalCheck("harbor", { now: NOW, decide });
+    const result = await runProposalWriter("harbor", { now: NOW, decide });
     expect(result).toEqual({ status: "NO_PROPOSAL", reasons: ["Looks like a slow stretch after the fair."], gaps: 1 });
     expect(db.commonsPost.create).not.toHaveBeenCalled();
     expect(db.aIObservation.update).toHaveBeenCalledWith({ where: { id: "gap-1" }, data: { details: expect.objectContaining({
@@ -323,14 +323,14 @@ describe("a goal check", () => {
   it("says no without a model call when a rule blocks it", async () => {
     const decide = vi.fn();
     db.proposal.count.mockResolvedValueOnce(2);
-    const busy = await runGoalCheck("harbor", { now: NOW, decide });
+    const busy = await runProposalWriter("harbor", { now: NOW, decide });
     expect(busy).toMatchObject({ status: "NO_PROPOSAL", reasons: [expect.stringMatching(/2 of Sage's proposals are still being voted on/)] });
 
     readSignal.mockImplementation(async (_coopId: string, key: string) => key === "conversation"
       ? { key, current: 4, history: [18, 20, 16, 18] }
       : { key, current: 9, history: [8, 10, 9, 9] });
     db.commonsProposalDraft.findFirst.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => where.ideaPostId ? { createdAt: new Date("2026-10-10T00:00:00Z") } : draftLookup({ where }));
-    const cooled = await runGoalCheck("harbor", { now: NOW, decide, force: true });
+    const cooled = await runProposalWriter("harbor", { now: NOW, decide, force: true });
     expect(cooled).toMatchObject({ status: "NO_PROPOSAL", reasons: [expect.stringMatching(/last 30 days/)] });
     expect(decide).not.toHaveBeenCalled();
   });
@@ -338,13 +338,13 @@ describe("a goal check", () => {
   it("says every goal is on track without a model call", async () => {
     readSignal.mockResolvedValue({ key: "conversation", current: 18, history: [18, 20] });
     const decide = vi.fn();
-    await expect(runGoalCheck("harbor", { now: NOW, decide })).resolves.toEqual({ status: "NO_PROPOSAL", reasons: ["Every goal we can check looks on track"], gaps: 0 });
+    await expect(runProposalWriter("harbor", { now: NOW, decide })).resolves.toEqual({ status: "NO_PROPOSAL", reasons: ["Every goal we can check looks on track"], gaps: 0 });
     expect(decide).not.toHaveBeenCalled();
   });
 
   it("drops an idea that uses a made-up cost", async () => {
     const decide = vi.fn().mockResolvedValue(idea({ body: `${idea().body} Snacks would cost $400.` }));
-    const result = await runGoalCheck("harbor", { now: NOW, decide });
+    const result = await runProposalWriter("harbor", { now: NOW, decide });
     expect(result).toMatchObject({ status: "NO_PROPOSAL", reasons: [expect.stringMatching(/couldn't back up: \$400/)] });
     expect(db.commonsPost.create).not.toHaveBeenCalled();
   });
@@ -353,12 +353,12 @@ describe("a goal check", () => {
     db.commonsContentScan.create.mockRejectedValue(new Error("already claimed"));
     // A first-week Commons that already has its one Sage proposal this week.
     db.commonsProposalDraft.count.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => where.authorId === null ? 0 : 1);
-    const blocked = await runGoalCheck("harbor", { now: NOW, decide: vi.fn(), admin: { actor: "admin@cahootz", skipLimits: false } });
+    const blocked = await runProposalWriter("harbor", { now: NOW, decide: vi.fn(), admin: { actor: "admin@cahootz", skipLimits: false } });
     expect(blocked).toMatchObject({ status: "NO_PROPOSAL", reasons: [expect.stringMatching(/first proposal here/)] });
-    expect(db.sageDecisionTrail.create.mock.calls[0]![0].data).toMatchObject({ trigger: "ADMIN_GOAL_CHECK" });
+    expect(db.sageDecisionTrail.create.mock.calls[0]![0].data).toMatchObject({ trigger: "ADMIN_PROPOSAL_WRITER" });
 
     const submit = votable();
-    const result = await runGoalCheck("harbor", { now: NOW, decide: vi.fn().mockResolvedValue(idea()), submit, admin: { actor: "admin@cahootz", skipLimits: true } });
+    const result = await runProposalWriter("harbor", { now: NOW, decide: vi.fn().mockResolvedValue(idea()), submit, admin: { actor: "admin@cahootz", skipLimits: true } });
     expect(result).toMatchObject({ status: "PROPOSED", proposalId: "prop-sage-1" });
     expect(db.commonsAction.create).toHaveBeenCalledWith({ data: expect.objectContaining({ replySourceKey: `goal_idea:harbor:2026-W42-b-admin-${NOW.getTime()}` }) });
     const steps = db.sageDecisionTrail.create.mock.calls[1]![0].data.steps as Array<{ label: string; adminOnly?: boolean }>;
@@ -367,9 +367,9 @@ describe("a goal check", () => {
 
   it("runs once per half-week and skips a Commons with no goals", async () => {
     db.commonsContentScan.create.mockRejectedValue(new Error("unique"));
-    await expect(runGoalCheck("harbor", { now: NOW, decide: vi.fn() })).resolves.toEqual({ status: "SKIPPED", reason: "Already checked this half of the week" });
+    await expect(runProposalWriter("harbor", { now: NOW, decide: vi.fn() })).resolves.toEqual({ status: "SKIPPED", reason: "Already checked this half of the week" });
     db.coopConfig.findFirst.mockResolvedValue({ ...CONFIG, missionGoals: [] });
-    await expect(runGoalCheck("harbor", { now: NOW, decide: vi.fn() })).resolves.toEqual({ status: "SKIPPED", reason: "No goals in the charter" });
+    await expect(runProposalWriter("harbor", { now: NOW, decide: vi.fn() })).resolves.toEqual({ status: "SKIPPED", reason: "No goals in the charter" });
   });
 });
 

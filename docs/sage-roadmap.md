@@ -408,7 +408,7 @@ Goal: as Sage learns how a Commons is doing, it writes proposals itself and puts
 
 Status (2026-10-18): built and verified locally; see Verification below.
 
-- **The goal check** (`services/sage-goal-ideas.ts`, a wake-cycle step). It runs at most twice a week per Commons: once Monday–Wednesday and once Thursday–Sunday (UTC), claimed through `CommonsContentScan`.
+- **The proposal writer** (`services/sage-proposal-writer.ts`, a wake-cycle step). It runs at most twice a week per Commons: once Monday–Wednesday and once Thursday–Sunday (UTC), claimed through `CommonsContentScan`.
 - **What Sage counts** (`services/sage-goal-signals.ts`).
   - Goals are free text, so code keeps a fixed list of 10 signals it can count from members' own records: talking, people taking part, events, orders at member stores, payments between members, new members, needs answered, deciding together, resources shared, and help that worked.
   - Each goal is matched to 0–3 signals once per charter version (one `gpt-5-nano` call that can only pick from the list, with keywords as the fallback). The match is saved as a `goal_signal_map` observation visible to members.
@@ -426,7 +426,7 @@ Status (2026-10-18): built and verified locally; see Verification below.
   - the monthly AI limit is reached;
   - for one goal: Sage proposed something for it in the last 30 days, a proposal or draft for it is open, or members turned one down in the last 60 days.
 
-  A new or small Commons isn't blocked. Otherwise one `gpt-5.6-luna` call either writes a single proposal or says `NO_PROPOSAL` with a reason. Every reason for a no goes to the decision trail (agent `sage-goal-check`, visible to members) and onto the gap observation.
+  A new or small Commons isn't blocked. Otherwise one `gpt-5.6-luna` call either writes a single proposal or says `NO_PROPOSAL` with a reason. Every reason for a no goes to the decision trail (agent `sage-proposal-writer`, visible to members) and onto the gap observation.
 - **Code's checks on the proposal.**
   - The goal must be one code left open.
   - Confidence must be at least 0.6.
@@ -448,10 +448,10 @@ Status (2026-10-18): built and verified locally; see Verification below.
 - **When the review sends it back,** Sage withdraws its proposal and posts the idea for a member to take on instead. Sage keeps a proposal only when the review advances it. A send-back is any other result: revise, needs more information, blocked, or the review didn't run. The review lands a "revise" as votable, but its own text says the proposal isn't strong enough yet; the first live run got exactly that.
   - The first member to tap "Take this on" owns the draft and edits the reasons, while the charter or goals change itself stays fixed.
   - A proposal they send from it also always goes to a vote, including after a resubmit or an applied alternative.
-- **A platform admin can run it now.** The web Commons AI page has a "Goal check" section with "Check goals now", to get a new Commons started or to try something out.
+- **A platform admin can run it now.** The web Commons AI page has a "Sage proposal writer" section with "Run the proposal writer", to get a new Commons started or to try something out.
   - It runs the same check with every rule and code check, gets its own keys (so it never blocks the scheduled run and can run repeatedly), and counts toward the autonomy limit.
   - "Skip the weekly limits" skips the how-many limits: per week, first week, open proposals and ideas, and the 30-day wait per goal. The spending limit, an already open or recently rejected proposal for the goal, and all of code's checks on the proposal still apply.
-  - The page says in one line what Sage did and opens the trail. The trail is marked "A platform admin's "Check goals now"", with an admin-only step naming who ran it.
+  - The page says in one line what Sage did and opens the trail. The trail is marked "A platform admin's "Run the proposal writer"", with an admin-only step naming who ran it.
   - Verified live: the real model wrote "Weekly news, needs and wins thread" for a new Commons, the review advanced it, and members were told.
 - **Steward applies a passed change.** When such a proposal becomes `APPROVED` or `FUNDED` (or at the next wake), code creates one pending `CoopConfigAudit` (`changedBy: proposal:<id>`) and notifies the stewards (`SAGE_AMENDMENT_READY`, Sage category).
   - Stewards see "Changes members passed" on the Commons page and apply it with one tap. That makes one new config version, re-reads memory, and is recorded as `APPLIED` with a sequence.
@@ -464,26 +464,26 @@ Status (2026-10-18): built and verified locally; see Verification below.
 - **Still needs people:** the member vote decides every Sage proposal, and a steward applies a passed charter or goals change. Sage never votes.
 - **Memory:** one `goal_gap` row per goal per Commons (60-day expiry, refreshed, closed when the gap closes) and one `goal_signal_map` per charter version (older ones `SUPERSEDED`). Both hold public activity counts only, and both are visible to members.
 - **Cost:**
-  - Goal check: at most one luna call per check, about $0.0015.
+  - Proposal writer: at most one luna call per run, about $0.0015.
   - Goal matching: one nano call per charter version, about $0.0002.
   - Proposal review: one full run per proposal Sage puts up. That's several gpt-5.2 calls, some with web search. Measured live on 2026-10-18: about $0.087 for one proposal (7 calls, about $0.012 each).
-  - Also measured: goal checks averaged $0.0005 (9 runs), and goal matching $0.0002 (10 runs).
+  - Also measured: proposal-writer runs averaged $0.0005 (9 runs), and goal matching $0.0002 (10 runs).
   - At the cap of 2 a week, that's under $1 per Commons per month, inside the default $5 autonomy limit.
-  - All three features (`sage-goal-check`, `sage-goal-map`, `sage-goal-proposal`) count toward the limit, and nothing runs once it's reached.
+  - All three features (`sage-proposal-writer`, `sage-goal-map`, `sage-goal-proposal`) count toward the limit, and nothing runs once it's reached.
 
 Verification:
 
 - Unit tests:
   - `sage-goal-signals.test.ts`: gap math, matching, steward picks, and keywords that no longer read "share news" as lending.
-  - `sage-goal-ideas.test.ts`: periods; every "no" rule, including that a one-member Commons is allowed; the proposal checks; proposal text; full checks that put a proposal up, say no, drop a made-up cost, withdraw a sent-back proposal and fall back to an open idea, and give a brand-new Commons a starter proposal; claiming; queueing and applying amendments.
+  - `sage-proposal-writer.test.ts`: periods; every "no" rule, including that a one-member Commons is allowed; the proposal checks; proposal text; full checks that put a proposal up, say no, drop a made-up cost, withdraw a sent-back proposal and fall back to an open idea, and give a brand-new Commons a starter proposal; claiming; queueing and applying amendments.
   - `proposal-sage-ideas.test.ts`: Sage's own proposal is saved as Sage, goes to a vote, and its review counts toward Sage's limit. A $0 Sage idea is never approved without a vote.
-  - `sage-principles.test.ts` includes the goal-check agent, and a notification-route test was added.
-- A live run on a cloned database: the real goal check found the quiet stretch, wrote the observation and posted. It caught two problems, both fixed: keywords matched "share news" to resources shared, and a test run id in a title was rightly refused as an unbacked number.
+  - `sage-principles.test.ts` includes the proposal-writer agent, and a notification-route test was added.
+- A live run on a cloned database: the real proposal writer found the quiet stretch, wrote the observation and posted. It caught two problems, both fixed: keywords matched "share news" to resources shared, and a test run id in a title was rightly refused as an unbacked number.
 - The local API's wake loop then ran the whole thing live, with the real model and the real proposal review. Sage wrote "Open weekly check-in thread" for the quiet "More communication" goal, it was saved as Sage's, and it went to a vote. The review graded it "revise" (59%), which is why Sage now keeps only proposals the review advances.
 - A photo walkthrough of the flow turned up two more fixes:
   - After a steward applied a charter change, "What Sage counts" went blank until the next check, because maps are per charter version. It now shows the last matches for goals that kept their key, and a steward can edit them right away.
   - The fixture didn't clear proposals the wake loop had put up in its Commons, and didn't stop the loop running there mid-test.
-- Playwright on a local stack (cloned database, API :3011, web :8091): `sage-goal-ideas.spec.ts` (journey 72) has two tests. In the first, the member gets the new-vote alert, Sage's proposal goes up for a vote, and the steward applies the passed change. In the second, a sent-back proposal sends no alert and a member takes it on. Both passed in 3 of 3 runs. The smoke suite passed 18 of 18. With the new-vote alert in place, the specs that create proposals or check alerts also passed: `proposal-form`, `governance-confirmations`, `circle-notifications` and `proposal-navigation`. `commons-info-page.spec.ts` and `sage-stewardship.spec.ts` passed on an earlier version of this change. The new admin journey (73, `admin-commons-ai.spec.ts` "runs Sage's goal check now") passed against a local web portal on :3012.
+- Playwright on a local stack (cloned database, API :3011, web :8091): `sage-proposal-writer.spec.ts` (journey 72) has two tests. In the first, the member gets the new-vote alert, Sage's proposal goes up for a vote, and the steward applies the passed change. In the second, a sent-back proposal sends no alert and a member takes it on. Both passed in 3 of 3 runs. The smoke suite passed 18 of 18. With the new-vote alert in place, the specs that create proposals or check alerts also passed: `proposal-form`, `governance-confirmations`, `circle-notifications` and `proposal-navigation`. `commons-info-page.spec.ts` and `sage-stewardship.spec.ts` passed on an earlier version of this change. The new admin journey (73, `admin-commons-ai.spec.ts` "runs Sage's proposal writer now") passed against a local web portal on :3012.
 - `pnpm -F @repo/trpc test`: 1015 passed, 31 skipped. Mobile Jest: 121 passed. `@repo/trpc` and `@cahootz/mobile` type-checks pass.
 
 Remaining:
@@ -700,7 +700,7 @@ For every Sage behavior change:
 - 2026-10-18: Sage starts proposals from charter goals. Decided with the user: ideas run up to twice a week per Commons at launch; Sage must be able to decide no, and records why; every idea ties to the charter, and a goal falling behind (for example "more communication" with nobody talking) is saved as an observation that leads to an idea. An idea is posted to the whole Commons and the first member to take it on owns it; it never goes to one steward. A passed charter or goals change waits for a steward's one-tap apply and is never applied automatically. Goals are measured with a fixed list of countable signals matched per goal (model picks, keywords as fallback, steward can change it), used right away. The user chose this over letting the model choose its own measurements with counting tools.
 - 2026-10-18 (same day, later): Sage writes the proposal and submits it itself, for a member vote, instead of waiting for a member to take the idea on. The user asked for this directly; AGENT.md's autonomy boundaries now carve out Sage's own charter-goal proposals (still never approved without a vote; a passed charter or goals change still needs a steward). New and small Commons get proposals too: the age and three-member minimums were removed, and a goal nobody has proposed anything for counts as behind. A proposal the review sends back is withdrawn and offered as an open idea instead.
 - 2026-10-18 (later): Every proposal that opens for a vote now notifies the Commons' members ("New vote: …"), not only Sage's, so people know to vote. A Commons' first week with Sage proposals is capped at one, so the launch doesn't hand every Commons two votes at once.
-- 2026-10-18 (later): Platform admins can run Sage's goal check on demand from the web Commons AI page, with an option to skip the weekly limits, for onboarding and testing. Safety rules and code checks still apply.
+- 2026-10-18 (later): Platform admins can run Sage's proposal writer on demand from the web Commons AI page, with an option to skip the weekly limits, for onboarding and testing. Safety rules and code checks still apply.
 
 ## Completed milestones
 

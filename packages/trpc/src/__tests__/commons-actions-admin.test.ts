@@ -92,9 +92,9 @@ describe("Commons admin API authentication", () => {
     vi.doUnmock("../services/circle-window.js");
   });
 
-  it("lets a platform admin run Sage's goal check now, and returns what it did and its trail", async () => {
-    const runGoalCheck = vi.fn().mockResolvedValue({ status: "NO_PROPOSAL", reasons: ["Every goal we can check looks on track"], gaps: 0 });
-    vi.doMock("../services/sage-goal-ideas.js", () => ({ runGoalCheck, runGoalCheckIfDue: vi.fn() }));
+  it("lets a platform admin run Sage's proposal writer now, and returns what it did and its trail", async () => {
+    const runProposalWriter = vi.fn().mockResolvedValue({ status: "NO_PROPOSAL", reasons: ["Every goal we can check looks on track"], gaps: 0 });
+    vi.doMock("../services/sage-proposal-writer.js", () => ({ runProposalWriter, runProposalWriterIfDue: vi.fn() }));
     vi.resetModules();
     const { commonsActionsAdminRouter: freshRouter } = await import("../routers/commons-actions-admin.js");
     const { issueCommonsAdminToken: freshIssue } = await import("../lib/commons-admin-token.js");
@@ -105,12 +105,12 @@ describe("Commons admin API authentication", () => {
       sageDecisionTrail: { findFirst: vi.fn().mockResolvedValue({ id: "trail-goal" }) },
     };
     const caller = freshRouter.createCaller({ db, req: { headers: { authorization: `Bearer ${token}` } } } as never);
-    await expect(caller.command({ coopId: "harbor", command: "goal-check", skipLimits: true }))
+    await expect(caller.command({ coopId: "harbor", command: "proposal-writer", skipLimits: true }))
       .resolves.toEqual({ status: "NO_PROPOSAL", reasons: ["Every goal we can check looks on track"], gaps: 0, trailId: "trail-goal" });
-    expect(runGoalCheck).toHaveBeenCalledWith("harbor", expect.objectContaining({ admin: { actor: "platform@example.com", skipLimits: true } }));
-    await caller.command({ coopId: "harbor", command: "goal-check" });
-    expect(runGoalCheck).toHaveBeenLastCalledWith("harbor", expect.objectContaining({ admin: { actor: "platform@example.com", skipLimits: false } }));
-    vi.doUnmock("../services/sage-goal-ideas.js");
+    expect(runProposalWriter).toHaveBeenCalledWith("harbor", expect.objectContaining({ admin: { actor: "platform@example.com", skipLimits: true } }));
+    await caller.command({ coopId: "harbor", command: "proposal-writer" });
+    expect(runProposalWriter).toHaveBeenLastCalledWith("harbor", expect.objectContaining({ admin: { actor: "platform@example.com", skipLimits: false } }));
+    vi.doUnmock("../services/sage-proposal-writer.js");
   });
 
   it("includes the original comment and its parent post in review actions", async () => {

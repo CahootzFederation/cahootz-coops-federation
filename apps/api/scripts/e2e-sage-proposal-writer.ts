@@ -1,31 +1,31 @@
 /**
- * Deterministic fixture for apps/mobile/e2e/sage-goal-ideas.spec.ts. Not part of the product.
+ * Deterministic fixture for apps/mobile/e2e/sage-proposal-writer.spec.ts. Not part of the product.
  *
- *   tsx --import ./dotenv.config.js scripts/e2e-sage-goal-ideas.ts seed <runId> [vote|sent-back]
+ *   tsx --import ./dotenv.config.js scripts/e2e-sage-proposal-writer.ts seed <runId> [vote|sent-back]
  *     Resets a private E2E-only Commons ("E2E Goal Ideas Commons": releaseclick1 is a steward,
  *     releaseclick2 and one helper account are members), backdates eight weeks of member posts
- *     followed by two quiet weeks, then runs the real goal check. Measuring, the gap observation,
+ *     followed by two quiet weeks, then runs the real proposal writer. Measuring, the gap observation,
  *     every "no" rule, code's checks on the idea, Sage's proposal text and the post are all real.
  *     Two things are fixed so the run costs nothing: the model's reply (a charter change that adds a
  *     Monday check-in), and the proposal review (several web-searching model calls, covered by
  *     proposal-sage-ideas.test.ts). The stand-in review saves Sage's proposal as votable ("vote") or
  *     sends it back ("sent-back"), so the real code withdraws it and posts an open idea.
- *   tsx --import ./dotenv.config.js scripts/e2e-sage-goal-ideas.ts approve <proposalId>
+ *   tsx --import ./dotenv.config.js scripts/e2e-sage-proposal-writer.ts approve <proposalId>
  *     Stands in for the member vote: marks Sage's proposal approved, then runs the real code that
  *     queues the change for a steward.
- *   tsx --import ./dotenv.config.js scripts/e2e-sage-goal-ideas.ts reset <runId>
+ *   tsx --import ./dotenv.config.js scripts/e2e-sage-proposal-writer.ts reset <runId>
  *     Resets the E2E Commons (members, charter, goals, nothing left from earlier runs) without running a
- *     goal check, for the admin journey that runs one from the portal.
- *   tsx --import ./dotenv.config.js scripts/e2e-sage-goal-ideas.ts charter
- *   tsx --import ./dotenv.config.js scripts/e2e-sage-goal-ideas.ts cleanup <runId>
+ *     proposal writer, for the admin journey that runs one from the portal.
+ *   tsx --import ./dotenv.config.js scripts/e2e-sage-proposal-writer.ts charter
+ *   tsx --import ./dotenv.config.js scripts/e2e-sage-proposal-writer.ts cleanup <runId>
  *
  * Prints one JSON line prefixed with "E2E_RESULT ". Only touches the E2E Commons, and refuses
  * production and non-local databases (unless E2E_ALLOW_NONLOCAL_DB=1).
  */
 import { db } from "../../../packages/db/index.js";
 import {
-  GOAL_CHECK_SOURCE, SAGE_PROPOSER_WALLET, goalCheckPeriod, queueAmendmentForProposal, runGoalCheck, type IdeaOutput, type IdeaSubmit,
-} from "../../../packages/trpc/src/services/sage-goal-ideas.js";
+  PROPOSAL_WRITER_SOURCE, SAGE_PROPOSER_WALLET, proposalWriterPeriod, queueAmendmentForProposal, runProposalWriter, type IdeaOutput, type IdeaSubmit,
+} from "../../../packages/trpc/src/services/sage-proposal-writer.js";
 
 export const COOP_ID = "e2e-goal-ideas";
 const NAME = "E2E Goal Ideas Commons";
@@ -86,7 +86,7 @@ async function clearCommons() {
   const drafts = await db.commonsProposalDraft.findMany({ where: { coopId: COOP_ID }, select: { submittedProposalId: true } });
   const proposalIds = drafts.flatMap((draft) => draft.submittedProposalId?.startsWith(PROPOSAL_ID_PREFIX) ? [draft.submittedProposalId] : []);
   await db.commonsProposalDraft.deleteMany({ where: { coopId: COOP_ID } });
-  // Every proposal here is E2E: this run's stand-ins, and any the local wake loop's real goal check put up.
+  // Every proposal here is E2E: this run's stand-ins, and any the local wake loop's real proposal writer put up.
   await db.proposal.deleteMany({ where: { coopId: COOP_ID } });
   await db.proposal.deleteMany({ where: { id: { in: proposalIds } } });
   const actions = await db.commonsAction.findMany({ where: { coopId: COOP_ID }, select: { id: true } });
@@ -173,11 +173,11 @@ async function seed(runId: string, mode: "vote" | "sent-back") {
   }
   await db.commonsPost.createMany({ data: posts });
 
-  const result = await runGoalCheck(COOP_ID, { force: true, matcher: null, decide: async () => fixedIdea(runId), submit: reviewStandIn(runId, mode) });
-  if (result.status !== "PROPOSED") throw new Error(`The goal check didn't propose: ${JSON.stringify(result)}`);
-  // Claim this half-week so the API's own wake loop doesn't run a second, real goal check here mid-test.
+  const result = await runProposalWriter(COOP_ID, { force: true, matcher: null, decide: async () => fixedIdea(runId), submit: reviewStandIn(runId, mode) });
+  if (result.status !== "PROPOSED") throw new Error(`The proposal writer didn't propose: ${JSON.stringify(result)}`);
+  // Claim this half-week so the API's own wake loop doesn't run a second, real proposal writer here mid-test.
   await db.commonsContentScan.create({ data: {
-    coopId: COOP_ID, sourceType: GOAL_CHECK_SOURCE, sourceId: COOP_ID, contentHash: goalCheckPeriod(new Date()), charterConfigId: "sage-goal-check:v1", status: "SUCCESS",
+    coopId: COOP_ID, sourceType: PROPOSAL_WRITER_SOURCE, sourceId: COOP_ID, contentHash: proposalWriterPeriod(new Date()), charterConfigId: "sage-proposal-writer:v1", status: "SUCCESS",
   } }).catch(() => {});
   const gap = await db.aIObservation.findUnique({ where: { systemKey: `goal_gap:${COOP_ID}:more_communication` }, select: { summary: true } });
   // How the app names whoever took an idea on (proposalIdeaForPost).
@@ -207,7 +207,7 @@ async function main() {
       : command === "reset" && first ? await reset(first)
         : command === "cleanup" && first ? (await clearCommons(), await ensureCommons(), { cleaned: true })
           : null;
-  if (!result) throw new Error("Usage: e2e-sage-goal-ideas.ts seed <runId> [vote|sent-back] | reset <runId> | approve <proposalId> | charter | cleanup <runId>");
+  if (!result) throw new Error("Usage: e2e-sage-proposal-writer.ts seed <runId> [vote|sent-back] | reset <runId> | approve <proposalId> | charter | cleanup <runId>");
   console.log(`E2E_RESULT ${JSON.stringify(result)}`);
 }
 

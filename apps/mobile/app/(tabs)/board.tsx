@@ -4,6 +4,7 @@ import React from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   RefreshControl,
   ScrollView,
@@ -42,6 +43,13 @@ type CountedLane = Exclude<ApiBoardLane, 'all'>;
 type BoardPostType = 'Ask' | 'Offer' | 'Update';
 type BoardCommons = { id: string; name: string };
 type LaneCounts = Record<CountedLane, number>;
+type MarketplacePreviewProduct = {
+  id: string;
+  name: string;
+  imageUrl?: string | null;
+  priceUSD: number;
+  store: { name: string };
+};
 
 const FALLBACK_COMMONS_ID = 'cahootz';
 const emptyCounts: LaneCounts = { needs: 0, offers: 0, events: 0 };
@@ -122,6 +130,8 @@ export default function BoardScreen() {
   const [query, setQuery] = React.useState('');
   const [items, setItems] = React.useState<CommonsPost[]>([]);
   const [laneCounts, setLaneCounts] = React.useState<LaneCounts>(emptyCounts);
+  const [marketplaceProducts, setMarketplaceProducts] = React.useState<MarketplacePreviewProduct[]>([]);
+  const [marketplaceLoading, setMarketplaceLoading] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState('');
@@ -180,9 +190,27 @@ export default function BoardScreen() {
     return () => clearTimeout(timer);
   }, [lane, load, query]);
 
+  const loadMarketplacePreview = React.useCallback(async () => {
+    try {
+      const result = await api.getProducts({ coopId, limit: 6 });
+      setMarketplaceProducts((result?.products ?? []).slice(0, 3));
+    } catch (loadError) {
+      console.error('Failed to load marketplace preview:', loadError);
+      setMarketplaceProducts([]);
+    } finally {
+      setMarketplaceLoading(false);
+    }
+  }, [coopId]);
+
+  React.useEffect(() => {
+    if (lane !== 'index') return;
+    setMarketplaceLoading(true);
+    void loadMarketplacePreview();
+  }, [lane, loadMarketplacePreview]);
+
   const refresh = async () => {
     setRefreshing(true);
-    await load();
+    await Promise.all([load(), ...(lane === 'index' ? [loadMarketplacePreview()] : [])]);
     setRefreshing(false);
   };
 
@@ -331,8 +359,12 @@ export default function BoardScreen() {
         {isIndex && !query ? (
           <BoardIndex
             counts={laneCounts}
+            marketplaceLoading={marketplaceLoading}
+            marketplaceProducts={marketplaceProducts}
             twoColumns={width >= 720}
+            wideMarketplacePreview={width >= 960}
             onSelectLane={selectLane}
+            onOpenProduct={(productId) => router.push({ pathname: '/product-detail', params: { id: productId } } as any)}
             onOpenResources={() => router.push({ pathname: '/(authenticated)/commons-resources', params: { coopId } } as any)}
             onQuickPost={(type) => resetComposer(type)}
             onCreateEvent={() => router.push({ pathname: '/[coopId]/events/create', params: { coopId } })}
@@ -373,31 +405,23 @@ export default function BoardScreen() {
     </SafeAreaView>
   );
 }
-function BoardIndex({ counts, twoColumns, onSelectLane, onOpenResources, onQuickPost, onCreateEvent }: {
+function BoardIndex({ counts, marketplaceLoading, marketplaceProducts, twoColumns, wideMarketplacePreview, onSelectLane, onOpenProduct, onOpenResources, onQuickPost, onCreateEvent }: {
   counts: LaneCounts;
+  marketplaceLoading: boolean;
+  marketplaceProducts: MarketplacePreviewProduct[];
   twoColumns: boolean;
+  wideMarketplacePreview: boolean;
   onSelectLane: (lane: BoardLane) => void;
+  onOpenProduct: (productId: string) => void;
   onOpenResources: () => void;
   onQuickPost: (type: BoardPostType) => void;
   onCreateEvent: () => void;
 }) {
-  const groups = [
-    {
-      title: 'Board posts',
-      rows: [
-        { label: 'All board posts', note: 'Everything posted to this board', icon: Megaphone, tone: tokens.blue, action: () => onSelectLane('all') },
-        { label: 'Needs & questions', note: 'Commons posts asking for help or answers', icon: CircleHelp, tone: tokens.orange, count: counts.needs, action: () => onSelectLane('needs') },
-        { label: 'Offers', note: 'Commons posts offering help or resources', icon: HandHeart, tone: tokens.green, count: counts.offers, action: () => onSelectLane('offers') },
-        { label: 'Events', note: 'Real events created in this Commons', icon: CalendarDays, tone: tokens.plum, count: counts.events, action: () => onSelectLane('events') },
-      ],
-    },
-    {
-      title: 'Community exchange',
-      rows: [
-        { label: 'Marketplace', note: 'Buy from member-run stores or start your own', icon: ShoppingBag, tone: tokens.orange, action: () => onSelectLane('marketplace') },
-        { label: 'Verified resources', note: 'Resources Sage found and an admin published', icon: BookOpen, tone: tokens.ochre, action: onOpenResources },
-      ],
-    },
+  const boardRows = [
+    { label: 'All board posts', note: 'Everything posted to this board', icon: Megaphone, tone: tokens.blue, action: () => onSelectLane('all') },
+    { label: 'Needs & questions', note: 'Commons posts asking for help or answers', icon: CircleHelp, tone: tokens.orange, count: counts.needs, action: () => onSelectLane('needs') },
+    { label: 'Offers', note: 'Commons posts offering help or resources', icon: HandHeart, tone: tokens.green, count: counts.offers, action: () => onSelectLane('offers') },
+    { label: 'Events', note: 'Real events created in this Commons', icon: CalendarDays, tone: tokens.plum, count: counts.events, action: () => onSelectLane('events') },
   ];
 
   return (
@@ -414,16 +438,93 @@ function BoardIndex({ counts, twoColumns, onSelectLane, onOpenResources, onQuick
 
       <Text accessibilityRole="header" style={{ marginTop: 22, color: tokens.ink, fontSize: 18, fontWeight: '900' }}>Browse the board</Text>
       <View style={{ marginTop: 8, flexDirection: twoColumns ? 'row' : 'column', flexWrap: 'wrap', columnGap: 24 }}>
-        {groups.map((group) => (
-          <View key={group.title} style={{ width: twoColumns ? '48%' : '100%', marginBottom: 18 }}>
-            <Text style={{ paddingVertical: 9, color: tokens.muted, fontSize: 11, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' }}>{group.title}</Text>
-            <View style={{ borderTopWidth: 1, borderTopColor: tokens.rule }}>
-              {group.rows.map((row) => <DirectoryRow key={row.label} {...row} />)}
-            </View>
+        <View style={{ width: twoColumns ? '48%' : '100%', marginBottom: 18 }}>
+          <Text style={{ paddingVertical: 9, color: tokens.muted, fontSize: 11, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' }}>Board posts</Text>
+          <View style={{ borderTopWidth: 1, borderTopColor: tokens.rule }}>
+            {boardRows.map((row) => <DirectoryRow key={row.label} {...row} />)}
           </View>
-        ))}
+        </View>
+
+        <View style={{ width: twoColumns ? '48%' : '100%', marginBottom: 18 }}>
+          <Text style={{ paddingVertical: 9, color: tokens.muted, fontSize: 11, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' }}>Community exchange</Text>
+          <View style={{ borderTopWidth: 1, borderTopColor: tokens.rule }}>
+            <DirectoryRow label="Marketplace" note="Buy from member-run stores or start your own" icon={ShoppingBag} tone={tokens.orange} action={() => onSelectLane('marketplace')} />
+            <MarketplacePreview
+              loading={marketplaceLoading}
+              products={marketplaceProducts}
+              wide={wideMarketplacePreview}
+              onOpenMarketplace={() => onSelectLane('marketplace')}
+              onOpenProduct={onOpenProduct}
+            />
+            <DirectoryRow label="Verified resources" note="Resources Sage found and an admin published" icon={BookOpen} tone={tokens.ochre} action={onOpenResources} />
+          </View>
+        </View>
       </View>
     </View>
+  );
+}
+
+function MarketplacePreview({ loading, products, wide, onOpenMarketplace, onOpenProduct }: {
+  loading: boolean;
+  products: MarketplacePreviewProduct[];
+  wide: boolean;
+  onOpenMarketplace: () => void;
+  onOpenProduct: (productId: string) => void;
+}) {
+  if (!loading && products.length === 0) return null;
+
+  return (
+    <View accessibilityLabel="Marketplace preview" style={{ paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: tokens.ruleLight }}>
+      <View style={{ minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={{ color: tokens.ink, fontSize: 13, fontWeight: '900' }}>From member shops</Text>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="See all marketplace products" onPress={onOpenMarketplace} style={{ minHeight: 44, justifyContent: 'center', paddingLeft: 12 }}>
+          <Text style={{ color: tokens.orange, fontSize: 12, fontWeight: '800' }}>See all</Text>
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <View style={{ minHeight: 120, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={tokens.orange} />
+        </View>
+      ) : wide ? (
+        <View style={{ marginTop: 8, flexDirection: 'row', gap: 10 }}>
+          {products.map((product) => <MarketplaceProductCard key={product.id} product={product} flexible onOpen={() => onOpenProduct(product.id)} />)}
+        </View>
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }} contentContainerStyle={{ gap: 10, paddingRight: 20 }}>
+          {products.map((product) => <MarketplaceProductCard key={product.id} product={product} onOpen={() => onOpenProduct(product.id)} />)}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+function MarketplaceProductCard({ product, flexible = false, onOpen }: {
+  product: MarketplacePreviewProduct;
+  flexible?: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={`View ${product.name}`}
+      onPress={onOpen}
+      style={flexible ? { minWidth: 0, flex: 1 } : { width: 146 }}
+    >
+      <View style={{ aspectRatio: 1, overflow: 'hidden', borderWidth: 1, borderColor: tokens.ruleLight, borderRadius: 8, backgroundColor: tokens.sheetWarm }}>
+        {product.imageUrl ? (
+          <Image source={{ uri: product.imageUrl }} resizeMode="cover" style={{ width: '100%', height: '100%' }} />
+        ) : (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <ShoppingBag size={26} strokeWidth={1.8} color={tokens.orange} />
+          </View>
+        )}
+      </View>
+      <Text numberOfLines={2} style={{ marginTop: 7, minHeight: 34, color: tokens.ink, fontSize: 13, lineHeight: 17, fontWeight: '800' }}>{product.name}</Text>
+      <Text style={{ marginTop: 2, color: tokens.orange, fontSize: 13, fontWeight: '900' }}>${product.priceUSD.toLocaleString('en-US', { maximumFractionDigits: 2 })}</Text>
+      <Text numberOfLines={1} style={{ marginTop: 2, color: tokens.muted, fontSize: 11 }}>{product.store.name}</Text>
+      <Text style={{ marginTop: 3, color: tokens.green, fontSize: 10, fontWeight: '700' }}>Available · Delivery</Text>
+    </TouchableOpacity>
   );
 }
 

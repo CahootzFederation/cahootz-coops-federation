@@ -52,7 +52,6 @@ function getExpoProjectId() {
 
 export async function registerForNativePushNotifications(
   sessionToken: string | null | undefined,
-  coopId = 'cahootz',
   options: {
     onlyAskIfUndetermined?: boolean;
     source?: PushPromptSource;
@@ -143,7 +142,6 @@ export async function registerForNativePushNotifications(
     {
       expoPushToken: pushToken.data,
       platform: Platform.OS,
-      coopId,
       appVersion: Constants.expoConfig?.version || null,
     },
     sessionToken

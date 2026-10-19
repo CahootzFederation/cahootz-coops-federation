@@ -55,6 +55,24 @@ jobs:
       - name: Check Trigger.dev task bundle
         run: pnpm check:trigger-build
 
+      - name: Generate Prisma client
+        run: pnpm -F @repo/db db:generate
+
+      # The bundle check above leaves @prisma/client external, so it can't see a
+      # missing runtime export. The real build can; run it before merge so a
+      # broken Trigger deploy can't land on main.
+      - name: Verify Trigger.dev deployment build
+        shell: bash
+        env:
+          TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+          TRIGGER_PROJECT_REF: ${{ vars.TRIGGER_PROJECT_REF }}
+        run: |
+          if [ -z "$TRIGGER_ACCESS_TOKEN" ]; then
+            echo "::warning::TRIGGER_ACCESS_TOKEN isn't available here (fork PR?), so the real Trigger.dev build was skipped."
+            exit 0
+          fi
+          pnpm exec trigger deploy --dry-run --skip-update-check
+
   format:
     runs-on: ubuntu-latest
     needs: lockfile-check

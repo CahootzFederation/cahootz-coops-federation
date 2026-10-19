@@ -25,6 +25,7 @@ import {
   PackageOpen,
   Plus,
   Search,
+  ShoppingBag,
   Vote,
   X,
 } from 'lucide-react-native';
@@ -394,6 +395,12 @@ function BoardIndex({ counts, twoColumns, onSelectLane, onOpenResources, onQuick
       title: 'Community',
       rows: [
         { label: 'Verified resources', note: 'Resources Sage found and an admin published', icon: BookOpen, tone: tokens.ochre, action: onOpenResources },
+      ],
+    },
+    {
+      title: 'Marketplace',
+      rows: [
+        { label: 'Shop & sell', note: 'Buy from community stores or open and manage your own', icon: ShoppingBag, tone: tokens.orange, action: () => onSelectLane('marketplace') },
       ],
     },
   ];

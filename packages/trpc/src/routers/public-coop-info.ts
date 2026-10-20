@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from "crypto";
-import { Agent, run, webSearchTool } from "@openai/agents";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
@@ -17,11 +16,11 @@ import {
   hasSubjectOverlap,
 } from "../services/newsletter-article-agent";
 import { router } from "../trpc";
-import { recordAgentResultCost, withAICommonsContext } from "../services/ai-cost.js";
+import { withAICommonsContext } from "../services/ai-cost.js";
 
 type NewsletterSubmissionType = "article" | "event";
 type NewsletterSubmissionStatus = "pending" | "published" | "dismissed";
-type NewsletterAgentId = "article-writer" | "event-writer";
+type NewsletterAgentId = "article-writer";
 
 interface PreviewOverrides {
   newsletterSubmissions?: unknown;
@@ -94,7 +93,6 @@ export interface NewsletterResearchCache {
 
 const agentLabels: Record<NewsletterAgentId, string> = {
   "article-writer": "Article Writer Agent",
-  "event-writer": "Event Writer Agent",
 };
 const NEWSLETTER_RESEARCH_CACHE_KEY = "newsletter-research";
 
@@ -115,11 +113,6 @@ const defaultAgentSchedules: Record<
 > = {
   "article-writer": {
     agentId: "article-writer",
-    enabled: true,
-    intervalHours: 168,
-  },
-  "event-writer": {
-    agentId: "event-writer",
     enabled: true,
     intervalHours: 168,
   },
@@ -207,10 +200,6 @@ function normalizeAgentSchedules(
     "article-writer": normalizeAgentSchedule(
       "article-writer",
       record["article-writer"],
-    ),
-    "event-writer": normalizeAgentSchedule(
-      "event-writer",
-      record["event-writer"],
     ),
   };
 }
@@ -337,16 +326,6 @@ function textFromJsonList(value: unknown, fallback: string[] = []) {
     })
     .map((item) => item.trim())
     .filter(Boolean);
-}
-
-function firstSentence(value: string | null | undefined) {
-  if (!value) return "";
-  return (
-    value
-      .replace(/\s+/g, " ")
-      .split(/(?<=[.!?])\s+/)[0]
-      ?.trim() || ""
-  );
 }
 
 function researchContextHash(params: {
@@ -708,9 +687,7 @@ function makeAgentSubmission(params: {
     contentMarkdown: params.contentMarkdown,
     date: params.date,
     location: params.location,
-    byline:
-      params.byline ||
-      (params.type === "event" ? "Events Desk" : "Editorial Desk"),
+    byline: params.byline || "Editorial Desk",
     ctaLabel: params.ctaLabel,
     ctaUrl: params.ctaUrl,
     sourceUrl: params.sourceUrl,
@@ -729,79 +706,6 @@ function makeAgentSubmission(params: {
   };
 }
 
-interface EventCandidate {
-  sourceTitle: string;
-  sourceUrl: string;
-  sourceName: string;
-  possibleEventTitle: string;
-  possibleDate: string;
-  whyItMayFitGoals: string;
-}
-
-interface VerifiedEventDraft {
-  title: string;
-  summary: string;
-  contentMarkdown: string;
-  date: string;
-  location: string;
-  sourceUrl: string;
-  ctaUrl: string;
-  sourceTitle: string;
-  sourceName: string;
-  goalFit: string;
-}
-
-const EventCandidateSchema = z.object({
-  sourceTitle: z.string(),
-  sourceUrl: z.string(),
-  sourceName: z.string(),
-  possibleEventTitle: z.string(),
-  possibleDate: z.string(),
-  whyItMayFitGoals: z.string(),
-});
-
-const EventDiscoverySchema = z.object({
-  candidates: z.array(EventCandidateSchema),
-});
-
-const EventVerificationSchema = z.object({
-  approved: z.boolean(),
-  eventTitle: z.string(),
-  sourceTitle: z.string(),
-  sourceUrl: z.string(),
-  sourceName: z.string(),
-  eventDate: z.string(),
-  eventTime: z.string(),
-  organizer: z.string(),
-  locationOrOnline: z.string(),
-  registrationUrl: z.string(),
-  summary: z.string(),
-  goalFit: z.string(),
-  verifiedFacts: z.array(z.string()),
-  rejectionReason: z.string(),
-});
-
-function sanitizeAgentText(value: string) {
-  return value
-    .replace(/cite[^]*/g, "")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function safeErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function sourceHost(value: string | undefined) {
-  if (!value) return undefined;
-  try {
-    return new URL(value).hostname;
-  } catch {
-    return undefined;
-  }
-}
-
 function logNewsletterAgent(
   level: "info" | "warn" | "error",
   event: string,
@@ -814,485 +718,6 @@ function logNewsletterAgent(
   };
 
   console[level](`[newsletter-agent] ${event}`, logProps);
-}
-
-async function runNewsletterAgentStep<T>(params: {
-  pipeline: "event";
-  step: string;
-  agent: Parameters<typeof run>[0];
-  input: string;
-  props?: Record<string, unknown>;
-}): Promise<T | undefined> {
-  const startedAt = Date.now();
-  logNewsletterAgent("info", "openai_step_started", {
-    pipeline: params.pipeline,
-    step: params.step,
-    ...params.props,
-  });
-
-  try {
-    const runResult = await run(params.agent, params.input);
-    await recordAgentResultCost({ feature: `newsletter-${params.step}`, model: String(params.props?.model || "unknown"), result: runResult }).catch(console.error);
-    const result = runResult as unknown as {
-      finalOutput?: T;
-      output?: T;
-    };
-    const output = result.finalOutput ?? result.output;
-    logNewsletterAgent("info", "openai_step_completed", {
-      pipeline: params.pipeline,
-      step: params.step,
-      durationMs: Date.now() - startedAt,
-      hasOutput: Boolean(output),
-      ...params.props,
-    });
-    return output;
-  } catch (error) {
-    logNewsletterAgent("error", "openai_step_failed", {
-      pipeline: params.pipeline,
-      step: params.step,
-      durationMs: Date.now() - startedAt,
-      error: safeErrorMessage(error),
-      ...params.props,
-    });
-    throw error;
-  }
-}
-
-function normalizeHttpUrl(value: string) {
-  try {
-    const parsedUrl = new URL(value.trim());
-    if (!["http:", "https:"].includes(parsedUrl.protocol)) return null;
-    return parsedUrl.toString();
-  } catch {
-    return null;
-  }
-}
-
-function hasConcreteValue(value: string) {
-  const normalized = sanitizeAgentText(value).toLowerCase();
-  if (!normalized) return false;
-  return ![
-    "unknown",
-    "tbd",
-    "n/a",
-    "na",
-    "none",
-    "not listed",
-    "not available",
-    "needs source",
-    "needs confirmation",
-    "needs confirmed date",
-    "needs confirmed location",
-    "to be announced",
-    "coming soon",
-  ].some(
-    (placeholder) =>
-      normalized === placeholder || normalized.includes(placeholder),
-  );
-}
-
-async function discoverEventCandidatesWithAgent(params: {
-  coopName: string;
-  coopDescription: string;
-  missionGoals: string[];
-  cachedEvents: NewsletterResearchResult[];
-}): Promise<EventCandidate[]> {
-  if (!process.env.OPENAI_API_KEY) {
-    logNewsletterAgent("warn", "skipped_missing_openai_api_key", {
-      pipeline: "event",
-      step: "event_discovery",
-      coopName: params.coopName,
-      cachedEventCount: params.cachedEvents.length,
-    });
-    return [];
-  }
-
-  const cachedLines = params.cachedEvents
-    .slice(0, 6)
-    .map((result) =>
-      [
-        `Title: ${result.title}`,
-        `URL: ${result.sourceUrl}`,
-        `Source: ${result.sourceName}`,
-        `Date hint: ${result.eventDate || "none"}`,
-        `Location hint: ${result.location || "none"}`,
-        `Summary: ${result.summary}`,
-        `Goal fit hint: ${result.reasonForFit}`,
-      ].join("\n"),
-    )
-    .join("\n\n");
-
-  const model =
-    process.env.NEWSLETTER_EVENT_MODEL ||
-    process.env.NEWSLETTER_ARTICLE_MODEL ||
-    "gpt-5.2";
-  const discoveryAgent = new Agent({
-    name: "Newsletter Event Discovery Agent",
-    instructions: [
-      "Find a small set of real, current event candidates for a co-op newsletter.",
-      "Use web_search when cached candidates are missing, stale, too thin, or not clearly event pages.",
-      "Prefer primary event pages, organizer pages, official calendar listings, ticket/registration pages, or credible community calendars.",
-      "Do not return evergreen resources, generic workshops without dates, recurring pages without a specific upcoming occurrence, articles about past events, or vague networking listings.",
-      "Specific co-op usefulness must come from the provided goals. Do not invent usefulness outside those goals.",
-      "Return at most 4 candidates. Fewer is better when quality is thin.",
-    ].join("\n"),
-    model,
-    outputType: EventDiscoverySchema,
-    tools: [webSearchTool()],
-    modelSettings: { toolChoice: "auto" },
-  });
-
-  const discoveryInput = [
-    `Today: ${new Date().toISOString().slice(0, 10)}`,
-    `Co-op: ${params.coopName}`,
-    `Co-op context: ${firstSentence(params.coopDescription) || params.coopName}`,
-    `Goals that define usefulness: ${params.missionGoals.join(", ") || "member ownership, local economic power, community participation"}`,
-    "",
-    "Cached event candidates, if any:",
-    cachedLines || "None.",
-  ].join("\n");
-
-  const output = await runNewsletterAgentStep<
-    z.infer<typeof EventDiscoverySchema>
-  >({
-    pipeline: "event",
-    step: "event_discovery",
-    agent: discoveryAgent,
-    input: discoveryInput,
-    props: {
-      model,
-      coopName: params.coopName,
-      cachedEventCount: params.cachedEvents.length,
-    },
-  });
-
-  const candidates =
-    output?.candidates
-      ?.map((candidate) => ({
-        sourceTitle: sanitizeAgentText(candidate.sourceTitle),
-        sourceUrl: sanitizeAgentText(candidate.sourceUrl),
-        sourceName: sanitizeAgentText(candidate.sourceName),
-        possibleEventTitle: sanitizeAgentText(candidate.possibleEventTitle),
-        possibleDate: sanitizeAgentText(candidate.possibleDate),
-        whyItMayFitGoals: sanitizeAgentText(candidate.whyItMayFitGoals),
-      }))
-      .filter(
-        (candidate) =>
-          candidate.sourceTitle && normalizeHttpUrl(candidate.sourceUrl),
-      )
-      .slice(0, 4) ?? [];
-
-  logNewsletterAgent("info", "event_candidates_discovered", {
-    pipeline: "event",
-    step: "event_discovery",
-    coopName: params.coopName,
-    rawCandidateCount: output?.candidates?.length ?? 0,
-    usableCandidateCount: candidates.length,
-  });
-
-  return candidates;
-}
-
-async function verifyEventCandidateWithAgent(params: {
-  coopName: string;
-  coopDescription: string;
-  missionGoals: string[];
-  candidate: EventCandidate;
-}): Promise<VerifiedEventDraft | null> {
-  if (!process.env.OPENAI_API_KEY) {
-    logNewsletterAgent("warn", "skipped_missing_openai_api_key", {
-      pipeline: "event",
-      step: "event_verifier",
-      coopName: params.coopName,
-      sourceTitle: params.candidate.sourceTitle,
-      sourceHost: sourceHost(params.candidate.sourceUrl),
-    });
-    return null;
-  }
-
-  const sourceUrl = normalizeHttpUrl(params.candidate.sourceUrl);
-  if (!sourceUrl) {
-    logNewsletterAgent("warn", "rejected", {
-      pipeline: "event",
-      step: "event_verifier",
-      reason: "invalid_candidate_url",
-      coopName: params.coopName,
-      sourceTitle: params.candidate.sourceTitle,
-    });
-    return null;
-  }
-
-  const model =
-    process.env.NEWSLETTER_EVENT_MODEL ||
-    process.env.NEWSLETTER_ARTICLE_MODEL ||
-    "gpt-5.2";
-  const verifierAgent = new Agent({
-    name: "Newsletter EventVerifier Agent",
-    instructions: [
-      "Verify whether one event candidate is good enough for a co-op newsletter queue.",
-      "Use web_search and the candidate URL to verify facts from public sources.",
-      "Approve only if there is a specific upcoming event occurrence, a real source URL, date, time or all-day indication, organizer, location or online access, registration/details URL, summary, and goal-based fit.",
-      "Reject evergreen pages, past events, vague event series without a specific upcoming date, generic networking, motivational content with no practical member utility, thin listings with missing organizer/date/location, or anything where facts conflict.",
-      "Specific co-op usefulness must come from the provided goals. Do not add an actionable next step.",
-      "Return verifiedFacts as short facts traceable to the source. If any required field is missing, approved must be false and rejectionReason must explain why.",
-    ].join("\n"),
-    model,
-    outputType: EventVerificationSchema,
-    tools: [webSearchTool()],
-    modelSettings: { toolChoice: "auto" },
-  });
-
-  const verificationInput = [
-    `Today: ${new Date().toISOString().slice(0, 10)}`,
-    `Co-op: ${params.coopName}`,
-    `Co-op context: ${firstSentence(params.coopDescription) || params.coopName}`,
-    `Goals that define usefulness: ${params.missionGoals.join(", ") || "member ownership, local economic power, community participation"}`,
-    "",
-    "Candidate to verify:",
-    `Source title: ${params.candidate.sourceTitle}`,
-    `Source URL: ${sourceUrl}`,
-    `Source name: ${params.candidate.sourceName}`,
-    `Possible event title: ${params.candidate.possibleEventTitle}`,
-    `Possible date: ${params.candidate.possibleDate}`,
-    `Why it may fit goals: ${params.candidate.whyItMayFitGoals}`,
-  ].join("\n");
-
-  const verification = await runNewsletterAgentStep<
-    z.infer<typeof EventVerificationSchema>
-  >({
-    pipeline: "event",
-    step: "event_verifier",
-    agent: verifierAgent,
-    input: verificationInput,
-    props: {
-      model,
-      coopName: params.coopName,
-      sourceTitle: params.candidate.sourceTitle,
-      sourceHost: sourceHost(sourceUrl),
-    },
-  });
-  if (!verification?.approved) {
-    logNewsletterAgent("warn", "rejected", {
-      pipeline: "event",
-      step: "event_verifier",
-      reason: verification?.rejectionReason || "not_approved",
-      coopName: params.coopName,
-      sourceTitle: params.candidate.sourceTitle,
-      sourceHost: sourceHost(sourceUrl),
-    });
-    return null;
-  }
-
-  const verifiedSourceUrl =
-    normalizeHttpUrl(verification.sourceUrl) || sourceUrl;
-  const registrationUrl =
-    normalizeHttpUrl(verification.registrationUrl) || verifiedSourceUrl;
-  const title = sanitizeAgentText(verification.eventTitle);
-  const summary = sanitizeAgentText(verification.summary);
-  const eventDate = sanitizeAgentText(verification.eventDate);
-  const eventTime = sanitizeAgentText(verification.eventTime);
-  const organizer = sanitizeAgentText(verification.organizer);
-  const locationOrOnline = sanitizeAgentText(verification.locationOrOnline);
-  const goalFit = sanitizeAgentText(verification.goalFit);
-  const verifiedFacts = verification.verifiedFacts
-    .map(sanitizeAgentText)
-    .filter(Boolean)
-    .slice(0, 6);
-
-  if (
-    !hasConcreteValue(title) ||
-    !hasConcreteValue(summary) ||
-    !hasConcreteValue(eventDate) ||
-    !hasConcreteValue(eventTime) ||
-    !hasConcreteValue(organizer) ||
-    !hasConcreteValue(locationOrOnline) ||
-    !hasConcreteValue(goalFit) ||
-    verifiedFacts.length < 3
-  ) {
-    logNewsletterAgent("warn", "rejected", {
-      pipeline: "event",
-      step: "event_verifier",
-      reason: "verified_event_failed_local_validation",
-      coopName: params.coopName,
-      sourceTitle: params.candidate.sourceTitle,
-      sourceHost: sourceHost(sourceUrl),
-      hasTitle: hasConcreteValue(title),
-      hasDate: hasConcreteValue(eventDate),
-      hasTime: hasConcreteValue(eventTime),
-      hasOrganizer: hasConcreteValue(organizer),
-      hasLocation: hasConcreteValue(locationOrOnline),
-      factCount: verifiedFacts.length,
-    });
-    return null;
-  }
-
-  const sourceTitle = sanitizeAgentText(
-    verification.sourceTitle || params.candidate.sourceTitle,
-  );
-  const sourceName = sanitizeAgentText(
-    verification.sourceName || params.candidate.sourceName,
-  );
-
-  logNewsletterAgent("info", "event_candidate_approved", {
-    pipeline: "event",
-    step: "event_verifier",
-    coopName: params.coopName,
-    title,
-    sourceTitle: sourceTitle || params.candidate.sourceTitle,
-    sourceHost: sourceHost(verifiedSourceUrl),
-  });
-
-  return {
-    title: title.slice(0, 120),
-    summary: summary.slice(0, 1200),
-    contentMarkdown: [
-      "## Verified event facts",
-      `- Date: ${eventDate}`,
-      `- Time: ${eventTime}`,
-      `- Organizer: ${organizer}`,
-      `- Location/online: ${locationOrOnline}`,
-      `- Source: ${sourceTitle || sourceName || verifiedSourceUrl}`,
-      "",
-      "## Why it fits this co-op",
-      goalFit,
-      "",
-      "## Source-backed notes",
-      verifiedFacts.map((fact) => `- ${fact}`).join("\n"),
-    ].join("\n"),
-    date: `${eventDate}${eventTime ? `, ${eventTime}` : ""}`.slice(0, 180),
-    location: locationOrOnline.slice(0, 180),
-    sourceUrl: verifiedSourceUrl,
-    ctaUrl: registrationUrl,
-    sourceTitle: (sourceTitle || title).slice(0, 180),
-    sourceName: (sourceName || new URL(verifiedSourceUrl).hostname).slice(
-      0,
-      120,
-    ),
-    goalFit: goalFit.slice(0, 1000),
-  };
-}
-
-async function generateVerifiedEventSubmissions(params: {
-  agentId: NewsletterAgentId;
-  coopId: string;
-  coopName: string;
-  coopDescription: string;
-  missionGoals: string[];
-  existingTitles: string[];
-  researchResults: NewsletterResearchResult[];
-}) {
-  const cachedEvents = params.researchResults
-    .filter(
-      (result) =>
-        result.type === "event" ||
-        result.recommendedNextAction === "draft_event",
-    )
-    .filter(
-      (result) =>
-        !params.existingTitles.some(
-          (title) => title.toLowerCase() === result.title.toLowerCase(),
-        ),
-    )
-    .slice(0, 6);
-
-  const cacheCandidates: EventCandidate[] = cachedEvents.map((result) => ({
-    sourceTitle: result.title,
-    sourceUrl: result.sourceUrl,
-    sourceName: result.sourceName,
-    possibleEventTitle: result.title,
-    possibleDate: result.eventDate || "",
-    whyItMayFitGoals: result.reasonForFit,
-  }));
-
-  logNewsletterAgent("info", "event_pipeline_started", {
-    pipeline: "event",
-    coopId: params.coopId,
-    coopName: params.coopName,
-    researchResultCount: params.researchResults.length,
-    cachedEventCount: cachedEvents.length,
-    existingTitleCount: params.existingTitles.length,
-  });
-
-  const discoveredCandidates = await discoverEventCandidatesWithAgent({
-    coopName: params.coopName,
-    coopDescription: params.coopDescription,
-    missionGoals: params.missionGoals,
-    cachedEvents,
-  });
-
-  const seenUrls = new Set<string>();
-  const candidates = [...cacheCandidates, ...discoveredCandidates]
-    .filter((candidate) => {
-      const normalizedUrl = normalizeHttpUrl(candidate.sourceUrl);
-      if (!normalizedUrl || seenUrls.has(normalizedUrl)) return false;
-      seenUrls.add(normalizedUrl);
-      candidate.sourceUrl = normalizedUrl;
-      return true;
-    })
-    .slice(0, 6);
-
-  logNewsletterAgent("info", "event_candidates_ready", {
-    pipeline: "event",
-    coopId: params.coopId,
-    coopName: params.coopName,
-    cacheCandidateCount: cacheCandidates.length,
-    discoveredCandidateCount: discoveredCandidates.length,
-    candidateCount: candidates.length,
-  });
-
-  const verifiedEvents: NewsletterSubmission[] = [];
-  for (const candidate of candidates) {
-    if (verifiedEvents.length >= 2) break;
-
-    const verifiedEvent = await verifyEventCandidateWithAgent({
-      coopName: params.coopName,
-      coopDescription: params.coopDescription,
-      missionGoals: params.missionGoals,
-      candidate,
-    });
-
-    if (!verifiedEvent) continue;
-    if (
-      params.existingTitles.some(
-        (title) => title.toLowerCase() === verifiedEvent.title.toLowerCase(),
-      )
-    )
-      continue;
-    if (
-      verifiedEvents.some(
-        (event) =>
-          event.title.toLowerCase() === verifiedEvent.title.toLowerCase(),
-      )
-    )
-      continue;
-
-    verifiedEvents.push(
-      makeAgentSubmission({
-        coopId: params.coopId,
-        agentId: params.agentId,
-        type: "event",
-        title: verifiedEvent.title,
-        summary: verifiedEvent.summary,
-        contentMarkdown: verifiedEvent.contentMarkdown,
-        date: verifiedEvent.date,
-        location: verifiedEvent.location,
-        sourceUrl: verifiedEvent.sourceUrl,
-        ctaLabel: "Event details",
-        ctaUrl: verifiedEvent.ctaUrl,
-        recommendedBecause: `Verified by the EventVerifier Agent from "${verifiedEvent.sourceTitle}" (${verifiedEvent.sourceName}). ${verifiedEvent.goalFit}`,
-      }),
-    );
-  }
-
-  logNewsletterAgent("info", "event_pipeline_completed", {
-    pipeline: "event",
-    coopId: params.coopId,
-    coopName: params.coopName,
-    candidateCount: candidates.length,
-    createdCount: verifiedEvents.length,
-  });
-
-  return verifiedEvents;
 }
 
 async function buildAgentSubmissions(params: {
@@ -1326,7 +751,7 @@ async function buildAgentSubmissions(params: {
     .sort((a, b) => b.relevanceScore - a.relevanceScore);
 
   logNewsletterAgent("info", "build_agent_submissions_started", {
-    pipeline: params.agentId === "article-writer" ? "article" : "event",
+    pipeline: "article",
     coopId: params.coopId,
     coopName: params.coopName,
     agentId: params.agentId,
@@ -1343,97 +768,74 @@ async function buildAgentSubmissions(params: {
     researchResults: usefulResearch,
   });
 
-  if (params.agentId === "article-writer") {
-    const articleSources = usefulResearch
-      .filter(
-        (result) =>
-          result.recommendedNextAction === "draft_article" ||
-          result.type === "news" ||
-          result.type === "article_source",
-      )
-      .filter(
-        (result) => !hasSubjectOverlap(result.title, params.existingTitles),
-      )
-      .slice(0, 3);
+  const articleSources = usefulResearch
+    .filter(
+      (result) =>
+        result.recommendedNextAction === "draft_article" ||
+        result.type === "news" ||
+        result.type === "article_source",
+    )
+    .filter(
+      (result) => !hasSubjectOverlap(result.title, params.existingTitles),
+    )
+    .slice(0, 3);
 
-    logNewsletterAgent("info", "article_sources_ready", {
-      pipeline: "article",
-      coopId: params.coopId,
+  logNewsletterAgent("info", "article_sources_ready", {
+    pipeline: "article",
+    coopId: params.coopId,
+    coopName: params.coopName,
+    sourceCount: articleSources.length,
+    willColdSearch: articleSources.length === 0,
+  });
+
+  const generatedDrafts: NewsletterSubmission[] = [];
+  const sourcesToTry: Array<NewsletterResearchResult | undefined> =
+    articleSources.length > 0 ? articleSources : [undefined];
+
+  for (const result of sourcesToTry) {
+    const llmDraft = await generateArticleDraftWithAgentOrchestration({
+      briefPrompt: articleBrief.prompt,
+      source: result,
+      existingTitles: [
+        ...params.existingTitles,
+        ...generatedDrafts.map((draft) => draft.title),
+      ],
       coopName: params.coopName,
-      sourceCount: articleSources.length,
-      willColdSearch: articleSources.length === 0,
+      coopDescription: params.coopDescription,
+      missionGoals: params.missionGoals,
     });
 
-    const generatedDrafts: NewsletterSubmission[] = [];
-    const sourcesToTry: Array<NewsletterResearchResult | undefined> =
-      articleSources.length > 0 ? articleSources : [undefined];
-
-    for (const result of sourcesToTry) {
-      const llmDraft = await generateArticleDraftWithAgentOrchestration({
-        briefPrompt: articleBrief.prompt,
-        source: result,
-        existingTitles: [
-          ...params.existingTitles,
-          ...generatedDrafts.map((draft) => draft.title),
-        ],
-        coopName: params.coopName,
-        coopDescription: params.coopDescription,
-        missionGoals: params.missionGoals,
-      });
-
-      if (llmDraft) {
-        generatedDrafts.push(
-          makeAgentSubmission({
-            coopId: params.coopId,
-            agentId: params.agentId,
-            type: "article",
-            title: llmDraft.title,
-            summary: llmDraft.summary,
-            contentMarkdown: llmDraft.contentMarkdown,
-            date: "Story",
-            sourceUrl: llmDraft.sourceUrl,
-            ctaLabel: llmDraft.ctaLabel || "Read source",
-            ctaUrl: llmDraft.sourceUrl,
-            recommendedBecause: `Written by the Article Writer Agent after the Research Curator Agent selected "${llmDraft.sourceTitle}" from ${llmDraft.sourceName}. ${llmDraft.reasonForFit}`,
-            agentPrompt: articleBrief.prompt,
-          }),
-        );
-      }
+    if (llmDraft) {
+      generatedDrafts.push(
+        makeAgentSubmission({
+          coopId: params.coopId,
+          agentId: params.agentId,
+          type: "article",
+          title: llmDraft.title,
+          summary: llmDraft.summary,
+          contentMarkdown: llmDraft.contentMarkdown,
+          date: "Story",
+          sourceUrl: llmDraft.sourceUrl,
+          ctaLabel: llmDraft.ctaLabel || "Read source",
+          ctaUrl: llmDraft.sourceUrl,
+          recommendedBecause: `Written by the Article Writer Agent after the Research Curator Agent selected "${llmDraft.sourceTitle}" from ${llmDraft.sourceName}. ${llmDraft.reasonForFit}`,
+          agentPrompt: articleBrief.prompt,
+        }),
+      );
     }
-
-    const uniqueDrafts = unique(generatedDrafts);
-    logNewsletterAgent("info", "article_pipeline_completed", {
-      pipeline: "article",
-      coopId: params.coopId,
-      coopName: params.coopName,
-      attemptedSourceCount: sourcesToTry.length,
-      generatedCount: generatedDrafts.length,
-      createdCount: uniqueDrafts.length,
-    });
-
-    return uniqueDrafts;
   }
 
-  const verifiedEvents = await generateVerifiedEventSubmissions({
-    agentId: params.agentId,
+  const uniqueDrafts = unique(generatedDrafts);
+  logNewsletterAgent("info", "article_pipeline_completed", {
+    pipeline: "article",
     coopId: params.coopId,
     coopName: params.coopName,
-    coopDescription: params.coopDescription,
-    missionGoals: params.missionGoals,
-    existingTitles: params.existingTitles,
-    researchResults: usefulResearch,
+    attemptedSourceCount: sourcesToTry.length,
+    generatedCount: generatedDrafts.length,
+    createdCount: uniqueDrafts.length,
   });
 
-  const uniqueEvents = unique(verifiedEvents).slice(0, 2);
-  logNewsletterAgent("info", "event_unique_filter_completed", {
-    pipeline: "event",
-    coopId: params.coopId,
-    coopName: params.coopName,
-    verifiedCount: verifiedEvents.length,
-    createdCount: uniqueEvents.length,
-  });
-
-  return uniqueEvents;
+  return uniqueDrafts;
 }
 
 function decodeHtmlEntities(value: string): string {
@@ -2399,7 +1801,7 @@ export const publicCoopInfoRouter = router({
     .input(
       z.object({
         coopId: z.string().min(1),
-        agentId: z.enum(["article-writer", "event-writer"]),
+        agentId: z.enum(["article-writer"]),
       }),
     )
     .mutation(async ({ input, ctx }) => {

@@ -276,7 +276,7 @@ export const commonsActionsAdminRouter = router({
       return { success: true };
     }
     if (input.command === "remove-question") {
-      // Sage's open question, its rhythm posts (priorities, open requests, appreciation, monthly review), and its proposal ideas.
+      // Sage's open question, its rhythm posts (Monday note, open requests, appreciation, monthly review), and its proposal ideas.
       if (!["ASK_COMMONS", "COMMUNITY_RHYTHM", "PROPOSE_IDEA"].includes(action.type) || action.status !== "PUBLISHED") conflict("Only a published Sage question, rhythm post or idea can be removed");
       await ctx.db.$transaction(async (tx) => {
         // sourcePostId is the question post itself; only Sage's own post in this Commons is deleted.

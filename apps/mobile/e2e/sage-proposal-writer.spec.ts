@@ -48,11 +48,11 @@ test("Sage writes a proposal for a quiet goal and puts it up for a vote, and a s
     await expect(shown(member.page, title)).toBeVisible({ timeout: 60_000 });
     await expect(shown(member.page, "AI helper")).toBeVisible();
 
-    // 2. A member sees Sage's post: the goal, the numbers behind it, and that it's up for a vote.
+    // 2. A member sees Sage's post: the idea, the goal in passing, and that it's up for a vote. No goal-gap numbers.
     await member.page.goto(`/${coopId}/posts/${postId}`);
     await expect(shown(member.page, PITCH)).toBeVisible({ timeout: 60_000 });
-    await expect(shown(member.page, /Why now: our goal "More communication"\. Posts and comments members write: 0 in the last two weeks/)).toBeVisible();
-    await expect(shown(member.page, /I put it up for a vote\. Read it, comment, and vote\. It only happens if members say yes\./)).toBeVisible();
+    await expect(shown(member.page, /for our goal "More communication", and I put it up for a vote\. Read it, comment, and vote\. It only happens if members say yes\./)).toBeVisible();
+    await expect(shown(member.page, /Why now: our goal/)).toHaveCount(0);
     await expect(member.page.getByLabel("AI helper, not a person").filter({ visible: true }).first()).toBeVisible();
     await expect(shown(member.page, "Up for a vote")).toBeVisible();
     await expect(member.page.getByRole("button", { name: "Take this on" }).locator("visible=true")).toHaveCount(0);

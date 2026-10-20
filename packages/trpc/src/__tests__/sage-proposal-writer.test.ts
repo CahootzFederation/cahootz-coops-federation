@@ -226,12 +226,14 @@ describe("code's checks on Sage's idea", () => {
 
   it("frames the post: a proposal up for a vote, or an idea a member takes on when the review sent it back", () => {
     const idea = { kind: "CHARTER_AMENDMENT" as const, pitch: "Let's make votes stay open a full week." };
-    const submitted = renderIdeaPost(idea, "Deciding together", "Proposals made and votes cast: 1 in the last two weeks.", true);
-    expect(submitted).toContain('Why now: our goal "Deciding together". Proposals made and votes cast');
+    const submitted = renderIdeaPost(idea, "Deciding together", true);
+    expect(submitted.startsWith("Let's make votes stay open a full week.")).toBe(true);
+    expect(submitted).toContain('It\'s a change to our charter for our goal "Deciding together", and I put it up for a vote.');
+    expect(submitted).not.toMatch(/Why now|last two weeks/);
     expect(submitted).toContain("I put it up for a vote");
     expect(submitted).toContain("It only happens if members say yes");
     expect(submitted).toContain("a steward applies the change");
-    const open = renderIdeaPost(idea, "Deciding together", null, false);
+    const open = renderIdeaPost(idea, "Deciding together", false);
     expect(open).toContain('Tap "Take this on" to make it yours');
     expect(open).toContain("nothing goes to a vote until you send it");
   });
@@ -305,7 +307,9 @@ describe("a proposal-writer run", () => {
     expect(result).toMatchObject({ status: "PROPOSED", proposalId: "prop-sage-1", gaps: 1 });
     const prompt = JSON.parse(decide.mock.calls[0]![0]);
     expect(prompt.candidates).toEqual([expect.objectContaining({ goalKey: "more_communication", notStartedYet: true, numbers: [NOT_STARTED_LINE] })]);
-    expect(db.commonsPost.create.mock.calls[0]![0].data.content).toContain(`Why now: our goal "More communication". ${NOT_STARTED_LINE}`);
+    const post = db.commonsPost.create.mock.calls[0]![0].data.content;
+    expect(post).toContain('for our goal "More communication", and I put it up for a vote.');
+    expect(post).not.toContain(NOT_STARTED_LINE);
   });
 
   it("records the model's decision not to propose, with its reason", async () => {

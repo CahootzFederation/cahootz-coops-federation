@@ -15,7 +15,7 @@ import { countQuestionResponders, COMMUNITY_QUESTION_MIN_RESPONDERS } from "./sa
 import { countActiveMembers, isoWeekKey } from "./sage-community-rhythm.js";
 import { DecisionTrail, percent } from "./sage-decision-trail.js";
 import { enqueueCommunityMemoryReconsideration } from "./sage-dispatch.js";
-import { isGroundedIn } from "./sage-grounding.js";
+import { isGroundedIn, unbackedNumbers } from "./sage-grounding.js";
 import { sageAutonomyAllowed } from "./sage-autonomy.js";
 import {
   PROPOSAL_WRITER_AGENT_KEY, GOAL_SIGNALS, describeGap, ensureGoalSignalMap, findSignalGap, modelGoalMatcher, readSignal,
@@ -23,6 +23,8 @@ import {
 } from "./sage-goal-signals.js";
 import { sageCorePrinciplesInstructions } from "./sage-principles.js";
 import { checkSageOutput, cleanseUntrustedText, describeOutputProblems } from "./untrusted-input.js";
+
+export { unbackedNumbers } from "./sage-grounding.js";
 
 /**
  * Sage's proposal writer: up to twice a week per Commons, Sage looks at how we're doing on each charter goal,
@@ -161,26 +163,6 @@ export interface IdeaContext {
   evidenceTexts: string[];
 }
 
-const NUMBER = /(\$\s?)?\d[\d,]*(?:\.\d+)?/g;
-
-function digits(token: string): string {
-  return token.replace(/[$,\s]/g, "").replace(/\.0+$/, "");
-}
-
-/**
- * Every number in the text is backed by the evidence. Small counts (12 or less, without a $) are
- * allowed, since "meet twice a month" or "for 3 months" are part of an idea, not facts about us.
- */
-export function unbackedNumbers(text: string, evidenceTexts: string[]): string[] {
-  const known = new Set(evidenceTexts.flatMap((source) => [...source.matchAll(NUMBER)].map((match) => digits(match[0]))));
-  return [...text.matchAll(NUMBER)].flatMap((match) => {
-    const value = digits(match[0]);
-    const isMoney = Boolean(match[1]);
-    if (!isMoney && Number(value) <= 12) return [];
-    return known.has(value) ? [] : [match[0].trim()];
-  });
-}
-
 /** The charter with one exact passage replaced, or null when the passage isn't there exactly once. */
 export function applyCharterChange(charter: string, find: string, replace: string): string | null {
   const target = find.trim();
@@ -266,20 +248,20 @@ const KIND_LINE: Record<IdeaKind, string> = {
 };
 
 /**
- * The post members see. Code writes the frame: for a proposal Sage put up, that it's up to members to
- * vote; for an idea the review sent back, that a member can take it on and nothing goes to a vote until
- * they send it.
+ * The post members see: the idea first, said like a neighbor would, then the goal in passing and what
+ * happens next. Code writes the frame: for a proposal Sage put up, that it's up to members to vote; for
+ * an idea the review sent back, that a member can take it on and nothing goes to a vote until they send
+ * it. The numbers behind the goal stay in the proposal and the decision trail, not the post.
  */
-export function renderIdeaPost(idea: Pick<CheckedIdea, "kind" | "pitch">, goalLabel: string, evidenceLine: string | null, submitted: boolean): string {
+export function renderIdeaPost(idea: Pick<CheckedIdea, "kind" | "pitch">, goalLabel: string, submitted: boolean): string {
   const steward = AMENDMENT_KINDS.has(idea.kind) ? " If members vote yes, a steward applies the change." : "";
+  const kind = `${KIND_LINE[idea.kind]} for our goal "${goalLabel}"`;
   const lines = [
     idea.pitch,
     "",
-    `Why now: our goal "${goalLabel}".${evidenceLine ? ` ${evidenceLine}` : ""}`,
-    "",
     submitted
-      ? `${KIND_LINE[idea.kind]}, and I put it up for a vote. Read it, comment, and vote. It only happens if members say yes.${steward}`
-      : `${KIND_LINE[idea.kind]}. Tap "Take this on" to make it yours. You can change anything, and nothing goes to a vote until you send it.${steward}`,
+      ? `${kind}, and I put it up for a vote. Read it, comment, and vote. It only happens if members say yes.${steward}`
+      : `${kind}. Tap "Take this on" to make it yours. You can change anything, and nothing goes to a vote until you send it.${steward}`,
   ];
   return lines.join("\n").slice(0, 1200);
 }
@@ -673,9 +655,8 @@ export async function runProposalWriter(coopId: string, options: ProposalWriterO
 
     const idea = checked.idea;
     const assessment = candidates.find((entry) => entry.goal.key === idea.goalKey)!;
-    const evidenceLine = assessment.gaps[0] ? describeGap(assessment.gaps[0]) : evidenceLines(assessment)[0] ?? null;
     const shared = await shareIdea({
-      coopId, config, period, idea, goal: assessment.goal, evidenceLine, originObservationId: gapIds.get(idea.goalKey) ?? null,
+      coopId, config, period, idea, goal: assessment.goal, originObservationId: gapIds.get(idea.goalKey) ?? null,
       submit: options.submit ?? engineSubmit,
     });
     trail.linkAction(shared.actionId).relatePost(shared.postId);
@@ -697,7 +678,7 @@ export async function runProposalWriter(coopId: string, options: ProposalWriterO
 }
 
 async function shareIdea(params: {
-  coopId: string; config: CoopConfig; period: string; idea: CheckedIdea; goal: MissionGoal; evidenceLine: string | null;
+  coopId: string; config: CoopConfig; period: string; idea: CheckedIdea; goal: MissionGoal;
   originObservationId: string | null; submit: IdeaSubmit;
 }) {
   const { coopId, config, period, idea, goal } = params;
@@ -739,7 +720,7 @@ async function shareIdea(params: {
 
     const post = await db.$transaction(async (tx) => {
       const post = await tx.commonsPost.create({ data: {
-        coopId, circleId: `general:${coopId}`, authorId: sage.id, title: idea.title, content: renderIdeaPost(idea, goal.label, params.evidenceLine, Boolean(proposalId)),
+        coopId, circleId: `general:${coopId}`, authorId: sage.id, title: idea.title, content: renderIdeaPost(idea, goal.label, Boolean(proposalId)),
         tag: "Idea", classification: IDEA_CLASSIFICATION, classificationConfidence: 1,
         classificationSignals: { version: 1, source: PROPOSAL_WRITER_SOURCE, actionId: action.id, ...(proposalId ? { proposalId } : {}) },
       }, select: { id: true } });

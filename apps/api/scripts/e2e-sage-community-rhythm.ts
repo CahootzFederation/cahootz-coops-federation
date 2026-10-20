@@ -3,6 +3,7 @@
  * cycle's calendar: it seeds records (a Need post by member B that nobody answered, and an event member A
  * hosted yesterday that B went to), then runs the real buildRhythm + publishRhythmPost for a category under
  * a unique E2E period key, so Sage posts in General and its notification uses the Community category.
+ * Monday's note uses its fixed template here (no model call), so the journey stays deterministic.
  *
  *   tsx --import ./dotenv.config.js scripts/e2e-sage-community-rhythm.ts seed <runId> <emailA> <emailB>
  *   tsx --import ./dotenv.config.js scripts/e2e-sage-community-rhythm.ts publish <runId> <category> <n> <emailA>
@@ -86,7 +87,7 @@ async function publish(runId: string, category: string, n: string, emailA: strin
   const need = await db.commonsPost.findFirst({ where: { coopId: COMMONS_COOP_ID, title: needTitle(runId) }, select: { id: true } });
   // Midweek lists only this run's need, so other local data can't push it out of the post.
   const built = await buildRhythm(COMMONS_COOP_ID, category, periodKey, new Date(), {
-    needPostIds: need ? [need.id] : [], mondayPeriodKey: `e2e-${runId}-0`,
+    needPostIds: need ? [need.id] : [], mondayPeriodKey: `e2e-${runId}-0`, mondayWriter: null,
   });
   const result = await publishRhythmPost(COMMONS_COOP_ID, category, periodKey, built.text, built.extra);
   if (!result.posted) throw new Error(`Sage didn't post: ${result.reason}`);

@@ -25,6 +25,7 @@ const { createTrendDetectorAgent } = await import("../services/sage-trend-agent.
 const { createStewardAgent } = await import("../services/sage-steward.js");
 const { getAgent } = await import("../agents/registry.js");
 const { createProposalWriterAgent } = await import("../services/sage-proposal-writer.js");
+const { createMondayNoteAgent } = await import("../services/sage-community-rhythm.js");
 
 beforeEach(() => {
   built.length = 0;
@@ -46,10 +47,11 @@ describe("Sage's core principles", () => {
     createTrendDetectorAgent();
     createStewardAgent([]);
     createProposalWriterAgent();
+    createMondayNoteAgent();
     db.coopConfig.findFirst.mockResolvedValue({ name: "Harbor", charterText: "Members share tools.", missionGoals: [] });
     await getAgent("sage-commons-reply")!.run({ coopId: "harbor", message: "Library or homes for the potluck?" });
 
-    expect(built.map((agent) => agent.name)).toEqual(["Commons Action Observer", "Sage Trend Observer", "Sage Steward", "Sage Proposal Writer", "Sage"]);
+    expect(built.map((agent) => agent.name)).toEqual(["Commons Action Observer", "Sage Trend Observer", "Sage Steward", "Sage Proposal Writer", "Sage Monday Note", "Sage"]);
     for (const agent of built) expect(agent.instructions, agent.name).toContain(sageCorePrinciplesInstructions());
   });
 

@@ -21,8 +21,9 @@ const steps: Step[] = [
   { name: "maintain memory", run: maintainSageMemory },
   // Deterministic and capped per Commons per day; each ask counts toward the helper's weekly outreach limit.
   { name: "unanswered needs", run: askHelpersForUnansweredNeeds },
-  // Templated rhythm posts (Monday priorities, midweek open requests, Friday appreciation, monthly review):
-  // no model call, one post per category per period, skipped in Commons with too few active members.
+  // Rhythm posts (Monday note, midweek open requests, Friday appreciation, monthly review):
+  // one small model call for Monday (within the monthly limit, template fallback), one post per category per
+  // period, skipped in Commons with too few active members.
   { name: "community rhythm", run: (coopId, now) => runCommunityRhythm(coopId, now) },
   // One balanced summary per proposal whose vote closes within 48 hours; one model call each, within the monthly limit.
   { name: "pre-vote summaries", run: summarizeProposalsNearingVote },

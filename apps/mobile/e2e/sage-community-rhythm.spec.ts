@@ -19,14 +19,19 @@ function shown(page: Page, text: string | RegExp) {
   return page.getByText(text).locator("visible=true").first();
 }
 
+function escapeRegExp(text: string) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Sage posts in each Commons' General circle. */
 function generalFeed(coopId: string) {
   return `/${coopId}/posts?circleId=${encodeURIComponent(`general:${coopId}`)}`;
 }
 
-// Sage's weekly rhythm: templated posts built from records and published in General. The posts and
-// their alerts use the existing Community notification category. B volunteers on Monday through the
-// real comment box; midweek carries that commitment forward and creates a follow-up without naming B.
+// Sage's weekly rhythm: posts built from records and published in General. Monday is a short note (its
+// fixed template here, so no model call), not a numbered list of goals. The posts and their alerts use
+// the existing Community notification category. B offers to help on Monday through the real comment box;
+// midweek carries that offer forward and creates a follow-up without naming B.
 test("Sage's rhythm posts in General and close the Monday loop", async ({ browser }) => {
   test.setTimeout(300_000);
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -37,10 +42,13 @@ test("Sage's rhythm posts in General and close the Monday loop", async ({ browse
     const seeded = fixture("seed", runId, USER_A_EMAIL, USER_B_EMAIL);
     const { page } = memberA;
 
-    // 1. Sage posts Monday's priorities. B explicitly volunteers in General through the real comment box.
+    // 1. Sage posts Monday's note: what's coming up and an easy invitation, with no numbered priorities.
+    //    B offers to help in General through the real comment box.
     const monday = fixture("publish", runId, "weekly_priorities", "0", USER_A_EMAIL);
     await memberB.page.goto(`/${seeded.coopId}/posts/${monday.postId}`);
-    const commitment = `Priority 1: I'll take the first step for E2E ${runId}.`;
+    await expect(shown(memberB.page, /requests? in the feed (is|are) still waiting for a reply/)).toBeVisible({ timeout: 60_000 });
+    await expect(shown(memberB.page, /This week's (three )?priorities|Take one step toward our goal|Reply with the priority number/)).toHaveCount(0);
+    const commitment = `I'll answer the ladder request for E2E ${runId}.`;
     await memberB.page.getByPlaceholder("Write a comment...").locator("visible=true").first().fill(commitment);
     await memberB.page.getByLabel("Send comment").locator("visible=true").first().click();
     await expect(shown(memberB.page, commitment)).toBeVisible({ timeout: 60_000 });
@@ -53,9 +61,11 @@ test("Sage's rhythm posts in General and close the Monday loop", async ({ browse
     expect(midweek.tasksCreated).toBe(1);
 
     // Post titles aren't shown in the app, so match the body. Appreciation uses verified counts and is labeled as Sage's.
+    // Contributors are named by default: A hosted the event. B asked for the ladder, so B is never named.
     await page.goto(`/${seeded.coopId}/posts/${friday.postId}`);
     await expect(shown(page, /Here's what members did for each other this week/)).toBeVisible({ timeout: 60_000 });
-    await expect(shown(page, "Thank you to everyone who showed up.")).toBeVisible();
+    await expect(shown(page, new RegExp(`Thank you, .*${escapeRegExp(seeded.nameA)}.*and everyone else who showed up\\.`))).toBeVisible();
+    await expect(shown(page, new RegExp(escapeRegExp(seeded.nameB)))).toHaveCount(0);
     await expect(shown(page, /\d+ events? hosted/)).toBeVisible();
     await expect(page.getByLabel("AI helper, not a person").filter({ visible: true }).first()).toBeVisible();
 
@@ -63,8 +73,8 @@ test("Sage's rhythm posts in General and close the Monday loop", async ({ browse
     await page.goto(`/${seeded.coopId}/posts/${midweek.postId}`);
     await expect(shown(page, listedNeed)).toBeVisible({ timeout: 60_000 });
     await expect(shown(page, "These requests haven't had a reply yet:")).toBeVisible();
-    await expect(shown(page, "From Monday's priorities:")).toBeVisible();
-    await expect(shown(page, /Priority 1 has a volunteer/)).toBeVisible();
+    await expect(shown(page, "From Monday's post:")).toBeVisible();
+    await expect(shown(page, /1 member offered to take something on\./)).toBeVisible();
     await expect(shown(page, new RegExp(`${seeded.nameB}`))).toHaveCount(0);
 
     // A's alert for the appreciation is in the inbox.

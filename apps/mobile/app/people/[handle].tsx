@@ -30,6 +30,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsPost, type PersonalPageFeedPost, type PersonalPageProfile } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
+import { MentionText } from '@/components/mention-text';
 import { postTypeLabel, shouldShowPostType } from '@/lib/post-types';
 import { personDisplayHandle, personHandleFromName, postBelongsToHandle } from '@/lib/social-profile';
 import { keyboardInsetScrollProps } from '@/lib/keyboard';
@@ -354,7 +355,9 @@ export default function PublicPersonPageScreen() {
                     )}
                     <Text className="text-xs font-semibold text-gray-400">{post.time}</Text>
                   </View>
-                  {post.body ? <Text className="mt-2 text-sm leading-5 text-gray-700">{post.body}</Text> : null}
+                  {post.body ? (
+                    <MentionText content={post.body} className="mt-2" style={{ color: '#374151', fontSize: 14, lineHeight: 20 }} />
+                  ) : null}
                   <Text className="mt-3 text-xs font-black text-gray-400">{post.group}</Text>
                 </View>
 

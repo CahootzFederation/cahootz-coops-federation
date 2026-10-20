@@ -32,6 +32,7 @@ import {
 } from 'lucide-react-native';
 
 import MarketplaceLane from '@/components/marketplace-lane';
+import { MentionText } from '@/components/mention-text';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, resolveCoopId } from '@/lib/api';
@@ -588,7 +589,7 @@ function BoardRow({ item, onOpen }: { item: CommonsPost; onOpen: () => void }) {
               <Text style={{ color: tone.ink, fontSize: 10, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' }}>{item.tag}</Text>
             </View>
             <Text style={{ marginTop: 3, color: tokens.ink, fontSize: 16, lineHeight: 21, fontWeight: '900' }}>{item.title}</Text>
-            <Text numberOfLines={2} style={{ marginTop: 3, color: tokens.inkSoft, fontSize: 13, lineHeight: 19 }}>{item.body}</Text>
+            <MentionText content={item.body} numberOfLines={2} style={{ marginTop: 3, color: tokens.inkSoft, fontSize: 13, lineHeight: 19 }} />
             <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <Text numberOfLines={1} style={{ minWidth: 0, flex: 1, color: tokens.muted, fontSize: 11 }}>@{item.authorHandle || item.author} · {item.time}</Text>
               <Text style={{ color: tokens.blue, fontSize: 11, fontWeight: '800' }}>{item.replies} {item.replies === 1 ? 'reply' : 'replies'} →</Text>

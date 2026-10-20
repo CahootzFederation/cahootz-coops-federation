@@ -63,7 +63,7 @@ export default function AppDrawer({
   onClose: () => void;
   activeCommonsId?: string;
 }) {
-  const { isAuthenticated, sessionToken, user, logout, previewWelcomeScreen } = useAuth();
+  const { isAuthenticated, sessionToken, user, logout, previewWelcomeScreen, isLoading: authLoading } = useAuth();
   const [memberCommons, setMemberCommons] = useState<CommonsDirectoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   // The directory is fetched when the drawer opens. Until it settles, the
@@ -91,25 +91,35 @@ export default function AppDrawer({
   }, [hasAccountSession, visible]);
 
   useEffect(() => {
-    if (!visible) {
+    // Wait for the saved session to load. Asking before then gets the
+    // signed-out list, with no memberships or default star.
+    if (!visible || authLoading) {
       return;
     }
+    let current = true;
     setIsLoading(true);
     setDirectoryError('');
     api
       .listCommonsDirectory(sessionToken)
-      .then((result) => setMemberCommons(result.coops.filter((c) =>
-        hasAccountSession ? c.accessStatus === 'ACTIVE' : !c.isLocked,
-      )))
+      .then((result) => {
+        if (!current) return;
+        setMemberCommons(result.coops.filter((c) =>
+          hasAccountSession ? c.accessStatus === 'ACTIVE' : !c.isLocked,
+        ));
+      })
       .catch((error) => {
         console.error('Failed to load member commons:', error);
-        setDirectoryError(friendlyError(error, "We couldn't load your commons."));
+        if (current) setDirectoryError(friendlyError(error, "We couldn't load your commons."));
       })
       .finally(() => {
+        if (!current) return;
         setIsLoading(false);
         setDirectoryLoaded(true);
       });
-  }, [hasAccountSession, visible, sessionToken, directoryReloadKey]);
+    return () => {
+      current = false;
+    };
+  }, [authLoading, hasAccountSession, visible, sessionToken, directoryReloadKey]);
 
   const activeCommonsForDrawer =
     memberCommons.length > 0

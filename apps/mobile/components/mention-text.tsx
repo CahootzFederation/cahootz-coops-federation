@@ -46,16 +46,19 @@ function openMentionedPerson(handle: string) {
 function MentionToken({
   handle,
   className,
+  style,
   onPressMention,
 }: {
   handle: string;
   className: string;
+  style?: TextStyle;
   onPressMention: (handle: string) => void;
 }) {
   const pressable = !(onPressMention === openMentionedPerson && isSageHandle(handle));
   return (
     <Text
       className={className}
+      style={style}
       onPress={pressable ? () => onPressMention(handle) : undefined}
       accessibilityRole={pressable ? 'link' : undefined}
     >
@@ -142,6 +145,9 @@ export function MentionText({
           key={part.key}
           handle={part.handle}
           className={mentionClassName ?? DEFAULT_MENTION_CLASS}
+          // Match the snippet's size; the shared Text's text-base default
+          // would otherwise make the mention bigger than the words around it.
+          style={style ? { fontSize: style.fontSize, lineHeight: style.lineHeight } : undefined}
           onPressMention={onPressMention}
         />
       ),

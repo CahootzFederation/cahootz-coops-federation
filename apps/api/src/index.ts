@@ -320,6 +320,13 @@ app.post('/webhooks/square', handleSquareWebhook);
 app.use('/api/upload', uploadRouter);
 app.use('/api/newsletter-subscriptions', newsletterSubscriptionsRouter);
 
+// tRPC answers depend on who's asking (x-session-token), so never let a
+// phone or proxy reuse one person's or a signed-out response for another call.
+app.use("/trpc", (_req, res, next) => {
+  res.set("Cache-Control", "private, no-store");
+  res.set("Vary", "x-session-token, x-wallet-address");
+  next();
+});
 app.use("/trpc", trpcExpress);
 
 // TODO: Fix Sashimo middleware path-to-regexp compatibility issue

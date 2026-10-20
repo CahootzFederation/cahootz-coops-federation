@@ -189,3 +189,40 @@ test('a Board event opens the full event detail screen', { tag: '@smoke' }, asyn
     await member.context.close();
   }
 });
+
+test('Recently posted shows @mentions instead of raw [@handle] tokens', async ({ browser }) => {
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const title = `E2E mention board ${runId}`;
+  const mentionedHandle = USER_B_EMAIL.split('@')[0].replace(/[^a-z0-9]+/gi, '').toLowerCase();
+  const member = await newSignedInPage(browser, USER_A_EMAIL);
+  let token: string | null = null;
+  let postId: string | undefined;
+
+  try {
+    token = await sessionTokenFor(member.page);
+    expect(token).toBeTruthy();
+    // Fixture setup only: the server stores the mention as [@handle].
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.createPost`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-session-token': token! },
+      body: JSON.stringify({
+        coopId: 'cahootz',
+        title,
+        content: `E2E ${runId}: thanks @${mentionedHandle} for the help`,
+        tag: 'Social',
+      }),
+    });
+    postId = (await response.json())?.result?.data?.post?.id;
+    expect(postId).toBeTruthy();
+
+    await member.page.goto('/board?coopId=cahootz');
+    await member.page.getByLabel('Search community board').fill(title);
+    const row = member.page.getByLabel(`Open ${title}`);
+    await expect(row).toBeVisible();
+    await expect(row.getByRole('link', { name: `@${mentionedHandle}`, exact: true })).toBeVisible();
+    await expect(row).not.toContainText(`[@${mentionedHandle}]`);
+  } finally {
+    await deletePost(token, postId).catch(() => {});
+    await member.context.close();
+  }
+});

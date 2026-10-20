@@ -31,7 +31,7 @@ function isGeneral(card: CircleCard): card is { general: true } {
 }
 
 export default function CircleView({ coopId }: { coopId: string }) {
-  const { sessionToken } = useAuth();
+  const { sessionToken, isLoading: authLoading } = useAuth();
   const [circles, setCircles] = useState<PrivateGroupSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAssigning, setIsAssigning] = useState(false);
@@ -87,6 +87,9 @@ export default function CircleView({ coopId }: { coopId: string }) {
   );
 
   useEffect(() => {
+    // Wait for the saved session to load. Asking before then gets the
+    // signed-out list, so the default star shows up late.
+    if (authLoading) return;
     let mounted = true;
     setCommonsLoading(true);
     setCommonsError('');
@@ -107,7 +110,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
     return () => {
       mounted = false;
     };
-  }, [commonsReloadKey, sessionToken]);
+  }, [authLoading, commonsReloadKey, sessionToken]);
 
   const retryLoad = () => {
     setActionError(null);

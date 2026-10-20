@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { newSignedInPage, USER_A_EMAIL } from "./support/auth";
 
@@ -6,6 +8,19 @@ import { newSignedInPage, USER_A_EMAIL } from "./support/auth";
 // scrolling, and only the people already on screen could be mentioned.
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 const COOP_ID = "cahootz";
+const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
+
+/** Fixture setup and cleanup only (see apps/api/scripts/e2e-mention-members.ts). */
+function mentionMembers(...args: string[]) {
+  const output = execFileSync(
+    "pnpm",
+    ["--silent", "-F", "@cahootz/api", "exec", "tsx", "--import", "./dotenv.config.js", "scripts/e2e-mention-members.ts", ...args],
+    { cwd: REPO_ROOT, encoding: "utf8", timeout: 120_000 },
+  );
+  const line = output.split("\n").reverse().find((entry) => entry.startsWith("E2E_RESULT "));
+  if (!line) throw new Error(`Mention members fixture printed no result:\n${output}`);
+  return JSON.parse(line.slice("E2E_RESULT ".length));
+}
 
 async function sessionTokenFor(page: Page) {
   const token = await page.evaluate(() => window.localStorage.getItem("cahootz.sessionToken"));
@@ -24,6 +39,8 @@ async function trpcPost(pathName: string, sessionToken: string, body: unknown) {
 
 test("a swipe scrolls the @mention list without picking anyone", async ({ browser }) => {
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  // A fresh database has only the two fixture accounts, too few to need scrolling.
+  mentionMembers("seed", runId);
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
   let postId: string | undefined;
   let token: string | undefined;
@@ -75,5 +92,6 @@ test("a swipe scrolls the @mention list without picking anyone", async ({ browse
   } finally {
     if (postId && token) await trpcPost("commons.deletePost", token, { postId }).catch(() => {});
     await context.close();
+    mentionMembers("cleanup", runId);
   }
 });

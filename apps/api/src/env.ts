@@ -33,7 +33,6 @@ export const env = createEnv({
     OPENAI_API_KEY: z.string().startsWith("sk-").min(20),
     COMMONS_AI_MODEL: z.string().min(1).optional(),
     NEWSLETTER_ARTICLE_MODEL: z.string().min(1).optional(),
-    NEWSLETTER_EVENT_MODEL: z.string().min(1).optional(),
     TRIGGER_SECRET_KEY: z.string().min(1).optional(),
     SAGE_WAKE_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
     PAYPAL_WEBHOOK_ID: z.string().optional(),

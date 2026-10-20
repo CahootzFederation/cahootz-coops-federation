@@ -3,7 +3,7 @@ import { logger, schedules, task } from "@trigger.dev/sdk";
 import { db } from "../../../../packages/db/index.js";
 import { runNewsletterAgentForCoop } from "../../../../packages/trpc/src/routers/public-coop-info.js";
 
-type NewsletterAgentId = "article-writer" | "event-writer";
+type NewsletterAgentId = "article-writer";
 type AgentRunStatus = "success" | "empty" | "error";
 
 interface NewsletterAgentSchedule {
@@ -22,17 +22,12 @@ interface PreviewOverrides {
   [key: string]: unknown;
 }
 
-const AGENT_IDS: NewsletterAgentId[] = ["article-writer", "event-writer"];
+const AGENT_IDS: NewsletterAgentId[] = ["article-writer"];
 const SYSTEM_UPDATED_BY = "trigger.dev/newsletter-agent-sweep";
 
 const defaultSchedules: Record<NewsletterAgentId, NewsletterAgentSchedule> = {
   "article-writer": {
     agentId: "article-writer",
-    enabled: true,
-    intervalHours: 168,
-  },
-  "event-writer": {
-    agentId: "event-writer",
     enabled: true,
     intervalHours: 168,
   },
@@ -100,7 +95,6 @@ function normalizeSchedules(
       "article-writer",
       record["article-writer"],
     ),
-    "event-writer": normalizeSchedule("event-writer", record["event-writer"]),
   };
 }
 
@@ -199,7 +193,7 @@ export const runNewsletterAgent = task({
 
     const agentId = payload.agentId ?? "article-writer";
     if (!AGENT_IDS.includes(agentId)) {
-      throw new Error("agentId must be article-writer or event-writer.");
+      throw new Error("agentId must be article-writer.");
     }
 
     return runAgent({

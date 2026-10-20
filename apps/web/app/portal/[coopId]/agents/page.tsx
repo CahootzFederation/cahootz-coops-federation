@@ -42,7 +42,7 @@ import {
   Trash2,
 } from "lucide-react";
 
-type NewsletterAgentId = "article-writer" | "event-writer";
+type NewsletterAgentId = "article-writer";
 type AgentRunStatus = "success" | "empty" | "error";
 
 interface NewsletterAgentSchedule {
@@ -79,11 +79,6 @@ const agentCopy: Record<
     description:
       "Researches sources, verifies an angle, writes, and quality-checks newsletter news drafts.",
   },
-  "event-writer": {
-    label: "Event Agent",
-    description:
-      "Finds events, verifies facts, checks goal fit, and drafts event listings.",
-  },
 };
 
 const cadenceOptions = [
@@ -97,11 +92,6 @@ const cadenceOptions = [
 const defaultSchedules: Record<NewsletterAgentId, NewsletterAgentSchedule> = {
   "article-writer": {
     agentId: "article-writer",
-    enabled: true,
-    intervalHours: 168,
-  },
-  "event-writer": {
-    agentId: "event-writer",
     enabled: true,
     intervalHours: 168,
   },
@@ -169,7 +159,6 @@ function normalizeSchedules(
       "article-writer",
       record["article-writer"],
     ),
-    "event-writer": normalizeSchedule("event-writer", record["event-writer"]),
   };
 }
 
@@ -495,8 +484,8 @@ export default function AgentsStatusPage() {
             Agent schedules
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-            Review automated editorial agent timing, adjust cadence, and trigger
-            the news or event agent when admins need fresh drafts.
+            See when the news agent runs, change how often, or run it now when
+            you want fresh drafts.
           </p>
         </div>
 
@@ -544,7 +533,7 @@ export default function AgentsStatusPage() {
           <Loader2 className="h-8 w-8 animate-spin text-zinc-500" />
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid max-w-3xl gap-4">
           {(Object.keys(agentCopy) as NewsletterAgentId[]).map((agentId) => {
             const schedule = schedules[agentId];
             const nextRunAt = getNextRunAt(schedule);

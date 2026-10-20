@@ -128,17 +128,6 @@ curl -s -X POST http://localhost:3001/dev/newsletter-agent/run \
   }' | jq
 ```
 
-Run the Event Writer Agent:
-
-```bash
-curl -s -X POST http://localhost:3001/dev/newsletter-agent/run \
-  -H "Content-Type: application/json" \
-  -d '{
-    "coopId": "soulaan",
-    "agentId": "event-writer",
-    "walletAddress": "0xYOUR_ADMIN_WALLET"
-  }' | jq
-```
 ## Charter Compliance Check
 
 The automated Charter Compliance Check is disabled for now while Cahootz documentation and governance language are being reset. The placeholder Cahootz charter lives at [documents/cahootz-charter.md](documents/cahootz-charter.md).

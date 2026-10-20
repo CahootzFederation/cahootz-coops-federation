@@ -18,7 +18,7 @@ interface NewsletterSchedule {
 
 function newsletterSchedule(
   value: unknown,
-  agentId: "article-writer" | "event-writer",
+  agentId: "article-writer",
 ): NewsletterSchedule {
   const root =
     typeof value === "object" && value !== null && !Array.isArray(value)
@@ -258,7 +258,7 @@ export async function getAgentOperationalSnapshot(
 
   for (const publicInfo of publicInfos) {
     if (!activeCoopIds.has(publicInfo.coopId)) continue;
-    for (const agentId of ["article-writer", "event-writer"] as const) {
+    for (const agentId of ["article-writer"] as const) {
       const schedule = newsletterSchedule(publicInfo.previewOverrides, agentId);
       if (!schedule.enabled) {
         issues.push({

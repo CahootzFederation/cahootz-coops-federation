@@ -251,10 +251,10 @@ app.post("/dev/newsletter-agent/run", async (req: Request, res: Response) => {
     });
   }
 
-  if (!["article-writer", "event-writer"].includes(agentId)) {
+  if (agentId !== "article-writer") {
     return res.status(400).json({
       success: false,
-      message: "agentId must be article-writer or event-writer.",
+      message: "agentId must be article-writer. That's the only newsletter agent now.",
     });
   }
 

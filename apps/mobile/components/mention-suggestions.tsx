@@ -38,6 +38,8 @@ export function MentionSuggestions({ keyword, onSelect, coopId = 'cahootz' }: Me
   const [searchResults, setSearchResults] = useState<Suggestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const requestId = useRef(0);
+  // The selection captured at touch-down, committed on release. See the row's handlers.
+  const pendingSelect = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (keyword == null || defaultMembers.length > 0) return;
@@ -106,15 +108,23 @@ export function MentionSuggestions({ keyword, onSelect, coopId = 'cahootz' }: Me
       className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg"
       style={{ maxHeight: 220, elevation: 12, zIndex: 50 }}
     >
-      <ScrollView keyboardShouldPersistTaps="always" bounces={false}>
+      <ScrollView testID="mention-suggestions" keyboardShouldPersistTaps="always" bounces={false}>
         {results.map((suggestion, index) => (
           <Pressable
             key={suggestion.id}
-            // onPressIn (not onPress) - fires on touch-down, before the tap can blur the
-            // still-focused composer TextInput. onPress fires on release, by which point
-            // the blur has already torn down the mention/selection state this depends on,
-            // so the row visually presses but nothing gets inserted.
-            onPressIn={() => onSelect({ id: suggestion.name, name: suggestion.name })}
+            // Capture onSelect on touch-down, before the tap can blur the still-focused
+            // composer TextInput and tear down the mention/selection state its closure
+            // depends on. Only commit it on release: selecting on touch-down meant any
+            // swipe that started on a row picked that person instead of scrolling the
+            // list. A swipe cancels the press, so onPress never fires and nothing is picked.
+            onPressIn={() => {
+              pendingSelect.current = () => onSelect({ id: suggestion.name, name: suggestion.name });
+            }}
+            onPress={() => {
+              const select = pendingSelect.current;
+              pendingSelect.current = null;
+              select?.();
+            }}
             className={`flex-row items-center gap-3 px-3 py-2.5 ${
               index < results.length - 1 ? 'border-b border-gray-100' : ''
             }`}

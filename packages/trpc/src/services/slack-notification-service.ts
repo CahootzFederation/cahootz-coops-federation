@@ -72,6 +72,17 @@ function databaseField(databaseId?: string) {
   return { title: "Database", value: safeSlackText(databaseId ? `${label} · ID ${databaseId}` : label, 200), short: true };
 }
 
+/**
+ * Every Railway project's Postgres shows up as postgres.railway.internal/railway,
+ * so the project and service name is what tells two senders apart.
+ */
+function railwayServiceField() {
+  const project = process.env.RAILWAY_PROJECT_NAME?.trim();
+  const service = process.env.RAILWAY_SERVICE_NAME?.trim();
+  const value = [project, service].filter(Boolean).join(" / ") || "not on Railway";
+  return { title: "Railway project / service", value: safeSlackText(value, 200), short: true };
+}
+
 /** Loud, repeatable alert used by the hourly watchdog while an agent is not operational. */
 export async function sendAgentOperationalAlert(params: {
   checkedAt: Date;
@@ -96,6 +107,7 @@ export async function sendAgentOperationalAlert(params: {
       color: "danger",
       fields: [
         { title: "Environment", value: process.env.RAILWAY_ENVIRONMENT_NAME ?? params.environment ?? process.env.NODE_ENV ?? "unknown", short: true },
+        railwayServiceField(),
         { title: "Issue count", value: String(params.issues.length), short: true },
         { title: "Sent by", value: params.source ?? "unknown", short: true },
         databaseField(params.databaseId),

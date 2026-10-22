@@ -67,6 +67,11 @@ export function databaseLabel(url = process.env.DATABASE_URL): string {
   }
 }
 
+function databaseField(databaseId?: string) {
+  const label = databaseLabel();
+  return { title: "Database", value: safeSlackText(databaseId ? `${label} · ID ${databaseId}` : label, 200), short: true };
+}
+
 /** Loud, repeatable alert used by the hourly watchdog while an agent is not operational. */
 export async function sendAgentOperationalAlert(params: {
   checkedAt: Date;
@@ -74,6 +79,8 @@ export async function sendAgentOperationalAlert(params: {
   environment?: string;
   /** Which monitor sent this, e.g. "Trigger.dev watchdog" or "API backup monitor". */
   source?: string;
+  /** From getDatabaseId(); shows whether two monitors read the same database. */
+  databaseId?: string;
 }): Promise<boolean> {
   const issueLines = params.issues.slice(0, 30).map((issue) => {
     const scope = issue.coopId ? ` (${safeSlackText(issue.coopId, 100)})` : "";
@@ -91,7 +98,7 @@ export async function sendAgentOperationalAlert(params: {
         { title: "Environment", value: process.env.RAILWAY_ENVIRONMENT_NAME ?? params.environment ?? process.env.NODE_ENV ?? "unknown", short: true },
         { title: "Issue count", value: String(params.issues.length), short: true },
         { title: "Sent by", value: params.source ?? "unknown", short: true },
-        { title: "Database", value: safeSlackText(databaseLabel(), 200), short: true },
+        databaseField(params.databaseId),
         { title: "Checked at", value: params.checkedAt.toISOString(), short: false },
         { title: "Alert behavior", value: "This alert repeats every watchdog run until every issue is cleared.", short: false },
       ],
@@ -112,6 +119,7 @@ export async function sendSageOutreachDailyReport(params: {
   modelFallbacks: number;
   deliveries: Array<{ label: string; status: string; reason?: string }>;
   checkedAt?: Date;
+  databaseId?: string;
 }): Promise<boolean> {
   const broken = !params.modelConfigured || params.failed > 0 || params.modelFallbacks > 0;
   const recipients = params.deliveries.length
@@ -134,6 +142,7 @@ export async function sendSageOutreachDailyReport(params: {
         { title: "Due / sent", value: `${params.due} / ${params.sent}`, short: true },
         { title: "Skipped", value: `${params.recent} recent, ${params.duplicate} duplicate, ${params.limited} weekly-limit`, short: true },
         { title: "Delivery failures", value: String(params.failed), short: true },
+        databaseField(params.databaseId),
         { title: "Checked at", value: (params.checkedAt ?? new Date()).toISOString(), short: false },
       ],
     }],

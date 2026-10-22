@@ -431,6 +431,16 @@ export interface WeeklyOutreachSummary {
   }>;
 }
 
+/** Saved before any work, so the watchdog can tell "never ran" from "started and died". */
+export async function recordWeeklyOutreachStart(startedAt: Date): Promise<void> {
+  const key = "agent.health.sage-weekly-outreach.started";
+  await db.platformConfig.upsert({
+    where: { key },
+    create: { key, value: startedAt.toISOString() },
+    update: { value: startedAt.toISOString() },
+  });
+}
+
 export async function recordWeeklyOutreachOperationalStatus(input: {
   checkedAt: Date;
   status: "success" | "error";

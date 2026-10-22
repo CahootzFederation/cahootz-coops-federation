@@ -47,6 +47,7 @@ describe("agent Slack operations alerts", () => {
     await sendAgentOperationalAlert({
       checkedAt: new Date("2026-10-17T01:49:53Z"),
       source: "API backup monitor",
+      databaseId: "a1b2c3d4",
       issues: [{ agentId: "sage-weekly-outreach", state: "FAILED", reason: "missing" }],
     });
 
@@ -54,7 +55,7 @@ describe("agent Slack operations alerts", () => {
     const fields = (JSON.parse(raw) as { attachments: Array<{ fields: Array<{ title: string; value: string }> }> })
       .attachments[0]!.fields;
     expect(fields).toContainEqual(expect.objectContaining({ title: "Sent by", value: "API backup monitor" }));
-    expect(fields).toContainEqual(expect.objectContaining({ title: "Database", value: "db.example.com/cahootz" }));
+    expect(fields).toContainEqual(expect.objectContaining({ title: "Database", value: "db.example.com/cahootz · ID a1b2c3d4" }));
     expect(raw).not.toContain("s3cret");
     expect(raw).not.toContain("admin");
   });
@@ -87,6 +88,35 @@ describe("agent Slack operations alerts", () => {
     expect(body.text).toContain("SAGE OUTREACH IS NOT FULLY OPERATIONAL");
     expect(body.text).toContain("@member");
     expect(body.text).toContain("MODEL_FAILED");
+  });
+
+  it("shows which database the outreach sweep wrote to", async () => {
+    vi.stubEnv("SLACK_WEBHOOK_URL", "https://hooks.slack.test/outreach");
+    vi.stubEnv("DATABASE_URL", "postgresql://u:p@shuttle.proxy.rlwy.net:41234/railway");
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await sendSageOutreachDailyReport({
+      modelConfigured: true,
+      considered: 3,
+      due: 0,
+      sent: 0,
+      recent: 0,
+      duplicate: 0,
+      limited: 0,
+      failed: 0,
+      modelFallbacks: 0,
+      deliveries: [],
+      databaseId: "a1b2c3d4",
+    });
+
+    const fields = (JSON.parse(fetchMock.mock.calls[0]![1].body as string) as {
+      attachments: Array<{ fields: Array<{ title: string; value: string }> }>;
+    }).attachments[0]!.fields;
+    expect(fields).toContainEqual(expect.objectContaining({
+      title: "Database",
+      value: "shuttle.proxy.rlwy.net/railway · ID a1b2c3d4",
+    }));
   });
 
   it("fails visibly when Slack is not configured", async () => {

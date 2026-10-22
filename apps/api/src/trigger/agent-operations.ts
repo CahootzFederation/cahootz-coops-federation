@@ -47,6 +47,7 @@ export const agentOperationsWatchdog = schedules.task({
       checkedAt: snapshot.checkedAt,
       issues: snapshot.issues,
       source: "Trigger.dev watchdog",
+      databaseId: snapshot.databaseId,
     });
     if (!delivered)
       throw new Error(

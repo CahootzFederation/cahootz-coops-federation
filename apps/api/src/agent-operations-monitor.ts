@@ -18,6 +18,7 @@ async function checkAgentOperations() {
       issues: snapshot.issues,
       environment: env.NODE_ENV,
       source: "API backup monitor",
+      databaseId: snapshot.databaseId,
     });
     if (!delivered)
       console.error(

@@ -4,6 +4,7 @@ import { getAgentOperationalSnapshot, isPrimaryProductionDeployment } from "../s
 
 const mocks = vi.hoisted(() => ({
   platformConfigFindUnique: vi.fn(),
+  platformConfigUpsert: vi.fn(),
   coopConfigFindMany: vi.fn(),
   commonsAgentSettingFindMany: vi.fn(),
   publicCoopInfoFindMany: vi.fn(),
@@ -13,7 +14,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@repo/db", () => ({
   db: {
-    platformConfig: { findUnique: mocks.platformConfigFindUnique },
+    platformConfig: {
+      findUnique: mocks.platformConfigFindUnique,
+      upsert: mocks.platformConfigUpsert,
+    },
     coopConfig: { findMany: mocks.coopConfigFindMany },
     commonsAgentSetting: { findMany: mocks.commonsAgentSettingFindMany },
     publicCoopInfo: { findMany: mocks.publicCoopInfoFindMany },
@@ -29,6 +33,7 @@ beforeEach(() => {
   vi.stubEnv("OPENAI_API_KEY", "sk-test");
   vi.stubEnv("SLACK_WEBHOOK_URL", "https://hooks.slack.test/agent-health");
   vi.stubEnv("TRIGGER_SECRET_KEY", "tr_prod_test");
+  mocks.platformConfigUpsert.mockResolvedValue({ value: "a1b2c3d4" });
   mocks.platformConfigFindUnique.mockResolvedValue({
     value: JSON.stringify({
       lastRunAt: "2026-10-13T17:00:00Z",
@@ -163,8 +168,102 @@ describe("agent operational health", () => {
     expect(snapshot.issues).toContainEqual({
       agentId: "sage-weekly-outreach",
       state: "FAILED",
-      reason: "No completed daily outreach sweep has been recorded.",
+      reason: expect.stringContaining(
+        "The daily outreach sweep has never started.",
+      ),
     });
+  });
+
+  it("says when a sweep started but never finished", async () => {
+    mocks.platformConfigFindUnique.mockImplementation(
+      async ({ where }: { where: { key: string } }) =>
+        where.key === "agent.health.sage-weekly-outreach.started"
+          ? { value: "2026-10-21T18:00:05.000Z" }
+          : null,
+    );
+
+    const snapshot = await getAgentOperationalSnapshot(
+      new Date("2026-10-21T22:02:00Z"),
+    );
+
+    expect(snapshot.issues).toContainEqual({
+      agentId: "sage-weekly-outreach",
+      state: "FAILED",
+      reason: expect.stringContaining(
+        "started at 2026-10-21T18:00:05.000Z but never finished",
+      ),
+    });
+  });
+
+  it("doesn't call a sweep that is still inside its 30-minute window unfinished", async () => {
+    mocks.platformConfigFindUnique.mockImplementation(
+      async ({ where }: { where: { key: string } }) =>
+        where.key === "agent.health.sage-weekly-outreach.started"
+          ? { value: "2026-10-21T18:00:05.000Z" }
+          : null,
+    );
+
+    const snapshot = await getAgentOperationalSnapshot(
+      new Date("2026-10-21T18:10:00Z"),
+    );
+
+    expect(snapshot.issues).toContainEqual({
+      agentId: "sage-weekly-outreach",
+      state: "FAILED",
+      reason: expect.stringContaining("has never started"),
+    });
+  });
+
+  it("names the unfinished run when the last good sweep is stale", async () => {
+    mocks.platformConfigFindUnique.mockImplementation(
+      async ({ where }: { where: { key: string } }) =>
+        where.key === "agent.health.sage-weekly-outreach.started"
+          ? { value: "2026-10-21T18:00:05.000Z" }
+          : {
+              value: JSON.stringify({
+                lastRunAt: "2026-10-20T18:00:00Z",
+                lastRunStatus: "success",
+                lastRunMessage: null,
+              }),
+            },
+    );
+
+    const snapshot = await getAgentOperationalSnapshot(
+      new Date("2026-10-21T22:02:00Z"),
+    );
+
+    expect(snapshot.issues).toContainEqual({
+      agentId: "sage-weekly-outreach",
+      state: "FAILED",
+      reason: expect.stringContaining(
+        "The last one started at 2026-10-21T18:00:05.000Z and never finished",
+      ),
+    });
+  });
+
+  it("reports the ID stored in the database it read, creating one only if missing", async () => {
+    const snapshot = await getAgentOperationalSnapshot(
+      new Date("2026-10-13T18:00:00Z"),
+    );
+
+    expect(snapshot.databaseId).toBe("a1b2c3d4");
+    expect(mocks.platformConfigUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: "platform.database-id" },
+        update: {},
+      }),
+    );
+  });
+
+  it("still checks health when the database ID can't be saved", async () => {
+    mocks.platformConfigUpsert.mockRejectedValue(new Error("read-only"));
+
+    const snapshot = await getAgentOperationalSnapshot(
+      new Date("2026-10-13T18:00:00Z"),
+    );
+
+    expect(snapshot.databaseId).toBeUndefined();
+    expect(snapshot.healthy).toBe(true);
   });
 });
 

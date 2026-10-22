@@ -1,7 +1,9 @@
 import { logger, schedules } from "@trigger.dev/sdk";
 
+import { getDatabaseId } from "../../../../packages/trpc/src/services/agent-operations.js";
 import {
   recordWeeklyOutreachOperationalStatus,
+  recordWeeklyOutreachStart,
   runWeeklySageOutreach,
 } from "../../../../packages/trpc/src/services/sage-weekly-outreach.js";
 import {
@@ -17,8 +19,10 @@ export const sageWeeklyOutreachSweep = schedules.task({
   maxDuration: 1800,
   run: async () => {
     const checkedAt = new Date();
+    const databaseId = await getDatabaseId();
     let summary: Awaited<ReturnType<typeof runWeeklySageOutreach>>;
     try {
+      await recordWeeklyOutreachStart(checkedAt);
       summary = await runWeeklySageOutreach();
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -30,6 +34,7 @@ export const sageWeeklyOutreachSweep = schedules.task({
       await sendAgentOperationalAlert({
         checkedAt,
         source: "Trigger.dev outreach sweep",
+        databaseId,
         issues: [
           {
             agentId: "sage-weekly-outreach",
@@ -43,6 +48,7 @@ export const sageWeeklyOutreachSweep = schedules.task({
     const slackDelivered = await sendSageOutreachDailyReport({
       ...summary,
       checkedAt,
+      databaseId,
     });
     const runFailed =
       summary.failed > 0 ||

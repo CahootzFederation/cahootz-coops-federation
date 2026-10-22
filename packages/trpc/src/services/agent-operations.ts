@@ -1,12 +1,18 @@
+import { randomUUID } from "node:crypto";
+
 import { db } from "@repo/db";
 
 import type { AgentOperationalIssue } from "./slack-notification-service.js";
 import { getSageAutonomyUsage } from "./sage-autonomy.js";
 
 const WEEKLY_OUTREACH_HEALTH_KEY = "agent.health.sage-weekly-outreach";
+const WEEKLY_OUTREACH_STARTED_KEY = "agent.health.sage-weekly-outreach.started";
+const DATABASE_ID_KEY = "platform.database-id";
 const WAKE_STALE_MS = 45 * 60 * 1000;
 const RUNNING_STALE_MS = 20 * 60 * 1000;
 const DAILY_SWEEP_STALE_MS = 26 * 60 * 60 * 1000;
+// The sweep's Trigger maxDuration is 30 minutes; past that a start with no finish means it died.
+const SWEEP_UNFINISHED_MS = 35 * 60 * 1000;
 
 interface NewsletterSchedule {
   enabled: boolean;
@@ -64,10 +70,30 @@ export function isPrimaryProductionDeployment(
   return !railwayEnvironment || railwayEnvironment === "production";
 }
 
+/**
+ * Short ID stored inside the database itself. Trigger.dev reaches Railway through a
+ * public host while the API uses postgres.railway.internal, so hostnames can't tell
+ * us whether both read the same database. Matching IDs in Slack can.
+ */
+export async function getDatabaseId(): Promise<string | undefined> {
+  try {
+    const row = await db.platformConfig.upsert({
+      where: { key: DATABASE_ID_KEY },
+      create: { key: DATABASE_ID_KEY, value: randomUUID().slice(0, 8) },
+      update: {},
+      select: { value: true },
+    });
+    return row.value;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface AgentOperationalSnapshot {
   checkedAt: Date;
   issues: AgentOperationalIssue[];
   healthy: boolean;
+  databaseId?: string;
 }
 
 /**
@@ -78,9 +104,13 @@ export async function getAgentOperationalSnapshot(
   now = new Date(),
 ): Promise<AgentOperationalSnapshot> {
   const issues: AgentOperationalIssue[] = [];
-  const [outreachHealthRow, configs, settings, publicInfos] = await Promise.all([
+  const [outreachHealthRow, outreachStartRow, configs, settings, publicInfos, databaseId] = await Promise.all([
     db.platformConfig.findUnique({
       where: { key: WEEKLY_OUTREACH_HEALTH_KEY },
+      select: { value: true },
+    }),
+    db.platformConfig.findUnique({
+      where: { key: WEEKLY_OUTREACH_STARTED_KEY },
       select: { value: true },
     }),
     db.coopConfig.findMany({
@@ -94,13 +124,23 @@ export async function getAgentOperationalSnapshot(
     db.publicCoopInfo.findMany({
       select: { coopId: true, previewOverrides: true },
     }),
+    getDatabaseId(),
   ]);
 
+  const startedAt = outreachStartRow ? new Date(outreachStartRow.value) : null;
+  const unfinishedStart =
+    startedAt &&
+    !Number.isNaN(startedAt.getTime()) &&
+    now.getTime() - startedAt.getTime() > SWEEP_UNFINISHED_MS
+      ? startedAt
+      : null;
   if (!outreachHealthRow) {
     issues.push({
       agentId: "sage-weekly-outreach",
       state: "FAILED",
-      reason: "No completed daily outreach sweep has been recorded.",
+      reason: unfinishedStart
+        ? `The daily outreach sweep started at ${unfinishedStart.toISOString()} but never finished. Open that sage-weekly-outreach-sweep run in Trigger.dev to see where it stopped.`
+        : "The daily outreach sweep has never started. Check that sage-weekly-outreach-sweep is scheduled and running in Trigger.dev's production environment.",
     });
   } else {
     let metadata: Record<string, unknown> = {};
@@ -136,7 +176,10 @@ export async function getAgentOperationalSnapshot(
       issues.push({
         agentId: "sage-weekly-outreach",
         state: "FAILED",
-        reason: "No successful daily outreach sweep has completed in 26 hours.",
+        reason:
+          unfinishedStart && unfinishedStart > lastRunAt
+            ? `No daily outreach sweep has finished in 26 hours. The last one started at ${unfinishedStart.toISOString()} and never finished; open that run in Trigger.dev.`
+            : "No daily outreach sweep has run in 26 hours. Check that sage-weekly-outreach-sweep is still scheduled in Trigger.dev.",
       });
     } else if (!lastRunAt) {
       issues.push({
@@ -298,5 +341,5 @@ export async function getAgentOperationalSnapshot(
     }
   }
 
-  return { checkedAt: now, issues, healthy: issues.length === 0 };
+  return { checkedAt: now, issues, healthy: issues.length === 0, databaseId };
 }

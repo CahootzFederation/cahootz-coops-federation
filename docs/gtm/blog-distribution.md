@@ -592,6 +592,8 @@ Starts Monday, October 26. Weekday mornings US Pacific get the best reach on HN,
 | Thu | Nov 5 | **r/solarpunk:** P2 post with summary comment. **Commons Library:** P3 pitch. **Bluesky/X:** P4. |
 | Fri | Nov 6 | **LinkedIn:** P6 post. **r/dao:** P3 post. **Substack Note:** P3 quote. |
 
+**Handbook post:** a step-by-step guide for members and stewards is drafted in [handbook-post.md](handbook-post.md). Publish it before the Monday Oct 26 start if you can. Every pitch that sends people to the app can link it as the "how it works" page, and stewards of new Commons can share it with their members.
+
 **Week 3 and later:** write the two originals: Tech Policy Press (P6/P3) and NPQ (P4/P2). Follow up once, politely, on any pitch with no reply after 10 business days. Try r/urbanplanning (P4) once your account meets its karma rule. Save SSIR, Noema, and YES! for when you have a real Commons story with numbers.
 
 **Track it.** Add `?utm_source=<venue>` to links if you want PostHog to show which venues send readers, for example `?utm_source=reddit_cooperatives`. Don't add UTM tags on Hacker News, where they look spammy.

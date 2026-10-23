@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { BlogCard } from "@/components/blog/blog-card";
 import { SiteShell } from "@/components/blog/site-shell";
 import { getPublishedBlogPosts } from "@/lib/blog";
+import { blogFeedAlternates } from "@/lib/blog-feed";
 
 export const metadata: Metadata = {
   title: "Blog | Cahootz",
@@ -10,6 +11,7 @@ export const metadata: Metadata = {
     "Updates, product notes, and practical writing on community-owned economies, commons governance, and local commerce.",
   alternates: {
     canonical: "https://cahootzcommons.com/blog",
+    types: blogFeedAlternates,
   },
 };
 

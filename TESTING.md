@@ -68,7 +68,7 @@ Run the tiers locally with `pnpm test:e2e:mobile:smoke`, `pnpm -F @cahootz/mobil
 The current Playwright suite covers:
 
 1. Two independent users sign in through the real UI and the account screen shows the correct email in each session (`auth.setup.ts`, which every other spec depends on).
-2. User A signs out while User B remains signed in after a reload. Sign Out asks first: "Stay signed in" keeps the session, and "Yes, sign out" ends it.
+2. User A signs out while User B remains signed in after a reload. Sign Out asks first: "Stay signed in" keeps the session, and "Yes, sign out" returns to the public carousel without tabs. Continue opens email verification; the other account remains signed in after reload.
 3. User A creates a commons post.
 4. User B reloads, sees the post, opens it, and submits a comment.
 5. User A reloads, opens the post, and sees User B's comment.

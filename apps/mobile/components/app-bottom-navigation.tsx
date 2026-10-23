@@ -1,3 +1,4 @@
+import { DESIGN } from '@/constants/design';
 import { router, useGlobalSearchParams, usePathname, useSegments } from 'expo-router';
 import { Bell, LayoutGrid, PanelsTopLeft, UserCircle } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -42,13 +43,11 @@ export function AppBottomNavigation() {
   }>();
   const active = screen === 'notifications' || screen === 'notification-settings'
     ? 'Alerts'
-    : ['board', 'store', 'store-detail', 'cart', 'checkout'].includes(screen)
+    : ['board', 'store', 'store-detail', 'product-detail', 'cart', 'checkout', 'commons-resources', 'orders', 'order-detail', 'my-store', 'my-stores', 'add-product', 'edit-product', 'apply-store', 'store-orders', 'store-payments', 'stripe-onboarding', 'apply-sc-verification'].includes(screen)
         ? 'Board'
-      : ['wallet', 'profile', 'personal-page', 'export-wallet', 'withdraw'].includes(screen)
+      : ['wallet', 'profile', 'personal-page', 'export-wallet', 'withdraw', 'payment-methods', 'bank-accounts', 'history', 'scan-pay', 'quick-pay', 'receipt', 'accept-payment', 'sage-settings', 'feedback'].includes(screen)
         ? 'You'
-        : screen === '(tabs)' || screen === 'index' || screen === '' || screen === 'posts'
-          ? 'Commons'
-          : undefined;
+        : 'Commons';
 
   // Onboarding, sign-in, and the commons application are focused, full-screen
   // flows: a stray tab tap there would throw away what the person typed.
@@ -64,7 +63,7 @@ export function AppBottomNavigation() {
         .filter(({ label }) => isAuthenticated || label !== 'Board')
         .map(({ label, href, icon: Icon }) => {
         const selected = active === label;
-        const color = selected ? '#FF6B00' : '#64748B';
+        const color = selected ? DESIGN.actionText : DESIGN.muted;
         const onPress = () => {
           // Circle feeds are destinations inside the already-selected
           // Commons tab. Re-selecting that tab must not add Circle View to

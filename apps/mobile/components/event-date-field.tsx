@@ -1,14 +1,11 @@
+import { DESIGN } from '@/constants/design';
 import { useState } from 'react';
 import { Platform, TouchableOpacity, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { Text } from '@/components/ui/text';
 
-const THEME = {
-  primary: '#FF6B00',
-  muted: '#6B7280',
-  border: '#E5E7EB',
-};
+const THEME = DESIGN;
 
 function formatDate(date: Date) {
   return date.toLocaleDateString(undefined, {
@@ -41,7 +38,7 @@ export function EventDateField({
 
   return (
     <View>
-      <Text className="mb-1 text-xs font-black uppercase text-gray-500">{label}</Text>
+      <Text className="mb-1 text-sm font-semibold text-gray-700">{label}</Text>
       <TouchableOpacity
         onPress={() => setOpen(true)}
         className="rounded-xl border bg-white px-4 py-3"

@@ -1,8 +1,9 @@
+import { DESIGN } from '@/constants/design';
 import { View } from 'react-native';
 
 import { Text } from '@/components/ui/text';
 
-const THEME = { border: '#E5E7EB' };
+const THEME = DESIGN;
 
 function pad(value: number) {
   return String(value).padStart(2, '0');
@@ -37,7 +38,7 @@ export function EventDateField({
 
   return (
     <View>
-      <Text className="mb-1 text-xs font-black uppercase text-gray-500">{label}</Text>
+      <Text className="mb-1 text-sm font-semibold text-gray-700">{label}</Text>
       <input
         type={mode}
         aria-label={label}
@@ -58,13 +59,15 @@ export function EventDateField({
         }}
         style={{
           width: '100%',
+          minWidth: 0,
+          minHeight: DESIGN.controlHeight,
           boxSizing: 'border-box',
           borderRadius: 12,
           border: `1px solid ${THEME.border}`,
-          background: 'white',
+          background: DESIGN.paper,
           padding: '12px 16px',
           fontSize: 16,
-          color: '#111827',
+          color: DESIGN.ink,
           fontFamily: 'inherit',
         }}
       />

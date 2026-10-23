@@ -382,6 +382,15 @@ Sign-in now has one shared email/code flow for new and existing accounts, withou
 
 The email verification form uses a compact, unboxed layout: Continue to Cahootz → Continue with email → Check your email → Verify and continue. Code entry shows the destination email and smaller Change email / Resend code actions. Browser sign-in helpers use the new button labels.
 
+### Design consistency regression coverage
+
+`design-consistency.spec.ts` signs releaseclick1 in through the UI and covers circular home search, wrapping names, retained Manage circles/menu/switcher controls, parent tab selection in Wallet and product detail, compact no-image products, cart/quantity navigation, and notification preference error/retry recovery. It creates a uniquely named E2E circle via fixture API and leaves it during cleanup. Notification failures are injected only into the test browser; retry then uses the real API. Check 320/375/414/768 widths.
+
+Local settings/proposal failures mentioning missing `NotificationPreference.sage` or `CommonsProposalDraft.ideaPostId` require the existing `20261016040000_simplify_sage_notifications` and `20261018000000_sage_goal_proposal_ideas` migrations; do not mask these with empty data.
+
+`design-secondary.spec.ts` covers directory search/clear/open, Alerts category and unread reset controls, and Sage settings failure/retry/reload plus expandable explanation. Empty alerts and a failed Sage request are browser-local response fixtures; recovery loads the real API. Layout checks use 320/375/414/768 widths. Existing `events.spec.ts` and `sage-decision-trail.spec.ts` retain real publishing/RSVP and persisted preference coverage.
+The same design spec exercises event recurrence, location switching, retained field values, and Publish availability at all four widths without publishing fixture content. Direct-entry Back returns to the selected commons’ Board when no in-app history exists; normal entry retains history navigation.
+
 ### Onboarding CI regressions
 
 Session restoration must finish before rendering the public carousel or email form. The shared authenticated helper waits for profile setup or the Commons screen, never the public Continue button. The signed-out Circle View journey verifies carousel → email → code without tabs, then tabs after an established member signs in. Commons-choice coverage accepts the seeded Cahootz display name and still requires its non-member details action after signup, application, and family creation. Admin login retains its separate Verify & Sign In label.

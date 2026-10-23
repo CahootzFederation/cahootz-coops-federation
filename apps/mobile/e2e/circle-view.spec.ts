@@ -140,7 +140,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
     expect(startingName).not.toBe(otherName);
     await page.getByLabel(`View circles in ${otherName}`, { exact: true }).filter({ visible: true }).click();
     await expect(currentCommons(otherName)).toBeVisible();
-    await expect(visible(`Choose a circle in ${otherName}`)).toBeVisible();
+    await expect(visible(`Find your circle in ${otherName}`)).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`coopId=${otherCoopId}`));
 
     await page.reload();
@@ -153,7 +153,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
       .filter({ visible: true })
       .click();
     await expect(currentCommons(startingName)).toBeVisible();
-    await expect(visible(`Choose a circle in ${startingName}`)).toBeVisible();
+    await expect(visible(`Find your circle in ${startingName}`)).toBeVisible();
 
     // 3. Commons directory.
     await page.getByLabel("Open menu").filter({ visible: true }).click();
@@ -161,7 +161,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
     await expect(page.getByText("Browse commons", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: `Open ${otherName} circles`, exact: true }).filter({ visible: true }).click();
     await expect(currentCommons(otherName)).toBeVisible();
-    await expect(visible(`Choose a circle in ${otherName}`)).toBeVisible();
+    await expect(visible(`Find your circle in ${otherName}`)).toBeVisible();
   } finally {
     await context.close();
   }

@@ -1,3 +1,4 @@
+import { DESIGN } from '@/constants/design';
 import React from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -35,9 +36,9 @@ import { friendlyError } from '@/lib/friendly-error';
 import { canAccessUpdateChannelDebug } from '@/lib/update-channel-debug';
 
 const PROFILE_THEME = {
-  paper: '#F8FAFC',
-  primary: '#FF6B00',
-  primarySoft: '#FFF7ED',
+  paper: DESIGN.paper,
+  primary: DESIGN.primary,
+  primarySoft: DESIGN.primarySoft,
   border: '#F0F2F5',
   muted: '#64748B',
   success: '#16A34A',

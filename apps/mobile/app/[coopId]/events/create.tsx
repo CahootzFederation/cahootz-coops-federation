@@ -1,3 +1,4 @@
+import { DESIGN } from '@/constants/design';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,13 +20,7 @@ import { api, type EventRecurrenceFreq, type PrivateGroupSummary } from '@/lib/a
 import { friendlyError } from '@/lib/friendly-error';
 import { keyboardScrollProps } from '@/lib/keyboard';
 
-const THEME = {
-  paper: '#F6F7F8',
-  primary: '#FF6B00',
-  ink: '#111827',
-  muted: '#6B7280',
-  border: '#E5E7EB',
-};
+const THEME = DESIGN;
 
 const RECURRENCE_OPTIONS: { label: string; value: EventRecurrenceFreq | null }[] = [
   { label: 'Does not repeat', value: null },
@@ -138,20 +133,22 @@ export default function CreateEventScreen() {
       <View className="border-b border-gray-200 bg-white px-4 pt-14 pb-3">
         <View className="flex-row items-center gap-3">
           <TouchableOpacity
-            onPress={() => router.back()}
+            onPress={() => router.canGoBack() ? router.back() : router.replace({ pathname: '/(tabs)/board', params: { coopId } })}
             className="h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white"
+            accessibilityRole="button"
             accessibilityLabel="Go back"
           >
             <ArrowLeft size={22} color={THEME.ink} />
           </TouchableOpacity>
-          <Text className="text-xl font-black text-gray-950">Create event</Text>
+          <Text className="text-xl font-bold text-gray-950">Create event</Text>
         </View>
       </View>
 
-      <ScrollView {...keyboardScrollProps} className="flex-1" contentContainerStyle={{ padding: 16, gap: 16 }}>
+      <ScrollView {...keyboardScrollProps} className="flex-1" contentContainerStyle={{ padding: DESIGN.gutter, gap: 24, width: '100%', maxWidth: 720, alignSelf: 'center' }}>
         <View>
-          <Text className="mb-1 text-xs font-black uppercase text-gray-500">Event name</Text>
+          <Text className="mb-1 text-sm font-semibold text-gray-700">Event name</Text>
           <TextInput
+            accessibilityLabel="Event name"
             value={title}
             onChangeText={setTitle}
             placeholder="New member welcome"
@@ -162,22 +159,22 @@ export default function CreateEventScreen() {
 
         {circles.length > 0 ? (
           <View>
-            <Text className="mb-1 text-xs font-black uppercase text-gray-500">Post in</Text>
+            <Text className="mb-1 text-sm font-semibold text-gray-700">Post in</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View className="flex-row gap-2">
                 {circles.map((circle) => (
                   <TouchableOpacity
                     key={circle.id}
                     onPress={() => setCircleId(circle.id)}
-                    className="rounded-full border px-3 py-2"
+                    className="min-h-12 justify-center rounded-xl border px-3 py-2"
                     style={{
                       borderColor: circleId === circle.id ? THEME.primary : THEME.border,
-                      backgroundColor: circleId === circle.id ? '#FFF7ED' : 'white',
+                      backgroundColor: circleId === circle.id ? DESIGN.primarySoft : DESIGN.paper,
                     }}
                   >
                     <Text
-                      className="text-xs font-black"
-                      style={{ color: circleId === circle.id ? THEME.primary : '#374151' }}
+                      className="text-xs font-bold"
+                      style={{ color: circleId === circle.id ? DESIGN.actionText : DESIGN.ink }}
                     >
                       {circle.name}
                     </Text>
@@ -204,8 +201,9 @@ export default function CreateEventScreen() {
         </View>
 
         <View>
-          <Text className="mb-1 text-xs font-black uppercase text-gray-500">Duration (minutes)</Text>
+          <Text className="mb-1 text-sm font-semibold text-gray-700">Duration (minutes)</Text>
           <TextInput
+            accessibilityLabel="Duration (minutes)"
             value={durationMinutes}
             onChangeText={setDurationMinutes}
             keyboardType="number-pad"
@@ -215,22 +213,24 @@ export default function CreateEventScreen() {
         </View>
 
         <View>
-          <Text className="mb-1 text-xs font-black uppercase text-gray-500">Repeats</Text>
+          <Text className="mb-1 text-sm font-semibold text-gray-700">Repeats</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View className="flex-row gap-2">
               {RECURRENCE_OPTIONS.map((option) => (
                 <TouchableOpacity
                   key={option.label}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: recurrenceFreq === option.value }}
                   onPress={() => setRecurrenceFreq(option.value)}
-                  className="rounded-full border px-3 py-2"
+                  className="min-h-12 justify-center rounded-xl border px-3 py-2"
                   style={{
                     borderColor: recurrenceFreq === option.value ? THEME.primary : THEME.border,
-                    backgroundColor: recurrenceFreq === option.value ? '#FFF7ED' : 'white',
+                    backgroundColor: recurrenceFreq === option.value ? DESIGN.primarySoft : DESIGN.paper,
                   }}
                 >
                   <Text
-                    className="text-xs font-black"
-                    style={{ color: recurrenceFreq === option.value ? THEME.primary : '#374151' }}
+                    className="text-xs font-bold"
+                    style={{ color: recurrenceFreq === option.value ? DESIGN.actionText : DESIGN.ink }}
                   >
                     {option.label}
                   </Text>
@@ -240,7 +240,7 @@ export default function CreateEventScreen() {
           </ScrollView>
 
           {recurrenceFreq ? (
-            <View className="mt-2 flex-row items-center gap-2">
+            <View className="mt-2 flex-row flex-wrap items-center gap-2">
               <Text className="text-xs font-semibold text-gray-600">Every</Text>
               <TextInput
                 value={recurrenceInterval}
@@ -265,34 +265,36 @@ export default function CreateEventScreen() {
         </View>
 
         <View>
-          <Text className="mb-1 text-xs font-black uppercase text-gray-500">Location</Text>
+          <Text className="mb-1 text-sm font-semibold text-gray-700">Location</Text>
           <View className="flex-row gap-2">
             <TouchableOpacity
+              accessibilityRole="button"
               onPress={() => setIsOnline(true)}
-              className="flex-1 items-center rounded-xl border px-3 py-2.5"
+              className="flex-1 items-center min-h-12 justify-center rounded-xl border px-3 py-2.5"
               style={{
                 borderColor: isOnline ? THEME.primary : THEME.border,
-                backgroundColor: isOnline ? '#FFF7ED' : 'white',
+                backgroundColor: isOnline ? DESIGN.primarySoft : DESIGN.paper,
               }}
             >
               <Text
-                className="text-xs font-black"
-                style={{ color: isOnline ? THEME.primary : '#374151' }}
+                className="text-xs font-bold"
+                style={{ color: isOnline ? DESIGN.actionText : DESIGN.ink }}
               >
                 Online
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
+              accessibilityRole="button"
               onPress={() => setIsOnline(false)}
-              className="flex-1 items-center rounded-xl border px-3 py-2.5"
+              className="flex-1 items-center min-h-12 justify-center rounded-xl border px-3 py-2.5"
               style={{
                 borderColor: !isOnline ? THEME.primary : THEME.border,
-                backgroundColor: !isOnline ? '#FFF7ED' : 'white',
+                backgroundColor: !isOnline ? DESIGN.primarySoft : DESIGN.paper,
               }}
             >
               <Text
-                className="text-xs font-black"
-                style={{ color: !isOnline ? THEME.primary : '#374151' }}
+                className="text-xs font-bold"
+                style={{ color: !isOnline ? DESIGN.actionText : DESIGN.ink }}
               >
                 In person
               </Text>
@@ -300,7 +302,8 @@ export default function CreateEventScreen() {
           </View>
           {isOnline ? (
             <TextInput
-              value={meetingUrl}
+              accessibilityLabel="Meeting link"
+            value={meetingUrl}
               onChangeText={setMeetingUrl}
               placeholder="Google Meet link (optional)"
               placeholderTextColor={THEME.muted}
@@ -309,7 +312,8 @@ export default function CreateEventScreen() {
             />
           ) : (
             <TextInput
-              value={location}
+              accessibilityLabel="Address"
+            value={location}
               onChangeText={setLocation}
               placeholder="Address"
               placeholderTextColor={THEME.muted}
@@ -319,8 +323,9 @@ export default function CreateEventScreen() {
         </View>
 
         <View>
-          <Text className="mb-1 text-xs font-black uppercase text-gray-500">Description</Text>
+          <Text className="mb-1 text-sm font-semibold text-gray-700">Description</Text>
           <TextInput
+            accessibilityLabel="Description"
             value={description}
             onChangeText={setDescription}
             placeholder="Meet your table and ask questions."
@@ -333,10 +338,10 @@ export default function CreateEventScreen() {
 
         <View className="flex-row items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3">
           <View className="min-w-0 flex-1 pr-3">
-            <Text className="text-sm font-black text-gray-950">Allow comments</Text>
+            <Text className="text-sm font-bold text-gray-950">Allow comments</Text>
             <Text className="text-xs text-gray-500">Members of this circle will see the event as a post.</Text>
           </View>
-          <Switch value={allowComments} onValueChange={setAllowComments} />
+          <Switch accessibilityLabel="Allow comments" value={allowComments} onValueChange={setAllowComments} />
         </View>
 
         {error ? <Text className="text-sm font-semibold text-red-600">{error}</Text> : null}
@@ -344,14 +349,15 @@ export default function CreateEventScreen() {
         <TouchableOpacity
           onPress={publishEvent}
           disabled={isSubmitting}
-          className="items-center rounded-full px-4 py-3.5"
+          className="min-h-12 items-center justify-center rounded-xl px-4 py-3.5"
           style={{ backgroundColor: THEME.primary, opacity: isSubmitting ? 0.7 : 1 }}
+          accessibilityRole="button"
           accessibilityLabel="Publish event"
         >
           {isSubmitting ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Text className="text-sm font-black text-white">Publish event</Text>
+            <Text className="text-sm font-bold" style={{ color: DESIGN.ink }}>Publish event</Text>
           )}
         </TouchableOpacity>
       </ScrollView>

@@ -722,3 +722,7 @@ If you encounter a situation not covered in this guide:
 - v1.3 (2026-10-16): Make sustained, voluntary, goal-directed participation an explicit product goal for every Commons, without engagement manipulation
 - v1.2 (2026-10-03): Add Sage constitutional operating-agent direction, autonomy boundaries, memory rules, cost controls, and evaluation requirements
 - v1.0 (2026-06-13): Create Cahootz Repo
+
+## Mobile visual design
+
+For mobile UI work, read `apps/mobile/DESIGN.md`. It records the user-approved patterns, shared tokens, preserved controls, and verification requirements for all agents.

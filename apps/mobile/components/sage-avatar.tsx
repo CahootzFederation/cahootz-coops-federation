@@ -73,7 +73,7 @@ export function SageAvatar({ size = 40, motion = 'still' }: { size?: number; mot
         [`${(closeAt + (100 - closeAt) / 2).toFixed(2)}%`]: { transform: [{ scaleY: 0.1 }] },
         '100%': { transform: [{ scaleY: 1 }] },
       },
-      animationDuration: `${duration}ms`,
+      animationDuration: `${duration}ms` as const,
       animationIterationCount: 'infinite' as const,
     };
   }, []);

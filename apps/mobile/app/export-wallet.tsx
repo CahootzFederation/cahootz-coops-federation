@@ -52,7 +52,7 @@ export default function ExportWalletScreen() {
 
   const copyToClipboard = async (text: string, label: string) => {
     await Clipboard.setStringAsync(text);
-    Alert.alert('Copied', `${label} copied to clipboard`);
+    Alert.alert('Copied', `${label} copied`);
   };
 
   if (step === 'warning') {
@@ -60,20 +60,20 @@ export default function ExportWalletScreen() {
       <ScrollView className="flex-1 bg-gray-50">
         <View className="p-6">
           <Text className="text-2xl font-bold text-gray-900 mb-4">
-            ⚠️ Security Warning
+            ⚠️ Before you go on
           </Text>
 
           <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
             <Text className="text-red-800 font-semibold mb-2">
-              Critical Security Information
+              Keep this safe
             </Text>
             <Text className="text-red-700 text-sm leading-6">
-              Your private key gives complete access to your wallet and funds. Anyone who has your private key can steal your funds.
+              Your private key works like a master password for your money. It gives full access to your wallet and everything in it. Anyone who has it can take your money.
             </Text>
           </View>
 
           <View className="bg-white rounded-xl p-4 mb-6 space-y-4">
-            <Text className="text-gray-900 font-semibold mb-2">Important:</Text>
+            <Text className="text-gray-900 font-semibold mb-2">Remember:</Text>
 
             <View className="flex-row">
               <Text className="text-gray-600 mr-2">•</Text>
@@ -85,14 +85,14 @@ export default function ExportWalletScreen() {
             <View className="flex-row">
               <Text className="text-gray-600 mr-2">•</Text>
               <Text className="flex-1 text-gray-700">
-                Store it in a secure location (password manager, hardware wallet, or paper backup in a safe)
+                Keep it somewhere safe, like a password manager, a hardware wallet, or a paper copy in a safe
               </Text>
             </View>
 
             <View className="flex-row">
               <Text className="text-gray-600 mr-2">•</Text>
               <Text className="flex-1 text-gray-700">
-                Do not take screenshots or save it in cloud storage
+                Don&apos;t take a screenshot of it or save it in cloud storage
               </Text>
             </View>
 
@@ -106,7 +106,7 @@ export default function ExportWalletScreen() {
             <View className="flex-row">
               <Text className="text-gray-600 mr-2">•</Text>
               <Text className="flex-1 text-gray-700">
-                If you lose your private key, you will lose access to your funds
+                If you lose your private key, you lose access to your money
               </Text>
             </View>
           </View>
@@ -121,7 +121,7 @@ export default function ExportWalletScreen() {
               {understood && <Text className="text-white font-bold">✓</Text>}
             </View>
             <Text className="flex-1 text-gray-700">
-              I understand the risks and will store my private key securely
+              I get the risks, and I&apos;ll keep my private key safe
             </Text>
           </TouchableOpacity>
 
@@ -151,10 +151,10 @@ export default function ExportWalletScreen() {
       <ScrollView {...keyboardInsetScrollProps} className="flex-1 bg-gray-50">
         <View className="p-6">
           <Text className="text-2xl font-bold text-gray-900 mb-2">
-            Verify Your Identity
+            Make sure it&apos;s you
           </Text>
           <Text className="text-gray-600 mb-6">
-            Enter your password to enable wallet signing on this device. Your key will be stored in secure device storage.
+            Enter your password to set up this phone to sign for your wallet. We&apos;ll keep your key in your phone&apos;s secure storage.
           </Text>
 
           <View className="bg-white rounded-xl p-4 mb-6">
@@ -180,7 +180,7 @@ export default function ExportWalletScreen() {
             {loading ? (
               <ActivityIndicator size="small" color="white" />
             ) : (
-              <Text className="text-white font-bold text-lg">Export Private Key</Text>
+              <Text className="text-white font-bold text-lg">Show my private key</Text>
             )}
           </TouchableOpacity>
 
@@ -200,15 +200,15 @@ export default function ExportWalletScreen() {
     <ScrollView className="flex-1 bg-gray-50">
       <View className="p-6">
         <Text className="text-2xl font-bold text-gray-900 mb-2">
-          Wallet Signing Enabled
+          This phone is set up
         </Text>
         <Text className="text-gray-600 mb-6">
-          This device can now sign Cahootz wallet verification messages. Save this information securely if you also want an external backup.
+          This phone can now sign for your Cahootz wallet. If you want a backup somewhere else too, save the info below somewhere safe.
         </Text>
 
         {/* Wallet Address */}
         <View className="bg-white rounded-xl p-4 mb-4">
-          <Text className="text-gray-700 font-semibold mb-2">Wallet Address</Text>
+          <Text className="text-gray-700 font-semibold mb-2">Wallet address</Text>
           <Text className="text-gray-900 font-mono text-sm mb-3 break-all">
             {walletAddress}
           </Text>
@@ -216,13 +216,13 @@ export default function ExportWalletScreen() {
             onPress={() => copyToClipboard(walletAddress, 'Address')}
             className="bg-primary py-2 rounded-lg items-center"
           >
-            <Text className="text-white font-semibold">Copy Address</Text>
+            <Text className="text-white font-semibold">Copy address</Text>
           </TouchableOpacity>
         </View>
 
         {/* Private Key */}
         <View className="bg-white rounded-xl p-4 mb-4">
-          <Text className="text-gray-700 font-semibold mb-2">Private Key</Text>
+          <Text className="text-gray-700 font-semibold mb-2">Private key</Text>
           <TouchableOpacity onPress={() => setShowKey(!showKey)} className="mb-3">
             <View className={`p-3 rounded-lg ${showKey ? 'bg-gray-100' : 'bg-yellow-50'}`}>
               {showKey ? (
@@ -247,7 +247,7 @@ export default function ExportWalletScreen() {
               onPress={() => copyToClipboard(privateKey, 'Private key')}
               className="bg-primary py-2 rounded-lg items-center"
             >
-              <Text className="text-white font-semibold">Copy Private Key</Text>
+              <Text className="text-white font-semibold">Copy private key</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -255,7 +255,7 @@ export default function ExportWalletScreen() {
         {/* QR Code */}
         {showKey && (
           <View className="bg-white rounded-xl p-4 mb-4 items-center">
-            <Text className="text-gray-700 font-semibold mb-3">QR Code</Text>
+            <Text className="text-gray-700 font-semibold mb-3">QR code</Text>
             <QRCode
               value={privateKey}
               size={200}
@@ -270,21 +270,21 @@ export default function ExportWalletScreen() {
 
         {/* Warning */}
         <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-          <Text className="text-red-800 font-semibold mb-2">⚠️ Final Warning</Text>
+          <Text className="text-red-800 font-semibold mb-2">⚠️ One last thing</Text>
           <Text className="text-red-700 text-sm">
-            Once you close this screen, you won&apos;t be able to see your private key again without re-authenticating. Make sure you&apos;ve saved it securely.
+            Once you close this screen, you&apos;ll need to enter your password again to see your private key. Make sure you&apos;ve saved it somewhere safe.
           </Text>
         </View>
 
         <TouchableOpacity
           onPress={() => {
             Alert.alert(
-              'Confirm',
-              'Have you saved your private key securely?',
+              'Saved it?',
+              'Have you saved your private key somewhere safe?',
               [
-                { text: 'Not Yet', style: 'cancel' },
+                { text: 'Not yet', style: 'cancel' },
                 {
-                  text: "Yes, I've Saved It",
+                  text: "Yes, I saved it",
                   onPress: () => router.back(),
                 },
               ]

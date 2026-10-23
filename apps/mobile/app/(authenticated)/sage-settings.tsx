@@ -13,7 +13,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 
-const LABEL = 'Show Sage decision trails';
+const LABEL = 'Show how Sage decides';
 
 export default function SageSettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -61,7 +61,7 @@ export default function SageSettingsScreen() {
           admin stay private to platform admins.
         </Text>
         {mutation.isError ? (
-          <Text accessibilityRole="alert" style={{ color: DESIGN.danger }}>Could not save. Your previous choice is still active.</Text>
+          <Text accessibilityRole="alert" style={{ color: DESIGN.danger }}>We couldn&apos;t save that. Nothing changed, so try again.</Text>
         ) : mutation.isSuccess && !mutation.isPending ? (
           <Text accessibilityLiveRegion="polite" style={{ fontSize: 13, color: DESIGN.success }}>Saved.</Text>
         ) : null}

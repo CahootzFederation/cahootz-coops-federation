@@ -83,14 +83,14 @@ function CardForm({ onSuccess, onCancel }: CardInputProps) {
             <X size={24} color="#111827" />
           </TouchableOpacity>
           <Text style={{ flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '600', color: '#111827', marginLeft: -32 }}>
-            Add Card
+            Add card
           </Text>
         </View>
       </View>
 
       <ScrollView style={{ flex: 1, padding: 16 }}>
         <View style={{ marginBottom: 24 }}>
-          <Text style={{ color: '#374151', fontWeight: '500', marginBottom: 12 }}>Card Information</Text>
+          <Text style={{ color: '#374151', fontWeight: '500', marginBottom: 12 }}>Card info</Text>
           <View style={{ borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, padding: 12, backgroundColor: '#FFFFFF' }}>
             <CardElement
               options={{
@@ -132,7 +132,7 @@ function CardForm({ onSuccess, onCancel }: CardInputProps) {
           {adding ? (
             <ActivityIndicator size="small" color="white" />
           ) : (
-            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>Add Card</Text>
+            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>Add card</Text>
           )}
         </TouchableOpacity>
       </ScrollView>

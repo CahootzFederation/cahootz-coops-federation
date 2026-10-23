@@ -15,7 +15,7 @@ export default function CardInput({ onCancel }: CardInputProps) {
             <X size={24} color="#111827" />
           </TouchableOpacity>
           <Text className="flex-1 text-center text-lg font-semibold text-gray-900 -ml-8">
-            Payment Methods
+            Payment methods
           </Text>
         </View>
       </View>

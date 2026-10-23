@@ -871,8 +871,8 @@ export const p2pRouter = router({
             userId: input.userId,
             coopId,
             type: 'WITHDRAWAL_INITIATED',
-            title: 'Withdrawal Processing',
-            body: `Your withdrawal of $${input.amountUSD.toFixed(2)} to account ending in ${bankAccount.last4} is being processed.`,
+            title: "Your money's on the way",
+            body: `We're sending $${input.amountUSD.toFixed(2)} to your account ending in ${bankAccount.last4}.`,
             data: {
               withdrawalId: withdrawal.id,
               amountUSD: input.amountUSD,

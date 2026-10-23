@@ -64,7 +64,7 @@ test('the board only lists its selected existing community features', { tag: '@s
     await expect(member.page.getByText('From member shops', { exact: true })).toBeVisible();
     await expect(member.page.getByLabel('View Seed Supporter')).toBeVisible();
     await expect(member.page.getByLabel('Open Verified resources')).toBeVisible();
-    await expect(member.page.getByLabel('Open Proposals & votes')).toHaveCount(0);
+    await expect(member.page.getByLabel('Open Proposals and votes')).toHaveCount(0);
     await expect(member.page.getByLabel('Open Projects & working groups')).toHaveCount(0);
     await expect(member.page.getByLabel('Open Notices & local news')).toHaveCount(0);
     await expect(member.page.getByLabel('Open Decisions & governance')).toHaveCount(0);

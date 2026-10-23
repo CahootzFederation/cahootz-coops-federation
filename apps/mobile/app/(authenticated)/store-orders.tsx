@@ -155,7 +155,7 @@ export default function StoreOrdersScreen() {
         <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900">Store Orders</Text>
+        <Text className="text-lg font-semibold text-gray-900">Store orders</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -215,7 +215,7 @@ export default function StoreOrdersScreen() {
             <View className="bg-white rounded-2xl p-12 items-center">
               <Package size={64} color="#D1D5DB" />
               <Text className="text-gray-500 text-center mt-4 text-lg font-semibold">
-                No Orders Yet
+                No orders yet
               </Text>
               <Text className="text-gray-400 text-center mt-2">
                 {selectedStatus === 'ALL' 
@@ -262,7 +262,7 @@ export default function StoreOrdersScreen() {
                       ${formatPrice(order.totalUSD)}
                     </Text>
                     <View className="flex-row items-center">
-                      <Text className="text-sm text-primary font-medium mr-1">View Details</Text>
+                      <Text className="text-sm text-primary font-medium mr-1">See details</Text>
                       <ChevronRight size={16} color="#FF8A2A" />
                     </View>
                   </View>

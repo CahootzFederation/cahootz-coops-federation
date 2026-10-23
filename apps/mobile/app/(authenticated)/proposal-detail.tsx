@@ -44,34 +44,12 @@ import { api } from '@/lib/api';
 import { ApiError, friendlyError } from '@/lib/friendly-error';
 import { votingDeadlineLine } from '@/lib/voting-deadline';
 import { keyboardScrollProps } from '@/lib/keyboard';
+import { plainProposalStatus, proposalStatusLabel } from '@/lib/proposal-status';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function prettifyKey(key: string) {
   return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function statusLabel(status: string) {
-  const map: Record<string, string> = {
-    submitted: 'AI Review', votable: 'Deliberation',
-    approved: 'Approved', funded: 'Funded',
-    rejected: 'Rejected', failed: 'Failed',
-  };
-  return map[status] ?? status;
-}
-
-/** A plain word for a proposal's status, for sentences like "This proposal is now approved." */
-function plainStatus(status: string) {
-  const map: Record<string, string> = {
-    submitted: 'in review',
-    votable: 'open for discussion',
-    approved: 'approved',
-    funded: 'funded',
-    rejected: 'not approved',
-    failed: 'not approved',
-    withdrawn: 'withdrawn',
-  };
-  return map[status.toLowerCase()] ?? status.toLowerCase().replace(/_/g, ' ');
 }
 
 type VoteChoice = 'FOR' | 'AGAINST' | 'ABSTAIN';
@@ -84,9 +62,9 @@ const VOTE_CHOICES: Record<VoteChoice, { label: string; tally: string; bg: strin
 };
 
 function decisionColor(d?: string) {
-  if (d === 'advance') return { bg: '#F0FDF4', border: '#86EFAC', text: '#15803D', label: 'Advance' };
-  if (d === 'block')   return { bg: '#FEF2F2', border: '#FCA5A5', text: '#DC2626', label: 'Block' };
-  return { bg: '#FFFBEB', border: '#FCD34D', text: '#FF6B00', label: 'Revise' };
+  if (d === 'advance') return { bg: '#F0FDF4', border: '#86EFAC', text: '#15803D', label: 'Moving forward' };
+  if (d === 'block')   return { bg: '#FEF2F2', border: '#FCA5A5', text: '#DC2626', label: 'Not a fit' };
+  return { bg: '#FFFBEB', border: '#FCD34D', text: '#FF6B00', label: 'Needs changes' };
 }
 
 function walletShort(w?: string) {
@@ -128,6 +106,9 @@ function CommentItem({ comment }: { comment: any }) {
   const alignmentColor: Record<string, string> = {
     ALIGNED: '#16A34A', NEUTRAL: '#FF6B00', MISALIGNED: '#DC2626',
   };
+  const alignmentLabel: Record<string, string> = {
+    ALIGNED: 'Fits our goals', NEUTRAL: 'Neutral', MISALIGNED: "Doesn't fit our goals",
+  };
   const aiColor = comment.aiEvaluation ? alignmentColor[comment.aiEvaluation.alignment] : undefined;
 
   return (
@@ -154,7 +135,7 @@ function CommentItem({ comment }: { comment: any }) {
               <View className="flex-row items-center gap-1" style={{ backgroundColor: `${aiColor}18`, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 }}>
                 <Sparkles size={11} color={aiColor} />
                 <Text style={{ color: aiColor, fontSize: 11, fontWeight: '600' }}>
-                  {comment.aiEvaluation.alignment}
+                  {alignmentLabel[comment.aiEvaluation.alignment] ?? comment.aiEvaluation.alignment}
                 </Text>
               </View>
               {(comment.aiEvaluation.goalsImpacted ?? []).map((g: string) => (
@@ -407,9 +388,9 @@ export function ProposalDetailContent() {
   const passesThreshold = proposal.evaluation?.computed_scores?.passes_threshold ?? false;
   const failReasons: string[] = proposal.evaluation?.computed_scores?.passFailReasons ?? [];
   const FAIL_LABELS: Record<string, string> = {
-    FAIL_STRUCTURAL_GATE: 'Structural score too low',
-    FAIL_MISSION_MIN_THRESHOLD: 'Mission impact score too low',
-    FAIL_NO_STRONG_MISSION_GOAL: 'No single goal scored strongly',
+    FAIL_STRUCTURAL_GATE: 'Plan score too low',
+    FAIL_MISSION_MIN_THRESHOLD: 'Goals score too low',
+    FAIL_NO_STRONG_MISSION_GOAL: "Doesn't strongly help any one goal",
   };
   const structuralBreakdown: { factor: string; rationale?: string }[] = proposal.evaluation?.structural_breakdown ?? [];
   const visibleComments = showAll ? comments : comments.slice(0, 3);
@@ -443,7 +424,7 @@ export function ProposalDetailContent() {
     steps.push({
       icon: <CheckCircle size={18} color="#16A34A" />,
       bg: '#DCFCE7',
-      label: 'Proposal Submitted',
+      label: 'Proposal sent',
       detail: formatDate(proposal.createdAt),
       done: true,
     });
@@ -454,21 +435,21 @@ export function ProposalDetailContent() {
       steps.push({
         icon: <Clock size={18} color="#FF6B00" />,
         bg: '#FEF3C7',
-        label: 'AI Scoring',
-        detail: 'Checking alignment with commons goals & charter',
+        label: 'Sage is checking it',
+        detail: 'Seeing how it fits our goals and charter',
         done: false,
       });
       return steps;
     }
 
     const decisionTag = aiAdvanced
-      ? 'Advanced'
-      : proposal.decision === 'block' ? 'Not aligned' : 'Needs revision';
+      ? 'Good fit'
+      : proposal.decision === 'block' ? 'Not a fit' : 'Needs changes';
     steps.push({
       icon: <Sparkles size={18} color={aiAdvanced ? '#16A34A' : '#DC2626'} />,
       bg: aiAdvanced ? '#DCFCE7' : '#FEF2F2',
-      label: 'AI Scoring Complete',
-      detail: `Score: ${overallScore}% · ${decisionTag}`,
+      label: 'Check done',
+      detail: `${decisionTag} (${overallScore}%)`,
       done: aiAdvanced,
     });
 
@@ -477,10 +458,10 @@ export function ProposalDetailContent() {
       steps.push({
         icon: <XCircle size={18} color="#DC2626" />,
         bg: '#FEF2F2',
-        label: 'Proposal Closed',
+        label: 'Closed',
         detail: proposal.decision === 'block'
-          ? 'Not aligned with commons goals — see AI notes below'
-          : 'Requires significant revision — see AI notes below',
+          ? "This doesn't fit our goals yet. The notes below say why."
+          : 'It needs big changes first. The notes below say what.',
         done: true,
       });
       return steps;
@@ -493,12 +474,12 @@ export function ProposalDetailContent() {
       steps.push({
         icon: <MessageCircle size={18} color={isVotable ? '#2563EB' : isApproved ? '#16A34A' : '#9CA3AF'} />,
         bg: isVotable ? '#DBEAFE' : isApproved ? '#DCFCE7' : '#F3F4F6',
-        label: 'Community Input',
+        label: 'Member input',
         detail: isVotable
-          ? 'Members can react & comment — council reviews sentiment'
-          : isApproved ? 'Input received by council'
-          : isTerminal ? 'Closed before vote'
-          : 'Pending',
+          ? 'Members react and comment, and the council looks at what they say.'
+          : isApproved ? 'The council heard from members.'
+          : isTerminal ? 'Closed before the vote'
+          : 'Not started yet',
         done: isApproved || isTerminal,
       });
 
@@ -506,8 +487,8 @@ export function ProposalDetailContent() {
         steps.push({
           icon: <XCircle size={18} color={st === 'withdrawn' ? '#6B7280' : '#DC2626'} />,
           bg: st === 'withdrawn' ? '#F3F4F6' : '#FEF2F2',
-          label: st === 'withdrawn' ? 'Withdrawn' : 'Rejected by Council',
-          detail: st === 'withdrawn' ? 'Withdrawn by proposer' : 'Council voted to reject',
+          label: st === 'withdrawn' ? 'Withdrawn' : 'Not approved by the council',
+          detail: st === 'withdrawn' ? 'The person who proposed it withdrew it.' : 'The council voted no.',
           done: true,
         });
         return steps;
@@ -516,10 +497,10 @@ export function ProposalDetailContent() {
       steps.push({
         icon: <Shield size={18} color={isVotable ? '#7C3AED' : '#16A34A'} />,
         bg: isVotable ? '#F5F3FF' : '#DCFCE7',
-        label: isVotable ? 'Council Vote (open)' : 'Council Approved',
+        label: isVotable ? 'Council vote (open)' : 'Council approved',
         detail: isVotable
-          ? 'Council members casting votes — majority decides'
-          : 'Approved by council ✓',
+          ? 'Council members are voting. The majority decides.'
+          : 'The council said yes ✓',
         done: isApproved,
       });
     } else {
@@ -527,8 +508,8 @@ export function ProposalDetailContent() {
       steps.push({
         icon: <CheckCircle size={18} color="#16A34A" />,
         bg: '#DCFCE7',
-        label: 'AI Auto-Approved',
-        detail: 'Budget below auto-approve threshold — no council vote required',
+        label: 'Approved automatically',
+        detail: "It costs less than this commons' limit for automatic approval, so it didn't need a council vote.",
         done: true,
       });
 
@@ -537,7 +518,7 @@ export function ProposalDetailContent() {
           icon: <XCircle size={18} color="#6B7280" />,
           bg: '#F3F4F6',
           label: 'Withdrawn',
-          detail: 'Withdrawn by proposer after approval',
+          detail: 'The person who proposed it withdrew it after it was approved.',
           done: true,
         });
         return steps;
@@ -549,7 +530,7 @@ export function ProposalDetailContent() {
       icon: <TrendingUp size={18} color={isFunded ? '#16A34A' : '#9CA3AF'} />,
       bg: isFunded ? '#DCFCE7' : '#F3F4F6',
       label: 'Funding',
-      detail: isFunded ? 'Funds disbursed ✓' : 'Pending disbursement',
+      detail: isFunded ? 'Money sent ✓' : 'Waiting for the money to go out',
       done: isFunded,
     });
 
@@ -568,8 +549,8 @@ export function ProposalDetailContent() {
           <ArrowLeft size={22} color="#1F2937" />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-gray-950 font-black text-xl" numberOfLines={1}>Proposal Details</Text>
-          <Text className="text-slate-600 text-sm font-semibold">{statusLabel(proposal.status)}</Text>
+          <Text className="text-gray-950 font-black text-xl" numberOfLines={1}>Proposal details</Text>
+          <Text className="text-slate-600 text-sm font-semibold">{proposalStatusLabel(proposal.status)}</Text>
         </View>
       </View>
 
@@ -604,7 +585,7 @@ export function ProposalDetailContent() {
                 </Text>
               </View>
               <View className="bg-blue-50 border border-blue-200 rounded-full px-3 py-1">
-                <Text className="text-blue-600 text-xs font-medium">{statusLabel(proposal.status)}</Text>
+                <Text className="text-blue-600 text-xs font-medium">{proposalStatusLabel(proposal.status)}</Text>
               </View>
             </View>
 
@@ -631,7 +612,7 @@ export function ProposalDetailContent() {
                 <Text className="text-charcoal-400 text-xs capitalize">{proposal.proposer?.role === 'bot' ? 'AI helper' : proposal.proposer?.role}</Text>
               </View>
               <View className="items-end">
-                <Text className="text-charcoal-400 text-xs">Submitted</Text>
+                <Text className="text-charcoal-400 text-xs">Sent</Text>
                 <Text className="text-charcoal-700 text-xs font-medium">{formatDate(proposal.createdAt)}</Text>
               </View>
             </View>
@@ -641,7 +622,7 @@ export function ProposalDetailContent() {
           {proposal.decisionReasons?.length > 0 && (
             <View className="rounded-2xl p-4 border" style={{ backgroundColor: dc.bg, borderColor: dc.border }}>
               <Text style={{ color: dc.text, fontWeight: '700', fontSize: 14, marginBottom: 6 }}>
-                Decision: {dc.label}
+                Result: {dc.label}
               </Text>
               {proposal.decisionReasons.map((r: string, i: number) => (
                 <View key={i} className="flex-row items-start gap-2 mb-1">
@@ -667,8 +648,8 @@ export function ProposalDetailContent() {
                   <Pencil size={16} color="#FF6B00" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-amber-800 font-semibold text-sm">Edit & Resubmit</Text>
-                  <Text className="text-primary text-xs">Update your proposal text and let the AI re-evaluate</Text>
+                  <Text className="text-amber-800 font-semibold text-sm">Edit and send again</Text>
+                  <Text className="text-primary text-xs">Change your proposal and Sage will check it again</Text>
                 </View>
                 {showEditPanel
                   ? <ChevronUp size={16} color="#FF6B00" />
@@ -683,7 +664,7 @@ export function ProposalDetailContent() {
                     onChangeText={setEditText}
                     multiline
                     numberOfLines={8}
-                    placeholder="Update your proposal text..."
+                    placeholder="Change your proposal here…"
                     placeholderTextColor="#9CA3AF"
                     style={{
                       borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 12,
@@ -691,7 +672,7 @@ export function ProposalDetailContent() {
                       fontSize: 13, color: '#1F2937', backgroundColor: '#F9FAFB',
                     }}
                   />
-                  <Text className="text-charcoal-400 text-xs text-right">{editText.length} chars</Text>
+                  <Text className="text-charcoal-400 text-xs text-right">{editText.length} characters</Text>
                   <TouchableOpacity
                     onPress={handleResubmit}
                     disabled={resubmitting || editText.trim().length < 10}
@@ -703,7 +684,7 @@ export function ProposalDetailContent() {
                       : <RotateCcw size={14} color="#fff" />
                     }
                     <Text className="text-white font-semibold text-sm">
-                      {resubmitting ? 'Re-evaluating…' : 'Resubmit for Review'}
+                      {resubmitting ? 'Checking again…' : 'Send changes'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -713,10 +694,10 @@ export function ProposalDetailContent() {
 
           {/* ── Budget & Funding ── */}
           <View className="bg-white rounded-2xl p-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
-            <Text className="text-charcoal-800 font-semibold text-base mb-3">Budget & Details</Text>
+            <Text className="text-charcoal-800 font-semibold text-base mb-3">Cost and details</Text>
             <View className="gap-2">
               {[
-                ['Budget Requested', `${proposal.budget?.currency ?? ''} ${proposal.budget?.amountRequested?.toLocaleString() ?? 0}`],
+                ['Amount asked for', `${proposal.budget?.currency ?? ''} ${proposal.budget?.amountRequested?.toLocaleString() ?? 0}`],
                 ['Category', categoryLabels[proposal.category] ?? prettifyKey(proposal.category)],
                 ['Location', proposal.region?.name],
               ].map(([label, value]) => (
@@ -736,8 +717,8 @@ export function ProposalDetailContent() {
                 <Sparkles size={20} color="#16A34A" />
               </View>
               <View className="flex-1">
-                <Text className="text-green-800 font-semibold text-base">AI Review Results</Text>
-                <Text className="text-green-600 text-xs">Engine v{proposal.audit?.engineVersion}</Text>
+                <Text className="text-green-800 font-semibold text-base">Sage&apos;s check</Text>
+                <Text className="text-green-600 text-xs">Version {proposal.audit?.engineVersion}</Text>
               </View>
               <View className="items-end">
                 <Text className="text-green-700 font-bold text-2xl">{overallScore}</Text>
@@ -763,7 +744,7 @@ export function ProposalDetailContent() {
                 ) : (
                   <View className="self-start rounded-full px-3 py-1 flex-row items-center gap-1" style={{ backgroundColor: '#FEF2F2' }}>
                     <XCircle size={12} color="#DC2626" />
-                    <Text style={{ color: '#DC2626', fontSize: 11, fontWeight: '600' }}>Below Threshold</Text>
+                    <Text style={{ color: '#DC2626', fontSize: 11, fontWeight: '600' }}>Not there yet</Text>
                   </View>
                 )}
               </View>
@@ -779,9 +760,9 @@ export function ProposalDetailContent() {
               {proposal.evaluation?.structural_scores && (
                 <View className="mb-3">
                   <View className="flex-row items-center justify-between mb-2">
-                    <Text className="text-charcoal-700 font-semibold text-sm">Structural</Text>
+                    <Text className="text-charcoal-700 font-semibold text-sm">The plan</Text>
                     <Text className="text-charcoal-400 text-xs">
-                      {Math.round((proposal.evaluation.computed_scores?.structural_weighted_score ?? 0) * 100)}% weighted
+                      Score: {Math.round((proposal.evaluation.computed_scores?.structural_weighted_score ?? 0) * 100)}%
                     </Text>
                   </View>
                   {/* Goal mapping valid */}
@@ -791,10 +772,10 @@ export function ProposalDetailContent() {
                       : <XCircle size={14} color="#DC2626" />
                     }
                     <Text style={{ color: proposal.evaluation.structural_scores.goal_mapping_valid ? '#16A34A' : '#DC2626', fontSize: 12 }}>
-                      Goal mapping {proposal.evaluation.structural_scores.goal_mapping_valid ? 'valid' : 'invalid'}
+                      {proposal.evaluation.structural_scores.goal_mapping_valid ? 'Ties to our goals' : "Doesn't tie to our goals"}
                     </Text>
                   </View>
-                  <ScoreBar label="Feasibility" value={proposal.evaluation.structural_scores.feasibility_score} icon={<CheckCircle size={13} color="#FF6B00" />} />
+                  <ScoreBar label="Can it be done?" value={proposal.evaluation.structural_scores.feasibility_score} icon={<CheckCircle size={13} color="#FF6B00" />} />
                   {structuralBreakdown.find(b => b.factor === 'feasibility')?.rationale ? (
                     <Text className="text-charcoal-400 text-xs ml-5 -mt-1 mb-1 italic">{structuralBreakdown.find(b => b.factor === 'feasibility')!.rationale}</Text>
                   ) : null}
@@ -803,7 +784,7 @@ export function ProposalDetailContent() {
                   {structuralBreakdown.find(b => b.factor === 'risk')?.rationale ? (
                     <Text className="text-charcoal-400 text-xs ml-5 mb-1 italic">{structuralBreakdown.find(b => b.factor === 'risk')!.rationale}</Text>
                   ) : null}
-                  <ScoreBar label="Accountability" value={proposal.evaluation.structural_scores.accountability_score} icon={<Users size={13} color="#FF6B00" />} />
+                  <ScoreBar label={"Clear who's responsible"} value={proposal.evaluation.structural_scores.accountability_score} icon={<Users size={13} color="#FF6B00" />} />
                   {structuralBreakdown.find(b => b.factor === 'accountability')?.rationale ? (
                     <Text className="text-charcoal-400 text-xs ml-5 -mt-1 mb-1 italic">{structuralBreakdown.find(b => b.factor === 'accountability')!.rationale}</Text>
                   ) : null}
@@ -814,9 +795,9 @@ export function ProposalDetailContent() {
               {proposal.evaluation?.mission_impact_scores && proposal.evaluation.mission_impact_scores.length > 0 && (
                 <View className="mt-1 pt-3 border-t border-cream-200">
                   <View className="flex-row items-center justify-between mb-2">
-                    <Text className="text-charcoal-700 font-semibold text-sm">Mission Impact</Text>
+                    <Text className="text-charcoal-700 font-semibold text-sm">How it helps our goals</Text>
                     <Text className="text-charcoal-400 text-xs">
-                      {Math.round((proposal.evaluation.computed_scores?.mission_weighted_score ?? 0) * 100)}% weighted
+                      Score: {Math.round((proposal.evaluation.computed_scores?.mission_weighted_score ?? 0) * 100)}%
                     </Text>
                   </View>
                   {proposal.evaluation.mission_impact_scores.map((s: any) => (
@@ -827,7 +808,7 @@ export function ProposalDetailContent() {
                         icon={<TrendingUp size={11} color="#FF6B00" />}
                       />
                       <Text className="text-charcoal-400 text-xs ml-5 -mt-1 mb-0.5">
-                        {Math.round(s.goal_priority_weight * 100)}% priority weight
+                        This goal counts for {Math.round(s.goal_priority_weight * 100)}% of our priorities
                       </Text>
                       {s.score_reason ? (
                         <Text className="text-charcoal-400 text-xs ml-5 mb-1 italic">{s.score_reason}</Text>
@@ -840,7 +821,7 @@ export function ProposalDetailContent() {
               {/* Risk Flags */}
               {proposal.evaluation?.risk_flags && proposal.evaluation.risk_flags.length > 0 && (
                 <View className="mt-3 pt-3 border-t border-cream-200">
-                  <Text className="text-primary font-semibold text-sm mb-2">Risk Flags</Text>
+                  <Text className="text-primary font-semibold text-sm mb-2">Things to watch</Text>
                   {proposal.evaluation.risk_flags.map((flag: string, i: number) => (
                     <View key={i} className="flex-row gap-2 mb-1">
                       <AlertCircle size={13} color="#FF6B00" style={{ marginTop: 1 }} />
@@ -853,7 +834,7 @@ export function ProposalDetailContent() {
               {/* Violations */}
               {proposal.evaluation?.violations && proposal.evaluation.violations.length > 0 && (
                 <View className="mt-3 pt-3 border-t border-cream-200">
-                  <Text className="text-red-600 font-semibold text-sm mb-2">Violations</Text>
+                  <Text className="text-red-600 font-semibold text-sm mb-2">Breaks a rule</Text>
                   {proposal.evaluation.violations.map((v: string, i: number) => (
                     <View key={i} className="flex-row gap-2 mb-1">
                       <XCircle size={13} color="#DC2626" style={{ marginTop: 1 }} />
@@ -866,7 +847,7 @@ export function ProposalDetailContent() {
               {/* Audit checks */}
               {proposal.audit?.checks?.length > 0 && (
                 <View className="mt-3 pt-3 border-t border-cream-200">
-                  <Text className="text-charcoal-700 font-semibold text-sm mb-2">Compliance Checks</Text>
+                  <Text className="text-charcoal-700 font-semibold text-sm mb-2">Rule checks</Text>
                   {proposal.audit.checks.map((check: any, i: number) => (
                     <View key={i} className="flex-row items-center gap-2 mb-1.5">
                       {check.passed
@@ -885,10 +866,10 @@ export function ProposalDetailContent() {
           {/* ── Alternatives ── */}
           {proposal.alternatives?.length > 0 && (
             <View className="bg-white rounded-2xl p-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
-              <Text className="text-charcoal-800 font-semibold text-base mb-3">AI Alternatives</Text>
+              <Text className="text-charcoal-800 font-semibold text-base mb-3">Other ways to do it</Text>
               {proposal.bestAlternative && (
                 <View className="p-3 rounded-xl border border-border bg-secondary mb-3">
-                  <Text className="text-primary font-semibold text-xs mb-1">⭐ Recommended Alternative</Text>
+                  <Text className="text-primary font-semibold text-xs mb-1">⭐ Best option</Text>
                   <Text className="text-charcoal-800 font-medium text-sm">{proposal.bestAlternative.label}</Text>
                   <Text className="text-charcoal-500 text-xs mt-1 leading-relaxed">{proposal.bestAlternative.rationale}</Text>
                 </View>
@@ -899,7 +880,7 @@ export function ProposalDetailContent() {
                   <Text className="text-charcoal-500 text-xs mt-1 leading-relaxed">{alt.rationale}</Text>
                   {alt.overallScore != null && (
                     <Text className="text-primary text-xs mt-1 font-semibold">
-                      Overall Score: {Math.round((alt.overallScore ?? 0) * 100)}%
+                      Score: {Math.round((alt.overallScore ?? 0) * 100)}%
                     </Text>
                   )}
                 </View>
@@ -910,11 +891,12 @@ export function ProposalDetailContent() {
           {/* ── Missing data ── */}
           {proposal.missing_data?.length > 0 && (
             <View className="bg-white rounded-2xl p-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
-              <Text className="text-charcoal-800 font-semibold text-base mb-3">Missing Data</Text>
+              <Text className="text-charcoal-800 font-semibold text-base mb-3">What&apos;s missing</Text>
               {proposal.missing_data.map((item: any, i: number) => {
                 const sev: string = item.severity ?? (item.blocking ? 'BLOCKER' : 'SOFT');
                 const isBlocker = sev === 'BLOCKER';
                 const isInfo = sev === 'INFO';
+                const sevLabel = isBlocker ? 'Needed first' : isInfo ? 'Good to know' : 'Would help';
                 const iconColor = isBlocker ? '#DC2626' : isInfo ? '#2563EB' : '#FF6B00';
                 const bgColor = isBlocker ? '#FEF2F2' : isInfo ? '#EFF6FF' : '#FFFBEB';
                 const textColor = isBlocker ? '#DC2626' : isInfo ? '#2563EB' : '#FF6B00';
@@ -927,11 +909,11 @@ export function ProposalDetailContent() {
                       <Text className="text-charcoal-400 text-xs">{item.why_needed}</Text>
                       <View className="flex-row flex-wrap items-center gap-1 mt-1">
                         <View className="self-start rounded-full px-2 py-0.5" style={{ backgroundColor: bgColor }}>
-                          <Text style={{ color: textColor, fontSize: 10, fontWeight: '600' }}>{sev}</Text>
+                          <Text style={{ color: textColor, fontSize: 10, fontWeight: '600' }}>{sevLabel}</Text>
                         </View>
                         {item.affectedGoalIds?.length > 0 && (
                           <Text style={{ fontSize: 10, color: '#9CA3AF' }}>
-                            affects: {item.affectedGoalIds.join(', ')}
+                            Affects: {item.affectedGoalIds.map((g: string) => g.replace(/_/g, ' ')).join(', ')}
                           </Text>
                         )}
                       </View>
@@ -964,7 +946,7 @@ export function ProposalDetailContent() {
                 </Text>
               </TouchableOpacity>
               <Text className="text-charcoal-400 text-xs text-center mt-2">
-                Only you (the proposer) can withdraw this proposal.
+                Only you can withdraw this, since you proposed it.
               </Text>
             </View>
           )}
@@ -1013,7 +995,7 @@ export function ProposalDetailContent() {
                   </Text>
                   {councilVoteResult.newStatus && (
                     <Text className="text-purple-700 text-sm font-semibold mt-1">
-                      This proposal is now {plainStatus(councilVoteResult.newStatus)}.
+                      This proposal is now {plainProposalStatus(councilVoteResult.newStatus)}.
                     </Text>
                   )}
                 </View>
@@ -1025,8 +1007,8 @@ export function ProposalDetailContent() {
           <View className="bg-white rounded-2xl p-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
             <View className="flex-row items-center justify-between mb-3">
               <View>
-                <Text className="text-charcoal-800 font-semibold text-base">Community Reactions</Text>
-                <Text className="text-charcoal-400 text-xs mt-0.5">Let the council know how members feel</Text>
+                <Text className="text-charcoal-800 font-semibold text-base">Member reactions</Text>
+                <Text className="text-charcoal-400 text-xs mt-0.5">Let the council know how you feel</Text>
               </View>
               {proposal.status === 'votable' && (
                 <View className="bg-blue-100 rounded-full px-3 py-1 flex-row items-center gap-1">
@@ -1067,12 +1049,12 @@ export function ProposalDetailContent() {
             </View>
             {reactionCounts.myReaction && (
               <Text className="text-charcoal-400 text-xs text-center mt-2">
-                You marked this as &quot;{reactionCounts.myReaction === 'SUPPORT' ? 'Support' : 'Has Concerns'}&quot; — tap again to remove
+                You picked &quot;{reactionCounts.myReaction === 'SUPPORT' ? 'Support' : 'Concern'}.&quot; Tap it again to take it back.
               </Text>
             )}
             {!user?.walletAddress && (
               <Text className="text-charcoal-400 text-xs text-center mt-2">
-                Connect your wallet to react to this proposal
+                Finish setting up your account to react to this proposal.
               </Text>
             )}
           </View>
@@ -1085,7 +1067,7 @@ export function ProposalDetailContent() {
             >
               <View className="flex-row items-center gap-2">
                 <FileText size={16} color="#FF6B00" />
-                <Text className="text-charcoal-800 font-semibold text-base">Full Proposal Details</Text>
+                <Text className="text-charcoal-800 font-semibold text-base">Full proposal details</Text>
               </View>
               {showFull ? <ChevronUp size={18} color="#6B7280" /> : <ChevronDown size={18} color="#6B7280" />}
             </TouchableOpacity>
@@ -1094,7 +1076,7 @@ export function ProposalDetailContent() {
                 {[
                   { label: 'Category', value: categoryLabels[proposal.category] ?? prettifyKey(proposal.category) },
                   { label: 'Location', value: proposal.region?.name },
-                  { label: 'Council Required', value: proposal.councilRequired ? 'Yes — pending council vote' : 'No — auto-approved if AI advances' },
+                  { label: 'Needs a council vote', value: proposal.councilRequired ? 'Yes, the council votes on it' : "No. It's approved automatically if it passes the check." },
                 ].map(row => (
                   <View key={row.label} className="mb-3">
                     <Text className="text-charcoal-400 text-xs">{row.label}</Text>
@@ -1110,7 +1092,7 @@ export function ProposalDetailContent() {
             <View className="flex-row items-center justify-between mb-4">
               <View className="flex-row items-center gap-2">
                 <MessageCircle size={16} color="#FF6B00" />
-                <Text className="text-charcoal-800 font-semibold text-base">Community Discussion</Text>
+                <Text className="text-charcoal-800 font-semibold text-base">Discussion</Text>
               </View>
               <View className="bg-cream-100 rounded-full px-2 py-0.5">
                 <Text className="text-charcoal-500 text-xs">{comments.length}</Text>
@@ -1134,7 +1116,7 @@ export function ProposalDetailContent() {
                 />
                 <View className="flex-row items-center justify-between">
                   <Text className="text-charcoal-400 text-xs">
-                    {comment.length > 0 ? `${comment.length}/5000` : 'Visible to all members'}
+                    {comment.length > 0 ? `${comment.length}/5000` : 'All members can see this'}
                   </Text>
                   <TouchableOpacity
                     onPress={postComment}
@@ -1152,7 +1134,7 @@ export function ProposalDetailContent() {
               </View>
             ) : (
               <View className="bg-cream-50 rounded-xl p-3 mb-4 items-center">
-                <Text className="text-charcoal-400 text-sm">Connect your wallet to join the discussion.</Text>
+                <Text className="text-charcoal-400 text-sm">Finish setting up your account to join the discussion.</Text>
               </View>
             )}
 
@@ -1190,8 +1172,8 @@ export function ProposalDetailContent() {
             <View className="bg-white rounded-2xl overflow-hidden" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
               <View className="p-4 flex-row items-center gap-2 border-b border-cream-200">
                 <History size={16} color="#FF6B00" />
-                <Text className="text-charcoal-800 font-semibold text-base flex-1">Submission History</Text>
-                <Text className="text-charcoal-400 text-xs">{revisions.length} revision{revisions.length !== 1 ? 's' : ''}</Text>
+                <Text className="text-charcoal-800 font-semibold text-base flex-1">Past versions</Text>
+                <Text className="text-charcoal-400 text-xs">{revisions.length} version{revisions.length !== 1 ? 's' : ''}</Text>
               </View>
               {[...revisions].reverse().map((rev: any) => {
                 const isExpanded = expandedRevision === rev.revisionNumber;
@@ -1208,7 +1190,7 @@ export function ProposalDetailContent() {
                     >
                       <Text className="text-charcoal-400 text-xs font-mono w-6">#{rev.revisionNumber}</Text>
                       <View className="rounded-full px-2.5 py-0.5" style={{ backgroundColor: decBg }}>
-                        <Text style={{ color: decColor, fontSize: 11, fontWeight: '600' }}>{rev.decision ?? 'unknown'}</Text>
+                        <Text style={{ color: decColor, fontSize: 11, fontWeight: '600' }}>{rev.decision ? decisionColor(rev.decision).label : 'Not checked'}</Text>
                       </View>
                       <Text className="text-charcoal-400 text-xs flex-1">
                         {new Date(rev.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -1225,7 +1207,7 @@ export function ProposalDetailContent() {
                       <View className="px-4 pb-4 gap-3 bg-cream-50">
                         {rev.decisionReasons?.length > 0 && (
                           <View>
-                            <Text className="text-charcoal-500 text-xs font-semibold uppercase tracking-wide mb-1">Decision Reasons</Text>
+                            <Text className="text-charcoal-500 text-xs font-semibold uppercase tracking-wide mb-1">Why</Text>
                             {rev.decisionReasons.map((r: string, i: number) => (
                               <View key={i} className="flex-row items-start gap-1.5 mb-1">
                                 <Text className="text-primary mt-0.5">•</Text>
@@ -1236,7 +1218,7 @@ export function ProposalDetailContent() {
                         )}
                         {rev.auditChecks?.length > 0 && (
                           <View>
-                            <Text className="text-charcoal-500 text-xs font-semibold uppercase tracking-wide mb-1">Compliance Checks</Text>
+                            <Text className="text-charcoal-500 text-xs font-semibold uppercase tracking-wide mb-1">Rule checks</Text>
                             {rev.auditChecks.map((check: any, i: number) => (
                               <View key={i} className="flex-row items-center gap-2 mb-1">
                                 {check.passed
@@ -1250,11 +1232,11 @@ export function ProposalDetailContent() {
                         )}
                         {rev.evaluation?.llm_summary && (
                           <View>
-                            <Text className="text-charcoal-500 text-xs font-semibold uppercase tracking-wide mb-1">AI Summary</Text>
+                            <Text className="text-charcoal-500 text-xs font-semibold uppercase tracking-wide mb-1">Sage&apos;s summary</Text>
                             <Text className="text-charcoal-500 text-xs italic">{rev.evaluation.llm_summary}</Text>
                           </View>
                         )}
-                        <Text className="text-charcoal-400 text-xs">Engine: {rev.engineVersion}</Text>
+                        <Text className="text-charcoal-400 text-xs">Version: {rev.engineVersion}</Text>
                       </View>
                     )}
                   </View>
@@ -1265,7 +1247,7 @@ export function ProposalDetailContent() {
 
           {/* ── Process timeline ── */}
           <View className="bg-white rounded-2xl p-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 }}>
-            <Text className="text-charcoal-800 font-semibold text-base mb-4">Proposal Process</Text>
+            <Text className="text-charcoal-800 font-semibold text-base mb-4">Where it stands</Text>
             {processSteps.map((step, i, arr) => (
               <View key={i} className="flex-row gap-3">
                 <View className="items-center">

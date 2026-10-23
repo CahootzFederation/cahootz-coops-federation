@@ -192,7 +192,7 @@ export default function PersonalPageScreen() {
   const deletePost = (postId: string) => {
     if (deletingPostId) return;
 
-    Alert.alert('Delete post?', 'This can\'t be undone.', [
+    Alert.alert('Delete post?', "You can't get it back.", [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -234,7 +234,7 @@ export default function PersonalPageScreen() {
             <ArrowLeft size={18} color={PAGE_THEME.ink} strokeWidth={2.6} />
           </TouchableOpacity>
           <View className="min-w-0 flex-1">
-            <Text className="text-[10px] font-black uppercase text-gray-500">Personal Page</Text>
+            <Text className="text-[10px] font-black uppercase text-gray-500">Personal page</Text>
             <Text className="text-base font-black text-gray-950" numberOfLines={1}>
               {personDisplayHandle(publicHandle)}
             </Text>
@@ -362,7 +362,7 @@ export default function PersonalPageScreen() {
                   radius={16}
                 />
                 <Text className="min-w-0 text-xs font-black text-slate-600" numberOfLines={1}>
-                  Posting to My Personal Page
+                  Posting to my personal page
                 </Text>
               </View>
               <PostTypeSelector value={selectedType} onChange={setSelectedType} />

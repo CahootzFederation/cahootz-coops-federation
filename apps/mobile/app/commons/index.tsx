@@ -259,7 +259,7 @@ export default function CommonsDirectoryScreen() {
             {availableCommons.map((item) => <CommonsCard key={item.id} commons={item} />)}
             {!loading && !error && filteredCommons.length === 0 ? (
               <EmptyState title={query.trim() ? "No commons found" : "No public commons yet"}
-                message={query.trim() ? "Try another name or topic." : "Public commons will appear here when they are available."}
+                message={query.trim() ? "Try another name or topic." : "None are open yet. Check back soon."}
                 action={query.trim() ? { label: 'Clear search', onPress: () => setQuery('') } : undefined} />
             ) : null}
           </View>

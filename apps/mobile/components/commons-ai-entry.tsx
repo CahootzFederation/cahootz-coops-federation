@@ -178,12 +178,12 @@ const ALLOWED_POST_MEDIA_MIMES = new Set([
 const COMMONS_RULES = [
   'A commons is a social space for a real group, place, identity, craft, or shared interest.',
   'Members can talk normally, share wins, post needs, support businesses, and turn useful threads into action.',
-  'Every commons should create value for its members. No scams, harassment, hate, extraction, or charity-only spaces.',
+  'No scams, harassment, or hate. Every commons should give back to its members, so no extraction schemes or charity-only spaces.',
 ] as const;
 
 const DRAWER_SECTIONS = [
   {
-    label: 'Personal Page',
+    label: 'Personal page',
     icon: UserCircle,
     action: '/(authenticated)/personal-page',
     requiresAuth: true,
@@ -191,14 +191,14 @@ const DRAWER_SECTIONS = [
   // No global "Private Spaces" entry here on purpose — Circles now live
   // under a commons (see the Circles section on /commons/[coopId]), and a
   // standalone drawer link made it look like they existed outside one.
-  { label: 'Commons Stores & Shops', icon: Store, action: '/(tabs)/store', requiresAuth: true },
+  { label: 'Stores and shops', icon: Store, action: '/(tabs)/store', requiresAuth: true },
   {
-    label: 'Messages & Direct Chat',
+    label: 'Messages',
     icon: MessageCircle,
     action: '/(tabs)/messages',
   },
   {
-    label: 'Report a Problem or Idea',
+    label: 'Report a problem or share an idea',
     icon: MessageSquareWarning,
     action: '/(authenticated)/feedback',
     requiresAuth: true,
@@ -348,7 +348,7 @@ export default function CommonsAiEntry({
     if (hasAccountSession) {
       byId.set(PERSONAL_PAGE_DESTINATION_ID, {
         id: PERSONAL_PAGE_DESTINATION_ID,
-        name: 'My Personal Page',
+        name: 'My personal page',
         shortName: 'Page',
         description: 'Post directly to your public personal page.',
         accessStatus: 'ACTIVE' as const,
@@ -411,7 +411,7 @@ export default function CommonsAiEntry({
       ? [
           {
             id: PERSONAL_PAGE_DESTINATION_ID,
-            label: 'My Personal Page',
+            label: 'My personal page',
             description: 'Your public page feed',
             icon: accountName.slice(0, 1).toUpperCase(),
             accessStatus: 'ACTIVE' as const,
@@ -623,7 +623,7 @@ export default function CommonsAiEntry({
         })
         .catch((error) => {
           console.error('Search failed:', error);
-          if (!cancelled) setSearchError('Could not search right now.');
+          if (!cancelled) setSearchError("We couldn't search right now. Try again in a moment.");
         })
         .finally(() => {
           if (!cancelled) setIsSearching(false);
@@ -818,7 +818,7 @@ export default function CommonsAiEntry({
           token,
         );
         finishOutgoingPost(outgoing);
-        setComposerNotice({ type: 'success', body: 'Posted to your Personal Page.' });
+        setComposerNotice({ type: 'success', body: 'Posted to your personal page.' });
         return;
       }
 
@@ -855,7 +855,7 @@ export default function CommonsAiEntry({
       finishOutgoingPost(outgoing);
       setComposerNotice(
         stillOnPostingFeed && !belongsInCurrentFeed
-          ? { type: 'error', body: 'The post was saved, but the server did not place it in this feed. Check General before posting again.' }
+          ? { type: 'error', body: "Your post went up, but it landed somewhere else. Check General before you post it again." }
           : { type: 'success', body: `Posted to ${outgoing.circleId ? outgoing.circleName || 'this circle' : outgoing.destination.name}.` },
       );
     } catch (error) {
@@ -1008,7 +1008,7 @@ export default function CommonsAiEntry({
       if (status !== 'granted') {
         setComposerNotice({
           type: 'error',
-          body: 'Allow photo library access to attach media.',
+          body: 'To add a photo or video, let Cahootz use your photo library.',
         });
         return;
       }
@@ -1062,7 +1062,7 @@ export default function CommonsAiEntry({
       console.error('Failed to pick post media:', error);
       setComposerNotice({
         type: 'error',
-        body: 'Could not attach that media.',
+        body: "We couldn't attach that. Try a different photo or video.",
       });
     }
   };
@@ -1171,7 +1171,7 @@ export default function CommonsAiEntry({
       );
       setSuggestionStatus('success');
       setSuggestionMessage(
-        'Suggestion sent. We will use it to decide which commons to open next.',
+        "Thanks! We'll use this to decide which commons to open next.",
       );
       setSuggestedCommonsName('');
       setSuggestedCommonsReason('');
@@ -1210,7 +1210,7 @@ export default function CommonsAiEntry({
   const deletePost = (post: CommonsPost) => {
     if (deletingPostId || !sessionToken) return;
 
-    Alert.alert('Delete post?', "This can't be undone.", [
+    Alert.alert('Delete this post?', "You can't get it back.", [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -1541,7 +1541,7 @@ export default function CommonsAiEntry({
               className="text-xs font-black"
               style={{ color: SOCIAL_THEME.primary }}
             >
-              Complete
+              Finish
             </Text>
           </View>
         </View>
@@ -2565,7 +2565,7 @@ export default function CommonsAiEntry({
                     className="text-[11px] font-black"
                     style={{ color: SOCIAL_THEME.primary }}
                   >
-                    Active Co-ops
+                    See all
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -2628,7 +2628,7 @@ export default function CommonsAiEntry({
                               ? 'Your page'
                               : hasAccountSession && 'isMember' in item && item.isMember
                                 ? isActive
-                                  ? 'Active Member'
+                                  ? 'Active member'
                                   : 'Member'
                                 : 'Public commons'}
                           </Text>
@@ -2677,7 +2677,7 @@ export default function CommonsAiEntry({
                       </View>
                       <View className="min-w-0 flex-1">
                         <Text className="text-sm font-black text-gray-900">Home</Text>
-                        <Text className="text-xs font-semibold text-stone-500">Circle View</Text>
+                        <Text className="text-xs font-semibold text-stone-500">Your circles</Text>
                       </View>
                       <ChevronRight size={15} color="#D6D3D1" />
                     </TouchableOpacity>
@@ -2699,7 +2699,7 @@ export default function CommonsAiEntry({
                       </View>
                       <View className="min-w-0 flex-1">
                         <Text className="text-sm font-black text-gray-900">
-                          Proposals &amp; Votes
+                          Proposals and votes
                         </Text>
                         <Text className="text-xs font-semibold text-stone-500">
                           Member decisions and voting
@@ -2886,7 +2886,7 @@ export default function CommonsAiEntry({
                   className="text-xs font-black"
                   style={{ color: SOCIAL_THEME.primary }}
                 >
-                  Explore all Commons directory
+                  Browse all commons
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -2935,7 +2935,7 @@ export default function CommonsAiEntry({
                 >
                   <LogOut size={16} color="#DC2626" />
                   <Text className="text-sm font-black text-red-600">
-                    Sign Out (@{accountHandle})
+                    Sign out (@{accountHandle})
                   </Text>
                 </TouchableOpacity>
               ) : (

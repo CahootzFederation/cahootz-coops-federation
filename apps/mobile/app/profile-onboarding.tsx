@@ -257,7 +257,7 @@ export default function ProfileOnboardingScreen() {
       await goToInviteStep();
     } catch (err) {
       console.error('Profile onboarding skip failed:', err);
-      setError('Could not skip right now. Try again.');
+      setError("We couldn’t skip that right now. Try again.");
     }
   };
 
@@ -293,7 +293,7 @@ export default function ProfileOnboardingScreen() {
         coop: user.coop,
       });
     } catch {
-      setError("We couldn’t save your progress. Please try again.");
+      setError("We couldn’t save your progress. Try again.");
       return;
     }
 
@@ -338,7 +338,7 @@ export default function ProfileOnboardingScreen() {
       const progress = await saveProgress('commons');
       if (progress && user && sessionToken) await login({ ...user, ...progress, sessionToken });
       setWizardStep('circles');
-    } catch { setError("We couldn’t save your progress. Please try again."); }
+    } catch { setError("We couldn’t save your progress. Try again."); }
   };
 
   const handleOpenInvitation = async (invitationId: string) => {

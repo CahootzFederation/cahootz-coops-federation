@@ -50,7 +50,7 @@ test('signed-out visitors do not see the Board and are sent to sign in from a ma
 
     await page.getByLabel('Open menu').click();
     await expect(page.getByText('Sign In', { exact: true })).toBeVisible();
-    await expect(page.getByText('Commons Stores & Shops', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Stores and shops', { exact: true })).toHaveCount(0);
     await page.getByLabel('Close menu').click();
 
     await page.goto('/store');
@@ -81,7 +81,7 @@ test('member chooses a funding badge, opens the cart, and reaches checkout', { t
 
     await member.page.getByText('Checkout', { exact: true }).click();
     await expect(member.page).toHaveURL(/\/checkout\?storeId=/);
-    await expect(member.page.getByText('Order Items', { exact: true })).toBeVisible();
+    await expect(member.page.getByText('Your items', { exact: true })).toBeVisible();
     await expect(member.page.getByText('Qty: 1', { exact: true })).toBeVisible();
     await expect(member.page.getByText(/Continue to payment \$\d/)).toBeVisible();
   } finally {
@@ -187,9 +187,9 @@ test('funding badge checkout uses Stripe test mode when a ready official shop is
       });
     });
     await member.page.getByText(/^Pay \$\d/).click();
-    expect(await confirmation).toContain('Payment Confirmed');
+    expect(await confirmation).toContain('Payment confirmed');
     await expect(member.page).toHaveURL(/order-detail\?id=/);
-    await expect(member.page.getByText('Order Details', { exact: true })).toBeVisible();
+    await expect(member.page.getByText('Order details', { exact: true })).toBeVisible();
     await expect(member.page.getByText('Hybrid commerce payment', { exact: true })).toBeVisible();
   } finally {
     await member.context.close();

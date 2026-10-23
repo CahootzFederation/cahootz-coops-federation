@@ -166,7 +166,7 @@ export default function SageSuggestionDetailScreen() {
         {isLoadingDetail && !detail ? (
           <ActivityIndicator accessibilityLabel="Loading Sage suggestion" color={THEME.primary} />
         ) : !detail ? (
-          <Text style={{ color: THEME.danger }}>{error || 'Not found.'}</Text>
+          <Text style={{ color: THEME.danger }}>{error || "We couldn't find this suggestion. Go back and pick another one."}</Text>
         ) : (
           <>
             <View style={{ borderRadius: 14, padding: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: THEME.border, gap: 6 }}>

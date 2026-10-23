@@ -50,7 +50,7 @@ test("a member adds a bio and emoji avatar to their page and another member sees
 
   try {
     await userA.page.getByLabel("Open menu").click();
-    await userA.page.getByText("My Personal Page", { exact: true }).click();
+    await userA.page.getByText("My personal page", { exact: true }).click();
     await expect(userA.page).toHaveURL(/personal-page/);
 
     await userA.page.getByRole("button", { name: /Add a bio|Edit profile/ }).click();

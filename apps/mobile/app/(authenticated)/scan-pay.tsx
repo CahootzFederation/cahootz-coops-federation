@@ -150,7 +150,7 @@ export default function ScanPayScreen() {
                 <ArrowLeft size={24} color="white" />
               </TouchableOpacity>
               <Text className="flex-1 text-center text-lg font-semibold text-white">
-                Scan to Pay
+                Scan to pay
               </Text>
               <View className="w-10" />
             </View>
@@ -159,7 +159,7 @@ export default function ScanPayScreen() {
           <View className="flex-1 items-center justify-center p-8">
             <Camera size={64} color="#6B7280" />
             <Text className="text-white text-xl font-semibold mt-6 text-center">
-              Camera Permission Needed
+              We need your camera
             </Text>
             <Text className="text-gray-400 text-center mt-2 mb-6">
               We need access to your camera to scan payment QR codes
@@ -168,7 +168,7 @@ export default function ScanPayScreen() {
               onPress={requestPermission}
               className="bg-primary px-6 py-3 rounded-xl"
             >
-              <Text className="text-white font-semibold">Grant Permission</Text>
+              <Text className="text-white font-semibold">Allow camera</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -176,7 +176,7 @@ export default function ScanPayScreen() {
               className="mt-4 px-6 py-3"
               accessibilityRole="button"
             >
-              <Text className="text-amber-500 font-semibold">Enter Code Manually</Text>
+              <Text className="text-amber-500 font-semibold">Type the code instead</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -200,7 +200,7 @@ export default function ScanPayScreen() {
               <ArrowLeft size={24} color="white" />
             </TouchableOpacity>
             <Text className="flex-1 text-center text-lg font-semibold text-white">
-              {mode === 'scan' ? 'Scan to Pay' : 'Enter Store Code'}
+              {mode === 'scan' ? 'Scan to pay' : 'Enter store code'}
             </Text>
             <View className="w-10" />
           </View>
@@ -262,7 +262,7 @@ export default function ScanPayScreen() {
                   onPress={() => setMode('code')}
                   className="p-4 bg-white/20 rounded-full"
                   accessibilityRole="button"
-                  accessibilityLabel="Enter Code Manually"
+                  accessibilityLabel="Type the code instead"
                 >
                   <Keyboard size={24} color="white" />
                 </TouchableOpacity>
@@ -273,7 +273,7 @@ export default function ScanPayScreen() {
                   onPress={() => setScanned(false)}
                   className="mt-4 py-3 items-center"
                 >
-                  <Text className="text-amber-500 font-semibold">Scan Again</Text>
+                  <Text className="text-amber-500 font-semibold">Scan again</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -283,7 +283,7 @@ export default function ScanPayScreen() {
           <View className="flex-1 pt-24 px-4">
             <View className="bg-gray-800 rounded-2xl p-6">
               <Text className="text-white text-lg font-semibold mb-4">
-                Enter Store Code
+                Enter store code
               </Text>
 
               <TextInput
@@ -320,7 +320,7 @@ export default function ScanPayScreen() {
                 {lookingUp ? (
                   <ActivityIndicator size="small" color="white" />
                 ) : (
-                  <Text className="text-white font-bold text-lg">Look Up Store</Text>
+                  <Text className="text-white font-bold text-lg">Find store</Text>
                 )}
               </TouchableOpacity>
 
@@ -330,7 +330,7 @@ export default function ScanPayScreen() {
                   className="mt-4 py-3 items-center flex-row justify-center"
                 >
                   <Camera size={20} color="#F59E0B" />
-                  <Text className="text-amber-500 font-semibold ml-2">Scan QR Code Instead</Text>
+                  <Text className="text-amber-500 font-semibold ml-2">Scan a QR code instead</Text>
                 </TouchableOpacity>
               )}
             </View>

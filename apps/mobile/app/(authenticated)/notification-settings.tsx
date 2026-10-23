@@ -125,7 +125,7 @@ export default function NotificationSettings() {
           {query.isError && (
             <View style={{ gap: 8 }}>
               <LoadError title="Settings couldn’t load" message="We couldn't load your notification settings. Please try again." onRetry={() => void query.refetch()} retrying={query.isFetching} />
-              <AlertButton label="Return to Alerts" onPress={() => router.replace('/(tabs)/notifications')} />
+              <AlertButton label="Go to alerts" onPress={() => router.replace('/(tabs)/notifications')} />
             </View>
           )}
           {preferences && (

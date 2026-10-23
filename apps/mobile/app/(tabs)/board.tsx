@@ -562,7 +562,7 @@ function BoardItems({ compact, error, items, loading, onOpen, onRetry, onSeeAll,
         <View style={{ alignItems: 'flex-start', borderBottomWidth: 1, borderBottomColor: tokens.rule, paddingVertical: 28 }}>
           <PackageOpen size={25} color={tokens.orange} />
           <Text style={{ marginTop: 10, color: tokens.ink, fontSize: 17, fontWeight: '900' }}>Nothing posted here yet</Text>
-          <Text style={{ marginTop: 4, color: tokens.muted, fontSize: 14, lineHeight: 20 }}>Create an Ask, Offer, or Update with the same Commons posting tools used elsewhere in the app.</Text>
+          <Text style={{ marginTop: 4, color: tokens.muted, fontSize: 14, lineHeight: 20 }}>Ask for help, offer something, or share an update. It works just like posting anywhere else.</Text>
           <TouchableOpacity accessibilityRole="button" onPress={onStart} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: tokens.orange, fontWeight: '800' }}>Post something</Text></TouchableOpacity>
         </View>
       ) : (

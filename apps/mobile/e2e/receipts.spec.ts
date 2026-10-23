@@ -195,10 +195,10 @@ test("after paying a store, the member sees a receipt with a way to History", as
     await visibleButton(page, "Pay $4.75").click();
 
     // The shared confirm sheet (components/payment-confirmation-modal.tsx) has no button roles.
-    await expect(shown(page, "Confirm Payment", { exact: true })).toBeVisible();
+    await expect(shown(page, "Confirm payment", { exact: true })).toBeVisible();
     await shown(page, "Confirm", { exact: true }).last().click();
 
-    await expect(shown(page, "Payment Sent!", { exact: true })).toBeVisible();
+    await expect(shown(page, "Payment sent!", { exact: true })).toBeVisible();
     expect(payCalls).toHaveLength(1);
     expect(JSON.parse(payCalls[0])).toMatchObject({ storeCode: code, amount: 4.75 });
 
@@ -210,7 +210,7 @@ test("after paying a store, the member sees a receipt with a way to History", as
     await expect(receiptRow(page, "Reference", shortReference(transferId))).toBeVisible();
 
     const done = visibleButton(page, "Done");
-    const toHistory = visibleButton(page, "View in History");
+    const toHistory = visibleButton(page, "See it in history");
     expect((await done.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
     expect((await toHistory.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
 

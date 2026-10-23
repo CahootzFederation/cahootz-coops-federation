@@ -69,7 +69,7 @@ export default function CommercePaymentConfirmation({
           <ShieldCheck size={20} color={accentColor} />
         </View>
         <View className="flex-1">
-          <Text className="text-gray-900 font-semibold">Secure Stripe Checkout</Text>
+          <Text className="text-gray-900 font-semibold">Secure Stripe checkout</Text>
           <Text className="text-gray-500 text-sm mt-1">
             Complete payment for {merchantName || 'this order'} on Stripe-hosted checkout.
           </Text>

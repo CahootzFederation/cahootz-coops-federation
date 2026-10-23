@@ -41,7 +41,7 @@ export default function ExploreScreen() {
             <CreditCard size={20} color="#2563EB" />
           </View>
           <View className="flex-1">
-            <Text className="text-gray-900 font-semibold">Payment Methods</Text>
+            <Text className="text-gray-900 font-semibold">Payment methods</Text>
             <Text className="text-gray-500 text-sm">Your saved cards</Text>
           </View>
           <Text className="text-gray-400 text-xl">›</Text>
@@ -56,7 +56,7 @@ export default function ExploreScreen() {
             <History size={20} color="#059669" />
           </View>
           <View className="flex-1">
-            <Text className="text-gray-900 font-semibold">Transaction History</Text>
+            <Text className="text-gray-900 font-semibold">Transaction history</Text>
             <Text className="text-gray-500 text-sm">View transfers and order activity</Text>
           </View>
           <Text className="text-gray-400 text-xl">›</Text>

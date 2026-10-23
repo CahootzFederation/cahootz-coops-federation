@@ -246,12 +246,12 @@ export default function GroupDetailScreen() {
     if (!sessionToken || !groupId) return;
 
     Alert.alert(
-      'Transfer leadership',
-      `Make ${name} the leader of this circle?`,
+      'Make a new leader?',
+      `Make ${name} the leader of this circle? You won't be the leader anymore.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Transfer',
+          text: 'Make leader',
           style: 'destructive',
           onPress: async () => {
             setTransferringUserId(newLeaderUserId);
@@ -279,7 +279,7 @@ export default function GroupDetailScreen() {
   const leaveGroup = () => {
     if (!sessionToken || !groupId) return;
 
-    Alert.alert('Leave circle', 'Are you sure you want to leave this circle?', [
+    Alert.alert('Leave this circle?', "You'll stop being a member here.", [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Leave',

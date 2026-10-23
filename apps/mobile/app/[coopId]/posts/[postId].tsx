@@ -309,7 +309,7 @@ export default function CommonsPostDetailScreen() {
   const deleteComment = (commentId: string) => {
     if (!sessionToken) return;
 
-    Alert.alert('Delete comment?', 'This can\'t be undone.', [
+    Alert.alert('Delete comment?', "You can't get it back.", [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -395,7 +395,7 @@ export default function CommonsPostDetailScreen() {
   const deletePost = () => {
     if (!post || isDeleting || !sessionToken) return;
 
-    Alert.alert('Delete post?', 'This can\'t be undone.', [
+    Alert.alert('Delete post?', "You can't get it back.", [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',

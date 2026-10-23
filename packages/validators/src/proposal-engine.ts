@@ -1268,7 +1268,7 @@ export class ProposalEngine {
     if (hasBlocker) {
       return {
         decision: "needs_info",
-        reasons: ["This proposal is missing critical information needed before it can be reviewed — see the 'Missing Data' section below for what's needed."],
+        reasons: ["This proposal is missing something important, so we can't check it yet. See what's missing below."],
         bestAlt: best,
       };
     }
@@ -1277,7 +1277,7 @@ export class ProposalEngine {
       return {
         decision: "revise",
         reasons: [
-          `This proposal scored ${(overallScore * 100).toFixed(0)}% overall, which is below the co-op's minimum threshold to move forward. It needs to be strengthened before it can go to a vote.`,
+          `This proposal scored ${(overallScore * 100).toFixed(0)}% overall. That's below the score this commons needs to move it forward, so it isn't ready for a vote yet. A few changes could get it there.`,
           ...evaluation.risk_flags.slice(0, 2),
         ],
         bestAlt: best,
@@ -1287,7 +1287,7 @@ export class ProposalEngine {
     if (evaluation.structural_scores.goal_mapping_valid === false) {
       return {
         decision: "revise",
-        reasons: ["This proposal doesn't clearly connect to any of the co-op's mission goals. Revise it to explain how it serves the community's economic priorities."],
+        reasons: ["This proposal doesn't clearly tie to any of this commons' goals. Change it to show how it helps with what the community is working toward."],
         bestAlt: best,
       };
     }
@@ -1295,7 +1295,7 @@ export class ProposalEngine {
     return {
       decision: "advance",
       reasons: [
-        `This proposal scored ${(overallScore * 100).toFixed(0)}% and meets the co-op's screening standards. It's ready to move forward for community review and voting.`,
+        `Nice work. This proposal scored ${(overallScore * 100).toFixed(0)}% and passed this commons' check, so it can move forward.`,
       ],
       bestAlt: best,
     };

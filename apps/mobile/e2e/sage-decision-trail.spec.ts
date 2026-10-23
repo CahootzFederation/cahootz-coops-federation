@@ -40,12 +40,12 @@ function shown(page: Page, text: string | RegExp) {
   return page.getByText(text).locator("visible=true").first();
 }
 
-// A member turns on "Show Sage decision trails" in Sage settings and then sees, on a circle post and on
+// A member turns on "Show how Sage decides" in Sage settings and then sees, on a circle post and on
 // a Sage suggestion, how Sage decided: what it read, what it considered, which rules it checked, what
 // it did, and the live result. Another member who hasn't turned the setting on sees none of it.
 test("a member who turns on decision trails sees how Sage decided, and others don't", async ({ browser }) => {
   test.setTimeout(180_000);
-  // Every spec that flips "Show Sage decision trails" on a fixture account takes a turn (see support/exclusive.ts).
+  // Every spec that flips "Show how Sage decides" on a fixture account takes a turn (see support/exclusive.ts).
   await withExclusiveAccountSetting("sage-decision-trails", async () => {
     const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const leader = await newSignedInPage(browser, USER_A_EMAIL);
@@ -66,12 +66,12 @@ test("a member who turns on decision trails sees how Sage decided, and others do
       // 1. The leader turns the setting on through the real settings screen, and it persists.
       await leader.page.goto("/profile");
       await shown(leader.page, "Sage settings").click();
-      const toggle = leader.page.getByRole("switch", { name: "Show Sage decision trails" });
+      const toggle = leader.page.getByRole("switch", { name: "Show how Sage decides" });
       await expect(toggle).toHaveAttribute("aria-checked", "false");
       await toggle.click();
       await expect(shown(leader.page, "Saved.")).toBeVisible();
       await leader.page.reload();
-      await expect(leader.page.getByRole("switch", { name: "Show Sage decision trails" })).toHaveAttribute("aria-checked", "true");
+      await expect(leader.page.getByRole("switch", { name: "Show how Sage decides" })).toHaveAttribute("aria-checked", "true");
 
       // 2. Fixture: a circle with a member's post, and two Sage decisions over its conversation.
       const { group } = await trpcPost("groups.create", leaderToken, { name: `E2E Trail circle ${runId}`, privacy: "invite-only" });
@@ -89,7 +89,7 @@ test("a member who turns on decision trails sees how Sage decided, and others do
       await leader.page.goto(`/${COOP_ID}/posts/${postId}`);
       await expect(shown(leader.page, "Sage decision trail")).toBeVisible();
       await leader.page.getByRole("button", { name: /Show Sage decision: Commented on the post as Sage/ }).locator("visible=true").first().click();
-      for (const stage of ["Observed", "Evidence gathered", "Action considered", "Policy check", "Action taken", "Result", "Follow-up"]) {
+      for (const stage of ["Observed", "What Sage looked at", "What Sage thought about doing", "Rules Sage checked", "What Sage did", "Result", "Follow-up"]) {
         await expect(shown(leader.page, stage)).toBeVisible();
       }
       await expect(shown(leader.page, /^Read \d+ posts, comments and messages in E2E Trail circle/)).toBeVisible();

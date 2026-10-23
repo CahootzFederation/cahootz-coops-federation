@@ -150,9 +150,9 @@ export default function HistoryScreen() {
 
   const getStatusText = (tx: Transaction) => {
     if (tx.type === 'pending') {
-      if (tx.status === 'PENDING_CLAIM') return 'Pending claim';
-      if (tx.status === 'EXPIRED') return 'Expired';
-      if (tx.status === 'CLAIMED_TO_BANK' || tx.status === 'CLAIMED_TO_SOULAAN') return 'Claimed';
+      if (tx.status === 'PENDING_CLAIM') return 'Waiting for them to accept it';
+      if (tx.status === 'EXPIRED') return 'Not accepted in time';
+      if (tx.status === 'CLAIMED_TO_BANK' || tx.status === 'CLAIMED_TO_SOULAAN') return 'Accepted';
     }
     if (tx.status === 'COMPLETED') return undefined;
     if (tx.status === 'FAILED') return 'Failed';

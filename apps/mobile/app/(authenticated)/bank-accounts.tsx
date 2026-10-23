@@ -113,7 +113,7 @@ export default function BankAccountsScreen() {
 
   const handleRemove = (account: BankAccount) => {
     Alert.alert(
-      'Remove Bank Account',
+      'Remove this bank account?',
       `Remove account ending in ${account.last4}?`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -157,7 +157,7 @@ export default function BankAccountsScreen() {
               <ArrowLeft size={24} color="#111827" />
             </TouchableOpacity>
             <Text className="flex-1 text-center text-lg font-semibold text-gray-900 -ml-8">
-              Bank Accounts
+              Bank accounts
             </Text>
           </View>
         </View>
@@ -235,7 +235,7 @@ export default function BankAccountsScreen() {
               className="mt-4 bg-primary rounded-xl py-4 flex-row items-center justify-center"
             >
               <Plus size={20} color="white" />
-              <Text className="text-white font-semibold ml-2">Add Bank Account</Text>
+              <Text className="text-white font-semibold ml-2">Add bank account</Text>
             </TouchableOpacity>
 
             {/* Info */}
@@ -264,7 +264,7 @@ export default function BankAccountsScreen() {
                   <X size={24} color="#111827" />
                 </TouchableOpacity>
                 <Text className="flex-1 text-center text-lg font-semibold text-gray-900 -ml-8">
-                  Add Bank Account
+                  Add bank account
                 </Text>
               </View>
             </View>
@@ -272,7 +272,7 @@ export default function BankAccountsScreen() {
             <ScrollView {...keyboardInsetScrollProps} className="flex-1 p-4">
               {/* Account Holder Name */}
               <View className="mb-4">
-                <Text className="text-gray-700 font-medium mb-2">Account Holder Name</Text>
+                <Text className="text-gray-700 font-medium mb-2">Name on the account</Text>
                 <TextInput
                   className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 bg-white"
                   placeholder="John Doe"
@@ -285,7 +285,7 @@ export default function BankAccountsScreen() {
 
               {/* Routing Number */}
               <View className="mb-4">
-                <Text className="text-gray-700 font-medium mb-2">Routing Number</Text>
+                <Text className="text-gray-700 font-medium mb-2">Routing number</Text>
                 <TextInput
                   className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 bg-white"
                   placeholder="9 digits"
@@ -299,7 +299,7 @@ export default function BankAccountsScreen() {
 
               {/* Account Number */}
               <View className="mb-4">
-                <Text className="text-gray-700 font-medium mb-2">Account Number</Text>
+                <Text className="text-gray-700 font-medium mb-2">Account number</Text>
                 <TextInput
                   className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 bg-white"
                   placeholder="Account number"
@@ -313,7 +313,7 @@ export default function BankAccountsScreen() {
 
               {/* Confirm Account Number */}
               <View className="mb-6">
-                <Text className="text-gray-700 font-medium mb-2">Confirm Account Number</Text>
+                <Text className="text-gray-700 font-medium mb-2">Type the account number again</Text>
                 <TextInput
                   className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 bg-white"
                   placeholder="Re-enter account number"
@@ -343,7 +343,7 @@ export default function BankAccountsScreen() {
                 {adding ? (
                   <ActivityIndicator size="small" color="white" />
                 ) : (
-                  <Text className="text-white font-bold text-lg">Add Bank Account</Text>
+                  <Text className="text-white font-bold text-lg">Add bank account</Text>
                 )}
               </TouchableOpacity>
             </ScrollView>

@@ -45,7 +45,7 @@ async function openProposal(page: Page, title: string) {
   await page.goto("/proposals?coopId=cahootz");
   await shown(page, title, { exact: true }).click();
   await expect(page).toHaveURL(/proposal-detail/);
-  await expect(shown(page, "Proposal Details", { exact: true })).toBeVisible();
+  await expect(shown(page, "Proposal details", { exact: true })).toBeVisible();
 }
 
 const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -319,7 +319,7 @@ test.describe("governance confirmations", () => {
       await expect(button(page, "Withdraw proposal")).toHaveCount(0);
       expect(fixture("e2e-governance-vote.ts", "status", proposalId).status).toBe("WITHDRAWN");
       await page.reload();
-      await expect(shown(page, "Proposal Details", { exact: true })).toBeVisible();
+      await expect(shown(page, "Proposal details", { exact: true })).toBeVisible();
       await expect(shown(page, title, { exact: true }).first()).toBeVisible();
       await expect(button(page, "Withdraw proposal")).toHaveCount(0);
     } finally {

@@ -197,7 +197,7 @@ test.describe("onboarding usability", () => {
     try {
       await page.goto("/sage");
       await expect(shown(page, "Meet Sage", { exact: true })).toBeVisible();
-      await expect(shown(page, /AI helper\. It's a computer program, not a person\./)).toBeVisible();
+      await expect(shown(page, /Sage is AI, not a person\./)).toBeVisible();
       await expect(shown(page, "What always waits for a person", { exact: true })).toBeVisible();
       await expect(shown(page, "What Sage remembers", { exact: true })).toBeVisible();
       await expect(shown(page, /spending or moving money, changing who is a member/)).toBeVisible();

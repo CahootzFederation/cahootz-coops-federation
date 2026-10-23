@@ -100,13 +100,25 @@ function formatCurrencyFromCents(amountCents?: number | null): string {
   return `$${((amountCents ?? 0) / 100).toFixed(2)}`;
 }
 
+// Plain words for membership/application statuses and roles, so members never see raw enum values.
+const PLAIN_STATUS: Record<string, string> = {
+  ACTIVE: 'Member',
+  PENDING: 'Waiting for approval',
+  SUSPENDED: 'On hold',
+  REJECTED: 'Not approved',
+  INACTIVE: 'Not active',
+  SUBMITTED: 'Application sent',
+  UNDER_REVIEW: 'Being reviewed',
+  APPROVED: 'Approved',
+  WITHDRAWN: 'Application withdrawn',
+};
+
 function formatStatus(status?: string | null): string {
-  if (!status) return 'No commons membership';
-  return status
-    .toLowerCase()
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
+  if (!status) return 'Not a member';
+  const plain = PLAIN_STATUS[status.toUpperCase()];
+  if (plain) return plain;
+  const words = status.toLowerCase().split('_').join(' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 function shortenAddress(address?: string | null): string {
@@ -247,24 +259,24 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
     if (preview?.customerReward?.eligible) {
       successMsg += `\n\nYou'll earn ${formatScAmount(preview.customerReward.estimatedAmount)} ${coin.symbol} when payment completes!`;
     } else if (businessReadiness?.scRewardEligible === false) {
-      successMsg += `\n\nThis merchant is not yet eligible for ${coin.name} rewards, so no rewards for this purchase.`;
+      successMsg += `\n\nThis store can't give ${coin.name} rewards yet, so this purchase doesn't earn any.`;
     }
 
     // Alert.alert is a no-op on react-native-web, so web buyers would get no
     // confirmation at all - use the browser's dialog and open the order.
     if (Platform.OS === 'web') {
-      window.alert(`Payment Confirmed\n\n${successMsg}`);
+      window.alert(`Payment confirmed\n\n${successMsg}`);
       router.replace(`/(authenticated)/order-detail?id=${paymentSession.transactionId}` as any);
       return;
     }
 
-    Alert.alert('Payment Confirmed', successMsg, [
+    Alert.alert('Payment confirmed', successMsg, [
       {
-        text: 'My Orders',
+        text: 'My orders',
         onPress: () => router.replace('/(authenticated)/orders' as any),
       },
       {
-        text: 'View Order',
+        text: 'See order',
         onPress: () => router.replace(`/(authenticated)/order-detail?id=${paymentSession.transactionId}` as any),
       },
     ]);
@@ -274,7 +286,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
     if (!user?.id || !checkoutBusinessId || cartItems.length === 0) return;
 
     if (!user.walletAddress) {
-      Alert.alert('Checkout failed', "Your wallet isn't set up yet, so you can't check out right now. Please try again later.");
+      Alert.alert('Checkout failed', "Your account isn't fully set up yet, so you can't check out right now. Try again in a little while.");
       return;
     }
 
@@ -286,7 +298,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
       !normalizedShippingAddress.state ||
       !normalizedShippingAddress.postalCode
     )) {
-      Alert.alert('Shipping Address Required', 'Enter the street address, city, state, and ZIP code so the store owner knows where to send the order.');
+      Alert.alert('Add a shipping address', 'Enter the street address, city, state, and ZIP code so the store owner knows where to send the order.');
       return;
     }
     const formattedShippingAddress = requiresShipping ? formatShippingAddress(normalizedShippingAddress) : undefined;
@@ -406,7 +418,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
             style={{ backgroundColor: accentColor }}
             onPress={() => router.back()}
           >
-            <Text className="text-white font-semibold">Continue Shopping</Text>
+            <Text className="text-white font-semibold">Keep shopping</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -446,8 +458,8 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
               </Text>
               <Text className="text-gray-500 text-sm mt-1">
                 {isActiveCoopMember
-                  ? 'This purchase will use your commons membership for checkout.'
-                  : 'Guest checkout has no commons membership status.'}
+                  ? "You're buying as a commons member."
+                  : "You're buying as a guest, not a commons member."}
               </Text>
             </View>
             <View
@@ -470,7 +482,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
             <View className="flex-row justify-between gap-4">
               <Text className="text-gray-500">Account</Text>
               <Text className="text-gray-900 font-semibold text-right flex-1" numberOfLines={1}>
-                {displayName || 'Signed-in user'}
+                {displayName || 'You'}
               </Text>
             </View>
             <View className="flex-row justify-between gap-4">
@@ -488,7 +500,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
               </View>
             ) : null}
             <View className="flex-row justify-between gap-4">
-              <Text className="text-gray-500">Expected treasury fee</Text>
+              <Text className="text-gray-500">Expected Wealth Fund fee</Text>
               <Text className="text-gray-900 font-semibold">
                 {formatCurrencyFromCents(displayedTreasuryFeeCents)}
               </Text>
@@ -517,9 +529,9 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
             <View className="flex-row items-start gap-3">
               <Info size={20} color={accentColor} />
               <View className="flex-1">
-                <Text className="font-semibold" style={{ color: accentColor }}>No {coin.symbol} Rewards</Text>
+                <Text className="font-semibold" style={{ color: accentColor }}>No {coin.symbol} rewards</Text>
                 <Text className="text-gray-600 text-sm mt-1">
-                  This merchant is not yet eligible for {coin.name} rewards.
+                  This store can&apos;t give {coin.name} rewards yet.
                 </Text>
               </View>
             </View>
@@ -528,7 +540,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
 
         {/* Cart Items */}
         <View className="mx-6 mt-4 bg-white rounded-2xl p-4 border border-gray-100">
-          <Text className="text-gray-900 font-semibold mb-3">Order Items</Text>
+          <Text className="text-gray-900 font-semibold mb-3">Your items</Text>
           {cartItems.map((item) => (
             <View key={item.productId} className="flex-row justify-between items-center py-3 border-b border-gray-100">
               <View className="flex-1">
@@ -545,7 +557,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
         {/* Price Breakdown */}
         {preview && (
           <View className="mx-6 mt-4 bg-white rounded-2xl p-4 border border-gray-100">
-            <Text className="text-gray-900 font-semibold mb-3">Price Breakdown</Text>
+            <Text className="text-gray-900 font-semibold mb-3">Price breakdown</Text>
             
             <View className="space-y-2">
               <View className="flex-row justify-between py-2">
@@ -555,7 +567,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
               
               {appliesTreasuryFee && (
                 <View className="flex-row justify-between py-2">
-                  <Text className="text-gray-500">Treasury fee</Text>
+                  <Text className="text-gray-500">Wealth Fund fee</Text>
                   <Text className="text-gray-500">${(displayedTreasuryFeeCents / 100).toFixed(2)}</Text>
                 </View>
               )}
@@ -577,7 +589,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
           <View className="mx-6 mt-4 p-4 border rounded-xl" style={{ backgroundColor: withAlpha(accentColor, '12'), borderColor: withAlpha(accentColor, '30') }}>
             <View className="flex-row items-center gap-2 mb-2">
               <BadgeCheck size={20} color={accentColor} />
-              <Text className="font-semibold" style={{ color: accentColor }}>{coin.symbol} Reward</Text>
+              <Text className="font-semibold" style={{ color: accentColor }}>{coin.symbol} reward</Text>
             </View>
             <Text className="text-gray-900 text-lg font-bold">
               +{formatScAmount(preview.customerReward.estimatedAmount)} {coin.symbol}
@@ -607,7 +619,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
 
         {/* Cardholder Name */}
         <View className="px-6 pt-4 pb-2">
-          <Text className="text-gray-900 font-semibold mb-2">Cardholder Name</Text>
+          <Text className="text-gray-900 font-semibold mb-2">Name on card</Text>
           <TextInput
             className="bg-white text-gray-900 px-4 py-3 rounded-xl border border-gray-200"
             placeholder="Name on card..."
@@ -623,7 +635,7 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
 
         {/* Shipping Address */}
         <View className="px-6 py-4 gap-3">
-          <Text className="text-gray-900 font-semibold">Shipping Address</Text>
+          <Text className="text-gray-900 font-semibold">Shipping address</Text>
           <TextInput
             className="bg-white text-gray-900 px-4 py-3 rounded-xl border border-gray-200"
             placeholder="Street address..."
@@ -694,10 +706,10 @@ export default function CheckoutHybrid({ storeId }: CheckoutHybridProps) {
 
         {/* Note */}
         <View className="px-6 py-4">
-          <Text className="text-gray-900 font-semibold mb-2">Order Note (Optional)</Text>
+          <Text className="text-gray-900 font-semibold mb-2">Note for the store (optional)</Text>
           <TextInput
             className="bg-white text-gray-900 px-4 py-3 rounded-xl border border-gray-200"
-            placeholder="Add a note for the merchant..."
+            placeholder="Add a note for the store..."
             placeholderTextColor="#9CA3AF"
             value={note}
             onChangeText={setNote}

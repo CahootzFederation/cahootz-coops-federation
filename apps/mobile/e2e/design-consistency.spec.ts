@@ -41,10 +41,10 @@ test('circle design preserves management, switching, search and wrapping names',
     await expect(page).toHaveURL(/spaces/);
     await page.goBack();
     await page.getByLabel(/Switch commons. Currently/).click();
-    await expect(page.getByText('Explore all commons', { exact: true })).toBeVisible();
+    await expect(page.getByText('Browse all commons', { exact: true })).toBeVisible();
     await page.getByLabel('Close commons switcher').last().click();
     await page.getByRole('button', { name: 'Open menu' }).click();
-    await expect(page.getByText(/Sign Out \(@/)).toBeVisible();
+    await expect(page.getByText(/Sign out \(@/)).toBeVisible();
     await page.getByLabel('Close menu').click();
     await page.getByRole('textbox', { name: 'Find a circle' }).fill(name);
     await card.click();
@@ -60,7 +60,7 @@ test('Wallet and product detail retain parent tabs and shopping controls', async
   await page.getByRole('tab', { name: 'You', exact: true }).click();
   await page.getByRole('button', { name: 'Wallet', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'You', exact: true })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByText('Export Wallet', { exact: true })).toBeVisible();
+  await expect(page.getByText('Export wallet', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Back to You' }).click();
   await expect(page).toHaveURL(/wallet/);
   await page.getByRole('tab', { name: 'Board', exact: true }).click();
@@ -73,7 +73,7 @@ test('Wallet and product detail retain parent tabs and shopping controls', async
   await page.getByRole('button', { name: 'Increase quantity' }).click();
   await expect(page.getByText('$100.00', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Decrease quantity' }).click();
-  await expect(page.getByRole('button', { name: 'Buy Now', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Buy now', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Shopping cart' }).click();
   await expect(page).toHaveURL(/cart/);
   await expect(page.getByRole('tab', { name: 'Board', exact: true })).toHaveAttribute('aria-selected', 'true');
@@ -90,7 +90,7 @@ test('notification settings offers recovery and reloads real preferences', async
   await page.getByRole('tab', { name: 'Alerts', exact: true }).click();
   await page.getByRole('button', { name: 'Notification settings', exact: true }).click();
   await expect(page.getByText('Settings couldn’t load', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Return to Alerts' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Go to alerts' })).toBeVisible();
   await expect(page.getByText('E2E internal failure')).toHaveCount(0);
   await page.unroute(match);
   await page.getByRole('button', { name: 'Try again', exact: true }).click();

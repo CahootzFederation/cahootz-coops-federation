@@ -92,9 +92,9 @@ export default function ProductDetailScreen() {
       'Added to Cart',
       `${quantity} x ${product.name} added to your cart.`,
       [
-        { text: 'Continue Shopping', style: 'cancel' },
+        { text: 'Keep shopping', style: 'cancel' },
         {
-          text: 'View Cart',
+          text: 'See cart',
           onPress: () => router.push('/cart'),
         },
       ]
@@ -402,7 +402,7 @@ export default function ProductDetailScreen() {
             disabled={!isAvailable}
             accessibilityState={{ disabled: !isAvailable }}
           >
-            <Text className="font-bold" style={{ color: DESIGN.ink }}>Buy Now</Text>
+            <Text className="font-bold" style={{ color: DESIGN.ink }}>Buy now</Text>
           </TouchableOpacity>
         </View>
 

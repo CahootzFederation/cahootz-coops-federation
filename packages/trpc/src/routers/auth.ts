@@ -404,7 +404,7 @@ export const authRouter = router({
         if (isDemoLogin(email, undefined, input.coopId) || isTestLogin(email)) {
           return {
             success: true,
-            message: "Login code sent to your email",
+            message: "We sent a code to your email.",
           };
         }
 
@@ -432,7 +432,7 @@ export const authRouter = router({
 
         return {
           success: true,
-          message: "Login code sent to your email",
+          message: "We sent a code to your email.",
         };
       } catch (error) {
         console.error("Request login code error:", error);
@@ -443,7 +443,7 @@ export const authRouter = router({
 
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to send login code. Please try again.",
+          message: "We couldn't send your code. Try again in a minute.",
         });
       }
     }),

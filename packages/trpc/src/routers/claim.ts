@@ -148,8 +148,8 @@ export const claimRouter = router({
             userId: transfer.senderId,
             coopId: transfer.coopId,
             type: 'PAYMENT_CLAIMED',
-            title: 'Payment Claimed',
-            body: `Your $${transfer.amountUSD.toFixed(2)} payment to ${transfer.recipientPhone} was claimed.`,
+            title: 'Payment accepted',
+            body: `${transfer.recipientPhone} accepted your $${transfer.amountUSD.toFixed(2)} payment.`,
             data: {
               pendingTransferId: transfer.id,
               claimMethod: 'bank',
@@ -302,8 +302,8 @@ export const claimRouter = router({
               userId: transfer.senderId,
               coopId: transfer.coopId,
               type: 'PAYMENT_CLAIMED',
-              title: 'Payment Claimed',
-              body: `${input.name} claimed your $${transfer.amountUSD.toFixed(2)} payment and joined ${config.shortName}!`,
+              title: 'Payment accepted',
+              body: `${input.name} accepted your $${transfer.amountUSD.toFixed(2)} payment and joined ${config.shortName}.`,
               data: {
                 pendingTransferId: transfer.id,
                 claimMethod: '???',

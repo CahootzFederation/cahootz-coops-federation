@@ -198,8 +198,8 @@ export default function CartScreen() {
 
   const handleClearCart = () => {
     Alert.alert(
-      'Clear Cart',
-      'Are you sure you want to remove all items from your cart?',
+      'Clear your cart?',
+      'This takes everything out of your cart.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -250,7 +250,7 @@ export default function CartScreen() {
           </TouchableOpacity>
           {items.length > 0 && (
             <TouchableOpacity onPress={handleClearCart}>
-              <Text className="text-red-500 font-medium">Clear All</Text>
+              <Text className="text-red-500 font-medium">Clear all</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -273,13 +273,13 @@ export default function CartScreen() {
             className="px-8 py-3 rounded-xl"
             style={{ backgroundColor: accentColor }}
           >
-            <Text className="text-white font-bold text-base">Browse Commons Stores</Text>
+            <Text className="text-white font-bold text-base">Browse commons stores</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => router.push('/(authenticated)/orders' as any)}
             className="mt-3 px-8 py-3 rounded-xl border border-gray-200 bg-white"
           >
-            <Text className="font-bold text-base" style={{ color: accentColor }}>View My Orders</Text>
+            <Text className="font-bold text-base" style={{ color: accentColor }}>See my orders</Text>
           </TouchableOpacity>
         </View>
       ) : (

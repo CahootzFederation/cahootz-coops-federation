@@ -108,7 +108,7 @@ export function PersonalPagePostCard({
   const deleteComment = (commentId: string) => {
     if (!sessionToken) return;
 
-    Alert.alert('Delete comment?', 'This can\'t be undone.', [
+    Alert.alert('Delete comment?', "You can't get it back.", [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -145,7 +145,7 @@ export function PersonalPagePostCard({
               </Text>
             </View>
           ) : (
-            <Text className="text-xs font-black text-gray-400">Personal Page</Text>
+            <Text className="text-xs font-black text-gray-400">Personal page</Text>
           )}
           <View className="flex-row items-center gap-2">
             <Text className="text-xs font-semibold text-gray-400">{post.time}</Text>

@@ -45,7 +45,7 @@ function getStatusInfo(store: any): {
   if (onboarding === 'SUBMITTED' || onboarding === 'PENDING') {
     return {
       label: 'Under review',
-      description: 'Your information has been submitted. This usually takes a few minutes. Tap "Check My Status" to see if you\'ve been approved.',
+      description: 'We sent your info to Stripe. This usually takes a few minutes. Tap "Check my status" to see if you\'re approved.',
       color: 'amber',
       actionNeeded: false,
     };
@@ -54,10 +54,10 @@ function getStatusInfo(store: any): {
   if (onboarding === 'RESTRICTED' || requirements.length > 0) {
     return {
       label: 'Action required',
-      description: 'There are a few things you need to finish before your account can be approved. Tap below to complete the remaining steps — it only takes a minute.',
+      description: 'You have a few things left to finish before your account can be approved. Tap below to wrap them up. It only takes a minute.',
       color: 'red',
       actionNeeded: true,
-      actionLabel: 'Finish Setup',
+      actionLabel: 'Finish setup',
     };
   }
 
@@ -67,7 +67,7 @@ function getStatusInfo(store: any): {
       description: 'Your account was not approved. This can happen if some information couldn\'t be verified. Tap below to try again or contact support.',
       color: 'red',
       actionNeeded: true,
-      actionLabel: 'Try Again',
+      actionLabel: 'Try again',
     };
   }
 
@@ -77,7 +77,7 @@ function getStatusInfo(store: any): {
     description: 'Set up takes about 5 minutes. You\'ll need your business info and a bank account for payouts.',
     color: 'gray',
     actionNeeded: true,
-    actionLabel: 'Set Up Payments',
+    actionLabel: 'Set up payments',
   };
 }
 
@@ -163,12 +163,12 @@ export default function StripeOnboardingScreen() {
       } else if (status.onboardingStatus === 'REJECTED') {
         Alert.alert(
           'Account not approved',
-          'Your Stripe account was not approved. This is usually due to verification issues. Tap "Try Again" to restart the process or contact support.',
+          'Stripe didn\'t approve your account. That usually means they couldn\'t confirm some of your info. Tap "Try again" to start over, or reach out to support.',
         );
       } else if (status.requirementsCurrentlyDue?.length > 0 || status.onboardingStatus === 'RESTRICTED') {
         Alert.alert(
           'Action required',
-          'Stripe needs a bit more information before your account can be activated. Tap "Finish Setup" to complete the remaining steps.',
+          'Stripe needs a bit more info before your account can go live. Tap "Finish setup" to finish the last steps.',
         );
       } else if (!quiet) {
         Alert.alert('Still under review', 'Hang tight — this usually takes just a few minutes. Check back soon.');
@@ -240,7 +240,7 @@ export default function StripeOnboardingScreen() {
           <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
             <ArrowLeft size={24} color="#374151" />
           </TouchableOpacity>
-          <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">Payment Setup</Text>
+          <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">Payment setup</Text>
         </View>
         <View className="flex-1 items-center justify-center px-8">
           <Text className="text-gray-700 dark:text-gray-300 text-lg text-center">{loadError}</Text>
@@ -276,7 +276,7 @@ export default function StripeOnboardingScreen() {
         <TouchableOpacity onPress={() => router.replace('/my-store')}>
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900 dark:text-white">Payment Setup</Text>
+        <Text className="text-lg font-semibold text-gray-900 dark:text-white">Payment setup</Text>
         <View className="w-6" />
       </View>
 
@@ -291,8 +291,8 @@ export default function StripeOnboardingScreen() {
           </Text>
           <Text className="text-gray-600 dark:text-gray-300 mt-2 leading-6">
             {stripeReady
-              ? 'Customers can now purchase from your store. Payouts will be deposited to your bank account.'
-              : 'To accept payments from customers, we need to verify your identity and set up direct deposits to your bank. This takes about 5 minutes.'}
+              ? 'Customers can buy from your store now. Your earnings go straight to your bank account.'
+              : 'To take payments, we need to confirm who you are and set up deposits to your bank. It takes about 5 minutes.'}
           </Text>
         </View>
 
@@ -396,7 +396,7 @@ export default function StripeOnboardingScreen() {
             ) : (
               <>
                 <Text className="text-white font-bold mr-2">
-                  {statusInfo.actionLabel ?? 'Set Up Payments'}
+                  {statusInfo.actionLabel ?? 'Set up payments'}
                 </Text>
                 <ExternalLink size={18} color="white" />
               </>
@@ -431,7 +431,7 @@ export default function StripeOnboardingScreen() {
               >
                 <Copy size={16} color={copied ? '#16A34A' : '#FF6B00'} />
                 <Text className={`font-semibold ml-2 text-sm ${copied ? 'text-green-600' : 'text-gray-900 dark:text-white'}`}>
-                  {copied ? 'Copied!' : 'Copy Link'}
+                  {copied ? 'Copied!' : 'Copy link'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -450,7 +450,7 @@ export default function StripeOnboardingScreen() {
             ) : (
               <>
                 <RefreshCw size={16} color="#FF6B00" />
-                <Text className="text-center text-gray-900 dark:text-white font-semibold ml-2">Check My Status</Text>
+                <Text className="text-center text-gray-900 dark:text-white font-semibold ml-2">Check my status</Text>
               </>
             )}
           </TouchableOpacity>
@@ -469,7 +469,7 @@ export default function StripeOnboardingScreen() {
               onPress={() => router.replace('/my-store')}
               className="py-3"
             >
-              <Text className="text-center text-primary dark:text-amber-400 font-semibold">Go to My Store</Text>
+              <Text className="text-center text-primary dark:text-amber-400 font-semibold">Go to my store</Text>
             </TouchableOpacity>
           </>
         ) : (

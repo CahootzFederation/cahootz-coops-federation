@@ -30,7 +30,7 @@ export default function ApplyScVerificationScreen() {
 
   const loadData = useCallback(async () => {
     if (!user?.walletAddress || !storeId) {
-      throw new Error("We couldn't tell which store this is. Go back to My Store and try again.");
+      throw new Error("We couldn't tell which store this is. Go back to your store and try again.");
     }
     const [result, fees] = await Promise.all([
       api.getMyScVerificationStatus(String(storeId), user.walletAddress),
@@ -62,7 +62,7 @@ export default function ApplyScVerificationScreen() {
 
   const handleSubmit = async () => {
     if (!user?.walletAddress || !storeId) {
-      Alert.alert("Couldn't tell which store", 'Go back to My Store and try again.');
+      Alert.alert("Couldn't tell which store", 'Go back to your store and try again.');
       return;
     }
 
@@ -84,7 +84,7 @@ export default function ApplyScVerificationScreen() {
       }, user.walletAddress);
 
       await loadData();
-      Alert.alert('Application sent', `An admin will review your ${coin.symbol} rewards application.`);
+      Alert.alert('Application sent', `An admin will look over your ${coin.symbol} rewards application.`);
     } catch (error: any) {
       console.error('Rewards application error:', error);
       Alert.alert(
@@ -113,7 +113,7 @@ export default function ApplyScVerificationScreen() {
           <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
             <ArrowLeft size={24} color="#374151" />
           </TouchableOpacity>
-          <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">Earn {coin.symbol} Rewards</Text>
+          <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">Earn {coin.symbol} rewards</Text>
         </View>
         <View className="flex-1 items-center justify-center px-8">
           <Text className="text-gray-700 dark:text-gray-300 text-lg text-center">{loadError}</Text>
@@ -147,7 +147,7 @@ export default function ApplyScVerificationScreen() {
         <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900 dark:text-white">Earn {coin.symbol} Rewards</Text>
+        <Text className="text-lg font-semibold text-gray-900 dark:text-white">Earn {coin.symbol} rewards</Text>
         <View className="w-6" />
       </View>
 
@@ -160,7 +160,7 @@ export default function ApplyScVerificationScreen() {
             <Text className="text-gray-900 dark:text-white font-semibold ml-2">Apply to earn {coin.symbol} rewards</Text>
           </View>
           <Text className="text-gray-600 dark:text-gray-300 leading-6">
-            {coin.name} ({coin.symbol}) is a non-transferable membership token. Once your store is verified, every qualifying purchase earns customers {coin.symbol} tokens that reflect their commons participation and give them a voice in governance.
+            {coin.name} ({coin.symbol}) is the commons&apos; membership coin. It can&apos;t be sent to anyone else. Once your store is verified, customers earn {coin.symbol} on every purchase that counts. It shows how much they take part in the commons and gives them a say in how it&apos;s run.
           </Text>
         </View>
 
@@ -168,10 +168,10 @@ export default function ApplyScVerificationScreen() {
         <View className="bg-white dark:bg-gray-800 rounded-2xl p-5 mb-4">
           <View className="flex-row items-center mb-3">
             <Info size={18} color="#FF6B00" />
-            <Text className="text-gray-900 dark:text-white font-semibold ml-2">How transaction fees work</Text>
+            <Text className="text-gray-900 dark:text-white font-semibold ml-2">How the fees work</Text>
           </View>
           <Text className="text-gray-500 dark:text-gray-400 text-sm leading-5 mb-4">
-            Every sale through the platform has two fee layers that fund the commons:
+            Every sale has two fees that help fund the commons:
           </Text>
 
           {/* Platform markup */}
@@ -185,7 +185,7 @@ export default function ApplyScVerificationScreen() {
                 <Text className="text-primary dark:text-amber-400 font-bold">{platformMarkupPct}</Text>
               </View>
               <Text className="text-gray-500 dark:text-gray-400 text-xs mt-1 leading-4">
-                Added on top of your listed price. The customer pays this. It covers platform operating costs and keeps the network running.
+                Added on top of your price. The customer pays this. It covers what it costs to run the app.
               </Text>
             </View>
           </View>
@@ -197,11 +197,11 @@ export default function ApplyScVerificationScreen() {
             </View>
             <View className="flex-1">
               <View className="flex-row items-center justify-between">
-                <Text className="text-gray-900 dark:text-white font-medium">Community treasury fee</Text>
+                <Text className="text-gray-900 dark:text-white font-medium">Wealth Fund fee</Text>
                 <Text className="text-green-600 dark:text-green-400 font-bold">{treasuryFeePct}</Text>
               </View>
               <Text className="text-gray-500 dark:text-gray-400 text-xs mt-1 leading-4">
-                Deducted from what you receive. Goes directly to the commons Wealth Fund — a shared pool that reinvests in the community.
+                Taken out of what you get paid. It goes straight to the commons Wealth Fund, a shared pool of money that gets put back into the community.
               </Text>
             </View>
           </View>
@@ -225,7 +225,7 @@ export default function ApplyScVerificationScreen() {
               <Text className="text-gray-900 dark:text-white text-sm font-bold">${customerPays.toFixed(2)}</Text>
             </View>
             <View className="flex-row justify-between mt-2">
-              <Text className="text-gray-600 dark:text-gray-300 text-sm">− Community treasury ({treasuryFeePct})</Text>
+              <Text className="text-gray-600 dark:text-gray-300 text-sm">− Wealth Fund ({treasuryFeePct})</Text>
               <Text className="text-green-600 dark:text-green-400 text-sm">−${treasuryFee.toFixed(2)}</Text>
             </View>
             <View className="border-t border-gray-200 dark:border-gray-600 my-2" />
@@ -244,13 +244,13 @@ export default function ApplyScVerificationScreen() {
               <View className="ml-3 flex-1">
                 <Text className="text-primary dark:text-amber-300 font-semibold">Complete payment setup first</Text>
                 <Text className="text-primary dark:text-amber-300 text-sm mt-1">
-                  Your payment account must be approved before you can apply for {coin.symbol} rewards. Finish setting up payments in My Store.
+                  Your payment account has to be approved before you can apply for {coin.symbol} rewards. Finish setting up payments on your store page.
                 </Text>
                 <TouchableOpacity
                   onPress={() => router.replace('/my-store')}
                   className="mt-3 bg-primary py-2 px-4 rounded-lg self-start"
                 >
-                  <Text className="text-white font-semibold text-sm">Go to My Store</Text>
+                  <Text className="text-white font-semibold text-sm">Go to my store</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -279,7 +279,7 @@ export default function ApplyScVerificationScreen() {
               <View className="ml-3 flex-1">
                 <Text className="text-primary dark:text-amber-300 font-semibold">Application under review</Text>
                 <Text className="text-primary dark:text-amber-300 text-sm mt-1">
-                  Admin review is still pending. You can come back later to check the status.
+                  An admin hasn&apos;t looked at it yet. Check back here later to see where it stands.
                 </Text>
               </View>
             </View>
@@ -291,9 +291,9 @@ export default function ApplyScVerificationScreen() {
             <View className="flex-row items-start">
               <XCircle size={20} color="#DC2626" />
               <View className="ml-3 flex-1">
-                <Text className="text-red-700 dark:text-red-300 font-semibold">Previous application was rejected</Text>
+                <Text className="text-red-700 dark:text-red-300 font-semibold">Your last application wasn&apos;t approved</Text>
                 <Text className="text-red-700 dark:text-red-300 text-sm mt-1">
-                  {status?.application?.rejectionReason || 'You can update your application and submit again.'}
+                  {status?.application?.rejectionReason || 'You can change your application and send it again.'}
                 </Text>
               </View>
             </View>
@@ -309,14 +309,14 @@ export default function ApplyScVerificationScreen() {
               </Text>
               <TextInput
                 className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-gray-900 dark:text-white h-36"
-                placeholder={`Explain how your store fits the commons mission, how customers benefit, and why it should participate in the ${coin.symbol} rewards network.`}
+                placeholder={`Tell us how your store fits what the commons is about, how it helps customers, and why it should give ${coin.symbol} rewards.`}
                 placeholderTextColor="#9CA3AF"
                 multiline
                 textAlignVertical="top"
                 value={whyScEligible}
                 onChangeText={setWhyScEligible}
               />
-              <Text className="text-xs text-gray-500 mt-1">{whyScEligible.length}/50 minimum characters</Text>
+              <Text className="text-xs text-gray-500 mt-1">{whyScEligible.length}/50 characters minimum</Text>
             </View>
 
             {/* Fee agreement checkbox */}
@@ -335,7 +335,7 @@ export default function ApplyScVerificationScreen() {
                 <Square size={22} color="#9CA3AF" style={{ marginTop: 1 }} />
               )}
               <Text className="flex-1 ml-3 text-sm text-gray-700 dark:text-gray-300 leading-5">
-                I understand that a <Text className="font-semibold text-primary dark:text-amber-400">{platformMarkupPct} platform markup</Text> is added to my listed prices (paid by customers), and a <Text className="font-semibold text-green-600 dark:text-green-400">{treasuryFeePct} community treasury fee</Text> is deducted from my payouts to fund the commons Wealth Fund.
+                I get it: customers pay <Text className="font-semibold text-primary dark:text-amber-400">{platformMarkupPct} on top of my price</Text>, and <Text className="font-semibold text-green-600 dark:text-green-400">{treasuryFeePct} of what I earn</Text> goes to the commons&apos; shared fund (the Wealth Fund).
               </Text>
             </TouchableOpacity>
           </>
@@ -345,11 +345,11 @@ export default function ApplyScVerificationScreen() {
       <View className="px-5 py-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
         {applicationStatus === 'APPROVED' || applicationStatus === 'PENDING' ? (
           <TouchableOpacity onPress={() => router.replace('/my-store')} className="bg-primary py-4 rounded-xl">
-            <Text className="text-center text-white font-bold">Back to My Store</Text>
+            <Text className="text-center text-white font-bold">Back to my store</Text>
           </TouchableOpacity>
         ) : !stripeReady ? (
           <TouchableOpacity onPress={() => router.replace('/my-store')} className="bg-primary py-4 rounded-xl">
-            <Text className="text-center text-white font-bold">Set Up Payments First</Text>
+            <Text className="text-center text-white font-bold">Set up payments first</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
@@ -361,7 +361,7 @@ export default function ApplyScVerificationScreen() {
               <ActivityIndicator color="white" />
             ) : (
               <Text className="text-center text-white font-bold">
-                {applicationStatus === 'REJECTED' ? 'Resubmit Application' : `Apply for ${coin.symbol} Rewards`}
+                {applicationStatus === 'REJECTED' ? 'Send application again' : `Apply for ${coin.symbol} rewards`}
               </Text>
             )}
           </TouchableOpacity>

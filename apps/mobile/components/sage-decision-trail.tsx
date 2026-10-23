@@ -7,10 +7,10 @@ import { api, type SageDecisionTrail, type SageTrailFilter, type SageTrailStage 
 
 const STAGES: { stage: SageTrailStage; label: string }[] = [
   { stage: 'OBSERVED', label: 'Observed' },
-  { stage: 'EVIDENCE', label: 'Evidence gathered' },
-  { stage: 'CONSIDERED', label: 'Action considered' },
-  { stage: 'POLICY', label: 'Policy check' },
-  { stage: 'TAKEN', label: 'Action taken' },
+  { stage: 'EVIDENCE', label: 'What Sage looked at' },
+  { stage: 'CONSIDERED', label: 'What Sage thought about doing' },
+  { stage: 'POLICY', label: 'Rules Sage checked' },
+  { stage: 'TAKEN', label: 'What Sage did' },
   { stage: 'RESULT', label: 'Result' },
   { stage: 'FOLLOW_UP', label: 'Follow-up' },
 ];
@@ -105,7 +105,7 @@ function ObservedContent({ observed }: { observed: SageDecisionTrail['observed']
 
 /**
  * Sage's decision trails for a post (and its comments), a suggestion, a proposal, or a conversation. Renders nothing unless
- * the member has turned on "Show Sage decision trails" in Sage settings; the API enforces who may see
+ * the member has turned on "Show how Sage decides" in Sage settings; the API enforces who may see
  * which trail.
  */
 export function SageDecisionTrails({
@@ -147,7 +147,7 @@ export function SageDecisionTrails({
       {state.trails.length ? (
         state.trails.map((trail) => <TrailCard key={trail.id} trail={trail} />)
       ) : (
-        <Text style={{ fontSize: 13, color: '#78716C' }}>Sage hasn&apos;t analyzed this yet.</Text>
+        <Text style={{ fontSize: 13, color: '#78716C' }}>Sage hasn&apos;t looked at this yet.</Text>
       )}
     </View>
   );

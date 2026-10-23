@@ -306,7 +306,7 @@ export default function QuickPayScreen() {
                 <ArrowLeft size={24} color="#111827" />
               </TouchableOpacity>
               <Text className="flex-1 text-center text-lg font-semibold text-gray-900">
-                Quick Pay
+                Quick pay
               </Text>
               <View className="w-10" />
             </View>
@@ -333,7 +333,7 @@ export default function QuickPayScreen() {
               className={`${canRetry ? 'mt-3' : 'mt-6'} bg-gray-900 px-6 py-3 rounded-xl items-center justify-center`}
               style={{ minHeight: 48 }}
             >
-              <Text className="text-white font-semibold">Go Back</Text>
+              <Text className="text-white font-semibold">Go back</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -374,7 +374,7 @@ export default function QuickPayScreen() {
                 <View className="flex-row items-center mt-2 bg-green-100 px-3 py-1 rounded-full">
                   <Shield size={14} color="#16A34A" />
                   <Text className="text-green-700 text-sm font-medium ml-1">
-                    Verified Store
+                    Verified store
                   </Text>
                 </View>
               )}
@@ -439,7 +439,7 @@ export default function QuickPayScreen() {
               </View>
             ) : (
               <View className="flex-row items-center justify-between py-3 border-t border-gray-100">
-                <Text className="text-gray-500">Your Balance</Text>
+                <Text className="text-gray-500">Your balance</Text>
                 <Text className="text-gray-900 font-medium">{balanceFormatted}</Text>
               </View>
             )}
@@ -556,7 +556,7 @@ export default function QuickPayScreen() {
                 <CheckCircle size={32} color="#16A34A" />
               </View>
               <Text className="text-xl font-bold text-gray-900 text-center">
-                Payment Sent!
+                Payment sent!
               </Text>
               {paidReceipt && (
                 <Text className="text-gray-600 text-center mt-1">
@@ -594,11 +594,11 @@ export default function QuickPayScreen() {
                 router.replace('/(authenticated)/history' as any);
               }}
               accessibilityRole="button"
-              accessibilityLabel="View in History"
+              accessibilityLabel="See it in history"
               className="mt-3 border border-gray-300 py-3 rounded-xl items-center justify-center"
               style={{ minHeight: 48 }}
             >
-              <Text className="text-gray-900 font-semibold text-base">View in History</Text>
+              <Text className="text-gray-900 font-semibold text-base">See it in history</Text>
             </TouchableOpacity>
           </View>
         </View>

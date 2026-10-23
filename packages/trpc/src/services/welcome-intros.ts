@@ -382,9 +382,9 @@ export async function escalateUnansweredIntros(db: Db, now: Date = new Date()): 
           coopId: intro.coopId,
           type: WELCOME_INTRO_UNANSWERED_ADMIN_NOTIFICATION,
           title: `${intro.group.name} needs a guide`,
-          body: `${displayName(intro.newcomer)} introduced themselves in ${intro.group.name} (commons ${intro.coopId}) ${Math.round(
+          body: `${displayName(intro.newcomer)} said hi in ${intro.group.name} over ${Math.round(
             INTRO_ADMIN_ESCALATION_AFTER_MS / 3_600_000,
-          )}+ hours ago and no one has responded. Assign a guide from the admin portal: ${adminUrl ?? adminPath}`,
+          )} hours ago and no one's answered yet. Can you find them a guide? You can pick one here: ${adminUrl ?? adminPath}`,
           data: {
             groupId: intro.groupId,
             coopId: intro.coopId,

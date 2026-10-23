@@ -24,13 +24,13 @@ const THEME = {
 const SEVERITY: Record<SageAlertView['severity'], { label: string; color: string }> = {
   HIGH: { label: 'Needs a look soon', color: '#B91C1C' },
   MEDIUM: { label: 'Worth a look', color: '#B45309' },
-  LOW: { label: 'For your awareness', color: '#64748B' },
+  LOW: { label: 'Just so you know', color: '#64748B' },
 };
 
 const STATUS_NOTE: Record<string, string> = {
   ACKNOWLEDGED: "You've marked this as handled.",
   REROUTED: 'You passed this on. Sage sent it to the next person responsible.',
-  EXPIRED: 'This alert has expired.',
+  EXPIRED: "This one's out of date now.",
 };
 
 function formatDay(iso: string) {

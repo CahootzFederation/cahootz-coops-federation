@@ -65,6 +65,8 @@ const requireAccountSession = t.middleware(async ({ ctx, next }) => {
   });
   await touchMemberActivity(context.db, user);
 
+  if (context.errorTracking) context.errorTracking.userId = user.id;
+
   const { lastActiveAt: _lastActiveAt, ...accountUser } = user;
   return next({
     ctx: {

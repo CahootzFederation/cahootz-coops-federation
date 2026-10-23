@@ -22,6 +22,12 @@ export interface Context {
   req: TrpcRequest;
   res: TrpcResponse;
   coopId: string | undefined;
+  /**
+   * Filled in by the auth middlewares so the tRPC error hook can tie a server
+   * error to the internal user id (and nothing else). Shared by reference
+   * because middlewares spread `ctx` into a new object.
+   */
+  errorTracking?: { userId?: string };
 }
 
 /**
@@ -35,6 +41,7 @@ export const createContext = ({ req, res }: CreateExpressContextOptions): Contex
     req: { headers: req.headers as Record<string, string | string[] | undefined> },
     res: res as TrpcResponse,
     coopId,
+    errorTracking: {},
   };
 };
 

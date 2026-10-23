@@ -32,13 +32,13 @@ Every member-facing string and every agent prompt must sound personable and plai
 When a task touches Sage, Commons agents, AI observations, proactive suggestions, agent memory, alerts, or AI spending:
 
 1. Read the “Sage — Constitutional Operating Agent” section in `AGENT.md`.
-2. Read `docs/sage-roadmap.md`.
+2. Read `docs/sage-roadmap.md` (the plan) and skim `docs/sage-changelog.md` (what is built and its known gaps).
 3. Inspect the current implementation before proposing new architecture. Reuse existing action, review, audit, observation, notification, and cost systems.
 4. Work on the highest-priority roadmap item that is within the user's request.
 5. Make Sage direct, action-oriented, and personable, but preserve consent, governance, privacy, and financial authorization boundaries.
 6. Prefer bounded deterministic tools over unrestricted agent access.
 7. Add or update unit tests and the required Playwright journey for behavior changes.
-8. Update `TESTING.md` and `docs/sage-roadmap.md` with the verified result.
+8. Update `TESTING.md` and `docs/sage-changelog.md` with the verified result, and take shipped items off `docs/sage-roadmap.md`.
 9. Record remaining limitations honestly. Do not mark a roadmap item complete merely because the prompt changed; verify the behavior in code and tests.
 
 Before finishing Sage work, report:

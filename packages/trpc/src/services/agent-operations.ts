@@ -5,14 +5,9 @@ import { db } from "@repo/db";
 import type { AgentOperationalIssue } from "./slack-notification-service.js";
 import { getSageAutonomyUsage } from "./sage-autonomy.js";
 
-const WEEKLY_OUTREACH_HEALTH_KEY = "agent.health.sage-weekly-outreach";
-const WEEKLY_OUTREACH_STARTED_KEY = "agent.health.sage-weekly-outreach.started";
 const DATABASE_ID_KEY = "platform.database-id";
 const WAKE_STALE_MS = 45 * 60 * 1000;
 const RUNNING_STALE_MS = 20 * 60 * 1000;
-const DAILY_SWEEP_STALE_MS = 26 * 60 * 60 * 1000;
-// The sweep's Trigger maxDuration is 30 minutes; past that a start with no finish means it died.
-const SWEEP_UNFINISHED_MS = 35 * 60 * 1000;
 
 interface NewsletterSchedule {
   enabled: boolean;
@@ -104,15 +99,7 @@ export async function getAgentOperationalSnapshot(
   now = new Date(),
 ): Promise<AgentOperationalSnapshot> {
   const issues: AgentOperationalIssue[] = [];
-  const [outreachHealthRow, outreachStartRow, configs, settings, publicInfos, databaseId] = await Promise.all([
-    db.platformConfig.findUnique({
-      where: { key: WEEKLY_OUTREACH_HEALTH_KEY },
-      select: { value: true },
-    }),
-    db.platformConfig.findUnique({
-      where: { key: WEEKLY_OUTREACH_STARTED_KEY },
-      select: { value: true },
-    }),
+  const [configs, settings, publicInfos, databaseId] = await Promise.all([
     db.coopConfig.findMany({
       where: { isActive: true, isDemo: false },
       select: { coopId: true },
@@ -127,69 +114,8 @@ export async function getAgentOperationalSnapshot(
     getDatabaseId(),
   ]);
 
-  const startedAt = outreachStartRow ? new Date(outreachStartRow.value) : null;
-  const unfinishedStart =
-    startedAt &&
-    !Number.isNaN(startedAt.getTime()) &&
-    now.getTime() - startedAt.getTime() > SWEEP_UNFINISHED_MS
-      ? startedAt
-      : null;
-  if (!outreachHealthRow) {
-    issues.push({
-      agentId: "sage-weekly-outreach",
-      state: "FAILED",
-      reason: unfinishedStart
-        ? `The daily outreach sweep started at ${unfinishedStart.toISOString()} but never finished. Open that sage-weekly-outreach-sweep run in Trigger.dev to see where it stopped.`
-        : "The daily outreach sweep has never started. Check that sage-weekly-outreach-sweep is scheduled and running in Trigger.dev's production environment.",
-    });
-  } else {
-    let metadata: Record<string, unknown> = {};
-    try {
-      const parsed = JSON.parse(outreachHealthRow.value) as unknown;
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed))
-        metadata = parsed as Record<string, unknown>;
-    } catch {
-      issues.push({
-        agentId: "sage-weekly-outreach",
-        state: "BROKEN",
-        reason: "The saved outreach health record is invalid JSON.",
-      });
-    }
-    const lastRunAt =
-      typeof metadata.lastRunAt === "string"
-        ? new Date(metadata.lastRunAt)
-        : null;
-    if (metadata.lastRunStatus === "error") {
-      issues.push({
-        agentId: "sage-weekly-outreach",
-        state: "FAILED",
-        reason:
-          typeof metadata.lastRunMessage === "string"
-            ? metadata.lastRunMessage.slice(0, 500)
-            : "The most recent daily outreach sweep failed.",
-      });
-    } else if (
-      lastRunAt &&
-      !Number.isNaN(lastRunAt.getTime()) &&
-      now.getTime() - lastRunAt.getTime() > DAILY_SWEEP_STALE_MS
-    ) {
-      issues.push({
-        agentId: "sage-weekly-outreach",
-        state: "FAILED",
-        reason:
-          unfinishedStart && unfinishedStart > lastRunAt
-            ? `No daily outreach sweep has finished in 26 hours. The last one started at ${unfinishedStart.toISOString()} and never finished; open that run in Trigger.dev.`
-            : "No daily outreach sweep has run in 26 hours. Check that sage-weekly-outreach-sweep is still scheduled in Trigger.dev.",
-      });
-    } else if (!lastRunAt) {
-      issues.push({
-        agentId: "sage-weekly-outreach",
-        state: "FAILED",
-        reason: "The outreach health record has no completed run timestamp.",
-      });
-    }
-  }
-
+  // The weekly-outreach sweep is deliberately left out of this watchdog. Its own daily Slack
+  // receipt still reports each run; the hourly "never started" alert was turned off on 2026-10-23.
   if (!process.env.OPENAI_API_KEY) {
     issues.push({
       agentId: "model-backed-agents",

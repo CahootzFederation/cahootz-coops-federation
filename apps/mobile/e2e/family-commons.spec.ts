@@ -291,7 +291,7 @@ test.describe("family commons", () => {
       await expect(shown(newcomer.page, "Find your people")).toBeVisible();
       await expect(newcomer.page.getByRole("button", { name: "Skip for now", exact: true })).toHaveCount(0);
       await newcomer.page.getByRole("button", { name: "Explore commons" }).click();
-      await newcomer.page.getByRole("button", { name: /^View Cahootz (Commons|Coop) details$/ }).click();
+      await newcomer.page.getByRole("button", { name: /^View Cahootz(?: Commons| Coop)? details$/ }).click();
       await newcomer.page.getByRole("button", { name: "Join commons", exact: true }).click();
       await expect(shown(newcomer.page, "Welcome In")).toBeVisible();
       await expect(newcomer.page.getByRole("button", { name: "Join a welcome lounge" })).toBeVisible();

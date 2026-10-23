@@ -74,6 +74,14 @@ export default function CommonsScreen() {
 
   // "/" resolves here (not app/index.tsx) when navigating from inside the
   // tabs, so honour the same `entry=sign-in` link the root screen does.
+  if (isLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-white">
+        <ActivityIndicator color="#FF6B00" />
+      </View>
+    );
+  }
+
   if (!user && !requestedCoopId) {
     if (params.entry !== 'sign-in') return <OnboardingWelcome
       onContinue={() => router.push('/?entry=sign-in' as any)}

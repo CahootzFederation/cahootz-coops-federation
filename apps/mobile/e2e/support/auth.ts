@@ -11,7 +11,7 @@ export const USER_A_EMAIL =
 export const USER_B_EMAIL =
   process.env.E2E_USER_B_EMAIL || "releaseclick2@test.cahootz.local";
 
-/** Leaves the unchanged intro/profile/invite steps, chooses Explore commons,
+/** Leaves the authenticated profile/invite steps, chooses Explore commons,
  * then opens the existing fixture commons (or its public visitor view).
  * Membership creation is tested separately with fresh accounts.
  */
@@ -19,18 +19,10 @@ export async function skipOnboardingWizard(
   page: Page,
   mode: "always" | "if-shown",
 ) {
-  const introContinue = page.getByRole("button", {
-    name: "Continue",
-    exact: true,
-  });
   if (mode === "if-shown") {
-    // Wait for the wizard's first step (or the feed, if onboarding is
-    // already done) before checking what to skip. A signed-in person who
-    // already saw the intro on this device starts at the profile form, so
-    // the first step isn't always the intro.
+    // Authenticated setup starts at profile; the public carousel is not a wizard step.
     await expect(
-      introContinue
-        .or(page.getByRole("button", { name: "Do this later" }))
+      page.getByRole("button", { name: "Do this later" })
         .or(page.getByRole("button", { name: "Explore commons" }))
         .or(page.getByRole("button", { name: "Next", exact: true }))
         .or(page.getByRole("button", { name: "Skip for now", exact: true }))
@@ -39,11 +31,6 @@ export async function skipOnboardingWizard(
         .first(),
     ).toBeVisible();
   }
-  if (await introContinue.isVisible().catch(() => false)) {
-    await introContinue.click();
-    await expect(page.getByRole("button", { name: "Do this later" })).toBeVisible();
-  }
-
   const deferProfile = page.getByRole("button", { name: "Do this later" });
   if (mode === "always") {
     await expect(deferProfile).toBeVisible();
@@ -103,8 +90,7 @@ export async function signIn(page: Page, email: string) {
   await skipOnboardingWizard(page, "if-shown");
 
   await expect(page.getByLabel("Open menu")).toBeVisible();
-  // Handles are editable and need not match the email prefix. Verify the
-  // signed-in identity through the real account screen instead.
+  // Handles are editable, so verify the account's email rather than its handle.
   await page.getByRole("tab", { name: "You", exact: true }).click();
   await expect(page.getByText(email, { exact: true }).filter({ visible: true })).toBeVisible();
   await page.getByRole("tab", { name: "Commons", exact: true }).click();

@@ -78,7 +78,7 @@ test("a platform admin manages Sage limits, repeats, decision trails and Analyze
     await expect(admin.getByLabel("Login code")).toBeVisible();
     const { code } = fixture("e2e-admin.ts", "login-code", ADMIN_EMAIL);
     await admin.getByLabel("Login code").fill(code);
-    await admin.getByRole("button", { name: "Verify and continue" }).click();
+    await admin.getByRole("button", { name: "Verify & Sign In" }).click();
     await expect(admin).toHaveURL(/\/portal\/admin(?!\/login)/);
 
     await admin.goto(`${ADMIN_BASE_URL}/portal/admin/commons/${COOP_ID}/ai`);
@@ -152,7 +152,7 @@ test("a platform admin runs Sage's proposal writer now and sees what it decided"
     await expect(admin.getByLabel("Login code")).toBeVisible();
     const { code } = fixture("e2e-admin.ts", "login-code", ADMIN_EMAIL);
     await admin.getByLabel("Login code").fill(code);
-    await admin.getByRole("button", { name: "Verify and continue" }).click();
+    await admin.getByRole("button", { name: "Verify & Sign In" }).click();
     await expect(admin).toHaveURL(/\/portal\/admin(?!\/login)/);
 
     await admin.goto(`${ADMIN_BASE_URL}/portal/admin/commons/${coopId}/ai`);

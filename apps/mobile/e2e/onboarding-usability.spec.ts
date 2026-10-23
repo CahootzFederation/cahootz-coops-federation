@@ -83,7 +83,7 @@ test.describe("onboarding usability", () => {
     // Straight to sign-in, with email and one-time-code autofill turned on.
     const email = page.getByPlaceholder("name@email.com");
     await expect(email).toBeVisible();
-    await expect(shown(page, "Sign in", { exact: true })).toBeVisible();
+    await expect(shown(page, "Continue to Cahootz", { exact: true })).toBeVisible();
     await expect(shown(page, /No password needed/)).toBeVisible();
     await expect(shown(page, "Common", { exact: true })).toHaveCount(0);
     await expect(email).toHaveAttribute("autocomplete", "email");
@@ -221,4 +221,30 @@ test.describe("onboarding usability", () => {
       await context.close();
     }
   });
+});
+
+
+test("restoring a saved session never exposes the public welcome or sign-in form", async ({ browser }) => {
+  const { page, context } = await newSignedInPage(browser, USER_A_EMAIL);
+  let releaseSession!: () => void;
+  const sessionGate = new Promise<void>((resolve) => { releaseSession = resolve; });
+  try {
+    await page.route("**/trpc/user.getOnboardingProgress", async (route) => {
+      await sessionGate;
+      await route.continue();
+    });
+    const sessionRequest = page.waitForRequest("**/trpc/user.getOnboardingProgress");
+    await page.goto("/");
+    await sessionRequest;
+    await expect(page.getByRole("progressbar").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
+    await expect(page.getByPlaceholder("name@email.com")).toHaveCount(0);
+    await expect(page.getByRole("tablist", { name: "Main navigation" })).toHaveCount(0);
+    releaseSession();
+    await expect(page.getByLabel("Open menu")).toBeVisible();
+    await expect(page.getByRole("tablist", { name: "Main navigation" })).toBeVisible();
+  } finally {
+    releaseSession();
+    await context.close();
+  }
 });

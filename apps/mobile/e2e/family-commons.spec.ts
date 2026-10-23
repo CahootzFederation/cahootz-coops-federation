@@ -330,10 +330,11 @@ test.describe("family commons", () => {
       await expect(shown(visitor, /This is a private family space/)).toBeVisible();
       await shown(visitor, "Sign in or create an account", { exact: true }).click();
 
-      // After signing in (and the onboarding wizard), the link resumes, and it
-      // only lets User B ask to join.
-      await signInFromSignInScreen(visitor, USER_B_EMAIL);
-      await visitor.getByRole("button", { name: "Next", exact: true }).click();
+      // An established account skips profile questions and resumes the link.
+      await visitor.getByPlaceholder("name@email.com").fill(USER_B_EMAIL);
+      await visitor.getByRole("button", { name: "Continue with email" }).click();
+      await visitor.getByPlaceholder("Enter 6-digit code").fill(TEST_CODE);
+      await visitor.getByRole("button", { name: "Verify and continue" }).click();
       await expect(visitor).toHaveURL(/\/invite\//);
       await expect(shown(visitor, "Request access", { exact: true })).toBeVisible();
 

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { router, useSegments } from 'expo-router';
+import { router, useSegments, useGlobalSearchParams } from 'expo-router';
 
 import { useAuth } from '@/contexts/auth-context';
 import { secureStorage } from '@/lib/secure-storage';
@@ -12,10 +12,12 @@ import { secureStorage } from '@/lib/secure-storage';
 export function PendingInvitationResume() {
   const { user, isLoading } = useAuth();
   const segments = useSegments();
+  const { entry } = useGlobalSearchParams<{ entry?: string | string[] }>();
+  const signingIn = (Array.isArray(entry) ? entry[0] : entry) === 'sign-in';
   const inProfileOnboarding = segments[0] === 'profile-onboarding';
 
   useEffect(() => {
-    if (isLoading || !user?.profileOnboardingCompletedAt || inProfileOnboarding) return;
+    if (isLoading || !user?.onboardingCompletedAt || inProfileOnboarding || signingIn) return;
 
     let cancelled = false;
     secureStorage.getItem(secureStorage.keys.PENDING_INVITATION).then((token) => {
@@ -27,7 +29,7 @@ export function PendingInvitationResume() {
     return () => {
       cancelled = true;
     };
-  }, [isLoading, user?.profileOnboardingCompletedAt, inProfileOnboarding]);
+  }, [isLoading, user?.onboardingCompletedAt, inProfileOnboarding, signingIn]);
 
   return null;
 }

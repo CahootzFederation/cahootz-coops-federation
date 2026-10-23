@@ -1,3 +1,4 @@
+import { DESIGN } from '@/constants/design';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -439,7 +440,7 @@ export default function ProfileOnboardingScreen() {
             style={introStyles.submitButton}
           >
             <Text style={introStyles.submitText}>Next</Text>
-            <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.6} />
+            <ArrowRight color={DESIGN.ink} size={20} strokeWidth={2.6} />
           </Pressable>
         </View>
       </SafeAreaView>
@@ -480,14 +481,14 @@ export default function ProfileOnboardingScreen() {
           {!hasCommonsMembership ? <>
           <Pressable accessibilityRole="button" accessibilityLabel="Explore commons"
             onPress={() => void completeOnboarding({ pathname: '/commons', params: { fromOnboarding: '1' } }, 'commons')}
-            style={[choiceStyles.card, { backgroundColor: '#E8F4E5' }]}>
+            style={[choiceStyles.card, { backgroundColor: DESIGN.green }]}>
             <Text style={choiceStyles.title}>{'Meet. Share.\nBelong.'}</Text>
             <Text style={choiceStyles.body}>Find a public commons around the things you care about.</Text>
             <View style={choiceStyles.action}><Text style={choiceStyles.actionText}>Explore commons</Text><ArrowRight color="#C2410C" size={24} /></View>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Start a family"
             onPress={() => void completeOnboarding({ pathname: '/(authenticated)/create-family', params: { fromOnboarding: '1' } }, 'family')}
-            style={[choiceStyles.card, { backgroundColor: '#F0E9FB' }]}>
+            style={[choiceStyles.card, { backgroundColor: DESIGN.purple }]}>
             <Text style={choiceStyles.title}>{'Your people.\nYour own space.'}</Text>
             <Text style={choiceStyles.body}>Start a private, invite-only commons for your family.</Text>
             <View style={choiceStyles.action}><Text style={choiceStyles.actionText}>Start a family</Text><ArrowRight color="#C2410C" size={24} /></View>
@@ -537,6 +538,7 @@ export default function ProfileOnboardingScreen() {
               </View>
               <Text style={styles.helper}>{introField.helper}</Text>
               <TextInput
+                accessibilityLabel={introField.label}
                 value={selfDescription}
                 onChangeText={updateIntro}
                 placeholder={introField.placeholder}
@@ -563,6 +565,7 @@ export default function ProfileOnboardingScreen() {
                     </View>
                     <Text style={styles.helper}>{field.helper}</Text>
                     <TextInput
+                      accessibilityLabel={field.label}
                       value={signalValues[field.name]}
                       onChangeText={(value) => updateSignalField(field.name, value)}
                       placeholder={field.placeholder}
@@ -641,7 +644,7 @@ export default function ProfileOnboardingScreen() {
             ) : (
               <>
                 <Text style={styles.submitText}>Start using Cahootz</Text>
-                <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.6} />
+                <ArrowRight color={DESIGN.ink} size={20} strokeWidth={2.6} />
               </>
             )}
           </Pressable>
@@ -656,24 +659,27 @@ export default function ProfileOnboardingScreen() {
 
 const choiceStyles = StyleSheet.create({
   card: { borderRadius: 24, padding: 24, minHeight: 240, marginTop: 8 },
-  title: { color: '#0F172A', fontSize: 28, lineHeight: 34, fontWeight: '900' },
-  body: { color: '#475569', fontSize: 16, lineHeight: 24, marginTop: 14 },
+  title: { color: DESIGN.ink, fontSize: 28, lineHeight: 34, fontWeight: '700' },
+  body: { color: DESIGN.muted, fontSize: 16, lineHeight: 24, marginTop: 14 },
   action: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 32 },
-  actionText: { color: '#C2410C', fontSize: 16, fontWeight: '800' },
-  footer: { color: '#64748B', fontSize: 14, lineHeight: 22, textAlign: 'center', marginTop: 32, marginBottom: 16 },
+  actionText: { color: DESIGN.actionText, fontSize: 16, fontWeight: '800' },
+  footer: { color: DESIGN.muted, fontSize: 14, lineHeight: 22, textAlign: 'center', marginTop: 32, marginBottom: 16 },
 });
 
 const introStyles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: DESIGN.paper,
   },
   scroll: {
     flex: 1,
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 20,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+    paddingHorizontal: DESIGN.gutter,
     paddingTop: 18,
     paddingBottom: 12,
   },
@@ -682,8 +688,8 @@ const introStyles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F0F2F5',
-    backgroundColor: '#FFFFFF',
+    borderTopColor: DESIGN.border,
+    backgroundColor: DESIGN.paper,
   },
   header: {
     paddingTop: 8,
@@ -695,7 +701,7 @@ const introStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     borderRadius: 999,
-    backgroundColor: '#FFF7ED',
+    backgroundColor: DESIGN.primarySoft,
     borderWidth: 1,
     borderColor: '#FED7AA',
     paddingHorizontal: 12,
@@ -703,19 +709,19 @@ const introStyles = StyleSheet.create({
     marginBottom: 18,
   },
   badgeText: {
-    color: '#C2410C',
+    color: DESIGN.actionText,
     fontSize: 13,
     fontWeight: '700',
   },
   title: {
-    color: '#0F172A',
+    color: DESIGN.ink,
     fontSize: 30,
     lineHeight: 36,
-    fontWeight: '900',
+    fontWeight: '700',
     letterSpacing: 0,
   },
   subtitle: {
-    color: '#64748B',
+    color: DESIGN.muted,
     fontSize: 16,
     lineHeight: 24,
     marginTop: 12,
@@ -730,8 +736,8 @@ const introStyles = StyleSheet.create({
     minHeight: 300,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#F0F2F5',
-    backgroundColor: '#FFFFFF',
+    borderColor: DESIGN.border,
+    backgroundColor: DESIGN.paper,
     padding: 18,
     justifyContent: 'center',
   },
@@ -756,18 +762,18 @@ const introStyles = StyleSheet.create({
     borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: DESIGN.paper,
     borderWidth: 1,
     borderColor: '#FED7AA',
   },
   carouselTitle: {
-    color: '#0F172A',
+    color: DESIGN.ink,
     fontSize: 21,
     lineHeight: 27,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   carouselBody: {
-    color: '#64748B',
+    color: DESIGN.muted,
     fontSize: 15,
     lineHeight: 22,
     marginTop: 8,
@@ -787,60 +793,63 @@ const introStyles = StyleSheet.create({
   },
   carouselDotActive: {
     width: 22,
-    backgroundColor: '#FF6B00',
+    backgroundColor: DESIGN.primary,
   },
   submitButton: {
-    minHeight: 58,
+    minHeight: 52,
     borderRadius: 16,
-    backgroundColor: '#FF6B00',
+    backgroundColor: DESIGN.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
   },
   submitText: {
-    color: '#FFFFFF',
+    color: DESIGN.ink,
     fontSize: 17,
     lineHeight: 22,
-    fontWeight: '900',
+    fontWeight: '700',
   },
 });
 
 const circlesStyles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: DESIGN.paper,
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 20,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+    paddingHorizontal: DESIGN.gutter,
     paddingTop: 18,
     paddingBottom: 12,
     gap: 12,
   },
   eyebrow: {
-    color: '#FF6B00',
+    color: DESIGN.actionText,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    fontWeight: '700',
+
   },
   title: {
-    color: '#0F172A',
+    color: DESIGN.ink,
     fontSize: 28,
     lineHeight: 34,
-    fontWeight: '900',
+    fontWeight: '700',
     marginTop: 6,
   },
   subtitle: {
-    color: '#64748B',
+    color: DESIGN.muted,
     fontSize: 15,
     lineHeight: 21,
     marginTop: 4,
     marginBottom: 8,
   },
   error: {
-    color: '#DC2626',
+    color: DESIGN.danger,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -850,8 +859,8 @@ const circlesStyles = StyleSheet.create({
     gap: 12,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#F0F2F5',
-    backgroundColor: '#FFFFFF',
+    borderColor: DESIGN.border,
+    backgroundColor: DESIGN.paper,
     padding: 14,
   },
   cardDisabled: {
@@ -868,13 +877,13 @@ const circlesStyles = StyleSheet.create({
     flex: 1,
   },
   cardTitle: {
-    color: '#0F172A',
+    color: DESIGN.ink,
     fontSize: 16,
     lineHeight: 21,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   cardText: {
-    color: '#64748B',
+    color: DESIGN.muted,
     fontSize: 13,
     lineHeight: 18,
     marginTop: 2,
@@ -884,7 +893,7 @@ const circlesStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: DESIGN.paper,
   },
   keyboardView: {
     flex: 1,
@@ -893,50 +902,47 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: DESIGN.paper,
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 20,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+    paddingHorizontal: DESIGN.gutter,
     paddingTop: 18,
     paddingBottom: 28,
   },
   profileIntro: {
     borderTopWidth: 1,
-    borderTopColor: '#F0F2F5',
+    borderTopColor: DESIGN.border,
     paddingTop: 18,
     marginBottom: 14,
   },
   sectionEyebrow: {
-    color: '#FF6B00',
+    color: DESIGN.actionText,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    fontWeight: '700',
+
   },
   sectionTitle: {
-    color: '#0F172A',
+    color: DESIGN.ink,
     fontSize: 24,
     lineHeight: 30,
-    fontWeight: '900',
+    fontWeight: '700',
     marginTop: 6,
   },
   sectionBody: {
-    color: '#64748B',
+    color: DESIGN.muted,
     fontSize: 14,
     lineHeight: 21,
     marginTop: 6,
   },
   form: {
-    gap: 18,
+    gap: 24,
   },
-  fieldBlock: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#F0F2F5',
-    backgroundColor: '#FFFFFF',
-    padding: 14,
-  },
+  fieldBlock: { gap: 2 },
   fieldHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -945,38 +951,39 @@ const styles = StyleSheet.create({
   },
   label: {
     flex: 1,
-    color: '#0F172A',
-    fontSize: 18,
-    lineHeight: 24,
+    color: DESIGN.ink,
+    fontSize: 16,
+    lineHeight: 22,
     fontWeight: '800',
   },
   requiredTag: {
-    color: '#475569',
+    color: DESIGN.muted,
     fontSize: 14,
     fontWeight: '600',
   },
   counter: {
-    color: '#FF6B00',
+    color: DESIGN.actionText,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '800',
   },
   counterComplete: {
-    color: '#16A34A',
+    color: DESIGN.success,
   },
   helper: {
-    color: '#64748B',
+    color: DESIGN.muted,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 8,
     marginBottom: 12,
   },
   input: {
-    borderRadius: 16,
+    minHeight: DESIGN.controlHeight,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#F8FAFC',
-    color: '#0F172A',
+    borderColor: DESIGN.border,
+    backgroundColor: DESIGN.paper,
+    color: DESIGN.ink,
     fontSize: 16,
     lineHeight: 22,
     paddingHorizontal: 14,
@@ -992,15 +999,15 @@ const styles = StyleSheet.create({
     minHeight: 104,
   },
   error: {
-    color: '#DC2626',
+    color: DESIGN.danger,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 16,
   },
   submitButton: {
-    minHeight: 58,
+    minHeight: 52,
     borderRadius: 16,
-    backgroundColor: '#FF6B00',
+    backgroundColor: DESIGN.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1012,10 +1019,10 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   submitText: {
-    color: '#FFFFFF',
+    color: DESIGN.ink,
     fontSize: 17,
     lineHeight: 22,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   secondaryButton: {
     minHeight: 46,
@@ -1024,7 +1031,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   secondaryButtonText: {
-    color: '#64748B',
+    color: DESIGN.muted,
     fontSize: 15,
     lineHeight: 20,
     fontWeight: '800',

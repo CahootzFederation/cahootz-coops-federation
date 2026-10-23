@@ -381,3 +381,12 @@ The member tab bar requires a loaded, signed-in account with completed onboardin
 Sign-in now has one shared email/code flow for new and existing accounts, without a separate Get started option. Its Back button always returns to the welcome carousel, including from code entry and when opened from commons details. Change Email still returns code entry to the email field. The commons-choice journeys cover each route.
 
 The email verification form uses a compact, unboxed layout: Continue to Cahootz → Continue with email → Check your email → Verify and continue. Code entry shows the destination email and smaller Change email / Resend code actions. Browser sign-in helpers use the new button labels.
+
+### Design consistency regression coverage
+
+`design-consistency.spec.ts` signs releaseclick1 in through the UI and covers circular home search, wrapping names, retained Manage circles/menu/switcher controls, parent tab selection in Wallet and product detail, compact no-image products, cart/quantity navigation, and notification preference error/retry recovery. It creates a uniquely named E2E circle via fixture API and leaves it during cleanup. Notification failures are injected only into the test browser; retry then uses the real API. Check 320/375/414/768 widths.
+
+Local settings/proposal failures mentioning missing `NotificationPreference.sage` or `CommonsProposalDraft.ideaPostId` require the existing `20261016040000_simplify_sage_notifications` and `20261018000000_sage_goal_proposal_ideas` migrations; do not mask these with empty data.
+
+`design-secondary.spec.ts` covers directory search/clear/open, Alerts category and unread reset controls, and Sage settings failure/retry/reload plus expandable explanation. Empty alerts and a failed Sage request are browser-local response fixtures; recovery loads the real API. Layout checks use 320/375/414/768 widths. Existing `events.spec.ts` and `sage-decision-trail.spec.ts` retain real publishing/RSVP and persisted preference coverage.
+The same design spec exercises event recurrence, location switching, retained field values, and Publish availability at all four widths without publishing fixture content. Direct-entry Back returns to the selected commons’ Board when no in-app history exists; normal entry retains history navigation.

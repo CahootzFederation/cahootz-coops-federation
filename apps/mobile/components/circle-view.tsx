@@ -6,6 +6,8 @@ import { router, useFocusEffect } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { DESIGN } from '@/constants/design';
+import { Input } from '@/components/ui/input';
 import { circleColorFromKey } from '@/lib/circle-color';
 import { secureStorage } from '@/lib/secure-storage';
 import { track } from '@/lib/analytics';
@@ -16,13 +18,7 @@ import { friendlyError } from '@/lib/friendly-error';
 import { IconAvatar } from '@/components/icon-avatar';
 import { CheckCircle2, ChevronDown, Compass, Menu, MessageCircle, Settings2, LogIn, Star, X } from 'lucide-react-native';
 
-const THEME = {
-  ink: '#111827',
-  muted: '#6B7280',
-  primary: '#FF6B00',
-  primarySoft: '#FFF7ED',
-  border: '#E5E7EB',
-};
+const THEME = { ...DESIGN, primary: DESIGN.actionText };
 
 type CircleCard = PrivateGroupSummary | { general: true };
 
@@ -32,6 +28,7 @@ function isGeneral(card: CircleCard): card is { general: true } {
 
 export default function CircleView({ coopId }: { coopId: string }) {
   const { sessionToken, isLoading: authLoading } = useAuth();
+  const [search, setSearch] = useState('');
   const [circles, setCircles] = useState<PrivateGroupSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAssigning, setIsAssigning] = useState(false);
@@ -198,7 +195,11 @@ export default function CircleView({ coopId }: { coopId: string }) {
   const memberCircles = circles.filter((c) => c.isMember && c.kind !== 'WELCOME_TABLE');
   const publicCircles = circles.filter((c) => !c.isMember && c.privacy === 'public');
 
-  const cards: CircleCard[] = [{ general: true }, ...memberCircles, ...publicCircles];
+  const matches = (name: string) => name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase());
+  const sections: { title: string; cards: CircleCard[] }[] = [
+    { title: 'Your circles', cards: [{ general: true as const }, ...memberCircles, ...(myWelcomeTable ? [myWelcomeTable] : [])] },
+    { title: 'Discover circles', cards: publicCircles },
+  ].map((section) => ({ ...section, cards: section.cards.filter((card) => matches(isGeneral(card) ? 'General' : card.name)) }));
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
@@ -378,18 +379,19 @@ export default function CircleView({ coopId }: { coopId: string }) {
       <ScrollView
         testID="circle-view-scroll"
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{ paddingBottom: 32, width: '100%', maxWidth: 720, alignSelf: 'center' }}
         keyboardShouldPersistTaps="handled"
       >
         <View className="px-5 pt-2">
           <Text className="text-3xl font-black text-gray-950">Welcome In</Text>
           <Text className="mt-1 text-base font-semibold text-gray-500">
-            Choose a circle in {activeCommonsName}
+            Find your circle in {activeCommonsName}
           </Text>
         </View>
 
         {sessionToken ? (
           <View className="px-5 pt-4">
+            <Input accessibilityLabel="Find a circle" placeholder="Find a circle" value={search} onChangeText={setSearch} style={{ minHeight: DESIGN.controlHeight, backgroundColor: DESIGN.paper }} />
             <CommonsInvitationsCard />
           </View>
         ) : null}
@@ -407,8 +409,11 @@ export default function CircleView({ coopId }: { coopId: string }) {
             {loadError ? (
               <LoadError message={loadError} onRetry={retryLoad} retrying={isLoading} />
             ) : null}
-            <View className="flex-row flex-wrap justify-between gap-y-6">
-              {cards.map((card) =>
+            {sections.map((section) => section.cards.length > 0 ? (
+            <View key={section.title}>
+              <Text accessibilityRole="header" className="mb-5 text-base font-bold" style={{ color: THEME.ink }}>{section.title}</Text>
+              <View className="flex-row flex-wrap justify-between gap-y-6">
+              {section.cards.map((card) =>
                 isGeneral(card) ? (
                   <CircleCardView
                     key="general"
@@ -431,14 +436,14 @@ export default function CircleView({ coopId }: { coopId: string }) {
                   />
                 ),
               )}
-              {myWelcomeTable ? (
-                <CircleCardView
-                  name={myWelcomeTable.name}
-                  colorKey={myWelcomeTable.colorKey}
-                  chattingCount={myWelcomeTable.chattingCount}
-                  onPress={() => openCircle(myWelcomeTable.id)}
-                />
-              ) : (
+              </View>
+            </View>
+            ) : null)}
+            {search.trim() && sections.every((section) => section.cards.length === 0) ? (
+              <Text style={{ color: THEME.muted }}>No circles match your search.</Text>
+            ) : null}
+            {!myWelcomeTable && !search.trim() ? (
+              <View className="flex-row">
                 <TouchableOpacity
                   accessibilityRole="button"
                   accessibilityLabel={sessionToken ? 'Join a welcome lounge' : 'Sign in'}
@@ -449,7 +454,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
                   activeOpacity={0.8}
                 >
                   <View
-                    className="h-28 w-28 items-center justify-center rounded-full border-2 border-dashed"
+                    className="h-24 w-24 items-center justify-center rounded-full border-2 border-dashed"
                     style={{ borderColor: THEME.primary, backgroundColor: THEME.primarySoft }}
                   >
                     {isAssigning ? (
@@ -467,8 +472,8 @@ export default function CircleView({ coopId }: { coopId: string }) {
                     {sessionToken ? 'Meet a small group of newcomers' : 'Log in to join your commons'}
                   </Text>
                 </TouchableOpacity>
-              )}
-            </View>
+              </View>
+            ) : null}
 
             {actionError ? (
               <Text accessibilityRole="alert" className="text-base font-bold text-red-700">
@@ -513,14 +518,10 @@ function CircleCardView({
       activeOpacity={0.8}
     >
       <View
-        className="h-28 w-28 items-center justify-center rounded-full"
+        className="h-24 w-24 items-center justify-center rounded-full"
         style={{
           backgroundColor: background,
-          shadowColor: '#0F172A',
-          shadowOpacity: 0.08,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 4 },
-          elevation: 2,
+
         }}
       >
         {iconEmoji ? (
@@ -536,7 +537,7 @@ function CircleCardView({
           </Text>
         )}
       </View>
-      <Text className="mt-3 text-center text-base font-black text-gray-900" numberOfLines={1}>
+      <Text className="mt-3 text-center text-sm font-bold text-gray-900">
         {name}
       </Text>
       {hideStatus ? null : (
@@ -548,7 +549,7 @@ function CircleCardView({
             className="text-center text-xs font-semibold"
             style={{ color: !joinLabel && chattingCount > 0 ? '#16A34A' : THEME.primary }}
           >
-            {joinLabel ? 'Join' : chattingCount > 0 ? `${chattingCount} chatting` : 'Join now'}
+            {joinLabel ? 'Join' : chattingCount > 0 ? `${chattingCount} chatting` : 'Joined'}
           </Text>
         </View>
       )}

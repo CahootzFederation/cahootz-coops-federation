@@ -1,4 +1,4 @@
-/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · genre: editorial utility · macrostructure: Ecosystem Index · theme: Cahootz newsprint · contrast: pass · responsive: pass */
+import { DESIGN } from '@/constants/design';
 import type { CommonsPost } from '@/lib/api';
 import React from 'react';
 import {
@@ -56,24 +56,24 @@ const FALLBACK_COMMONS_ID = 'cahootz';
 const emptyCounts: LaneCounts = { needs: 0, offers: 0, events: 0 };
 
 const tokens = {
-  paper: '#F7F0E3',
-  sheet: '#FFFDF8',
-  sheetWarm: '#F0E3CD',
-  ink: '#211A14',
-  inkSoft: '#51473D',
-  muted: '#6E6257',
-  rule: '#CFC0AA',
-  ruleLight: '#E4D8C6',
+  paper: DESIGN.paper,
+  sheet: DESIGN.paper,
+  sheetWarm: DESIGN.primarySoft,
+  ink: DESIGN.ink,
+  inkSoft: DESIGN.muted,
+  muted: DESIGN.muted,
+  rule: DESIGN.border,
+  ruleLight: DESIGN.border,
   orange: '#B94614',
-  orangePale: '#F5DDD0',
+  orangePale: DESIGN.primarySoft,
   blue: '#315D72',
-  bluePale: '#DCE8EB',
+  bluePale: DESIGN.blue,
   green: '#3D684E',
-  greenPale: '#DDE9DE',
+  greenPale: DESIGN.green,
   ochre: '#8A641B',
   ochrePale: '#EFE3C4',
   plum: '#654C68',
-  plumPale: '#E8DEE8',
+  plumPale: DESIGN.purple,
   danger: '#A1332B',
 };
 
@@ -304,10 +304,10 @@ export default function BoardScreen() {
               accessibilityRole="button"
               accessibilityLabel="Add to board"
               onPress={() => resetComposer()}
-              style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: tokens.ink, borderRadius: 8, paddingHorizontal: 12, backgroundColor: tokens.ink }}
+              style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: DESIGN.primary, borderRadius: 12, paddingHorizontal: 12, backgroundColor: DESIGN.primary }}
             >
-              <Plus size={17} color={tokens.sheet} />
-              <Text style={{ marginLeft: 5, color: tokens.sheet, fontSize: 13, fontWeight: '800' }}>Post</Text>
+              <Plus size={17} color={tokens.ink} />
+              <Text style={{ marginLeft: 5, color: tokens.ink, fontSize: 13, fontWeight: '800' }}>Post</Text>
             </TouchableOpacity>
           </View>
 
@@ -648,8 +648,8 @@ function Composer({ open, postType, title, body, publishing, onClose, onChoose, 
                 <TextInput accessibilityLabel="Board item title" value={title} onChangeText={onTitleChange} placeholder="Example: Looking for help with Saturday's cleanup" placeholderTextColor={tokens.muted} style={{ minHeight: 48, borderWidth: 1, borderColor: tokens.rule, borderRadius: 7, paddingHorizontal: 12, color: tokens.ink, fontSize: 15 }} />
                 <Text style={{ marginTop: 15, marginBottom: 6, color: tokens.inkSoft, fontSize: 13, fontWeight: '800' }}>Details</Text>
                 <TextInput accessibilityLabel="Board item details" value={body} onChangeText={onBodyChange} placeholder="Include the place, timing, and how someone should respond." placeholderTextColor={tokens.muted} multiline style={{ minHeight: 116, borderWidth: 1, borderColor: tokens.rule, borderRadius: 7, paddingHorizontal: 12, paddingVertical: 11, color: tokens.ink, fontSize: 15, lineHeight: 21, textAlignVertical: 'top' }} />
-                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Publish board item" disabled={!title.trim() || !body.trim() || publishing} onPress={onPublish} style={{ minHeight: 48, marginTop: 18, alignItems: 'center', justifyContent: 'center', borderRadius: 7, backgroundColor: tokens.ink, opacity: !title.trim() || !body.trim() || publishing ? 0.5 : 1 }}>
-                  {publishing ? <ActivityIndicator color={tokens.sheet} /> : <Text style={{ color: tokens.sheet, fontSize: 14, fontWeight: '900' }}>Publish post</Text>}
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Publish board item" disabled={!title.trim() || !body.trim() || publishing} onPress={onPublish} style={{ minHeight: 48, marginTop: 18, alignItems: 'center', justifyContent: 'center', borderRadius: 7, backgroundColor: DESIGN.primary, opacity: !title.trim() || !body.trim() || publishing ? 0.5 : 1 }}>
+                  {publishing ? <ActivityIndicator color={tokens.ink} /> : <Text style={{ color: tokens.ink, fontSize: 14, fontWeight: '900' }}>Publish post</Text>}
                 </TouchableOpacity>
               </View>
             )}

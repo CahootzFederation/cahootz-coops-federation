@@ -1,3 +1,4 @@
+import { DESIGN } from '@/constants/design';
 import React from 'react';
 import { ActivityIndicator, Image, RefreshControl, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -53,12 +54,12 @@ type ProductItem = {
 };
 
 const colors = {
-  paper: '#FFF9ED',
-  ink: '#241A10',
-  muted: '#75685A',
-  line: '#E9DDCB',
+  paper: DESIGN.paper,
+  ink: DESIGN.ink,
+  muted: DESIGN.muted,
+  line: DESIGN.border,
   orange: '#E85D04',
-  orangeSoft: '#FFF0E2',
+  orangeSoft: DESIGN.primarySoft,
   forest: '#245B45',
 };
 const money = (value: number) => `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;

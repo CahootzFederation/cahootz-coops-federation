@@ -1,9 +1,11 @@
 import React from 'react';
-import { ScrollView, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft } from 'lucide-react-native';
+import { DetailHeader } from '@/components/detail-header';
+import { LoadError } from '@/components/load-error';
+import { DESIGN } from '@/constants/design';
 
 import { PreferenceSwitch } from '@/components/preference-switch';
 import { SageIntro } from '@/components/sage-intro';
@@ -22,6 +24,7 @@ export default function SageSettingsScreen() {
     queryKey,
     queryFn: () => api.getSageTrailSettings(sessionToken!),
     enabled: !!sessionToken,
+    retry: false,
   });
   const mutation = useMutation({
     mutationFn: (value: boolean) => api.setSageTrailSettings(value, sessionToken!),
@@ -30,29 +33,18 @@ export default function SageSettingsScreen() {
   const enabled = mutation.isPending ? !!mutation.variables : !!query.data?.showSageDecisionTrails;
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: '#FAFAF9' }}
-      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 32, gap: 16 }}
-    >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(authenticated)/profile' as any))}
-          style={{ height: 40, width: 40, alignItems: 'center', justifyContent: 'center' }}
-        >
-          <ArrowLeft size={22} color="#C2410C" />
-        </TouchableOpacity>
-        <Text style={{ fontSize: 22, fontWeight: '800', color: '#1C1917' }}>Sage settings</Text>
-      </View>
-
-      <SageIntro dismissible={false} />
-
-      <View style={{ borderRadius: 14, borderWidth: 1, borderColor: '#E7E5E4', backgroundColor: '#FFFFFF', padding: 16, gap: 10 }}>
+    <View style={{ flex: 1, backgroundColor: DESIGN.paper }}>
+      <DetailHeader title="Sage settings" parent="You" onBack={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/wallet')} />
+      <ScrollView contentContainerStyle={{ padding: DESIGN.gutter, paddingBottom: insets.bottom + 32, gap: 20, width: '100%', maxWidth: 720, alignSelf: 'center' }}>
+      <Text style={{ fontSize: 15, lineHeight: 22, color: DESIGN.muted }}>Choose what you see from Sage.</Text>
+      {query.isPending ? <ActivityIndicator accessibilityLabel="Loading Sage settings" color={DESIGN.actionText} /> : null}
+      {query.isError ? <LoadError title="Sage settings couldn’t load" message="Try again to see your saved preference." retrying={query.isFetching} onRetry={() => void query.refetch()} /> : null}
+      {query.data ? (
+      <View style={{ borderRadius: 14, borderWidth: 1, borderColor: DESIGN.border, backgroundColor: DESIGN.paper, padding: 16, gap: 10 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <View style={{ flex: 1, gap: 4 }}>
-            <Text style={{ fontWeight: '800', color: '#1C1917' }}>{LABEL}</Text>
-            <Text style={{ fontSize: 13, color: '#57534E' }}>
+            <Text style={{ fontWeight: '800', color: DESIGN.ink }}>{LABEL}</Text>
+            <Text style={{ fontSize: 13, color: DESIGN.muted }}>
               See how Sage decided what to do with posts and circle conversations: what it read, what it considered,
               which rules it checked, what it did, and what happened next.
             </Text>
@@ -64,17 +56,20 @@ export default function SageSettingsScreen() {
             onChange={(value) => mutation.mutate(value)}
           />
         </View>
-        <Text style={{ fontSize: 12, color: '#78716C' }}>
+        <Text style={{ fontSize: 12, color: DESIGN.muted }}>
           You&apos;ll only see trails for posts and circles you can already see. Introductions and anything Sage flags for an
           admin stay private to platform admins.
         </Text>
         {mutation.isError ? (
-          <Text accessibilityRole="alert" style={{ color: '#B91C1C' }}>Could not save. Your previous choice is still active.</Text>
+          <Text accessibilityRole="alert" style={{ color: DESIGN.danger }}>Could not save. Your previous choice is still active.</Text>
         ) : mutation.isSuccess && !mutation.isPending ? (
-          <Text accessibilityLiveRegion="polite" style={{ fontSize: 13, color: '#047857' }}>Saved.</Text>
+          <Text accessibilityLiveRegion="polite" style={{ fontSize: 13, color: DESIGN.success }}>Saved.</Text>
         ) : null}
       </View>
 
+      ) : null}
+      <SageIntro dismissible={false} collapsible />
     </ScrollView>
+    </View>
   );
 }

@@ -1,3 +1,4 @@
+import { DESIGN } from '@/constants/design';
 import React from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { ActivityIndicator, Alert, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
@@ -28,10 +29,10 @@ import { personDisplayHandle, personHandleFromName } from '@/lib/social-profile'
 import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const PAGE_THEME = {
-  paper: '#F6F7F8',
-  primary: '#FF6B00',
-  primarySoft: '#FFF7ED',
-  border: '#E5E7EB',
+  paper: DESIGN.paper,
+  primary: DESIGN.primary,
+  primarySoft: DESIGN.primarySoft,
+  border: DESIGN.border,
   muted: '#64748B',
   ink: '#111827',
 };

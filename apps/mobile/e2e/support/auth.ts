@@ -103,11 +103,12 @@ export async function signIn(page: Page, email: string) {
   await skipOnboardingWizard(page, "if-shown");
 
   await expect(page.getByLabel("Open menu")).toBeVisible();
-  await page.getByLabel("Open menu").click();
-  await expect(
-    page.getByText(new RegExp(`Sign Out \\(@${email.split("@")[0]}\\)`)),
-  ).toBeVisible();
-  await page.getByLabel("Close menu").click();
+  // Handles are editable and need not match the email prefix. Verify the
+  // signed-in identity through the real account screen instead.
+  await page.getByRole("tab", { name: "You", exact: true }).click();
+  await expect(page.getByText(email, { exact: true }).filter({ visible: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Commons", exact: true }).click();
+  await expect(page.getByLabel("Open menu")).toBeVisible();
 }
 
 /**

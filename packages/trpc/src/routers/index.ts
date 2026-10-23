@@ -42,8 +42,10 @@ import { knowledgeBaseRouter } from "./knowledge-base.js";
 import { commonsActionsRouter } from "./commons-actions.js";
 import { commonsActionsAdminRouter } from "./commons-actions-admin.js";
 import { sageRouter } from "./sage.js";
+import { communityPulseRouter } from "./community-pulse.js";
 
 export const appRouter = router({
+  communityPulse: communityPulseRouter,
   user: userRouter,
   anonymousProfile: anonymousProfileRouter,
   proposal: proposalRouter,

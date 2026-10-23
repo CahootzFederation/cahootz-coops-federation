@@ -4,6 +4,7 @@
  * current, asking a likely helper about needs nobody answered, the weekly community rhythm posts, the
  * twice-weekly proposal writer, and the steward's review. Each step is isolated so one failure doesn't stop the others.
  */
+import { publishCommunityPulse } from "./sage-community-pulse.js";
 import { expireSageAlerts } from "./sage-responsibility.js";
 import { runCommunityRhythm } from "./sage-community-rhythm.js";
 import { maintainSageMemory } from "./sage-memory.js";
@@ -16,6 +17,8 @@ import { askHelpersForUnansweredNeeds } from "./sage-unanswered-needs.js";
 type Step = { name: string; run: (coopId: string, now: Date) => Promise<unknown> };
 
 const steps: Step[] = [
+  // Once-daily, count-backed shared observations; no private sources or model calls.
+  { name: "community pulse", run: (coopId, now) => publishCommunityPulse(coopId, now) },
   { name: "follow up on suggestions", run: followUpOnSuggestions },
   { name: "expire alerts", run: expireSageAlerts },
   { name: "maintain memory", run: maintainSageMemory },

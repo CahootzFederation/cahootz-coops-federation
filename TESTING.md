@@ -29,6 +29,8 @@ pnpm -F @repo/db seed:test-users -- --coopId=cahootz --count=2 --prefix=releasec
 
 ## Automated browser journeys
 
+Community Pulse feedback (`community-pulse.spec.ts`): two isolated browser contexts sign in as `releaseclick1` and `releaseclick2`, then open the Community tab. Assert People → Circles → Pulse, inspect the basis, save independent answers, add/remove an explanation, reload, change an answer, and recover from a forced save failure without losing the last saved choice. Neither member sees the other's feedback, and an internal observation is absent. The journey rejects raw-text rendering warnings and checks the card and response controls at 320/375/414/768px widths. The fixture `apps/api/scripts/e2e-human-ai-feedback.ts` creates uniquely named `E2E-pulse-*` observations, verifies exactly two feedback rows and the database's immutable-wording guard, and deletes only its observations (feedback cascades). It refuses production and nonlocal databases. Requires migration `20261023000000_human_ai_feedback`. Optional `E2E_DATABASE_URL` directs the fixture to a disposable local database; use `E2E_API_BASE_URL` for a real API connected to that same database (the test forwards browser API requests to it). A third journey invokes the real publisher concurrently in an isolated, private E2E Commons, verifies exactly one observation, reads its basis through the UI, responds, reloads, and checks persistence. Cleanup removes that Commons’ observations, membership rows, wake records, and config. It tests publication but not Sage learning from feedback.
+
 Start the API and mobile web app, then run:
 
 ```bash
@@ -399,3 +401,6 @@ The forwarded-family-link regression signs an established member in from an invi
 
 A companion fresh-account journey follows the same family link through email verification, profile deferral, and invitations, then returns to Request access without tabs or automatic membership, including after reload.
 The normal-commons referral journey also checks that submitting an application consumes the auto-open link, reload shows the pending state without reopening the form, and withdrawal remains usable. Commons details wait for session restoration before deciding whether to open the application.
+### Community Pulse publication
+
+`packages/trpc/src/__tests__/sage-community-pulse.test.ts` checks evidence scope, small-group suppression, self replies, bounded samples, daily cadence, deduplication, source references, and supersession without rewriting feedback targets. The browser publication journey uses `e2e-human-ai-feedback.ts publish` / `cleanup-published`; it never fabricates a Pulse row directly. For a first local publication outside tests, run `pnpm -F @cahootz/api exec tsx --import ./dotenv.config.js scripts/publish-community-pulse-local.ts cahootz`. The command refuses nonlocal/production databases. Normal publication runs through Sage's existing wake cycle.

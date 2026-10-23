@@ -32,8 +32,8 @@ export default function BlogPage() {
               </h1>
               <p className="mt-5 text-lg leading-8 text-slate-400">
                 Product updates, founder thinking, commons playbooks, and practical
-                essays drafted in Notion and published here where the community can
-                find them.
+                essays to help your community put good ideas into practice.
+                Newest submissions appear first.
               </p>
             </div>
           </div>

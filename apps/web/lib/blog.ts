@@ -1,4 +1,6 @@
-import { blogPosts } from "./blog.generated";
+import { blogPosts as notionPosts } from "./blog.generated";
+import { pullRequestPosts } from "../content/blog";
+import { combineBlogPosts } from "./blog-sources";
 
 export interface BlogListItem {
   text: string;
@@ -117,6 +119,9 @@ export interface BlogPost {
   description: string;
   excerpt: string;
   publishedAt: string;
+  /** Immutable submission timestamp; legacy Notion snapshots use publishedAt. */
+  submittedAt?: string;
+  source?: "notion" | "pr";
   updatedAt?: string;
   author: string;
   category: string;
@@ -195,10 +200,7 @@ export function blocksFromNotionPaste(markdown: string): BlogPostBlock[] {
 }
 
 export function getPublishedBlogPosts() {
-  return [...blogPosts].sort(
-    (a, b) =>
-      new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
-  );
+  return combineBlogPosts(notionPosts, pullRequestPosts);
 }
 
 export function getFeaturedBlogPosts(limit = 3) {
@@ -210,7 +212,7 @@ export function getFeaturedBlogPosts(limit = 3) {
 }
 
 export function getBlogPost(slug: string) {
-  return blogPosts.find((post) => post.slug === slug);
+  return getPublishedBlogPosts().find((post) => post.slug === slug);
 }
 
 export function formatPostDate(date: string) {

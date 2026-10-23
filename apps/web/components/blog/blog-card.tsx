@@ -31,7 +31,9 @@ export function BlogCard({ post, priority = false }: BlogCardProps) {
 
       <div className="p-5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-slate-500">
-          <span>{formatPostDate(post.publishedAt)}</span>
+          <time dateTime={post.submittedAt ?? post.publishedAt}>
+            {formatPostDate(post.submittedAt ?? post.publishedAt)}
+          </time>
           <span className="inline-flex items-center gap-1.5">
             <Clock className="h-3.5 w-3.5" />
             {post.readingTime}
@@ -41,6 +43,7 @@ export function BlogCard({ post, priority = false }: BlogCardProps) {
         <h3 className="mt-3 text-xl font-black leading-tight text-white group-hover:text-[#facc15]">
           <Link href={`/blog/${post.slug}`}>{post.title}</Link>
         </h3>
+        <p className="mt-2 text-sm text-slate-400">Written by {post.author}</p>
         <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-400">
           {post.excerpt}
         </p>

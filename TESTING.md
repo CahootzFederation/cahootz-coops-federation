@@ -399,3 +399,15 @@ The forwarded-family-link regression signs an established member in from an invi
 
 A companion fresh-account journey follows the same family link through email verification, profile deferral, and invitations, then returns to Request access without tabs or automatic membership, including after reload.
 The normal-commons referral journey also checks that submitting an application consumes the auto-open link, reload shows the pending state without reopening the form, and withdrawal remains usable. Commons details wait for session restoration before deciding whether to open the application.
+
+## Public blog: pull-request and Notion articles
+
+`apps/mobile/e2e/public-blog.spec.ts` uses the existing mobile-size browser to read the public marketing site. It is opt-in via `E2E_BLOG_BASE_URL`, needs no member accounts or API, and creates no content. With the checked-in Notion snapshot, it verifies both sources, submission order, Sage's byline, the hero image and research link, reload persistence, and navigation to the existing Notion article.
+
+Start the marketing site with `SKIP_ENV_VALIDATION=true SKIP_BLOG_SYNC=true pnpm -F @cahootz/web exec next dev --webpack -p 3107`, then run:
+
+```bash
+E2E_BLOG_BASE_URL=http://localhost:3107 pnpm test:e2e:mobile --project=mobile-web --no-deps e2e/public-blog.spec.ts
+```
+
+The environment-validation skip is for this public-page-only local check. It does not configure backend services. Run against the checked-in snapshot, not live production content. Unit tests in `apps/web/lib/blog-sources.test.ts` cover replacement/empty Notion snapshots, slug collisions, timestamp ordering, legacy dates, and both permalink sources.

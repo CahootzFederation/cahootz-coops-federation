@@ -41,7 +41,7 @@ test('circle design preserves management, switching, search and wrapping names',
     await expect(page).toHaveURL(/spaces/);
     await page.goBack();
     await page.getByLabel(/Switch commons. Currently/).click();
-    await expect(page.getByText('Browse all commons', { exact: true })).toBeVisible();
+    await expect(page.getByText('See every commons', { exact: true })).toBeVisible();
     await page.getByLabel('Close commons switcher').last().click();
     await page.getByRole('button', { name: 'Open menu' }).click();
     await expect(page.getByText(/Sign out \(@/)).toBeVisible();

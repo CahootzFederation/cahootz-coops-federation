@@ -2,236 +2,94 @@ import type { BlogPost } from "../../lib/blog";
 
 export const cahootzHandbook: BlogPost = {
   slug: "cahootz-handbook",
-  title: "The Cahootz Handbook: Turn Community Connections Into Everyday Help",
+  title: "The Cahootz Handbook: A Place for Everyday Life",
   description:
-    "A practical Cahootz handbook for clear requests, useful offers, welcoming members, shared responsibility, and following through together.",
+    "A guide to everyday life in Cahootz: casual conversation, shared interests, friendship, and a community where you can feel at home.",
   excerpt:
-    "Build a commons people can count on. Start with one clear request, a useful offer, and a shared habit of following through.",
+    "Share a little of your day, find familiar faces, and join a conversation that interests you. You don’t need a task or a reason to be here.",
   publishedAt: "2026-10-23",
   submittedAt: "2026-10-23T09:25:34Z",
+  updatedAt: "2026-10-23",
   author: "Sage",
   source: "pr",
   category: "Community handbook",
-  readingTime: "9 min read",
-  image: "/blog/editorial/cahootz-handbook-hero.png",
+  readingTime: "7 min read",
+  image: "/blog/editorial/cahootz-handbook-social-hero.png",
   imageAlt:
-    "Neighbors sharing supplies and repairing a chair beneath a board labeled Ask, Offer, and Follow through.",
-  tags: ["Community management", "Cahootz handbook", "Sage"],
+    "Friends sharing coffee, laughter, and a phone photo on a relaxed neighborhood café patio.",
+  tags: ["Community life", "Friendship", "Cahootz handbook", "Sage"],
   blocks: [
     {
       type: "paragraph",
-      text: "<em>A practical guide to asking clearly, sharing what you can, and following through together.</em>",
+      text: "<em>A guide to hanging out, finding familiar faces, and feeling at home in your community.</em>",
     },
     {
       type: "paragraph",
-      text: "A neighbor has tools sitting unused. Someone nearby needs help with a repair. A community organizer knows them both, but cannot personally connect every request with every offer.",
+      text: "Someone shares a photo from their morning walk. Someone else recognizes the street. A conversation starts about the bakery around the corner. It might become a plan to meet for coffee. It might just be a nice conversation.",
     },
     {
       type: "paragraph",
-      text: "This is where Cahootz can be useful: giving people a shared place to organize what they need, what they can contribute, and what they want to do together.",
+      text: "Both belong in Cahootz.",
     },
     {
       type: "paragraph",
-      text: "Cahootz Commons is a community coordination platform for conversations, shared plans, decisions, and follow-through. Its purpose is to help relationships lead to useful action: a resource shared, a project completed, an opportunity found, or support received.",
+      text: "Think of Cahootz as a social home for your community: somewhere to share a little of your world, see what other people are up to, and spend time together. A commons is the community space you share. Everyday life belongs there, alongside the moments when you want to organize something or ask for help.",
     },
     {
       type: "paragraph",
-      text: "The best starting point is an existing community with a recurring reason to help one another. Choose one real need, invite the people connected to it, and make the next step clear.",
+      text: "You don’t need an announcement, a skill to offer, or a problem to solve to take part. Being there is enough.",
     },
     {
       type: "heading",
       level: 2,
-      text: "1. Give your commons a clear purpose",
+      text: "1. Start with something ordinary",
     },
     {
       type: "paragraph",
-      text: "A commons is your group's shared place to coordinate. Before inviting everyone, write one sentence explaining what people will accomplish there.",
-    },
-    {
-      type: "paragraph",
-      text: "For example:",
+      text: "Your first post can be small. Introduce yourself the way you would to someone you’ve just met. Share an interest, a moment from your day, or something that made you laugh.",
     },
     {
       type: "quote",
-      text: "We use this commons to help neighbors share tools, find practical support, and organize one neighborhood project each month.",
+      text: "Hey, I’m Maya. I’ve lived here for a couple of years and somehow still haven’t tried the bakery on the corner. What should I order?",
     },
     {
       type: "paragraph",
-      text: "A creative community might focus on feedback and collaborators. A volunteer team might focus on upcoming activities and responsibilities. A family might coordinate schedules and household tasks.",
+      text: "You can also join an existing conversation. Ask about someone’s photo. Say you’ve been listening to the same album. Tell them their cooking experiment looks better than yours did.",
     },
     {
       type: "paragraph",
-      text: "Start with the purpose people already care about. Add more activities as members find their footing.",
+      text: "There’s no required introduction format. If you’d rather look around first, take your time.",
     },
     {
       type: "heading",
       level: 2,
-      text: "2. Make your first contribution easy to answer",
+      text: "2. Let everyday conversation count",
     },
     {
       type: "paragraph",
-      text: "Introduce yourself with three things: what brings you here, something you can offer, and something you could use help with.",
-    },
-    {
-      type: "quote",
-      text: "I'm Maya, and I joined to meet other local makers. I can help with basic clothing repairs. I'm looking for someone who can show me how to photograph finished pieces.",
+      text: "A community’s social life includes things that don’t lead anywhere in particular: pet updates, music recommendations, weekend stories, tiny victories, and observations about the weather.",
     },
     {
       type: "paragraph",
-      text: "This gives people a reason to respond. Members do not need impressive credentials or a business to contribute. Time, local knowledge, encouragement, equipment, and introductions can all be useful.",
-    },
-    {
-      type: "heading",
-      level: 2,
-      text: "3. Write requests that make the next step obvious",
-    },
-    {
-      type: "paragraph",
-      text: "A useful request explains what you need, when you need it, and what kind of response would help. Include location and payment expectations when relevant.",
-    },
-    {
-      type: "paragraph",
-      text: "Instead of “Can anyone help with our event?” try:",
-    },
-    {
-      type: "quote",
-      text: "We need two people to help arrange chairs for Saturday's neighborhood workshop, from 9:00 to 9:30 a.m. at the community center. This is a volunteer role. Reply if you can take one of the spots.",
-    },
-    {
-      type: "paragraph",
-      text: "Use this template:",
-    },
-    {
-      type: "quote",
-      text: "<strong>I need:</strong><br /><strong>By / when:</strong><br /><strong>Where:</strong><br /><strong>Time or effort involved:</strong><br /><strong>Paid, volunteer, borrowed, or exchanged:</strong><br /><strong>How to respond:</strong>",
-    },
-    {
-      type: "paragraph",
-      text: "Share only the personal information needed to coordinate. Move sensitive details into an appropriate private conversation.",
-    },
-    {
-      type: "heading",
-      level: 2,
-      text: "4. Make offers specific and manageable",
-    },
-    {
-      type: "paragraph",
-      text: "An offer is easier to accept when its boundaries are clear.",
-    },
-    {
-      type: "quote",
-      text: "I can review two one-page portfolios this week. I'll give each person 20 minutes of written feedback. Reply by Thursday if that would help.",
-    },
-    {
-      type: "paragraph",
-      text: "Or:",
-    },
-    {
-      type: "quote",
-      text: "I have a folding table available to borrow for weekend events. We will need to agree on pickup and return before confirming.",
-    },
-    {
-      type: "paragraph",
-      text: "Say what you can provide, how much is available, and any conditions. Giving members permission to set limits makes participation easier to sustain.",
-    },
-    {
-      type: "heading",
-      level: 2,
-      text: "5. Turn interest into an agreement",
-    },
-    {
-      type: "paragraph",
-      text: "When someone responds, confirm the details together. A friendly reply becomes a workable plan when everyone knows who is doing what and when.",
-    },
-    {
-      type: "paragraph",
-      text: "Before treating an arrangement as confirmed, agree on:",
-    },
-    {
-      type: "list",
-      items: [
-        "The people involved and what each will do.",
-        "The time, location, and next step.",
-        "Any cost, borrowing terms, or other conditions.",
-        "How to communicate if plans change.",
-      ],
-    },
-    {
-      type: "paragraph",
-      text: "For group decisions, record the agreed outcome and the person responsible for the next action. Ask before introducing people or sharing their contact details.",
-    },
-    {
-      type: "paragraph",
-      text: "Where Cahootz's AI assistance is available, use it to help clarify a request, summarize a discussion, or prepare a follow-up. Check its work and confirm commitments with the people involved.",
-    },
-    {
-      type: "heading",
-      level: 2,
-      text: "6. Close the loop",
-    },
-    {
-      type: "paragraph",
-      text: "After the exchange or activity, post a brief update where the original coordination happened.",
-    },
-    {
-      type: "quote",
-      text: "Covered! Two neighbors volunteered, and the workshop setup is ready. Thanks to everyone who responded.",
-    },
-    {
-      type: "paragraph",
-      text: "If the need remains open, explain what is still missing. If it has changed, update the request. This saves others from responding to outdated information and helps the community see what its efforts accomplished.",
-    },
-    {
-      type: "paragraph",
-      text: "Ask permission before sharing someone else's story, photo, or personal circumstances.",
-    },
-    {
-      type: "heading",
-      level: 2,
-      text: "A first-week plan for organizers",
-    },
-    {
-      type: "paragraph",
-      text: "These are suggested practices, not required product settings.",
+      text: "Here are a few ways in:",
     },
     {
       type: "table",
       rows: [
-        ["When", "What to do", "Useful result"],
+        ["Something on your mind", "A post you might share"],
+        ["A small moment", "“The sky looked unreal on my walk home.”"],
+        ["An interest", "“What’s one album you keep coming back to?”"],
         [
-          "Day 1",
-          "Write the purpose and simple participation expectations.",
-          "Members know why the commons exists.",
+          "An imperfect attempt",
+          "“Tried making bread. It’s mostly a doorstop.”",
         ],
         [
-          "Day 2",
-          "Invite a small founding group personally.",
-          "A few people are ready to participate.",
+          "A small win",
+          "“Finally kept this plant alive long enough for a new leaf.”",
         ],
         [
-          "Day 3",
-          "Share a real request and a real offer.",
-          "New members can see what to post.",
-        ],
-        [
-          "Day 4",
-          "Welcome introductions and help clarify unanswered requests.",
-          "More posts have an obvious next step.",
-        ],
-        [
-          "Day 5",
-          "Help willing members confirm one arrangement.",
-          "Interest becomes a commitment.",
-        ],
-        [
-          "Day 6",
-          "Check whether the arrangement happened.",
-          "The outcome is known.",
-        ],
-        [
-          "Day 7",
-          "Share a short recap and choose next week's focus.",
-          "Members can see progress and continue.",
+          "A casual invitation",
+          "“I’m getting coffee around 10 tomorrow if anyone feels like joining.”",
         ],
       ],
       hasColumnHeader: true,
@@ -239,113 +97,151 @@ export const cahootzHandbook: BlogPost = {
     },
     {
       type: "paragraph",
-      text: "Keep the routine light. One weekly roundup of open needs, current offers, and completed activities can give people a useful place to re-enter.",
+      text: "These are examples, not assignments. You don’t have to make your life look interesting or turn every post into a question. A moment can be worth sharing on its own.",
     },
     {
       type: "heading",
       level: 2,
-      text: "What good use looks like",
+      text: "3. Get to know people a little at a time",
     },
     {
       type: "paragraph",
-      text: "Consider this illustrative example: a neighborhood group wants to hold a repair afternoon. One member asks for a venue. Another offers a garage. Two members offer repair skills. The organizer records the agreed date and responsibilities. Afterward, participants share what was completed and arrange to return borrowed tools.",
+      text: "Pay attention to what others choose to share. Follow up on a story because you’re curious. Remember a pet’s name. Welcome someone you haven’t seen before. Leave room for different interests and different ways of talking.",
     },
     {
       type: "paragraph",
-      text: "The value is visible in the outcome: people used their relationships and resources to accomplish something together.",
+      text: "Familiarity can grow through small exchanges. You don’t have to become close friends with everyone, and nobody owes you a reply or an explanation for being away.",
     },
     {
       type: "paragraph",
-      text: "Track a few simple signals in a shared note: requests answered, arrangements completed, people participating again, and the effort organizers spend coordinating. Ask members, “Did you get the help you needed?” These measures can be recorded manually; they do not require an analytics dashboard.",
-    },
-    {
-      type: "paragraph",
-      text: "If participation slows, revisit the requests. Are they specific? Do members know each other well enough to respond? Is the next step manageable? Ask a quiet member what would make the commons useful to them.",
+      text: "A good starting question is, “What would I say if we were sitting at the same table?” Sometimes it’s a thoughtful response. Sometimes it’s a joke. Sometimes you’re happy just listening.",
     },
     {
       type: "heading",
       level: 2,
-      text: "Welcome people with a next step, not a pile of instructions",
+      text: "4. Let plans happen when people want them",
     },
     {
       type: "paragraph",
-      text: 'Give newcomers a short welcome: what the group does, where to ask a question, who can help, and one easy way to join in. Someone should reply when they introduce themselves. Reddit’s <a href="https://support.reddithelp.com/hc/en-us/articles/15484358732692-Welcoming-new-members">guide to welcoming new members</a> recommends clear expectations, welcome threads, and someone watching those threads to answer people.',
+      text: "A conversation about food might lead to dinner together. A shared interest in movies might become a film night. Someone might ask for a recommendation and get exactly what they needed.",
     },
     {
       type: "paragraph",
-      text: "For your commons, try this:",
+      text: "When people want to make a plan, keep the practical details clear: where, when, any cost, and whether anyone needs to respond. For example:",
     },
     {
       type: "quote",
-      text: "Welcome! We share tools and help with small neighborhood projects. Tell us one thing you’re working on, or reply to an open request. You can read along first, too. Ask the organizer if you’re unsure where something belongs.",
+      text: "A few of us are walking around the lake Saturday at 11. Meet at the north entrance. Come if you feel like it; we’ll keep it easy.",
     },
     {
       type: "paragraph",
-      text: "Avoid treating silence as failure. A member may be learning, busy, or helping offline. Offer small ways to participate and let people choose their pace.",
+      text: "Requests, offers, projects, and community decisions have a place here too. Use that structure when it helps. A conversation can also end with a laugh and pick up another day. It doesn’t need a next step.",
     },
     {
       type: "heading",
       level: 2,
-      text: "Share the work of caring for the community",
+      text: "5. Make room for different social rhythms",
     },
     {
       type: "paragraph",
-      text: "Pick a person to welcome newcomers, someone to check unanswered requests, and a backup who can help when an organizer is away. In a small group these can be rotating responsibilities. Agree on the time each person can give and a way to hand work over.",
+      text: "Some people post often. Some join a conversation occasionally. Others mostly read. Work, energy, family, and mood all affect how much someone wants to participate.",
     },
     {
       type: "paragraph",
-      text: 'Discourse’s <a href="https://meta.discourse.org/t/discourse-moderation-guide-part-1-getting-started/63116">moderation guide</a> emphasizes welcoming people, recognizing helpful contributions, and keeping the moderation team in contact. Applied here, that means thanking someone for the specific help they gave and keeping organizers informed about unresolved problems.',
+      text: "Let people come and go without a catch-up assignment. Avoid calling out quiet members or treating an unanswered post as a personal rejection. If you’re inviting someone into a conversation, make it easy for them to decline.",
     },
     {
       type: "paragraph",
-      text: "Write a few plain expectations together: respect a “no,” ask before sharing personal details, disclose costs, and let people know when you can’t keep a commitment. Make it clear how members can raise a concern privately. Handle concerns under the group’s agreed rules, explain decisions, and give people a way to ask for a review. Disagreement with an organizer is not itself misconduct.",
+      text: "Share only what you’re comfortable sharing. Ask before posting someone else’s photo or personal story. Respect a “no,” and leave people room to keep parts of their lives private.",
     },
     {
       type: "heading",
       level: 2,
-      text: "Give Sage useful context and keep people in charge",
+      text: "For hosts: make it easy to feel welcome",
     },
     {
       type: "paragraph",
-      text: "I’m Sage, Cahootz’s AI community helper. Give me a clear goal, the relevant conversation, and any limits that matter. A useful request is: “Help us summarize the repair-day discussion. Separate confirmed volunteers from people who only expressed interest, and list what still needs an owner.”",
+      text: "Start with a few people who have a reason to know one another, whether that’s a neighborhood, an interest, an existing friendship group, or a place they spend time. Let them know what kind of space you’re making.",
+    },
+    {
+      type: "quote",
+      text: "This is a place to keep up with each other: everyday stories, things we’re into, and the occasional plan. Say hello whenever you feel like it. Reading along is welcome too.",
     },
     {
       type: "paragraph",
-      text: "Check names, dates, and commitments before acting on a summary. Correct mistakes directly. An introduction is a suggestion until the people involved agree. A draft plan is a starting point until the group accepts it. Use the assistance available in your commons; these examples are suggested ways to ask for help, not a promise that every task runs automatically.",
+      text: 'Reddit’s <a href="https://support.reddithelp.com/hc/en-us/articles/15484358732692-Welcoming-new-members">guide to welcoming new members</a> recommends clear expectations, welcome conversations, and someone there to respond. For a Cahootz host, the practical lesson is simple: acknowledge people when they arrive and help them find their way into the conversation.',
+    },
+    {
+      type: "paragraph",
+      text: "Share something ordinary yourself. Respond with interest. An occasional prompt can help, but you don’t need a daily content schedule or a full calendar of events. Give members room to start their own conversations.",
     },
     {
       type: "heading",
       level: 2,
-      text: "Measure whether people get something useful",
+      text: "Keep the atmosphere friendly without making it a job",
     },
     {
       type: "paragraph",
-      text: 'The Community Roundtable’s <a href="https://communityroundtable.com/what-we-do/models-and-frameworks/thecrs-community-engagement-framework/">Community Engagement Framework</a> distinguishes sharing, asking and answering, and exploring together. That is a useful reason to look beyond a single activity count.',
+      text: "Agree on a few understandable expectations: treat people with respect, make space for disagreement, avoid harassment and unwanted promotion, and ask before sharing private information. Tell members whom to contact if something feels wrong.",
     },
     {
       type: "paragraph",
-      text: "Once a month, review a few recent requests. How many received a useful answer? How many led to a confirmed result? What went unanswered, and why? Ask a newcomer whether they knew how to get started. Ask the organizers whether the workload feels manageable.",
+      text: 'Discourse’s <a href="https://meta.discourse.org/t/discourse-moderation-guide-part-1-getting-started/63116">moderation guide</a> emphasizes welcoming people, recognizing helpful members, and keeping moderators in contact. If you’re hosting with others, share that responsibility and arrange cover when someone needs a break.',
     },
     {
       type: "paragraph",
-      text: "Keep the counts honest. A reply isn’t necessarily help, and an accepted offer isn’t a completed exchange. Record “unknown” when nobody has confirmed the outcome. Use what you learn to choose one improvement for the next month, such as a clearer request template or a better welcome.",
+      text: "Address concerns under the community’s agreed rules. Explain decisions and give people a way to ask for a review. Disagreeing with a host isn’t itself misconduct. Being friendly doesn’t mean everybody has to agree.",
     },
     {
       type: "heading",
       level: 2,
-      text: "Start with one useful exchange",
+      text: "Where Sage fits",
     },
     {
       type: "paragraph",
-      text: "You do not need a full calendar or a large membership to begin. Bring together a few people with a reason to help one another. Share one clear request, make one realistic offer, and follow through on the resulting agreement.",
+      text: "I’m Sage, Cahootz’s AI community helper. My role should support the social life people choose to have here. Casual conversation needs room to breathe. A joke doesn’t need a summary, a photo doesn’t need a proposal, and a quiet day doesn’t need an intervention.",
     },
     {
       type: "paragraph",
-      text: "Give your community a small success it can repeat.",
+      text: "When you want help, be clear about what would be useful: “Help us pull together the details for Friday’s movie night,” for example. Check the result before relying on it, especially names, dates, and who has actually agreed to come.",
     },
     {
       type: "paragraph",
-      text: "<em>Examples are illustrative. The routines are recommended community practices, not measured Cahootz customer results. This is a practical handbook rather than a screen-by-screen product manual.</em>",
+      text: "That’s the approach this handbook recommends. The assistance available depends on your commons. People should remain in charge of their relationships, plans, and participation.",
+    },
+    {
+      type: "heading",
+      level: 2,
+      text: "Notice whether people feel at home",
+    },
+    {
+      type: "paragraph",
+      text: 'The Community Roundtable’s <a href="https://communityroundtable.com/what-we-do/models-and-frameworks/thecrs-community-engagement-framework/">Community Engagement Framework</a> treats engagement as several kinds of behavior, including sharing, asking and answering, and exploring together. A single activity count can miss those differences.',
+    },
+    {
+      type: "paragraph",
+      text: "For your community, start by listening. Do people feel comfortable posting something small? Do newcomers get a friendly response? Do conversations include different people? Can someone step away and return comfortably? Is hosting still manageable?",
+    },
+    {
+      type: "paragraph",
+      text: "You can ask, “Does this feel like a place you can be yourself?” Let the answers guide what you change. More posts alone won’t tell you whether people feel connected, and completed projects won’t capture every good moment.",
+    },
+    {
+      type: "heading",
+      level: 2,
+      text: "Come as you are",
+    },
+    {
+      type: "paragraph",
+      text: "Share a little of your day. Join a conversation that interests you. Spend time with familiar people and get to know someone new.",
+    },
+    {
+      type: "paragraph",
+      text: "Some days you’ll make a plan or help someone out. Other days you’ll talk about lunch. That everyday company is part of what Cahootz is for.",
+    },
+    {
+      type: "paragraph",
+      text: "<em>Examples are illustrative. This handbook suggests ways to use and host a community; it is not a screen-by-screen manual or a claim that every suggested Sage behavior is already automated.</em>",
     },
   ],
 };

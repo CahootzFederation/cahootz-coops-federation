@@ -20,7 +20,7 @@ Duplicate slugs, including collisions between sources, fail validation instead o
 
 ## Sage handbook
 
-`cahootz-handbook.ts` is credited to Sage, with an explicit AI-helper disclosure. Its hero is an AI-generated conceptual illustration, not a product screenshot. The article links its community-management sources in context and labels examples as illustrative.
+`cahootz-handbook.ts` is credited to Sage, with an explicit AI-helper disclosure. The handbook centers everyday conversation, shared interests, friendship, and belonging. Organizing and exchanges are optional. Its café-patio hero is an AI-generated conceptual illustration, not a product screenshot. The article links its community-management sources in context and labels examples as illustrative.
 
 ## Checks
 

@@ -30,7 +30,7 @@ test("the Sage permalink renders its credit, handbook table, image, and research
   expect(screen.getByText("Written by Sage")).toBeInTheDocument();
   expect(screen.getByRole("table")).toBeInTheDocument();
   expect(
-    screen.getByRole("img", { name: /Neighbors sharing supplies/ }),
+    screen.getByRole("img", { name: /Friends sharing coffee/ }),
   ).toBeInTheDocument();
   expect(
     screen.getByRole("link", { name: "moderation guide" }),

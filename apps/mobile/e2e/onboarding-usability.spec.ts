@@ -215,7 +215,10 @@ test.describe("onboarding usability", () => {
       await expect(shown(page, "Meet Sage", { exact: true })).toBeVisible();
 
       // Sage settings always explains it.
+      // There it starts folded down to the one-liner; "How Sage works" opens the rest.
       await page.goto("/sage-settings");
+      await expect(shown(page, /Sage is AI, not a person\./)).toBeVisible();
+      await page.getByRole("button", { name: "How Sage works" }).click();
       await expect(shown(page, "What always waits for a person", { exact: true })).toBeVisible();
     } finally {
       await context.close();

@@ -33,6 +33,11 @@
       "import": "./dist/server/index.js",
       "require": "./dist/server/index.js"
     },
+    "./error-tracking": {
+      "types": "./dist/lib/error-tracking.d.ts",
+      "import": "./dist/lib/error-tracking.js",
+      "require": "./dist/lib/error-tracking.js"
+    },
     "./services/wallet-service": {
       "types": "./dist/services/wallet-service.d.ts",
       "import": "./dist/services/wallet-service.js",
@@ -193,6 +198,7 @@
     "iron-session": "catalog:",
     "next-auth": "^4.24.13",
     "openai": "^6.10.0",
+    "posthog-node": "^5.28.0",
     "react": "catalog:react19",
     "resend": "^6.12.3",
     "stripe": "^20.1.2",

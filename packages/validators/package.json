@@ -18,6 +18,11 @@
       "types": "./dist/notification.d.ts",
       "import": "./dist/notification.js",
       "default": "./dist/notification.js"
+    },
+    "./error-tracking": {
+      "types": "./dist/error-tracking.d.ts",
+      "import": "./dist/error-tracking.js",
+      "default": "./dist/error-tracking.js"
     }
   },
   "scripts": {

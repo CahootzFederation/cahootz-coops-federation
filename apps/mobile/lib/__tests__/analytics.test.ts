@@ -6,6 +6,7 @@ import * as analytics from "../analytics";
 
 const mockClient = {
   capture: jest.fn(),
+  captureException: jest.fn(),
   identify: jest.fn(),
   register: jest.fn(async () => {}),
   reset: jest.fn(),
@@ -23,6 +24,7 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 function allSentPayloads() {
   return JSON.stringify([
     mockClient.capture.mock.calls,
+    mockClient.captureException.mock.calls,
     mockClient.identify.mock.calls,
     mockClient.register.mock.calls,
     mockClient.screen.mock.calls,
@@ -42,6 +44,7 @@ describe("analytics without a key", () => {
     analytics.track("app_opened", { source: "cold_start", is_first_open: true, signed_in: false });
     analytics.track("signed_in");
     analytics.screen("/profile-onboarding");
+    analytics.captureError(new Error("boom"));
     analytics.reset();
 
     expect(analytics.isAnalyticsEnabled()).toBe(false);
@@ -49,7 +52,7 @@ describe("analytics without a key", () => {
     expect(PostHog).not.toHaveBeenCalled();
     expect(AsyncStorage.getItem).not.toHaveBeenCalled();
     expect(AsyncStorage.setItem).not.toHaveBeenCalled();
-    expect(allSentPayloads()).toBe("[[],[],[],[]]");
+    expect(allSentPayloads()).toBe("[[],[],[],[],[]]");
   });
 
   it("treats a blank key as unset", () => {
@@ -78,6 +81,30 @@ describe("analytics with a key", () => {
         enableSessionReplay: false,
       }),
     );
+  });
+
+  it("autocaptures crashes and rejections, not console errors, and scrubs them before sending", () => {
+    init();
+    const options = (PostHog as unknown as jest.Mock).mock.calls[0]![1] as {
+      errorTracking: unknown;
+      before_send: (event: unknown) => { properties: { $exception_list: Array<{ value: string }> } };
+    };
+    expect(options.errorTracking).toEqual({
+      autocapture: { uncaughtExceptions: true, unhandledRejections: true, console: false },
+    });
+
+    const sent = options.before_send({
+      event: "$exception",
+      properties: { $exception_list: [{ type: "Error", value: "Login failed for sam@example.com, code 482913" }] },
+    });
+    expect(sent.properties.$exception_list[0]!.value).toBe("Login failed for [redacted], code [redacted]");
+  });
+
+  it("reports caught errors with filtered properties", () => {
+    init();
+    const error = new Error("render failed");
+    analytics.captureError(error, { source: "root_error_boundary", email: "sam@example.com" });
+    expect(mockClient.captureException).toHaveBeenCalledWith(error, { source: "root_error_boundary" });
   });
 
   it("uses a configured host", () => {

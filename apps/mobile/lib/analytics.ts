@@ -11,11 +11,18 @@
  * - Event names and their properties are a typed map. To add an event, add
  *   an entry to `AnalyticsEvents` and call `track('your_event', {...})`.
  *
+ * - Error tracking: uncaught JS errors and unhandled promise rejections are
+ *   sent as `$exception` events, and `captureError` reports caught ones (the
+ *   root ErrorBoundary uses it). Exception messages pass through the shared
+ *   `scrubExceptionEvent` (@repo/validators/error-tracking), which redacts
+ *   codes, tokens, keys, emails, phone numbers and message bodies.
+ *
  * Retention ("came back within 24h / 7d") is intentionally not computed on
  * the device. Build it in PostHog as a retention insight on `app_opened`;
  * see docs/mobile-analytics.md.
  */
 import type { PostHog } from 'posthog-react-native';
+import { scrubExceptionEvent } from '@repo/validators/error-tracking';
 
 export type OnboardingStep = 'intro' | 'profile' | 'invite' | 'circles';
 
@@ -210,6 +217,13 @@ export function initAnalytics(config: AnalyticsConfig = configFromEnv()): void {
       disableGeoip: true,
       disableSurveys: true,
       enableSessionReplay: false,
+      // Send crashes to PostHog error tracking. Console errors stay out: they
+      // are noisy and often log request details.
+      errorTracking: {
+        autocapture: { uncaughtExceptions: true, unhandledRejections: true, console: false },
+      },
+      // Redact secrets and personal data from exception messages before they leave the device.
+      before_send: scrubExceptionEvent,
     });
   } catch (error) {
     client = null;
@@ -226,6 +240,20 @@ export function track<E extends AnalyticsEvent>(
     client.capture(event, sanitizeProperties(args[0] as Record<string, unknown> | undefined));
   } catch (error) {
     console.warn('[analytics] capture failed', error);
+  }
+}
+
+/**
+ * Reports a caught error to PostHog error tracking, e.g. from an error
+ * boundary. Properties go through the same PII filter as events, and the
+ * message itself is scrubbed in `before_send`.
+ */
+export function captureError(error: unknown, properties?: Record<string, unknown>): void {
+  if (!client) return;
+  try {
+    client.captureException(error, sanitizeProperties(properties));
+  } catch (captureFailure) {
+    console.warn('[analytics] captureException failed', captureFailure);
   }
 }
 

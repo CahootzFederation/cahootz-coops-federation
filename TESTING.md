@@ -385,3 +385,5 @@ The email verification form uses a compact, unboxed layout: Continue to Cahootz 
 ### Onboarding CI regressions
 
 Session restoration must finish before rendering the public carousel or email form. The shared authenticated helper waits for profile setup or the Commons screen, never the public Continue button. The signed-out Circle View journey verifies carousel → email → code without tabs, then tabs after an established member signs in. Commons-choice coverage accepts the seeded Cahootz display name and still requires its non-member details action after signup, application, and family creation. Admin login retains its separate Verify & Sign In label.
+
+The forwarded-family-link regression signs an established member in from an invitation and verifies automatic return to that invitation, request submission, reload persistence, and steward review. Background invitation screens must not clear the pending link during sign-in; form selectors target the visible screen.

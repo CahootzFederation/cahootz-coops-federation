@@ -342,6 +342,7 @@ test.describe("family commons", () => {
       await visitor.getByRole("checkbox", { name: `I agree to ${familyName}'s rules` }).click();
       await visitor
         .getByPlaceholder("Add a note so they know it's you (optional)")
+        .filter({ visible: true })
         .fill(`E2E ${runId}: it's your cousin`);
       await shown(visitor, "Request access", { exact: true }).click();
       await expect(shown(visitor, "Request sent")).toBeVisible();

@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { ArrowLeft, Check, Clock, Lock, Mail } from 'lucide-react-native';
 
 import { IconAvatar } from '@/components/icon-avatar';
@@ -112,12 +113,14 @@ export function CommonsInvitationView({
     void load();
   }, [authLoading, load]);
 
-  // Opened while signed in: nothing left to resume after sign-in.
+  const isFocused = useIsFocused();
+
+  // A background invitation must retain its link while sign-in completes.
   useEffect(() => {
-    if (user && token) {
+    if (isFocused && user && token) {
       void secureStorage.removeItem(secureStorage.keys.PENDING_INVITATION);
     }
-  }, [user, token]);
+  }, [isFocused, user, token]);
 
   const signInToContinue = async () => {
     if (token) {
@@ -126,7 +129,7 @@ export function CommonsInvitationView({
     // They came for this invitation, so skip the app-intro carousel before
     // signing in; the profile step still runs afterwards.
     await markAnonymousProfileIntroSeen();
-    router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
+    router.push({ pathname: '/', params: { entry: 'sign-in' } } as any);
   };
 
   const accept = async () => {

@@ -134,29 +134,13 @@ describe("knowledgeBaseRouter", () => {
       expect(ingestDocument).not.toHaveBeenCalled();
     });
 
-    it("auto-joins the default commons (cahootz) rather than rejecting", async () => {
-      vi.mocked(ingestDocument).mockResolvedValue({
-        document: {
-          id: "doc_2",
-          title: "FAQ",
-          type: "FAQ",
-          visibility: "COMMONS",
-          createdAt: new Date("2026-09-08T00:00:00.000Z"),
-        } as any,
-        chunkCount: 1,
-      });
+    it("requires explicit membership even in Cahootz Commons", async () => {
       const db = makeDb({ userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null) } });
-
-      const result = await callerFor(db).uploadDocument({
-        scopeType: "commons",
-        scopeId: "cahootz",
-        type: "FAQ",
-        title: "FAQ",
-        content: "Some content.",
-      });
-
-      expect(db.userCoopMembership.upsert).toHaveBeenCalled();
-      expect(result.document.id).toBe("doc_2");
+      await expect(callerFor(db).uploadDocument({
+        scopeType: "commons", scopeId: "cahootz", type: "FAQ", title: "FAQ", content: "Some content.",
+      })).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(db.userCoopMembership.upsert).not.toHaveBeenCalled();
+      expect(ingestDocument).not.toHaveBeenCalled();
     });
   });
 

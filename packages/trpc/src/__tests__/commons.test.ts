@@ -156,7 +156,7 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
       ...overrides.user,
     },
     userCoopMembership: {
-      upsert: vi.fn().mockResolvedValue({ id: 'membership_1' }),
+      upsert: vi.fn().mockResolvedValue({ id: 'membership_1', status: 'ACTIVE' }),
       findUnique: vi.fn().mockResolvedValue({ status: 'ACTIVE' }),
       findMany: vi.fn().mockResolvedValue([]),
       ...overrides.userCoopMembership,
@@ -798,6 +798,21 @@ describe('commonsRouter', () => {
     ).rejects.toThrow('Create an account to continue.');
   });
 
+  it('joins the open commons only through an explicit request', async () => {
+    const db = makeDb({ userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null) } });
+    await callerFor(db, { 'x-session-token': 'token_1' }).joinOpenCommons({ coopId: 'cahootz' });
+    expect(db.userCoopMembership.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ userId: ACTIVE_USER.id, coopId: 'cahootz', roles: ['member'] }),
+    }));
+  });
+
+  it('does not reinstate a blocked membership through self-join', async () => {
+    const db = makeDb({ userCoopMembership: { findUnique: vi.fn().mockResolvedValue({ status: 'SUSPENDED' }) } });
+    await expect(callerFor(db, { 'x-session-token': 'token_1' }).joinOpenCommons({ coopId: 'cahootz' }))
+      .rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(db.userCoopMembership.upsert).not.toHaveBeenCalled();
+  });
+
   it('creates posts as Cahootz Commons member actions', async () => {
     const db = makeDb({
       commonsPost: {
@@ -824,15 +839,9 @@ describe('commonsRouter', () => {
     });
 
     expect(result.post.id).toBe('post_1');
-    expect(db.userCoopMembership.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({
-          coopId: 'cahootz',
-          status: 'ACTIVE',
-          roles: ['member'],
-        }),
-      }),
-    );
+    expect(db.userCoopMembership.upsert).not.toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ userId: ACTIVE_USER.id, roles: ['member'] }),
+    }));
     expect(db.commonsPost.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

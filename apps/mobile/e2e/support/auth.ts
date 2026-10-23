@@ -11,56 +11,34 @@ export const USER_A_EMAIL =
 export const USER_B_EMAIL =
   process.env.E2E_USER_B_EMAIL || "releaseclick2@test.cahootz.local";
 
-/**
- * Clicks past the post-signup wizard's three steps (intro carousel, profile
- * form, "find your way in") by taking the skip/defer path on each. Shared by
- * every spec so a wizard change (like the third "circles" step added here)
- * only needs fixing in one place.
- *
- * `mode: "always"` asserts each step is present before skipping it - use
- * this right after `page.goto("/")` for a guaranteed-fresh anonymous
- * session, where a conditional `isVisible()` check can race the screen's
- * async load and silently no-op instead of waiting for it.
- *
- * `mode: "if-shown"` tolerates a step being absent (already completed by a
- * prior test run against the same seeded account) - use this right after a
- * login, where completion state isn't known up front.
+/** Leaves the authenticated profile/invite steps, chooses Explore commons,
+ * then opens the existing fixture commons (or its public visitor view).
+ * Membership creation is tested separately with fresh accounts.
  */
 export async function skipOnboardingWizard(
   page: Page,
   mode: "always" | "if-shown",
 ) {
-  const introContinue = page.getByRole("button", {
-    name: "Continue",
-    exact: true,
-  });
   if (mode === "if-shown") {
-    // Wait for the wizard's first step (or the feed, if onboarding is
-    // already done) before checking what to skip. A signed-in person who
-    // already saw the intro on this device starts at the profile form, so
-    // the first step isn't always the intro.
+    // Authenticated setup starts at profile; the public carousel is not a wizard step.
     await expect(
-      introContinue
-        .or(page.getByRole("button", { name: "Do this later" }))
-        .or(page.getByRole("button", { name: "Skip for now" }))
+      page.getByRole("button", { name: "Do this later" })
+        .or(page.getByRole("button", { name: "Explore commons" }))
+        .or(page.getByRole("button", { name: "Next", exact: true }))
+        .or(page.getByRole("button", { name: "Skip for now", exact: true }))
         .or(page.getByLabel("Open menu"))
         .filter({ visible: true })
         .first(),
     ).toBeVisible();
   }
-  if (mode === "always") {
-    await expect(introContinue).toBeVisible();
-    await introContinue.click();
-  } else if (await introContinue.isVisible().catch(() => false)) {
-    await introContinue.click();
-  }
-
   const deferProfile = page.getByRole("button", { name: "Do this later" });
   if (mode === "always") {
     await expect(deferProfile).toBeVisible();
     await deferProfile.click();
+    await expect(page.getByRole("button", { name: "Next", exact: true })).toBeVisible();
   } else if (await deferProfile.isVisible().catch(() => false)) {
     await deferProfile.click();
+    await expect(page.getByRole("button", { name: "Next", exact: true })).toBeVisible();
   }
 
   // Then the "Invite people you know" step.
@@ -72,46 +50,51 @@ export async function skipOnboardingWizard(
     await inviteNext.click();
   }
 
-  // "Do this later" only skips the profile form - it now lands on a third
-  // "find your way in" step (welcome lounge / General / invited family / skip) before the
-  // feed, so skip that too to reach Circle View.
-  const skipCircles = page.getByRole("button", { name: "Skip for now" });
+  const existingCommonsSkip = page.getByRole("button", { name: "Skip for now", exact: true });
+  if (mode === "if-shown") {
+    await expect(existingCommonsSkip.or(page.getByRole("button", { name: "Explore commons" })).or(page.getByLabel("Open menu")).filter({ visible: true }).first()).toBeVisible();
+    if (await existingCommonsSkip.isVisible()) {
+      await existingCommonsSkip.click();
+      return;
+    }
+  }
+  // Newcomers without memberships choose where to belong.
+
+  const exploreCommons = page.getByRole("button", { name: "Explore commons" });
   if (mode === "always") {
-    await expect(skipCircles).toBeVisible();
-    await skipCircles.click();
-  } else if (await skipCircles.isVisible().catch(() => false)) {
-    await skipCircles.click();
+    await expect(exploreCommons).toBeVisible();
+    await exploreCommons.click();
+    await expect(page.getByText("Browse commons", { exact: true })).toBeVisible();
+    await page.goto("/?coopId=cahootz");
+  } else if (await exploreCommons.isVisible().catch(() => false)) {
+    await exploreCommons.click();
+    await expect(page.getByText("Browse commons", { exact: true })).toBeVisible();
+    await page.goto("/");
   }
 }
 
 export async function enterFeed(page: Page) {
-  await page.goto("/");
-
-  await expect(page).toHaveURL(/profile-onboarding/);
-  await skipOnboardingWizard(page, "always");
+  await page.goto("/?coopId=cahootz");
 
   await expect(page.getByLabel("Open menu")).toBeVisible();
 }
 
 export async function signIn(page: Page, email: string) {
-  await enterFeed(page);
-  await page.getByLabel("Open menu").click();
-  await page.getByText("Sign In", { exact: true }).click();
+  await page.goto("/?entry=sign-in");
 
   await page.getByPlaceholder("name@email.com").fill(email);
-  await page.getByRole("button", { name: "Log in with code" }).click();
+  await page.getByRole("button", { name: "Continue with email" }).click();
   await page.getByPlaceholder("Enter 6-digit code").fill(TEST_CODE);
-  await page.getByRole("button", { name: "Verify & Sign In" }).click();
+  await page.getByRole("button", { name: "Verify and continue" }).click();
 
-  await expect(page).toHaveURL(/profile-onboarding/);
   await skipOnboardingWizard(page, "if-shown");
 
   await expect(page.getByLabel("Open menu")).toBeVisible();
-  await page.getByLabel("Open menu").click();
-  await expect(
-    page.getByText(new RegExp(`Sign Out \\(@${email.split("@")[0]}\\)`)),
-  ).toBeVisible();
-  await page.getByLabel("Close menu").click();
+  // Handles are editable, so verify the account's email rather than its handle.
+  await page.getByRole("tab", { name: "You", exact: true }).click();
+  await expect(page.getByText(email, { exact: true }).filter({ visible: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Commons", exact: true }).click();
+  await expect(page.getByLabel("Open menu")).toBeVisible();
 }
 
 /**
@@ -141,6 +124,7 @@ export async function newSignedInPage(browser: Browser, email: string) {
   const page = await context.newPage();
   if (hasSavedSession) {
     await page.goto("/");
+    await skipOnboardingWizard(page, "if-shown");
     await expect(page.getByLabel("Open menu")).toBeVisible();
   } else {
     await signIn(page, email);

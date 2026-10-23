@@ -115,7 +115,7 @@ async function seedPending(runId: string, circleId: string, targetPostId: string
     update: {},
   });
   await replayTrendWindow(windowId(runId, "pending"), {
-    hasSuggestion: true, confidence: 0.65, capability: "comment_on_post", targetPostId,
+    hasSuggestion: true, confidence: 0.6, capability: "comment_on_post", targetPostId,
     title: `E2E ${runId} Answer the parking question`,
     body: `E2E ${runId}: Park behind the library; the front lot closes at 6.`,
     reason: `E2E ${runId}: Two members asked where to park and nobody answered.`,

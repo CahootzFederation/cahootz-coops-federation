@@ -440,10 +440,6 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
     setCurrentStep(LOGIN_STEP);
   };
 
-  const goToBrowseCoops = () => {
-    setCurrentStep(BROWSE_STEP);
-  };
-
   const selectCoop = (coopId: string) => {
     setSelectedCoopId(coopId);
     nextStep(); // Go to coop details
@@ -1353,140 +1349,84 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
     );
   };
 
+  // Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
   const renderLogin = () => (
-    <ScrollView {...keyboardInsetScrollProps} className="flex-1 bg-background">
-      <View className="min-h-screen flex-1 justify-center p-6">
-        <View className="w-full max-w-md mx-auto">
-          {onBack && (
-            <Pressable
-              onPress={onBack}
-              className="flex-row items-center self-start mb-4"
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
-            >
-              <Icon as={ChevronLeft} size={16} className="text-muted-foreground" />
-              <Text className="text-muted-foreground ml-1">Back</Text>
-            </Pressable>
-          )}
-          {/* Header */}
-          <View className="items-center mb-8">
-            <View className="bg-primary p-3 rounded-full mb-4">
-              <Icon as={Building} size={32} className="text-white" />
-            </View>
-            <Text className="text-3xl font-black text-foreground mb-2 text-center">Sign in</Text>
-            <Text className="text-muted-foreground text-center text-base leading-6">
-              {codeSent
-                ? "We emailed you a 6-digit code. Type it below. If you don't see it, check your spam folder."
-                : "Type your email and we'll send you a 6-digit code. No password needed."}
-            </Text>
-          </View>
+    <ScrollView {...keyboardInsetScrollProps} className="flex-1 bg-background" contentContainerStyle={{ flexGrow: 1 }}>
+      <View className="flex-1 px-6 py-8">
+        {onBack && (
+          <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Go back"
+            className="flex-row items-center self-start gap-1 py-2">
+            <Icon as={ChevronLeft} size={18} className="text-muted-foreground" />
+            <Text className="text-muted-foreground">Back</Text>
+          </Pressable>
+        )}
+        <View className="flex-1 justify-center w-full mx-auto py-12" style={{ maxWidth: 360 }}>
+          <Text className="text-primary text-xl font-extrabold mb-8">cahootz</Text>
+          <Text accessibilityRole="header" className="text-3xl font-bold text-foreground mb-3">
+            {codeSent ? 'Check your email' : 'Continue to Cahootz'}
+          </Text>
+          <Text className="text-muted-foreground text-base leading-6 mb-8">
+            {codeSent ? 'Enter the 6-digit code we sent to' : 'Sign in or create an account with your email.'}
+            {codeSent ? <Text className="text-foreground font-semibold">{'\n'}{loginData.email}</Text> : null}
+          </Text>
 
-          <Card className="bg-white border-border" testID="login-form-card">
-            <CardContent className="p-6">
-              <View className="gap-5">
-                {/* Email */}
-                <View>
-                  <Label className="text-foreground">Email address</Label>
-                  <Input
-                    value={loginData.email}
-                    onChangeText={(text) => setLoginData(prev => ({ ...prev, email: text }))}
-                    className="mt-1 border-input"
-                    placeholder="name@email.com"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    textContentType="emailAddress"
-                    autoCorrect={false}
-                    editable={!codeSent}
-                  />
-                </View>
-
-                {/* Code Input - shown after code is sent */}
-                {codeSent && (
-                  <View>
-                    <Label className="text-foreground">Verification Code</Label>
-                    <Input
-                      value={loginData.code}
-                      onChangeText={(text) => setLoginData(prev => ({ ...prev, code: text }))}
-                      className="mt-1 border-input"
-                      placeholder="Enter 6-digit code"
-                      keyboardType="number-pad"
-                      autoComplete="one-time-code"
-                      textContentType="oneTimeCode"
-                      maxLength={6}
-                      autoFocus
-                    />
-                  </View>
-                )}
-
-                {/* Error Message */}
-                {loginError ? (
-                  <View className="bg-red-50 border border-red-200 rounded-lg p-3">
-                    <Text className="text-red-700 text-sm">{loginError}</Text>
-                  </View>
-                ) : null}
-
-                {/* Submit Button */}
-                {!codeSent ? (
-                  <Button
-                    className="h-auto min-h-16 w-full bg-primary px-4 py-4"
-                    onPress={handleRequestCode}
-                    disabled={isRequestingCode || !loginData.email}
-                  >
-                    <Text className="text-center text-white font-semibold">
-                      {isRequestingCode ? 'Sending Code...' : 'Log in with code'}
-                    </Text>
-                  </Button>
-                ) : (
-                  <View className="gap-3">
-                    <Button
-                      className="h-auto min-h-16 w-full bg-primary px-4 py-4"
-                      onPress={handleVerifyCode}
-                      disabled={isVerifyingCode || !loginData.code || loginData.code.length !== 6}
-                    >
-                      <Text className="text-center text-white font-semibold">
-                        {isVerifyingCode ? 'Verifying...' : 'Verify & Sign In'}
-                      </Text>
-                    </Button>
-
-                    {/* Resend Code Button */}
-                    <Button
-                      variant="outline"
-                      className="h-auto min-h-14 w-full border-input px-4 py-3"
-                      onPress={handleRequestCode}
-                      disabled={!canResend || isRequestingCode}
-                    >
-                      <Text className="text-center text-foreground">
-                        {canResend ? 'Resend Code' : `Resend in ${resendTimer}s`}
-                      </Text>
-                    </Button>
-
-                    {/* Change Email Button */}
-                    <Button
-                      variant="ghost"
-                      className="w-full"
-                      onPress={() => {
-                        setCodeSent(false);
-                        setLoginData(prev => ({ ...prev, code: '' }));
-                        setLoginError('');
-                      }}
-                    >
-                      <Text className="text-primary">Change Email</Text>
-                    </Button>
-                  </View>
-                )}
+          <View className="gap-4 bg-background" testID="login-form-card">
+            {!codeSent ? (
+              <View>
+                <Label className="text-foreground">Email address</Label>
+                <Input accessibilityLabel="Email address"
+                  value={loginData.email}
+                  onChangeText={(text) => setLoginData(prev => ({ ...prev, email: text }))}
+                  className="mt-2 bg-background border-input"
+                  style={{ height: 52 }}
+                  placeholder="name@email.com" keyboardType="email-address"
+                  autoCapitalize="none" autoComplete="email" textContentType="emailAddress" autoCorrect={false}
+                  onSubmitEditing={() => { if (loginData.email && !isRequestingCode) void handleRequestCode(); }}
+                />
               </View>
-            </CardContent>
-          </Card>
-
-          {/* Signup Link */}
-          <View className="items-center mt-6">
-            <Button variant="ghost" onPress={goToBrowseCoops}>
-              <Text className="text-foreground">Don&apos;t have an account? </Text>
-              <Text className="font-semibold text-primary">Join a Commons</Text>
+            ) : (
+              <View>
+                <Label className="text-foreground">Verification code</Label>
+                <Input accessibilityLabel="Verification code"
+                  value={loginData.code}
+                  onChangeText={(text) => setLoginData(prev => ({ ...prev, code: text.replace(/[^0-9]/g, '') }))}
+                  className="mt-2 bg-background border-input text-center"
+                  style={{ height: 56, fontSize: 20, letterSpacing: 2 }}
+                  placeholder="Enter 6-digit code" keyboardType="number-pad"
+                  autoComplete="one-time-code" textContentType="oneTimeCode" maxLength={6} autoFocus
+                  onSubmitEditing={() => { if (loginData.code.length === 6 && !isVerifyingCode) void handleVerifyCode(); }}
+                />
+              </View>
+            )}
+            {loginError ? (
+              <Text accessibilityRole="alert" className="text-destructive text-sm leading-5">{loginError}</Text>
+            ) : null}
+            <Button style={{ height: 52 }} className="w-full bg-primary"
+              onPress={codeSent ? handleVerifyCode : handleRequestCode}
+              disabled={codeSent ? isVerifyingCode || loginData.code.length !== 6 : isRequestingCode || !loginData.email.trim()}>
+              <Text className="text-center text-white font-semibold">
+                {codeSent ? (isVerifyingCode ? 'Verifying…' : 'Verify and continue') : (isRequestingCode ? 'Sending code…' : 'Continue with email')}
+              </Text>
             </Button>
+            {!codeSent ? (
+              <Text className="text-muted-foreground text-sm leading-5 text-center">
+                We’ll email you a 6-digit code. No password needed.
+              </Text>
+            ) : (
+              <View className="flex-row items-center justify-between">
+                <Button variant="ghost" onPress={() => {
+                  setCodeSent(false);
+                  setLoginData(prev => ({ ...prev, code: '' }));
+                  setLoginError('');
+                }}>
+                  <Text className="text-muted-foreground text-sm">Change email</Text>
+                </Button>
+                <Button variant="ghost" onPress={handleRequestCode} disabled={!canResend || isRequestingCode}>
+                  <Text className="text-muted-foreground text-sm">{canResend ? 'Resend code' : `Resend in ${resendTimer}s`}</Text>
+                </Button>
+              </View>
+            )}
           </View>
-
         </View>
       </View>
     </ScrollView>

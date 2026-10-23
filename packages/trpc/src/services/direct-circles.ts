@@ -8,7 +8,7 @@ import { buildSageReplyTools } from '../agents/tools/member-action-tools.js';
 import { safeFirstName } from './sage-reply-templates.js';
 import { auditLogEntry } from '../lib/audit.js';
 import { isSageUser } from '../lib/bot.js';
-import { COMMONS_COOP_ID, ensureCommonsMembership } from '../lib/commons.js';
+import { COMMONS_COOP_ID } from '../lib/commons.js';
 import { encodeMentions } from '../lib/mentions.js';
 import { createNotificationAndPush } from './push-notification-service.js';
 import { traceSageReply } from './sage-reply-trails.js';
@@ -57,10 +57,9 @@ export function rejectDirectCircle(group: { kind: string }, message: string) {
 }
 
 async function requireCommonsAccess(db: Db, userId: string, coopId: string) {
-  if (coopId === COMMONS_COOP_ID) {
-    await ensureCommonsMembership(db, userId);
-    return;
-  }
+  // Platform DMs remain account-to-account. Their shared storage scope does
+  // not enroll either participant in Cahootz Commons.
+  if (coopId === COMMONS_COOP_ID) return;
   const membership = await db.userCoopMembership.findUnique({
     where: { userId_coopId: { userId, coopId } },
     select: { status: true },

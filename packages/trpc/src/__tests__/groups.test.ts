@@ -815,7 +815,7 @@ describe('groupsRouter', () => {
     it('creates one private circle with both people as members the first time', async () => {
       const db = makeDb({
         user: { findUnique: usersById() },
-        userCoopMembership: { upsert: vi.fn().mockResolvedValue({}) },
+        userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}) },
         group: {
           findUnique: vi.fn().mockResolvedValue(null),
           create: vi.fn().mockResolvedValue(directGroup),
@@ -825,6 +825,7 @@ describe('groupsRouter', () => {
       const result = await callerFor(db).openDirect({ userId: OTHER_USER.id });
 
       expect(result.groupId).toBe('dm_1');
+      expect(db.userCoopMembership.upsert).not.toHaveBeenCalled();
       expect(db.group.findUnique).toHaveBeenCalledWith({ where: { directKey: DIRECT_KEY } });
       const created = db.group.create.mock.calls[0][0].data;
       expect(created).toMatchObject({
@@ -1059,9 +1060,9 @@ describe('groupsRouter', () => {
       expect(db.groupMember.upsert).not.toHaveBeenCalled();
     });
 
-    it('requires membership in the parent common before joining', async () => {
+    it.each(['artists', 'cahootz'])('requires membership in %s before joining its circle', async (coopId) => {
       const db = makeDb({
-        group: { findUnique: vi.fn().mockResolvedValue({ id: 'group_1', coopId: 'artists', privacy: 'public' }) },
+        group: { findUnique: vi.fn().mockResolvedValue({ id: 'group_1', coopId, privacy: 'public' }) },
         userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null) },
       });
 
@@ -1504,6 +1505,12 @@ describe('groupsRouter', () => {
   });
 
   describe('assignWelcomeTable', () => {
+    it('does not seat an account that has not chosen to join Cahootz', async () => {
+      const db = makeDb({ userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null) } });
+      await expect(callerFor(db).assignWelcomeTable({})).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect(db.$transaction).not.toHaveBeenCalled();
+    });
+
     const baseConfig = {
       id: 'cfg_1',
       coopId: 'cahootz',

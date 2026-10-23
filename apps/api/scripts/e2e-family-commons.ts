@@ -119,11 +119,23 @@ async function cleanupNewcomers(emails: string[]) {
   return { deleted: userIds.length };
 }
 
+async function prepareFirstLoginMember(email: string) {
+  if (!/^e2e-[a-z0-9-]+@test\.cahootz\.local$/.test(email)) throw new Error('Throwaway test email required');
+  const commons = await db.coopConfig.findFirstOrThrow({ where: { name: 'E2E Market Commons' } });
+  const user = await db.user.create({ data: {
+    email, status: 'ACTIVE', handle: email.split('@')[0],
+    memberships: { create: { coopId: commons.coopId, status: 'ACTIVE', roles: ['member'] } },
+  } });
+  return { userId: user.id };
+}
+
 async function main() {
   assertSafeEnvironment();
   const [command, first, second, ...rest] = process.argv.slice(2);
   const result =
-    command === "cleanup" && first
+    command === "prepare-first-login-member" && first
+      ? await prepareFirstLoginMember(first)
+      : command === "cleanup" && first
       ? await cleanupFamily(first)
       : command === "cleanup-referral" && first && second
         ? await cleanupReferral(first, second)

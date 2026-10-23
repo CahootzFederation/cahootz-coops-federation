@@ -63,15 +63,12 @@ export async function requireMembership(
   return group;
 }
 
-// The platform-wide "cahootz" commons is open to every account (see
-// listVisible), so any active person is a commons member there. Every other
-// commons requires an ACTIVE membership.
+// Commons actions require explicit membership, including in Cahootz.
 async function isCommonsMember(
   db: AccountAuthenticatedContext['db'],
   userId: string,
   coopId: string,
 ) {
-  if (coopId === 'cahootz') return true;
   const membership = await db.userCoopMembership.findUnique({
     where: { userId_coopId: { userId, coopId } },
     select: { status: true },
@@ -455,9 +452,7 @@ export const groupsRouter = router({
           deletedAt: null,
           isBot: false,
           groupMemberships: { none: { groupId: group.id } },
-          ...(group.coopId === 'cahootz'
-            ? {}
-            : { memberships: { some: { coopId: group.coopId, status: 'ACTIVE' } } }),
+          memberships: { some: { coopId: group.coopId, status: 'ACTIVE' } },
           OR: [
             { name: { contains: input.query, mode: 'insensitive' } },
             { handle: { contains: input.query, mode: 'insensitive' } },
@@ -797,14 +792,8 @@ export const groupsRouter = router({
       if (!group || group.privacy !== 'public') {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Public circle not found.' });
       }
-      if (group.coopId !== 'cahootz') {
-        const commonMembership = await context.db.userCoopMembership.findUnique({
-          where: { userId_coopId: { userId, coopId: group.coopId } },
-          select: { status: true },
-        });
-        if (commonMembership?.status !== 'ACTIVE') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this commons first.' });
-        }
+      if (!(await isCommonsMember(context.db, userId, group.coopId))) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this commons first.' });
       }
       const existing = await context.db.groupMember.findUnique({
         where: { groupId_userId: { groupId: group.id, userId } },
@@ -1183,7 +1172,7 @@ export const groupsRouter = router({
       const context = ctx as AccountAuthenticatedContext;
       const userId = context.accountUser.id;
 
-      if (input.coopId !== 'cahootz' && !(await isCommonsMember(context.db, userId, input.coopId))) {
+      if (!(await isCommonsMember(context.db, userId, input.coopId))) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Join this commons before joining its welcome lounge.',

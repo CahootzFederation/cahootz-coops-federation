@@ -30,7 +30,7 @@ export type AnalyticsEvents = {
     days_since_signup?: number;
   };
   onboarding_step_viewed: { step: OnboardingStep; signed_in: boolean };
-  /** The person skipped a step ("Skip" on the profile form, "Skip for now" on circles). */
+  /** The person deferred the optional profile form. */
   onboarding_deferred: { step: OnboardingStep; signed_in: boolean };
   /** Tapped an invite-from-contacts card. `picker` is false where it falls back to sharing a message. */
   contact_invite_started: { source: string; picker: boolean };
@@ -42,7 +42,7 @@ export type AnalyticsEvents = {
   onboarding_sign_in_chosen: { step: OnboardingStep };
   /** The wizard was finished. `profile_completed` is false if the profile form was skipped. */
   onboarding_completed: {
-    exit: 'welcome_lounge' | 'general' | 'skip' | 'invitation' | 'family';
+    exit: 'commons' | 'invitation' | 'family';
     profile_completed: boolean;
     signed_in: boolean;
   };

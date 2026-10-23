@@ -9,7 +9,6 @@ import { publicProcedure, authenticatedProcedure, accountAuthenticatedProcedure 
 import { router } from "../trpc.js";
 import { getUserWallet, createWalletForUser, getUserWalletInfo } from "../services/wallet-service.js";
 import type { AccountAuthenticatedContext, AuthenticatedContext } from "../context.js";
-import { ensureCommonsMembership } from "../lib/commons.js";
 
 const DEMO_LOGIN_EMAIL = "demo@cahootz.coop";
 const DEMO_COOP_ID = "demo";
@@ -91,6 +90,55 @@ const BALANCE_ABI = [
 ] as const;
 
 export const userRouter = router({
+  restartOnboarding: accountAuthenticatedProcedure.mutation(async ({ ctx }) => {
+    return ctx.db.user.update({
+      where: { id: ctx.accountUser.id },
+      data: { onboardingStep: 'profile', onboardingCompletedAt: null },
+      select: { onboardingStep: true, onboardingCompletedAt: true, onboardingDraft: true },
+    });
+  }),
+
+  getOnboardingProgress: accountAuthenticatedProcedure.query(async ({ ctx }) => {
+    return ctx.db.user.findUniqueOrThrow({
+      where: { id: ctx.accountUser.id },
+      select: { onboardingStep: true, onboardingCompletedAt: true, onboardingDraft: true },
+    });
+  }),
+
+  saveOnboardingProgress: accountAuthenticatedProcedure
+    .input(z.object({
+      step: z.enum(['welcome', 'profile', 'invite', 'commons', 'complete']),
+      draft: z.object({
+        selfDescription: z.string().max(5000),
+        interests: z.string().max(5000),
+        resourcesOffered: z.string().max(5000),
+        resourcesNeeded: z.string().max(5000),
+        goals: z.string().max(3000),
+        businessSummary: z.string().max(2000),
+        locationSummary: z.string().max(500),
+      }).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const steps = ['welcome', 'profile', 'invite', 'commons', 'complete'];
+      // A delayed save from another tab must never move progress backwards.
+      await ctx.db.user.updateMany({
+        where: {
+          id: ctx.accountUser.id,
+          onboardingCompletedAt: null,
+          onboardingStep: { in: steps.slice(0, steps.indexOf(input.step) + 1) },
+        },
+        data: {
+          onboardingStep: input.step,
+          ...(input.draft ? { onboardingDraft: input.draft } : {}),
+          ...(input.step === 'complete' ? { onboardingCompletedAt: new Date(), onboardingDraft: {} } : {}),
+        },
+      });
+      return ctx.db.user.findUniqueOrThrow({
+        where: { id: ctx.accountUser.id },
+        select: { onboardingStep: true, onboardingCompletedAt: true, onboardingDraft: true },
+      });
+    }),
+
   // Public procedures
   getAllUsers: publicProcedure.query(({ ctx }) => {
     const context = ctx as Context;
@@ -408,7 +456,6 @@ export const userRouter = router({
       const combinedGoals = input.goals ?? input.shortTermGoals ?? "";
       const longTermGoals = input.goals !== undefined ? null : input.longTermGoals || null;
 
-      await ensureCommonsMembership(context.db, context.accountUser.id);
 
       const user = await context.db.user.update({
         where: { id: context.accountUser.id },

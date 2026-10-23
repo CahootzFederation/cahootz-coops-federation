@@ -43,3 +43,31 @@ export function checkTriggerModelKey(params: {
   );
   return "missing-warned";
 }
+
+// The body of the Trigger.dev start hook in apps/api/src/trigger/init.ts. The SDK
+// pieces are passed in so this package doesn't depend on @trigger.dev/sdk.
+export function createOpenAIKeyStartHook(deps: {
+  logger: {
+    warn: (message: string, details: Record<string, unknown>) => void;
+    error: (message: string, details: Record<string, unknown>) => void;
+  };
+  abort: (message: string) => Error;
+  getApiKey?: () => string | undefined;
+}) {
+  return async ({ ctx, task }: { ctx: { environment: { type: TriggerEnvironmentType } }; task: string }) => {
+    try {
+      checkTriggerModelKey({
+        taskId: task,
+        environmentType: ctx.environment.type,
+        apiKey: (deps.getApiKey ?? (() => process.env.OPENAI_API_KEY))(),
+        warn: (message, details) => deps.logger.warn(message, details),
+      });
+    } catch (error) {
+      if (error instanceof MissingOpenAIKeyError) {
+        deps.logger.error(error.message, { taskId: task });
+        throw deps.abort(error.message);
+      }
+      throw error;
+    }
+  };
+}

@@ -8,6 +8,7 @@ import {
   MODEL_TASK_IDS,
   MissingOpenAIKeyError,
   checkTriggerModelKey,
+  createOpenAIKeyStartHook,
 } from '../services/trigger-model-key.js';
 
 const triggerDir = join(dirname(fileURLToPath(import.meta.url)), '../../../../apps/api/src/trigger');
@@ -71,36 +72,27 @@ describe('Trigger.dev OpenAI key check', () => {
   });
 });
 
-describe('Trigger.dev init hook', () => {
-  async function loadHook() {
-    vi.resetModules();
-    let hook: ((params: { ctx: { environment: { type: string } }; task: string }) => Promise<void>) | undefined;
-    const logger = { warn: vi.fn(), error: vi.fn() };
-    class AbortTaskRunError extends Error {
-      constructor(message: string) { super(message); this.name = 'AbortTaskRunError'; }
-    }
-    vi.doMock('@trigger.dev/sdk', () => ({
-      AbortTaskRunError,
-      logger,
-      tasks: { onStartAttempt: (_name: string, fn: typeof hook) => { hook = fn; } },
-    }));
-    await import('../../../../apps/api/src/trigger/init.js');
-    return { hook: hook!, logger };
+describe('Trigger.dev start hook', () => {
+  class AbortTaskRunError extends Error {
+    constructor(message: string) { super(message); this.name = 'AbortTaskRunError'; }
   }
 
   it('aborts a production model run without retries when the key is missing', async () => {
-    const saved = process.env.OPENAI_API_KEY;
-    delete process.env.OPENAI_API_KEY;
-    try {
-      const { hook, logger } = await loadHook();
-      await expect(hook({ ctx: { environment: { type: 'PRODUCTION' } }, task: 'sage-wake-sweep' }))
-        .rejects.toMatchObject({ name: 'AbortTaskRunError', message: MISSING_PRODUCTION_KEY_MESSAGE });
-      expect(logger.error).toHaveBeenCalledOnce();
-      await expect(hook({ ctx: { environment: { type: 'DEVELOPMENT' } }, task: 'sage-wake-sweep' })).resolves.toBeUndefined();
-      expect(logger.warn).toHaveBeenCalledOnce();
-      await expect(hook({ ctx: { environment: { type: 'PRODUCTION' } }, task: 'event-reminder-sweep' })).resolves.toBeUndefined();
-    } finally {
-      if (saved !== undefined) process.env.OPENAI_API_KEY = saved;
-    }
+    const logger = { warn: vi.fn(), error: vi.fn() };
+    const hook = createOpenAIKeyStartHook({ logger, abort: (message) => new AbortTaskRunError(message), getApiKey: () => undefined });
+    await expect(hook({ ctx: { environment: { type: 'PRODUCTION' } }, task: 'sage-wake-sweep' }))
+      .rejects.toMatchObject({ name: 'AbortTaskRunError', message: MISSING_PRODUCTION_KEY_MESSAGE });
+    expect(logger.error).toHaveBeenCalledOnce();
+    await expect(hook({ ctx: { environment: { type: 'DEVELOPMENT' } }, task: 'sage-wake-sweep' })).resolves.toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledOnce();
+    await expect(hook({ ctx: { environment: { type: 'PRODUCTION' } }, task: 'event-reminder-sweep' })).resolves.toBeUndefined();
+  });
+
+  it('lets a production model run start when the key is set', async () => {
+    const logger = { warn: vi.fn(), error: vi.fn() };
+    const hook = createOpenAIKeyStartHook({ logger, abort: (message) => new AbortTaskRunError(message), getApiKey: () => 'sk-test-value' });
+    await expect(hook({ ctx: { environment: { type: 'PRODUCTION' } }, task: 'sage-wake-sweep' })).resolves.toBeUndefined();
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
   });
 });

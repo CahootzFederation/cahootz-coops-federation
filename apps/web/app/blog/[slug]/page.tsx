@@ -486,7 +486,10 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 <span className="rounded-md border border-[#f59e0b]/25 bg-[#f59e0b]/10 px-3 py-1 font-bold uppercase tracking-widest text-[#facc15]">
                   {post.category}
                 </span>
-                <span>{formatPostDate(post.publishedAt)}</span>
+                <span>Written by {post.author}</span>
+                <time dateTime={post.submittedAt ?? post.publishedAt}>
+                  Submitted {formatPostDate(post.submittedAt ?? post.publishedAt)}
+                </time>
                 <span className="inline-flex items-center gap-1.5">
                   <Clock className="h-4 w-4" />
                   {post.readingTime}

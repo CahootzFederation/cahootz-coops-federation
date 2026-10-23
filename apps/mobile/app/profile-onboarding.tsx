@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
   Platform,
   Pressable,
   SafeAreaView,
@@ -11,11 +9,10 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowRight, HandHeart, Lightbulb, MessageCircle, UserCircle, Users } from 'lucide-react-native';
+import { ArrowRight } from 'lucide-react-native';
 
 import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
 import { InviteContactsCard } from '@/components/invite-contacts-card';
@@ -25,7 +22,6 @@ import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import {
   getOrCreateAnonymousId,
-  hasSeenAnonymousProfileIntro,
   markAnonymousProfileIntroSeen,
 } from '@/lib/anonymous-id';
 import { track } from '@/lib/analytics';
@@ -228,13 +224,6 @@ export default function ProfileOnboardingScreen() {
   const updateOptionalField = (name: OptionalFieldName, value: string) => {
     setOptionalValues((current) => ({ ...current, [name]: value }));
     setError('');
-  };
-
-  const handleSignInInstead = async () => {
-    track('onboarding_sign_in_chosen', { step: wizardStep });
-    // Remember the intro was seen first, or "/" sends them straight back here.
-    await markAnonymousProfileIntroSeen().catch(() => {});
-    router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
   };
 
   // Leaving the profile form: drop its "Almost there" error so it doesn't

@@ -276,4 +276,3 @@ const introStyles = StyleSheet.create({
     fontWeight: '900',
   },
 });
-

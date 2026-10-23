@@ -69,3 +69,30 @@ describe('user.updateIdentity', () => {
     expect(db.user.update).not.toHaveBeenCalled();
   });
 });
+
+describe('user onboarding progress', () => {
+  it('keeps completed onboarding complete when an older tab saves a draft', async () => {
+    let saved: any = { onboardingStep: 'profile', onboardingCompletedAt: null, onboardingDraft: {} };
+    const db = makeDb({ user: {
+      findUniqueOrThrow: vi.fn().mockImplementation(() => Promise.resolve(saved)),
+      updateMany: vi.fn().mockImplementation(({ where, data }) => {
+        expect(where.id).toBe(accountUser.id);
+        if (saved.onboardingCompletedAt || !where.onboardingStep.in.includes(saved.onboardingStep)) return Promise.resolve({ count: 0 });
+        saved = { ...saved, ...data };
+        return Promise.resolve({ count: 1 });
+      }),
+    } });
+    const caller = callerFor(db);
+    await caller.saveOnboardingProgress({ step: 'invite' });
+    await caller.saveOnboardingProgress({ step: 'profile' });
+    expect(saved.onboardingStep).toBe('invite');
+    await caller.saveOnboardingProgress({ step: 'commons' });
+    const completed = await caller.saveOnboardingProgress({ step: 'complete' });
+    expect(completed.onboardingCompletedAt).toBeInstanceOf(Date);
+    await caller.saveOnboardingProgress({ step: 'profile', draft: {
+      selfDescription: 'stale', interests: '', resourcesOffered: '', resourcesNeeded: '', goals: '', businessSummary: '', locationSummary: '',
+    } });
+    expect(saved).toEqual(completed);
+    expect(saved.onboardingDraft).toEqual({});
+  });
+});

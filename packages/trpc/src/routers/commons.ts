@@ -11,7 +11,6 @@ import { auditLogEntry } from '../lib/audit.js';
 import { ensureSageBotUser, isSageUser } from '../lib/bot.js';
 import {
   COMMONS_COOP_ID,
-  ensureCommonsMembership,
   ensureUserHandle,
 } from '../lib/commons.js';
 import { encodeMentions } from '../lib/mentions.js';
@@ -1020,11 +1019,6 @@ export async function requireActiveCommonsMembership(
   userId: string,
   coopId: string,
 ) {
-  if (coopId === COMMONS_COOP_ID) {
-    await ensureCommonsMembership(db, userId);
-    return;
-  }
-
   const isMember = await hasActiveCommonsMembership(db, userId, coopId);
   if (!isMember) {
     throw new TRPCError({
@@ -1694,10 +1688,43 @@ export const commonsRouter = router({
     };
   }),
 
-  /**
-   * Real, live-computed stats for the commons info page's "This month" row.
-   * Requires active membership - these counts are member-only detail.
-   */
+  // The legacy AUTOMATIC policy means anyone may explicitly join Cahootz.
+  // Signing in, browsing, and joining another commons never invoke this.
+  joinOpenCommons: accountAuthenticatedProcedure
+    .input(z.object({ coopId: z.literal('cahootz') }))
+    .mutation(async ({ input, ctx }) => {
+      const { accountUser } = ctx as AccountAuthenticatedContext;
+      await ctx.db.$transaction(async (tx) => {
+        const existing = await tx.userCoopMembership.findUnique({
+          where: { userId_coopId: { userId: accountUser.id, coopId: input.coopId } },
+        });
+        if (existing && existing.status !== 'ACTIVE') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Contact a steward about your membership.' });
+        }
+        if (!existing) {
+          const now = new Date();
+          const membership = await tx.userCoopMembership.upsert({
+            where: { userId_coopId: { userId: accountUser.id, coopId: input.coopId } },
+            create: {
+              userId: accountUser.id, coopId: input.coopId, status: 'ACTIVE',
+              roles: ['member'], joinedAt: now, lastActiveAt: now,
+            },
+            // A concurrent request must never reactivate a blocked membership.
+            update: {},
+          });
+          if (membership.status !== 'ACTIVE') {
+            throw new TRPCError({ code: 'FORBIDDEN', message: 'Contact a steward about your membership.' });
+          }
+          await tx.auditLog.create({ data: auditLogEntry({
+            actorId: accountUser.id, action: 'COMMONS_JOINED', resource: 'Coop',
+            resourceId: input.coopId, metadata: { method: 'SELF_JOIN' },
+          }) });
+        }
+      });
+      return { success: true };
+    }),
+
+  /** Live member-only stats for the commons info page's "This month" row. */
   getActivityStats: accountAuthenticatedProcedure
     .input(z.object({ coopId: z.string().min(1) }))
     .query(async ({ input, ctx }) => {
@@ -2059,8 +2086,6 @@ export const commonsRouter = router({
             },
           }),
         });
-
-        await ensureCommonsMembership(tx, user.id);
 
         await tx.userCoopMembership.upsert({
           where: {
@@ -3496,7 +3521,6 @@ export const commonsRouter = router({
 
   listDirectMembers: accountAuthenticatedProcedure.query(async ({ ctx }) => {
     const { accountUser } = ctx as AccountAuthenticatedContext;
-    await ensureCommonsMembership(ctx.db, accountUser.id);
 
     const memberships = await ctx.db.userCoopMembership.findMany({
       where: {

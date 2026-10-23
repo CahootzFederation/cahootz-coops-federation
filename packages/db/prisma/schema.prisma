@@ -42,6 +42,10 @@ model User {
   businessSummary              String?
   locationSummary              String?
   profileSignals               Json                    @default("{}")
+  onboardingStep              String @default("welcome")
+  onboardingCompletedAt       DateTime?
+  onboardingDraft             Json @default("{}")
+  firstLoginAt                 DateTime? // Set once after successful authentication, independent of invitations/membership
   profileOnboardingCompletedAt DateTime?
   // Personal page avatar: a photo wins over an emoji, which wins over initials.
   avatarUrl                    String? // Uploaded profile photo URL (blob storage)
@@ -325,7 +329,7 @@ enum MembershipStatus {
 }
 
 enum CommonsJoinPolicy {
-  AUTOMATIC // Every account joins (Cahootz Commons only)
+  AUTOMATIC // Explicit self-join without an application (legacy name; Cahootz Commons only)
   APPLICATION_REQUIRED // Everyone applies and a steward reviews, even when invited
   INVITE_ONLY // Private family commons: a verified named invitation grants membership
 

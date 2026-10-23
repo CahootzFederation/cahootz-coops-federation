@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, ChevronRight, Home, Lock, Search, Users } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
@@ -33,6 +33,7 @@ function statusTone(status: CommonsDirectoryItem['accessStatus'], commons?: Comm
   if (status === 'ACTIVE') {
     return { label: commons?.isSteward ? 'Steward' : 'Member', bg: THEME.greenSoft, fg: THEME.green };
   }
+  if (status === 'LOCKED' && commons?.joinPolicy === 'AUTOMATIC') return { label: 'Open to join', bg: THEME.greenSoft, fg: THEME.green };
   if (status === 'PENDING') return { label: 'Pending', bg: THEME.blueSoft, fg: THEME.blue };
   if (status === 'REJECTED') return { label: 'Closed', bg: THEME.redSoft, fg: THEME.red };
   return { label: 'Locked', bg: THEME.primarySoft, fg: THEME.primary };
@@ -96,6 +97,8 @@ function CommonsCard({ commons }: { commons: CommonsDirectoryItem }) {
               ? commons.isMember
                 ? 'View circles'
                 : 'Browse circles'
+              : commons.joinPolicy === 'AUTOMATIC' && commons.accessStatus === 'LOCKED'
+                ? 'View and join'
               : commons.canApply
                 ? 'View and apply'
                 : 'View status'}
@@ -117,6 +120,7 @@ function CommonsCard({ commons }: { commons: CommonsDirectoryItem }) {
 
 export default function CommonsDirectoryScreen() {
   const { sessionToken, user } = useAuth();
+  const { fromOnboarding } = useLocalSearchParams<{ fromOnboarding?: string }>();
   const [commons, setCommons] = useState<CommonsDirectoryItem[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -159,6 +163,7 @@ export default function CommonsDirectoryScreen() {
     );
   }, [commons, query]);
 
+  const canReturnToChoice = fromOnboarding === '1';
   const yourCommons = filteredCommons.filter((item) => item.isMember);
   const availableCommons = filteredCommons.filter((item) => !item.isMember);
 
@@ -168,8 +173,11 @@ export default function CommonsDirectoryScreen() {
         <View className="px-4 pb-4 pt-2">
           <View className="mb-4 flex-row items-center justify-between">
             <TouchableOpacity
-              onPress={() => router.back()}
+              onPress={() => canReturnToChoice
+                ? router.replace({ pathname: '/profile-onboarding', params: { step: 'commons', chooseCommons: '1' } } as any)
+                : router.canGoBack() ? router.back() : router.replace('/(tabs)' as any)}
               className="h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white"
+              accessibilityRole="button"
               accessibilityLabel="Go back"
             >
               <ArrowLeft size={20} color={THEME.ink} />

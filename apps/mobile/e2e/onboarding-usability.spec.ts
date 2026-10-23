@@ -1,11 +1,12 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { USER_A_EMAIL, newSignedInPage } from "./support/auth";
+import { USER_A_EMAIL, newSignedInPage, skipOnboardingWizard } from "./support/auth";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const TEST_CODE = process.env.E2E_LOGIN_CODE || "000000";
 const RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+const PROFILE_EMAIL = `e2e-applicant-profile-${RUN_ID}@test.cahootz.local`;
 const APPLICANT_EMAIL = `e2e-applicant-${RUN_ID}@test.cahootz.local`;
 
 /** Visible text only: Expo Router keeps earlier screens mounted (hidden). */
@@ -70,16 +71,14 @@ async function outlastOldErrorTimeout(page: Page) {
 test.describe("onboarding usability", () => {
   test.afterAll(() => {
     applicationFixture("cleanup", APPLICANT_EMAIL);
+    applicationFixture("cleanup", PROFILE_EMAIL);
   });
 
-  test("a returning member signs in from the first welcome screen without seeing the intro again", { tag: "@smoke" }, async ({
+  test("a returning member verifies email and skips completed onboarding", { tag: "@smoke" }, async ({
     page,
   }) => {
-    await page.goto("/");
-    await expect(page).toHaveURL(/profile-onboarding/);
-    await expect(shown(page, "A community app for everyday help and action")).toBeVisible();
+    await page.goto("/?entry=sign-in");
 
-    await page.getByRole("button", { name: "I already have an account" }).click();
 
     // Straight to sign-in, with email and one-time-code autofill turned on.
     const email = page.getByPlaceholder("name@email.com");
@@ -89,23 +88,21 @@ test.describe("onboarding usability", () => {
     await expect(shown(page, "Common", { exact: true })).toHaveCount(0);
     await expect(email).toHaveAttribute("autocomplete", "email");
     await email.fill(USER_A_EMAIL);
-    await page.getByRole("button", { name: "Log in with code" }).click();
+    await page.getByRole("button", { name: "Continue with email" }).click();
     const code = page.getByPlaceholder("Enter 6-digit code");
     await expect(code).toHaveAttribute("autocomplete", "one-time-code");
     await code.fill(TEST_CODE);
-    await page.getByRole("button", { name: "Verify & Sign In" }).click();
+    await page.getByRole("button", { name: "Verify and continue" }).click();
 
-    // The fixture account hasn't finished its profile, so it lands on the
-    // profile form - not back on the intro it already skipped.
-    await expect(page).toHaveURL(/profile-onboarding/);
-    await expect(shown(page, "Build your profile")).toBeVisible();
-    await expect(shown(page, "A community app for everyday help and action")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
-
-    await page.getByRole("button", { name: "Do this later" }).click();
-    await page.getByRole("button", { name: "Next", exact: true }).click();
-    await page.getByRole("button", { name: "Skip for now" }).click();
+    // Finish any outstanding setup once; subsequent visits bypass the wizard.
+    await skipOnboardingWizard(page, "if-shown");
     await expect(page.getByLabel("Open menu").filter({ visible: true })).toBeVisible();
+
+    await expect(shown(page, "Build your profile")).toHaveCount(0);
+    await expect(shown(page, "Find your people")).toHaveCount(0);
+    await page.goto('/profile-onboarding');
+    await expect(page.getByLabel('Open menu').filter({ visible: true })).toBeVisible();
+    await expect(page).not.toHaveURL(/profile-onboarding/);
 
     // Coming back later doesn't restart the welcome screens.
     await page.reload();
@@ -118,15 +115,14 @@ test.describe("onboarding usability", () => {
   }) => {
     await page.emulateMedia({ colorScheme: "dark" });
     await page.addInitScript(() => document.documentElement.classList.add("dark"));
-    await page.goto("/");
+    await page.goto("/?entry=sign-in");
     await expect(page.locator("html")).not.toHaveClass(/dark/);
 
-    await page.getByRole("button", { name: "I already have an account" }).click();
     const email = page.getByPlaceholder("name@email.com");
     const label = shown(page, "Email address", { exact: true });
     const card = page.getByTestId("login-form-card");
-    const submit = page.getByRole("button", { name: "Log in with code" });
-    const submitText = shown(page, "Log in with code", { exact: true });
+    const submit = page.getByRole("button", { name: "Continue with email" });
+    const submitText = shown(page, "Continue with email", { exact: true });
 
     await expect(email).toBeVisible();
     await expect(label).toBeVisible();
@@ -136,51 +132,21 @@ test.describe("onboarding usability", () => {
     expect(await contrastRatio(submitText, submit)).toBeGreaterThan(2);
   });
 
-  test("someone who tapped Continue past the intro doesn't see it again after signing in", async ({ page }) => {
-    await page.goto("/");
-    await expect(page).toHaveURL(/profile-onboarding/);
-    await expect(shown(page, "A community app for everyday help and action")).toBeVisible();
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await expect(shown(page, "Build your profile")).toBeVisible();
-
-    // Leave the wizard and sign in from the start screen instead.
-    await page.goto("/?entry=sign-in");
-    await expect(page).not.toHaveURL(/profile-onboarding/);
-    await page.getByPlaceholder("name@email.com").fill(USER_A_EMAIL);
-    await page.getByRole("button", { name: "Log in with code" }).click();
-    await page.getByPlaceholder("Enter 6-digit code").fill(TEST_CODE);
-    await page.getByRole("button", { name: "Verify & Sign In" }).click();
-
-    await expect(page).toHaveURL(/profile-onboarding/);
-    await expect(shown(page, "Build your profile")).toBeVisible();
-    await expect(shown(page, "A community app for everyday help and action")).toHaveCount(0);
-  });
-
-  test("sign-in and the commons application hide the tab bar, and Back brings it back", async ({ page }) => {
-    const tabs = page.getByRole("tablist", { name: "Main navigation" });
-    await page.goto("/");
-    await page.getByRole("button", { name: "I already have an account" }).click();
+  test("signed-out onboarding links require email verification", async ({ page }) => {
+    await page.goto("/profile-onboarding?step=commons");
     await expect(page.getByPlaceholder("name@email.com")).toBeVisible();
-    // A stray tab tap here would throw away what the person typed.
-    await expect(tabs).toHaveCount(0);
-
-    await shown(page, "Join a Commons", { exact: true }).click();
-    await expect(shown(page, /Choose Your Commons/)).toBeVisible();
-    await expect(tabs).toHaveCount(0);
-
-    // The old intro splash cards are gone: Back from the commons list returns to sign-in.
-    await page.getByText("Back", { exact: true }).filter({ visible: true }).first().click();
+    await expect(shown(page, "Welcome to Cahootz", { exact: true })).toHaveCount(0);
+    await expect(shown(page, "Find your people", { exact: true })).toHaveCount(0);
+    await page.reload();
     await expect(page.getByPlaceholder("name@email.com")).toBeVisible();
-    await expect(shown(page, /Cooperative finance|Share vibes|AI proposal engine/)).toHaveCount(0);
-
-    // Back again leaves sign-in for the app, and the tabs return.
-    await page.getByText("Back", { exact: true }).filter({ visible: true }).first().click();
-    await expect(tabs).toBeVisible();
   });
 
   test("Start using Cahootz says what's missing, and the message stays until the person edits", async ({ page }) => {
-    await page.goto("/");
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await page.goto("/?entry=sign-in");
+    await page.getByPlaceholder("name@email.com").fill(PROFILE_EMAIL);
+    await page.getByRole("button", { name: "Continue with email" }).click();
+    await page.getByPlaceholder("Enter 6-digit code").fill(TEST_CODE);
+    await page.getByRole("button", { name: "Verify and continue" }).click();
     await expect(shown(page, "Build your profile")).toBeVisible();
 
     const start = page.getByRole("button", { name: "Start using Cahootz" });
@@ -202,79 +168,28 @@ test.describe("onboarding usability", () => {
     await expect(shown(page, /Add at least one thing to "Interests"/)).toHaveCount(0);
   });
 
-  test("the application says what's missing, keeps the message, and shows the saved reference number", async ({
-    page,
-  }) => {
-    test.setTimeout(240_000);
-    await page.goto("/");
-    await page.getByRole("button", { name: "I already have an account" }).click();
-    await shown(page, "Join a Commons", { exact: true }).click();
-    await page.getByText("Learn More").filter({ visible: true }).first().click();
-    await page.getByText(/^Apply to Join/).filter({ visible: true }).click();
-
-    // Step 1: Continue explains what's missing instead of sitting greyed out.
-    await expect(shown(page, /Step 1 of 4/)).toBeVisible();
-    const emailField = page.getByPlaceholder("marcus@example.com");
-    await expect(emailField).toHaveAttribute("autocomplete", "email");
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await expect(shown(page, /Please fill in these to continue:/)).toBeVisible();
+  test("the commons application explains missing answers and preserves its submitted state", async ({ page }) => {
+    await page.goto("/?entry=sign-in");
+    await page.getByPlaceholder("name@email.com").fill(APPLICANT_EMAIL);
+    await page.getByRole("button", { name: "Continue with email" }).click();
+    await page.getByPlaceholder("Enter 6-digit code").fill(TEST_CODE);
+    await page.getByRole("button", { name: "Verify and continue" }).click();
+    await page.getByRole("button", { name: "Do this later" }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await page.getByRole("button", { name: "Explore commons" }).click();
+    await page.getByRole("button", { name: "View E2E Market Commons details" }).click();
+    await page.getByRole("button", { name: "Apply to join", exact: true }).click();
+    await shown(page, "Send application", { exact: true }).click();
+    await expect(shown(page, /Please answer:.*Phone/)).toBeVisible();
     await outlastOldErrorTimeout(page);
-    await expect(shown(page, /Please fill in these to continue:/)).toBeVisible();
-
-    await page.getByPlaceholder("Marcus", { exact: true }).fill("E2E");
-    await expect(shown(page, /Please fill in these to continue:/)).toHaveCount(0);
-    await page.getByPlaceholder("Johnson", { exact: true }).fill(`Applicant ${RUN_ID}`);
-    await emailField.fill(APPLICANT_EMAIL);
-    await page.getByPlaceholder("(555) 123-4567").fill(`415555${String(Date.now()).slice(-4)}`);
-    // Sign-in uses an emailed code, so the application never asks for a password.
-    await expect(page.getByPlaceholder("Create a strong password")).toHaveCount(0);
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-
-    // Step 2: answer whatever the commons asks, driven by the list of
-    // unanswered questions that Continue now shows.
-    await expect(shown(page, /Step 2 of 4/)).toBeVisible();
-    for (let attempt = 0; attempt < 12; attempt++) {
-      await page.getByRole("button", { name: "Continue", exact: true }).click();
-      const missing = shown(page, /Please answer these questions to continue:/);
-      if (!(await missing.isVisible().catch(() => false))) break;
-      const firstLabel = ((await missing.innerText()).split("\n• ")[1] ?? "").trim();
-      expect(firstLabel).not.toBe("");
-      const question = page.getByText(firstLabel, { exact: false }).filter({ visible: true }).first();
-      const firstChoice = question.locator(
-        'xpath=following::*[@role="button" or @role="checkbox" or self::input or self::textarea][1]',
-      );
-      const tag = await firstChoice.evaluate((el) => el.tagName.toLowerCase());
-      if (tag === "input" || tag === "textarea") {
-        await firstChoice.fill("E2E answer");
-      } else {
-        await firstChoice.click();
-      }
-    }
-    await expect(shown(page, /Step 3 of 4/)).toBeVisible();
-    await page.getByRole("button", { name: "Skip for Now" }).click();
-
-    // Step 4: Submit is tappable before the boxes are checked and says why it can't go yet.
-    await expect(shown(page, /Step 4 of 4/)).toBeVisible();
-    const submit = page.getByRole("button", { name: /Submit Application/ });
-    await expect(submit).toBeEnabled();
-    await submit.click();
-    await expect(shown(page, /Please finish these before you submit:/)).toBeVisible();
-    await expect(shown(page, /Check the box for the Privacy Policy/)).toBeVisible();
-    await outlastOldErrorTimeout(page);
-    await expect(shown(page, /Please finish these before you submit:/)).toBeVisible();
-
-    for (const box of await page.getByRole("checkbox").filter({ visible: true }).all()) {
-      await box.click();
-    }
-    await expect(shown(page, /Please finish these before you submit:/)).toHaveCount(0);
-    await submit.click();
-
-    // The reference shown is the one saved on the application.
-    const referenceLine = shown(page, /^Your reference number: APP-[A-Z0-9]{6}$/);
-    await expect(referenceLine).toBeVisible({ timeout: 60_000 });
-    const shownReference = (await referenceLine.innerText()).replace("Your reference number: ", "").trim();
-    const saved = applicationFixture("lookup", APPLICANT_EMAIL);
-    expect(saved.referenceCode).toBe(shownReference);
+    await expect(shown(page, /Please answer:.*Phone/)).toBeVisible();
+    await page.getByPlaceholder("Full name").fill(`E2E Applicant ${RUN_ID}`);
+    await page.getByPlaceholder("Phone", { exact: true }).fill(`415${String(Date.now()).slice(-7)}`);
+    await shown(page, "Send application", { exact: true }).click();
+    await expect(shown(page, "Application sent", { exact: true })).toBeVisible();
+    await shown(page, "Done", { exact: true }).click();
+    await page.reload();
+    await expect(shown(page, "Application pending", { exact: true }).first()).toBeVisible();
   });
 
   test("Sage introduces itself as an AI helper and says what waits for a person", async ({ browser }) => {

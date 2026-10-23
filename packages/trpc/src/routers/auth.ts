@@ -9,7 +9,6 @@ import { sendLoginCode, generateLoginCode, isEmailConfigured } from "../lib/emai
 import {
   COMMONS_COOP_ID,
   createAccountSession,
-  ensureCommonsMembership,
   ensureUserHandle,
   getCoopSessionData,
 } from "../lib/commons.js";
@@ -80,6 +79,10 @@ export const authRouter = router({
         locationSummary: z.string().nullable(),
         profileSignals: z.any(),
         profileOnboardingCompletedAt: z.date().nullable(),
+        onboardingStep: z.string().default('welcome'),
+        onboardingCompletedAt: z.date().nullable().default(null),
+        onboardingDraft: z.any().default({}),
+        isFirstLogin: z.boolean(),
         sessionToken: z.string().optional(),
         coop: z.object({
           id: z.string(),
@@ -158,13 +161,16 @@ export const authRouter = router({
               })
             : user;
 
-        await ensureCommonsMembership(context.db, activeUser.id);
         const handle = await ensureUserHandle(context.db, activeUser);
         const sessionToken = await createAccountSession(
           context.db,
           context,
           activeUser.id,
         );
+        const firstLogin = await context.db.user.updateMany({
+          where: { id: activeUser.id, firstLoginAt: null },
+          data: { firstLoginAt: new Date() },
+        });
         const coopData = await getCoopSessionData(context.db, COMMONS_COOP_ID);
 
         // User is active, allow login
@@ -193,6 +199,10 @@ export const authRouter = router({
             locationSummary: activeUser.locationSummary,
             profileSignals: activeUser.profileSignals,
             profileOnboardingCompletedAt: activeUser.profileOnboardingCompletedAt,
+            onboardingStep: user.onboardingStep,
+            onboardingCompletedAt: user.onboardingCompletedAt,
+            onboardingDraft: user.onboardingDraft,
+            isFirstLogin: firstLogin.count === 1,
             sessionToken,
             coop: coopData,
           },
@@ -369,7 +379,6 @@ export const authRouter = router({
             where: { id: user.id, status: "PENDING" },
             data: { status: "ACTIVE" },
           });
-          await ensureCommonsMembership(context.db, user.id);
         }
 
         if (input.coopId && input.coopId !== COMMONS_COOP_ID) {
@@ -474,6 +483,10 @@ export const authRouter = router({
         locationSummary: z.string().nullable(),
         profileSignals: z.any(),
         profileOnboardingCompletedAt: z.date().nullable(),
+        onboardingStep: z.string().default('welcome'),
+        onboardingCompletedAt: z.date().nullable().default(null),
+        onboardingDraft: z.any().default({}),
+        isFirstLogin: z.boolean(),
         sessionToken: z.string(),
         coop: z.object({
           id: z.string(),
@@ -535,7 +548,7 @@ export const authRouter = router({
                 status: "ACTIVE",
                 ...(input.coopId
                   ? { coopId: input.coopId }
-                  : { coopId: COMMONS_COOP_ID }),
+                  : {}),
               },
               orderBy: {
                 joinedAt: 'desc',
@@ -574,7 +587,6 @@ export const authRouter = router({
             where: { id: user.id, status: "PENDING" },
             data: { status: "ACTIVE" },
           });
-          await ensureCommonsMembership(context.db, user.id);
 
           user = await context.db.user.findUniqueOrThrow({
             where: { id: user.id },
@@ -582,7 +594,6 @@ export const authRouter = router({
               memberships: {
                 where: {
                   status: "ACTIVE",
-                  coopId: COMMONS_COOP_ID,
                 },
                 orderBy: {
                   joinedAt: "desc",
@@ -634,16 +645,18 @@ export const authRouter = router({
           }
         }
 
-        const activeCoopId =
-          user.memberships[0]?.coopId ||
-          (isDemoCode ? DEMO_COOP_ID : COMMONS_COOP_ID);
-        const coopData = await getCoopSessionData(context.db, activeCoopId);
+        const activeCoopId = user.memberships[0]?.coopId || (isDemoCode ? DEMO_COOP_ID : undefined);
+        const coopData = activeCoopId ? await getCoopSessionData(context.db, activeCoopId) : undefined;
         const handle = await ensureUserHandle(context.db, user);
         const sessionToken = await createAccountSession(
           context.db,
           context,
           user.id,
         );
+        const firstLogin = await context.db.user.updateMany({
+          where: { id: user.id, firstLoginAt: null },
+          data: { firstLoginAt: new Date() },
+        });
 
         return {
           success: true,
@@ -670,6 +683,10 @@ export const authRouter = router({
             locationSummary: user.locationSummary,
             profileSignals: user.profileSignals,
             profileOnboardingCompletedAt: user.profileOnboardingCompletedAt,
+            onboardingStep: user.onboardingStep,
+            onboardingCompletedAt: user.onboardingCompletedAt,
+            onboardingDraft: user.onboardingDraft,
+            isFirstLogin: firstLogin.count === 1,
             sessionToken,
             coop: coopData,
           },

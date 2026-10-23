@@ -242,6 +242,7 @@ export default function CommonsAiEntry({
     sessionToken,
     user,
     previewWelcomeScreen,
+    resetProfileOnboarding,
   } = useAuth();
   const [draft, setDraft] = useState('');
   const [feedPosts, setFeedPosts] = useState<CommonsPost[]>([]);
@@ -1518,7 +1519,7 @@ export default function CommonsAiEntry({
     (hasAccountSession && !user?.profileOnboardingCompletedAt ? (
       <TouchableOpacity
         accessibilityRole="button"
-        onPress={() => router.push('/profile-onboarding' as any)}
+        onPress={() => void resetProfileOnboarding().catch(() => Alert.alert('Could not open profile setup', 'Please try again.'))}
         className="mb-5 overflow-hidden rounded-[28px]"
         style={{ backgroundColor: SOCIAL_THEME.primary }}
         activeOpacity={0.86}

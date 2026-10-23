@@ -126,7 +126,7 @@ export function CommonsInvitationView({
     // They came for this invitation, so skip the app-intro carousel before
     // signing in; the profile step still runs afterwards.
     await markAnonymousProfileIntroSeen();
-    router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
+    router.push({ pathname: '/', params: { entry: 'sign-in' } } as any);
   };
 
   const accept = async () => {

@@ -31,6 +31,10 @@ interface User {
   locationSummary?: string | null;
   profileSignals?: unknown;
   profileOnboardingCompletedAt?: Date | null;
+  isFirstLogin?: boolean;
+  onboardingStep?: string;
+  onboardingCompletedAt?: string | Date | null;
+  onboardingDraft?: Record<string, string>;
   sessionToken?: string;
   // Coop membership info (set after application approval)
   coop?: {
@@ -79,14 +83,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
-  const { coopId: coopIdParam } = useGlobalSearchParams<{ coopId?: string | string[] }>();
+  const { coopId: coopIdParam, chooseCommons } = useGlobalSearchParams<{ coopId?: string | string[]; chooseCommons?: string }>();
   const activeCoopId = Array.isArray(coopIdParam) ? coopIdParam[0] : coopIdParam;
   const pushRegistrationAttempt = useRef<string | null>(null);
   const userRef = useRef(user);
+  const wizardOwnsExit = useRef(false);
   userRef.current = user;
   const inProfileOnboarding = segments[0] === 'profile-onboarding';
+  // Only finishing the whole wizard skips onboarding. Login history is separate.
+  const returningUser = !!user?.onboardingCompletedAt;
   const readyForPushRegistration = !!user && (
-    !!user.profileOnboardingCompletedAt || profileOnboardingDeferredUserId === user.id
+    returningUser || !!user.profileOnboardingCompletedAt || profileOnboardingDeferredUserId === user.id
   );
 
   // Load session on mount
@@ -133,15 +140,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // bare "/(tabs)" and silently fall back to the default Commons.
     const atRoot = pathname === '/' && segments[0] !== '(tabs)';
 
-    if (!user && inAuthGroup) {
+    if (!user && (inAuthGroup || inProfileOnboarding)) {
       // User is not logged in but in authenticated routes, redirect to onboarding
-      router.replace('/');
+      router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
       return;
     }
 
     const profileOnboardingDeferred = !!user && profileOnboardingDeferredUserId === user.id;
 
-    if (user && !user.profileOnboardingCompletedAt && !profileOnboardingDeferred && !inProfileOnboarding) {
+    if (!inProfileOnboarding) wizardOwnsExit.current = false;
+
+    if (user && returningUser && inProfileOnboarding && chooseCommons !== '1' && !wizardOwnsExit.current) {
+      router.replace('/(tabs)' as any);
+      return;
+    }
+
+
+    if (user && !returningUser && !inProfileOnboarding) {
       router.replace('/profile-onboarding' as any);
       return;
     }
@@ -153,10 +168,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (user?.profileOnboardingCompletedAt && inProfileOnboarding) {
-      router.replace('/(tabs)' as any);
-    }
-  }, [user, segments, isLoading, router, pathname, profileOnboardingDeferredUserId, activeCoopId]);
+    // The wizard owns its exit, including the final commons choice after saving a profile.
+  }, [user, segments, isLoading, router, pathname, profileOnboardingDeferredUserId, activeCoopId, returningUser, chooseCommons]);
 
   const loadSession = async () => {
     try {
@@ -174,6 +187,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const storedSessionToken =
           parsedUser.sessionToken ||
           (await secureStorage.getItem(secureStorage.keys.SESSION_TOKEN));
+        if (storedSessionToken) {
+          const progress = await api.getOnboardingProgress(storedSessionToken);
+          Object.assign(parsedUser, progress);
+          setUser({ ...parsedUser });
+        }
         setSessionToken(storedSessionToken);
 
         // Set coop config if user has coop membership
@@ -272,6 +290,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // login() is also used to refresh the stored record for the same
       // account (e.g. after profile onboarding) - only a new id is a sign-in.
       const isNewSignIn = userRef.current?.id !== userData.id;
+      if (inProfileOnboarding && !userRef.current?.onboardingCompletedAt && userData.onboardingCompletedAt) {
+        wizardOwnsExit.current = true;
+      }
       setUser(userData);
       setSessionToken(userData.sessionToken || null);
       if (isNewSignIn) {
@@ -317,12 +338,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // the local "deferred" flag and the locally cached completion timestamp so
   // the navigation effect above redirects to /profile-onboarding on its own.
   const resetProfileOnboarding = async () => {
-    if (!user) return;
+    if (!user || !sessionToken) return;
+    const progress = await api.restartOnboarding(sessionToken);
 
     await secureStorage.removeItem(secureStorage.keys.PROFILE_ONBOARDING_DEFERRED_USER);
     setProfileOnboardingDeferredUserId(null);
 
-    const updatedUser = { ...user, profileOnboardingCompletedAt: null };
+    const updatedUser = { ...user, ...progress, profileOnboardingCompletedAt: null };
     await secureStorage.setItem(secureStorage.keys.USER, JSON.stringify(updatedUser));
     setUser(updatedUser);
   };
@@ -365,7 +387,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
-        isLoading,
+        isLoading: isLoading || (returningUser && inProfileOnboarding && chooseCommons !== '1' && !wizardOwnsExit.current),
         isAuthenticated: !!user,
         sessionToken,
         login,

@@ -210,6 +210,10 @@ export interface EmailCodeAuthResult {
     locationSummary: string | null;
     profileSignals?: unknown;
     profileOnboardingCompletedAt: string | null;
+    isFirstLogin: boolean;
+    onboardingStep: string;
+    onboardingCompletedAt: string | null;
+    onboardingDraft: Record<string, string>;
     sessionToken: string;
     coop?: {
       id: string;
@@ -1198,6 +1202,14 @@ export const api = {
       response,
       'Failed to load commons',
     );
+  },
+
+  async joinOpenCommons(coopId: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/commons.joinOpenCommons`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ coopId }),
+    });
+    return readTrpcResult<{ success: boolean }>(response, 'Could not join this commons');
   },
 
   async setDefaultCommons(coopId: string, sessionToken: string) {
@@ -2628,6 +2640,28 @@ export const api = {
       response,
       'Failed to send login code',
     );
+  },
+
+  async restartOnboarding(sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/user.restartOnboarding`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken), body: '{}',
+    });
+    return readTrpcResult<{ onboardingStep: string; onboardingCompletedAt: string | null; onboardingDraft: Record<string, string> }>(response, 'Could not reopen profile setup');
+  },
+
+  async getOnboardingProgress(sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/user.getOnboardingProgress`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<{ onboardingStep: string; onboardingCompletedAt: string | null; onboardingDraft: Record<string, string> }>(response, 'Could not load onboarding progress');
+  },
+
+  async saveOnboardingProgress(step: 'profile' | 'invite' | 'commons' | 'complete', sessionToken: string, draft?: Record<string, string>) {
+    const response = await fetch(`${API_BASE_URL}/trpc/user.saveOnboardingProgress`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ step, ...(draft ? { draft } : {}) }),
+    });
+    return readTrpcResult<{ onboardingStep: string; onboardingCompletedAt: string | null; onboardingDraft: Record<string, string> }>(response, 'Could not save onboarding progress');
   },
 
   async verifyLoginCode(

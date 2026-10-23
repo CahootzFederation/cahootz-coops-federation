@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { enterFeed } from "./support/auth";
+import { enterFeed, skipOnboardingWizard } from "./support/auth";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const TEST_CODE = process.env.E2E_LOGIN_CODE || "000000";
@@ -38,18 +38,10 @@ async function signInAs(page: Page, email: string) {
   await page.getByLabel("Open menu").click();
   await page.getByText("Sign In", { exact: true }).click();
   await page.getByPlaceholder("name@email.com").fill(email);
-  await page.getByRole("button", { name: "Log in with code" }).click();
+  await page.getByRole("button", { name: "Continue with email" }).click();
   await page.getByPlaceholder("Enter 6-digit code").fill(TEST_CODE);
-  await page.getByRole("button", { name: "Verify & Sign In" }).click();
-  await expect(page).toHaveURL(/profile-onboarding/);
-  const later = page.getByRole("button", { name: "Do this later" });
-  if (await later.isVisible().catch(() => false)) {
-    await later.click();
-    await page.getByRole("button", { name: "Next", exact: true }).click();
-  }
-  const skip = page.getByRole("button", { name: "Skip for now" });
-  await expect(skip).toBeVisible();
-  await skip.click();
+  await page.getByRole("button", { name: "Verify and continue" }).click();
+  await skipOnboardingWizard(page, "if-shown");
   await expect(page.getByLabel("Open menu").filter({ visible: true })).toBeVisible();
 }
 

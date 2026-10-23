@@ -52,9 +52,9 @@ function shown(page: Page, text: string | RegExp, options?: { exact?: boolean })
 /** Signs in from the sign-in screen and skips the wizard's intro (if shown) and profile steps. */
 async function signInFromSignInScreen(page: Page, email: string) {
   await page.getByPlaceholder("name@email.com").fill(email);
-  await page.getByRole("button", { name: "Log in with code" }).click();
+  await page.getByRole("button", { name: "Continue with email" }).click();
   await page.getByPlaceholder("Enter 6-digit code").fill(TEST_CODE);
-  await page.getByRole("button", { name: "Verify & Sign In" }).click();
+  await page.getByRole("button", { name: "Verify and continue" }).click();
 
   await expect(page).toHaveURL(/profile-onboarding/);
   // Someone who already saw the intro on this device starts at the profile form.
@@ -88,13 +88,6 @@ async function newcomerAtOnboardingChoices(browser: Browser, email: string) {
   await page.goto("/?entry=sign-in");
   await signInFromSignInScreen(page, email);
   return { context, page };
-}
-
-/** Circle View shows the member's own lounge in place of the "join" card. */
-async function expectSeatedInWelcomeLounge(page: Page) {
-  await page.goto("/");
-  await expect(shown(page, /^Welcome Lounge \d+$/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Join a welcome lounge" })).toHaveCount(0);
 }
 
 test.describe.configure({ mode: "serial" });
@@ -273,7 +266,7 @@ test.describe("family commons", () => {
     }
   });
 
-  test("a newcomer who goes to General from onboarding is still seated in a welcome lounge", async ({
+  test("a newcomer chooses Cahootz Commons explicitly and is not seated in a welcome lounge", async ({
     browser,
   }) => {
     test.setTimeout(180_000);
@@ -295,13 +288,15 @@ test.describe("family commons", () => {
       // The profile step's "Almost there" error doesn't follow onto later steps.
       await expect(shown(newcomer.page, /Almost there\. To continue/)).toHaveCount(0);
       await newcomer.page.getByRole("button", { name: "Next", exact: true }).click();
-      await expect(shown(newcomer.page, "Find your way in")).toBeVisible();
-      await shown(newcomer.page, "Go to General").click();
-      await expect(newcomer.page).toHaveURL(/\/cahootz\/posts/);
-      await expect(
-        newcomer.page.getByRole("textbox", { name: "Share what's happening..." }),
-      ).toBeVisible();
-      await expectSeatedInWelcomeLounge(newcomer.page);
+      await expect(shown(newcomer.page, "Find your people")).toBeVisible();
+      await expect(newcomer.page.getByRole("button", { name: "Skip for now", exact: true })).toHaveCount(0);
+      await newcomer.page.getByRole("button", { name: "Explore commons" }).click();
+      await newcomer.page.getByRole("button", { name: /^View Cahootz (Commons|Coop) details$/ }).click();
+      await newcomer.page.getByRole("button", { name: "Join commons", exact: true }).click();
+      await expect(shown(newcomer.page, "Welcome In")).toBeVisible();
+      await expect(newcomer.page.getByRole("button", { name: "Join a welcome lounge" })).toBeVisible();
+      await newcomer.page.reload();
+      await expect(shown(newcomer.page, "Welcome In")).toBeVisible();
     } finally {
       await newcomer.context.close();
     }

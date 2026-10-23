@@ -45,7 +45,7 @@ test("a platform admin sends a Sage check-in to a member from the Agent Playgrou
     await expect(admin.getByLabel("Login code")).toBeVisible();
     const { code } = fixture("login-code", ADMIN_EMAIL);
     await admin.getByLabel("Login code").fill(code);
-    await admin.getByRole("button", { name: "Verify & Sign In" }).click();
+    await admin.getByRole("button", { name: "Verify and continue" }).click();
     await expect(admin).toHaveURL(/\/portal\/admin(?!\/login)/);
 
     await admin.getByRole("link", { name: "Agent Playground" }).click();

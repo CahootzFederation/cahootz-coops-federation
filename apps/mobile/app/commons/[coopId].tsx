@@ -22,6 +22,7 @@ import { Text } from '@/components/ui/text';
 import { GoalSignalsCard, VotedAmendmentsCard } from '@/components/sage-goal-cards';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { secureStorage } from '@/lib/secure-storage';
 import { friendlyError } from '@/lib/friendly-error';
 import { IconAvatar } from '@/components/icon-avatar';
 import { LoadError } from '@/components/load-error';
@@ -387,6 +388,22 @@ export default function CommonsDetailScreen() {
   const needsProfileName = !user?.name?.trim();
   const needsProfilePhone = !user?.phone?.trim() && !phoneQuestion;
   const canOpenApply = canApply && !!sessionToken && !!user;
+  const canJoin = accessStatus === 'LOCKED' && joinPolicy === 'AUTOMATIC';
+  const [joining, setJoining] = useState(false);
+  async function handleJoin() {
+    if (!sessionToken || !user || joining) return;
+    setJoining(true);
+    try {
+      await api.joinOpenCommons(coopId, sessionToken);
+      router.replace({ pathname: '/(tabs)', params: { coopId } } as any);
+    } catch (err) {
+      setError(friendlyError(err, "We couldn't join this commons. Try again."));
+    } finally { setJoining(false); }
+  }
+  async function signInToJoin() {
+    await secureStorage.setItem(secureStorage.keys.COMMONS_DESTINATION, `commons:${coopId}`);
+    router.push({ pathname: '/', params: { entry: 'sign-in' } } as any);
+  }
 
   useEffect(() => {
     if (params.apply === '1' && !loading && canOpenApply) setApplyOpen(true);
@@ -635,7 +652,7 @@ export default function CommonsDetailScreen() {
         <View className="px-4 pb-4 pt-2">
           <View className="mb-4 flex-row items-center justify-between">
             <TouchableOpacity
-              onPress={() => router.back()}
+              onPress={() => router.canGoBack() ? router.back() : router.replace('/commons' as any)}
               className="h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white"
               accessibilityLabel="Go back"
             >
@@ -739,30 +756,35 @@ export default function CommonsDetailScreen() {
                 </>
               ) : (
                 <TouchableOpacity
-                  onPress={() =>
-                    canOpenApply ? setApplyOpen(true) : undefined
-                  }
-                  disabled={!canOpenApply}
+                  onPress={() => {
+                    if (!sessionToken) void signInToJoin();
+                    else if (canJoin) void handleJoin();
+                    else if (canOpenApply) setApplyOpen(true);
+                  }}
+                  accessibilityRole="button"
+                  disabled={joining || !(canApply || canJoin)}
                   className="flex-1 flex-row items-center justify-center gap-2 rounded-xl px-4 py-3"
                   style={{
-                    backgroundColor: canOpenApply
+                    backgroundColor: canApply || canJoin
                       ? THEME.primary
                       : THEME.border,
                   }}
                 >
-                  {canOpenApply ? (
+                  {canApply || canJoin ? (
                     <Send size={17} color="white" />
                   ) : (
                     <CheckCircle2 size={17} color={THEME.muted} />
                   )}
                   <Text
                     className={
-                      canOpenApply
+                      canApply || canJoin
                         ? 'font-black text-white'
                         : 'font-black text-gray-500'
                     }
                   >
-                    {canApply && !canOpenApply
+                    {canJoin
+                      ? joining ? 'Joining…' : sessionToken ? 'Join commons' : 'Sign in to join'
+                      : canApply && !canOpenApply
                       ? 'Sign in to apply'
                       : canOpenApply
                         ? 'Apply to join'

@@ -1,4 +1,4 @@
-import { router, useGlobalSearchParams, useSegments } from 'expo-router';
+import { router, useGlobalSearchParams, usePathname, useSegments } from 'expo-router';
 import { Bell, LayoutGrid, PanelsTopLeft, UserCircle } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,8 +15,17 @@ const destinations = [
 
 export function AppBottomNavigation() {
   const segments = useSegments();
+  const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const { sessionToken, isAuthenticated } = useAuth();
+  const { sessionToken, isAuthenticated, isLoading, user } = useAuth();
+  // Recheck on navigation so joining/creating a commons reveals the tabs.
+  const membershipQuery = useQuery({
+    queryKey: ['navigation-commons-membership', sessionToken, pathname],
+    queryFn: () => api.listCommonsDirectory(sessionToken!),
+    enabled: isAuthenticated && !!sessionToken,
+    staleTime: 0,
+  });
+  const hasCommons = membershipQuery.data?.coops.some((commons) => commons.isMember) ?? false;
   const unreadQuery = useQuery({
     queryKey: ['unread-notifications-badge', sessionToken],
     queryFn: () => api.getUnreadNotificationCount(sessionToken!),
@@ -27,8 +36,9 @@ export function AppBottomNavigation() {
   const hasUnread = (unreadQuery.data?.count ?? 0) > 0;
 
   const screen: string = segments[segments.length - 1] || '';
-  const { entry } = useGlobalSearchParams<{
+  const { entry, coopId } = useGlobalSearchParams<{
     entry?: string | string[];
+    coopId?: string;
   }>();
   const active = screen === 'notifications' || screen === 'notification-settings'
     ? 'Alerts'
@@ -42,7 +52,9 @@ export function AppBottomNavigation() {
 
   // Onboarding, sign-in, and the commons application are focused, full-screen
   // flows: a stray tab tap there would throw away what the person typed.
+  if (isLoading || !isAuthenticated || !user?.onboardingCompletedAt || !hasCommons) return null;
   if (screen === 'profile-onboarding') return null;
+  if (!isAuthenticated && !coopId && (screen === 'index' || screen === '' || screen === '(tabs)')) return null;
   if (isSignInEntry(entry) && (screen === 'index' || screen === '' || screen === '(tabs)')) return null;
 
   return (

@@ -30,6 +30,28 @@ The target operating loop is:
 
 The account Alerts screen shows the configured source Commons name for Commons-scoped alerts, including Sage post comments and targeted alerts. Names come from the stored Commons ID, never generated prose; unknown names are omitted.
 
+## Community Pulse and human feedback (2026-10-23)
+
+The mobile Commons info page's Community tab shows People, Circles, then Community Pulse. Pulse now reads up to five active, unexpired `AIObservation` rows explicitly published with type `community_pulse`, scope `commons`, and visibility `COMMONS_MEMBERS`. It does not expose generic memory, private notes, internal hypotheses, raw metadata, or raw source IDs. The published `summary` is the statement; optional `details.title`, `details.basis`, and `details.uncertainty` are the only extra fields returned. There is an honest empty state until eligible observations exist; the earlier hardcoded examples and pretend RSVP controls have been removed.
+
+`HumanAIFeedback` stores one editable response per observation/member, with Commons scope, `YES` / `PARTLY` / `DIFFERENT_TAKE`, an optional 500-character explanation, and created/updated timestamps. `communityPulse.list` and `communityPulse.saveFeedback` require a valid account session and active membership in the requested Commons. User identity comes from the session. Reads return only the caller's feedback. Selecting a response saves immediately; Save explanation persists or clears the optional explanation. Choice-only updates retain an existing explanation. Failed saves leave the last confirmed answer selected, retain unsaved text, and show an error. Database uniqueness and upsert prevent duplicate rows.
+
+Migration `20261023000000_human_ai_feedback` adds the table, enum, foreign keys, indexes, comment-length constraint, and guards: feedback must reference an eligible Pulse in the same Commons, and Pulse wording/details/scope are immutable. A revised statement must be a new observation; the prior one can become `SUPERSEDED`. No version column is needed. Changing visibility or lifecycle status remains possible. Deleting the observation or user cascades its feedback.
+
+Remaining: richer grounded thematic analysis, member-visible source links, and a bounded feedback-review process for Sage. Saving feedback does not yet cause Sage to reconsider an observation or generate anything. Native device verification remains outstanding.
+
+Coverage: `community-pulse.test.ts` checks membership, scope, response ownership, safe projections, and validation. The mobile browser journeys cover two-member saves, explanations, failure recovery, reload persistence, private-response isolation, and immutable wording. Apply `20261023000000_human_ai_feedback` before deploying the API/mobile changes and the Trigger worker. The migration and browser journeys were verified on the local development database; production deployment is separate.
+
+## Community Pulse publisher (2026-10-23)
+
+Sage's existing wake cycle now calls `publishCommunityPulse` for each active, non-demo Commons. At most once per day it reads up to 200 General-feed posts from the preceding 14 days (null circle or that Commons' General circle), excluding bots, deleted accounts, local test accounts, and E2E text. It never reads DMs, member memory, private circle content, or private feedback. Only IDs, dates, tags, and reply authors are selected; no member-written prose reaches the published text. Replies are capped at 200 per post; a capped reply sample cannot establish that a request is unanswered.
+
+The first version uses deterministic aggregate rules, with zero model calls or token cost. It describes requests without replies only when at least three distinct authors support that pattern, and describes conversations only with replied-to posts from at least three authors. Below three authors it suppresses counts and publishes an honest limited-evidence observation. It never infers preferences from silence or treats a reply as proof of completed help.
+
+Each card is an `AIObservation` with type `community_pulse`, Commons scope, `COMMONS_MEMBERS` visibility, confidence, basis, uncertainty, window bounds, source references, next-day review, and seven-day expiry. The stable publisher key is `sage-community-pulse`. A transaction-level advisory lock and unique day key prevent duplicate publications across workers. Unchanged wording skips a new card until expiry, while advancing the review date. Changed reads create new rows and supersede only this publisher's previous active rows; earlier wording and `HumanAIFeedback` remain intact. No alerts or feed posts are sent.
+
+The local-only command in `apps/api/scripts/publish-community-pulse-local.ts` runs the same publisher for initial activation; there is no alternate publishing endpoint. Automatic work uses the existing Trigger schedule or API fallback wake loop.
+
 ## Current foundation
 
 Already present in the repository:
@@ -637,6 +659,7 @@ For every Sage behavior change:
   - Limitation: during a model outage, a reply that isn't a need (for example "thanks!") is saved as "other", because nothing can tell it apart. The member sees it and can forget it.
   - Verified: `pnpm -F @repo/trpc test` (872 passed) and the mobile type-check. New cases are in `sage-private-signals.test.ts` and `sage-member-memory.test.ts`.
 - 2026-10-13: Agent operations are no longer allowed to fail or pause silently. The always-on weekly-outreach sweep sends a daily receipt through the existing Slack webhook with each due member and the actual outcome, including the shared proactive weekly limit. Its latest result is stored as platform operational health, so an independent hourly watchdog repeats a channel-level alert while the model configuration, outreach sweep, Commons auto-reply setting, autonomy budget, newsletter schedule, or Sage wake cycle is off, paused, stale, or failed.
+- 2026-10-23: The hourly watchdog no longer checks the weekly-outreach sweep. It kept sending "The daily outreach sweep has never started" for production and we couldn't fix the schedule, so the check was removed. The sweep's own daily Slack receipt still reports each run. Limitation: if the sweep stops running entirely, nothing alerts.
 - 2026-10-14: Community hypotheses go to the whole Commons as an open question, never to one person. Before this, the steward's prompt (added 2026-10-11 without a recorded decision) let it send a hypothesis to a Commons admin as a private alert, so one person could hold a pattern built from members' private check-ins. Nothing linked what Sage did back to the hypothesis either, so every 30- and 90-day impact review recorded `NO_ACTION`, which counted against the hypothesis.
   - Decision (user, 2026-10-14): no steward, admin or other single person checks or views a hypothesis. The steward agent no longer receives hypotheses at all (prompt, input and trail).
   - When a hypothesis is `ACTIVE`, the daily community memory sweep posts one question from Sage in the Commons feed (`sage-community-question.ts`). The text is a fixed template per theme that asks what the group could do together. It has no counts, no quotes, no model-written text, and nothing hinting at private check-ins. Code adds the matching mission goal only if it passes the output check. No model call.

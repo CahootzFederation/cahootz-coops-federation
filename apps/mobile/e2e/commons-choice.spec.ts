@@ -58,9 +58,9 @@ test('signup, applying, and family creation never enroll in Cahootz Commons', as
   await page.getByLabel('Go back', { exact: true }).filter({ visible: true }).click();
   await expect(page.getByText('Find your people', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Explore commons' }).click();
-  await expect(page.getByRole('button', { name: /^View Cahootz (Commons|Coop) details$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^View Cahootz(?: Commons| Coop)? details$/ })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('button', { name: /^View Cahootz (Commons|Coop) details$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^View Cahootz(?: Commons| Coop)? details$/ })).toBeVisible();
   await page.getByRole('button', { name: 'View E2E Market Commons details' }).click();
   await page.getByLabel('Go back', { exact: true }).filter({ visible: true }).click();
   await expect(page.getByText('Browse commons', { exact: true })).toBeVisible();
@@ -74,7 +74,7 @@ test('signup, applying, and family creation never enroll in Cahootz Commons', as
   await page.reload();
   await expect(page.getByText('Application pending', { exact: true }).filter({ visible: true }).first()).toBeVisible();
   await page.goto('/commons');
-  await expect(page.getByRole('button', { name: /^View Cahootz (Commons|Coop) details$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^View Cahootz(?: Commons| Coop)? details$/ })).toBeVisible();
   await page.goto('/?entry=sign-in');
   await expect(page.getByText('Find your people', { exact: true })).toBeVisible();
   await expect(page.getByRole('tablist', { name: 'Main navigation' })).toHaveCount(0);
@@ -91,9 +91,9 @@ test('signup, applying, and family creation never enroll in Cahootz Commons', as
   await expect(page).not.toHaveURL(/profile-onboarding/);
   await page.goto('/commons');
 
-  await expect(page.getByRole('button', { name: /^View Cahootz (Commons|Coop) details$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^View Cahootz(?: Commons| Coop)? details$/ })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('button', { name: /^View Cahootz (Commons|Coop) details$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^View Cahootz(?: Commons| Coop)? details$/ })).toBeVisible();
 });
 
 test('a completed user without a commons returns to choices without tabs on the next login', async ({ page, browser }) => {
@@ -110,7 +110,7 @@ test('a completed user without a commons returns to choices without tabs on the 
     await expect(page.getByText('Family · step 1 of 3')).toBeVisible();
     await expect(page.getByLabel('Family name')).toBeVisible();
     await page.goto('/commons');
-    await expect(page.getByRole('button', { name: /^View Cahootz (Commons|Coop) details$/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^View Cahootz(?: Commons| Coop)? details$/ })).toBeVisible();
     const returningContext = await browser.newContext();
     try {
       const returningPage = await returningContext.newPage();

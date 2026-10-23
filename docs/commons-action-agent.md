@@ -29,7 +29,7 @@ Every Sage decision records a decision trail: Commons posts and comments, circle
 
 ## Follow-ups, routed alerts and the daily review
 
-Sage's wake loop runs every 15 minutes through the `sage-wake-sweep` Trigger.dev schedule, or every 60 seconds inside the API when `TRIGGER_SECRET_KEY` is blank (`SAGE_WAKE_INTERVAL_MS` overrides the interval). Each run, per Commons: follows up on due tasks (one reminder, then it stops), expires old alerts, consolidates and expires Sage's memory, and once a day runs the steward review. Escalations from the feed agent and the steward become alerts routed in code to the responsible person. Platform admins see tasks, wake runs and alerts on the Commons AI actions page and can **Run wake now**. Details and limits are in `docs/sage-roadmap.md`.
+Sage's wake loop runs every 15 minutes through the `sage-wake-sweep` Trigger.dev schedule, or every 60 seconds inside the API when `TRIGGER_SECRET_KEY` is blank (`SAGE_WAKE_INTERVAL_MS` overrides the interval). Each run, per Commons: follows up on due tasks (one reminder, then it stops), expires old alerts, consolidates and expires Sage's memory, and once a day runs the steward review. Escalations from the feed agent and the steward become alerts routed in code to the responsible person. Platform admins see tasks, wake runs and alerts on the Commons AI actions page and can **Run wake now**. Details and limits are in `docs/sage-changelog.md`.
 
 ## Alerts and steering defenses
 

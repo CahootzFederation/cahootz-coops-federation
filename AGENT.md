@@ -69,7 +69,9 @@ Sage must obtain the required member or leadership approval before:
 - taking disciplinary action;
 - performing an irreversible external action.
 
-Sage's own proposals (decided 2026-10-18): Sage may write a proposal tied to a charter goal and put it up for a vote itself, labeled as coming from Sage. Code caps how many (two a week, two open at a time per Commons), runs it through the normal proposal review, and never lets it skip the member vote. Members decide by voting. A passed charter or goals change still waits for a steward to apply it. Sage never votes.
+Sage's own proposals (decided 2026-10-18): Sage may write a proposal tied to a charter goal and put it up for a vote itself, labeled as coming from Sage. Code caps how many (two a week, two open at a time per Commons), runs it through the normal proposal review, and never lets it skip the member vote. Members decide by voting. Sage never votes.
+
+Passed proposals take effect (decided 2026-10-23): a proposal can carry specific changes to the charter, goals, voting rules, a member's steward role, or Sage's spending limits and proposal pace. When the vote passes under the Commons' normal threshold, code applies the change automatically 48 hours later, as a new `CoopConfig` version with a `CoopConfigAudit` row tied to the proposal and its vote count. Code re-checks each change before applying it, and a change can't leave a Commons with no steward. Commons-specific instructions for Sage belong in the charter. The platform-wide core principles can't be changed by vote. This replaces the earlier rule that a steward taps to apply a passed charter or goals change. Until it ships, that steward tap is still how changes get applied.
 
 The model recommends actions. Deterministic code enforces authorization, permissions, budgets, idempotency, and governance rules.
 
@@ -115,7 +117,7 @@ Do not judge Sage only by how often it produces output. Measure:
 - cost per accepted action;
 - cost per completed outcome.
 
-When working on Sage, read and update `docs/sage-roadmap.md`. Advance the highest-priority incomplete milestone that is within the user's request. Do not silently broaden the task into unrelated Sage work.
+When working on Sage, read `docs/sage-roadmap.md` for the plan and `docs/sage-changelog.md` for what is built, and update both. Advance the highest-priority incomplete milestone that is within the user's request. Do not silently broaden the task into unrelated Sage work.
 
 ---
 

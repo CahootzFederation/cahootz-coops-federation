@@ -27,6 +27,22 @@ export function resolveCoopId(): string {
 // API configuration
 export const API_BASE_URL = getApiUrl();
 
+export type HumanAIFeedbackResponse = 'YES' | 'PARTLY' | 'DIFFERENT_TAKE';
+export interface HumanAIFeedback {
+  response: HumanAIFeedbackResponse;
+  comment: string | null;
+  updatedAt: string;
+}
+export interface CommunityPulseObservation {
+  id: string;
+  summary: string;
+  title?: string;
+  basis?: string;
+  uncertainty?: string;
+  createdAt: string;
+  feedback: HumanAIFeedback | null;
+}
+
 /**
  * Session expiry detection.
  *
@@ -4800,6 +4816,23 @@ export const api = {
   },
 
   // ── Sage Suggestions ────────────────────────────────────────────────────────
+
+  async getCommunityPulse(coopId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/communityPulse.list?input=${input}`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<{ observations: CommunityPulseObservation[] }>(response, "We couldn't load the community pulse.");
+  },
+
+  async saveHumanAIFeedback(input: {
+    coopId: string; observationId: string; response: HumanAIFeedbackResponse; comment?: string | null;
+  }, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/communityPulse.saveFeedback`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken), body: JSON.stringify(input),
+    });
+    return readTrpcResult<HumanAIFeedback>(response, "Your response didn't save. Please try again.");
+  },
 
   async listSageSuggestions(
     tab: 'NEEDS_YOU' | 'WAITING' | 'DONE',

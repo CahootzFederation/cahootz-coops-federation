@@ -19,6 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
+import { CommunityPulse } from '@/components/community-pulse';
 import { GoalSignalsCard, VotedAmendmentsCard } from '@/components/sage-goal-cards';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
@@ -932,6 +933,7 @@ export default function CommonsDetailScreen() {
 
               {activeTab === 'community' ? (
                 <CommunityTab
+                  coopId={coopId}
                   membersPreview={membersPreview}
                   isSteward={!!directoryItem?.isSteward}
                   circles={circles}
@@ -1425,6 +1427,7 @@ function SageAutonomyRow({
 }
 
 function CommunityTab({
+  coopId,
   membersPreview,
   isSteward,
   circles,
@@ -1432,6 +1435,7 @@ function CommunityTab({
   onOpenCircle,
   onSeeAllCircles,
 }: {
+  coopId: string;
   membersPreview: MembersPreview | null;
   isSteward: boolean;
   circles: PrivateGroupSummary[];
@@ -1548,6 +1552,7 @@ function CommunityTab({
           <Text className="font-black text-gray-700">+ Start a circle</Text>
         </TouchableOpacity>
       </View>
+      <CommunityPulse key={coopId} coopId={coopId} />
     </>
   );
 }

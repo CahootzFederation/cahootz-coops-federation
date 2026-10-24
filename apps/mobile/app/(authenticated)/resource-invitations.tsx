@@ -34,7 +34,7 @@ export default function ResourceInvitations() {
   return <ScrollView style={{ flex: 1, backgroundColor: "#F6F7F8" }} contentContainerStyle={{ padding: 20, gap: 16 }}>
     <TouchableOpacity accessibilityRole="button" onPress={() => router.back()}><Text style={{ color: "#9A3412", fontWeight: "700" }}>← Back</Text></TouchableOpacity>
     <Text style={{ fontSize: 24, fontWeight: "800", color: "#111827" }}>Resource invitations</Text>
-    <Text style={{ color: "#475569" }}>Accepting lets a platform admin review your listing before it appears in the Commons resource catalog.</Text>
+    <Text style={{ color: "#475569" }}>If you accept, a Cahootz admin looks over your listing before it shows up in the commons resource list.</Text>
     {!!error && <Text style={{ color: "#B91C1C" }}>{error}</Text>}
     {query.isLoading && <ActivityIndicator />}
     {query.isError && !query.data && (

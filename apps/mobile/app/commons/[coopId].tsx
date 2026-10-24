@@ -47,6 +47,7 @@ import {
   UserPlus,
 } from 'lucide-react-native';
 import { keyboardInsetScrollProps } from '@/lib/keyboard';
+import { proposalStatusLabel } from '@/lib/proposal-status';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -72,7 +73,7 @@ const DEFAULT_CONFIG: CoopConfigDetail = {
     'A social commons for conversation, resources, and coordinated action.',
   displayMission:
     'Members turn useful conversations into proposals, shared resources, and coordinated action.',
-  charterText: 'The commons charter has not been published yet.',
+  charterText: "This commons hasn't shared its charter yet.",
   missionGoals: [],
   proposalCategories: [],
   applicationQuestions: [],
@@ -116,11 +117,11 @@ type InfoTab = 'overview' | 'community' | 'governance';
 const TABS: { key: InfoTab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'community', label: 'Community' },
-  { key: 'governance', label: 'Governance' },
+  { key: 'governance', label: 'How we decide' },
 ];
 
 function formatMoney(value?: number, currency = 'USD') {
-  if (typeof value !== 'number' || Number.isNaN(value)) return 'Not connected';
+  if (typeof value !== 'number' || Number.isNaN(value)) return 'Not set';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
@@ -144,12 +145,8 @@ function formatPercent(value?: number) {
 }
 
 function shortAddress(address?: string) {
-  if (!address) return 'Not configured';
+  if (!address) return 'Not set up yet';
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
-}
-
-function statusLabel(status: string) {
-  return status.toLowerCase().replace(/_/g, ' ');
 }
 
 function proposalBudget(proposal: ProposalSummary) {
@@ -847,16 +844,16 @@ export default function CommonsDetailScreen() {
                         : 'Application pending'
                       : inviteOnly
                         ? 'Invite only'
-                        : 'Membership required'}
+                        : 'Members only'}
                   </Text>
                   <Text className="mt-1 text-sm leading-5 text-gray-700">
                     {accessStatus === 'PENDING'
                       ? inviteOnly
                         ? 'You asked to join. A steward reviews every request, and nothing here is visible until they approve it.'
-                        : 'You applied to this commons. The full info page unlocks after approval.'
+                        : "You applied to join. You'll see everything here once you're approved."
                       : inviteOnly
                         ? 'This is a private, invite-only commons. Ask a steward to invite you.'
-                        : 'Apply to join this commons. Overview, community, and governance details are only visible to approved members.'}
+                        : "Apply to join to see what's going on inside. Only approved members can see this page."}
                   </Text>
                   {inviteOnly ? <StewardHelp /> : null}
                   {accessStatus === 'PENDING' && sessionToken ? (
@@ -1093,8 +1090,8 @@ export default function CommonsDetailScreen() {
                         No extra questions
                       </Text>
                       <Text className="mt-1 text-sm leading-5 text-gray-600">
-                        This commons is only asking for your Cahootz account
-                        identity right now.
+                        This commons just needs your Cahootz account for
+                        now.
                       </Text>
                     </View>
                   ) : null}
@@ -1204,7 +1201,7 @@ function OverviewTab({
             </Text>
           </View>
           <Text className="text-xs font-black uppercase text-gray-400">
-            Mission priority
+            How much each counts
           </Text>
         </View>
         {config.missionGoals.length > 0 ? (
@@ -1238,7 +1235,7 @@ function OverviewTab({
           <Text className="mt-2 text-sm leading-5 text-gray-600">
             {isFamily
               ? "Not set up yet. The family hasn't decided what it's building toward."
-              : 'No mission priorities have been published for this commons yet.'}
+              : "This commons hasn't shared its goals yet."}
           </Text>
         )}
         {onEditFamilySetup ? (
@@ -1305,8 +1302,8 @@ function OverviewTab({
           Browse verified resources →
         </Text>
         <Text className="mt-1 text-sm text-gray-600">
-          People, skills, spaces, tools, and useful information shared with
-          this Commons.
+          People, skills, spaces, tools, and useful info shared with this
+          commons.
         </Text>
       </TouchableOpacity>
     </>
@@ -1587,12 +1584,12 @@ function GovernanceTab({
             {
               step: '2',
               title: 'Propose',
-              body: 'Formal requests include a plan, budget, and owner.',
+              body: "A proposal lays out the plan, the cost, and who's in charge of it.",
             },
             {
               step: '3',
               title: 'Decide',
-              body: 'The decision path depends on the amount requested.',
+              body: 'Who decides depends on how much money it asks for. See below.',
             },
           ].map((item) => (
             <View key={item.step} className="flex-row items-start gap-3">
@@ -1617,7 +1614,7 @@ function GovernanceTab({
 
       <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
         <Text className="mb-3 text-lg font-black text-gray-950">
-          Funding thresholds
+          Who needs to OK what
         </Text>
         <View className="flex-row gap-2">
           <View className="flex-1 rounded-xl bg-gray-50 p-3">
@@ -1625,7 +1622,7 @@ function GovernanceTab({
               $0 – {formatMoney(config.aiAutoApproveThresholdUSD)}
             </Text>
             <Text className="mt-1 text-xs font-black text-gray-900">
-              Small proposal lane
+              Small asks
             </Text>
           </View>
           <View className="flex-1 rounded-xl bg-gray-50 p-3">
@@ -1634,7 +1631,7 @@ function GovernanceTab({
               {formatMoney(config.councilVoteThresholdUSD)}
             </Text>
             <Text className="mt-1 text-xs font-black text-gray-900">
-              Council review
+              The council decides
             </Text>
           </View>
           <View className="flex-1 rounded-xl bg-gray-50 p-3">
@@ -1642,13 +1639,13 @@ function GovernanceTab({
               {formatMoney(config.councilVoteThresholdUSD)}+
             </Text>
             <Text className="mt-1 text-xs font-black text-gray-900">
-              Commons vote
+              Members vote
             </Text>
           </View>
         </View>
         <View className="mt-3 flex-row justify-between border-t border-gray-100 pt-3">
           <Text className="text-sm font-semibold text-gray-500">
-            Member approval threshold
+            Yes votes needed to pass
           </Text>
           <Text className="text-sm font-black text-gray-900">
             {formatPercent(config.approvalThresholdPercent)}
@@ -1659,7 +1656,7 @@ function GovernanceTab({
       <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
         <View className="mb-3 flex-row items-center gap-2">
           <CircleDollarSign size={19} color={THEME.green} />
-          <Text className="text-lg font-black text-gray-950">Treasury</Text>
+          <Text className="text-lg font-black text-gray-950">Shared money</Text>
         </View>
         <View
           className="rounded-xl p-3"
@@ -1669,20 +1666,20 @@ function GovernanceTab({
             className="text-xs font-bold uppercase"
             style={{ color: THEME.green }}
           >
-            Cash balance
+            Balance
           </Text>
           <Text className="mt-1 text-2xl font-black text-gray-950">
-            Not connected
+            Not shown yet
           </Text>
           <Text className="mt-1 text-sm leading-5 text-gray-700">
-            This page is ready for a per-commons cash balance once treasury
-            accounting is exposed to members.
+            When it&apos;s ready, you&apos;ll see how much money this commons
+            has right here.
           </Text>
         </View>
         <View className="mt-3 gap-2">
           <View className="flex-row justify-between gap-3">
             <Text className="text-sm font-semibold text-gray-500">
-              Treasury safe
+              Shared wallet address
             </Text>
             <Text className="flex-1 text-right text-sm font-black text-gray-900">
               {shortAddress(config.treasurySafeAddress)}
@@ -1729,7 +1726,7 @@ function GovernanceTab({
                       className="text-xs font-black"
                       style={{ color: THEME.primary }}
                     >
-                      {statusLabel(proposal.status)}
+                      {proposalStatusLabel(proposal.status)}
                     </Text>
                   </View>
                 </View>
@@ -1740,15 +1737,15 @@ function GovernanceTab({
                   {proposal.summary}
                 </Text>
                 <Text className="mt-2 text-xs font-bold text-gray-500">
-                  {proposal.category} - {proposalBudget(proposal)}
+                  {proposal.category?.replace(/_/g, ' ')} - {proposalBudget(proposal)}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
         ) : (
           <Text className="text-sm leading-5 text-gray-600">
-            No proposals are open yet. This is where formal requests,
-            budgets, votes, and funding decisions will live.
+            No proposals yet. When members ask for money or want to decide
+            something together, it&apos;ll show up here.
           </Text>
         )}
       </View>

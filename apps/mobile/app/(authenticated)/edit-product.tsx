@@ -113,7 +113,7 @@ export default function EditProductScreen() {
   };
 
   const getCategoryLabel = (value: string) => {
-    return productCategories.find((c) => c.key === value)?.label || 'Select Category';
+    return productCategories.find((c) => c.key === value)?.label || 'Pick a category';
   };
 
   const validateForm = (): boolean => {
@@ -168,8 +168,8 @@ export default function EditProductScreen() {
 
   const handleDelete = () => {
     Alert.alert(
-      'Delete Product',
-      'Are you sure you want to delete this product? This action cannot be undone.',
+      'Delete this product?',
+      "You can't get it back.",
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -181,7 +181,7 @@ export default function EditProductScreen() {
             setDeleting(true);
             try {
               await api.deleteProduct(id, user.walletAddress);
-              Alert.alert('Deleted', 'Product has been removed.', [
+              Alert.alert('Deleted', 'Your product was deleted.', [
                 { text: 'OK', onPress: () => router.back() },
               ]);
             } catch (error: any) {
@@ -214,7 +214,7 @@ export default function EditProductScreen() {
           <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
             <ArrowLeft size={24} color="#374151" />
           </TouchableOpacity>
-          <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">Edit Product</Text>
+          <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">Edit product</Text>
         </View>
         <View className="flex-1 items-center justify-center px-8">
           <Text className="text-gray-700 dark:text-gray-300 text-lg text-center">{loadError}</Text>
@@ -246,7 +246,7 @@ export default function EditProductScreen() {
             <ArrowLeft size={24} color="#374151" />
           </TouchableOpacity>
           <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-            Edit Product
+            Edit product
           </Text>
           <TouchableOpacity onPress={handleDelete} disabled={deleting}>
             {deleting ? (
@@ -262,7 +262,7 @@ export default function EditProductScreen() {
           <View className="bg-white dark:bg-gray-800 rounded-xl mb-6 overflow-hidden">
             <View className="flex-row items-center justify-between px-4 py-4">
               <View className="flex-1">
-                <Text className="text-gray-900 dark:text-white font-medium">Product Active</Text>
+                <Text className="text-gray-900 dark:text-white font-medium">Product is live</Text>
                 <Text className="text-gray-500 dark:text-gray-400 text-sm">
                   {formData.isActive
                     ? 'Product is visible to customers'
@@ -281,7 +281,7 @@ export default function EditProductScreen() {
           {/* Basic Info */}
           <View className="mb-6">
             <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Basic Information
+              Basic info
             </Text>
 
             <View className="mb-4">
@@ -451,7 +451,7 @@ export default function EditProductScreen() {
             <View className="bg-white dark:bg-gray-800 rounded-xl overflow-hidden">
               <View className="flex-row items-center justify-between px-4 py-4 border-b border-gray-100 dark:border-gray-700">
                 <View className="flex-1">
-                  <Text className="text-gray-900 dark:text-white font-medium">Track Inventory</Text>
+                  <Text className="text-gray-900 dark:text-white font-medium">Track inventory</Text>
                   <Text className="text-gray-500 dark:text-gray-400 text-sm">
                     Show out of stock when quantity is 0
                   </Text>
@@ -465,7 +465,7 @@ export default function EditProductScreen() {
               </View>
               <View className="flex-row items-center justify-between px-4 py-4">
                 <View className="flex-1">
-                  <Text className="text-gray-900 dark:text-white font-medium">Allow Backorders</Text>
+                  <Text className="text-gray-900 dark:text-white font-medium">Allow backorders</Text>
                   <Text className="text-gray-500 dark:text-gray-400 text-sm">
                     Continue selling when out of stock
                   </Text>
@@ -493,7 +493,7 @@ export default function EditProductScreen() {
             {saving ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text className="text-center text-white font-bold text-lg">Save Changes</Text>
+              <Text className="text-center text-white font-bold text-lg">Save changes</Text>
             )}
           </TouchableOpacity>
         </View>

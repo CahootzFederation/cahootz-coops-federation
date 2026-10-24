@@ -34,7 +34,7 @@ export function PaymentConfirmationModal({
     >
       <View style={styles.overlay}>
         <View style={styles.modalContainer}>
-          <Text style={styles.title}>Confirm Payment</Text>
+          <Text style={styles.title}>Confirm payment</Text>
           <Text style={styles.amount}>{amount}</Text>
 
           {hasFeeBreakdown && (

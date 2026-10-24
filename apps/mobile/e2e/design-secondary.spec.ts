@@ -33,14 +33,14 @@ test('Sage settings recovers from failure and keeps its explanation available', 
     await expect(page.getByRole('switch')).toHaveCount(0);
     await page.unroute(path);
     await page.getByRole('button', { name: 'Try again' }).click();
-    await expect(page.getByRole('switch', { name: 'Show Sage decision trails' })).toBeVisible();
+    await expect(page.getByRole('switch', { name: 'Show how Sage decides' })).toBeVisible();
     await expect(page.getByText('What Sage remembers', { exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'How Sage works', exact: true }).click();
     await expect(page.getByText('What Sage remembers', { exact: true })).toBeVisible();
     await expect(page.getByText('What always waits for a person', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Hide how Sage works' }).click();
     await page.reload();
-    await expect(page.getByRole('switch', { name: 'Show Sage decision trails' })).toBeVisible();
+    await expect(page.getByRole('switch', { name: 'Show how Sage decides' })).toBeVisible();
     for (const width of [320, 375, 414, 768]) {
       await page.setViewportSize({ width, height: 900 });
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

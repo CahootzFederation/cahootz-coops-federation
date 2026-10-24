@@ -62,7 +62,7 @@ test("Sage shows its own face instead of initials", async ({ browser }) => {
     const { handle } = JSON.parse(raw || "{}");
     expect(handle).toBeTruthy();
     await member.page.goto(`/people/${handle}`);
-    await expect(member.page.getByText("Personal Page").first()).toBeVisible();
+    await expect(member.page.getByText("Personal page").first()).toBeVisible();
     await expect(member.page.getByTestId("sage-avatar")).toHaveCount(0);
   } finally {
     await member.context.close();

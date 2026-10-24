@@ -230,7 +230,7 @@ test('unfinished onboarding starts over after leaving each step until completion
 test('sign-in back returns to the carousel even when opened from commons details', async ({ page }) => {
   await page.goto('/?coopId=cahootz');
   await page.getByLabel('Open menu').click();
-  await page.getByText('Explore all Commons directory', { exact: true }).filter({ visible: true }).click();
+  await page.getByText('Browse all commons', { exact: true }).filter({ visible: true }).click();
   await expect(page.getByText('Browse commons', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'View E2E Market Commons details' }).click();
   await page.getByRole('button', { name: 'Sign in to apply' }).click();

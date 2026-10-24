@@ -149,9 +149,9 @@ export default function CommercePaymentConfirmation({
   if (!clientSecret) {
     return (
       <View className="mx-6 mt-4 mb-3 rounded-2xl border border-red-100 bg-red-50 p-4">
-        <Text className="text-red-700 font-semibold">Payment could not be prepared.</Text>
+        <Text className="text-red-700 font-semibold">We couldn't get your payment ready.</Text>
         <Text className="text-red-700 text-sm mt-1">
-          Stripe did not return a client secret for web checkout.
+          Go back and try again. You haven't been charged.
         </Text>
       </View>
     );

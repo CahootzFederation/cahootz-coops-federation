@@ -269,7 +269,7 @@ export const applicationRouter = router({
         console.error('🚨 Throwing generic INTERNAL_SERVER_ERROR');
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to submit application. Please try again.",
+          message: "We couldn't send your application. Try again in a minute.",
           cause: error,
         });
       }

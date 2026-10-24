@@ -32,7 +32,7 @@ function shown(page: Page, text: string | RegExp) {
 // publishes. Live model calls, so tagged @sage.
 test("Sage helps with an everyday decision, grounded on the thread and checked for relevance", { tag: "@sage" }, async ({ browser }) => {
   test.setTimeout(300_000);
-  // Every spec that flips "Show Sage decision trails" on a fixture account takes a turn (see support/exclusive.ts).
+  // Every spec that flips "Show how Sage decides" on a fixture account takes a turn (see support/exclusive.ts).
   await withExclusiveAccountSetting("sage-decision-trails", async () => {
     const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const member = await newSignedInPage(browser, USER_B_EMAIL);

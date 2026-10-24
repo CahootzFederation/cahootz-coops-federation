@@ -77,7 +77,7 @@ export default function AddProductScreen() {
   }, [loadCategories]);
 
   const getCategoryLabel = (value: string) => {
-    return productCategories.find((c) => c.key === value)?.label || 'Select Category';
+    return productCategories.find((c) => c.key === value)?.label || 'Pick a category';
   };
 
   const validateForm = (): boolean => {
@@ -103,7 +103,7 @@ export default function AddProductScreen() {
       return;
     }
     if (!storeId) {
-      Alert.alert("Couldn't tell which store", 'Go back to My Store and tap Add again.');
+      Alert.alert("Couldn't tell which store", 'Go back to your store and tap Add again.');
       return;
     }
 
@@ -151,7 +151,7 @@ export default function AddProductScreen() {
             <ArrowLeft size={24} color="#374151" />
           </TouchableOpacity>
           <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-            Add Product
+            Add product
           </Text>
           <View className="w-6" />
         </View>
@@ -160,7 +160,7 @@ export default function AddProductScreen() {
           {/* Basic Info */}
           <View className="mb-6">
             <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Basic Information
+              Basic info
             </Text>
 
             <View className="mb-4">
@@ -250,7 +250,7 @@ export default function AddProductScreen() {
             {/* Primary Image */}
             <View className="mb-4">
               <Text className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Primary Image
+                Main image
               </Text>
               {formData.imageUrl ? (
                 <View className="relative">
@@ -281,7 +281,7 @@ export default function AddProductScreen() {
             {/* Additional Images Gallery */}
             <View className="mb-4">
               <Text className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Additional Images (Optional)
+                More images (optional)
               </Text>
               {formData.images.length > 0 ? (
                 <View>
@@ -389,7 +389,7 @@ export default function AddProductScreen() {
             <View className="bg-white dark:bg-gray-800 rounded-xl overflow-hidden">
               <View className="flex-row items-center justify-between px-4 py-4 border-b border-gray-100 dark:border-gray-700">
                 <View className="flex-1">
-                  <Text className="text-gray-900 dark:text-white font-medium">Track Inventory</Text>
+                  <Text className="text-gray-900 dark:text-white font-medium">Track inventory</Text>
                   <Text className="text-gray-500 dark:text-gray-400 text-sm">
                     Show out of stock when quantity is 0
                   </Text>
@@ -403,7 +403,7 @@ export default function AddProductScreen() {
               </View>
               <View className="flex-row items-center justify-between px-4 py-4">
                 <View className="flex-1">
-                  <Text className="text-gray-900 dark:text-white font-medium">Allow Backorders</Text>
+                  <Text className="text-gray-900 dark:text-white font-medium">Allow backorders</Text>
                   <Text className="text-gray-500 dark:text-gray-400 text-sm">
                     Continue selling when out of stock
                   </Text>
@@ -430,7 +430,7 @@ export default function AddProductScreen() {
             {loading ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text className="text-center text-white font-bold text-lg">Add Product</Text>
+              <Text className="text-center text-white font-bold text-lg">Add product</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -441,7 +441,7 @@ export default function AddProductScreen() {
             <View className="bg-white dark:bg-gray-800 rounded-xl p-5 w-full max-w-md">
               <View className="flex-row justify-between items-center mb-4">
                 <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Upload Primary Image
+                  Upload main image
                 </Text>
                 <TouchableOpacity onPress={() => setShowImageUpload(false)}>
                   <X size={24} color="#9CA3AF" />
@@ -454,7 +454,7 @@ export default function AddProductScreen() {
                   updateField('imageUrl', url);
                   setShowImageUpload(false);
                 }}
-                title="Product Image"
+                title="Product image"
                 description="Upload a clear photo of your product"
                 aspectRatio={[4, 3]}
               />
@@ -468,7 +468,7 @@ export default function AddProductScreen() {
             <View className="bg-white dark:bg-gray-800 rounded-xl p-5 w-full max-w-md">
               <View className="flex-row justify-between items-center mb-4">
                 <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Upload Gallery Images
+                  Upload more images
                 </Text>
                 <TouchableOpacity onPress={() => setShowGalleryUpload(false)}>
                   <X size={24} color="#9CA3AF" />
@@ -482,7 +482,7 @@ export default function AddProductScreen() {
                   updateField('images', [...formData.images, ...urls]);
                   setShowGalleryUpload(false);
                 }}
-                title="Product Gallery"
+                title="Product gallery"
                 description="Upload multiple product images"
               />
             </View>

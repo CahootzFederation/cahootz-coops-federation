@@ -353,7 +353,7 @@ export default function StoreDetailScreen() {
               >
                 <Globe size={20} color="#6B7280" />
                 <Text className="text-primary dark:text-amber-400 ml-3">
-                  Visit Website
+                  Visit website
                 </Text>
               </TouchableOpacity>
             )}

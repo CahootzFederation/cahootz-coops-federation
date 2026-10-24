@@ -175,7 +175,7 @@ export default function MyStoresScreen() {
         <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900 dark:text-white">My Commons Stores</Text>
+        <Text className="text-lg font-semibold text-gray-900 dark:text-white">My commons stores</Text>
         <TouchableOpacity
           onPress={() => router.push('/apply-store')}
           className="bg-primary px-3 py-2 rounded-full flex-row items-center"
@@ -208,7 +208,7 @@ export default function MyStoresScreen() {
           <View className="flex-1 items-center justify-center px-8 py-20">
             <Store size={64} color="#9CA3AF" />
             <Text className="text-xl font-bold text-gray-900 dark:text-white mt-4 text-center">
-              No Commons Stores Yet
+              No commons stores yet
             </Text>
             <Text className="text-gray-500 dark:text-gray-400 text-center mt-2">
               You haven&apos;t created any stores yet. Apply now to start selling.
@@ -217,7 +217,7 @@ export default function MyStoresScreen() {
               onPress={() => router.push('/apply-store')}
               className="bg-primary px-8 py-4 rounded-xl mt-6"
             >
-              <Text className="text-white font-bold">Create Your First Store</Text>
+              <Text className="text-white font-bold">Create your first store</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -303,7 +303,7 @@ export default function MyStoresScreen() {
                 {(store.status === 'PENDING' || store.status === 'REJECTED' || store.status === 'SUSPENDED') && (
                   <View className="p-3 bg-gray-50 dark:bg-gray-900">
                     <Text className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                      {store.status === 'PENDING' && 'Complete Stripe Connect to activate'}
+                      {store.status === 'PENDING' && 'Finish Stripe setup to go live'}
                       {store.status === 'REJECTED' && 'Application rejected - contact support'}
                       {store.status === 'SUSPENDED' && 'Store suspended - contact support'}
                     </Text>

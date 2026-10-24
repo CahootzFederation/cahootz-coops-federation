@@ -33,7 +33,7 @@ test("Commons tab lands on Circle View, and a post board stays inside the tab", 
     await page.getByLabel("Close commons switcher").last().click();
 
     await page.getByLabel("Open menu").click();
-    await page.getByText("Explore all Commons directory", { exact: true }).click();
+    await page.getByText("Browse all commons", { exact: true }).click();
     await expect(page.getByText("Browse commons", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: `Open ${activeCommonsName} circles` }).click();
     await expect(
@@ -157,7 +157,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
 
     // 3. Commons directory.
     await page.getByLabel("Open menu").filter({ visible: true }).click();
-    await page.getByText("Explore all Commons directory", { exact: true }).click();
+    await page.getByText("Browse all commons", { exact: true }).click();
     await expect(page.getByText("Browse commons", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: `Open ${otherName} circles`, exact: true }).filter({ visible: true }).click();
     await expect(currentCommons(otherName)).toBeVisible();

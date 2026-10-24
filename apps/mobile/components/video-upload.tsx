@@ -46,12 +46,12 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
         const duration = video.duration ? video.duration / 1000 : 0;
 
         if (duration < 5) {
-          Alert.alert('Video too short', 'Please record a video between 5-10 seconds');
+          Alert.alert('Video too short', 'Record a video that’s 5 to 10 seconds long.');
           return;
         }
 
         if (duration > 10) {
-          Alert.alert('Video too long', 'Please record a video between 5-10 seconds');
+          Alert.alert('Video too long', 'Record a video that’s 5 to 10 seconds long.');
           return;
         }
 
@@ -60,7 +60,7 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
       }
     } catch (error) {
       console.error('Error picking video:', error);
-      Alert.alert("Couldn't open your videos", "We couldn't open your videos. Please try again.");
+      Alert.alert("Couldn't open your videos", "We couldn't open your videos. Try again.");
     }
   };
 
@@ -87,12 +87,12 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
         const duration = video.duration ? video.duration / 1000 : 0;
 
         if (duration < 5) {
-          Alert.alert('Video too short', 'Please record a video between 5-10 seconds');
+          Alert.alert('Video too short', 'Record a video that’s 5 to 10 seconds long.');
           return;
         }
 
         if (duration > 10) {
-          Alert.alert('Video too long', 'Please record a video between 5-10 seconds');
+          Alert.alert('Video too long', 'Record a video that’s 5 to 10 seconds long.');
           return;
         }
 
@@ -101,13 +101,13 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
       }
     } catch (error) {
       console.error('Error recording video:', error);
-      Alert.alert("Couldn't open the camera", "We couldn't open the camera. Please try again.");
+      Alert.alert("Couldn't open the camera", "We couldn't open the camera. Try again.");
     }
   };
 
   const uploadVideo = async () => {
     if (!videoUri) {
-      Alert.alert('No video selected', 'Please record or select a video first');
+      Alert.alert('No video selected', 'Record or choose a video first.');
       return;
     }
 
@@ -168,8 +168,8 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
       setUploadProgress(100);
 
       Alert.alert(
-        'Success!',
-        'Your introduction video has been uploaded',
+        'Video uploaded',
+        'Your intro video is up.',
         [
           {
             text: 'OK',
@@ -190,10 +190,10 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
       {/* Title and instructions */}
       <View>
         <Text className="text-lg font-semibold text-gray-900 mb-1">
-          Introduction Video
+          Intro video
         </Text>
         <Text className="text-sm text-gray-600">
-          Record a 5-10 second video introducing yourself to the commons
+          Record a 5 to 10 second video to introduce yourself to the commons
         </Text>
       </View>
 
@@ -228,7 +228,7 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
             className="bg-primary flex-row items-center justify-center py-4 rounded-xl"
           >
             <Ionicons name="videocam" size={20} color="white" />
-            <Text className="text-white font-semibold ml-2">Record Video</Text>
+            <Text className="text-white font-semibold ml-2">Record a video</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -236,7 +236,7 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
             className="bg-gray-200 flex-row items-center justify-center py-4 rounded-xl"
           >
             <Ionicons name="folder-open" size={20} color="#374151" />
-            <Text className="text-gray-700 font-semibold ml-2">Choose from Library</Text>
+            <Text className="text-gray-700 font-semibold ml-2">Choose from your photos</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -248,7 +248,7 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
           className="bg-green-600 flex-row items-center justify-center py-4 rounded-xl"
         >
           <Ionicons name="cloud-upload" size={20} color="white" />
-          <Text className="text-white font-semibold ml-2">Upload Video</Text>
+          <Text className="text-white font-semibold ml-2">Upload video</Text>
         </TouchableOpacity>
       )}
 
@@ -275,7 +275,7 @@ export default function VideoUpload({ onUploadComplete, apiUrl, resourceId = "te
         <Text className="text-xs text-gray-600 font-semibold mb-1">Tips for a great video:</Text>
         <Text className="text-xs text-gray-600">• Find good lighting</Text>
         <Text className="text-xs text-gray-600">• Look at the camera</Text>
-        <Text className="text-xs text-gray-600">• Keep it between 5-10 seconds</Text>
+        <Text className="text-xs text-gray-600">• Keep it 5 to 10 seconds long</Text>
         <Text className="text-xs text-gray-600">• Introduce yourself and why you want to join</Text>
       </View>
     </View>

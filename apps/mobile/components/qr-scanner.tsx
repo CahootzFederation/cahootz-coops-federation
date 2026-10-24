@@ -76,7 +76,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
           }}
           className="bg-primary px-6 py-3 rounded-lg"
         >
-          <Text className="text-white font-semibold">Grant Permission</Text>
+          <Text className="text-white font-semibold">Allow camera</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onClose} className="mt-4">
           <Text className="text-gray-400">Cancel</Text>

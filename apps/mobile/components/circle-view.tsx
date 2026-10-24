@@ -321,11 +321,11 @@ export default function CircleView({ coopId }: { coopId: string }) {
                 router.push('/commons' as any);
               }}
               className="mt-4 min-h-11 flex-row items-center justify-center gap-2"
-              accessibilityLabel="Explore all commons"
+              accessibilityLabel="See every commons"
             >
               <Compass size={17} color={THEME.primary} />
               <Text className="text-sm font-black" style={{ color: THEME.primary }}>
-                Explore all commons
+                See every commons
               </Text>
             </TouchableOpacity>
           </View>

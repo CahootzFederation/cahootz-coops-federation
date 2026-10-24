@@ -47,12 +47,12 @@ export default function SubmitNewsletterScreen() {
     }
 
     if (!walletAddress) {
-      Alert.alert('Wallet Required', 'You need a wallet on your account before submitting to the newsletter.');
+      Alert.alert("Your account isn't set up yet", 'Finish setting up your account to send something to the newsletter.');
       return;
     }
 
     if (!canSubmit) {
-      Alert.alert('Add More Detail', 'Please add a title and a short write-up before submitting.');
+      Alert.alert('Add a little more', 'Add a headline and a short write-up before you send it.');
       return;
     }
 
@@ -73,8 +73,8 @@ export default function SubmitNewsletterScreen() {
       );
 
       Alert.alert(
-        'Submitted',
-        'Thanks. Your submission went to the commons newsletter inbox for review.',
+        'Sent',
+        'Thanks! It went to the commons newsletter inbox, and someone will look it over.',
         [{ text: 'Done', onPress: () => router.back() }]
       );
     } catch (error: unknown) {
@@ -102,7 +102,7 @@ export default function SubmitNewsletterScreen() {
                 <ArrowLeft size={20} color="#111827" />
               </TouchableOpacity>
               <View className="flex-1">
-                <Text className="text-2xl font-bold text-gray-900">Submit to Newsletter</Text>
+                <Text className="text-2xl font-bold text-gray-900">Share with the newsletter</Text>
                 <Text className="mt-1 text-sm text-gray-500">
                   Send a story or event to the commons paper.
                 </Text>
@@ -120,7 +120,7 @@ export default function SubmitNewsletterScreen() {
                 <View className="flex-1">
                   <Text className="font-semibold text-gray-900">Community paper inbox</Text>
                   <Text className="text-sm leading-5 text-gray-500">
-                    The commons can review, edit, and publish your submission.
+                    Your commons can look it over, edit it, and publish it.
                   </Text>
                 </View>
               </View>
@@ -216,7 +216,7 @@ export default function SubmitNewsletterScreen() {
               <View className="mt-4">
                 <View className="mb-2 flex-row items-center">
                   <LinkIcon size={15} color="#6B7280" />
-                  <Text className="ml-2 text-sm font-semibold text-gray-800">Link URL optional</Text>
+                  <Text className="ml-2 text-sm font-semibold text-gray-800">Link (optional)</Text>
                 </View>
                 <TextInput
                   value={ctaUrl}
@@ -233,7 +233,7 @@ export default function SubmitNewsletterScreen() {
               <View className="mt-4">
                 <View className="mb-2 flex-row items-center">
                   <Image size={15} color="#6B7280" />
-                  <Text className="ml-2 text-sm font-semibold text-gray-800">Image URL optional</Text>
+                  <Text className="ml-2 text-sm font-semibold text-gray-800">Image link (optional)</Text>
                 </View>
                 <TextInput
                   value={imageUrl}
@@ -260,13 +260,13 @@ export default function SubmitNewsletterScreen() {
               ) : (
                 <>
                   <Send size={18} color="#FFFFFF" />
-                  <Text className="ml-2 font-semibold text-white">Send to Commons</Text>
+                  <Text className="ml-2 font-semibold text-white">Send</Text>
                 </>
               )}
             </TouchableOpacity>
 
             <Text className="mt-3 text-center text-xs leading-5 text-gray-500">
-              Submissions are reviewed before appearing on the public newsletter.
+              Someone looks over each one before it shows up in the public newsletter.
             </Text>
           </View>
         </ScrollView>

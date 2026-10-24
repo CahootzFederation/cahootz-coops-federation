@@ -3182,16 +3182,16 @@ export const storeRouter = router({
             userId: buyer.id,
             coopId: store.coopId,
             type: 'ORDER_PLACED',
-            title: 'Order Placed',
-            body: `Your order from ${store.name} for $${totalUSD.toFixed(2)} has been placed.`,
+            title: 'Order placed',
+            body: `Your $${totalUSD.toFixed(2)} order from ${store.name} is in.`,
             data: { orderId: order.id, storeId: store.id, amount: totalUSD },
           },
           {
             userId: store.owner.id,
             coopId: store.coopId,
             type: 'ORDER_RECEIVED',
-            title: 'New Order',
-            body: `You have a new order for $${totalUSD.toFixed(2)}.`,
+            title: 'New order',
+            body: `You got a new order for $${totalUSD.toFixed(2)}.`,
             data: { orderId: order.id, amount: totalUSD },
           },
         ],
@@ -3681,10 +3681,10 @@ export const storeRouter = router({
 
       // Create notification for buyer
       const statusMessages: Record<string, string> = {
-        PROCESSING: 'is being processed',
-        SHIPPED: 'has been shipped',
-        DELIVERED: 'has been delivered',
-        CANCELLED: 'has been cancelled',
+        PROCESSING: 'is being put together',
+        SHIPPED: 'is on its way',
+        DELIVERED: 'was delivered',
+        CANCELLED: 'was canceled',
       };
 
       await context.db.notification.create({
@@ -3692,7 +3692,7 @@ export const storeRouter = router({
           userId: order.buyerId,
           coopId: order.store.coopId,
           type: 'ORDER_STATUS_UPDATE',
-          title: 'Order Update',
+          title: 'Order update',
           body: `Your order ${statusMessages[input.status]}.${input.trackingNumber ? ` Tracking: ${input.trackingNumber}` : ''}`,
           data: {
             orderId: order.id,

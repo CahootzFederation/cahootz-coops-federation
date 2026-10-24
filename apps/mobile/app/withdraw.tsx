@@ -124,8 +124,8 @@ export default function WithdrawScreen() {
       );
 
       Alert.alert(
-        'Withdrawal Initiated',
-        `$${amountNum.toFixed(2)} is being sent to your account ending in ${selectedAccount.last4}.\n\nExpected arrival: ${result.eta}`,
+        "Your money's on the way",
+        `$${amountNum.toFixed(2)} is on its way to your account ending in ${selectedAccount.last4}.\n\nShould arrive: ${result.eta}`,
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (err) {
@@ -212,7 +212,7 @@ export default function WithdrawScreen() {
             )}
 
             {/* Bank Account Selection */}
-            <Text className="text-gray-900 font-semibold text-lg mb-3">Withdraw To</Text>
+            <Text className="text-gray-900 font-semibold text-lg mb-3">Send it to</Text>
 
             {bankAccounts.length === 0 ? (
               <TouchableOpacity
@@ -223,7 +223,7 @@ export default function WithdrawScreen() {
                   <Plus size={24} color="#6B7280" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-gray-900 font-medium">Add Bank Account</Text>
+                  <Text className="text-gray-900 font-medium">Add bank account</Text>
                   <Text className="text-gray-500 text-sm">Required for withdrawals</Text>
                 </View>
                 <ChevronRight size={20} color="#9CA3AF" />
@@ -240,7 +240,7 @@ export default function WithdrawScreen() {
                   </View>
                   <View className="flex-1">
                     <Text className="text-gray-900 font-medium">
-                      {selectedAccount?.bankName || 'Select Account'}
+                      {selectedAccount?.bankName || 'Pick an account'}
                     </Text>
                     <Text className="text-gray-500 text-sm">
                       {selectedAccount
@@ -291,7 +291,7 @@ export default function WithdrawScreen() {
                       <View className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mr-3">
                         <Plus size={20} color="#6B7280" />
                       </View>
-                      <Text className="text-primary">Add New Account</Text>
+                      <Text className="text-primary">Add another account</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -324,7 +324,7 @@ export default function WithdrawScreen() {
 
             {/* Info Box */}
             <View className="bg-secondary rounded-lg p-4 mb-4">
-              <Text className="text-amber-800 text-sm font-medium mb-1">Processing Time</Text>
+              <Text className="text-amber-800 text-sm font-medium mb-1">How long it takes</Text>
               <Text className="text-primary text-sm">
                 Withdrawals typically arrive in 1-3 business days. There are no fees for
                 standard withdrawals.

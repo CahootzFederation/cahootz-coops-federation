@@ -13,10 +13,10 @@ const RAW_SERVER_ERROR =
 
 const HISTORY_FALLBACK = "We couldn't load your transactions. Please try again.";
 
-/** Opens Transaction History the way the app links to it (from the wallet hub). */
+/** Opens Transaction history the way the app links to it (from the wallet hub). */
 async function openHistory(page: Page) {
   await page.goto('/explore');
-  await shown(page, 'Transaction History', { exact: true }).click();
+  await shown(page, 'Transaction history', { exact: true }).click();
   await expect(page).toHaveURL(/\/history$/);
   await expect(shown(page, 'Your recent transactions', { exact: true })).toBeVisible();
 }

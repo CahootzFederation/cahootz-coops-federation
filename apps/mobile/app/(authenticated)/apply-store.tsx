@@ -169,13 +169,13 @@ export default function ApplyStoreScreen() {
   };
 
   const getCategoryLabel = (value: string) => {
-    return storeCategories.find((c) => c.key === value)?.label || 'Select Category';
+    return storeCategories.find((c) => c.key === value)?.label || 'Pick a category';
   };
 
   const renderStoreStep = () => (
     <View className="px-5">
       <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        Store Information
+        Store info
       </Text>
 
       <View className="mb-4">
@@ -259,7 +259,7 @@ export default function ApplyStoreScreen() {
 
       <View className="mb-4">
         <Text className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Store Image (Optional)
+          Store image (optional)
         </Text>
         {formData.storeImageUrl ? (
           <View className="relative">
@@ -289,7 +289,7 @@ export default function ApplyStoreScreen() {
 
       <View className="mb-4">
         <Text className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Store Banner (Optional)
+          Store banner (optional)
         </Text>
         {formData.storeBannerUrl ? (
           <View className="relative">
@@ -322,7 +322,7 @@ export default function ApplyStoreScreen() {
   const renderOwnerStep = () => (
     <View className="px-5">
       <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        Your Information
+        About you
       </Text>
 
       <View className="mb-4">
@@ -391,12 +391,12 @@ export default function ApplyStoreScreen() {
   const renderReviewStep = () => (
     <View className="px-5">
       <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        Review Your Application
+        Review your application
       </Text>
 
       <View className="bg-white dark:bg-gray-800 rounded-xl p-4 mb-4">
         <Text className="text-sm font-semibold text-primary dark:text-amber-400 mb-2">
-          Store Information
+          Store info
         </Text>
         <Text className="text-gray-900 dark:text-white font-medium">{formData.storeName}</Text>
         <Text className="text-gray-500 dark:text-gray-400 text-sm">
@@ -409,7 +409,7 @@ export default function ApplyStoreScreen() {
 
       <View className="bg-white dark:bg-gray-800 rounded-xl p-4 mb-4">
         <Text className="text-sm font-semibold text-primary dark:text-amber-400 mb-2">
-          Your Information
+          About you
         </Text>
         <Text className="text-gray-900 dark:text-white font-medium">{formData.ownerName}</Text>
         <Text className="text-gray-500 dark:text-gray-400 text-sm">{formData.ownerEmail}</Text>
@@ -420,11 +420,11 @@ export default function ApplyStoreScreen() {
         <View className="flex-row items-center mb-2">
           <BadgeCheck size={20} color="#FF6B00" />
           <Text className="text-amber-800 dark:text-amber-200 font-semibold ml-2">
-            What Happens Next
+            What happens next
           </Text>
         </View>
         <Text className="text-primary dark:text-amber-300 text-sm">
-          After submitting, you&apos;ll complete Stripe Connect to verify your identity and set up payouts. Your store goes live as soon as Stripe enables charges.
+          After you send this, you&apos;ll finish a quick Stripe setup to confirm who you are and how you get paid. Your store goes live as soon as Stripe lets you take payments.
         </Text>
       </View>
     </View>
@@ -525,7 +525,7 @@ export default function ApplyStoreScreen() {
                 {loading ? (
                   <ActivityIndicator color="white" />
                 ) : (
-                  <Text className="text-center text-white font-bold">Create Store</Text>
+                  <Text className="text-center text-white font-bold">Create store</Text>
                 )}
               </TouchableOpacity>
             ) : (
@@ -546,7 +546,7 @@ export default function ApplyStoreScreen() {
             <View className="bg-white dark:bg-gray-800 rounded-xl p-5 w-full max-w-md">
               <View className="flex-row justify-between items-center mb-4">
                 <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Upload Store Image
+                  Upload store image
                 </Text>
                 <TouchableOpacity onPress={() => setShowImageUpload(false)}>
                   <X size={24} color="#9CA3AF" />
@@ -559,7 +559,7 @@ export default function ApplyStoreScreen() {
                   updateField('storeImageUrl', url);
                   setShowImageUpload(false);
                 }}
-                title="Store Image"
+                title="Store image"
                 description="Upload your store logo or main image"
                 aspectRatio={[1, 1]}
               />
@@ -573,7 +573,7 @@ export default function ApplyStoreScreen() {
             <View className="bg-white dark:bg-gray-800 rounded-xl p-5 w-full max-w-md">
               <View className="flex-row justify-between items-center mb-4">
                 <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Upload Store Banner
+                  Upload store banner
                 </Text>
                 <TouchableOpacity onPress={() => setShowBannerUpload(false)}>
                   <X size={24} color="#9CA3AF" />
@@ -586,7 +586,7 @@ export default function ApplyStoreScreen() {
                   updateField('storeBannerUrl', url);
                   setShowBannerUpload(false);
                 }}
-                title="Store Banner"
+                title="Store banner"
                 description="Upload a wide banner image for your store"
                 aspectRatio={[16, 9]}
               />

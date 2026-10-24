@@ -1,6 +1,29 @@
 # Voice audit: Sage prompts and app copy
 
-October 16, 2026. This applies the "Voice: Personable and Plain" rules in `AGENT.md`. It's a list of suggestions; none of it has been changed yet.
+October 16, 2026. This applies the "Voice: Personable and Plain" rules in `AGENT.md`. It started as a list of suggestions; see "Status" for what has shipped.
+
+## Status (October 23, 2026)
+
+**Done**
+
+- **A, G, H** (server error text, "common" typo, hard-coded coin names) shipped on October 16 in `friendly-error.ts`, `routers/groups.ts`, `store-pay-service.ts` and `uc-transfer.ts`. The last hard-coded "UC" in `routers/onramp.ts` now says "coins".
+- **The shared Sage voice block** (`SAGE_VOICE` in `sage-principles.ts`) and nearly all of **"Canned Sage text members see"** shipped on October 16. The proposal-engine verdicts are now plain too, and they still give the score.
+- **B, C, D, E, F, I** (sentence case, action buttons, "Finish setting up your account", plain governance and money words, plain status words, "You can't get it back"). Proposal status words now come from one helper, `apps/mobile/lib/proposal-status.ts`.
+- **Screen by screen:** proposals, the Commons info page, home and feed, login and onboarding (on top of #275/#276), messages, Sage UI, wallet and payments, and notifications. The shared drawer labels are sentence case too ("Personal page", "Proposals and votes", "Sign out (@…)").
+
+**Kept on purpose (the suggestion would have dropped a fact)**
+
+- "Approved automatically" doesn't print a dollar limit. The screen never had it, and today's limit may not be the one that applied.
+- The passed-proposal verdict says "it can move forward", not "ready for a vote". Small proposals that pass are approved without a vote.
+- Checkout doesn't say the fee "goes to your commons' shared fund". The fee ledger has no commons ID, so we can't promise that. It uses the existing "Wealth Fund fee" name.
+- The Commons rules line still bans extraction schemes and charity-only spaces, in plainer words.
+- "Private key" stays on the export screen, with a one-line explanation. The button that shows it says "Show my private key".
+
+**Not done yet**
+
+- **J** (call the AI "Sage" everywhere). "AI helper" stays as the label on proposals Sage writes, because specs and the AI disclosure rely on it.
+- **"Prompt lines worth changing"**: the reply, trend and registry lines are done. The Community Observer, proposal-engine scorer, Data Needs, Comment Evaluation and newsletter prompt lines are not.
+- The "Please try again." fallbacks that `friendly-errors.spec.ts` and `money-screens.spec.ts` assert word for word.
 
 ## The short version
 

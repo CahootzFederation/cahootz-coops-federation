@@ -426,7 +426,7 @@ Remaining:
 - Whether the live model now replies more often in production is unmeasured. Run `scripts/sage-health-check.sql` against production a week after release and compare "Did nothing" against `SAGE_COMMENT` and `SAGE_SUGGESTION_NEEDS_YOU` counts.
 - Commons admins still have no queue screen. A held reply reaches them only as an alert and the Sage hub's Needs you tab.
 - Lowering the age limit to 5 days means the daily catch-up scan can reply to older posts it missed, so a backlog could produce a burst of replies the first day.
-- Production's Trigger.dev environment still needs `OPENAI_API_KEY` set by hand. Nothing checks it in the Trigger runtime.
+- Production's Trigger.dev environment still needs `OPENAI_API_KEY` set by hand. Update (2026-10-23): `apps/api/src/trigger/init.ts` now checks it before every model-calling task (list in `packages/trpc/src/services/trigger-model-key.ts`). In production a missing key aborts the run, with no retries, and the message says where to add it. In dev, staging and preview it logs a warning and keeps the fallback. The "Deploy Trigger.dev" workflow also fails when the production env var list has no `OPENAI_API_KEY` (it reads names only; if Trigger's API can't be reached, it warns and deploys). Verified: `trigger-model-key.test.ts` (10 tests, including the hook itself), `pnpm -F @repo/trpc test:run` (1060 passed) and `pnpm check:trigger-build` passed. Not yet verified: that `TRIGGER_ACCESS_TOKEN` can read production env vars through Trigger's API. Check the first deploy log for "Trigger.dev production has OPENAI_API_KEY set" rather than the "Couldn't read" warning.
 
 ### P1 — Sage proposals from charter goals (2026-10-18)
 

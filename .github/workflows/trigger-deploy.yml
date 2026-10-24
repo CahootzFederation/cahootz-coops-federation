@@ -42,6 +42,9 @@ jobs:
             exit 1
           fi
 
+      - name: Check Trigger.dev production env vars
+        run: node scripts/check-trigger-prod-env.mjs
+
       - name: Generate Prisma client
         run: pnpm -F @repo/db db:generate
 

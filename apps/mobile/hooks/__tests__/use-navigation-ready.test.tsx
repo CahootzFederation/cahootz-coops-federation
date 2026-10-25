@@ -1,8 +1,12 @@
 import { describe, expect, it, jest } from "@jest/globals";
-import React from "react";
-import { act, create } from "react-test-renderer";
+import React, { act } from "react";
 
 import { useNavigationReady } from "../use-navigation-ready";
+
+// react-test-renderer ships no type declarations; this is the part used here.
+const { create } = require("react-test-renderer") as {
+  create: (element: React.ReactElement) => { unmount: () => void };
+};
 
 type Listener = () => void;
 

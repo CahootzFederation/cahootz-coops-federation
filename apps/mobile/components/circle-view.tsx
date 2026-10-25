@@ -115,6 +115,10 @@ export default function CircleView({ coopId }: { coopId: string }) {
   };
 
   const openCircle = (circleId?: string) => {
+    // Opening a circle reads it; clear its badge now rather than on the next load.
+    if (circleId) {
+      setCircles((current) => current.map((c) => (c.id === circleId ? { ...c, unreadCount: 0 } : c)));
+    }
     router.replace({ pathname: '/[coopId]/posts', params: { coopId, circleId } } as any);
   };
 
@@ -431,6 +435,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
                     iconEmoji={card.iconEmoji}
                     iconColor={card.iconColor}
                     chattingCount={card.chattingCount}
+                    unreadCount={card.isMember ? card.unreadCount ?? 0 : 0}
                     joinLabel={!card.isMember}
                     onPress={() => (card.isMember ? openCircle(card.id) : joinPublicCircle(card.id))}
                   />
@@ -493,6 +498,7 @@ function CircleCardView({
   iconEmoji,
   iconColor,
   chattingCount,
+  unreadCount = 0,
   joinLabel,
   hideStatus,
   onPress,
@@ -502,16 +508,19 @@ function CircleCardView({
   iconEmoji?: string | null;
   iconColor?: string | null;
   chattingCount: number;
+  unreadCount?: number;
   joinLabel?: boolean;
   hideStatus?: boolean;
   onPress: () => void;
 }) {
   const palette = circleColorFromKey(colorKey);
   const background = iconColor || palette.background;
+  const unreadLabel = unreadCount > 99 ? '99+' : String(unreadCount);
 
   return (
     <TouchableOpacity
       accessibilityRole="button"
+      accessibilityLabel={unreadCount > 0 ? `${name}, ${unreadCount} new` : undefined}
       onPress={onPress}
       className="items-center"
       style={{ width: '47%' }}
@@ -536,6 +545,14 @@ function CircleCardView({
             {name.slice(0, 1).toUpperCase()}
           </Text>
         )}
+        {unreadCount > 0 ? (
+          <View
+            testID="circle-unread-badge"
+            className="absolute -right-1 -top-1 h-7 min-w-7 items-center justify-center rounded-full border-2 border-white bg-red-600 px-1.5"
+          >
+            <Text className="text-xs font-black text-white">{unreadLabel}</Text>
+          </View>
+        ) : null}
       </View>
       <Text className="mt-3 text-center text-sm font-bold text-gray-900">
         {name}

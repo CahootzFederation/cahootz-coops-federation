@@ -491,6 +491,8 @@ export interface PrivateGroupSummary {
   iconEmoji?: string | null;
   iconColor?: string | null;
   chattingCount: number;
+  // New posts and comments from others since you last opened the circle.
+  unreadCount?: number;
   welcomeTableNumber: number | null;
   welcomeTableStatus: 'OPEN' | 'FULL' | 'CLOSED' | null;
   capacity: number | null;

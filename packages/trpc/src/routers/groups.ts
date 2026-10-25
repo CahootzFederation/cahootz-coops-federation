@@ -30,6 +30,7 @@ import { touchCircleWindow } from '../services/circle-window.js';
 import { coinNameFrom, formatCoinAmount } from '../services/coop-chain-config-service.js';
 import { validateSCBalance } from '../services/sc-validation-service.js';
 import { enterChat, getChattingCounts, leaveChat, refreshChatPresence } from '../services/circle-presence.js';
+import { getCircleUnreadCounts, markCircleRead } from '../services/circle-unread.js';
 import { assignWelcomeTable, getNewcomerCounts } from '../services/welcome-tables.js';
 import { getWelcomeIntroStatus } from '../services/welcome-intros.js';
 import { router } from '../trpc.js';
@@ -116,6 +117,7 @@ function mapCircleSummary(
   isMember: boolean,
   chattingCounts: Map<string, number>,
   newcomerCounts: Map<string, number>,
+  unreadCounts: Map<string, number> = new Map(),
 ) {
   return {
     id: group.id,
@@ -131,6 +133,7 @@ function mapCircleSummary(
     iconEmoji: group.iconEmoji,
     iconColor: group.iconColor,
     chattingCount: chattingCounts.get(group.id) ?? 0,
+    unreadCount: isMember ? unreadCounts.get(group.id) ?? 0 : 0,
     welcomeTableNumber: group.welcomeTableNumber,
     welcomeTableStatus: group.welcomeTableStatus,
     capacity: group.capacity,
@@ -176,14 +179,15 @@ export const groupsRouter = router({
       }
 
       const groupIds = [...visible.keys()];
-      const [chattingCounts, newcomerCounts] = await Promise.all([
+      const [chattingCounts, newcomerCounts, unreadCounts] = await Promise.all([
         getChattingCounts(context.db, groupIds),
         getNewcomerCounts(context.db, groupIds),
+        getCircleUnreadCounts(context.db, userId, memberships),
       ]);
 
       return {
         groups: [...visible.values()].map(({ group, isMember }) =>
-          mapCircleSummary(group, userId, isMember, chattingCounts, newcomerCounts),
+          mapCircleSummary(group, userId, isMember, chattingCounts, newcomerCounts, unreadCounts),
         ),
       };
     }),
@@ -208,14 +212,15 @@ export const groupsRouter = router({
       });
 
       const groupIds = memberships.map((m) => m.group.id);
-      const [chattingCounts, newcomerCounts] = await Promise.all([
+      const [chattingCounts, newcomerCounts, unreadCounts] = await Promise.all([
         getChattingCounts(context.db, groupIds),
         getNewcomerCounts(context.db, groupIds),
+        getCircleUnreadCounts(context.db, userId, memberships),
       ]);
 
       return {
         groups: memberships.map(({ group }) =>
-          mapCircleSummary(group, userId, true, chattingCounts, newcomerCounts),
+          mapCircleSummary(group, userId, true, chattingCounts, newcomerCounts, unreadCounts),
         ),
       };
     }),
@@ -1208,6 +1213,7 @@ export const groupsRouter = router({
 
       await requireMembership(context.db, input.groupId, userId);
       await enterChat(context.db, input.groupId, userId);
+      await markCircleRead(context.db, input.groupId, userId);
 
       return { success: true };
     }),

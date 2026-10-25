@@ -1707,7 +1707,7 @@ model GroupMember {
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   joinedAt          DateTime  @default(now())
   role              String    @default("MEMBER") // "MEMBER" | "GUIDE" | "NEWCOMER"
-  // Last time this member read the circle's messages; drives DM unread counts.
+  // Last time this member opened the circle; drives circle and DM unread counts.
   lastReadAt        DateTime?
   notificationLevel String    @default("HIGHLIGHTS") // "ALL" | "HIGHLIGHTS" | "MENTIONS" | "NONE"
 

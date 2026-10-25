@@ -1,5 +1,5 @@
 import { auditLogEntry } from "../../lib/audit.js";
-import { cancelOpenOfferCheckouts, refundOfferTransaction, type StripeClient } from "./payments.js";
+import { backfillProcessingFees, cancelOpenOfferCheckouts, refundOfferTransaction, type StripeClient } from "./payments.js";
 import { refundPaidCommitments } from "./lifecycle.js";
 import {
   type Db,
@@ -26,6 +26,7 @@ export type OfferSweepResult = {
   groupBuysFailed: number;
   refundsRetried: number;
   dealHoldsReleased: number;
+  processingFeesFilled: number;
 };
 
 async function audit(db: Db, action: string, offerId: string, metadata?: Record<string, unknown>) {
@@ -49,6 +50,7 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: StripeCli
     groupBuysFailed: 0,
     refundsRetried: 0,
     dealHoldsReleased: 0,
+    processingFeesFilled: 0,
   };
 
   // 1. Member Deals past their end date.
@@ -220,6 +222,12 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: StripeCli
     });
     if (released) result.dealHoldsReleased++;
   }
+
+  // 7. Stripe's fee, for payments whose webhook arrived before Stripe had it.
+  result.processingFeesFilled = await backfillProcessingFees(db, stripe).catch((error) => {
+    console.error("[Offers] Processing fee backfill failed:", error);
+    return 0;
+  });
 
   return result;
 }

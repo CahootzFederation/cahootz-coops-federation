@@ -5,7 +5,7 @@ import { createNotificationAndPush } from "../push-notification-service.js";
 import { recordFederationFee, recordFederationFeeRefund } from "../treasury-ledger-service.js";
 import { type Db, formatCents, notifyOnce } from "./shared.js";
 
-export type StripeClient = Pick<Stripe, "refunds" | "paymentIntents" | "checkout">;
+export type StripeClient = Pick<Stripe, "refunds" | "paymentIntents" | "checkout" | "charges">;
 
 export async function defaultStripe(): Promise<Stripe> {
   const StripeCtor = (await import("stripe")).default;
@@ -200,6 +200,40 @@ export async function handleOfferPaymentRefunded(
     title: "Your refund is on the way",
     body: `We refunded ${formatCents(Math.round((params.chargedAmount * params.incrementalRatio) * 100))} for ${transaction.offer.title}. It usually shows on your card in 5–10 business days.`,
   });
+}
+
+/**
+ * Fills in Stripe's processing fee on offer payments that don't have it yet.
+ * With newer Stripe API versions the balance transaction often isn't ready when
+ * payment_intent.succeeded arrives, so the webhook can't always read it.
+ */
+export async function backfillProcessingFees(db: Db, stripe?: StripeClient, limit = 50) {
+  const missing = await db.commerceTransaction.findMany({
+    where: {
+      offerId: { not: null },
+      processingFeeAmount: null,
+      stripeChargeId: { not: null },
+      status: { in: ["COMPLETED", "PARTIALLY_REFUNDED", "REFUNDED"] },
+    },
+    select: { id: true, stripeChargeId: true },
+    take: limit,
+  });
+  if (missing.length === 0) return 0;
+  const client = stripe ?? (await defaultStripe());
+  let filled = 0;
+  for (const transaction of missing) {
+    try {
+      const charge = await client.charges.retrieve(transaction.stripeChargeId!, { expand: ["balance_transaction"] });
+      const balance = charge.balance_transaction;
+      if (balance && typeof balance === "object") {
+        await db.commerceTransaction.update({ where: { id: transaction.id }, data: { processingFeeAmount: balance.fee / 100 } });
+        filled++;
+      }
+    } catch (error) {
+      console.warn(`[Offers] Couldn't read the processing fee for ${transaction.id}:`, error instanceof Error ? error.message : error);
+    }
+  }
+  return filled;
 }
 
 /** Stops unpaid checkouts for an offer once its payment window closes. Best effort. */

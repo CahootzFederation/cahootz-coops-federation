@@ -23,11 +23,14 @@ import {
 } from "../services/marketplace-offers/index.js";
 import { createFakeOfferDb, seedOfferWorld } from "./fixtures/fake-offer-db.js";
 
+const DAY_MS = 86_400_000;
+
 function fakeStripe() {
   return {
     refunds: { create: vi.fn(async () => ({ id: "re_1" })) },
     paymentIntents: { cancel: vi.fn(async () => ({})) },
     checkout: { sessions: { expire: vi.fn(async () => ({})) } },
+    charges: { retrieve: vi.fn(async () => ({ balance_transaction: { fee: 134 } })) },
   } as any;
 }
 
@@ -307,6 +310,15 @@ describe("offer sweep", () => {
     const result = await runOfferSweep(db, new Date(), stripe);
     expect(result.dealsExpired).toBe(1);
     expect(db.tables.marketplaceOffer[0].status).toBe("EXPIRED");
+  });
+
+  it("fills in Stripe's fee on paid offer orders that are missing it", async () => {
+    seedOfferWorld(db, { offerType: "MEMBER_DEAL", expiresAt: new Date(Date.now() + DAY_MS), commitmentDeadline: null });
+    db.tables.commerceTransaction.push({ id: "tx_fee", offerId: "offer_1", status: "COMPLETED", stripeChargeId: "ch_1", processingFeeAmount: null });
+    const result = await runOfferSweep(db, new Date(), stripe);
+    expect(result.processingFeesFilled).toBe(1);
+    expect(db.tables.commerceTransaction[0].processingFeeAmount).toBe(1.34);
+    expect(stripe.charges.retrieve).toHaveBeenCalledWith("ch_1", { expand: ["balance_transaction"] });
   });
 
   it("sends each payment reminder once", async () => {

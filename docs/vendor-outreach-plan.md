@@ -149,7 +149,7 @@ Code builds each email. Sage writes only one short personal paragraph.
   - Configured by two new env vars, approved by you: `RESEND_OUTREACH_FROM_EMAIL` (the sender) and `OUTREACH_REPLY_TO_EMAIL` (a real inbox the team reads, for example `partners@cahootzcoops.com`).
   - Sending refuses to start until both are set and the mailing address is in `PlatformConfig`.
 - A new exported `sendVendorOutreachEmail` in `lib/email.ts` uses that sender and reply-to and adds the unsubscribe headers.
-- **The email links to two places:** the vendor reply page, and the new businesses page (below), so a vendor who searches for us finds a real explanation.
+- **The email links to one place:** the vendor reply page, which also explains how Member Deals and Group Buys work and how vendors get paid, so a vendor can learn about us before saying yes.
 - When Resend isn't configured (local runs and CI), messages are saved as DRY_RUN and not sent.
 
 **Limits, all enforced in code:**
@@ -160,7 +160,7 @@ Code builds each email. Sage writes only one short personal paragraph.
 
 ### 5. When the vendor answers
 
-There's a public reply page at `apps/web/app/v/[token]`, with a token per prospect and no sign-in. It offers three choices:
+There's a public reply page at `apps/web/app/v/[token]`, with a token per prospect and no sign-in. It starts with a short, plain explanation: what Cahootz Commons is, how Member Deals and Group Buys work, and how vendors get paid (a set dollar amount per item, with Stripe's fee and the community's share taken from the rest, never from the vendor's amount). Then it offers three choices:
 
 - **"Yes, I'm interested":** the vendor gives a name, the best way to reach them, and optionally what they could offer. The prospect becomes INTERESTED, and platform admins get Slack and admin-portal alerts. **Sage stops here.**
 - **"Not right now":** the prospect becomes DECLINED, and Sage won't contact them again for 180 days.
@@ -174,32 +174,6 @@ On an interested prospect, the admin has **Mark in talks**, **Mark declined** an
 
 - To convert, the admin helps the vendor open a shop (the existing store application and Stripe onboarding).
 - The admin then creates the offer in the existing offers admin. The steward still approves it as today, and the prospect links to the new offer.
-
-## The main website, a businesses page, and a blog post
-
-The main site (`apps/web/app/page.tsx`) is built for members. Today a vendor who looks us up finds very little written for them:
-- one link, "Bring your business into the commons", to an interest form;
-- a treasury calculator that says 4-15% of member spending comes out of business revenue, which contradicts the no-markup, small-share pitch;
-- old wording in places a vendor can reach: "Unity Coin" in the business form, "community-owned economies" in the site title and social previews, and a public `/buy` page selling Unity Coins.
-
-**Before the first email goes out:**
-1. **A focused page for businesses** at `/for-businesses`. It's linked from the landing nav and footer, and every outreach email links to it. It covers:
-   - what Cahootz Commons is;
-   - how Member Deals and Group Buys work;
-   - how vendors get paid: members pay your price through Stripe, there's no markup for members, and Cahootz and the community each take a small agreed share;
-   - what we ask of you: a member price, and pickup or delivery;
-   - a "Talk to us" form.
-2. **A "For local businesses" section on the main page**, replacing the treasury calculator, with a short pitch and a link to `/for-businesses`.
-3. **Clean up what a vendor can see:**
-   - the "Unity Coin" placeholder in `business-signup-form.tsx`;
-   - the site title, description and social-preview text in `app/layout.tsx`;
-   - the blog page heading;
-   - the public `/buy` Unity Coin page (remove it or redirect it);
-   - one contact address everywhere (today the site uses hello@cahootz.coop and team@cahootzcoops.com);
-   - adding `/contact` and `/for-businesses` to `sitemap.ts`.
-
-**A blog post (helpful, not required).** For example "Why local businesses are giving Cahootz communities a better price." The existing post "From Customers to Co-Owners" is the only one aimed at businesses, and it predates Member Deals.
-- Posts come from Notion and are re-synced on every build, so a post has to be published in Notion. I can draft the text.
 
 ## Member referrals (mobile)
 
@@ -261,7 +235,7 @@ New feature keys (`vendor-outreach-research`, `vendor-outreach-draft`) are added
 1. **Demand and referrals:** the theme-to-category map, the weekly demand check and interest question, the referral form, the `VendorProspect` model, and the admin prospect list.
 2. **Campaigns:** `VendorCampaign`, Sage's proposals, the admin approve/edit/reject page, and `ProspectSource` with Sage's suggestions.
 3. **Discovery:** Cahootz-shop matching, referral matching, the web-search research worker, and the code checks (MX lookup, dedupe, suppression).
-4. **Outreach:** the website work above (ships first in this phase), the email builder and outreach check, `sendVendorOutreachEmail` with unsubscribe headers, the hourly sweep with limits and the follow-up, the vendor reply page, and suppression.
+4. **Outreach:** the email builder and outreach check, `sendVendorOutreachEmail` with unsubscribe headers, the hourly sweep with limits and the follow-up, the vendor reply page, and suppression.
 5. **Hand-off and results:** admin pipeline actions, linking prospects to offers, and a funnel report: questions asked → interest → campaigns → contacted → interested → converted.
 
 ## Files likely to change

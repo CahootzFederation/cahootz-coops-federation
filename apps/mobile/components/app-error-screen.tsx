@@ -22,7 +22,7 @@ export function AppErrorScreen({ error, retry }: ErrorBoundaryProps) {
         Something went wrong
       </Text>
       <Text style={styles.body}>
-        This screen hit a snag. Check that you're online, then try again.
+        {"This screen hit a snag. Check that you're online, then try again."}
       </Text>
       <Pressable accessibilityRole="button" onPress={retry} style={styles.button}>
         <Text style={styles.buttonText}>Try again</Text>

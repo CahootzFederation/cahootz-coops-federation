@@ -41,6 +41,7 @@ describe.skipIf(!enabled)("Group Buy commitments in Postgres", () => {
         regularPriceCents: 2400,
         regularPriceSource: "Shelf price",
         memberPriceCents: 1800,
+        vendorPayoutCents: 1500,
         minimumCommitments: 10,
         minimumPaidOrders: 8,
         maximumQuantity: CAP,

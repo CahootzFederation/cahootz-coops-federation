@@ -22,8 +22,9 @@ export const offerStatuses = [
 ] as const;
 export type OfferStatus = (typeof offerStatuses)[number];
 
-// Fee shares are capped so a deal can never quietly eat the vendor's margin.
-const MAX_OFFER_FEE_BPS = 2000;
+/** Stripe's standard US card fee, used only for estimates before a payment. The real fee is recorded from Stripe. */
+export const STRIPE_FEE_PERCENT_BPS = 290;
+export const STRIPE_FEE_FIXED_CENTS = 30;
 
 const optionalText = (max: number) =>
   z
@@ -48,8 +49,8 @@ export const offerInputSchema = z
     regularPriceCents: z.number().int().positive(),
     regularPriceSource: z.string().trim().min(3).max(200),
     memberPriceCents: z.number().int().positive(),
-    federationFeeBps: z.number().int().min(0).max(MAX_OFFER_FEE_BPS).default(0),
-    commonsFeeBps: z.number().int().min(0).max(MAX_OFFER_FEE_BPS).default(0),
+    vendorPayoutCents: z.number().int().positive(),
+    commonsSplitBps: z.number().int().min(0).max(10000).default(5000),
     minimumCommitments: z.number().int().positive().optional().nullable(),
     minimumPaidOrders: z.number().int().positive().optional().nullable(),
     maximumQuantity: z.number().int().positive().optional().nullable(),
@@ -74,11 +75,17 @@ export const offerInputSchema = z
         message: "The member price has to be lower than the regular price.",
       });
     }
-    if (offer.federationFeeBps + offer.commonsFeeBps > MAX_OFFER_FEE_BPS) {
+    if (offer.vendorPayoutCents > offer.memberPriceCents) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["commonsFeeBps"],
-        message: "Federation and Commons shares together can't be more than 20%.",
+        path: ["vendorPayoutCents"],
+        message: "The vendor can't get more than members pay.",
+      });
+    } else if (offer.memberPriceCents - offer.vendorPayoutCents < estimateStripeFeeCents(offer.memberPriceCents)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["vendorPayoutCents"],
+        message: `After Stripe's fee (about ${centsLabel(estimateStripeFeeCents(offer.memberPriceCents))}), nothing is left for the Commons and Cahootz. Lower what the vendor gets or raise the member price.`,
       });
     }
     if (
@@ -174,4 +181,46 @@ export function offerSavings(
   const savingsPercent =
     regularPriceCents > 0 ? Math.floor((perUnit * 100) / regularPriceCents) : 0;
   return { savingsCents: perUnit * quantity, savingsPercent };
+}
+
+const centsLabel = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+
+/** Stripe's card fee on a charge, estimated (2.9% + 30¢). The recorded split always uses Stripe's real fee. */
+export function estimateStripeFeeCents(chargedCents: number): number {
+  if (chargedCents <= 0) return 0;
+  return Math.round((chargedCents * STRIPE_FEE_PERCENT_BPS) / 10000) + STRIPE_FEE_FIXED_CENTS;
+}
+
+export interface OfferSplit {
+  chargedCents: number;
+  stripeFeeCents: number;
+  vendorCents: number;
+  /** What's left after Stripe and the vendor. Negative only if Stripe's fee was bigger than the margin. */
+  remainderCents: number;
+  commonsCents: number;
+  cahootzCents: number;
+}
+
+/**
+ * How one payment is split: Stripe's fee comes off first, the vendor gets their
+ * fixed amount, and what's left is split between the Commons and Cahootz.
+ * The Commons never goes negative; if Stripe's fee eats the whole margin,
+ * Cahootz absorbs the shortfall.
+ */
+export function splitOfferPayment(params: {
+  chargedCents: number;
+  vendorCents: number;
+  stripeFeeCents: number;
+  commonsSplitBps: number;
+}): OfferSplit {
+  const remainderCents = params.chargedCents - params.stripeFeeCents - params.vendorCents;
+  const commonsCents = remainderCents > 0 ? Math.floor((remainderCents * params.commonsSplitBps) / 10000) : 0;
+  return {
+    chargedCents: params.chargedCents,
+    stripeFeeCents: params.stripeFeeCents,
+    vendorCents: params.vendorCents,
+    remainderCents,
+    commonsCents,
+    cahootzCents: remainderCents - commonsCents,
+  };
 }

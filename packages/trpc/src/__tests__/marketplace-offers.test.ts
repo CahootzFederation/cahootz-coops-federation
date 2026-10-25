@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { offerInputSchema, offerSavings } from "@repo/validators/marketplace-offers";
+import { estimateStripeFeeCents, offerInputSchema, offerSavings, splitOfferPayment } from "@repo/validators/marketplace-offers";
 
 vi.mock("../services/treasury-ledger-service.js", () => ({
   recordFederationFee: vi.fn(async () => ({})),
   recordFederationFeeRefund: vi.fn(async () => ({})),
+  recordFeeCollection: vi.fn(async () => ({})),
+  recordRefund: vi.fn(async () => ({})),
+  recordStripeFeeShortfall: vi.fn(async () => ({})),
 }));
 
 import { calculateOfferPricing } from "../services/checkout-pricing-service.js";
-import { recordFederationFee, recordFederationFeeRefund } from "../services/treasury-ledger-service.js";
+import { recordFederationFee, recordFederationFeeRefund, recordFeeCollection, recordRefund, recordStripeFeeShortfall } from "../services/treasury-ledger-service.js";
 import {
   cancelCommitment,
   canTransition,
@@ -35,22 +38,27 @@ function fakeStripe() {
 }
 
 describe("offer pricing", () => {
-  it("charges the member price with no markup and takes fee shares from the vendor", () => {
-    const breakdown = calculateOfferPricing({ memberUnitCents: 1800, quantity: 2, federationFeeBps: 300, commonsFeeBps: 200 });
+  it("charges the member price with no markup, pays the vendor their fixed amount, and splits the rest after Stripe", () => {
+    const breakdown = calculateOfferPricing({ memberUnitCents: 1800, quantity: 2, vendorUnitCents: 1500, commonsSplitBps: 5000 });
     expect(breakdown).toMatchObject({
       listedAmount: 3600,
       chargedAmount: 3600,
       platformMarkupAmount: 0,
-      federationFeeAmount: 108,
-      treasuryFeeAmount: 72,
-      merchantSettlementAmount: 3420,
+      merchantSettlementAmount: 3000,
+      estimatedStripeFeeAmount: 134,
+      treasuryFeeAmount: 233,
+      federationFeeAmount: 233,
     });
   });
 
-  it("gives the vendor everything when the offer has no fee shares", () => {
-    const breakdown = calculateOfferPricing({ memberUnitCents: 999, quantity: 1, federationFeeBps: 0, commonsFeeBps: 0 });
-    expect(breakdown.chargedAmount).toBe(999);
-    expect(breakdown.merchantSettlementAmount).toBe(999);
+  it("estimates Stripe's fee as 2.9% plus 30 cents", () => {
+    expect(estimateStripeFeeCents(1800)).toBe(82);
+    expect(estimateStripeFeeCents(3600)).toBe(134);
+  });
+
+  it("splits what's left by the offer's Commons share, and never lets the Commons go negative", () => {
+    expect(splitOfferPayment({ chargedCents: 1800, vendorCents: 1500, stripeFeeCents: 82, commonsSplitBps: 7000 })).toMatchObject({ remainderCents: 218, commonsCents: 152, cahootzCents: 66 });
+    expect(splitOfferPayment({ chargedCents: 1000, vendorCents: 950, stripeFeeCents: 59, commonsSplitBps: 5000 })).toMatchObject({ remainderCents: -9, commonsCents: 0, cahootzCents: -9 });
   });
 
   it("works out savings once, rounding the percent down", () => {
@@ -67,6 +75,7 @@ describe("offer input rules", () => {
     regularPriceCents: 2400,
     regularPriceSource: "Shelf price",
     memberPriceCents: 1800,
+    vendorPayoutCents: 1500,
     minimumCommitments: 10,
     minimumPaidOrders: 8,
     commitmentDeadline: "2026-11-01T00:00:00Z",
@@ -79,6 +88,12 @@ describe("offer input rules", () => {
   it("rejects a member price that isn't a saving", () => {
     const result = offerInputSchema.safeParse({ ...base, memberPriceCents: 2400 });
     expect(result.success).toBe(false);
+  });
+
+  it("rejects a vendor amount that leaves nothing after Stripe's fee", () => {
+    expect(offerInputSchema.safeParse({ ...base, vendorPayoutCents: 1800 }).success).toBe(false);
+    expect(offerInputSchema.safeParse({ ...base, vendorPayoutCents: 1750 }).success).toBe(false);
+    expect(offerInputSchema.safeParse({ ...base, vendorPayoutCents: 1900 }).success).toBe(false);
   });
 
   it("rejects a paid minimum above the commitment minimum", () => {
@@ -162,6 +177,10 @@ describe("offer payments", () => {
   let stripe: any;
   beforeEach(() => {
     vi.mocked(recordFederationFee).mockClear();
+    vi.mocked(recordFeeCollection).mockClear();
+    vi.mocked(recordRefund).mockClear();
+    vi.mocked(recordFederationFeeRefund).mockClear();
+    vi.mocked(recordStripeFeeShortfall).mockClear();
     db = createFakeOfferDb();
     stripe = fakeStripe();
     seedOfferWorld(db, { status: "PAYMENT_OPEN", paymentDeadline: new Date(Date.now() + 3600_000) });
@@ -184,7 +203,11 @@ describe("offer payments", () => {
       coopId: "church",
       status: "COMPLETED",
       chargedAmount: 36,
-      federationFeeAmount: 1.08,
+      merchantSettlementAmount: 30,
+      refundedAmount: 0,
+      treasuryFeeAmount: 0,
+      federationFeeAmount: 0,
+      processingFeeAmount: 1.34,
       currency: "USD",
       stripePaymentIntentId: "pi_1",
     });
@@ -194,8 +217,25 @@ describe("offer payments", () => {
     const result = await handleOfferPaymentSucceeded(db, "tx_1", stripe);
     expect(result).toMatchObject({ outcome: "PAID", savingsCents: 1200 });
     expect(db.tables.offerCommitment[0]).toMatchObject({ status: "PAID", savingsCents: 1200 });
-    expect(recordFederationFee).toHaveBeenCalledWith(expect.objectContaining({ coopId: "church", amount: 1.08 }));
+    // $36 paid, Stripe kept $1.34, vendor gets $30: $4.66 left, split 50/50.
+    expect(recordFeeCollection).toHaveBeenCalledWith(expect.objectContaining({ coopId: "church", amount: 2.33 }));
+    expect(recordFederationFee).toHaveBeenCalledWith(expect.objectContaining({ coopId: "church", amount: 2.33 }));
+    expect(db.tables.commerceTransaction[0]).toMatchObject({ treasuryFeeAmount: 2.33, federationFeeAmount: 2.33 });
     expect(stripe.refunds.create).not.toHaveBeenCalled();
+  });
+
+  it("waits for Stripe's real fee before recording any shares", async () => {
+    db.tables.commerceTransaction[0].processingFeeAmount = null;
+    await handleOfferPaymentSucceeded(db, "tx_1", stripe);
+    expect(recordFeeCollection).not.toHaveBeenCalled();
+    expect(recordFederationFee).not.toHaveBeenCalled();
+  });
+
+  it("records a shortfall for Cahootz when Stripe's fee is bigger than what's left", async () => {
+    Object.assign(db.tables.commerceTransaction[0], { merchantSettlementAmount: 35, processingFeeAmount: 1.34 });
+    await handleOfferPaymentSucceeded(db, "tx_1", stripe);
+    expect(recordFeeCollection).not.toHaveBeenCalled();
+    expect(recordStripeFeeShortfall).toHaveBeenCalledWith(expect.objectContaining({ amount: 0.34 }));
   });
 
   it("refunds a payment that lands after the window closed", async () => {
@@ -219,11 +259,17 @@ describe("offer payments", () => {
 
   it("removes the saving on a full refund and shrinks it on a partial one", async () => {
     await handleOfferPaymentSucceeded(db, "tx_1", stripe);
+    // What the ledger credited at payment time; refunds reverse it in proportion.
+    db.tables.treasuryLedgerEntry.push(
+      { sourceTransactionId: "tx_1", direction: "CREDIT", sourceTransactionType: "COMMERCE_FEE", amount: 2.33 },
+      { sourceTransactionId: "tx_1", direction: "CREDIT", sourceTransactionType: "FEDERATION_FEE", amount: 2.33 },
+    );
     await handleOfferPaymentRefunded(db, { transactionId: "tx_1", refundedAmount: 9, chargedAmount: 36, incrementalRatio: 0.25, idempotencyKey: "ch:900" });
     expect(db.tables.offerCommitment[0]).toMatchObject({ status: "PAID", savingsCents: 900 });
     await handleOfferPaymentRefunded(db, { transactionId: "tx_1", refundedAmount: 36, chargedAmount: 36, incrementalRatio: 0.75, idempotencyKey: "ch:3600" });
     expect(db.tables.offerCommitment[0]).toMatchObject({ status: "REFUNDED", savingsCents: 0 });
     expect(recordFederationFeeRefund).toHaveBeenCalledTimes(2);
+    expect(recordRefund).toHaveBeenCalledWith(expect.objectContaining({ amount: 2.33 * 0.25, idempotencyKey: "ch:900" }));
   });
 
   it("only counts paid offers in a member's savings", async () => {

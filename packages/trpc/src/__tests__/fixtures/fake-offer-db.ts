@@ -43,6 +43,7 @@ type Tables = {
   userCoopMembership: Row[];
   store: Row[];
   commerceTransaction: Row[];
+  treasuryLedgerEntry: Row[];
 };
 
 let idCounter = 0;
@@ -154,6 +155,7 @@ export function createFakeOfferDb() {
     userCoopMembership: [],
     store: [],
     commerceTransaction: [],
+    treasuryLedgerEntry: [],
   };
   const db: any = {
     tables,
@@ -165,6 +167,7 @@ export function createFakeOfferDb() {
     user: model(tables, "user", "user"),
     store: model(tables, "store", "store"),
     commerceTransaction: model(tables, "commerceTransaction", "tx"),
+    treasuryLedgerEntry: model(tables, "treasuryLedgerEntry", "led"),
     userCoopMembership: {
       ...model(tables, "userCoopMembership", "mem"),
       findUnique: vi.fn(async ({ where }: Row) => {
@@ -205,8 +208,8 @@ export function seedOfferWorld(db: any, overrides: Row = {}) {
     regularPriceCents: 2400,
     regularPriceSource: "Posted shelf price",
     memberPriceCents: 1800,
-    federationFeeBps: 300,
-    commonsFeeBps: 200,
+    vendorPayoutCents: 1500,
+    commonsSplitBps: 5000,
     minimumCommitments: 3,
     minimumPaidOrders: 2,
     maximumQuantity: 5,

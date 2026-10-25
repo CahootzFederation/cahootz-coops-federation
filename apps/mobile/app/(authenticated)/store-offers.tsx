@@ -88,7 +88,6 @@ function VendorOfferCard({ offer, sessionToken, startOpen, onChanged }: { offer:
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const isGroupBuy = offer.offerType === 'GROUP_BUY';
-  const yourShare = offer.memberPriceCents - Math.round((offer.memberPriceCents * (offer.federationFeeBps + offer.commonsFeeBps)) / 10000);
 
   const loadRoster = useCallback(async () => {
     try {
@@ -125,7 +124,7 @@ function VendorOfferCard({ offer, sessionToken, startOpen, onChanged }: { offer:
         </Text>
         <Text className="mt-1 text-base font-black" style={{ color: colors.ink }}>{offer.title}</Text>
         <Text className="mt-1 text-xs" style={{ color: colors.muted }}>
-          Members pay {formatCents(offer.memberPriceCents)}. You get {formatCents(yourShare)} each. Cahootz covers the card fee.
+          Members pay {formatCents(offer.memberPriceCents)}. You get {formatCents(offer.split.vendorCents)} each, with no fees taken from that.
         </Text>
         <Text className="mt-2 text-sm font-black" style={{ color: colors.ink }}>
           {isGroupBuy ? `${offer.committedQuantity} of ${offer.minimumCommitments} committed` : `${offer.paidOrders} sold`}

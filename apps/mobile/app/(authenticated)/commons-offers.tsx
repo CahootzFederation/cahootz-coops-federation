@@ -119,7 +119,10 @@ function OfferSummary({ offer }: { offer: StewardOffer }) {
         <Text className="text-sm font-black" style={{ color: colors.forest }}>saves {formatCents(offer.savingsCents)} ({offer.savingsPercent}%)</Text>
       </Text>
       {line('Regular price from', offer.regularPriceSource)}
-      {line('Shares from the vendor', `Cahootz ${offer.federationFeeBps / 100}%, this Commons ${offer.commonsFeeBps / 100}%. Members pay no extra fees.`)}
+      {line(
+        'Each unit',
+        `Member pays ${formatCents(offer.split.memberPaysCents)}. Stripe's fee is about ${formatCents(offer.split.estimatedStripeFeeCents)}, the vendor gets ${formatCents(offer.split.vendorCents)}, and what's left goes to this Commons (about ${formatCents(offer.split.commonsCents)}) and Cahootz (about ${formatCents(offer.split.cahootzCents)}). Members pay no extra fees.`,
+      )}
       {isGroupBuy
         ? line('Goal', `${offer.minimumCommitments} committed by ${formatOfferDateTime(offer.commitmentDeadline)}, then ${offer.minimumPaidOrders} paid within ${offer.paymentWindowHours} hours`)
         : line('Ends', formatOfferDateTime(offer.expiresAt))}

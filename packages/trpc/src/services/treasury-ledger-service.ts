@@ -182,6 +182,32 @@ export async function recordFederationFee(params: {
   });
 }
 
+/** When Stripe's fee on an offer payment is more than what's left after the vendor, Cahootz covers the gap. */
+export async function recordStripeFeeShortfall(params: {
+  sourceTransactionId: string;
+  coopId: string;
+  amount: number;
+  currency: string;
+}) {
+  const existing = await db.treasuryLedgerEntry.findFirst({
+    where: { sourceTransactionId: params.sourceTransactionId, sourceTransactionType: 'STRIPE_FEE_SHORTFALL' },
+  });
+  if (existing) return existing;
+  return db.treasuryLedgerEntry.create({
+    data: {
+      sourceTransactionId: params.sourceTransactionId,
+      sourceTransactionType: 'STRIPE_FEE_SHORTFALL',
+      accountType: 'PLATFORM_FEES',
+      entryType: 'ADJUSTMENT',
+      coopId: params.coopId,
+      amount: params.amount,
+      currency: params.currency.toUpperCase(),
+      direction: 'DEBIT',
+      description: "Stripe's fee was more than what was left after the vendor on a member offer",
+    },
+  });
+}
+
 /** Reverse the federation share, in proportion, when an offer payment is refunded. */
 export async function recordFederationFeeRefund(params: {
   sourceTransactionId: string;

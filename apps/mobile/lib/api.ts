@@ -986,6 +986,16 @@ export interface MarketplaceOffer {
   } | null;
 }
 
+/** Where one unit's price goes. Stripe's fee is estimated; each payment records the real fee. */
+export interface OfferUnitSplit {
+  memberPaysCents: number;
+  estimatedStripeFeeCents: number;
+  vendorCents: number;
+  commonsCents: number;
+  cahootzCents: number;
+  commonsSplitBps: number;
+}
+
 /** An offer as a steward sees it: totals only, never who joined. */
 export interface StewardOffer {
   id: string;
@@ -1000,8 +1010,7 @@ export interface StewardOffer {
   memberPriceCents: number;
   savingsCents: number;
   savingsPercent: number;
-  federationFeeBps: number;
-  commonsFeeBps: number;
+  split: OfferUnitSplit;
   minimumCommitments: number | null;
   minimumPaidOrders: number | null;
   maximumQuantity: number | null;
@@ -1030,8 +1039,7 @@ export interface VendorOffer {
   productName: string;
   memberPriceCents: number;
   regularPriceCents: number;
-  federationFeeBps: number;
-  commonsFeeBps: number;
+  split: OfferUnitSplit;
   committedQuantity: number;
   minimumCommitments: number | null;
   minimumPaidOrders: number | null;

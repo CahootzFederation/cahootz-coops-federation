@@ -57,7 +57,7 @@ test("a new deal stays hidden until a steward approves it, and the steward only 
       await steward.page.goto(`/commons-offers?coopId=${OFFERS_COOP_ID}`);
       const review = steward.page.getByLabel(`Review ${title}`);
       await expect(review).toBeVisible();
-      await expect(review.getByText(/Cahootz 3%, this Commons 2%/)).toBeVisible();
+      await expect(review.getByText(/Stripe's fee is about \$0\.82, the vendor gets \$15\.00/)).toBeVisible();
       await expect(shown(steward.page, /never who joined or paid/)).toBeVisible();
       await review.getByRole("button", { name: "Approve" }).click();
       await expect(steward.page.getByLabel(`Results for ${title}`)).toBeVisible();

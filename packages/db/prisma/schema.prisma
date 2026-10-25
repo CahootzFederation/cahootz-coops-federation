@@ -3692,9 +3692,11 @@ model MarketplaceOffer {
   regularPriceSource String // Where the comparison price comes from, e.g. "Posted shelf price"
   memberPriceCents   Int
 
-  // Shares taken from vendor proceeds. The member pays memberPriceCents, no markup.
-  federationFeeBps Int @default(0)
-  commonsFeeBps    Int @default(0)
+  // What the vendor gets per unit. Members pay memberPriceCents with no markup;
+  // Stripe's fee comes off first, then what's left after the vendor is split
+  // between the Commons (commonsSplitBps) and Cahootz (the rest).
+  vendorPayoutCents Int
+  commonsSplitBps   Int @default(5000)
 
   // Quantities are units, not people.
   minimumCommitments Int? // Group Buy: units needed by the commitment deadline

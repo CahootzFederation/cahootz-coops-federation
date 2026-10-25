@@ -32,7 +32,9 @@ interface OfferRow {
 const money = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 const toCents = (value: string) => Math.round(Number.parseFloat(value || '0') * 100);
 const percentToBps = (value: string) => Math.round(Number.parseFloat(value || '0') * 100);
-// Preview only; mirrors offerSavings() in @repo/validators, which the server uses for the real numbers.
+// Preview only; these mirror offerSavings(), estimateStripeFeeCents() and splitOfferPayment()
+// in @repo/validators. The server uses those for the real numbers, and Stripe's real fee once paid.
+const estimateStripeFee = (cents: number) => (cents > 0 ? Math.round((cents * 290) / 10000) + 30 : 0);
 const offerSavings = (regular: number, member: number) => {
   const savingsCents = Math.max(0, regular - member);
   return { savingsCents, savingsPercent: regular > 0 ? Math.floor((savingsCents * 100) / regular) : 0 };
@@ -47,8 +49,8 @@ const emptyForm = {
   regularPrice: '',
   regularPriceSource: '',
   memberPrice: '',
-  federationFeePercent: '0',
-  commonsFeePercent: '0',
+  vendorPayout: '',
+  commonsSharePercent: '50',
   quantityPerMember: '1',
   maximumQuantity: '',
   minimumCommitments: '',
@@ -101,10 +103,12 @@ export default function CommonsOffersPage() {
     const member = toCents(form.memberPrice);
     if (!regular || !member) return null;
     const { savingsCents, savingsPercent } = offerSavings(regular, member);
-    const federation = Math.round((member * percentToBps(form.federationFeePercent)) / 10000);
-    const commons = Math.round((member * percentToBps(form.commonsFeePercent)) / 10000);
-    return { savingsCents, savingsPercent, federation, commons, vendor: member - federation - commons, member };
-  }, [form.regularPrice, form.memberPrice, form.federationFeePercent, form.commonsFeePercent]);
+    const vendor = toCents(form.vendorPayout);
+    const stripeFee = estimateStripeFee(member);
+    const left = member - stripeFee - vendor;
+    const commons = left > 0 ? Math.floor((left * percentToBps(form.commonsSharePercent)) / 10000) : 0;
+    return { savingsCents, savingsPercent, member, stripeFee, vendor, left, commons, cahootz: left - commons, hasVendor: vendor > 0 };
+  }, [form.regularPrice, form.memberPrice, form.vendorPayout, form.commonsSharePercent]);
 
   function chooseProduct(productId: string) {
     const product = products.find((p) => p.id === productId);
@@ -130,8 +134,8 @@ export default function CommonsOffersPage() {
       regularPriceCents: toCents(form.regularPrice),
       regularPriceSource: form.regularPriceSource,
       memberPriceCents: toCents(form.memberPrice),
-      federationFeeBps: percentToBps(form.federationFeePercent),
-      commonsFeeBps: percentToBps(form.commonsFeePercent),
+      vendorPayoutCents: toCents(form.vendorPayout),
+      commonsSplitBps: percentToBps(form.commonsSharePercent),
       quantityPerMember: optionalInt(form.quantityPerMember) ?? 1,
       maximumQuantity: optionalInt(form.maximumQuantity),
       minimumCommitments: isGroupBuy ? optionalInt(form.minimumCommitments) : null,
@@ -242,22 +246,37 @@ export default function CommonsOffersPage() {
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className={label}>
-                Cahootz share (%)
-                <input className={input} inputMode="decimal" value={form.federationFeePercent} onChange={set('federationFeePercent')} />
+                Vendor gets ($ per unit)
+                <input className={input} inputMode="decimal" value={form.vendorPayout} onChange={set('vendorPayout')} required />
               </label>
               <label className={label}>
-                Commons share (%)
-                <input className={input} inputMode="decimal" value={form.commonsFeePercent} onChange={set('commonsFeePercent')} />
+                Commons share of what&apos;s left (%)
+                <input className={input} inputMode="decimal" value={form.commonsSharePercent} onChange={set('commonsSharePercent')} />
               </label>
             </div>
           </div>
 
           {preview && (
             <div className="rounded-md border border-white/10 bg-black/20 p-4 text-sm text-slate-300" aria-label="Price preview">
-              Members pay <strong className="text-white">{money(preview.member)}</strong> and save{' '}
-              <strong className="text-emerald-300">{money(preview.savingsCents)} ({preview.savingsPercent}%)</strong>. Per unit, the vendor gets{' '}
-              {money(preview.vendor)}, Cahootz {money(preview.federation)}, the Commons {money(preview.commons)}. Stripe&apos;s fee
-              comes out of the Cahootz share.
+              <p>
+                Members pay <strong className="text-white">{money(preview.member)}</strong> and save{' '}
+                <strong className="text-emerald-300">{money(preview.savingsCents)} ({preview.savingsPercent}%)</strong>.
+              </p>
+              {preview.hasVendor && (
+                <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-5" aria-label="Where each unit's money goes">
+                  <div><dt className="text-xs text-slate-500">Member pays</dt><dd className="text-white">{money(preview.member)}</dd></div>
+                  <div><dt className="text-xs text-slate-500">Stripe fee (about)</dt><dd className="text-white">−{money(preview.stripeFee)}</dd></div>
+                  <div><dt className="text-xs text-slate-500">Vendor gets</dt><dd className="text-white">{money(preview.vendor)}</dd></div>
+                  <div><dt className="text-xs text-slate-500">Commons ({form.commonsSharePercent || 0}%)</dt><dd className="text-white">{money(preview.commons)}</dd></div>
+                  <div><dt className="text-xs text-slate-500">Cahootz</dt><dd className="text-white">{money(preview.cahootz)}</dd></div>
+                </dl>
+              )}
+              {preview.hasVendor && preview.left <= 0 && (
+                <p className="mt-2 text-amber-300">
+                  After Stripe&apos;s fee there&apos;s nothing left for the Commons and Cahootz. Lower what the vendor gets or raise the member price.
+                </p>
+              )}
+              <p className="mt-2 text-xs text-slate-500">Stripe&apos;s fee is estimated at 2.9% + 30¢. Each payment records Stripe&apos;s real fee.</p>
             </div>
           )}
 

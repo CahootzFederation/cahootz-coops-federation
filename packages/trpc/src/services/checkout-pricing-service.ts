@@ -1,3 +1,5 @@
+import { estimateStripeFeeCents, splitOfferPayment } from '@repo/validators/marketplace-offers';
+
 import { SC_REWARD_RATE } from '../constants/sc-rewards.js';
 
 export interface CheckoutFeeConfig {
@@ -87,37 +89,47 @@ export function calculateCheckoutPricing(params: {
 }
 
 export interface OfferFeeShares {
-  federationFeeBps: number;
-  commonsFeeBps: number;
+  /** What the vendor gets per unit, in cents. */
+  vendorUnitCents: number;
+  /** The Commons' share of what's left after Stripe and the vendor, in basis points (5000 = half). */
+  commonsSplitBps: number;
 }
 
 export interface OfferPriceBreakdown extends CheckoutPriceBreakdown {
   federationFeeAmount: number;
+  estimatedStripeFeeAmount: number;
 }
 
 /**
  * Member Deal and Group Buy pricing. The member pays the member price and
- * nothing more: there is no checkout markup. The federation and Commons shares
- * come out of the vendor's proceeds, at the rates agreed on the offer.
- * Never reads FeeConfig, so its fallback can't add a markup to a deal.
+ * nothing more: there is no checkout markup. The vendor gets the fixed amount
+ * set on the offer. Stripe's fee comes off what the member pays, and what's left
+ * is split between the Commons and Cahootz. Never reads FeeConfig.
  *
- * All amounts are in cents. `treasuryFeeAmount` is the Commons share, so the
- * existing ledger and refund code treat it the same as today's treasury fee.
+ * Shares here use an estimated Stripe fee; they're recomputed from Stripe's real
+ * fee once the payment settles (marketplace-offers/payments.ts finalizeOfferShares).
+ * All amounts are in cents. `treasuryFeeAmount` is the Commons share.
  */
 export function calculateOfferPricing(params: {
   memberUnitCents: number;
   quantity: number;
 } & OfferFeeShares): OfferPriceBreakdown {
   const listedAmount = params.memberUnitCents * params.quantity;
-  const federationFeeAmount = Math.round((listedAmount * params.federationFeeBps) / 10000);
-  const commonsFeeAmount = Math.round((listedAmount * params.commonsFeeBps) / 10000);
+  const vendorAmount = params.vendorUnitCents * params.quantity;
+  const split = splitOfferPayment({
+    chargedCents: listedAmount,
+    vendorCents: vendorAmount,
+    stripeFeeCents: estimateStripeFeeCents(listedAmount),
+    commonsSplitBps: params.commonsSplitBps,
+  });
   return {
     listedAmount,
     chargedAmount: listedAmount,
-    merchantSettlementAmount: listedAmount - federationFeeAmount - commonsFeeAmount,
+    merchantSettlementAmount: vendorAmount,
     platformMarkupAmount: 0,
-    treasuryFeeAmount: commonsFeeAmount,
-    federationFeeAmount,
-    platformFeeAmount: federationFeeAmount + commonsFeeAmount,
+    treasuryFeeAmount: split.commonsCents,
+    federationFeeAmount: split.cahootzCents,
+    estimatedStripeFeeAmount: split.stripeFeeCents,
+    platformFeeAmount: listedAmount - vendorAmount,
   };
 }

@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 
-import { offerSavings } from "@repo/validators/marketplace-offers";
+import { estimateStripeFeeCents, offerSavings, splitOfferPayment } from "@repo/validators/marketplace-offers";
 
 import { requireActiveMember, requireSteward } from "../commons-membership.js";
 import { requireStoreOwner } from "./lifecycle.js";
@@ -12,6 +12,27 @@ import {
   PAID_COMMITMENT_STATUSES,
 } from "./shared.js";
 import { memberOfferView, offerInclude } from "./views.js";
+
+/**
+ * How one unit's price is split, with Stripe's fee estimated (2.9% + 30¢).
+ * Recorded payments use Stripe's real fee.
+ */
+export function unitSplit(offer: { memberPriceCents: number; vendorPayoutCents: number; commonsSplitBps: number }) {
+  const split = splitOfferPayment({
+    chargedCents: offer.memberPriceCents,
+    vendorCents: offer.vendorPayoutCents,
+    stripeFeeCents: estimateStripeFeeCents(offer.memberPriceCents),
+    commonsSplitBps: offer.commonsSplitBps,
+  });
+  return {
+    memberPaysCents: split.chargedCents,
+    estimatedStripeFeeCents: split.stripeFeeCents,
+    vendorCents: split.vendorCents,
+    commonsCents: split.commonsCents,
+    cahootzCents: split.cahootzCents,
+    commonsSplitBps: offer.commonsSplitBps,
+  };
+}
 
 const commitmentSelect = { quantity: true, status: true, savingsCents: true, committedAt: true, paidAt: true } as const;
 
@@ -182,8 +203,7 @@ export async function listOffersForSteward(db: Db, userId: string, coopId: strin
       regularPriceSource: offer.regularPriceSource,
       memberPriceCents: offer.memberPriceCents,
       ...offerSavings(offer.regularPriceCents, offer.memberPriceCents),
-      federationFeeBps: offer.federationFeeBps,
-      commonsFeeBps: offer.commonsFeeBps,
+      split: unitSplit(offer),
       minimumCommitments: offer.minimumCommitments,
       minimumPaidOrders: offer.minimumPaidOrders,
       maximumQuantity: offer.maximumQuantity,
@@ -227,8 +247,7 @@ export async function listOffersForVendor(db: Db, userId: string) {
       productName: offer.product.name,
       memberPriceCents: offer.memberPriceCents,
       regularPriceCents: offer.regularPriceCents,
-      federationFeeBps: offer.federationFeeBps,
-      commonsFeeBps: offer.commonsFeeBps,
+      split: unitSplit(offer),
       committedQuantity: offer.committedQuantity,
       minimumCommitments: offer.minimumCommitments,
       minimumPaidOrders: offer.minimumPaidOrders,
@@ -275,7 +294,7 @@ export async function listOffersForAdmin(db: Db, coopId: string) {
     orderBy: { updatedAt: "desc" },
   });
   const money = await offerFinancials(db, offers.map((o) => o.id));
-  return offers.map((offer) => ({ ...offer, ...offerSavings(offer.regularPriceCents, offer.memberPriceCents), financials: money.get(offer.id)! }));
+  return offers.map((offer) => ({ ...offer, ...offerSavings(offer.regularPriceCents, offer.memberPriceCents), split: unitSplit(offer), financials: money.get(offer.id)! }));
 }
 
 export async function getOfferForAdmin(db: Db, offerId: string) {
@@ -297,6 +316,7 @@ export async function getOfferForAdmin(db: Db, offerId: string) {
   return {
     ...offer,
     ...offerSavings(offer.regularPriceCents, offer.memberPriceCents),
+    split: unitSplit(offer),
     financials: money.get(offer.id)!,
     exceptions: exceptions.map((c) => ({
       commitmentId: c.id,

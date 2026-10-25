@@ -31,8 +31,14 @@ interface OfferDetail {
   memberPriceCents: number;
   savingsCents: number;
   savingsPercent: number;
-  federationFeeBps: number;
-  commonsFeeBps: number;
+  split: {
+    memberPaysCents: number;
+    estimatedStripeFeeCents: number;
+    vendorCents: number;
+    commonsCents: number;
+    cahootzCents: number;
+    commonsSplitBps: number;
+  };
   committedQuantity: number;
   minimumCommitments: number | null;
   minimumPaidOrders: number | null;
@@ -190,7 +196,10 @@ export default function OfferDetailPage() {
         {stat('Regular price', `${money(offer.regularPriceCents)} (${offer.regularPriceSource})`)}
         {stat('Member price', money(offer.memberPriceCents))}
         {stat('Saving per unit', `${money(offer.savingsCents)} (${offer.savingsPercent}%)`)}
-        {stat('Shares', `Cahootz ${offer.federationFeeBps / 100}% · Commons ${offer.commonsFeeBps / 100}%`)}
+        {stat('Vendor gets per unit', money(offer.split.vendorCents))}
+        {stat('Stripe fee per unit (about)', money(offer.split.estimatedStripeFeeCents))}
+        {stat(`Commons per unit (${offer.split.commonsSplitBps / 100}% of what's left)`, money(offer.split.commonsCents))}
+        {stat('Cahootz per unit', money(offer.split.cahootzCents))}
         {offer.offerType === 'GROUP_BUY'
           ? stat('Committed', `${offer.committedQuantity} of ${offer.minimumCommitments} needed${offer.maximumQuantity ? ` · ${offer.maximumQuantity} max` : ''}`)
           : stat('Ends', when(offer.expiresAt))}

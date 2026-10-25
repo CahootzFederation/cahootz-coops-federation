@@ -57,8 +57,8 @@ export async function startOfferCheckout(db: Db, input: OfferCheckoutInput, now 
     commitmentId: commitment.id,
     memberUnitCents: commitment.memberUnitCents,
     quantity: commitment.quantity,
-    federationFeeBps: offer.federationFeeBps,
-    commonsFeeBps: offer.commonsFeeBps,
+    vendorUnitCents: offer.vendorPayoutCents,
+    commonsSplitBps: offer.commonsSplitBps,
   };
   const shared = {
     customerId: input.userId,

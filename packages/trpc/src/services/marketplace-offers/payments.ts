@@ -2,7 +2,15 @@ import type Stripe from "stripe";
 
 import { auditLogEntry } from "../../lib/audit.js";
 import { createNotificationAndPush } from "../push-notification-service.js";
-import { recordFederationFee, recordFederationFeeRefund } from "../treasury-ledger-service.js";
+import { splitOfferPayment } from "@repo/validators/marketplace-offers";
+
+import {
+  recordFederationFee,
+  recordFederationFeeRefund,
+  recordFeeCollection,
+  recordRefund,
+  recordStripeFeeShortfall,
+} from "../treasury-ledger-service.js";
 import { type Db, formatCents, notifyOnce } from "./shared.js";
 
 export type StripeClient = Pick<Stripe, "refunds" | "paymentIntents" | "checkout" | "charges">;
@@ -127,14 +135,8 @@ export async function handleOfferPaymentSucceeded(db: Db, transactionId: string,
   });
   if (marked.count === 0) return { outcome: "ALREADY_RECORDED" as const };
 
-  if (transaction.federationFeeAmount > 0) {
-    await recordFederationFee({
-      sourceTransactionId: transaction.id,
-      coopId: transaction.coopId,
-      amount: transaction.federationFeeAmount,
-      currency: transaction.currency,
-    });
-  }
+  // Shares are recorded once Stripe's real fee is known (now, or by the sweep later).
+  await finalizeOfferShares(db, transaction.id);
 
   await notifyOnce(db, {
     offer,
@@ -170,7 +172,25 @@ export async function handleOfferPaymentRefunded(
   });
   if (!transaction?.offer) return;
 
-  const federationReversal = transaction.federationFeeAmount * params.incrementalRatio;
+  // Reverse what was actually credited for this payment, in proportion to the refund.
+  // Shares not recorded yet (Stripe's fee wasn't known) get scaled down when they are.
+  const credits = await db.treasuryLedgerEntry.findMany({
+    where: { sourceTransactionId: transaction.id, direction: "CREDIT", sourceTransactionType: { in: ["COMMERCE_FEE", "FEDERATION_FEE"] } },
+    select: { sourceTransactionType: true, amount: true },
+  });
+  const credited = (type: string) => credits.filter((entry) => entry.sourceTransactionType === type).reduce((sum, entry) => sum + entry.amount, 0);
+  const commonsReversal = credited("COMMERCE_FEE") * params.incrementalRatio;
+  const federationReversal = credited("FEDERATION_FEE") * params.incrementalRatio;
+  if (commonsReversal > 0) {
+    await recordRefund({
+      sourceTransactionId: transaction.id,
+      coopId: transaction.coopId,
+      amount: commonsReversal,
+      currency: transaction.currency,
+      reason: "Member offer payment refunded",
+      idempotencyKey: params.idempotencyKey,
+    });
+  }
   if (federationReversal > 0) {
     await recordFederationFeeRefund({
       sourceTransactionId: transaction.id,
@@ -227,6 +247,7 @@ export async function backfillProcessingFees(db: Db, stripe?: StripeClient, limi
       const balance = charge.balance_transaction;
       if (balance && typeof balance === "object") {
         await db.commerceTransaction.update({ where: { id: transaction.id }, data: { processingFeeAmount: balance.fee / 100 } });
+        await finalizeOfferShares(db, transaction.id);
         filled++;
       }
     } catch (error) {
@@ -234,6 +255,62 @@ export async function backfillProcessingFees(db: Db, stripe?: StripeClient, limi
     }
   }
   return filled;
+}
+
+/**
+ * Records the Commons and Cahootz shares of an offer payment using Stripe's real
+ * fee: Stripe's fee comes off what the member paid, the vendor gets their fixed
+ * amount, and what's left is split by the offer's commonsSplitBps. Waits until
+ * Stripe's fee is known. Safe to run twice: each ledger write is idempotent.
+ */
+export async function finalizeOfferShares(db: Db, transactionId: string) {
+  const transaction = await db.commerceTransaction.findUnique({
+    where: { id: transactionId },
+    include: { offer: { select: { commonsSplitBps: true } } },
+  });
+  if (!transaction?.offer || transaction.processingFeeAmount == null) return { finalized: false as const };
+  if (!["COMPLETED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(transaction.status)) return { finalized: false as const };
+
+  const cents = (dollars: number) => Math.round(dollars * 100);
+  const split = splitOfferPayment({
+    chargedCents: cents(transaction.chargedAmount),
+    vendorCents: cents(transaction.merchantSettlementAmount),
+    stripeFeeCents: cents(transaction.processingFeeAmount),
+    commonsSplitBps: transaction.offer.commonsSplitBps,
+  });
+  await db.commerceTransaction.update({
+    where: { id: transaction.id },
+    data: { treasuryFeeAmount: split.commonsCents / 100, federationFeeAmount: split.cahootzCents / 100 },
+  });
+
+  // A refund that happened before this point already returned the money; only the kept part earns shares.
+  const kept = transaction.chargedAmount > 0 ? Math.max(0, 1 - transaction.refundedAmount / transaction.chargedAmount) : 0;
+  if (split.commonsCents > 0 && kept > 0) {
+    await recordFeeCollection({
+      sourceTransactionId: transaction.id,
+      coopId: transaction.coopId,
+      amount: (split.commonsCents / 100) * kept,
+      currency: transaction.currency,
+      metadata: { stripeFeeCents: split.stripeFeeCents, vendorCents: split.vendorCents, commonsSplitBps: transaction.offer.commonsSplitBps },
+    });
+  }
+  if (split.cahootzCents > 0 && kept > 0) {
+    await recordFederationFee({
+      sourceTransactionId: transaction.id,
+      coopId: transaction.coopId,
+      amount: (split.cahootzCents / 100) * kept,
+      currency: transaction.currency,
+    });
+  } else if (split.cahootzCents < 0) {
+    // Stripe's fee was more than what was left after the vendor, so Cahootz covers the gap.
+    await recordStripeFeeShortfall({
+      sourceTransactionId: transaction.id,
+      coopId: transaction.coopId,
+      amount: -split.cahootzCents / 100,
+      currency: transaction.currency,
+    });
+  }
+  return { finalized: true as const, split };
 }
 
 /** Stops unpaid checkouts for an offer once its payment window closes. Best effort. */

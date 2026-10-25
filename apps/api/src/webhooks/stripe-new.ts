@@ -130,7 +130,8 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
   });
 
   // Step 2b: Record treasury ledger entry only when this checkout actually has a treasury contribution.
-  if (paymentResult.treasuryFeeUSD > 0) {
+  // Offer payments record their shares from Stripe's real fee (handleOfferPaymentSucceeded).
+  if (paymentResult.treasuryFeeUSD > 0 && !ledgerTransaction?.offerId) {
     await recordFeeCollection({
       sourceTransactionId: paymentResult.transactionId,
       amount: paymentResult.treasuryFeeUSD,
@@ -439,7 +440,8 @@ async function handleChargeRefunded(event: Stripe.Event) {
   ]);
 
   const treasuryReversal = transaction.treasuryFeeAmount * incrementalRatio;
-  if (treasuryReversal > 0) {
+  // Offer refunds reverse what was actually credited (handleOfferPaymentRefunded).
+  if (treasuryReversal > 0 && !transaction.offerId) {
     await recordRefund({
       sourceTransactionId: transaction.id,
       amount: treasuryReversal,

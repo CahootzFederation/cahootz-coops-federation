@@ -73,7 +73,7 @@ export async function getActiveFeeConfig(): Promise<{
 
 /**
  * A Member Deal or Group Buy purchase. When present, the transaction uses the
- * offer's member price and fee shares instead of FeeConfig.
+ * offer's member price, vendor amount and split instead of FeeConfig.
  */
 export interface OfferCheckout extends OfferFeeShares {
   offerId: string;
@@ -98,7 +98,7 @@ async function resolveTransactionPricing(params: {
       breakdown,
       federationFeeAmount: breakdown.federationFeeAmount,
       platformMarkupBps: 0,
-      treasuryFeeBps: params.offer.commonsFeeBps,
+      treasuryFeeBps: params.offer.commonsSplitBps,
     };
   }
   const feeConfig = await getActiveFeeConfig();

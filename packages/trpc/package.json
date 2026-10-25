@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:run": "vitest run",
-    "test:ci": "vitest run --reporter=verbose"
+    "test:ci": "vitest run --reporter=verbose",
+    "test:db": "vitest run -c vitest.db.config.ts"
   },
   "exports": {
     ".": {
@@ -92,6 +93,16 @@
       "types": "./dist/services/funding-settlement-service.d.ts",
       "import": "./dist/services/funding-settlement-service.js",
       "require": "./dist/services/funding-settlement-service.js"
+    },
+    "./services/marketplace-offers": {
+      "types": "./dist/services/marketplace-offers/index.d.ts",
+      "import": "./dist/services/marketplace-offers/index.js",
+      "require": "./dist/services/marketplace-offers/index.js"
+    },
+    "./services/vendor-outreach": {
+      "types": "./dist/services/vendor-outreach/index.d.ts",
+      "import": "./dist/services/vendor-outreach/index.js",
+      "require": "./dist/services/vendor-outreach/index.js"
     },
     "./services/stripe-connect-service": {
       "types": "./dist/services/stripe-connect-service.d.ts",

@@ -1490,9 +1490,20 @@ function CommunityTab({
           <ActivityIndicator color={THEME.primary} />
         )}
         {isSteward ? (
-          <Text className="mt-3 text-sm font-semibold text-gray-700">
-            You&apos;re a steward here.
-          </Text>
+          <>
+            <Text className="mt-3 text-sm font-semibold text-gray-700">
+              You&apos;re a steward here.
+            </Text>
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/(authenticated)/commons-offers', params: { coopId } } as any)}
+              accessibilityRole="button"
+              className="mt-2 self-start"
+            >
+              <Text className="text-sm font-black" style={{ color: THEME.primary }}>
+                Review member deals
+              </Text>
+            </TouchableOpacity>
+          </>
         ) : null}
         <View className="mt-2">
           <StewardHelp />

@@ -942,6 +942,190 @@ async function readTrpcResult<T>(
   return result.result?.data as T;
 }
 
+/** A Member Deal or Group Buy as a member sees it (`marketplaceOffers.get`). */
+export interface MarketplaceOffer {
+  id: string;
+  offerType: 'MEMBER_DEAL' | 'GROUP_BUY';
+  status: string;
+  coopId: string;
+  title: string;
+  description: string | null;
+  vendor: { storeId: string; name: string };
+  product: { id: string; name: string; imageUrl: string | null };
+  regularPriceCents: number;
+  memberPriceCents: number;
+  savingsCents: number;
+  savingsPercent: number;
+  regularPriceSource: string;
+  quantityPerMember: number;
+  minimumCommitments: number | null;
+  committedQuantity: number;
+  maximumQuantity: number | null;
+  spotsLeft: number | null;
+  commitmentDeadline: string | null;
+  paymentDeadline: string | null;
+  fulfillmentDate: string | null;
+  expiresAt: string | null;
+  fulfillmentMethod: 'PICKUP' | 'DELIVERY';
+  pickupLocation: string | null;
+  serviceArea: string | null;
+  redemptionRules: string | null;
+  refundPolicy: string | null;
+  substitutionPolicy: string | null;
+  terms: string | null;
+  canCommit: boolean;
+  canBuy: boolean;
+  canPay: boolean;
+  myCommitment: {
+    quantity: number;
+    status: string;
+    savingsCents: number;
+    committedAt: string;
+    paidAt: string | null;
+    amountDueCents: number;
+  } | null;
+}
+
+/** An offer as a steward sees it: totals only, never who joined. */
+export interface StewardOffer {
+  id: string;
+  offerType: 'MEMBER_DEAL' | 'GROUP_BUY';
+  status: string;
+  title: string;
+  description: string | null;
+  vendorName: string;
+  productName: string;
+  regularPriceCents: number;
+  regularPriceSource: string;
+  memberPriceCents: number;
+  savingsCents: number;
+  savingsPercent: number;
+  federationFeeBps: number;
+  commonsFeeBps: number;
+  minimumCommitments: number | null;
+  minimumPaidOrders: number | null;
+  maximumQuantity: number | null;
+  quantityPerMember: number;
+  commitmentDeadline: string | null;
+  paymentWindowHours: number;
+  expiresAt: string | null;
+  fulfillmentMethod: 'PICKUP' | 'DELIVERY';
+  pickupLocation: string | null;
+  redemptionRules: string | null;
+  refundPolicy: string | null;
+  substitutionPolicy: string | null;
+  terms: string | null;
+  committedQuantity: number;
+  householdCount: number;
+  paidOrders: number;
+  verifiedSavingsCents: number;
+  commonsRevenueCents: number;
+}
+
+export interface VendorOffer {
+  id: string;
+  offerType: 'MEMBER_DEAL' | 'GROUP_BUY';
+  status: string;
+  title: string;
+  productName: string;
+  memberPriceCents: number;
+  regularPriceCents: number;
+  federationFeeBps: number;
+  commonsFeeBps: number;
+  committedQuantity: number;
+  minimumCommitments: number | null;
+  minimumPaidOrders: number | null;
+  commitmentDeadline: string | null;
+  paymentDeadline: string | null;
+  expiresAt: string | null;
+  fulfillmentMethod: 'PICKUP' | 'DELIVERY';
+  pickupLocation: string | null;
+  paidOrders: number;
+  vendorProceedsCents: number;
+}
+
+export interface VendorRosterEntry {
+  commitmentId: string;
+  name: string;
+  phone: string | null;
+  quantity: number;
+  paid: boolean;
+  pickedUp: boolean;
+  status: string;
+  committedAt: string;
+}
+
+export interface OfferCheckoutSession {
+  transactionId: string;
+  clientSecret: string | null;
+  checkoutUrl: string | null;
+  checkoutSessionId: string | null;
+  totalChargedCents: number;
+  merchantSettlementCents: number;
+  platformFeeCents: number;
+  treasuryFeeCents: number;
+  isDemoMode: boolean;
+}
+
+export interface MemberSavings {
+  totalSavingsCents: number;
+  offers: Array<{
+    offerId: string;
+    title: string;
+    offerType: 'MEMBER_DEAL' | 'GROUP_BUY';
+    vendorName: string;
+    quantity: number;
+    paidCents: number;
+    savingsCents: number;
+    paidAt: string | null;
+  }>;
+}
+
+export interface DealCategoryOption {
+  key: string;
+  label: string;
+}
+
+export interface MyBusinessReferral {
+  id: string;
+  businessName: string;
+  categoryLabel: string | null;
+  stage: string;
+  createdAt: string;
+}
+
+export interface RecommendBusinessInput {
+  coopId: string;
+  businessName: string;
+  category?: string;
+  description?: string;
+  website?: string;
+  email?: string;
+  phone?: string;
+  city?: string;
+  state?: string;
+  howKnown?: string;
+  mayNameReferrer: boolean;
+  confirmedPublicContact: true;
+}
+
+async function offersQuery<T>(procedure: string, input: unknown, sessionToken: string, fallback: string) {
+  const query = input === undefined ? '' : `?input=${encodeURIComponent(JSON.stringify(input))}`;
+  const response = await fetch(`${API_BASE_URL}/trpc/marketplaceOffers.${procedure}${query}`, {
+    headers: createApiHeaders(null, sessionToken),
+  });
+  return readTrpcResult<T>(response, fallback);
+}
+
+async function offersMutation<T>(procedure: string, input: unknown, sessionToken: string, fallback: string) {
+  const response = await fetch(`${API_BASE_URL}/trpc/marketplaceOffers.${procedure}`, {
+    method: 'POST',
+    headers: createApiHeaders(null, sessionToken),
+    body: JSON.stringify(input),
+  });
+  return readTrpcResult<T>(response, fallback);
+}
+
 async function postCommonsInvitations<T>(
   procedure: string,
   body: unknown,
@@ -4816,6 +5000,72 @@ export const api = {
   },
 
   // ── Sage Suggestions ────────────────────────────────────────────────────────
+
+  // ── Recommending local businesses for deals ──
+  async getDealCategories(sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/vendorOutreach.categories`, { headers: createApiHeaders(null, sessionToken) });
+    return readTrpcResult<DealCategoryOption[]>(response, "We couldn't load the categories.");
+  },
+  async recommendBusiness(input: RecommendBusinessInput, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/vendorOutreach.recommendBusiness`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken), body: JSON.stringify(input),
+    });
+    return readTrpcResult<{ prospectId: string; duplicate: boolean; alreadyKnown: boolean }>(response, "Your recommendation didn't send. Please try again.");
+  },
+  async getMyBusinessReferrals(coopId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/vendorOutreach.myReferrals?input=${input}`, { headers: createApiHeaders(null, sessionToken) });
+    return readTrpcResult<MyBusinessReferral[]>(response, "We couldn't load your recommendations.");
+  },
+
+  // ── Member Deals and Group Buys ──
+  listOffers(coopId: string, sessionToken: string) {
+    return offersQuery<MarketplaceOffer[]>('listForCommons', { coopId }, sessionToken, "We couldn't load deals right now.");
+  },
+  getOffer(offerId: string, sessionToken: string) {
+    return offersQuery<MarketplaceOffer>('get', { offerId }, sessionToken, "We couldn't load this offer.");
+  },
+  commitToOffer(input: { offerId: string; quantity: number; contactPhone?: string }, sessionToken: string) {
+    return offersMutation<{ committedQuantity: number; quantity: number; thresholdReached: boolean }>(
+      'commit', { ...input, shareContact: true }, sessionToken, "Your spot didn't save. Please try again.",
+    );
+  },
+  cancelOfferCommitment(offerId: string, sessionToken: string) {
+    return offersMutation<{ committedQuantity: number }>('cancelCommitment', { offerId }, sessionToken, "We couldn't cancel your spot. Please try again.");
+  },
+  startOfferCheckout(
+    input: { offerId: string; quantity?: number; paymentUi: 'payment_intent' | 'hosted_checkout'; successUrl?: string; cancelUrl?: string },
+    sessionToken: string,
+  ) {
+    return offersMutation<OfferCheckoutSession>('startCheckout', input, sessionToken, "We couldn't start checkout. Please try again.");
+  },
+  getMySavings(sessionToken: string, coopId?: string) {
+    return offersQuery<MemberSavings>('mySavings', coopId ? { coopId } : {}, sessionToken, "We couldn't load your savings.");
+  },
+  listStewardOffers(coopId: string, sessionToken: string) {
+    return offersQuery<StewardOffer[]>('stewardList', { coopId }, sessionToken, "We couldn't load offers for review.");
+  },
+  approveOffer(offerId: string, sessionToken: string) {
+    return offersMutation<void>('stewardApprove', { offerId }, sessionToken, "The approval didn't go through. Please try again.");
+  },
+  sendOfferBack(offerId: string, note: string, sessionToken: string) {
+    return offersMutation<void>('stewardSendBack', { offerId, note }, sessionToken, "We couldn't send it back. Please try again.");
+  },
+  listVendorOffers(sessionToken: string) {
+    return offersQuery<VendorOffer[]>('vendorList', undefined, sessionToken, "We couldn't load your offers.");
+  },
+  getVendorRoster(offerId: string, sessionToken: string) {
+    return offersQuery<VendorRosterEntry[]>('vendorRoster', { offerId }, sessionToken, "We couldn't load who joined.");
+  },
+  confirmOfferCapacity(offerId: string, sessionToken: string) {
+    return offersMutation<{ paymentDeadline: string }>('vendorConfirm', { offerId }, sessionToken, "We couldn't open payment. Please try again.");
+  },
+  updateOfferFulfillment(offerId: string, status: 'ORDERED' | 'READY' | 'FULFILLED', sessionToken: string) {
+    return offersMutation<{ ok: true }>('vendorUpdateFulfillment', { offerId, status }, sessionToken, "That update didn't save. Please try again.");
+  },
+  markOfferPickedUp(commitmentId: string, sessionToken: string) {
+    return offersMutation<{ ok: true }>('vendorMarkPickedUp', { commitmentId }, sessionToken, "That update didn't save. Please try again.");
+  },
 
   async getCommunityPulse(coopId: string, sessionToken: string) {
     const input = encodeURIComponent(JSON.stringify({ coopId }));

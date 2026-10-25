@@ -95,6 +95,14 @@ export function notificationDestination(
         circleId: id("circleId")!,
       },
     };
+  // Member Deals and Group Buys: stewards review, vendors manage, members view.
+  if (id("offerId")) {
+    if (notification.type === "OFFER_NEEDS_STEWARD_APPROVAL")
+      return { pathname: "/(authenticated)/commons-offers", params: { coopId: id("coopId") || notification.coopId } };
+    if (notification.type.startsWith("VENDOR_OFFER_"))
+      return { pathname: "/(authenticated)/store-offers", params: { offerId: id("offerId")! } };
+    return { pathname: "/(authenticated)/offer-detail", params: { id: id("offerId")! } };
+  }
   if (id("orderId"))
     return {
       pathname: "/(authenticated)/order-detail",

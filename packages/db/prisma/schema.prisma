@@ -42,9 +42,9 @@ model User {
   businessSummary              String?
   locationSummary              String?
   profileSignals               Json                    @default("{}")
-  onboardingStep              String @default("welcome")
-  onboardingCompletedAt       DateTime?
-  onboardingDraft             Json @default("{}")
+  onboardingStep               String                  @default("welcome")
+  onboardingCompletedAt        DateTime?
+  onboardingDraft              Json                    @default("{}")
   firstLoginAt                 DateTime? // Set once after successful authentication, independent of invitations/membership
   profileOnboardingCompletedAt DateTime?
   // Personal page avatar: a photo wins over an emoji, which wins over initials.
@@ -108,6 +108,8 @@ model User {
   welcomeIntros              WelcomeIntro[]
   commonsCommentReactions    CommonsCommentReaction[]
   commonsPostReactions       CommonsPostReaction[]
+  offerCommitments           OfferCommitment[]
+  vendorReferrals            VendorReferral[]
   circleChatPresence         CircleChatPresence[]
   eventsCreated              Event[]                    @relation("EventCreatedBy")
   eventHosting               EventHost[]
@@ -2594,6 +2596,7 @@ model Store {
   orders                    StoreOrder[]
   paymentRequests           StorePaymentRequest[]
   scRewards                 SCRewardTransaction[]
+  marketplaceOffers         MarketplaceOffer[]
 
   @@unique([coopId, shortCode])
   @@index([ownerId])
@@ -2643,6 +2646,7 @@ model Product {
   // Relations
   orderItems               StoreOrderItem[]
   fundingBadgeEntitlements FundingBadgeEntitlement[]
+  marketplaceOffers        MarketplaceOffer[]
 
   @@index([storeId])
   @@index([category])
@@ -3306,6 +3310,12 @@ model CommerceTransaction {
   // Metadata
   metadata Json? // Order details, line items, etc.
 
+  // Member Deal / Group Buy purchases. Null for regular listings.
+  offerId             String?
+  offer               MarketplaceOffer? @relation(fields: [offerId], references: [id])
+  federationFeeAmount Float             @default(0) // Cahootz federation share, taken from vendor proceeds
+  processingFeeAmount Float? // Stripe's fee, read from the balance transaction once paid
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   completedAt   DateTime?
@@ -3318,8 +3328,10 @@ model CommerceTransaction {
   treasuryLedgerEntries    TreasuryLedgerEntry[]
   scMintEvents             SCMintEvent[]
   fundingBadgeEntitlements FundingBadgeEntitlement[]
+  offerCommitment          OfferCommitment?
 
   @@index([customerId, createdAt(sort: Desc)])
+  @@index([offerId])
   @@index([businessId, createdAt(sort: Desc)])
   @@index([coopId])
   @@index([status])
@@ -3368,6 +3380,7 @@ model TreasuryLedgerEntry {
   sourceTransactionId   String? // CommerceTransaction.id, ProposalId, etc.
   sourceTransactionType String // 'COMMERCE_FEE', 'REFUND', 'ALLOCATION', 'ADJUSTMENT'
   sourceTransaction     CommerceTransaction? @relation(fields: [sourceTransactionId], references: [id])
+  coopId                String? // Commons the entry belongs to; null on entries written before 2026-10
 
   // Accounting
   accountType TreasuryAccountType
@@ -3385,6 +3398,7 @@ model TreasuryLedgerEntry {
   @@index([accountType, occurredAt(sort: Desc)])
   @@index([sourceTransactionId])
   @@index([entryType])
+  @@index([coopId, accountType])
   @@schema("public")
 }
 
@@ -3649,6 +3663,260 @@ model AnonymousProfile {
   updatedAt        DateTime  @updatedAt
   migratedToUserId String?
   migratedAt       DateTime?
+
+  @@schema("public")
+}
+
+// ── Member Deals and Group Buys ───────────────────────────
+//
+// An offer gives members of one Commons a lower price on an existing product.
+// A Member Deal is live as soon as a steward approves it. A Group Buy only
+// unlocks once enough members commit; nobody pays until the vendor confirms.
+// Regular listings never touch these tables.
+
+model MarketplaceOffer {
+  id         String    @id @default(cuid())
+  offerType  OfferType
+  coopId     String
+  storeId    String
+  store      Store     @relation(fields: [storeId], references: [id])
+  productId  String
+  product    Product   @relation(fields: [productId], references: [id])
+  businessId String
+
+  title       String
+  description String?
+
+  // Prices are whole cents. Savings are derived from these two, never stored.
+  regularPriceCents  Int
+  regularPriceSource String // Where the comparison price comes from, e.g. "Posted shelf price"
+  memberPriceCents   Int
+
+  // Shares taken from vendor proceeds. The member pays memberPriceCents, no markup.
+  federationFeeBps Int @default(0)
+  commonsFeeBps    Int @default(0)
+
+  // Quantities are units, not people.
+  minimumCommitments Int? // Group Buy: units needed by the commitment deadline
+  minimumPaidOrders  Int? // Group Buy: units that must be paid when the payment window closes
+  maximumQuantity    Int?
+  quantityPerMember  Int  @default(1)
+  committedQuantity  Int  @default(0) // Cache; only written while holding the offer lock
+
+  commitmentDeadline DateTime?
+  paymentWindowHours Int       @default(72)
+  paymentOpensAt     DateTime?
+  paymentDeadline    DateTime?
+  fulfillmentDate    DateTime?
+
+  fulfillmentMethod  OfferFulfillmentMethod @default(PICKUP)
+  pickupLocation     String?
+  serviceArea        String?
+  redemptionRules    String?
+  refundPolicy       String?
+  substitutionPolicy String?
+  terms              String?
+
+  status              OfferStatus @default(DRAFT)
+  stewardNote         String? // Why a steward sent the offer back
+  createdById         String
+  stewardApprovedById String?
+  stewardApprovedAt   DateTime?
+  publishedAt         DateTime?
+  expiresAt           DateTime? // Member Deal end
+  cancelledAt         DateTime?
+  cancelReason        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  commitments          OfferCommitment[]
+  commerceTransactions CommerceTransaction[]
+  notificationSends    OfferNotificationSend[]
+
+  @@index([coopId, status])
+  @@index([status, commitmentDeadline])
+  @@index([status, paymentDeadline])
+  @@index([status, expiresAt])
+  @@index([storeId])
+  @@schema("public")
+}
+
+// One row per member per offer. For a Group Buy it is created when the member
+// commits; for a Member Deal when they start checkout. Savings are only set once
+// the payment completes, and are reduced when it is refunded.
+model OfferCommitment {
+  id      String           @id @default(cuid())
+  offerId String
+  offer   MarketplaceOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  quantity Int
+  status   CommitmentStatus @default(COMMITTED)
+
+  // Shared with the vendor because the member ticked "share my name and phone".
+  contactName  String?
+  contactPhone String?
+
+  regularUnitCents Int
+  memberUnitCents  Int
+  savingsCents     Int @default(0)
+
+  commerceTransactionId String?              @unique
+  commerceTransaction   CommerceTransaction? @relation(fields: [commerceTransactionId], references: [id])
+  refundError           String?
+
+  committedAt       DateTime  @default(now())
+  cancelledAt       DateTime?
+  paymentNotifiedAt DateTime?
+  paidAt            DateTime?
+  refundedAt        DateTime?
+  fulfilledAt       DateTime?
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([offerId, userId])
+  @@index([userId, status])
+  @@index([offerId, status])
+  @@schema("public")
+}
+
+// Claimed before an offer notification is sent, so a retried sweep never
+// sends the same notice twice.
+model OfferNotificationSend {
+  id        String           @id @default(cuid())
+  offerId   String
+  offer     MarketplaceOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  userId    String
+  kind      String
+  createdAt DateTime         @default(now())
+
+  @@unique([offerId, userId, kind])
+  @@schema("public")
+}
+
+enum OfferType {
+  MEMBER_DEAL
+  GROUP_BUY
+
+  @@schema("public")
+}
+
+enum OfferFulfillmentMethod {
+  PICKUP
+  DELIVERY
+
+  @@schema("public")
+}
+
+enum OfferStatus {
+  DRAFT
+  PENDING_STEWARD
+  LIVE
+  PAUSED
+  AWAITING_VENDOR
+  PAYMENT_OPEN
+  CONFIRMED
+  ORDERED
+  READY
+  FULFILLED
+  EXPIRED
+  CANCELLED
+  FAILED
+
+  @@schema("public")
+}
+
+enum CommitmentStatus {
+  COMMITTED
+  CANCELLED
+  PAYMENT_PENDING
+  PAID
+  LAPSED
+  REFUNDED
+  FULFILLED
+
+  @@schema("public")
+}
+
+// ── Vendor finding and outreach (docs/vendor-outreach-plan.md) ──
+//
+// A business we might ask for a Member Deal or Group Buy. One row per business:
+// a second member recommending the same business adds a referral, not a prospect.
+// Phase 1 fills this from member referrals; later phases add shops already on
+// Cahootz and web search, and the outreach statuses.
+
+model VendorProspect {
+  id              String             @id @default(cuid())
+  businessName    String
+  category        String? // Deal category key from vendor-outreach/categories.ts
+  description     String? // What they sell, in the recommender's words
+  website         String?
+  domain          String? // Lowercased host of the website or email, for dedupe
+  email           String?
+  emailNormalized String?            @unique
+  phone           String?
+  city            String?
+  state           String?
+  sourceType      ProspectSourceType
+  sourceUrl       String? // Where a contact was found (web search, directory)
+  storeId         String? // Set when the business already has a Cahootz shop
+  status          ProspectStatus     @default(FOUND)
+  statusNote      String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  referrals VendorReferral[]
+
+  @@index([status])
+  @@index([category])
+  @@index([domain])
+  @@schema("public")
+}
+
+// A member's recommendation of a business. The referrer is only ever named to
+// the business if they said so (mayNameReferrer).
+model VendorReferral {
+  id                     String         @id @default(cuid())
+  prospectId             String
+  prospect               VendorProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  referredByUserId       String
+  referredBy             User           @relation(fields: [referredByUserId], references: [id], onDelete: Cascade)
+  coopId                 String
+  howKnown               String?
+  mayNameReferrer        Boolean        @default(false)
+  confirmedPublicContact Boolean
+  createdAt              DateTime       @default(now())
+
+  @@unique([prospectId, referredByUserId])
+  @@index([referredByUserId, createdAt])
+  @@index([coopId, createdAt])
+  @@schema("public")
+}
+
+enum ProspectSourceType {
+  MEMBER_REFERRAL
+  CAHOOTZ_SHOP
+  WEB_SEARCH
+  DIRECTORY_SITE
+  ADMIN
+
+  @@schema("public")
+}
+
+enum ProspectStatus {
+  FOUND
+  VERIFIED
+  QUEUED
+  CONTACTED
+  FOLLOWED_UP
+  INTERESTED
+  IN_TALKS
+  CONVERTED
+  DECLINED
+  UNSUBSCRIBED
+  BOUNCED
+  SKIPPED
 
   @@schema("public")
 }

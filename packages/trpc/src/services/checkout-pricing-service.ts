@@ -85,3 +85,39 @@ export function calculateCheckoutPricing(params: {
     expectedScReward: calculateCheckoutScReward(listedAmountCents),
   };
 }
+
+export interface OfferFeeShares {
+  federationFeeBps: number;
+  commonsFeeBps: number;
+}
+
+export interface OfferPriceBreakdown extends CheckoutPriceBreakdown {
+  federationFeeAmount: number;
+}
+
+/**
+ * Member Deal and Group Buy pricing. The member pays the member price and
+ * nothing more: there is no checkout markup. The federation and Commons shares
+ * come out of the vendor's proceeds, at the rates agreed on the offer.
+ * Never reads FeeConfig, so its fallback can't add a markup to a deal.
+ *
+ * All amounts are in cents. `treasuryFeeAmount` is the Commons share, so the
+ * existing ledger and refund code treat it the same as today's treasury fee.
+ */
+export function calculateOfferPricing(params: {
+  memberUnitCents: number;
+  quantity: number;
+} & OfferFeeShares): OfferPriceBreakdown {
+  const listedAmount = params.memberUnitCents * params.quantity;
+  const federationFeeAmount = Math.round((listedAmount * params.federationFeeBps) / 10000);
+  const commonsFeeAmount = Math.round((listedAmount * params.commonsFeeBps) / 10000);
+  return {
+    listedAmount,
+    chargedAmount: listedAmount,
+    merchantSettlementAmount: listedAmount - federationFeeAmount - commonsFeeAmount,
+    platformMarkupAmount: 0,
+    treasuryFeeAmount: commonsFeeAmount,
+    federationFeeAmount,
+    platformFeeAmount: federationFeeAmount + commonsFeeAmount,
+  };
+}

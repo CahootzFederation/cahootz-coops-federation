@@ -65,7 +65,7 @@ async function getActiveCoops(): Promise<CoopOption[]> {
 export const metadata: Metadata = {
   title: "Cahootz | A place for communities to move together",
   description:
-    "Cahootz Commons is the iPhone app for the communities you belong to. Post and react in your commons, talk in circles, organize your family, and let Sage introduce you to the members who can help.",
+    "Cahootz Commons is the iPhone app for the communities you belong to. Post and react in your commons, talk in circles, organize your family, buy together from local businesses for a lower price, and let Sage introduce you to the members who can help.",
   alternates: { canonical: "https://cahootzcommons.com" },
 };
 
@@ -91,7 +91,7 @@ const pathways = [
     index: "03",
     label: "Build",
     title: "Make things happen together.",
-    body: "Spend with the businesses your people run, pool ideas into plans, and watch your community get stronger because you're part of it.",
+    body: "Spend with the businesses your people run, buy together to get a better price, pool ideas into plans, and watch your community get stronger because you're part of it.",
     className: "pathway-governance",
   },
 ];
@@ -108,6 +108,10 @@ const faqs = [
   {
     q: "Is there an Android app?",
     a: "Not yet. Cahootz Commons is on iPhone today and Android is coming. Join the interest list below and we'll tell you when it's ready.",
+  },
+  {
+    q: "How do group buys work?",
+    a: "A local business offers a lower price if enough people in your commons join by a deadline. Joining costs nothing. You only pay once it hits its goal and the business confirms. If it doesn't hit its goal, nobody is charged.",
   },
   {
     q: "Who is Sage?",
@@ -139,6 +143,7 @@ export default async function HomePage() {
           </Link>
           <nav aria-label="Main navigation" className="header-nav">
             <a href="#how-it-works">How it works</a>
+            <a href="#group-buys">Group buys</a>
             <a href="#sage">Meet Sage</a>
             <a href="#get-in">How to get in</a>
             <a href="#find-a-commons">Find a commons</a>
@@ -310,6 +315,59 @@ export default async function HomePage() {
                 </li>
               </ul>
               <AppStoreButton>Meet Sage in the app</AppStoreButton>
+            </div>
+          </div>
+        </section>
+
+        <section className="group-buy-section" id="group-buys">
+          <div className="landing-shell">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">GROUP BUYS</p>
+                <h2>Buy together. Pay less.</h2>
+              </div>
+              <p>
+                When enough people in your commons want the same thing, a local
+                business can offer a lower price. Everyone who joins gets that
+                price.
+              </p>
+            </div>
+            <ol className="get-in-steps">
+              <li>
+                <span>01</span>
+                <strong>Find a group buy.</strong>
+                <p>
+                  A local business posts a deal in your commons, like a box of
+                  produce or a service for the block. You&apos;ll see the price,
+                  the goal, and the deadline to join.
+                </p>
+              </li>
+              <li>
+                <span>02</span>
+                <strong>Count yourself in.</strong>
+                <p>
+                  Tap to join before the deadline. You won&apos;t pay anything
+                  yet. Share it with your people so it fills up faster.
+                </p>
+              </li>
+              <li>
+                <span>03</span>
+                <strong>Get the lower price.</strong>
+                <p>
+                  Once it hits its goal and the business confirms, you&apos;ll
+                  get a set time to pay in the app. Then pick it up or get it
+                  delivered. If it doesn&apos;t hit its goal, nobody is
+                  charged.
+                </p>
+              </li>
+            </ol>
+            <p className="group-buy-note">
+              Don&apos;t want to wait for a group? Look for{" "}
+              <strong>Member Deals</strong>, a special price local businesses
+              offer just to members.
+            </p>
+            <div className="get-in-actions">
+              <AppStoreButton>Find group buys in the app</AppStoreButton>
             </div>
           </div>
         </section>

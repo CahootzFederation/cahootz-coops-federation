@@ -24,6 +24,9 @@ body {
 }
 #how-it-works,
 #ai-role,
+#group-buys,
+#sage,
+#get-in,
 #find-a-commons,
 #join,
 #business-form {
@@ -782,6 +785,7 @@ body {
   }
   .intro-inner,
   .decision-section,
+  .group-buy-section,
   .commons-section,
   .journal-section,
   .faq-section,
@@ -932,6 +936,20 @@ body {
 }
 .get-in-section {
   padding-block: var(--space-3xl);
+}
+.group-buy-section {
+  border-bottom: var(--rule-thin) solid var(--color-rule);
+  padding-block: var(--space-3xl);
+}
+.group-buy-note {
+  color: var(--color-ink-2);
+  font-size: var(--text-md);
+  line-height: 1.6;
+  margin: 0 0 var(--space-lg);
+  max-width: 60ch;
+}
+.group-buy-note strong {
+  color: var(--color-ink);
 }
 .get-in-steps {
   display: grid;

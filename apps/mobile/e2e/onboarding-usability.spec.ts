@@ -201,6 +201,9 @@ test.describe("onboarding usability", () => {
       await expect(shown(page, "What always waits for a person", { exact: true })).toBeVisible();
       await expect(shown(page, "What Sage remembers", { exact: true })).toBeVisible();
       await expect(shown(page, /spending or moving money, changing who is a member/)).toBeVisible();
+      // The full card must not push the suggestion tabs under the bottom navigation.
+      await page.getByRole("tab", { name: "Following" }).filter({ visible: true }).click();
+      await page.getByRole("tab", { name: "Needs you" }).filter({ visible: true }).click();
 
       // "Got it" shrinks it to one line, remembered on this device.
       await page.getByRole("button", { name: "Got it" }).click();

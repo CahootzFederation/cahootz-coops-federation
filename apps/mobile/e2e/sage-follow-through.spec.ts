@@ -28,7 +28,9 @@ function shown(page: Page, text: string | RegExp) {
 // A member asks the Commons a shared-cost question. Sage replies on its own asking for the details it
 // needs; when the member replies with those details in the app, Sage reads the thread (including its
 // own reply) and follows through by drafting the proposal instead of asking again. Live model calls, so tagged @sage.
-test("Sage follows through on its offer when a member replies with the details", { tag: "@sage" }, async ({ browser }) => {
+// Quarantined (issue #288): flaky on main (CI run 39781494014 passed only on retry). Make the live-model step
+// deterministic before turning this back on.
+test.fixme("Sage follows through on its offer when a member replies with the details", { tag: "@sage" }, async ({ browser }) => {
   test.setTimeout(300_000);
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const member = await newSignedInPage(browser, USER_B_EMAIL);

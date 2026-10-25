@@ -54,13 +54,13 @@ interface OfferDetail {
     verifiedSavingsCents: number;
     paidOrders: number;
   };
-  exceptions: Array<{ commitmentId: string; status: string; refundError: string | null; paymentFailure: string | null }>;
+  exceptions: { commitmentId: string; status: string; refundError: string | null; paymentFailure: string | null }[];
 }
 
 const money = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
 
-type Action = { label: string; body: Record<string, unknown>; confirm?: string; danger?: boolean };
+interface Action { label: string; body: Record<string, unknown>; confirm?: string; danger?: boolean }
 
 function actionsFor(offer: OfferDetail): Action[] {
   const actions: Action[] = [];

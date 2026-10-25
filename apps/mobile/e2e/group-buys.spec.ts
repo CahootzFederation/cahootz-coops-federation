@@ -56,11 +56,9 @@ test("two members commit without being charged, a reload doesn't double count, a
   }
 });
 
-test("members hear when the goal is hit, can pay once the vendor confirms, and an expired group buy charges nobody", async ({ browser }) => {
+test("members hear when the goal is hit, and can pay once the vendor confirms", async ({ browser }) => {
   const goal = `${RUN} oil`;
-  const expiring = `${RUN} sugar`;
   const { offerId: goalId } = offersFixture(["create", JSON.stringify({ title: goal, offerType: "GROUP_BUY", status: "LIVE", minimumCommitments: 2 })]);
-  const { offerId: expiringId } = offersFixture(["create", JSON.stringify({ title: expiring, offerType: "GROUP_BUY", status: "LIVE", minimumCommitments: 5 })]);
   const a = await newSignedInPage(browser, USER_A_EMAIL);
   const b = await newSignedInPage(browser, USER_B_EMAIL);
   try {
@@ -78,8 +76,17 @@ test("members hear when the goal is hit, can pay once the vendor confirms, and a
     await openOffer(a.page, goal);
     await expect(visibleButton(a.page, "Pay $18.00")).toBeVisible();
     await expect(shown(a.page, /Pay by .* to keep your spot/)).toBeVisible();
+  } finally {
+    await a.context.close();
+    await b.context.close();
+  }
+});
 
-    // A group buy that misses its goal by the deadline expires; nobody is charged.
+test("a group buy that misses its goal by the deadline expires and charges nobody", async ({ browser }) => {
+  const expiring = `${RUN} sugar`;
+  const { offerId: expiringId } = offersFixture(["create", JSON.stringify({ title: expiring, offerType: "GROUP_BUY", status: "LIVE", minimumCommitments: 5 })]);
+  const a = await newSignedInPage(browser, USER_A_EMAIL);
+  try {
     await openOffer(a.page, expiring);
     await commit(a.page);
     offersFixture(["close-commitments", expiringId]);
@@ -90,6 +97,5 @@ test("members hear when the goal is hit, can pay once the vendor confirms, and a
     await expect(shown(a.page, `${expiring} didn't happen this time`).first()).toBeVisible();
   } finally {
     await a.context.close();
-    await b.context.close();
   }
 });

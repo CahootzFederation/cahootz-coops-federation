@@ -18,7 +18,7 @@ import {
 
 import { adminErrorResponse, requirePlatformAdmin } from '@/lib/platform-admin-session';
 
-type Params = { params: Promise<{ coopId: string; offerId: string }> };
+interface Params { params: Promise<{ coopId: string; offerId: string }> }
 
 async function loadInCoop(coopId: string, offerId: string) {
   const offer = await getOfferForAdmin(db, offerId);

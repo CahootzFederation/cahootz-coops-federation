@@ -32,7 +32,9 @@ function fixture(...args: string[]) {
 // check-in now. The member sees it in their Sage conversation, and the admin's history shows it as manual.
 // User B is the target because sage-weekly-outreach.spec.ts uses User A's Sage conversation.
 // Takes turns with sage-proactive.spec.ts, which also uses B's Sage conversation.
-test("a platform admin sends a Sage check-in to a member from the Agent Playground", async ({ browser }) => withExclusiveAccountSetting("user-b-sage-conversation", async () => {
+// Quarantined (issue #287): flaky on main (CI run 39996432316 passed only on retry; the "manual" history row never
+// appeared within 60s). Fix the history refresh before turning this back on.
+test.fixme("a platform admin sends a Sage check-in to a member from the Agent Playground", async ({ browser }) => withExclusiveAccountSetting("user-b-sage-conversation", async () => {
   test.setTimeout(240_000);
   const adminContext = await browser.newContext();
   const admin = await adminContext.newPage();

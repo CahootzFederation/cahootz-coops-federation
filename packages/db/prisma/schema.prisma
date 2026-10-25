@@ -103,6 +103,7 @@ model User {
   groupComments              GroupComment[]
   uploadedKnowledgeDocuments KnowledgeDocument[]
   verifiedAIObservations     AIObservation[]            @relation("AIObservationVerifier")
+  humanAIFeedback            HumanAIFeedback[]
   welcomeTableConfigsGuiding WelcomeTableConfig[]       @relation("WelcomeTableGuide")
   welcomeIntros              WelcomeIntro[]
   commonsCommentReactions    CommonsCommentReaction[]
@@ -962,6 +963,7 @@ model AIObservation {
   summary             String                  @db.Text
   details             Json?
   sources             AIObservationSource[]
+  humanFeedback       HumanAIFeedback[]
   originatedActions   CommonsAction[]
   visibility          AIObservationVisibility @default(COMMONS_ADMINS)
   status              AIObservationStatus     @default(ACTIVE)
@@ -979,6 +981,32 @@ model AIObservation {
   @@index([status, expiresAt])
   @@index([generatedByAgentKey, createdAt])
   @@index([scopeType, scopeId, generatedByAgentKey, createdAt])
+  @@schema("public")
+}
+
+enum HumanAIFeedbackResponse {
+  YES
+  PARTLY
+  DIFFERENT_TAKE
+
+  @@schema("public")
+}
+
+model HumanAIFeedback {
+  id            String                  @id @default(cuid())
+  observationId String
+  observation   AIObservation           @relation(fields: [observationId], references: [id], onDelete: Cascade)
+  coopId        String
+  userId        String
+  user          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  response      HumanAIFeedbackResponse
+  comment       String?                 @db.Text
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@unique([observationId, userId])
+  @@index([coopId, createdAt])
+  @@index([userId])
   @@schema("public")
 }
 

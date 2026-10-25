@@ -88,9 +88,6 @@ export default function SageSuggestionsScreen() {
         <SageAvatar size={32} motion="blink" />
         <Text style={{ fontSize: 20, fontWeight: '800', color: THEME.ink }}>Sage suggestions</Text>
       </View>
-      <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
-        <SageIntro />
-      </View>
 
       <ScrollView
         horizontal
@@ -122,6 +119,8 @@ export default function SageSuggestionsScreen() {
         contentContainerStyle={{ padding: 16, paddingTop: 0, gap: 10, flexGrow: 1 }}
         refreshControl={<RefreshControl refreshing={isLoadingList} onRefresh={load} />}
       >
+        {/* Scrolls with the list so the tabs above stay reachable on small screens. */}
+        <SageIntro />
         {activeTab === 'FOLLOWING' && sessionToken ? (
           <SageFollowing sessionToken={sessionToken} />
         ) : isLoadingList && suggestions.length === 0 ? (

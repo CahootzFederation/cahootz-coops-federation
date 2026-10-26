@@ -52,6 +52,12 @@ Each card is an `AIObservation` with type `community_pulse`, Commons scope, `COM
 
 The local-only command in `apps/api/scripts/publish-community-pulse-local.ts` runs the same publisher for initial activation; there is no alternate publishing endpoint. Automatic work uses the existing Trigger schedule or API fallback wake loop.
 
+## Commons-scoped mentions (2026-10-25)
+
+The @mention picker reads active memberships from the selected Commons. It no longer uses the platform-wide people search or the original Commons' direct-message list. Opening the picker lazily creates that Commons' own Sage account and membership, so the right Sage remains available while people and Sage accounts from other Commons stay out. The write path applies the same membership rule: a hand-typed nonmember handle remains plain text and cannot create an out-of-scope mention notification.
+
+Verification: the tRPC suite passed (1,073 tests, 31 skipped), the tRPC build and mobile type-check passed, and the focused Playwright journey passed. The required full mobile E2E run also passed the new mention journey before the local Expo server exited; its final result was therefore not green (47 passed, 2 skipped, 2 did not run, 70 failed, with the later failures reporting port 8081 refused).
+
 ## Current foundation
 
 Already present in the repository:
@@ -743,6 +749,7 @@ For every Sage behavior change:
 - 2026-10-18 (same day, later): Sage writes the proposal and submits it itself, for a member vote, instead of waiting for a member to take the idea on. The user asked for this directly; AGENT.md's autonomy boundaries now carve out Sage's own charter-goal proposals (still never approved without a vote; a passed charter or goals change still needs a steward). New and small Commons get proposals too: the age and three-member minimums were removed, and a goal nobody has proposed anything for counts as behind. A proposal the review sends back is withdrawn and offered as an open idea instead.
 - 2026-10-18 (later): Every proposal that opens for a vote now notifies the Commons' members ("New vote: …"), not only Sage's, so people know to vote. A Commons' first week with Sage proposals is capped at one, so the launch doesn't hand every Commons two votes at once.
 - 2026-10-20: Monday's post is a short, leader-style note phrased by a small model from facts code picks, and goals appear only when something moved on one. Proposal posts lead with the idea and mention the goal in passing, without gap numbers. Reverses the 2026-10-16 naming decision: members who pitched in are named in Sage's Monday and Friday posts by default, and an opt-out setting will come later (the user will write it). People who asked for help are never named.
+- 2026-10-25: @mention suggestions and stored mention resolution are scoped to active membership in the selected Commons. Opening the picker materializes that Commons' own Sage membership; Sages from other Commons and nonmember people are excluded. A hand-typed nonmember handle stays plain text and sends no mention alert.
 - 2026-10-18 (later): Platform admins can run Sage's proposal writer on demand from the web Commons AI page, with an option to skip the weekly limits, for onboarding and testing. Safety rules and code checks still apply.
 
 ## Completed milestones

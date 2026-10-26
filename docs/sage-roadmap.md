@@ -1,6 +1,6 @@
 # Sage product roadmap
 
-Last updated: 2026-10-17
+Last updated: 2026-10-25
 
 ## North star
 
@@ -51,6 +51,12 @@ The first version uses deterministic aggregate rules, with zero model calls or t
 Each card is an `AIObservation` with type `community_pulse`, Commons scope, `COMMONS_MEMBERS` visibility, confidence, basis, uncertainty, window bounds, source references, next-day review, and seven-day expiry. The stable publisher key is `sage-community-pulse`. A transaction-level advisory lock and unique day key prevent duplicate publications across workers. Unchanged wording skips a new card until expiry, while advancing the review date. Changed reads create new rows and supersede only this publisher's previous active rows; earlier wording and `HumanAIFeedback` remain intact. No alerts or feed posts are sent.
 
 The local-only command in `apps/api/scripts/publish-community-pulse-local.ts` runs the same publisher for initial activation; there is no alternate publishing endpoint. Automatic work uses the existing Trigger schedule or API fallback wake loop.
+
+## Commons-scoped mentions (2026-10-25)
+
+The @mention picker reads active memberships from the selected Commons. It no longer uses the platform-wide people search or the original Commons' direct-message list. Opening the picker lazily creates that Commons' own Sage account and membership, so the right Sage remains available while people and Sage accounts from other Commons stay out. The write path applies the same membership rule: a hand-typed nonmember handle remains plain text and cannot create an out-of-scope mention notification.
+
+Verification: the tRPC suite passed (1,073 tests, 31 skipped), the tRPC build and mobile type-check passed, and the focused Playwright journey passed. The required full mobile E2E run also passed the new mention journey before the local Expo server exited; its final result was therefore not green (47 passed, 2 skipped, 2 did not run, 70 failed, with the later failures reporting port 8081 refused).
 
 ## Current foundation
 
@@ -315,6 +321,7 @@ Goal: everything Sage says sounds like a friendly, sharp neighbor, not a system,
 Status (2026-10-16): built and verified locally (gpt-5.6-luna), except one steward journey blocked by local data (see Verification).
 
 - **One shared voice block.** `SAGE_VOICE` sits next to the core principles in `sage-principles.ts` and is returned by `sageCorePrinciplesInstructions()`, so the reply agent, Commons Action, Trend, Steward, check-in follow-up and weekly check-in agents all get it. It asks for everyday words, short sentences, contractions and "we/you", allows a little warmth, rules out fake excitement and over-apologizing, gives one short example reply, and says a friendly tone never softens a fact, a risk, a cost or a "no". The per-agent "trusted community organizer" lines are gone. `SAGE_VOICE_RULES` no longer says "No greetings or sign-offs" or "Lead with your position"; it says to open with what Sage thinks and why, like talking to a neighbor, and to skip formal greetings. The reply agent is now framed as "a friendly organizer who helps out in {Commons}", and it still says it's an AI if asked. The trend agent's posts are "direct but friendly", and Community Observer summaries read like a quick catch-up.
+- **Voice references (2026-10-25).** The runtime `SAGE_VOICE` block now blends broad communication traits associated with Marc Lamont Hill, KevOnStage, Keith Lee and Sway Calloway: connect community details to the bigger picture, use natural relatable humor, stay calm and specific, and speak with culturally grounded confidence and curiosity. The prompt explicitly forbids imitation, catchphrases, forced slang and copied personas. Because every Sage agent loads the shared block, the references apply to replies, feed and trend comments, stewardship, check-ins, pre-vote summaries, proposals and Monday notes without duplicating prompt text.
 - **Canned text rewritten** (no model calls): the reply fallback, input refusals, the safety reply and its two follow-ups, the memory list, footer, date format ("Oct 10") and "forget" reply, the promised check-back, introduction offers and the "did it help?" ask, the resource invitation, the proposal-draft-ready notifications, the thanks shout-out, suggestion reminders and closing reasons, the community-question goal line, weekly check-in and follow-up fallbacks, and the decision-trail steps members can read ("Checked our charter (version N) and our N goals", "Sent a ready-made reply", "Something went wrong, so Sage didn't act").
 - **Meaning kept.** The safety reply still tells the member to call their local emergency number, says Sage can't send help itself, and shares nothing without their OK. A "yes" after the offer is still matched in code; the match now accepts the new wording and the old one (`SAFETY_OFFER_MARKERS`), so offers sent before this change still work. The memory footer still says notes are only used in private chats and counted, without a name, in Commons-wide totals once enough members share a need. Yes/no parsing, consent gates and approval paths are unchanged.
 
@@ -742,6 +749,7 @@ For every Sage behavior change:
 - 2026-10-18 (same day, later): Sage writes the proposal and submits it itself, for a member vote, instead of waiting for a member to take the idea on. The user asked for this directly; AGENT.md's autonomy boundaries now carve out Sage's own charter-goal proposals (still never approved without a vote; a passed charter or goals change still needs a steward). New and small Commons get proposals too: the age and three-member minimums were removed, and a goal nobody has proposed anything for counts as behind. A proposal the review sends back is withdrawn and offered as an open idea instead.
 - 2026-10-18 (later): Every proposal that opens for a vote now notifies the Commons' members ("New vote: …"), not only Sage's, so people know to vote. A Commons' first week with Sage proposals is capped at one, so the launch doesn't hand every Commons two votes at once.
 - 2026-10-20: Monday's post is a short, leader-style note phrased by a small model from facts code picks, and goals appear only when something moved on one. Proposal posts lead with the idea and mention the goal in passing, without gap numbers. Reverses the 2026-10-16 naming decision: members who pitched in are named in Sage's Monday and Friday posts by default, and an opt-out setting will come later (the user will write it). People who asked for help are never named.
+- 2026-10-25: @mention suggestions and stored mention resolution are scoped to active membership in the selected Commons. Opening the picker materializes that Commons' own Sage membership; Sages from other Commons and nonmember people are excluded. A hand-typed nonmember handle stays plain text and sends no mention alert.
 - 2026-10-18 (later): Platform admins can run Sage's proposal writer on demand from the web Commons AI page, with an option to skip the weekly limits, for onboarding and testing. Safety rules and code checks still apply.
 
 ## Completed milestones

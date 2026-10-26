@@ -109,3 +109,54 @@ it("leaves failures unalerted so the next run retries when Slack is down", async
   expect(result.alerted).toBe(false);
   expect(db.pushTicket.updateMany).not.toHaveBeenCalled();
 });
+
+it("keeps Apple/Expo error codes by name and logs the receipt failure", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  stubFetch({
+    "receipt-a": { status: "error", details: { error: "ProviderError" } },
+    "receipt-b": { status: "error", details: { error: "ExpoError" } },
+    "receipt-c": { status: "error", details: { error: "DeveloperError" } },
+    "receipt-d": { status: "error", message: "ExponentPushToken[x] failed" },
+  });
+  const db = receiptDb([ticket("a"), ticket("b"), ticket("c"), ticket("d", { type: "SAGE_RHYTHM" })]);
+  await checkPushReceipts(db, now);
+
+  const codes = db.pushTicket.update.mock.calls.map(([args]: any) => args.data.errorCode);
+  expect(codes).toEqual(["ProviderError", "ExpoError", "DeveloperError", "NoErrorCode"]);
+  expect(db.pushDevice.updateMany).not.toHaveBeenCalled();
+  expect(warn).toHaveBeenCalledWith("[push] Expo receipt failed", {
+    ticketId: "d",
+    type: "SAGE_RHYTHM",
+    coopId: "cahootz",
+    code: "NoErrorCode",
+    rawCode: undefined,
+  });
+});
+
+it("logs an unknown Expo code by name but never logs a token", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  stubFetch({
+    "receipt-a": { status: "error", details: { error: "BrandNewError" } },
+    "receipt-b": { status: "error", details: { error: "ExponentPushToken[secret]" } },
+  });
+  const db = receiptDb([ticket("a"), ticket("b")]);
+  await checkPushReceipts(db, now);
+
+  const logged = warn.mock.calls.filter(([line]) => line === "[push] Expo receipt failed").map(([, ctx]) => ctx);
+  expect(logged).toEqual([
+    expect.objectContaining({ code: "UnknownProviderError", rawCode: "BrandNewError" }),
+    expect.objectContaining({ code: "UnknownProviderError", rawCode: undefined }),
+  ]);
+  expect(JSON.stringify(warn.mock.calls)).not.toContain("ExponentPushToken");
+});
+
+it("gives a fix hint for Apple-side failures in Slack", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const slack = stubFetch({});
+  const db = receiptDb([], [ticket("a", { status: "ERROR", errorCode: "ProviderError", type: "SAGE_RHYTHM" })]);
+  await checkPushReceipts(db, now);
+  expect(slack[0].text).toContain("ProviderError");
+  expect(slack[0].text).toContain("Apple or Google turned the push down");
+});

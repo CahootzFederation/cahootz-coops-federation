@@ -172,6 +172,10 @@ const PUSH_FIX_HINTS: Record<string, string> = {
   PUSH_TOO_MANY_EXPERIENCE_IDS: "Tokens from more than one Expo project were sent together. Check the app's projectId.",
   ReceiptMissing: "Expo never reported back on these. Check status.expo.dev and try again.",
   RequestFailed: "We couldn't reach Expo. Check the API network and status.expo.dev.",
+  ProviderError: "Apple or Google turned the push down. Usually a stale token or one from a different build (TestFlight vs. App Store). If it keeps happening for one member, have them reopen the app.",
+  ExpoError: "Something broke on Expo's side. Check status.expo.dev; one-offs need no fix.",
+  DeveloperError: "We sent Expo a badly formed push. Check the payload for that notification type.",
+  NoErrorCode: "Expo said it failed but didn't say why. Check status.expo.dev if this keeps happening.",
 };
 
 /** Posts failed phone pushes to Slack, grouped by error, with what to do about each. */
@@ -190,7 +194,7 @@ export async function sendPushDeliveryAlert(params: {
   const codeLines = summary.byCode.slice(0, 10).map(({ code, count }) => {
     const hint = PUSH_FIX_HINTS[code] ?? (code.startsWith("HttpError")
       ? "Expo rejected the request. Check the API logs for [push] Expo HTTP error."
-      : "Unrecognized error. Check the API logs for [push] lines.");
+      : "Expo sent a code we don't know yet. Search the API logs for [push] Expo receipt failed or ticket rejected; rawCode has its name.");
     return `• *${safeSlackText(code, 60)}* × ${count} — ${hint}`;
   });
   if (params.receiptLookupFailed)

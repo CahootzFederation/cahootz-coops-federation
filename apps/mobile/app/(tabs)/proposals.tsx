@@ -287,7 +287,7 @@ function ProposalsHub() {
                         : 'Start a proposal'}
                 </Text>
                 <Text className="mt-1 text-sm leading-5 text-white/80">
-                  Sage can help you write it up: the need, the options, who's involved, the cost, and what people vote on.
+                  Sage can help you write it up: the need, the options, who&apos;s involved, the cost, and what people vote on.
                 </Text>
               </View>
               <Plus size={20} color="white" />

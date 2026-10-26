@@ -267,9 +267,9 @@ export default function MessagesScreen() {
                 <ShieldCheck size={21} color="#047857" />
               </View>
               <View className="flex-1">
-                <Text className="text-xl font-black text-gray-900">You'll need an account to message people</Text>
+                <Text className="text-xl font-black text-gray-900">You&apos;ll need an account to message people</Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">
-                  You can read the commons without signing in. To message someone, you'll need an account with a verified email.
+                  You can read the commons without signing in. To message someone, you&apos;ll need an account with a verified email.
                 </Text>
               </View>
             </View>
@@ -438,7 +438,7 @@ export default function MessagesScreen() {
               {!isLoadingMessages && !conversationError && messages.length === 0 ? (
                 <View className="rounded-xl bg-stone-100 px-4 py-3">
                   <Text className="text-sm leading-5 text-gray-700">
-                    No messages yet. Say hi, or send something that doesn't need to be public.
+                    No messages yet. Say hi, or send something that doesn&apos;t need to be public.
                   </Text>
                 </View>
               ) : null}

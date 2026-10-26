@@ -1168,6 +1168,31 @@ export const api = {
     );
   },
 
+  async listMentionMembers(
+    data: { coopId: string; query?: string; limit?: number },
+    sessionToken?: string | null,
+  ) {
+    const input = encodeURIComponent(
+      JSON.stringify({
+        coopId: data.coopId,
+        query: data.query ?? '',
+        limit: data.limit ?? 8,
+      }),
+    );
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.listMentionMembers?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
+
+    return readTrpcResult<{ members: SearchPerson[] }>(
+      response,
+      "We couldn't load this Commons' members",
+    );
+  },
+
   async getCommonsPost(
     data: { coopId?: string; postId: string },
     sessionToken?: string | null,

@@ -46,6 +46,7 @@ export async function listProspectsForAdmin(db: Db = defaultDb) {
     orderBy: { createdAt: "desc" },
     take: 200,
     include: {
+      responses: { orderBy: { respondedAt: "desc" }, take: 1, select: { interest: true, contactName: true, bestContact: true, offerIdea: true, respondedAt: true } },
       referrals: {
         orderBy: { createdAt: "asc" },
         select: {
@@ -70,6 +71,11 @@ export async function listProspectsForAdmin(db: Db = defaultDb) {
     state: prospect.state,
     sourceType: prospect.sourceType,
     status: prospect.status,
+    statusNote: prospect.statusNote,
+    sourceUrl: prospect.sourceUrl,
+    convertedOfferId: prospect.convertedOfferId,
+    lastContactedAt: prospect.lastContactedAt,
+    latestResponse: prospect.responses[0] ?? null,
     createdAt: prospect.createdAt,
     referralCount: prospect.referrals.length,
     commons: [...new Set(prospect.referrals.map((referral) => referral.coopId))],

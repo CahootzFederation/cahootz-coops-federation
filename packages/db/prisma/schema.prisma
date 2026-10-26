@@ -3849,26 +3849,31 @@ enum CommitmentStatus {
 // Cahootz and web search, and the outreach statuses.
 
 model VendorProspect {
-  id              String             @id @default(cuid())
-  businessName    String
-  category        String? // Deal category key from vendor-outreach/categories.ts
-  description     String? // What they sell, in the recommender's words
-  website         String?
-  domain          String? // Lowercased host of the website or email, for dedupe
-  email           String?
-  emailNormalized String?            @unique
-  phone           String?
-  city            String?
-  state           String?
-  sourceType      ProspectSourceType
-  sourceUrl       String? // Where a contact was found (web search, directory)
-  storeId         String? // Set when the business already has a Cahootz shop
-  status          ProspectStatus     @default(FOUND)
-  statusNote      String?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  id               String             @id @default(cuid())
+  businessName     String
+  category         String? // Deal category key from vendor-outreach/categories.ts
+  description      String? // What they sell, in the recommender's words
+  website          String?
+  domain           String? // Lowercased host of the website or email, for dedupe
+  email            String?
+  emailNormalized  String?            @unique
+  phone            String?
+  city             String?
+  state            String?
+  sourceType       ProspectSourceType
+  sourceUrl        String? // Where a contact was found (web search, directory)
+  storeId          String? // Set when the business already has a Cahootz shop
+  status           ProspectStatus     @default(FOUND)
+  statusNote       String?
+  lastContactedAt  DateTime?
+  declinedUntil    DateTime? // "Not right now": not contacted again before this
+  convertedOfferId String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
-  referrals VendorReferral[]
+  referrals         VendorReferral[]
+  campaignProspects CampaignProspect[]
+  responses         VendorResponse[]
 
   @@index([status])
   @@index([category])
@@ -3919,6 +3924,177 @@ enum ProspectStatus {
   UNSUBSCRIBED
   BOUNCED
   SKIPPED
+
+  @@schema("public")
+}
+
+// A platform-admin-approved outreach campaign: Sage may find and email businesses
+// for one deal category near one Commons, within these limits. Proposed by Sage
+// from public answers to a deal question; nothing is sent until it's ACTIVE.
+model VendorCampaign {
+  id             String               @id @default(cuid())
+  coopId         String
+  category       String // Deal category key (vendor-outreach/categories.ts)
+  offerType      OfferType            @default(GROUP_BUY)
+  searchTerms    String[]
+  area           String? // City or neighborhood to search near; required before approval
+  demandActionId String?              @unique // The deal-interest question this came from
+  demandEvidence Json // Public counts only: answers, Need posts
+  pitchPoints    String? // Admin-approved extra line for the email
+  maxEmails      Int                  @default(10)
+  maxSearches    Int                  @default(5)
+  searchesUsed   Int                  @default(0)
+  status         VendorCampaignStatus @default(PROPOSED)
+  rejectReason   String?
+  approvedById   String?
+  approvedAt     DateTime?
+  discoveredAt   DateTime?
+  expiresAt      DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  prospects CampaignProspect[]
+
+  @@index([status])
+  @@index([coopId, createdAt])
+  @@schema("public")
+}
+
+// Where Sage may look for businesses. Built-in sources plus ones Sage suggests,
+// which only count once a platform admin enables them.
+model ProspectSource {
+  id          String               @id @default(cuid())
+  type        ProspectSourceType
+  name        String               @unique
+  config      Json                 @default("{}") // e.g. { domain, queryHint }
+  suggestedBy String // "system", "sage" or an admin id
+  reason      String?
+  status      ProspectSourceStatus @default(SUGGESTED)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([status])
+  @@schema("public")
+}
+
+model CampaignProspect {
+  id             String                 @id @default(cuid())
+  campaignId     String
+  campaign       VendorCampaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  prospectId     String
+  prospect       VendorProspect         @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  status         CampaignProspectStatus @default(QUEUED)
+  skipReason     String?
+  replyTokenHash String?                @unique
+  personalLine   String? // Sage's checked paragraph for this business, if any
+  firstSentAt    DateTime?
+  followUpSentAt DateTime?
+  respondedAt    DateTime?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  messages  OutreachMessage[]
+  responses VendorResponse[]
+
+  @@unique([campaignId, prospectId])
+  @@index([status])
+  @@schema("public")
+}
+
+// One row per email step; the unique key means a step is never sent twice.
+model OutreachMessage {
+  id                 String                @id @default(cuid())
+  campaignProspectId String
+  campaignProspect   CampaignProspect      @relation(fields: [campaignProspectId], references: [id], onDelete: Cascade)
+  step               OutreachStep
+  toEmail            String
+  subject            String
+  body               String                @db.Text
+  status             OutreachMessageStatus
+  resendId           String?
+  error              String?
+  sentAt             DateTime              @default(now())
+
+  @@unique([campaignProspectId, step])
+  @@index([status, sentAt])
+  @@schema("public")
+}
+
+// Never email these again: unsubscribes, bounces, and admin blocks.
+model OutreachSuppression {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  domain    String?  @unique
+  reason    String // UNSUBSCRIBED, BOUNCED, ASKED_NOT_TO, ADMIN
+  createdAt DateTime @default(now())
+
+  @@schema("public")
+}
+
+model VendorResponse {
+  id                 String            @id @default(cuid())
+  prospectId         String
+  prospect           VendorProspect    @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  campaignProspectId String?
+  campaignProspect   CampaignProspect? @relation(fields: [campaignProspectId], references: [id], onDelete: SetNull)
+  interest           VendorInterest
+  contactName        String?
+  bestContact        String?
+  offerIdea          String?
+  respondedAt        DateTime          @default(now())
+
+  @@index([prospectId])
+  @@schema("public")
+}
+
+enum VendorCampaignStatus {
+  PROPOSED
+  ACTIVE
+  PAUSED
+  COMPLETED
+  EXPIRED
+  REJECTED
+
+  @@schema("public")
+}
+
+enum ProspectSourceStatus {
+  SUGGESTED
+  ENABLED
+  DISABLED
+
+  @@schema("public")
+}
+
+enum CampaignProspectStatus {
+  QUEUED
+  SENT
+  FOLLOWED_UP
+  RESPONDED
+  SKIPPED
+
+  @@schema("public")
+}
+
+enum OutreachStep {
+  FIRST
+  FOLLOW_UP
+
+  @@schema("public")
+}
+
+enum OutreachMessageStatus {
+  SENT
+  DRY_RUN
+  FAILED
+
+  @@schema("public")
+}
+
+enum VendorInterest {
+  YES
+  NOT_NOW
+  UNSUBSCRIBE
 
   @@schema("public")
 }

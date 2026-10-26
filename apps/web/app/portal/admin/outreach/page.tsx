@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, ArrowLeft, Loader2, MessageCircleQuestion, Store } from 'lucide-react';
 
@@ -16,6 +16,26 @@ interface DemandRow {
   needPosts: { posts: number; members: number } | null;
 }
 
+interface CampaignRow {
+  id: string;
+  coopId: string;
+  categoryLabel: string;
+  offerType: 'MEMBER_DEAL' | 'GROUP_BUY';
+  searchTerms: string[];
+  area: string | null;
+  demandEvidence: { interestCount?: number; needPosts?: { posts: number; members: number } | null };
+  pitchPoints: string | null;
+  maxEmails: number;
+  maxSearches: number;
+  searchesUsed: number;
+  status: string;
+  rejectReason: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  counts: { found: number; queued: number; sent: number; responded: number; skipped: number };
+  prospects: { prospectId: string; businessName: string; email: string | null; phone: string | null; source: string; status: string; skipReason: string | null; pipeline: string }[];
+}
+
 interface ProspectRow {
   id: string;
   businessName: string;
@@ -27,33 +47,89 @@ interface ProspectRow {
   city: string | null;
   state: string | null;
   sourceType: string;
+  sourceUrl: string | null;
   status: string;
+  statusNote: string | null;
+  convertedOfferId: string | null;
   createdAt: string;
-  referralCount: number;
-  commons: string[];
-  referrals: Array<{ coopId: string; howKnown: string | null; mayNameReferrer: boolean; referrer: string | null; createdAt: string }>;
+  latestResponse: { interest: string; contactName: string | null; bestContact: string | null; offerIdea: string | null; respondedAt: string } | null;
+  referrals: { coopId: string; howKnown: string | null; mayNameReferrer: boolean; referrer: string | null; createdAt: string }[];
 }
+
+interface SourceRow {
+  id: string;
+  type: string;
+  name: string;
+  config: { domain?: string };
+  suggestedBy: string;
+  reason: string | null;
+  status: 'SUGGESTED' | 'ENABLED' | 'DISABLED';
+}
+
+type Funnel = Record<string, number>;
 
 const date = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 const SOURCE: Record<string, string> = { MEMBER_REFERRAL: 'Member referral', CAHOOTZ_SHOP: 'Cahootz shop', WEB_SEARCH: 'Web search', DIRECTORY_SITE: 'Directory', ADMIN: 'Added by admin' };
+const STATUS: Record<string, string> = {
+  FOUND: 'Found', VERIFIED: 'Checked', QUEUED: 'Queued', CONTACTED: 'Emailed', FOLLOWED_UP: 'Followed up', INTERESTED: 'Said yes',
+  IN_TALKS: 'In talks', CONVERTED: 'Deal live', DECLINED: 'Not now', UNSUBSCRIBED: 'Unsubscribed', BOUNCED: 'Bounced', SKIPPED: 'Skipped',
+};
+const SKIP: Record<string, string> = {
+  NO_EMAIL: 'Phone only', BAD_EMAIL: 'Bad email', NO_MAIL_SERVER: "Domain can't get mail", UNSUBSCRIBED: 'Unsubscribed', SUPPRESSED: 'Do not email',
+  CONTACTED_RECENTLY: 'Emailed in last 90 days', DECLINED_RECENTLY: 'Said not now', ALREADY_TALKING: 'Already talking', OVER_LIMIT: 'Over the email limit',
+};
+const TABS = ['campaigns', 'businesses', 'demand', 'sources'] as const;
+type Tab = (typeof TABS)[number];
 
-/** Platform admin: what members want (from Sage's public questions) and the businesses they recommended. */
+const btn = 'rounded-md border px-3 py-1.5 text-xs font-semibold disabled:opacity-50';
+const primary = `${btn} border-emerald-300/40 bg-emerald-300/10 text-emerald-100 hover:bg-emerald-300/20`;
+const quiet = `${btn} border-white/15 text-slate-200 hover:bg-white/10`;
+const danger = `${btn} border-red-400/40 text-red-200 hover:bg-red-400/10`;
+const input = 'mt-1 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-white/30 focus:outline-none';
+
+/** Platform admin: what members want, Sage's campaigns, the businesses found, and how it's going. */
 export default function VendorOutreachPage() {
-  const [demand, setDemand] = useState<DemandRow[] | null>(null);
-  const [prospects, setProspects] = useState<ProspectRow[]>([]);
+  const [data, setData] = useState<{ demand: DemandRow[]; campaigns: CampaignRow[]; prospects: ProspectRow[]; sources: SourceRow[]; funnel: Funnel; sendingLive: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<'demand' | 'prospects'>('demand');
+  const [notice, setNotice] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>('campaigns');
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     fetch('/api/admin/outreach')
       .then(async (response) => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "We couldn't load vendor outreach.");
-        setDemand(data.demand);
-        setProspects(data.prospects);
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "We couldn't load vendor outreach.");
+        setData(body);
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "We couldn't load vendor outreach."));
   }, []);
+  useEffect(load, [load]);
+
+  async function post(url: string, body: unknown, done: string) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "That didn't work.");
+      setNotice(done);
+      load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "That didn't work.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const f = data?.funnel;
+  const counts: Record<Tab, number> = {
+    campaigns: data?.campaigns.length ?? 0,
+    businesses: data?.prospects.length ?? 0,
+    demand: data?.demand.length ?? 0,
+    sources: data?.sources.length ?? 0,
+  };
 
   return (
     <div className="space-y-6">
@@ -63,36 +139,83 @@ export default function VendorOutreachPage() {
       <div>
         <h1 className="text-2xl font-bold text-white">Vendor outreach</h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-400">
-          What members want, and the local businesses they recommended. Demand comes only from Sage&apos;s public questions to each
-          Commons and how many members answered, never from anyone&apos;s private messages.
+          Sage asks each Commons what they&apos;d buy together, proposes campaigns from the answers, and, once you approve one, finds and emails
+          local businesses within its limits. When a business says yes, it lands here for you to follow up.
         </p>
       </div>
 
-      <div className="flex gap-2" role="tablist">
-        {(['demand', 'prospects'] as const).map((key) => (
+      {data && !data.sendingLive && (
+        <div className="rounded-[8px] border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
+          Email isn&apos;t sending yet: emails are saved as previews (dry run). Real sending starts once the outreach sender
+          (<code>RESEND_OUTREACH_FROM_EMAIL</code>, <code>OUTREACH_REPLY_TO_EMAIL</code>) and the mailing address
+          (platform setting <code>outreach.postalAddress</code>) are set.
+        </div>
+      )}
+
+      {f && (
+        <section aria-label="Outreach funnel" className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+          {[
+            ['Questions asked', f.questionsAsked],
+            ['Members interested', f.membersInterested],
+            ['Campaigns approved', f.campaignsApproved],
+            ['Businesses found', f.businessesFound],
+            ['Emailed', f.businessesEmailed],
+            ['Said yes', f.saidYes],
+            ['In talks', f.inTalks],
+            ['Deals live', f.dealsLive],
+          ].map(([label, value]) => (
+            <div key={label as string} className="rounded-md border border-white/10 bg-black/20 p-3">
+              <p className="text-xs text-slate-500">{label}</p>
+              <p className="mt-1 text-xl font-semibold text-white">{value}</p>
+            </div>
+          ))}
+        </section>
+      )}
+
+      <div className="flex flex-wrap gap-2" role="tablist">
+        {TABS.map((key) => (
           <button
             key={key}
             role="tab"
             aria-selected={tab === key}
             onClick={() => setTab(key)}
-            className={`rounded-md border px-3 py-1.5 text-sm ${tab === key ? 'border-emerald-300/60 bg-emerald-300/15 text-emerald-100' : 'border-white/10 text-slate-300'}`}
+            className={`rounded-md border px-3 py-1.5 text-sm capitalize ${tab === key ? 'border-emerald-300/60 bg-emerald-300/15 text-emerald-100' : 'border-white/10 text-slate-300'}`}
           >
-            {key === 'demand' ? `Demand (${demand?.length ?? 0})` : `Businesses (${prospects.length})`}
+            {key} ({counts[key]})
           </button>
         ))}
       </div>
 
+      {notice && <p className="text-sm text-emerald-300">{notice}</p>}
       {error && <div className="flex gap-2 rounded-[8px] border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300"><AlertCircle className="h-4 w-4 shrink-0" />{error}</div>}
-      {!demand && !error && <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>}
+      {!data && !error && <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>}
 
-      {demand && tab === 'demand' && (
-        demand.length === 0 ? (
-          <div className="rounded-[8px] border border-dashed border-white/15 p-10 text-center text-slate-400">
-            Sage hasn&apos;t asked any Commons about deals yet. It checks every Monday.
+      {data && tab === 'campaigns' && (
+        data.campaigns.length === 0 ? (
+          <Empty text="No campaigns yet. Sage proposes one when at least 5 members answer a deal question." />
+        ) : (
+          <div className="space-y-4">
+            {data.campaigns.map((campaign) => <CampaignCard key={campaign.id} campaign={campaign} busy={busy} post={post} />)}
           </div>
+        )
+      )}
+
+      {data && tab === 'businesses' && (
+        data.prospects.length === 0 ? (
+          <Empty text="No businesses yet. Members can recommend them, and campaigns find more." />
+        ) : (
+          <div className="space-y-3">
+            {data.prospects.map((prospect) => <ProspectCard key={prospect.id} prospect={prospect} busy={busy} post={post} />)}
+          </div>
+        )
+      )}
+
+      {data && tab === 'demand' && (
+        data.demand.length === 0 ? (
+          <Empty text="Sage hasn't asked any Commons about deals yet. It checks every Monday." />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
-            {demand.map((row) => (
+            {data.demand.map((row) => (
               <div key={row.id} className="rounded-[10px] border border-white/10 bg-white/[0.03] p-4">
                 <div className="flex items-start gap-3">
                   <MessageCircleQuestion className="mt-0.5 h-5 w-5 text-emerald-300" />
@@ -106,8 +229,7 @@ export default function VendorOutreachPage() {
                   </div>
                 </div>
                 <p className="mt-3 text-xs text-slate-500">
-                  Why Sage asked: {row.evidenceKind}
-                  {row.needPosts ? ` (${row.needPosts.posts} posts from ${row.needPosts.members} members)` : ''}
+                  Why Sage asked: {row.evidenceKind}{row.needPosts ? ` (${row.needPosts.posts} posts from ${row.needPosts.members} members)` : ''}
                 </p>
               </div>
             ))}
@@ -115,45 +237,191 @@ export default function VendorOutreachPage() {
         )
       )}
 
-      {demand && tab === 'prospects' && (
-        prospects.length === 0 ? (
-          <div className="rounded-[8px] border border-dashed border-white/15 p-10 text-center text-slate-400">No businesses yet. Members can recommend them from the marketplace.</div>
-        ) : (
-          <div className="overflow-x-auto rounded-[10px] border border-white/10">
-            <table className="w-full text-left text-sm text-slate-300">
-              <thead className="bg-white/[0.03] text-xs text-slate-500">
-                <tr><th className="p-3">Business</th><th className="p-3">Contact</th><th className="p-3">From</th><th className="p-3">Recommended by</th><th className="p-3">Status</th></tr>
-              </thead>
-              <tbody>
-                {prospects.map((prospect) => (
-                  <tr key={prospect.id} className="border-t border-white/5 align-top">
-                    <td className="p-3">
-                      <div className="flex items-center gap-2"><Store className="h-4 w-4 text-orange-200" /><span className="font-semibold text-white">{prospect.businessName}</span></div>
-                      <p className="text-xs text-slate-500">{prospect.categoryLabel}{prospect.city ? ` · ${prospect.city}${prospect.state ? `, ${prospect.state}` : ''}` : ''}</p>
-                      {prospect.description && <p className="mt-1 text-xs text-slate-400">{prospect.description}</p>}
-                    </td>
-                    <td className="p-3 text-xs">
-                      {prospect.website && <p>{prospect.website}</p>}
-                      {prospect.email && <p>{prospect.email}</p>}
-                      {prospect.phone && <p>{prospect.phone}</p>}
-                    </td>
-                    <td className="p-3 text-xs">{SOURCE[prospect.sourceType] ?? prospect.sourceType}<p className="text-slate-500">{date(prospect.createdAt)}</p></td>
-                    <td className="p-3 text-xs">
-                      {prospect.referrals.map((referral, index) => (
-                        <p key={index}>
-                          {referral.referrer ?? 'A member'} ({referral.coopId}){referral.mayNameReferrer ? ' · OK to name' : ''}
-                          {referral.howKnown ? <span className="block text-slate-500">&ldquo;{referral.howKnown}&rdquo;</span> : null}
-                        </p>
-                      ))}
-                    </td>
-                    <td className="p-3 text-xs">{prospect.status.toLowerCase().replace('_', ' ')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
+      {data && tab === 'sources' && (
+        <div className="space-y-2">
+          <p className="text-sm text-slate-400">Where Sage may look for businesses. Places Sage suggests do nothing until you turn them on.</p>
+          {data.sources.map((source) => (
+            <div key={source.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-white/10 bg-white/[0.03] p-3">
+              <div>
+                <p className="font-semibold text-white">{source.name}</p>
+                <p className="text-xs text-slate-400">
+                  {source.config?.domain ? `${source.config.domain} · ` : ''}{source.suggestedBy === 'sage' ? 'Suggested by Sage' : 'Built in'}
+                  {source.reason ? ` · ${source.reason}` : ''}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">{source.status === 'ENABLED' ? 'On' : source.status === 'SUGGESTED' ? 'Suggested' : 'Off'}</span>
+                {source.status === 'ENABLED' ? (
+                  <button className={quiet} disabled={busy} onClick={() => post(`/api/admin/outreach/sources/${source.id}`, { status: 'DISABLED' }, `${source.name} turned off.`)}>Turn off</button>
+                ) : (
+                  <button className={primary} disabled={busy} onClick={() => post(`/api/admin/outreach/sources/${source.id}`, { status: 'ENABLED' }, `${source.name} turned on.`)}>Turn on</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
+    </div>
+  );
+}
+
+function Empty({ text }: { text: string }) {
+  return <div className="rounded-[8px] border border-dashed border-white/15 p-10 text-center text-slate-400">{text}</div>;
+}
+
+type Post = (url: string, body: unknown, done: string) => Promise<void>;
+
+function CampaignCard({ campaign, busy, post }: { campaign: CampaignRow; busy: boolean; post: Post }) {
+  const [area, setArea] = useState(campaign.area ?? '');
+  const [maxEmails, setMaxEmails] = useState(String(campaign.maxEmails));
+  const [pitch, setPitch] = useState(campaign.pitchPoints ?? '');
+  const url = `/api/admin/outreach/campaigns/${campaign.id}`;
+  const evidence = campaign.demandEvidence ?? {};
+  return (
+    <div className="rounded-[10px] border border-white/10 bg-white/[0.03] p-4" aria-label={`Campaign ${campaign.categoryLabel} for ${campaign.coopId}`} data-testid={`campaign-${campaign.id}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="font-semibold text-white">{campaign.categoryLabel} · {campaign.coopId}</p>
+          <p className="text-xs text-slate-400">
+            {campaign.offerType === 'GROUP_BUY' ? 'Group buy' : 'Member deal'} · proposed {date(campaign.createdAt)}
+            {campaign.expiresAt ? ` · ends ${date(campaign.expiresAt)}` : ''}
+          </p>
+        </div>
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-slate-200" data-testid="campaign-status">{campaign.status.toLowerCase()}</span>
+      </div>
+      <p className="mt-2 text-sm text-slate-300">
+        {evidence.interestCount ?? 0} members answered Sage&apos;s question
+        {evidence.needPosts ? `, plus ${evidence.needPosts.posts} public Need posts from ${evidence.needPosts.members} members` : ''}.
+        Search terms: {campaign.searchTerms.join(', ')}.
+      </p>
+
+      {campaign.status === 'PROPOSED' && (
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <label className="text-xs text-slate-300">
+            Search near (city or area)
+            <input className={input} value={area} onChange={(e) => setArea(e.target.value)} placeholder="Atlanta, GA" />
+          </label>
+          <label className="text-xs text-slate-300">
+            Most emails to send
+            <input className={input} inputMode="numeric" value={maxEmails} onChange={(e) => setMaxEmails(e.target.value)} />
+          </label>
+          <label className="text-xs text-slate-300 md:col-span-3">
+            Extra line for the email (optional, no prices or promises)
+            <input className={input} value={pitch} onChange={(e) => setPitch(e.target.value)} />
+          </label>
+          <div className="flex gap-2 md:col-span-3">
+            <button
+              className={primary}
+              disabled={busy}
+              onClick={() => post(url, { action: 'approve', area, maxEmails: Number(maxEmails) || undefined, pitchPoints: pitch || null }, 'Campaign approved. Sage will start finding businesses within the hour.')}
+            >
+              Approve campaign
+            </button>
+            <button
+              className={danger}
+              disabled={busy}
+              onClick={() => {
+                const reason = window.prompt('Why not? (Sage will see this next time.)');
+                if (reason && reason.trim().length >= 3) void post(url, { action: 'reject', reason }, 'Campaign rejected.');
+              }}
+            >
+              Reject
+            </button>
+          </div>
+        </div>
+      )}
+
+      {campaign.status !== 'PROPOSED' && (
+        <>
+          <p className="mt-2 text-xs text-slate-400">
+            Near {campaign.area} · up to {campaign.maxEmails} emails · web searches {campaign.searchesUsed}/{campaign.maxSearches}
+            {campaign.rejectReason ? ` · rejected: ${campaign.rejectReason}` : ''}
+          </p>
+          <div className="mt-2 grid grid-cols-5 gap-2 text-sm">
+            {(['found', 'queued', 'sent', 'responded', 'skipped'] as const).map((key) => (
+              <div key={key}><p className="text-xs capitalize text-slate-500">{key}</p><p className="font-semibold text-white">{campaign.counts[key]}</p></div>
+            ))}
+          </div>
+          {campaign.prospects.length > 0 && (
+            <ul className="mt-3 space-y-1 text-xs text-slate-300">
+              {campaign.prospects.map((row) => (
+                <li key={row.prospectId}>
+                  <span className="text-white">{row.businessName}</span> · {SOURCE[row.source] ?? row.source} · {row.status.toLowerCase().replace('_', ' ')}
+                  {row.skipReason ? ` (${SKIP[row.skipReason] ?? row.skipReason})` : ''}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-3 flex gap-2">
+            {campaign.status === 'ACTIVE' && <button className={quiet} disabled={busy} onClick={() => post(url, { action: 'pause' }, 'Campaign paused. Nothing more will be sent.')}>Pause</button>}
+            {campaign.status === 'PAUSED' && <button className={primary} disabled={busy} onClick={() => post(url, { action: 'resume' }, 'Campaign resumed.')}>Resume</button>}
+            {['ACTIVE', 'PAUSED'].includes(campaign.status) && <button className={danger} disabled={busy} onClick={() => post(url, { action: 'complete' }, 'Campaign ended.')}>End campaign</button>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ProspectCard({ prospect, busy, post }: { prospect: ProspectRow; busy: boolean; post: Post }) {
+  const url = `/api/admin/outreach/prospects/${prospect.id}`;
+  const response = prospect.latestResponse;
+  return (
+    <div className="rounded-[10px] border border-white/10 bg-white/[0.03] p-4" aria-label={`Business ${prospect.businessName}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex items-start gap-2">
+          <Store className="mt-0.5 h-4 w-4 text-orange-200" />
+          <div>
+            <p className="font-semibold text-white">{prospect.businessName}</p>
+            <p className="text-xs text-slate-400">
+              {prospect.categoryLabel}{prospect.city ? ` · ${prospect.city}${prospect.state ? `, ${prospect.state}` : ''}` : ''} · {SOURCE[prospect.sourceType] ?? prospect.sourceType} · {date(prospect.createdAt)}
+            </p>
+          </div>
+        </div>
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-slate-200">{STATUS[prospect.status] ?? prospect.status}</span>
+      </div>
+      <p className="mt-2 text-xs text-slate-300">
+        {[prospect.email, prospect.phone, prospect.website].filter(Boolean).join(' · ') || 'No contact details'}
+        {prospect.sourceUrl ? <> · <a className="underline" href={prospect.sourceUrl} target="_blank" rel="noreferrer">where found</a></> : null}
+      </p>
+      {prospect.description && <p className="mt-1 text-xs text-slate-400">{prospect.description}</p>}
+      {prospect.referrals.map((referral, index) => (
+        <p key={index} className="mt-1 text-xs text-slate-400">
+          Recommended by {referral.referrer ?? 'a member'} ({referral.coopId}){referral.mayNameReferrer ? ', OK to name' : ''}
+          {referral.howKnown ? `: “${referral.howKnown}”` : ''}
+        </p>
+      ))}
+      {response && (
+        <div className="mt-2 rounded-md border border-emerald-300/20 bg-emerald-300/5 p-2 text-xs text-emerald-100">
+          {response.interest === 'YES' ? 'Said yes' : response.interest === 'NOT_NOW' ? 'Said not right now' : 'Unsubscribed'} on {date(response.respondedAt)}
+          {response.contactName ? ` · ${response.contactName}` : ''}{response.bestContact ? ` · ${response.bestContact}` : ''}
+          {response.offerIdea ? <span className="block text-emerald-200/80">“{response.offerIdea}”</span> : null}
+        </div>
+      )}
+      {prospect.statusNote && <p className="mt-1 text-xs text-slate-500">Note: {prospect.statusNote}</p>}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {['INTERESTED', 'CONTACTED', 'FOLLOWED_UP', 'FOUND'].includes(prospect.status) && (
+          <button className={primary} disabled={busy} onClick={() => post(url, { action: 'inTalks' }, `${prospect.businessName} marked in talks.`)}>Mark in talks</button>
+        )}
+        {['INTERESTED', 'IN_TALKS'].includes(prospect.status) && (
+          <button
+            className={primary}
+            disabled={busy}
+            onClick={() => {
+              const offerId = window.prompt('Paste the offer id from the offer admin page:');
+              if (offerId?.trim()) void post(url, { action: 'converted', offerId: offerId.trim() }, `${prospect.businessName} marked as a live deal.`);
+            }}
+          >
+            Deal created
+          </button>
+        )}
+        {!['DECLINED', 'UNSUBSCRIBED', 'CONVERTED'].includes(prospect.status) && (
+          <button className={quiet} disabled={busy} onClick={() => post(url, { action: 'declined' }, `${prospect.businessName} marked not interested.`)}>Not interested</button>
+        )}
+        {!['UNSUBSCRIBED', 'SKIPPED'].includes(prospect.status) && (
+          <button className={danger} disabled={busy} onClick={() => post(url, { action: 'doNotEmail' }, `We won't email ${prospect.businessName}.`)}>Do not email</button>
+        )}
+      </div>
     </div>
   );
 }

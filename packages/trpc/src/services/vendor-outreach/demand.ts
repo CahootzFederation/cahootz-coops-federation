@@ -5,6 +5,7 @@ import { countQuestionResponders } from "../sage-community-question.js";
 import { retrieveCommunityInsights } from "../sage-community-memory.js";
 import { isoWeekKey } from "../sage-community-rhythm.js";
 import { checkSageOutput } from "../untrusted-input.js";
+import { proposeCampaigns } from "./campaigns.js";
 import { dealCategoriesInText, dealCategoryByKey, dealCategoryForTheme, dealQuestionText } from "./categories.js";
 
 type Db = typeof defaultDb;
@@ -243,8 +244,9 @@ export async function runVendorDemandSweep(options: { now?: Date; coopIds?: stri
   for (const { coopId } of configs) {
     try {
       const interest = await countDealInterest(coopId, now, db);
+      const campaigns = await proposeCampaigns(coopId, now, db);
       const question = await askCommonsAboutDeals(coopId, now, db);
-      results.push({ coopId, ...interest, question });
+      results.push({ coopId, ...interest, ...campaigns, question });
     } catch (error) {
       failed++;
       results.push({ coopId, error: error instanceof Error ? error.message : String(error) });

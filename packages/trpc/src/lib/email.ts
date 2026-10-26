@@ -625,6 +625,41 @@ async function sendEmail({
   }
 }
 
+/**
+ * The outreach sender: a business email to a local vendor, from the separate
+ * outreach address so outreach never affects delivery of login codes. Callers
+ * must check outreachEmailReady() first; this throws when it isn't set up.
+ */
+export function outreachEmailReady() {
+  return isEmailConfigured() && !!process.env.RESEND_OUTREACH_FROM_EMAIL && !!process.env.OUTREACH_REPLY_TO_EMAIL;
+}
+
+export async function sendVendorOutreachEmail(input: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  oneClickUnsubscribeUrl: string;
+}) {
+  if (!outreachEmailReady()) throw new Error("Outreach email is not set up");
+  const resend = new Resend(env.RESEND_API_KEY);
+  const result = await resend.emails.send({
+    from: `Cahootz Commons <${process.env.RESEND_OUTREACH_FROM_EMAIL}>`,
+    to: input.to,
+    subject: input.subject,
+    html: input.html,
+    text: input.text,
+    replyTo: process.env.OUTREACH_REPLY_TO_EMAIL,
+    headers: {
+      "List-Unsubscribe": `<${input.oneClickUnsubscribeUrl}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    },
+  });
+  if (result.error) throw new Error(result.error.message);
+  if (!result.data) throw new Error("Resend did not return sent email data");
+  return result.data;
+}
+
 export async function sendLoginCode(
   email: string,
   code: string,

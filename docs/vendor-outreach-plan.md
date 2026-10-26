@@ -1,6 +1,6 @@
 # Vendor finding and outreach: plan
 
-Status: approved 2026-10-26. Phase 1 is built (weekly demand check and interest question, Recommend a business, the prospect list in the admin portal). Phases 2-5 are not built.
+Status: approved 2026-10-26. Phases 1-5 are built. Real email sending waits on the outreach sender address, the reply inbox and the mailing address (until then emails are saved as dry runs). Bounce handling from Resend webhooks is not built yet.
 
 ## Goal
 

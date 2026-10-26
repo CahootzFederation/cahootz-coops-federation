@@ -9,7 +9,7 @@
  *   ... rerun
  *     Runs the demand check again (it must not post a second question).
  *   ... cleanup <runId> <addedMember:true|false>
- *     Deletes the run's Need posts, Sage's deal questions in that commons, E2E
+ *     Deletes the run's Need posts, Sage's deal questions in that commons, the run's
  *     business recommendations, and the temporary membership.
  *
  * Prints one JSON line prefixed with "E2E_RESULT ". Refuses production and non-local databases.
@@ -71,7 +71,8 @@ async function rerun() {
 async function cleanup(runId: string, addedMember: string) {
   await db.commonsPost.deleteMany({ where: { coopId: COOP_ID, title: { startsWith: `E2E ${runId}` } } });
   await clearDealQuestions();
-  const prospects = await db.vendorProspect.findMany({ where: { businessName: { startsWith: "E2E" } }, select: { id: true } });
+  // Only this run's businesses; other journeys add E2E businesses too.
+  const prospects = await db.vendorProspect.findMany({ where: { businessName: { startsWith: `E2E ${runId}` } }, select: { id: true } });
   await db.auditLog.deleteMany({ where: { resourceId: { in: prospects.map((prospect) => prospect.id) } } });
   await db.vendorProspect.deleteMany({ where: { id: { in: prospects.map((prospect) => prospect.id) } } });
   if (addedMember === "true") {

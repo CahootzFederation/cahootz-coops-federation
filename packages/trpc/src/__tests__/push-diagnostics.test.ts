@@ -65,6 +65,7 @@ it("reports an Expo ticket error even when HTTP succeeds without logging tokens"
     notificationId: "alert",
     type: "MENTION",
     code: "DeviceNotRegistered",
+    rawCode: "DeviceNotRegistered",
   });
   expect(JSON.stringify(warn.mock.calls)).not.toContain("secret-device-token");
 });

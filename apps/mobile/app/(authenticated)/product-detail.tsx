@@ -67,6 +67,9 @@ export default function ProductDetailScreen() {
     return `$${price.toFixed(2)}`;
   };
 
+  // Badges and Sage message packs are added to the member's account, so there's nothing to ship.
+  const isDigital = product?.kind === 'FUNDING_BADGE' || product?.kind === 'SAGE_MESSAGE_PACK';
+
   const handleAddToCart = () => {
     if (!product) return;
 
@@ -77,7 +80,7 @@ export default function ProductDetailScreen() {
         imageUrl: product.imageUrl,
         priceUSD: product.priceUSD,
         maxQuantity: product.kind === 'FUNDING_BADGE' ? 1 : undefined,
-        requiresShipping: product.kind !== 'FUNDING_BADGE',
+        requiresShipping: !isDigital,
         exclusiveGroup: product.kind === 'FUNDING_BADGE' ? 'funding-badge' : undefined,
       },
       {
@@ -111,7 +114,7 @@ export default function ProductDetailScreen() {
         imageUrl: product.imageUrl,
         priceUSD: product.priceUSD,
         maxQuantity: product.kind === 'FUNDING_BADGE' ? 1 : undefined,
-        requiresShipping: product.kind !== 'FUNDING_BADGE',
+        requiresShipping: !isDigital,
         exclusiveGroup: product.kind === 'FUNDING_BADGE' ? 'funding-badge' : undefined,
       },
       {
@@ -176,7 +179,9 @@ export default function ProductDetailScreen() {
         : product.allowBackorder
           ? 'Available by backorder'
           : 'Unavailable';
-  const deliveryNote = product.kind === 'FUNDING_BADGE'
+  const deliveryNote = product.kind === 'SAGE_MESSAGE_PACK'
+    ? 'Added to your Ask Sage messages after purchase'
+    : isDigital
     ? 'Added to your account after purchase'
     : 'Delivered to the address provided at checkout';
 

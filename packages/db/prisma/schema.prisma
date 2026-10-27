@@ -85,6 +85,9 @@ model User {
   scMintEvents               SCMintEvent[]
   scBurnEvents               SCBurnEvent[]
   fundingBadges              FundingBadgeEntitlement[]
+  sageMessageCredits         SageMessageCredit[]
+  sageMessageUses            SageMessageUse[]
+  sageChatMessages           SageChatMessage[]
   commonsPosts               CommonsPost[]
   personalPagePosts          PersonalPagePost[]
   commonsComments            CommonsComment[]
@@ -1007,6 +1010,57 @@ model HumanAIFeedback {
   @@unique([observationId, userId])
   @@index([coopId, createdAt])
   @@index([userId])
+  @@schema("public")
+}
+
+// Messages a member bought from their Commons' official store to talk with Sage. They never expire.
+model SageMessageCredit {
+  id                    String              @id @default(cuid())
+  userId                String
+  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coopId                String
+  messages              Int
+  productId             String
+  product               Product             @relation(fields: [productId], references: [id], onDelete: Restrict)
+  commerceTransactionId String
+  commerceTransaction   CommerceTransaction @relation(fields: [commerceTransactionId], references: [id], onDelete: Restrict)
+  // Set when the payment is refunded; revoked credits no longer count.
+  revokedAt             DateTime?
+  createdAt             DateTime            @default(now())
+
+  @@unique([commerceTransactionId, productId])
+  @@index([userId, coopId])
+  @@schema("public")
+}
+
+// One row per member message Sage answered with a model, from the Ask Sage chat or a DM.
+// paid=false uses the monthly free allowance; paid=true uses bought messages.
+model SageMessageUse {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coopId    String
+  source    String // "CHAT" | "DM"
+  sourceId  String
+  paid      Boolean
+  createdAt DateTime @default(now())
+
+  @@unique([source, sourceId])
+  @@index([userId, coopId, createdAt])
+  @@schema("public")
+}
+
+// The member's private Ask Sage conversation about one Commons.
+model SageChatMessage {
+  id        String   @id @default(cuid())
+  coopId    String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String // "MEMBER" | "SAGE"
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([userId, coopId, createdAt])
   @@schema("public")
 }
 
@@ -2640,10 +2694,15 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Sage message packs only: how many messages one unit of this product adds.
+  sageMessageCount Int?
+
   // Relations
   orderItems               StoreOrderItem[]
   fundingBadgeEntitlements FundingBadgeEntitlement[]
+  sageMessageCredits       SageMessageCredit[]
 
+  @@unique([storeId, sageMessageCount])
   @@index([storeId])
   @@index([category])
   @@index([isActive])
@@ -2660,6 +2719,7 @@ enum StoreKind {
 enum ProductKind {
   STANDARD
   FUNDING_BADGE
+  SAGE_MESSAGE_PACK
 
   @@schema("public")
 }
@@ -3318,6 +3378,7 @@ model CommerceTransaction {
   treasuryLedgerEntries    TreasuryLedgerEntry[]
   scMintEvents             SCMintEvent[]
   fundingBadgeEntitlements FundingBadgeEntitlement[]
+  sageMessageCredits       SageMessageCredit[]
 
   @@index([customerId, createdAt(sort: Desc)])
   @@index([businessId, createdAt(sort: Desc)])

@@ -139,6 +139,10 @@ async function main() {
       });
     }
 
+    // Test accounts start every seed with a full allowance of Sage messages, so repeated local
+    // E2E runs in one month never hit the 20-message limit (sage-message-allowance.ts).
+    await prisma.sageMessageUse.deleteMany({ where: { userId: user.id, coopId } });
+
     summary.push({ email, handle });
   }
 

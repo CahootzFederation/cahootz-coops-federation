@@ -4,6 +4,7 @@ import { TRPCError } from '@trpc/server';
 
 import type { AccountAuthenticatedContext } from '../context.js';
 import { runSageCommonsReply } from '../agents/registry.js';
+import { answerWithinSageAllowance, listSagePacks, outOfMessagesReply } from './sage-message-allowance.js';
 import { buildSageReplyTools } from '../agents/tools/member-action-tools.js';
 import { safeFirstName } from './sage-reply-templates.js';
 import { auditLogEntry } from '../lib/audit.js';
@@ -359,10 +360,16 @@ async function replyAsSage(
     await traceSageReply(
       { kind: 'dm', coopId: group.coopId, groupId: group.id, messageId: message.id },
       { message: message.content, threadContext, threadCount: prior.length, remembered, toolLog: actions.state.log },
-      (cleanMessage, thread) => runSageCommonsReply(
-        { coopId: group.coopId, message: cleanMessage, threadContext: thread, channel: 'dm', memberMemory: remembered, memberName: safeFirstName(sender.name) ?? undefined },
-        undefined,
-        actions,
+      // DMs share the Ask Sage allowance, so a DM isn't a free way around it. Only a model answer uses one.
+      (cleanMessage, thread) => answerWithinSageAllowance(
+        db,
+        { userId: sender.id, coopId: group.coopId, source: 'DM', sourceId: message.id },
+        () => runSageCommonsReply(
+          { coopId: group.coopId, message: cleanMessage, threadContext: thread, channel: 'dm', memberMemory: remembered, memberName: safeFirstName(sender.name) ?? undefined },
+          undefined,
+          actions,
+        ),
+        async (allowance) => ({ reply: outOfMessagesReply(allowance, (await listSagePacks(db, group.coopId)).storeReady) }),
       ),
       publish,
     );

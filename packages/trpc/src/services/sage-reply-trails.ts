@@ -19,12 +19,14 @@ export const SAGE_UNSAFE_REPLY = "I can't give a good answer to that here. A Com
  *
  * Mentions in the general Commons feed are visible to that Commons' members; a mention in a circle only
  * to that circle's members; a direct message's trail only to the two people in it (circle visibility on
- * the DM's private group).
+ * the DM's private group). An Ask Sage chat is private to the member, so its trail is admin-only, the same
+ * people who can already read every DM trail.
  */
 export type SageReplySource =
   | { kind: "post"; coopId: string; postId: string; circleId?: string | null }
   | { kind: "comment"; coopId: string; postId: string; commentId: string; circleId?: string | null }
-  | { kind: "dm"; coopId: string; groupId: string; messageId: string };
+  | { kind: "dm"; coopId: string; groupId: string; messageId: string }
+  | { kind: "chat"; coopId: string; messageId: string };
 
 export interface SageReplyGrounding {
   charterChars: number;
@@ -34,6 +36,13 @@ export interface SageReplyGrounding {
 }
 
 function trailFor(source: SageReplySource, message: string, threadContext: string | undefined) {
+  if (source.kind === "chat") {
+    return new DecisionTrail({
+      agent: "sage-reply", coopId: source.coopId, circleId: null,
+      sourceType: "sage_chat", sourceId: source.messageId, trigger: "SAGE_CHAT", visibility: "ADMINS",
+      observed: { content: message, context: threadContext }, relatedPostIds: [],
+    }).step("OBSERVED", "Read a message in the Ask Sage chat");
+  }
   const isDm = source.kind === "dm";
   const circleId = isDm ? source.groupId : source.circleId ?? null;
   return new DecisionTrail({
@@ -60,12 +69,13 @@ export async function traceSageReply(
   const inputCheck = mergeFlags(thread ? [message, thread] : [message]);
   const trail = trailFor(source, message.text, thread?.text);
   trail.step("EVIDENCE", input.threadCount
-    ? `${input.threadCount} earlier ${source.kind === "dm" ? "messages in this conversation" : "items in the thread"}`
+    ? `${input.threadCount} earlier ${source.kind === "dm" || source.kind === "chat" ? "messages in this conversation" : "items in the thread"}`
     : "No earlier conversation");
   if (input.remembered?.length) {
     trail.step("EVIDENCE", `${input.remembered.length} need${input.remembered.length === 1 ? "" : "s"} remembered from the member's check-ins`, { detail: input.remembered.join("\n") });
   }
   if (source.kind === "dm") trail.policy("The sender is in this direct message with Sage", true);
+  else if (source.kind === "chat") trail.policy("The sender is an active member of this Commons", true);
   else {
     trail.policy("The sender is an active member of this Commons", true);
     trail.policy(source.circleId ? "Sage replies to @mentions in this Commons' circles, with no tools" : "Sage replies to @mentions in the general Commons feed", true);
@@ -84,7 +94,8 @@ export async function traceSageReply(
       if (refusal !== "STEERING") {
         await db.auditLog.create({
           data: auditLogEntry({
-            actorId: "system/sage", action: "SAGE_INPUT_REFUSED", resource: source.kind === "dm" ? "GroupComment" : source.kind === "comment" ? "CommonsComment" : "CommonsPost",
+            actorId: "system/sage", action: "SAGE_INPUT_REFUSED",
+            resource: source.kind === "dm" ? "GroupComment" : source.kind === "chat" ? "SageChatMessage" : source.kind === "comment" ? "CommonsComment" : "CommonsPost",
             resourceId: source.kind === "post" ? source.postId : source.kind === "comment" ? source.commentId : source.messageId,
             metadata: { reason: refusal, channel: source.kind, length: input.message.length },
           }),
@@ -116,7 +127,7 @@ export async function traceSageReply(
       outputCheck.ok ? "" : isUnsafeReply(outputCheck.problems) ? "Sent a safe standard reply instead." : "Links and @mentions were removed before posting.",
     ].filter(Boolean).join(" ") || undefined);
     await publish(reply);
-    trail.taken(source.kind === "dm" ? "Replied in the direct message" : "Replied in the comments as Sage", "PASS");
+    trail.taken(source.kind === "dm" ? "Replied in the direct message" : source.kind === "chat" ? "Replied in the Ask Sage chat" : "Replied in the comments as Sage", "PASS");
     trail.result("Reply posted", "PASS", "None.");
     await trail.save();
   } catch (error) {

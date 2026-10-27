@@ -1,6 +1,6 @@
 # Sage product roadmap
 
-Last updated: 2026-10-25
+Last updated: 2026-10-27
 
 ## North star
 
@@ -57,6 +57,32 @@ The local-only command in `apps/api/scripts/publish-community-pulse-local.ts` ru
 The @mention picker reads active memberships from the selected Commons. It no longer uses the platform-wide people search or the original Commons' direct-message list. Opening the picker lazily creates that Commons' own Sage account and membership, so the right Sage remains available while people and Sage accounts from other Commons stay out. The write path applies the same membership rule: a hand-typed nonmember handle remains plain text and cannot create an out-of-scope mention notification.
 
 Verification: the tRPC suite passed (1,073 tests, 31 skipped), the tRPC build and mobile type-check passed, and the focused Playwright journey passed. The required full mobile E2E run also passed the new mention journey before the local Expo server exited; its final result was therefore not green (47 passed, 2 skipped, 2 did not run, 70 failed, with the later failures reporting port 8081 refused).
+
+## Ask Sage chat and message allowance (2026-10-27)
+
+Members can now talk with Sage about their Commons in a private **Ask Sage** chat, opened from the General post board header (`app/(authenticated)/sage/chat.tsx`, `sage.chat` / `sage.sendChat`). It's apart from posts and from DMs, and only the member sees it. Each Sage answer gets a bounded snapshot of what members can already see (`buildCommunitySnapshot`): up to 3 published Pulse cards, 15 General-feed posts from the last 14 days, 5 upcoming General events and 5 open proposals, capped at 6,000 characters and cleansed as untrusted input. It never includes private circles, DMs, other members' memory, or names. The member's own saved needs are used the same way as in their DM.
+
+User decisions (2026-10-26):
+
+- One allowance per member per Commons, shared by Ask Sage and member DMs to Sage, so a DM isn't a free way around it.
+- 20 free messages each UTC month, used first.
+- More messages are sold as two platform-fixed packs in the Commons' official store: 50 for $5 and 150 for $12. Stewards can't change them. Bought messages never expire.
+
+How it works (`sage-message-allowance.ts`):
+
+- Only a real model answer uses a message. Fixed replies cost nothing, and neither does the stock "I'm not sure" reply Sage sends when the model returns nothing: refused input (code, math, huge pastes, steering), memory requests, yes/no to Sage's own asks, and check-in follow-ups Sage started.
+- `claimSageMessage` takes a per-member advisory lock, is idempotent per source message, and records a `SageMessageUse` (free or paid). If the model fails, the message is given back and the chat keeps nothing, so the member can retry.
+- Out of messages: the chat saves nothing, keeps the member's text, and shows when free messages return and the packs to buy. A DM gets a fixed reply with the reset date, with no model call.
+- Packs are `Product` rows of kind `SAGE_MESSAGE_PACK` with a `sageMessageCount`, created by `ensureCommonsFundingStore` and lazily for older official stores. Checkout allows them only from the official store and only for signed-in active members, and treats them like badges: nothing ships, and the product page says the messages are added to Ask Sage. The Ask Sage button shows only to members of that Commons. The Stripe payment webhook grants a `SageMessageCredit` per pack (times quantity, idempotent); any refund revokes that payment's credits, and messages already used stay used.
+- Every chat answer records a decision trail (`SAGE_CHAT`, admin-only, like DM trails). Its cost is recorded as feature `sage-community-chat`. Member-requested AI isn't counted against or paused by the autonomy limit; the message allowance is what bounds it. At the current `gpt-5.6-luna` reply model with low effort and a 1,200-token cap, one local answer cost $0.0006 (2,624 input and 65 output tokens). A Commons with a full snapshot reads up to about 1,500 more tokens, so 20 messages should stay around 1 to 2 cents per member per month.
+
+Migration `20261026000000_sage_community_chat` adds the enum value, `Product.sageMessageCount` (unique per store), `SageMessageCredit`, `SageMessageUse` and `SageChatMessage`. Apply it before deploying the API and mobile app, then run `pnpm db:backfill-funding-stores` to list the packs in every official store (they're also created the first time anyone opens Ask Sage).
+
+Verification: unit tests in `sage-community-chat.test.ts` (allowance order, monthly reset, per-Commons separation, idempotency, release on failure, grants, refunds, DM gating, chat send/out/fail/refusal paths, snapshot scope); the full tRPC suite (1,097 passed, 31 skipped); mobile type-check; journey 78 in `TESTING.md`, both the deterministic journey and the live `@sage` journey, on a local clone with the new migration applied. The live run recorded a `sage-community-chat` cost event and admin-only `SAGE_CHAT` decision trails.
+
+Open questions for the product owner: the official store is SC-verified, so buying a pack currently earns coin rewards ("Earns SC rewards" on the product page), the same as a funding badge; and official stores settle to the platform's shared Stripe account, so pack money doesn't go straight to the Commons.
+
+Remaining: the chat has no action tools yet (it can't draft posts or introductions the way a DM can); nothing in a chat becomes Sage memory; a refund revokes all of that payment's messages even when partial; the chat doesn't show past purchases; stewards can't see Ask Sage usage or pack sales in one place. Buying a pack end to end through Stripe hasn't been run locally; the webhook grant and refund paths are unit-tested only.
 
 ## Current foundation
 

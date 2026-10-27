@@ -24,6 +24,7 @@ import { recordFeeCollection, recordRefund } from '@repo/trpc/services/treasury-
 import { evaluateAndMintCommerceReward } from '@repo/trpc/services/reward-policy-service';
 import { burnSC } from '@repo/trpc/services/sc-token-service';
 import { grantFundingBadgesForTransaction } from '@repo/trpc/services/funding-badge-service';
+import { grantSageMessageCreditsForTransaction, revokeSageMessageCreditsForTransaction } from '@repo/trpc/services/sage-message-allowance';
 import { sendOrderCompletedNotification } from '@repo/trpc/services/slack-notification-service';
 import { sendOrderEmails } from '@repo/trpc/services/email-service';
 import { db } from '@repo/db';
@@ -173,6 +174,7 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
   }
 
   await grantFundingBadgesForTransaction(db, transaction.id);
+  await grantSageMessageCreditsForTransaction(db, transaction.id);
 
   const transactionMeta = transaction.metadata as Record<string, unknown> | null;
   const store = transaction.business.store;
@@ -393,6 +395,7 @@ async function handleChargeRefunded(event: Stripe.Event) {
         ? { status: 'REVOKED', revokedAt: new Date(), suspendedAt: null }
         : { status: 'SUSPENDED', suspendedAt: new Date(), revokedAt: null },
     }),
+    revokeSageMessageCreditsForTransaction(db, transaction.id),
   ]);
 
   const treasuryReversal = transaction.treasuryFeeAmount * incrementalRatio;

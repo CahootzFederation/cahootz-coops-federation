@@ -60,6 +60,9 @@ async function resolveCheckoutItems(input: {
     if (product.kind === 'FUNDING_BADGE' && (item.quantity !== 1 || store.kind !== 'OFFICIAL_COMMONS')) {
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'Funding badges must be purchased one at a time from the official shop' });
     }
+    if (product.kind === 'SAGE_MESSAGE_PACK' && store.kind !== 'OFFICIAL_COMMONS') {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: "Sage messages are only sold in your Commons' own store." });
+    }
     return {
       productId: product.id,
       name: product.name,
@@ -91,6 +94,19 @@ async function resolveCheckoutItems(input: {
     });
     if (owned) {
       throw new TRPCError({ code: 'CONFLICT', message: `You already own the ${owned.tier.toLowerCase().replaceAll('_', ' ')} badge` });
+    }
+  }
+
+  if (normalizedItems.some((item) => item.kind === 'SAGE_MESSAGE_PACK')) {
+    // Bought messages belong to one member in one Commons, so the buyer has to be signed in and a member.
+    const membership = input.customerId
+      ? await db.userCoopMembership.findUnique({
+          where: { userId_coopId: { userId: input.customerId, coopId: input.coopId } },
+          select: { status: true },
+        })
+      : null;
+    if (membership?.status !== 'ACTIVE') {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Sage messages are for members of this Commons. Sign in with your member account to buy them.' });
     }
   }
 

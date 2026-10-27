@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import type { AccountAuthenticatedContext } from "../context.js";
 import { accountAuthenticatedProcedure } from "../procedures/account-authenticated.js";
+import { loadSageChat, sendSageChatMessage } from "../services/sage-community-chat.js";
 import { enqueueSageActionExecute } from "../services/sage-dispatch.js";
 import { describeSageAuditEvent } from "../services/sage-audit-descriptions.js";
 import { presentTrails } from "../services/sage-decision-trail.js";
@@ -151,6 +152,23 @@ async function memberVisibleTrails(
 }
 
 export const sageRouter = router({
+  /** The member's Ask Sage chat for one Commons, with how many messages they have left and the packs for sale. */
+  chat: accountAuthenticatedProcedure
+    .input(z.object({ coopId: z.string().min(1), before: z.string().min(1).optional() }))
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      return loadSageChat(context.db, { userId: context.accountUser.id, coopId: input.coopId, before: input.before });
+    }),
+
+  sendChat: accountAuthenticatedProcedure
+    .input(z.object({ coopId: z.string().min(1), content: z.string().max(4000) }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      const sent = await sendSageChatMessage(context.db, { userId: context.accountUser.id, coopId: input.coopId, content: input.content });
+      const latest = await loadSageChat(context.db, { userId: context.accountUser.id, coopId: input.coopId });
+      return { status: sent.status, sent: sent.messages, allowance: latest.allowance, storeReady: latest.storeReady, packs: latest.packs };
+    }),
+
   /** The member's personal "Show Sage decision trails" app setting. */
   trailSettings: accountAuthenticatedProcedure.query(async ({ ctx }) => {
     const context = ctx as AccountAuthenticatedContext;

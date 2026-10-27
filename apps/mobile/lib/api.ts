@@ -962,6 +962,21 @@ async function postCommonsInvitations<T>(
 }
 
 // Helper functions for API calls
+export type SageChatMessage = { id: string; fromSage: boolean; body: string; createdAt: string };
+export type SageChatAllowance = {
+  freeLimit: number; freeUsed: number; freeLeft: number; paidLeft: number; left: number; resetsAt: string;
+};
+export type SageMessagePack = { productId: string; messages: number; priceUSD: number };
+export type SageChat = {
+  coopId: string;
+  commonsName: string;
+  messages: SageChatMessage[];
+  olderCursor: string | null;
+  allowance: SageChatAllowance;
+  storeReady: boolean;
+  packs: SageMessagePack[];
+};
+
 export const api = {
   /**
    * Submit a new application to join a Cahootz co-op
@@ -4859,6 +4874,27 @@ export const api = {
       method: 'POST', headers: createApiHeaders(null, sessionToken), body: JSON.stringify(input),
     });
     return readTrpcResult<HumanAIFeedback>(response, "Your response didn't save. Please try again.");
+  },
+
+  async getSageChat(coopId: string, sessionToken: string, before?: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId, ...(before ? { before } : {}) }));
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.chat?input=${input}`, {
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<SageChat>(response, "We couldn't open your chat with Sage. Please try again.");
+  },
+
+  async sendSageChat(coopId: string, content: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/sage.sendChat`, {
+      method: 'POST', headers: createApiHeaders(null, sessionToken), body: JSON.stringify({ coopId, content }),
+    });
+    return readTrpcResult<{
+      status: 'SENT' | 'OUT_OF_MESSAGES';
+      sent: SageChatMessage[];
+      allowance: SageChatAllowance;
+      storeReady: boolean;
+      packs: SageMessagePack[];
+    }>(response, "Your message didn't send. Please try again.");
   },
 
   async listSageSuggestions(

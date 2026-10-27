@@ -38,6 +38,7 @@ describe('commons funding badges', () => {
           findFirst: vi.fn().mockResolvedValue(null),
           create: vi.fn(async ({ data }) => { created.push(data); }),
           update: vi.fn(),
+          upsert: vi.fn(),
         },
       };
       return { db, created };

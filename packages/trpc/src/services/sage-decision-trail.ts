@@ -43,9 +43,9 @@ export interface TrailObserved {
 export type TrailAgent = "commons-action-agent" | "sage-trend" | "proposal-engine" | "comment-evaluation" | "sage-reply"
   | "cadence" | "guardian" | "steward" | "sage-pre-vote" | "sage-proposal-writer";
 export type TrailSourceType = "commons_post" | "commons_comment" | "circle_window"
-  | "proposal" | "proposal_comment" | "sage_mention" | "sage_dm" | "sage_task" | "sage_alert" | "commons_review" | "proposal_writer";
+  | "proposal" | "proposal_comment" | "sage_mention" | "sage_dm" | "sage_chat" | "sage_task" | "sage_alert" | "commons_review" | "proposal_writer";
 export type TrailTrigger = "NEW_CONTENT" | "SCHEDULED_SCAN" | "ADMIN_SCAN" | "CIRCLE_WINDOW_FULL" | "ADMIN_ANALYZE"
-  | "PROPOSAL_SUBMITTED" | "PROPOSAL_RESUBMITTED" | "PROPOSAL_ALTERNATIVE_APPLIED" | "PROPOSAL_COMMENT" | "SAGE_MENTION" | "SAGE_DM"
+  | "PROPOSAL_SUBMITTED" | "PROPOSAL_RESUBMITTED" | "PROPOSAL_ALTERNATIVE_APPLIED" | "PROPOSAL_COMMENT" | "SAGE_MENTION" | "SAGE_DM" | "SAGE_CHAT"
   | "SAGE_WAKE" | "ESCALATION" | "ADMIN_PROPOSAL_WRITER";
 export type TrailVisibility = "COMMONS_MEMBERS" | "CIRCLE" | "ADMINS";
 
@@ -222,6 +222,7 @@ const TRIGGER_LABEL: Record<string, string> = {
   PROPOSAL_COMMENT: "A comment on a proposal",
   SAGE_MENTION: "A member @mentioned Sage",
   SAGE_DM: "A member messaged Sage directly",
+  SAGE_CHAT: "A member asked Sage about their Commons",
   SAGE_WAKE: "Sage checking back on schedule",
   ESCALATION: "Something needed a person's attention",
 };

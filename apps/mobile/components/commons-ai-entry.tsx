@@ -1887,6 +1887,24 @@ export default function CommonsAiEntry({
               <Settings2 size={18} color={SOCIAL_THEME.primary} />
             </TouchableOpacity>
           ) : null}
+          {/* Ask Sage is for members only (sage.chat refuses anyone else), so visitors never see a dead end. */}
+          {isScopedFeed && sessionToken && (!feedCircleId || feedCircleId === `general:${feedCoopId}`)
+            && memberCommons.some((commons) => commons.id === feedCoopId) ? (
+            <TouchableOpacity
+              onPress={() =>
+                router.push({ pathname: '/(authenticated)/sage/chat', params: { coopId: feedCoopId } } as any)
+              }
+              className="h-11 flex-row items-center gap-1.5 rounded-full pl-1.5 pr-3"
+              style={{ backgroundColor: SOCIAL_THEME.primarySoft }}
+              accessibilityRole="button"
+              accessibilityLabel="Ask Sage about this Commons"
+            >
+              <SageAvatar size={30} />
+              <Text className="text-sm font-black" style={{ color: SOCIAL_THEME.primary }}>
+                Ask Sage
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 

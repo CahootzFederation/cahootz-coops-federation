@@ -1,5 +1,7 @@
 import type { FundingBadgeTier } from '@repo/db';
 
+import { ensureSageMessagePacks } from './sage-message-allowance.js';
+
 export type FundingBadgeDefinition = {
   tier: FundingBadgeTier;
   rank: number;
@@ -115,6 +117,8 @@ export async function ensureCommonsFundingStore(
       await db.product.create({ data: { ...data, storeId: store.id, images: [] } });
     }
   }
+
+  await ensureSageMessagePacks(db, { storeId: store.id, coopName: input.coopName });
 
   return store;
 }

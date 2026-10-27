@@ -88,6 +88,11 @@
       "import": "./dist/services/funding-badge-service.js",
       "require": "./dist/services/funding-badge-service.js"
     },
+    "./services/sage-message-allowance": {
+      "types": "./dist/services/sage-message-allowance.d.ts",
+      "import": "./dist/services/sage-message-allowance.js",
+      "require": "./dist/services/sage-message-allowance.js"
+    },
     "./services/funding-settlement-service": {
       "types": "./dist/services/funding-settlement-service.d.ts",
       "import": "./dist/services/funding-settlement-service.js",

@@ -80,7 +80,7 @@ Migration `20261026000000_sage_community_chat` adds the enum value, `Product.sag
 
 Verification: unit tests in `sage-community-chat.test.ts` (allowance order, monthly reset, per-Commons separation, idempotency, release on failure, grants, refunds, DM gating, chat send/out/fail/refusal paths, snapshot scope); the full tRPC suite (1,097 passed, 31 skipped); mobile type-check; journey 78 in `TESTING.md`, both the deterministic journey and the live `@sage` journey, on a local clone with the new migration applied. The live run recorded a `sage-community-chat` cost event and admin-only `SAGE_CHAT` decision trails.
 
-Open questions for the product owner: the official store is SC-verified, so buying a pack currently earns coin rewards ("Earns SC rewards" on the product page), the same as a funding badge; and official stores settle to the platform's shared Stripe account, so pack money doesn't go straight to the Commons.
+Coin rewards (decided 2026-10-27): buying a pack earns SC rewards like any other official-store purchase, the same as a funding badge, and the product page says "Earns SC rewards." The product owner chose to keep this. Open question for the product owner: official stores settle to the platform's shared Stripe account, so pack money doesn't go straight to the Commons.
 
 Remaining: the chat has no action tools yet (it can't draft posts or introductions the way a DM can); nothing in a chat becomes Sage memory; a refund revokes all of that payment's messages even when partial; the chat doesn't show past purchases; stewards can't see Ask Sage usage or pack sales in one place. Buying a pack end to end through Stripe hasn't been run locally; the webhook grant and refund paths are unit-tested only.
 

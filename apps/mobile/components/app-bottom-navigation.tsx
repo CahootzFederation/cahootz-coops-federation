@@ -6,10 +6,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { SageAvatar } from '@/components/sage-avatar';
 
 const destinations = [
   { label: 'Commons', href: '/(tabs)' as const, icon: LayoutGrid },
   { label: 'Board', href: '/(tabs)/board' as const, icon: PanelsTopLeft },
+  { label: 'Ask Sage', href: '/(authenticated)/sage/chat' as const, icon: null },
   { label: 'Alerts', href: '/(tabs)/notifications' as const, icon: Bell },
   { label: 'You', href: '/(tabs)/wallet' as const, icon: UserCircle },
 ];
@@ -26,7 +28,8 @@ export function AppBottomNavigation() {
     enabled: isAuthenticated && !!sessionToken,
     staleTime: 0,
   });
-  const hasCommons = membershipQuery.data?.coops.some((commons) => commons.isMember) ?? false;
+  const memberCommonsIds = membershipQuery.data?.coops.filter((commons) => commons.isMember).map((commons) => commons.id) ?? [];
+  const hasCommons = memberCommonsIds.length > 0;
   const unreadQuery = useQuery({
     queryKey: ['unread-notifications-badge', sessionToken],
     queryFn: () => api.getUnreadNotificationCount(sessionToken!),
@@ -41,7 +44,9 @@ export function AppBottomNavigation() {
     entry?: string | string[];
     coopId?: string;
   }>();
-  const active = screen === 'notifications' || screen === 'notification-settings'
+  const active = screen === 'chat' && segments.includes('sage' as never)
+    ? 'Ask Sage'
+    : screen === 'notifications' || screen === 'notification-settings'
     ? 'Alerts'
     : ['board', 'store', 'store-detail', 'product-detail', 'cart', 'checkout', 'commons-resources', 'orders', 'order-detail', 'my-store', 'my-stores', 'add-product', 'edit-product', 'apply-store', 'store-orders', 'store-payments', 'stripe-onboarding', 'apply-sc-verification'].includes(screen)
         ? 'Board'
@@ -71,6 +76,12 @@ export function AppBottomNavigation() {
           if (label === 'Commons' && selected) {
             return;
           }
+          if (label === 'Ask Sage') {
+            // Ask about the Commons on screen, or the first one they belong to.
+            const sageCoopId = coopId && memberCommonsIds.includes(coopId) ? coopId : memberCommonsIds[0];
+            router.navigate({ pathname: href, params: { coopId: sageCoopId } } as any);
+            return;
+          }
           router.navigate(href);
         };
         return (
@@ -84,7 +95,7 @@ export function AppBottomNavigation() {
             style={styles.item}
           >
             <View>
-              <Icon size={24} color={color} />
+              {Icon ? <Icon size={24} color={color} /> : <SageAvatar size={26} />}
               {label === 'Alerts' && hasUnread ? <View accessibilityLabel="Unread alerts" style={styles.dot} /> : null}
             </View>
             <Text style={[styles.label, { color }]}>{label}</Text>

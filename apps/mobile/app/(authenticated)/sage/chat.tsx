@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Send } from 'lucide-react-native';
+import { Send } from 'lucide-react-native';
+import { useQuery } from '@tanstack/react-query';
 import { Text } from '@/components/ui/text';
 import { SageAvatar } from '@/components/sage-avatar';
 import { LoadError } from '@/components/load-error';
@@ -38,14 +39,22 @@ function allowanceLine(chat: SageChat) {
 
 export default function AskSageScreen() {
   const params = useLocalSearchParams<{ coopId?: string }>();
-  const coopId = params.coopId || 'cahootz';
   const { isLoading, isAuthenticated, sessionToken } = useAuth();
+  const directory = useQuery({
+    queryKey: ['sage-chat-commons', sessionToken],
+    queryFn: () => api.listCommonsDirectory(sessionToken!),
+    enabled: !!sessionToken,
+  });
+  const memberCommons = directory.data?.coops.filter((commons) => commons.isMember) ?? [];
+  const coopId = params.coopId || memberCommons[0]?.id;
   const [chat, setChat] = useState<SageChat | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [pending, setPending] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const coopIdRef = useRef(coopId);
+  coopIdRef.current = coopId;
 
   useEffect(() => {
     if (isLoading || (isAuthenticated && sessionToken)) return;
@@ -53,11 +62,12 @@ export default function AskSageScreen() {
   }, [isAuthenticated, isLoading, sessionToken]);
 
   const load = useCallback(() => {
-    if (!sessionToken) return;
+    if (!sessionToken || !coopId) return;
     setLoadError(null);
+    // A slow answer for a Commons they've since switched away from is dropped.
     api.getSageChat(coopId, sessionToken)
-      .then(setChat)
-      .catch((error) => setLoadError(friendlyError(error, "We couldn't open your chat with Sage.")));
+      .then((result) => { if (coopIdRef.current === coopId) setChat(result); })
+      .catch((error) => { if (coopIdRef.current === coopId) setLoadError(friendlyError(error, "We couldn't open your chat with Sage.")); });
   }, [coopId, sessionToken]);
 
   // Reload on focus, so messages bought in the store show up when the member comes back.
@@ -69,7 +79,7 @@ export default function AskSageScreen() {
 
   const send = async (text = draft) => {
     const content = text.trim();
-    if (!content || !sessionToken || !chat || pending) return;
+    if (!content || !sessionToken || !coopId || !chat || pending) return;
     setPending(content);
     setDraft('');
     setSendError(null);
@@ -94,18 +104,18 @@ export default function AskSageScreen() {
 
   const outOfMessages = chat ? chat.allowance.left <= 0 : false;
 
+  const switchCommons = (nextCoopId: string) => {
+    if (nextCoopId === coopId || pending) return;
+    setChat(null);
+    setSendError(null);
+    setDraft('');
+    router.setParams({ coopId: nextCoopId });
+  };
+
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: THEME.paper }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={keyboardAvoidingBehavior}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderColor: THEME.border, backgroundColor: '#FFFFFF' }}>
-          <TouchableOpacity
-            onPress={() => (router.canGoBack() ? router.back() : router.replace({ pathname: '/[coopId]/posts', params: { coopId } } as any))}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            style={{ height: 40, width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: THEME.primarySoft }}
-          >
-            <ArrowLeft size={20} color={THEME.primary} />
-          </TouchableOpacity>
           <SageAvatar size={36} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={{ fontSize: 17, fontWeight: '800', color: THEME.ink }}>Ask Sage</Text>
@@ -114,6 +124,31 @@ export default function AskSageScreen() {
             </Text>
           </View>
         </View>
+
+        {memberCommons.length > 1 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ flexGrow: 0, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderColor: THEME.border }}
+            contentContainerStyle={{ gap: 8, paddingHorizontal: 16, paddingVertical: 8 }}
+          >
+            {memberCommons.map((commons) => {
+              const selected = commons.id === coopId;
+              return (
+                <TouchableOpacity
+                  key={commons.id}
+                  onPress={() => switchCommons(commons.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ask about ${commons.name}`}
+                  accessibilityState={{ selected }}
+                  style={{ borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: selected ? THEME.primary : THEME.border, backgroundColor: selected ? THEME.primarySoft : '#FFFFFF' }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: selected ? THEME.primary : THEME.muted }}>{commons.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : null}
 
         {chat ? (
           <View testID="sage-allowance" style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderColor: THEME.border }}>
@@ -126,7 +161,10 @@ export default function AskSageScreen() {
 
         <ScrollView ref={scrollRef} {...keyboardScrollProps} style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 10 }}>
           {loadError ? <LoadError message={loadError} onRetry={load} /> : null}
-          {!chat && !loadError ? <ActivityIndicator color={THEME.primary} style={{ marginTop: 32 }} /> : null}
+          {directory.isSuccess && !coopId ? (
+            <Text style={{ fontSize: 15, lineHeight: 21, color: THEME.ink }}>Join a Commons first, then you can ask Sage about it here.</Text>
+          ) : null}
+          {!chat && !loadError && (coopId || !directory.isSuccess) ? <ActivityIndicator color={THEME.primary} style={{ marginTop: 32 }} /> : null}
 
           {chat && chat.messages.length === 0 && !pending ? (
             <View style={{ borderRadius: 14, padding: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: THEME.border, gap: 10 }}>

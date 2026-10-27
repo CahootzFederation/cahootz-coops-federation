@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useId, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useReducedMotion } from 'react-native-reanimated';
 import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Stop } from 'react-native-svg';
@@ -20,15 +20,18 @@ export type SageAvatarMotion = 'still' | 'blink' | 'thinking';
 // Blob, cheeks, glasses and mouth; the eyes are a separate layer so they can
 // blink. Kept in sync with assets/images/sage/sage.svg.
 function SageBody({ size }: { size: number }) {
+  // Each avatar needs its own gradient id: on web every SVG shares one page,
+  // and a duplicate id resolves to the first avatar, which may be hidden.
+  const gradientId = `sageBlob${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100">
       <Defs>
-        <LinearGradient id="sageBlob" x1="0" y1="0" x2="1" y2="1">
+        <LinearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
           <Stop offset="0" stopColor="#FED7AA" />
           <Stop offset="1" stopColor="#FB923C" />
         </LinearGradient>
       </Defs>
-      <Path d="M48 12 C72 8 92 26 90 50 C88 76 70 92 46 90 C22 88 8 70 10 46 C12 26 26 14 48 12 Z" fill="url(#sageBlob)" />
+      <Path d="M48 12 C72 8 92 26 90 50 C88 76 70 92 46 90 C22 88 8 70 10 46 C12 26 26 14 48 12 Z" fill={`url(#${gradientId})`} />
       <Ellipse cx="34" cy="28" rx="10" ry="6" fill="#FFFFFF" opacity={0.4} transform="rotate(-25 34 28)" />
       <Ellipse cx="28" cy="62" rx="6" ry="4" fill="#F472B6" opacity={0.55} />
       <Ellipse cx="72" cy="62" rx="6" ry="4" fill="#F472B6" opacity={0.55} />

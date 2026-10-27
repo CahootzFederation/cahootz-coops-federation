@@ -16,9 +16,17 @@ function fixture<T>(command: 'reset' | 'use-all', runId: string, email: string):
 
 async function openAskSage(page: Page) {
   await openGeneralFeed(page);
-  await page.getByLabel('Ask Sage about this Commons').click();
+  // Ask Sage is the middle tab of the bottom bar.
+  const tab = page.getByRole('tab', { name: 'Ask Sage' });
+  await tab.click();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
   // The post board stays mounted under the chat, so wait on the chat's own allowance bar.
   await expect(page.getByTestId('sage-allowance')).toBeVisible();
+  await expect(page.getByText(/^About .+ · only you can see this$/)).toBeVisible();
+  // Every Sage face needs its own gradient id; a shared one drew the faces blank on web.
+  const gradientIds = await page.locator('linearGradient').evaluateAll(nodes => nodes.map(node => node.id));
+  expect(gradientIds.filter(id => id.startsWith('sageBlob')).length).toBeGreaterThan(1);
+  expect(new Set(gradientIds).size).toBe(gradientIds.length);
 }
 
 const newRunId = () => `E2E-sage-chat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;

@@ -86,7 +86,8 @@ describe("suggested price for a discovered item", () => {
   });
 
   it("always passes the money check it suggests", () => {
-    for (const [regular, bulk] of [[2889, 1217], [142, 57], [3900, 2730], [1699, 1096], [729, 542]]) {
+    const cases: Array<[number, number]> = [[2889, 1217], [142, 57], [3900, 2730], [1699, 1096], [729, 542]];
+    for (const [regular, bulk] of cases) {
       const suggestion = suggestItemOfferPrice({ regularPriceCents: regular, bulkPriceCents: bulk });
       if (!suggestion) continue;
       expect(checkOfferMargin({ memberPriceCents: suggestion.memberPriceCents, vendorPayoutCents: suggestion.vendorPayoutCents, commonsSplitBps: 5000, minShareCents: DEFAULT_OFFER_PRICING.minShareCents }).ok).toBe(true);

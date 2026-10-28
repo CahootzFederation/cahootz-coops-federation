@@ -120,6 +120,9 @@ export async function discoverForCampaign(db: Db, campaignId: string, deps: Disc
       searchTerms: campaign.searchTerms,
       area: campaign.area,
       directoryHints: await enabledDirectoryHints(db),
+      item: campaign.sourcedProductId
+        ? await db.sourcedProduct.findUnique({ where: { id: campaign.sourcedProductId }, select: { name: true, supplierName: true, sourceUrl: true } })
+        : null,
     }).catch((error) => {
       console.error("[Vendor outreach] Web research failed:", error);
       return null;

@@ -175,6 +175,16 @@ On an interested prospect, the admin has **Mark in talks**, **Mark declined** an
 - To convert, the admin helps the vendor open a shop (the existing store application and Stripe onboarding).
 - The admin then creates the offer in the existing offers admin. The steward still approves it as today, and the prospect links to the new offer.
 
+## Items from the product discovery bot (decided 2026-10-27)
+
+The product discovery bot (`docs/product-discovery.md`) finds bulk supplier items for each Commons profile and saves them as candidates. They plug into outreach like this:
+
+- **Review.** A platform admin approves or turns down each item on **Product ideas** (`/portal/admin/outreach`), with its price evidence, what was checked and what wasn't. Approving marks the item checked (`VERIFIED`) and its Commons match `APPROVED`. "Turn down everywhere" rejects the item for every Commons so the bot never brings it back. An item with out-of-date price evidence can't be approved.
+- **Find a seller.** For an approved item whose profile is linked to a Commons, the admin enters an area and an email cap. That creates an `ACTIVE` Group Buy campaign with `sourcedProductId` (starting it is the approval). Discovery works as usual, and web research is told the item and its supplier, so it can return a local shop that sells it or the supplier's own wholesale contact. The email and reply page name the item. With no member answers behind it, the email says "Households in a community near …" instead of a count.
+- **Sage asks about a real item.** The weekly deal question may name an approved item: with member demand, an item in that category; without it, the best-fitting item not asked about in 60 days whose category wasn't asked about either ("everyday goods" items excepted). The text is fixed and uses the bot's newest prices, labeled as prices found online. Answers count toward a campaign like any deal question, and that campaign carries the item.
+- **Start the Group Buy.** When a seller from an item search says yes, **Start the group buy** opens the offer form for that Commons as a Group Buy, filled in from the item: title, description, regular price and its source, the bot's per-person price as the member price, and the people needed as the unlock count. The admin picks the seller's product on Cahootz and enters the agreed amounts. The offer keeps `sourcedProductId`.
+- **Not done:** the seller still has to be on Cahootz with a payout account before the offer can be saved, and Sage never buys stock or sets a price.
+
 ## Member referrals (mobile)
 
 A **Recommend a business** form, reached from the marketplace's Deals section and the vendor-less categories:

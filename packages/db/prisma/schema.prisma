@@ -2647,6 +2647,8 @@ model SourcedProduct {
 
   commonsMatches    CommonsProductMatch[]
   priceObservations ProductPriceObservation[]
+  vendorCampaigns   VendorCampaign[]
+  marketplaceOffers MarketplaceOffer[]
 
   @@index([status, updatedAt])
   @@index([category])
@@ -3877,14 +3879,17 @@ model AnonymousProfile {
 // Regular listings never touch these tables.
 
 model MarketplaceOffer {
-  id         String    @id @default(cuid())
-  offerType  OfferType
-  coopId     String
-  storeId    String
-  store      Store     @relation(fields: [storeId], references: [id])
-  productId  String
-  product    Product   @relation(fields: [productId], references: [id])
-  businessId String
+  id               String          @id @default(cuid())
+  offerType        OfferType
+  coopId           String
+  storeId          String
+  store            Store           @relation(fields: [storeId], references: [id])
+  productId        String
+  product          Product         @relation(fields: [productId], references: [id])
+  businessId       String
+  // The discovered item this offer came from, if any (product-discovery bot).
+  sourcedProductId String?
+  sourcedProduct   SourcedProduct? @relation(fields: [sourcedProductId], references: [id], onDelete: SetNull)
 
   title       String
   description String?
@@ -3943,6 +3948,7 @@ model MarketplaceOffer {
   @@index([status, paymentDeadline])
   @@index([status, expiresAt])
   @@index([storeId])
+  @@index([sourcedProductId])
   @@schema("public")
 }
 
@@ -4134,31 +4140,35 @@ enum ProspectStatus {
 // for one deal category near one Commons, within these limits. Proposed by Sage
 // from public answers to a deal question; nothing is sent until it's ACTIVE.
 model VendorCampaign {
-  id             String               @id @default(cuid())
-  coopId         String
-  category       String // Deal category key (vendor-outreach/categories.ts)
-  offerType      OfferType            @default(GROUP_BUY)
-  searchTerms    String[]
-  area           String? // City or neighborhood to search near; required before approval
-  demandActionId String?              @unique // The deal-interest question this came from
-  demandEvidence Json // Public counts only: answers, Need posts
-  pitchPoints    String? // Admin-approved extra line for the email
-  maxEmails      Int                  @default(10)
-  maxSearches    Int                  @default(5)
-  searchesUsed   Int                  @default(0)
-  status         VendorCampaignStatus @default(PROPOSED)
-  rejectReason   String?
-  approvedById   String?
-  approvedAt     DateTime?
-  discoveredAt   DateTime?
-  expiresAt      DateTime?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  id               String               @id @default(cuid())
+  coopId           String
+  category         String // Deal category key (vendor-outreach/categories.ts)
+  offerType        OfferType            @default(GROUP_BUY)
+  searchTerms      String[]
+  area             String? // City or neighborhood to search near; required before approval
+  demandActionId   String?              @unique // The deal-interest question this came from
+  demandEvidence   Json // Public counts only: answers, Need posts
+  // A discovered item the campaign looks for a seller of (product-discovery bot).
+  sourcedProductId String?
+  sourcedProduct   SourcedProduct?      @relation(fields: [sourcedProductId], references: [id], onDelete: SetNull)
+  pitchPoints      String? // Admin-approved extra line for the email
+  maxEmails        Int                  @default(10)
+  maxSearches      Int                  @default(5)
+  searchesUsed     Int                  @default(0)
+  status           VendorCampaignStatus @default(PROPOSED)
+  rejectReason     String?
+  approvedById     String?
+  approvedAt       DateTime?
+  discoveredAt     DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   prospects CampaignProspect[]
 
   @@index([status])
   @@index([coopId, createdAt])
+  @@index([sourcedProductId])
   @@schema("public")
 }
 

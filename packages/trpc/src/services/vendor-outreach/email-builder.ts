@@ -10,6 +10,8 @@ export interface OutreachEmailInput {
   step: "FIRST" | "FOLLOW_UP";
   businessName: string;
   categoryLabel: string;
+  /** A specific discovered item the campaign is finding a seller for. Used in place of the category. */
+  itemName?: string | null;
   area: string;
   interestCount: number;
   offerType: "MEMBER_DEAL" | "GROUP_BUY";
@@ -30,7 +32,9 @@ const escapeHtml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 export function buildOutreachEmail(input: OutreachEmailInput): OutreachEmail {
-  const households = input.interestCount === 1 ? "1 household" : `${input.interestCount} households`;
+  const what = input.itemName || input.categoryLabel;
+  // An admin can start a search for an item before any members have answered; then we don't give a number.
+  const households = input.interestCount < 1 ? "Households" : input.interestCount === 1 ? "1 household" : `${input.interestCount} households`;
   const deal =
     input.offerType === "GROUP_BUY"
       ? "a group order when enough people sign up, at a price that works for you"
@@ -47,20 +51,22 @@ export function buildOutreachEmail(input: OutreachEmailInput): OutreachEmail {
       ? [
           `Hi ${input.businessName},`,
           "I'm reaching out from Cahootz Commons, a network of community groups that buy from local businesses together.",
-          `${households} in a community near ${input.area} told us they'd buy ${input.categoryLabel} together. We're looking for a local business that would offer them ${deal}.`,
+          input.interestCount < 1
+            ? `${households} in a community near ${input.area} want to buy ${what} together. We're looking for a business that would offer them ${deal}.`
+            : `${households} in a community near ${input.area} told us they'd buy ${what} together. We're looking for a local business that would offer them ${deal}.`,
           ...(input.personalLine ? [input.personalLine] : []),
           ...(input.pitchPoints ? [input.pitchPoints] : []),
         ]
       : [
           `Hi ${input.businessName},`,
-          `Following up on my note about ${households} near ${input.area} who'd like to buy ${input.categoryLabel} together.`,
+          `Following up on my note about ${input.interestCount < 1 ? "households" : households} near ${input.area} who'd like to buy ${what} together.`,
           "If it's a fit, it takes about a minute to tell us. If not, no problem at all.",
         ];
 
   const subject =
     input.step === "FIRST"
-      ? `Local households looking for ${input.categoryLabel}`
-      : `Following up: local households and ${input.categoryLabel}`;
+      ? `Local households looking for ${what}`
+      : `Following up: local households and ${what}`;
 
   const replyLine = `If you're open to it, tell us here: ${input.replyUrl}`;
   const text = [

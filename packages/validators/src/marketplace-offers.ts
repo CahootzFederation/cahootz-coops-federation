@@ -48,6 +48,8 @@ export const offerInputSchema = z
     description: optionalText(2000),
     regularPriceCents: z.number().int().positive(),
     regularPriceSource: z.string().trim().min(3).max(200),
+    /** The discovered item (product-discovery bot) this offer came from, if any. */
+    sourcedProductId: z.string().min(1).optional().nullable(),
     memberPriceCents: z.number().int().positive(),
     vendorPayoutCents: z.number().int().positive(),
     commonsSplitBps: z.number().int().min(0).max(10000).default(5000),

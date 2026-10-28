@@ -74,3 +74,7 @@ Migration `20261027010000_product_discovery_catalog` creates the schema and
 seeds the current Planet, Traveler, Family, and Blues of America examples.
 Family and Blues of America reuse relevant global product rows from Planet,
 exercising the cross-Commons structure from the first deployment.
+
+## From candidate to Group Buy
+
+Platform admins review candidates on **Product ideas** in Vendor outreach (`/portal/admin/outreach`). Approving an item marks the product `VERIFIED` and the match `APPROVED`; it doesn't feature it on the homepage. An approved item for a profile linked to a Commons (`coopId`) can start a seller search, can be named in Sage's weekly deal question, and can prefill a Group Buy. Cahootz never buys the stock itself. See "Items from the product discovery bot" in `docs/vendor-outreach-plan.md`.

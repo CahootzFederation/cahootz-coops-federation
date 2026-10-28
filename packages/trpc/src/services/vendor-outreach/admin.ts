@@ -28,6 +28,7 @@ export async function listDemandForAdmin(db: Db = defaultDb) {
         coopId: question.coopId,
         categoryKey: payload.dealCategory as string,
         categoryLabel: dealCategoryByKey(payload.dealCategory as string)?.label ?? String(payload.dealCategory),
+        itemName: typeof (payload.item as { name?: unknown } | undefined)?.name === "string" ? (payload.item as { name: string }).name : null,
         title: payload.title as string,
         askedAt: question.createdAt,
         postId: question.sourcePostId,
@@ -47,6 +48,13 @@ export async function listProspectsForAdmin(db: Db = defaultDb) {
     take: 200,
     include: {
       responses: { orderBy: { respondedAt: "desc" }, take: 1, select: { interest: true, contactName: true, bestContact: true, offerIdea: true, respondedAt: true } },
+      // Item seller searches this business is part of, so a yes can start that item's Group Buy.
+      campaignProspects: {
+        where: { campaign: { sourcedProductId: { not: null } } },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { campaign: { select: { coopId: true, sourcedProduct: { select: { id: true, name: true } } } } },
+      },
       referrals: {
         orderBy: { createdAt: "asc" },
         select: {
@@ -76,6 +84,9 @@ export async function listProspectsForAdmin(db: Db = defaultDb) {
     convertedOfferId: prospect.convertedOfferId,
     lastContactedAt: prospect.lastContactedAt,
     latestResponse: prospect.responses[0] ?? null,
+    item: prospect.campaignProspects[0]?.campaign.sourcedProduct
+      ? { coopId: prospect.campaignProspects[0].campaign.coopId, ...prospect.campaignProspects[0].campaign.sourcedProduct }
+      : null,
     createdAt: prospect.createdAt,
     referralCount: prospect.referrals.length,
     commons: [...new Set(prospect.referrals.map((referral) => referral.coopId))],

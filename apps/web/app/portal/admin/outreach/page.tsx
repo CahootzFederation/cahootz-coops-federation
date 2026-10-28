@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ArrowLeft, Loader2, MessageCircleQuestion, Store } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Loader2, MessageCircleQuestion, Package, Store } from 'lucide-react';
 
 interface DemandRow {
   id: string;
   coopId: string;
   categoryLabel: string;
+  itemName: string | null;
   title: string;
   askedAt: string;
   interestCount: number;
@@ -21,9 +22,10 @@ interface CampaignRow {
   coopId: string;
   categoryLabel: string;
   offerType: 'MEMBER_DEAL' | 'GROUP_BUY';
+  item: { id: string; name: string; supplierName: string; sourceUrl: string } | null;
   searchTerms: string[];
   area: string | null;
-  demandEvidence: { interestCount?: number; needPosts?: { posts: number; members: number } | null };
+  demandEvidence: { interestCount?: number; source?: string; needPosts?: { posts: number; members: number } | null };
   pitchPoints: string | null;
   maxEmails: number;
   maxSearches: number;
@@ -53,7 +55,39 @@ interface ProspectRow {
   convertedOfferId: string | null;
   createdAt: string;
   latestResponse: { interest: string; contactName: string | null; bestContact: string | null; offerIdea: string | null; respondedAt: string } | null;
+  item: { coopId: string; id: string; name: string } | null;
   referrals: { coopId: string; howKnown: string | null; mayNameReferrer: boolean; referrer: string | null; createdAt: string }[];
+}
+
+interface ItemRow {
+  profileId: string;
+  productId: string;
+  profileName: string;
+  coopId: string | null;
+  status: 'CANDIDATE' | 'APPROVED';
+  fitScore: number;
+  fitReason: string;
+  purpose: string;
+  name: string;
+  brand: string;
+  supplierName: string;
+  category: string;
+  categoryKey: string;
+  description: string;
+  sourceUrl: string;
+  price: {
+    memberShare: string;
+    peopleNeeded: number;
+    regularPriceCents: number;
+    bulkShareCents: number;
+    sourceUrl: string;
+    comparisonUrl: string | null;
+    verifiedFacts: string[];
+    risks: string[];
+    observedAt: string;
+    expired: boolean;
+  } | null;
+  campaign: { id: string; status: string } | null;
 }
 
 interface SourceRow {
@@ -68,6 +102,7 @@ interface SourceRow {
 
 type Funnel = Record<string, number>;
 
+const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 const date = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 const SOURCE: Record<string, string> = { MEMBER_REFERRAL: 'Member referral', CAHOOTZ_SHOP: 'Cahootz shop', WEB_SEARCH: 'Web search', DIRECTORY_SITE: 'Directory', ADMIN: 'Added by admin' };
 const STATUS: Record<string, string> = {
@@ -78,8 +113,11 @@ const SKIP: Record<string, string> = {
   NO_EMAIL: 'Phone only', BAD_EMAIL: 'Bad email', NO_MAIL_SERVER: "Domain can't get mail", UNSUBSCRIBED: 'Unsubscribed', SUPPRESSED: 'Do not email',
   CONTACTED_RECENTLY: 'Emailed in last 90 days', DECLINED_RECENTLY: 'Said not now', ALREADY_TALKING: 'Already talking', OVER_LIMIT: 'Over the email limit',
 };
-const TABS = ['campaigns', 'businesses', 'demand', 'sources'] as const;
+const TABS = ['campaigns', 'businesses', 'items', 'demand', 'sources'] as const;
 type Tab = (typeof TABS)[number];
+const TAB_LABEL: Record<Tab, string> = { campaigns: 'campaigns', businesses: 'businesses', items: 'product ideas', demand: 'demand', sources: 'sources' };
+const WHY: Record<string, string> = { community_pattern: 'a community pattern', need_posts: 'public Need posts', approved_item: 'an item you approved' };
+interface Category { key: string; label: string }
 
 const btn = 'rounded-md border px-3 py-1.5 text-xs font-semibold disabled:opacity-50';
 const primary = `${btn} border-emerald-300/40 bg-emerald-300/10 text-emerald-100 hover:bg-emerald-300/20`;
@@ -89,7 +127,16 @@ const input = 'mt-1 w-full rounded-md border border-white/10 bg-black/30 px-3 py
 
 /** Platform admin: what members want, Sage's campaigns, the businesses found, and how it's going. */
 export default function VendorOutreachPage() {
-  const [data, setData] = useState<{ demand: DemandRow[]; campaigns: CampaignRow[]; prospects: ProspectRow[]; sources: SourceRow[]; funnel: Funnel; sendingLive: boolean } | null>(null);
+  const [data, setData] = useState<{
+    demand: DemandRow[];
+    campaigns: CampaignRow[];
+    prospects: ProspectRow[];
+    items: ItemRow[];
+    sources: SourceRow[];
+    funnel: Funnel;
+    sendingLive: boolean;
+    categories: Category[];
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('campaigns');
@@ -127,6 +174,7 @@ export default function VendorOutreachPage() {
   const counts: Record<Tab, number> = {
     campaigns: data?.campaigns.length ?? 0,
     businesses: data?.prospects.length ?? 0,
+    items: data?.items.length ?? 0,
     demand: data?.demand.length ?? 0,
     sources: data?.sources.length ?? 0,
   };
@@ -181,7 +229,7 @@ export default function VendorOutreachPage() {
             onClick={() => setTab(key)}
             className={`rounded-md border px-3 py-1.5 text-sm capitalize ${tab === key ? 'border-emerald-300/60 bg-emerald-300/15 text-emerald-100' : 'border-white/10 text-slate-300'}`}
           >
-            {key} ({counts[key]})
+            {TAB_LABEL[key]} ({counts[key]})
           </button>
         ))}
       </div>
@@ -210,6 +258,22 @@ export default function VendorOutreachPage() {
         )
       )}
 
+      {data && tab === 'items' && (
+        data.items.length === 0 ? (
+          <Empty text="No product ideas yet. The product discovery bot adds them as it finds items for each Commons." />
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-400">
+              Items the product discovery bot found for each Commons. Approve the good ones, then find a seller: Sage looks for a local shop
+              or the supplier&apos;s wholesale contact. Sage may also ask the Commons about an approved item in its weekly question.
+            </p>
+            {data.items.map((item) => (
+              <ItemCard key={`${item.profileId}:${item.productId}`} item={item} categories={data.categories} busy={busy} post={post} />
+            ))}
+          </div>
+        )
+      )}
+
       {data && tab === 'demand' && (
         data.demand.length === 0 ? (
           <Empty text="Sage hasn't asked any Commons about deals yet. It checks every Monday." />
@@ -221,7 +285,7 @@ export default function VendorOutreachPage() {
                   <MessageCircleQuestion className="mt-0.5 h-5 w-5 text-emerald-300" />
                   <div className="flex-1">
                     <p className="font-semibold text-white">{row.title}</p>
-                    <p className="text-xs text-slate-400">{row.coopId} · {row.categoryLabel} · asked {date(row.askedAt)}</p>
+                    <p className="text-xs text-slate-400">{row.coopId} · {row.itemName ?? row.categoryLabel} · asked {date(row.askedAt)}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold text-white">{row.interestCount}</p>
@@ -229,7 +293,7 @@ export default function VendorOutreachPage() {
                   </div>
                 </div>
                 <p className="mt-3 text-xs text-slate-500">
-                  Why Sage asked: {row.evidenceKind}{row.needPosts ? ` (${row.needPosts.posts} posts from ${row.needPosts.members} members)` : ''}
+                  Why Sage asked: {WHY[row.evidenceKind] ?? row.evidenceKind}{row.needPosts ? ` (${row.needPosts.posts} posts from ${row.needPosts.members} members)` : ''}
                 </p>
               </div>
             ))}
@@ -281,7 +345,7 @@ function CampaignCard({ campaign, busy, post }: { campaign: CampaignRow; busy: b
     <div className="rounded-[10px] border border-white/10 bg-white/[0.03] p-4" aria-label={`Campaign ${campaign.categoryLabel} for ${campaign.coopId}`} data-testid={`campaign-${campaign.id}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="font-semibold text-white">{campaign.categoryLabel} · {campaign.coopId}</p>
+          <p className="font-semibold text-white">{campaign.item?.name ?? campaign.categoryLabel} · {campaign.coopId}</p>
           <p className="text-xs text-slate-400">
             {campaign.offerType === 'GROUP_BUY' ? 'Group buy' : 'Member deal'} · proposed {date(campaign.createdAt)}
             {campaign.expiresAt ? ` · ends ${date(campaign.expiresAt)}` : ''}
@@ -290,10 +354,20 @@ function CampaignCard({ campaign, busy, post }: { campaign: CampaignRow; busy: b
         <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-slate-200" data-testid="campaign-status">{campaign.status.toLowerCase()}</span>
       </div>
       <p className="mt-2 text-sm text-slate-300">
-        {evidence.interestCount ?? 0} members answered Sage&apos;s question
-        {evidence.needPosts ? `, plus ${evidence.needPosts.posts} public Need posts from ${evidence.needPosts.members} members` : ''}.
+        {evidence.source === 'discovered_item'
+          ? 'You started this seller search from a product idea.'
+          : <>
+              {evidence.interestCount ?? 0} members answered Sage&apos;s question
+              {evidence.needPosts ? `, plus ${evidence.needPosts.posts} public Need posts from ${evidence.needPosts.members} members` : ''}.
+            </>}{' '}
         Search terms: {campaign.searchTerms.join(', ')}.
       </p>
+      {campaign.item && (
+        <p className="mt-1 text-xs text-slate-400">
+          Looking for a seller of {campaign.item.name} (found at{' '}
+          <a className="underline" href={campaign.item.sourceUrl} target="_blank" rel="noreferrer">{campaign.item.supplierName}</a>).
+        </p>
+      )}
 
       {campaign.status === 'PROPOSED' && (
         <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -403,6 +477,11 @@ function ProspectCard({ prospect, busy, post }: { prospect: ProspectRow; busy: b
         {['INTERESTED', 'CONTACTED', 'FOLLOWED_UP', 'FOUND'].includes(prospect.status) && (
           <button className={primary} disabled={busy} onClick={() => post(url, { action: 'inTalks' }, `${prospect.businessName} marked in talks.`)}>Mark in talks</button>
         )}
+        {prospect.item && ['INTERESTED', 'IN_TALKS'].includes(prospect.status) && (
+          <Link className={primary} href={`/portal/admin/commons/${prospect.item.coopId}/offers?item=${prospect.item.id}`}>
+            Start the group buy for {prospect.item.name}
+          </Link>
+        )}
         {['INTERESTED', 'IN_TALKS'].includes(prospect.status) && (
           <button
             className={primary}
@@ -422,6 +501,108 @@ function ProspectCard({ prospect, busy, post }: { prospect: ProspectRow; busy: b
           <button className={danger} disabled={busy} onClick={() => post(url, { action: 'doNotEmail' }, `We won't email ${prospect.businessName}.`)}>Do not email</button>
         )}
       </div>
+    </div>
+  );
+}
+
+function ItemCard({ item, categories, busy, post }: { item: ItemRow; categories: Category[]; busy: boolean; post: Post }) {
+  const [area, setArea] = useState('');
+  const [maxEmails, setMaxEmails] = useState('10');
+  const [category, setCategory] = useState(item.categoryKey);
+  const url = '/api/admin/outreach/items';
+  const keys = { profileId: item.profileId, productId: item.productId };
+  const price = item.price;
+  const openSearch = item.campaign && ['PROPOSED', 'ACTIVE', 'PAUSED'].includes(item.campaign.status) ? item.campaign : null;
+  return (
+    <div className="rounded-[10px] border border-white/10 bg-white/[0.03] p-4" aria-label={`Product idea ${item.name}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex items-start gap-2">
+          <Package className="mt-0.5 h-4 w-4 text-emerald-200" />
+          <div>
+            <p className="font-semibold text-white">{item.name}</p>
+            <p className="text-xs text-slate-400">
+              {item.brand} · {item.category} · for {item.profileName}{item.coopId ? ` (${item.coopId})` : ' (not linked to a Commons yet)'} · fit {item.fitScore}/100
+            </p>
+          </div>
+        </div>
+        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-slate-200" data-testid="item-status">
+          {item.status === 'APPROVED' ? 'Approved' : 'Needs review'}
+        </span>
+      </div>
+      <p className="mt-2 text-xs text-slate-300">{item.purpose}</p>
+      <p className="mt-1 text-xs text-slate-500">Why it fits: {item.fitReason}</p>
+      {price ? (
+        <div className="mt-2 text-sm text-slate-200">
+          <span className="text-slate-500 line-through">{money(price.regularPriceCents)}</span>{' '}
+          <span className="font-semibold text-white">{money(price.bulkShareCents)} each</span> for {price.memberShare} when {price.peopleNeeded} people buy together
+          <span className="block text-xs text-slate-500">
+            Price from <a className="underline" href={price.sourceUrl} target="_blank" rel="noreferrer">{item.supplierName}</a> on {date(price.observedAt)}
+            {price.comparisonUrl ? <> · <a className="underline" href={price.comparisonUrl} target="_blank" rel="noreferrer">regular price</a></> : null}
+            {price.expired ? ' · out of date' : ''}
+          </span>
+          {price.verifiedFacts.length > 0 && <span className="block text-xs text-slate-400">Checked: {price.verifiedFacts.join(' · ')}</span>}
+          {price.risks.length > 0 && <span className="block text-xs text-amber-200">Not checked: {price.risks.join(' · ')}</span>}
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-amber-200">No price yet.</p>
+      )}
+
+      {item.status === 'CANDIDATE' && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button className={primary} disabled={busy} onClick={() => post(url, { action: 'review', ...keys, decision: 'approve' }, `${item.name} approved for ${item.profileName}.`)}>
+            Approve
+          </button>
+          <button className={quiet} disabled={busy} onClick={() => post(url, { action: 'review', ...keys, decision: 'reject' }, `${item.name} turned down for ${item.profileName}.`)}>
+            Not for this Commons
+          </button>
+          <button
+            className={danger}
+            disabled={busy}
+            onClick={() => {
+              if (window.confirm(`Turn down ${item.name} for every Commons? The bot won't suggest it again.`)) {
+                void post(url, { action: 'review', ...keys, decision: 'reject', everywhere: true }, `${item.name} turned down everywhere.`);
+              }
+            }}
+          >
+            Turn down everywhere
+          </button>
+        </div>
+      )}
+
+      {item.status === 'APPROVED' && item.coopId && (
+        openSearch ? (
+          <p className="mt-3 text-xs text-emerald-200">Seller search {openSearch.status.toLowerCase()}. See it under Campaigns.</p>
+        ) : (
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <label className="text-xs text-slate-300">
+              Search near (city or area)
+              <input className={input} value={area} onChange={(e) => setArea(e.target.value)} placeholder="Atlanta, GA" />
+            </label>
+            <label className="text-xs text-slate-300">
+              Most emails to send
+              <input className={input} inputMode="numeric" value={maxEmails} onChange={(e) => setMaxEmails(e.target.value)} />
+            </label>
+            <label className="text-xs text-slate-300">
+              Kind of seller
+              <select className={input} value={category} onChange={(e) => setCategory(e.target.value)}>
+                {categories.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+              </select>
+            </label>
+            <div className="flex flex-wrap gap-2 md:col-span-3">
+              <button
+                className={primary}
+                disabled={busy}
+                onClick={() => post(url, { action: 'findSeller', ...keys, area, maxEmails: Number(maxEmails) || undefined, category }, `Sage will look for a seller of ${item.name} within the hour.`)}
+              >
+                Find a seller
+              </button>
+              <Link className={quiet} href={`/portal/admin/commons/${item.coopId}/offers?item=${item.productId}`}>
+                Already have a seller? Set up the group buy
+              </Link>
+            </div>
+          </div>
+        )
+      )}
     </div>
   );
 }

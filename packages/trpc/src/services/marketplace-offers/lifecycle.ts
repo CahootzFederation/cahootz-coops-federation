@@ -60,6 +60,9 @@ export async function createOffer(db: Db, actorId: string, coopId: string, raw: 
   if (product.store.status !== "APPROVED" || product.store.deletedAt || !product.store.businessId) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "That shop isn't approved to sell yet." });
   }
+  if (input.sourcedProductId && !(await db.sourcedProduct.findUnique({ where: { id: input.sourcedProductId }, select: { id: true } }))) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "We couldn't find the discovered item this offer came from. Start it again from Vendor outreach." });
+  }
   const offer = await db.marketplaceOffer.create({
     data: {
       ...offerData(input),

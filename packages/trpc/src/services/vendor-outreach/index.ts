@@ -10,6 +10,8 @@
  */
 export * from "./categories.js";
 export * from "./demand.js";
+export * from "./item-questions.js";
+export * from "./items.js";
 export * from "./referrals.js";
 export * from "./admin.js";
 export * from "./campaigns.js";

@@ -96,6 +96,19 @@ export const DEAL_CATEGORIES: DealCategory[] = [
       ask: "Would a member rate from a trusted plumber, electrician or handyman help? We're looking for local pros who would give this Commons a better price.",
     },
   },
+  {
+    // Discovered items (product-discovery bot) that fit none of the above. Never
+    // picked from member demand: it has no themes or keywords.
+    key: "other",
+    label: "everyday goods",
+    themes: [],
+    keywords: [],
+    storeCategories: [],
+    question: {
+      title: "A better price on everyday goods?",
+      ask: "Would a group deal on everyday goods help your household? We're looking for sellers who would give this Commons a lower price.",
+    },
+  },
 ];
 
 export const DEAL_QUESTION_CLOSING =
@@ -110,7 +123,7 @@ export function dealCategoryForTheme(themeKey: string): DealCategory | null {
 }
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const KEYWORD_PATTERNS = DEAL_CATEGORIES.map((category) => ({
+const KEYWORD_PATTERNS = DEAL_CATEGORIES.filter((category) => category.keywords.length > 0).map((category) => ({
   key: category.key,
   pattern: new RegExp(`\\b(${category.keywords.map(escape).join("|")})\\b`, "i"),
 }));

@@ -65,7 +65,8 @@ export async function outreachFunnel(db: Db = defaultDb) {
     campaignsProposed: count(campaigns, () => true),
     campaignsApproved: count(campaigns, (row) => ["ACTIVE", "PAUSED", "COMPLETED", "EXPIRED"].includes(row.status)),
     businessesFound: count(prospectsByStatus, () => true),
-    businessesEmailed: count(firstEmails, (row) => row.status === "SENT"),
+    // Previews count as emailed: the business still got a reply link (and, in tests, answered on it).
+    businessesEmailed: count(firstEmails, (row) => row.status === "SENT" || row.status === "DRY_RUN"),
     emailsDryRun: count(firstEmails, (row) => row.status === "DRY_RUN"),
     saidYes: count(responses, (row) => row.interest === "YES"),
     saidNotNow: count(responses, (row) => row.interest === "NOT_NOW"),

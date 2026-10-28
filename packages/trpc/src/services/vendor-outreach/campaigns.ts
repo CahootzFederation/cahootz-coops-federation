@@ -50,26 +50,33 @@ export async function proposeCampaigns(coopId: string, now = new Date(), db: Db 
     const category = dealCategoryByKey(payload.dealCategory as string);
     if (!category || interestCount === null || interestCount < CAMPAIGN_MIN_INTEREST) continue;
     const evidence = (payload.evidence ?? {}) as { kind?: string; postCount?: number; authorCount?: number };
+    // A question that named a discovered item looks for a seller of that item.
+    const item = (payload.item ?? null) as { productId?: string; name?: string } | null;
+    const productId = typeof payload.sourcedProductId === "string"
+      ? (await db.sourcedProduct.findUnique({ where: { id: payload.sourcedProductId }, select: { id: true } }))?.id ?? null
+      : null;
     try {
       const campaign = await db.vendorCampaign.create({
         data: {
           coopId,
           category: category.key,
-          offerType: MEMBER_DEAL_CATEGORIES.has(category.key) ? "MEMBER_DEAL" : "GROUP_BUY",
-          searchTerms: [category.label, ...category.keywords.slice(0, 3)],
+          offerType: !productId && MEMBER_DEAL_CATEGORIES.has(category.key) ? "MEMBER_DEAL" : "GROUP_BUY",
+          searchTerms: productId && item?.name ? [item.name, category.label] : [category.label, ...category.keywords.slice(0, 3)],
+          sourcedProductId: productId,
           demandActionId: question.id,
           demandEvidence: {
             interestCount,
             questionPostId: question.sourcePostId,
             askedAt: question.createdAt.toISOString(),
             needPosts: evidence.kind === "need_posts" ? { posts: evidence.postCount ?? 0, members: evidence.authorCount ?? 0 } : null,
+            ...(productId ? { item: payload.item as Record<string, string | number> } : {}),
           },
         },
       });
       proposed++;
       await audit(db, "system:sage", "VENDOR_CAMPAIGN_PROPOSED", campaign.id, { coopId, category: category.key, interestCount });
       await sendSlackNotification({
-        text: `Sage proposed a vendor outreach campaign: ${category.label} for ${coopId} (${interestCount} members said they'd buy). Review it in the admin portal under Vendor Outreach.`,
+        text: `Sage proposed a vendor outreach campaign: ${productId && item?.name ? item.name : category.label} for ${coopId} (${interestCount} members said they'd buy). Review it in the admin portal under Vendor Outreach.`,
       }).catch(() => false);
     } catch (error) {
       // One campaign per question: a rerun finds it already proposed.
@@ -147,6 +154,7 @@ export async function listCampaignsForAdmin(db: Db = defaultDb) {
     orderBy: { createdAt: "desc" },
     take: 100,
     include: {
+      sourcedProduct: { select: { id: true, name: true, supplierName: true, sourceUrl: true } },
       prospects: {
         select: {
           status: true,
@@ -164,6 +172,7 @@ export async function listCampaignsForAdmin(db: Db = defaultDb) {
       category: campaign.category,
       categoryLabel: dealCategoryByKey(campaign.category)?.label ?? campaign.category,
       offerType: campaign.offerType,
+      item: campaign.sourcedProduct,
       searchTerms: campaign.searchTerms,
       area: campaign.area,
       demandEvidence: campaign.demandEvidence,

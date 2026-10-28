@@ -95,6 +95,9 @@ export async function runOutreachSweep(db: Db = defaultDb, now = new Date(), dep
     const interestCount = Number((campaign.demandEvidence as { interestCount?: number })?.interestCount ?? 0);
     if (!category || !campaign.area) continue;
     const forbiddenNames = await forbiddenNamesFor(db, campaign.coopId);
+    const item = campaign.sourcedProductId
+      ? await db.sourcedProduct.findUnique({ where: { id: campaign.sourcedProductId }, select: { name: true } })
+      : null;
 
     const deliver = async (row: { id: string; personalLine: string | null; prospect: { id: string; businessName: string; email: string | null; description: string | null } }, step: "FIRST" | "FOLLOW_UP") => {
       const token = replyToken(row.id);
@@ -103,6 +106,7 @@ export async function runOutreachSweep(db: Db = defaultDb, now = new Date(), dep
         step,
         businessName: row.prospect.businessName,
         categoryLabel: category.label,
+        itemName: item?.name ?? null,
         area: campaign.area!,
         interestCount,
         offerType: campaign.offerType,
@@ -151,7 +155,7 @@ export async function runOutreachSweep(db: Db = defaultDb, now = new Date(), dep
         continue;
       }
       const personalLine = row.personalLine ?? (await allowed(campaign.coopId)
-        ? await personalLineFor({ coopId: campaign.coopId, businessName: row.prospect.businessName, about: row.prospect.description, categoryLabel: category.label, forbiddenNames }, draft)
+        ? await personalLineFor({ coopId: campaign.coopId, businessName: row.prospect.businessName, about: row.prospect.description, categoryLabel: item?.name ?? category.label, forbiddenNames }, draft)
         : null);
       const delivered = await deliver({ ...row, personalLine }, "FIRST");
       if (!delivered) continue;

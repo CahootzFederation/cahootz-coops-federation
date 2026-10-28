@@ -20,7 +20,7 @@ async function findByToken(db: Db, token: string) {
     where: { replyTokenHash: hashReplyToken(token) },
     include: {
       prospect: true,
-      campaign: { select: { id: true, coopId: true, category: true, area: true, offerType: true } },
+      campaign: { select: { id: true, coopId: true, category: true, area: true, offerType: true, sourcedProduct: { select: { name: true } } } },
       responses: { orderBy: { respondedAt: "desc" }, take: 1, select: { interest: true } },
     },
   });
@@ -36,7 +36,7 @@ export async function loadReplyPage(db: Db, token: string) {
   if (!row) invalidLink();
   return {
     businessName: row.prospect.businessName,
-    categoryLabel: dealCategoryByKey(row.campaign.category)?.label ?? "local goods",
+    categoryLabel: row.campaign.sourcedProduct?.name ?? dealCategoryByKey(row.campaign.category)?.label ?? "local goods",
     area: row.campaign.area,
     offerType: row.campaign.offerType,
     answered: row.responses[0]?.interest ?? null,

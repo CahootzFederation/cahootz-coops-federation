@@ -72,7 +72,9 @@ describe("choosing what to ask", () => {
   });
 });
 
-function demandDb(overrides: { members?: number; posts?: Array<Record<string, string>> } = {}) {
+type ItemMatch = { productId: string; name: string; category: string; description?: string; supplierName?: string; price?: Record<string, unknown> | null };
+
+function demandDb(overrides: { members?: number; posts?: Array<Record<string, string>>; items?: ItemMatch[] } = {}) {
   const actions: any[] = [];
   const posts: any[] = [];
   const db: any = {
@@ -94,6 +96,22 @@ function demandDb(overrides: { members?: number; posts?: Array<Record<string, st
       update: vi.fn(async ({ where, data }: any) => Object.assign(actions.find((a) => a.id === where.id), data)),
     },
     commonsActionAudit: { create: vi.fn(async () => ({})) },
+    // Approved product-discovery items for this Commons (none unless a test adds them).
+    commonsProductMatch: {
+      findMany: vi.fn(async () =>
+        (overrides.items ?? []).map((item) => ({
+          productId: item.productId,
+          product: { id: item.productId, name: item.name, supplierName: item.supplierName ?? "Bulk Co", category: item.category, description: item.description ?? "" },
+        })),
+      ),
+    },
+    productPriceObservation: {
+      findFirst: vi.fn(async ({ where }: any) => {
+        const item = (overrides.items ?? []).find((candidate) => candidate.productId === where.productId);
+        if (!item || item.price === null) return null;
+        return { memberShare: "64 pods", regularPriceCents: 2889, bulkShareCents: 1217, peopleNeeded: 12, sourceUrl: "https://bulk.example/pods", observedAt: NOW, ...item.price };
+      }),
+    },
     commonsPost: {
       findMany: vi.fn(async () => overrides.posts ?? []),
       create: vi.fn(async ({ data }: any) => {
@@ -134,6 +152,37 @@ describe("weekly demand check", () => {
     expect(result).toMatchObject({ asked: true, categoryKey: "baby_supplies", evidence: "community_pattern" });
     expect(db.actions[0].payload.evidence).toEqual({ kind: "community_pattern" });
     expect(db.actions[0].originObservationId).toBe("obs1");
+  });
+
+  it("names an approved item, with its price, when there's no other demand", async () => {
+    const db = demandDb({ items: [{ productId: "pods", name: "Laundry pods", category: "Household", description: "Concentrated laundry detergent pods" }] });
+    const result = await askCommonsAboutDeals("church", NOW, db);
+    expect(result).toMatchObject({ asked: true, categoryKey: "household_essentials", productId: "pods", evidence: "approved_item" });
+    expect(db.posts[0].title).toBe("A group buy on Laundry pods?");
+    expect(db.posts[0].content).toContain("Laundry pods (64 pods) runs about $28.89 on its own. If 12 of us buy together, it could come to about $12.17 each.");
+    expect(db.posts[0].content).toContain("prices we found online");
+    expect(db.actions[0].payload).toMatchObject({ dealCategory: "household_essentials", sourcedProductId: "pods", evidence: { kind: "approved_item" } });
+
+    // A week later it doesn't ask about the same item again.
+    expect((await askCommonsAboutDeals("church", new Date(NOW.getTime() + 8 * DAY), db)).asked).toBe(false);
+  });
+
+  it("names an item in the category members are already asking about", async () => {
+    const db = demandDb({
+      posts: needPosts,
+      items: [
+        { productId: "pods", name: "Laundry pods", category: "Household", description: "detergent" },
+        { productId: "rice", name: "Jasmine rice, 25 lb", category: "Pantry", description: "rice" },
+      ],
+    });
+    const result = await askCommonsAboutDeals("church", NOW, db);
+    expect(result).toMatchObject({ asked: true, categoryKey: "groceries", productId: "rice", evidence: "need_posts" });
+    expect(db.posts[0].title).toBe("A group buy on Jasmine rice, 25 lb?");
+  });
+
+  it("skips items whose price evidence has run out", async () => {
+    const db = demandDb({ items: [{ productId: "pods", name: "Laundry pods", category: "Household", price: null }] });
+    expect((await askCommonsAboutDeals("church", NOW, db)).asked).toBe(false);
   });
 
   it("skips small Commons and Commons with no clear demand", async () => {

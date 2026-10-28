@@ -11,6 +11,8 @@ const RELATIONS: Record<string, { table: string; key: string }> = {
   campaignProspect: { table: "campaignProspect", key: "campaignProspectId" },
   campaign: { table: "vendorCampaign", key: "campaignId" },
   prospect: { table: "vendorProspect", key: "prospectId" },
+  profile: { table: "commonsProductProfile", key: "profileId" },
+  product: { table: "sourcedProduct", key: "productId" },
 };
 
 const UNIQUE: Record<string, string[][]> = {
@@ -20,6 +22,7 @@ const UNIQUE: Record<string, string[][]> = {
   outreachSuppression: [["email"], ["domain"]],
   vendorProspect: [["emailNormalized"]],
   prospectSource: [["name"]],
+  commonsProductMatch: [["profileId", "productId"]],
 };
 
 /** Column defaults from the Prisma schema that the services rely on. */
@@ -73,10 +76,24 @@ export function createFakeOutreachDb() {
     for (const [key, spec] of Object.entries(include)) {
       if (!spec) continue;
       if (key === "prospect") out.prospect = { ...rows("vendorProspect").find((p) => p.id === row.prospectId) };
-      else if (key === "campaign") out.campaign = { ...rows("vendorCampaign").find((c) => c.id === row.campaignId) };
+      else if (key === "campaign") {
+        const nested = typeof spec === "object" ? ((spec as Row).select ?? (spec as Row).include) : undefined;
+        out.campaign = withIncludes("vendorCampaign", rows("vendorCampaign").find((c) => c.id === row.campaignId) ?? {}, nested);
+      }
       else if (key === "prospects") out.prospects = rows("campaignProspect").filter((cp) => cp.campaignId === row.id).map((cp) => withIncludes("campaignProspect", cp, (spec as Row).select ?? (spec as Row).include));
       else if (key === "responses") out.responses = rows("vendorResponse").filter((r) => (table === "vendorProspect" ? r.prospectId === row.id : r.campaignProspectId === row.id)).sort((a, b) => b.respondedAt - a.respondedAt).slice(0, (spec as Row).take ?? 100);
-      else if (key === "referrals") out.referrals = rows("vendorReferral").filter((r) => r.prospectId === row.id).map((r) => ({ ...r, referredBy: { name: r.referrerName ?? null, email: null } }));
+      else if (key === "profile") out.profile = { ...rows("commonsProductProfile").find((p) => p.id === row.profileId) };
+      else if (key === "product") {
+        const product: Row = { ...rows("sourcedProduct").find((p) => p.id === row.productId) };
+        const nested = typeof spec === "object" ? ((spec as Row).include ?? {}) : {};
+        if (nested.priceObservations) product.priceObservations = rows("productPriceObservation").filter((o) => o.productId === product.id).sort((a, b) => b.observedAt - a.observedAt);
+        if (nested.vendorCampaigns) product.vendorCampaigns = rows("vendorCampaign").filter((c) => c.sourcedProductId === product.id);
+        out.product = product;
+      }
+      else if (key === "sourcedProduct") {
+        const product = rows("sourcedProduct").find((p) => p.id === row.sourcedProductId);
+        out.sourcedProduct = product ? { ...product } : null;
+      } else if (key === "referrals") out.referrals = rows("vendorReferral").filter((r) => r.prospectId === row.id).map((r) => ({ ...r, referredBy: { name: r.referrerName ?? null, email: null } }));
     }
     return out;
   };
@@ -153,6 +170,7 @@ export function createFakeOutreachDb() {
   const names = [
     "commonsAction", "vendorCampaign", "vendorProspect", "vendorReferral", "prospectSource", "campaignProspect", "outreachMessage",
     "outreachSuppression", "vendorResponse", "auditLog", "store", "coopConfig", "platformConfig", "marketplaceOffer",
+    "commonsProductProfile", "sourcedProduct", "commonsProductMatch", "productPriceObservation",
   ];
   const db: any = { tables };
   for (const name of names) db[name] = model(name);

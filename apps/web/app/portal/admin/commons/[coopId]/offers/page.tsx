@@ -78,6 +78,8 @@ export default function CommonsOffersPage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Set when the form starts from a product idea (Vendor outreach → "Start the group buy").
+  const [fromItem, setFromItem] = useState<{ sourcedProductId: string; title: string; memberShare: string | null } | null>(null);
 
   const load = useCallback(() => {
     if (!coopId) return;
@@ -94,6 +96,30 @@ export default function CommonsOffersPage() {
   }, [coopId]);
 
   useEffect(load, [load]);
+
+  useEffect(() => {
+    const itemId = new URLSearchParams(window.location.search).get('item');
+    if (!itemId) return;
+    const dollars = (cents: number | null) => (cents ? (cents / 100).toFixed(2) : '');
+    fetch(`/api/admin/outreach/items/${encodeURIComponent(itemId)}`)
+      .then(async (response) => {
+        const item = await response.json();
+        if (!response.ok) throw new Error(item.error || "We couldn't load that product idea.");
+        setForm({
+          ...emptyForm,
+          offerType: 'GROUP_BUY',
+          title: item.title,
+          description: item.description,
+          regularPrice: dollars(item.regularPriceCents),
+          regularPriceSource: item.regularPriceSource ?? '',
+          memberPrice: dollars(item.memberPriceCents),
+          minimumCommitments: item.minimumCommitments ? String(item.minimumCommitments) : '',
+        });
+        setFromItem({ sourcedProductId: item.sourcedProductId, title: item.title, memberShare: item.memberShare });
+        setShowForm(true);
+      })
+      .catch((reason) => setFormError(reason instanceof Error ? reason.message : "We couldn't load that product idea."));
+  }, []);
 
   const set = (key: keyof typeof emptyForm) => (event: { target: { value: string } }) =>
     setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -151,6 +177,7 @@ export default function CommonsOffersPage() {
       refundPolicy: form.refundPolicy,
       substitutionPolicy: form.substitutionPolicy,
       terms: form.terms,
+      sourcedProductId: fromItem?.sourcedProductId ?? null,
     };
     try {
       const response = await fetch(`/api/admin/commons/${coopId}/offers`, {
@@ -161,6 +188,7 @@ export default function CommonsOffersPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "We couldn't save the draft.");
       setForm(emptyForm);
+      setFromItem(null);
       setShowForm(false);
       load();
     } catch (reason) {
@@ -197,6 +225,12 @@ export default function CommonsOffersPage() {
 
       {showForm && (
         <form onSubmit={createDraft} className="space-y-5 rounded-[10px] border border-white/10 bg-white/[0.03] p-5" aria-label="New offer">
+          {fromItem && (
+            <p className="rounded-md border border-emerald-300/20 bg-emerald-300/5 p-3 text-xs text-emerald-100" data-testid="offer-from-item">
+              Started from the product idea {fromItem.title}{fromItem.memberShare ? ` (${fromItem.memberShare} each)` : ''}. The prices are what we
+              found online. Pick the seller&apos;s product, then set the member price and vendor amount you agreed with them.
+            </p>
+          )}
           <div className="flex gap-2" role="radiogroup" aria-label="Offer type">
             {(['MEMBER_DEAL', 'GROUP_BUY'] as const).map((type) => (
               <button

@@ -7,6 +7,7 @@ import { isoWeekKey } from "../sage-community-rhythm.js";
 import { checkSageOutput } from "../untrusted-input.js";
 import { proposeCampaigns } from "./campaigns.js";
 import { dealCategoriesInText, dealCategoryByKey, dealCategoryForTheme, dealQuestionText } from "./categories.js";
+import { approvedItemsForCommons, itemQuestionText, type ItemSnapshot } from "./item-questions.js";
 
 type Db = typeof defaultDb;
 
@@ -41,7 +42,9 @@ export type DealEvidence =
   | { kind: "community_pattern"; categoryKey: string; observationId: string; confidence: number }
   | { kind: "need_posts"; categoryKey: string; postCount: number; authorCount: number; postIds: string[] };
 
-export interface AskedDealQuestion { categoryKey: string | null; createdAt: Date }
+export interface AskedDealQuestion { categoryKey: string | null; productId?: string | null; createdAt: Date }
+
+export type DealItem = ItemSnapshot & { categoryKey: string };
 
 /** Group recent public Need posts by deal category, keeping only categories enough different members raised. */
 export function needPostEvidence(posts: Array<{ id: string; authorId: string; title: string; content: string }>): DealEvidence[] {
@@ -83,6 +86,27 @@ export function pickDealQuestion(evidence: DealEvidence[], asked: AskedDealQuest
     .sort((a, b) => strength(b) - strength(a))[0] ?? null;
 }
 
+/**
+ * Which approved item (from the product-discovery bot) the question names, if
+ * any. With member demand, only an item in that category; without it, the best
+ * item not asked about in 60 days whose category wasn't either. The weekly
+ * limit is checked before this.
+ */
+export function pickDealItem(choice: DealEvidence | null, items: DealItem[], asked: AskedDealQuestion[], now: Date): DealItem | null {
+  const since = now.getTime() - DEAL_QUESTION_CATEGORY_COOLDOWN_DAYS * DAY_MS;
+  const recent = asked.filter((entry) => entry.createdAt.getTime() > since);
+  const recentItems = new Set(recent.map((entry) => entry.productId).filter(Boolean));
+  const recentCategories = new Set(recent.map((entry) => entry.categoryKey));
+  const fresh = items.filter((item) => !recentItems.has(item.productId));
+  if (choice) return fresh.find((item) => item.categoryKey === choice.categoryKey) ?? null;
+  return fresh.find((item) => item.categoryKey === "other" || !recentCategories.has(item.categoryKey)) ?? null;
+}
+
+function productOf(payload: unknown): string | null {
+  const id = (payload as { sourcedProductId?: unknown } | null)?.sourcedProductId;
+  return typeof id === "string" ? id : null;
+}
+
 function categoryOf(payload: unknown): string | null {
   const key = (payload as { dealCategory?: unknown } | null)?.dealCategory;
   return typeof key === "string" ? key : null;
@@ -111,7 +135,7 @@ async function gatherEvidence(db: Db, coopId: string, now: Date): Promise<DealEv
 }
 
 export type DemandResult =
-  | { asked: true; actionId: string; postId: string; categoryKey: string; evidence: DealEvidence["kind"] }
+  | { asked: true; actionId: string; postId: string; categoryKey: string; productId: string | null; evidence: DealEvidence["kind"] | "approved_item" }
   | { asked: false; reason: string };
 
 /** Posts at most one deal-interest question for a Commons this week. Safe to run twice. */
@@ -128,11 +152,19 @@ export async function askCommonsAboutDeals(coopId: string, now = new Date(), db:
     },
     select: { createdAt: true, payload: true },
   });
-  const asked = previous.map((row) => ({ categoryKey: categoryOf(row.payload), createdAt: row.createdAt }));
+  const asked = previous.map((row) => ({ categoryKey: categoryOf(row.payload), productId: productOf(row.payload), createdAt: row.createdAt }));
+  if (asked.some((entry) => entry.createdAt.getTime() > now.getTime() - DEAL_QUESTION_COMMONS_COOLDOWN_DAYS * DAY_MS)) {
+    return { asked: false, reason: "Asked recently, or no clear demand" };
+  }
   const choice = pickDealQuestion(await gatherEvidence(db, coopId, now), asked, now);
-  if (!choice) return { asked: false, reason: "Asked recently, or no clear demand" };
+  // A platform admin approved these items for this Commons, so one can be asked about even without a demand signal.
+  const item = pickDealItem(choice, await approvedItemsForCommons(db, coopId, now), asked, now);
+  if (!choice && !item) return { asked: false, reason: "Asked recently, or no clear demand" };
+  const categoryKey = choice?.categoryKey ?? item!.categoryKey;
+  const questionKey = item ? `item:${item.productId}` : categoryKey;
+  const evidenceKind = choice?.kind ?? "approved_item";
 
-  const text = dealQuestionText(choice.categoryKey)!;
+  const text = item ? itemQuestionText(item) : dealQuestionText(categoryKey)!;
   if (!checkSageOutput(`${text.title}\n${text.body}`).ok) return { asked: false, reason: "The question failed Sage's output check" };
 
   const sage = await ensureSageBotUser(db, coopId);
@@ -143,30 +175,33 @@ export async function askCommonsAboutDeals(coopId: string, now = new Date(), db:
       data: {
         coopId,
         sourceType: DEAL_INTEREST_SOURCE,
-        sourceId: `${coopId}:${choice.categoryKey}:${isoWeekKey(now)}`,
+        sourceId: `${coopId}:${questionKey}:${isoWeekKey(now)}`,
         // Replaced with the question post's id once it's posted, like Sage's community questions.
-        sourcePostId: `${coopId}:${choice.categoryKey}`,
+        sourcePostId: `${coopId}:${questionKey}`,
         sourceAuthorId: sage.id,
-        contentHash: choice.categoryKey,
+        contentHash: questionKey,
         position: 0,
         type: "ASK_COMMONS",
         status: "PENDING",
-        summary: `Sage asked the Commons about a deal on ${dealCategoryByKey(choice.categoryKey)!.label}`,
-        confidence: choice.kind === "community_pattern" ? choice.confidence : 0.6,
+        summary: item
+          ? `Sage asked the Commons about a group buy on ${item.name}`
+          : `Sage asked the Commons about a deal on ${dealCategoryByKey(categoryKey)!.label}`,
+        confidence: choice?.kind === "community_pattern" ? choice.confidence : 0.6,
         draftText: text.body,
         generatedDraftText: text.body,
         charterConfigId: CONFIG_KEY,
-        originObservationId: choice.kind === "community_pattern" ? choice.observationId : null,
+        originObservationId: choice?.kind === "community_pattern" ? choice.observationId : null,
         payload: {
-          dealCategory: choice.categoryKey,
+          dealCategory: categoryKey,
           title: text.title,
           body: text.body,
           // Kind only for patterns: the pattern itself stays internal. Need posts are public.
-          evidence: choice.kind === "need_posts"
+          evidence: choice?.kind === "need_posts"
             ? { kind: choice.kind, postCount: choice.postCount, authorCount: choice.authorCount, postIds: choice.postIds }
-            : { kind: choice.kind },
+            : { kind: evidenceKind },
+          ...(item ? { sourcedProductId: item.productId, item } : {}),
         },
-        auditEvents: { create: { eventType: "SUGGESTION_CREATED", metadata: { kind: DEAL_INTEREST_SOURCE, evidence: choice.kind } } },
+        auditEvents: { create: { eventType: "SUGGESTION_CREATED", metadata: { kind: DEAL_INTEREST_SOURCE, evidence: evidenceKind } } },
       },
       select: { id: true },
     });
@@ -194,7 +229,7 @@ export async function askCommonsAboutDeals(coopId: string, now = new Date(), db:
     await db.commonsActionAudit.create({
       data: { actionId: action.id, eventType: "QUESTION_POSTED", metadata: { resultEntityType: "CommonsPost", resultEntityId: post.id } },
     });
-    return { asked: true, actionId: action.id, postId: post.id, categoryKey: choice.categoryKey, evidence: choice.kind };
+    return { asked: true, actionId: action.id, postId: post.id, categoryKey, productId: item?.productId ?? null, evidence: evidenceKind };
   } catch (error) {
     await db.commonsAction.update({ where: { id: action.id }, data: { status: "FAILED" } }).catch(() => {});
     throw error;

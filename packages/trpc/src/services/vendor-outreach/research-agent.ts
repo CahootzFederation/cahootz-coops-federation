@@ -41,6 +41,8 @@ export interface ResearchRequest {
   searchTerms: string[];
   area: string;
   directoryHints: Array<{ name: string; domain: string }>;
+  /** A specific item to find a seller for (from the product-discovery bot). */
+  item?: { name: string; supplierName: string; sourceUrl: string } | null;
 }
 
 export type ResearchRunner = (request: ResearchRequest) => Promise<ResearchResult | null>;
@@ -50,7 +52,7 @@ const INSTRUCTIONS = [
   "Use web search. Prefer independent, locally owned businesses near the area given.",
   "Only report contact details the business publishes itself, on its own website or its business listing.",
   "Never guess or invent an email, phone, website or business. Use null when you can't find one.",
-  "Don't include large national chains, marketplaces, or businesses that are closed.",
+  "Don't include large national chains (other than a supplier the request names), marketplaces, or businesses that are closed.",
   "whyFit is one short, plain sentence about the business, with no prices and no promises.",
   "If you notice a directory of local businesses that would be good to search next time, suggest it.",
 ].join("\n");
@@ -67,6 +69,9 @@ export const runVendorResearch: ResearchRunner = async (request) => {
   const input = [
     `Find up to ${MAX_BUSINESSES} local businesses selling ${request.categoryLabel} near ${request.area}.`,
     `Helpful search terms: ${request.searchTerms.join(", ")}.`,
+    request.item
+      ? `They want one item in particular: ${request.item.name}, sold by ${request.item.supplierName} (${request.item.sourceUrl}). Look for local shops that sell it or something very close. You may also include ${request.item.supplierName} itself if it publishes a wholesale or business sales contact, even if it isn't local.`
+      : "",
     request.directoryHints.length
       ? `Also look in these directories: ${request.directoryHints.map((hint) => `${hint.name} (site:${hint.domain})`).join("; ")}.`
       : "",

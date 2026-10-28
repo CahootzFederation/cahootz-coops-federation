@@ -1,9 +1,10 @@
 /**
- * E2E fixture for the vendor outreach journey (apps/mobile/e2e/vendor-outreach.spec.ts).
- * Not part of the product; only the Playwright spec calls it.
+ * E2E fixture for the vendor outreach journeys (apps/mobile/e2e/vendor-outreach.spec.ts and
+ * discovered-items.spec.ts). Not part of the product; only the Playwright specs call it.
+ * Each run uses its own commons id (e2e-outreach-<runId>), so parallel journeys don't collide.
  *
  *   tsx --import ./dotenv.config.js scripts/e2e-vendor-outreach.ts setup <runId>
- *     In the shared private E2E commons: records an answered deal question (6 members)
+ *     Records an answered deal question (6 members)
  *     and a member-recommended "E2E <runId> Corner Market" in "E2E Town <runId>", then
  *     runs the real campaign proposal step. Sage proposes a groceries campaign.
  *   ... sweep <runId>
@@ -13,9 +14,19 @@
  *     email is saved as a DRY_RUN. Prints the business's reply link token.
  *   ... cleanup <runId>
  *     Deletes the run's question, campaign, business, messages and replies.
+ *   ... item-setup <runId>
+ *     Adds a product-discovery item for the run's commons ("E2E <runId> Laundry pods",
+ *     waiting for review, with price evidence) and a member-recommended
+ *     "E2E <runId> Soap Shop" in "E2E Town <runId>" that sells household basics.
+ *   ... item-sweep <runId>
+ *     Runs the outreach sweep for the item's seller search, as sweep does. Prints the token.
+ *   ... item-cleanup <runId>
+ *     Deletes the item, its profile, seller search, draft offer and the business.
  *
  * Prints one JSON line prefixed with "E2E_RESULT ". Refuses production and non-local databases.
  */
+import { createHash } from "node:crypto";
+
 import { db } from "../../../packages/db/index.js";
 import { proposeCampaigns } from "../../../packages/trpc/src/services/vendor-outreach/campaigns.js";
 import { DEAL_INTEREST_SOURCE } from "../../../packages/trpc/src/services/vendor-outreach/demand.js";
@@ -80,7 +91,11 @@ async function setup(runId: string) {
 }
 
 async function sweep(runId: string) {
-  const campaign = await db.vendorCampaign.findFirstOrThrow({ where: { coopId: coopFor(runId), area: `E2E Town ${runId}` } });
+  return sweepCampaign({ coopId: coopFor(runId), area: `E2E Town ${runId}`, sourcedProductId: null }, emailFor(runId));
+}
+
+async function sweepCampaign(where: { coopId: string; area: string; sourcedProductId: string | null }, email: string) {
+  const campaign = await db.vendorCampaign.findFirstOrThrow({ where });
   // Only the fixture business: switch shop matching and web search off for this run.
   const toggled = await db.prospectSource.findMany({ where: { type: { in: ["CAHOOTZ_SHOP", "WEB_SEARCH"] }, status: "ENABLED" }, select: { id: true } });
   await db.prospectSource.updateMany({ where: { id: { in: toggled.map((source) => source.id) } }, data: { status: "DISABLED" } });
@@ -91,7 +106,7 @@ async function sweep(runId: string) {
       draft: async () => null,
       research: async () => ({ businesses: [], suggestedSources: [] }),
     });
-    const row = await db.campaignProspect.findFirstOrThrow({ where: { campaignId: campaign.id, prospect: { emailNormalized: emailFor(runId) } } });
+    const row = await db.campaignProspect.findFirstOrThrow({ where: { campaignId: campaign.id, prospect: { emailNormalized: email } } });
     return { summary, token: replyToken(row.id), status: row.status };
   } finally {
     await db.prospectSource.updateMany({ where: { id: { in: toggled.map((source) => source.id) } }, data: { status: "ENABLED" } });
@@ -107,12 +122,68 @@ async function cleanup(runId: string) {
   return { cleaned: true };
 }
 
+const itemIds = (runId: string) => ({ profileId: `e2e-profile-${runId}`, productId: `e2e-item-${runId}`, sellerEmail: `soap-${runId}@e2e-vendor.test` });
+
+async function itemSetup(runId: string) {
+  const { profileId, productId, sellerEmail } = itemIds(runId);
+  const sourceUrl = `https://e2e-supplier.test/${runId}/laundry-pods`;
+  await db.commonsProductProfile.create({
+    data: {
+      id: profileId, key: `e2e-${runId}`, coopId: coopFor(runId), name: `E2E ${runId} Families`, description: "E2E profile",
+      participantLabel: "households", searchPrompt: "E2E", isEnabled: true,
+    },
+  });
+  await db.sourcedProduct.create({
+    data: {
+      id: productId, sourceKey: createHash("sha256").update(sourceUrl).digest("hex"), sourceUrl, name: `E2E ${runId} Laundry pods`,
+      description: "Plastic-free laundry detergent pods.", category: "Household", brand: "E2E Brand", supplierName: "E2E Supplier",
+    },
+  });
+  await db.commonsProductMatch.create({
+    data: { profileId, productId, fitScore: 88, fitReason: "Families buy laundry soap every month.", purpose: "Cheaper laundry for every household." },
+  });
+  await db.productPriceObservation.create({
+    data: {
+      id: `e2e-price-${runId}`, productId, sourceUrl, memberShare: "64 pods", peopleNeeded: 12, regularPriceCents: 2889, bulkShareCents: 1217,
+      verifiedFacts: ["Public price on the supplier's page"], risksOrUnverifiedClaims: ["Shipping cost not checked"], evidenceHash: `e2e-${runId}`,
+    },
+  });
+  await db.vendorProspect.create({
+    data: {
+      businessName: `E2E ${runId} Soap Shop`, category: "household_essentials", description: "Neighborhood shop with bulk cleaning supplies.",
+      email: sellerEmail, emailNormalized: sellerEmail, domain: "e2e-vendor.test", city: `E2E Town ${runId}`, sourceType: "MEMBER_REFERRAL",
+    },
+  });
+  return { profileId, productId, coopId: coopFor(runId) };
+}
+
+async function itemSweep(runId: string) {
+  const { productId, sellerEmail } = itemIds(runId);
+  return sweepCampaign({ coopId: coopFor(runId), area: `E2E Town ${runId}`, sourcedProductId: productId }, sellerEmail);
+}
+
+async function itemCleanup(runId: string) {
+  const { profileId, productId, sellerEmail } = itemIds(runId);
+  await db.marketplaceOffer.deleteMany({ where: { sourcedProductId: productId, status: "DRAFT" } });
+  await db.vendorCampaign.deleteMany({ where: { coopId: coopFor(runId) } });
+  await db.commonsAction.deleteMany({ where: { coopId: coopFor(runId) } });
+  await db.vendorProspect.deleteMany({ where: { emailNormalized: sellerEmail } });
+  await db.outreachSuppression.deleteMany({ where: { email: sellerEmail } });
+  await db.sourcedProduct.deleteMany({ where: { id: productId } });
+  await db.commonsProductProfile.deleteMany({ where: { id: profileId } });
+  return { cleaned: true };
+}
+
+const COMMANDS: Record<string, (runId: string) => Promise<unknown>> = {
+  setup, sweep, cleanup, "item-setup": itemSetup, "item-sweep": itemSweep, "item-cleanup": itemCleanup,
+};
+
 async function main() {
   assertSafeTarget();
   const [command, runId] = process.argv.slice(2);
-  if (!runId) throw new Error("Usage: e2e-vendor-outreach.ts <setup|sweep|cleanup> <runId>");
-  const result = command === "setup" ? await setup(runId) : command === "sweep" ? await sweep(runId) : command === "cleanup" ? await cleanup(runId) : null;
-  if (!result) throw new Error(`Unknown command ${command}`);
+  const run = command ? COMMANDS[command] : undefined;
+  if (!runId || !run) throw new Error(`Usage: e2e-vendor-outreach.ts <${Object.keys(COMMANDS).join("|")}> <runId>`);
+  const result = await run(runId);
   console.log(`E2E_RESULT ${JSON.stringify(result)}`);
 }
 

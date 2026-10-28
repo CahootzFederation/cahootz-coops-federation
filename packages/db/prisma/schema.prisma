@@ -2566,6 +2566,177 @@ enum WithdrawalStatus {
   @@schema("public")
 }
 
+// ── Shared-price product discovery ──────────────────────
+
+enum SourcedProductStatus {
+  CANDIDATE
+  VERIFIED
+  REJECTED
+  STALE
+
+  @@schema("public")
+}
+
+enum CommonsProductMatchStatus {
+  CANDIDATE
+  APPROVED
+  REJECTED
+  PAUSED
+
+  @@schema("public")
+}
+
+enum ProductDiscoveryRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SKIPPED
+
+  @@schema("public")
+}
+
+// A discovery profile may represent a live Commons (coopId is set) or a
+// public example Commons. Products are global and connect through the join
+// model below, so one verified item can serve several Commons without copies.
+model CommonsProductProfile {
+  id                     String    @id @default(cuid())
+  key                    String    @unique
+  coopId                 String?
+  name                   String
+  description            String    @db.Text
+  participantLabel       String
+  searchPrompt           String    @db.Text
+  searchTerms            String[]  @default([])
+  excludedTerms          String[]  @default([])
+  isEnabled              Boolean   @default(true)
+  isHomepageVisible      Boolean   @default(false)
+  displayOrder           Int       @default(0)
+  discoveryIntervalHours Int       @default(168)
+  monthlyRunLimit        Int       @default(5)
+  maxCandidatesPerRun    Int       @default(4)
+  lastDiscoveredAt       DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  productMatches CommonsProductMatch[]
+  discoveryRuns  ProductDiscoveryRun[]
+
+  @@index([coopId])
+  @@index([isEnabled, displayOrder])
+  @@index([isHomepageVisible, displayOrder])
+  @@schema("public")
+}
+
+// External supplier products stay separate from purchasable Store/Product
+// inventory until a real supplier offer is approved and fulfilled.
+model SourcedProduct {
+  id             String               @id @default(cuid())
+  sourceKey      String               @unique
+  sourceUrl      String
+  name           String
+  description    String               @db.Text
+  category       String
+  brand          String
+  supplierName   String
+  imageUrl       String?
+  imageAlt       String?
+  status         SourcedProductStatus @default(CANDIDATE)
+  lastVerifiedAt DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  commonsMatches    CommonsProductMatch[]
+  priceObservations ProductPriceObservation[]
+
+  @@index([status, updatedAt])
+  @@index([category])
+  @@schema("public")
+}
+
+// The relation owns Commons-specific fit, ordering, and approval. Discovery
+// never promotes a candidate to APPROVED; that remains a reviewable decision.
+model CommonsProductMatch {
+  profileId          String
+  productId          String
+  profile            CommonsProductProfile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  product            SourcedProduct            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  status             CommonsProductMatchStatus @default(CANDIDATE)
+  fitScore           Int
+  fitReason          String                    @db.Text
+  purpose            String                    @db.Text
+  tone               String                    @default("mint")
+  isHomepageFeatured Boolean                   @default(false)
+  displayOrder       Int                       @default(0)
+  discoveredByRunId  String?
+  discoveredByRun    ProductDiscoveryRun?      @relation(fields: [discoveredByRunId], references: [id], onDelete: SetNull)
+  approvedBy         String?
+  approvedAt         DateTime?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  @@id([profileId, productId])
+  @@index([profileId, status, displayOrder])
+  @@index([productId, status])
+  @@index([discoveredByRunId])
+  @@schema("public")
+}
+
+// Price evidence is append-only. The public catalog reads the newest valid
+// observation, preserving old supplier claims for audit instead of overwriting.
+model ProductPriceObservation {
+  id                      String               @id @default(cuid())
+  productId               String
+  product                 SourcedProduct       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  discoveryRunId          String?
+  discoveryRun            ProductDiscoveryRun? @relation(fields: [discoveryRunId], references: [id], onDelete: SetNull)
+  sourceUrl               String
+  comparisonUrl           String?
+  currency                String               @default("USD")
+  memberShare             String
+  peopleNeeded            Int
+  regularPriceCents       Int
+  bulkShareCents          Int
+  verifiedFacts           String[]             @default([])
+  risksOrUnverifiedClaims String[]             @default([])
+  evidenceHash            String
+  observedAt              DateTime             @default(now())
+  expiresAt               DateTime?
+
+  @@unique([productId, evidenceHash])
+  @@index([productId, observedAt])
+  @@index([discoveryRunId])
+  @@index([expiresAt])
+  @@schema("public")
+}
+
+// Each scheduled/manual attempt is durable and idempotent. The run record is
+// also the audit boundary for model input/output and persistence counts.
+model ProductDiscoveryRun {
+  id                String                    @id @default(cuid())
+  profileId         String
+  profile           CommonsProductProfile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  idempotencyKey    String                    @unique
+  status            ProductDiscoveryRunStatus @default(RUNNING)
+  trigger           String
+  model             String?
+  query             String                    @db.Text
+  candidateCount    Int                       @default(0)
+  savedProductCount Int                       @default(0)
+  savedMatchCount   Int                       @default(0)
+  error             String?                   @db.Text
+  startedAt         DateTime                  @default(now())
+  finishedAt        DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  productMatches    CommonsProductMatch[]
+  priceObservations ProductPriceObservation[]
+
+  @@index([profileId, startedAt])
+  @@index([status, startedAt])
+  @@schema("public")
+}
+
 // ── Store/Marketplace Models ────────────────────────────
 
 model Store {

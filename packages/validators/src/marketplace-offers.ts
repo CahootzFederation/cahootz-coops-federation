@@ -278,6 +278,12 @@ function sharesAtWorst(memberPriceCents: number, vendorPayoutCents: number, comm
   });
 }
 
+/** True when the Commons and Cahootz each keep at least minShareCents at the worst-case card fee. Cheap: no search. */
+function marginPasses(memberPriceCents: number, vendorPayoutCents: number, commonsSplitBps: number, minShareCents: number) {
+  const split = sharesAtWorst(memberPriceCents, vendorPayoutCents, commonsSplitBps);
+  return split.commonsCents >= minShareCents && split.cahootzCents >= minShareCents;
+}
+
 export type OfferMarginCheck =
   | { ok: true; worst: OfferSplit }
   | { ok: false; worst: OfferSplit; message: string; minMemberPriceCents: number | null; maxVendorPayoutCents: number | null };
@@ -294,10 +300,7 @@ export function checkOfferMargin(params: {
   minShareCents: number;
 }): OfferMarginCheck {
   const { memberPriceCents, vendorPayoutCents, commonsSplitBps, minShareCents } = params;
-  const passes = (member: number, vendor: number) => {
-    const split = sharesAtWorst(member, vendor, commonsSplitBps);
-    return split.commonsCents >= minShareCents && split.cahootzCents >= minShareCents;
-  };
+  const passes = (member: number, vendor: number) => marginPasses(member, vendor, commonsSplitBps, minShareCents);
   const worst = sharesAtWorst(memberPriceCents, vendorPayoutCents, commonsSplitBps);
   if (passes(memberPriceCents, vendorPayoutCents)) return { ok: true, worst };
 
@@ -365,7 +368,8 @@ export function suggestItemOfferPrice(params: {
     const margin = Math.round(((regular - vendor) * pricing.itemMarginBps) / 10000);
     // Gross up so Stripe's typical fee comes out of what members pay, not the margin.
     let member = Math.ceil((vendor + margin + STRIPE_FEE_FIXED_CENTS) / (1 - STRIPE_FEE_PERCENT_BPS / 10000));
-    while (!checkOfferMargin({ memberPriceCents: member, vendorPayoutCents: vendor, commonsSplitBps, minShareCents: pricing.minShareCents }).ok) member++;
+    // Raise the price until both shares clear the minimum (only ever a few cents).
+    while (!marginPasses(member, vendor, commonsSplitBps, pricing.minShareCents)) member++;
     return { regular, vendor, member };
   };
   let packSize = 1;

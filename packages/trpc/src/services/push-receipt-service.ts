@@ -1,4 +1,4 @@
-import { disableDeadDevices, expoPushHeaders, safeExpoErrorCode } from "./push-notification-service";
+import { disableDeadDevices, expoPushHeaders, loggableExpoErrorCode, safeExpoErrorCode } from "./push-notification-service";
 import { sendPushDeliveryAlert } from "./slack-notification-service";
 
 export const EXPO_PUSH_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
@@ -108,6 +108,13 @@ export async function checkPushReceipts(db: ReceiptDb, now = new Date()) {
       }
       failed += 1;
       const errorCode = safeExpoErrorCode(receipt.details?.error);
+      console.warn("[push] Expo receipt failed", {
+        ticketId: row.id,
+        type: row.type,
+        coopId: row.coopId,
+        code: errorCode,
+        rawCode: loggableExpoErrorCode(receipt.details?.error),
+      });
       if (errorCode === "DeviceNotRegistered") deadDevices.push(row.deviceId);
       await db.pushTicket.update({ where: { id: row.id }, data: { status: "ERROR", errorCode, checkedAt: now } });
     }

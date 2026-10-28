@@ -26,6 +26,7 @@ import { PaymentConfirmationProvider } from '@/components/payment-confirmation-p
 import StripeWrapper from '@/components/providers/StripeWrapper';
 import { toastConfig } from '@/lib/toast-config';
 import { captureError } from '@/lib/analytics';
+import { useNavigationReady } from '@/hooks/use-navigation-ready';
 import * as Sentry from '@sentry/react-native';
 import { colorScheme as nativeWindColorScheme } from 'nativewind';
 
@@ -171,8 +172,11 @@ function RootLayout() {
     nativeWindColorScheme.set('light');
   }, []);
 
-  // Handle deep links
+  // Handle deep links once the navigator can take them (see useNavigationReady).
+  const navigationReady = useNavigationReady();
   useEffect(() => {
+    if (!navigationReady) return;
+
     // Handle deep links when app is already open
     const subscription = Linking.addEventListener('url', ({ url }) => {
       handleDeepLink(url);
@@ -187,7 +191,7 @@ function RootLayout() {
     });
 
     return () => subscription.remove();
-  }, []);
+  }, [navigationReady]);
 
   return (
     <SafeAreaProvider>
@@ -222,5 +226,9 @@ function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+// A screen that throws while rendering shows a retry screen instead of
+// closing the app.
+export { AppErrorScreen as ErrorBoundary } from '@/components/app-error-screen';
 
 export default AppMetricsRoot.wrap(Sentry.wrap(RootLayout));

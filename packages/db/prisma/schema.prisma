@@ -1707,7 +1707,7 @@ model GroupMember {
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   joinedAt          DateTime  @default(now())
   role              String    @default("MEMBER") // "MEMBER" | "GUIDE" | "NEWCOMER"
-  // Last time this member read the circle's messages; drives DM unread counts.
+  // Last time this member opened the circle; drives circle and DM unread counts.
   lastReadAt        DateTime?
   notificationLevel String    @default("HIGHLIGHTS") // "ALL" | "HIGHLIGHTS" | "MENTIONS" | "NONE"
 
@@ -2380,6 +2380,37 @@ model AppFeedback {
 
   @@index([createdAt])
   @@index([userId])
+  @@schema("public")
+}
+
+/// Sage's private suggestion for a GitHub issue, one per week (or month), built
+/// from in-app feedback, Community Pulse, proposals and open issues. Only
+/// platform admins see it. It reaches GitHub only when an admin posts it.
+model SageDevIssueDraft {
+  id                String    @id @default(cuid())
+  /// "2026-W44" when weekly, "2026-10" when monthly. One draft per period.
+  periodKey         String    @unique
+  cadence           String // WEEKLY | MONTHLY
+  status            String    @default("DRAFT") // DRAFT | POSTING | POSTED | DISMISSED
+  title             String
+  /// The issue text exactly as it would be posted.
+  body              String    @db.Text
+  /// Counts computed by code, never by the model.
+  evidence          Json
+  /// Why the privacy check blocked posting. Empty when it's safe to post.
+  privacyFlags      String[]  @default([])
+  windowStart       DateTime
+  windowEnd         DateTime
+  githubIssueNumber Int?
+  githubIssueUrl    String?
+  postedAt          DateTime?
+  postedBy          String?
+  dismissedAt       DateTime?
+  dismissedBy       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([status, createdAt])
   @@schema("public")
 }
 

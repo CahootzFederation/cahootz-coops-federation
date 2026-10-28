@@ -14,13 +14,12 @@ interface MentionSuggestionsProps {
 interface Suggestion {
   id: string;
   name: string;
+  canonicalHandle: string;
   label: string;
   caption?: string;
   /** Sage's own account, shown with Sage's face. */
   isSage?: boolean;
 }
-
-const SAGE_SUGGESTION: Suggestion = { id: 'sage', name: 'sage', label: 'Sage', caption: 'Commons AI assistant', isSage: true };
 
 function personInitial(label: string) {
   return label.trim().slice(0, 1).toUpperCase() || '?';
@@ -30,73 +29,61 @@ function personInitial(label: string) {
  * Dropdown shown while composing a post/comment/DM whenever the cursor is
  * mid-@mention (keyword !== undefined, see react-native-controlled-mentions).
  * Empty keyword shows recently-active Commons members; a non-empty keyword
- * debounce-searches by name/handle. Sage is always pinned when it matches.
+ * debounce-searches by name/handle. Every result has an active membership in
+ * this Commons, and this Commons' own Sage account is pinned when it matches.
  */
 export function MentionSuggestions({ keyword, onSelect, coopId = 'cahootz' }: MentionSuggestionsProps) {
   const { sessionToken } = useAuth();
-  const [defaultMembers, setDefaultMembers] = useState<Suggestion[]>([]);
-  const [searchResults, setSearchResults] = useState<Suggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const requestId = useRef(0);
+  // The selection captured at touch-down, committed on release. See the row's handlers.
+  const pendingSelect = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    if (keyword == null || defaultMembers.length > 0) return;
-    api
-      .listDirectMembers(sessionToken)
-      .then((result) => {
-        setDefaultMembers(
-          result.members
-            .filter((m) => m.handle)
-            .map((m) => ({ id: m.id, name: m.handle, label: m.name, caption: `@${m.handle}`, isSage: m.isSage })),
-        );
-      })
-      .catch(() => setDefaultMembers([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keyword == null, sessionToken]);
-
-  useEffect(() => {
-    const trimmed = (keyword ?? '').trim();
-    if (!trimmed) {
-      setSearchResults([]);
+    if (keyword == null) {
+      requestId.current += 1;
+      setSuggestions([]);
+      setIsLoading(false);
       return;
     }
 
+    const trimmed = (keyword ?? '').trim();
     const thisRequest = ++requestId.current;
     setIsLoading(true);
+    setSuggestions([]);
     const timeout = setTimeout(() => {
       api
-        .searchCommons({ coopId, query: trimmed, limit: 8 }, sessionToken)
+        .listMentionMembers({ coopId, query: trimmed, limit: 8 }, sessionToken)
         .then((result) => {
           if (requestId.current !== thisRequest) return;
-          setSearchResults(
-            result.people.map((p) => ({
-              id: p.id,
-              name: p.handle,
-              label: p.name,
-              caption: `@${p.handle}`,
-              isSage: p.isSage,
+          setSuggestions(
+            result.members.map((member) => ({
+              canonicalHandle: member.handle,
+              id: member.id,
+              name: member.isSage ? 'sage' : member.handle,
+              label: member.name,
+              caption: member.isSage ? 'Commons AI assistant' : `@${member.handle}`,
+              isSage: member.isSage,
             })),
           );
         })
         .catch(() => {
-          if (requestId.current === thisRequest) setSearchResults([]);
+          if (requestId.current === thisRequest) setSuggestions([]);
         })
         .finally(() => {
           if (requestId.current === thisRequest) setIsLoading(false);
         });
-    }, 250);
+    }, trimmed ? 250 : 0);
 
     return () => clearTimeout(timeout);
   }, [keyword, coopId, sessionToken]);
 
   if (keyword == null) return null;
 
-  const trimmedKeyword = keyword.trim().toLowerCase();
-  const base = trimmedKeyword ? searchResults : defaultMembers;
-  const sageMatches = !trimmedKeyword || 'sage'.startsWith(trimmedKeyword);
   const results: Suggestion[] = [
-    ...(sageMatches ? [SAGE_SUGGESTION] : []),
-    ...base.filter((s) => s.name !== 'sage'),
+    ...suggestions.filter((suggestion) => suggestion.isSage),
+    ...suggestions.filter((suggestion) => !suggestion.isSage),
   ].slice(0, 8);
 
   if (results.length === 0 && !isLoading) return null;
@@ -105,16 +92,26 @@ export function MentionSuggestions({ keyword, onSelect, coopId = 'cahootz' }: Me
     <View
       className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg"
       style={{ maxHeight: 220, elevation: 12, zIndex: 50 }}
+      accessibilityLabel="Mention suggestions"
     >
-      <ScrollView keyboardShouldPersistTaps="always" bounces={false}>
+      <ScrollView testID="mention-suggestions" keyboardShouldPersistTaps="always" bounces={false}>
         {results.map((suggestion, index) => (
           <Pressable
             key={suggestion.id}
-            // onPressIn (not onPress) - fires on touch-down, before the tap can blur the
-            // still-focused composer TextInput. onPress fires on release, by which point
-            // the blur has already torn down the mention/selection state this depends on,
-            // so the row visually presses but nothing gets inserted.
-            onPressIn={() => onSelect({ id: suggestion.name, name: suggestion.name })}
+            testID={`mention-suggestion-${suggestion.canonicalHandle}`}
+            // Capture onSelect on touch-down, before the tap can blur the still-focused
+            // composer TextInput and tear down the mention/selection state its closure
+            // depends on. Only commit it on release: selecting on touch-down meant any
+            // swipe that started on a row picked that person instead of scrolling the
+            // list. A swipe cancels the press, so onPress never fires and nothing is picked.
+            onPressIn={() => {
+              pendingSelect.current = () => onSelect({ id: suggestion.name, name: suggestion.name });
+            }}
+            onPress={() => {
+              const select = pendingSelect.current;
+              pendingSelect.current = null;
+              select?.();
+            }}
             className={`flex-row items-center gap-3 px-3 py-2.5 ${
               index < results.length - 1 ? 'border-b border-gray-100' : ''
             }`}

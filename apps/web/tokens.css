@@ -9,6 +9,7 @@
   --color-ink-2: #565b52;
   --color-rule: #c9c6bc;
   --color-accent: #ef945b;
+  --color-accent-ink: #20251f;
   --color-accent-deep: #ae4c2e;
   --color-dark: #1f2924;
   --color-light: #fffdf8;
@@ -32,4 +33,5 @@
   --radius-card: 6px;
   --radius-pill: 100px;
   --rule-thin: 1px;
+  --tap-target: 44px;
 }

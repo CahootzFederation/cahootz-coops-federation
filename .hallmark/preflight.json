@@ -1,12 +1,14 @@
 {
-  "scannedAt": "2026-09-18",
-  "scope": "apps/mobile",
-  "framework": "Expo Router with React Native",
-  "styling": "NativeWind with existing semantic and Cahootz brand tokens",
-  "motion": "React Native Reanimated is installed",
+  "scannedAt": "2026-10-27",
+  "scope": "apps/web root homepage shared-price experiment",
+  "framework": "Next.js App Router with React and TypeScript",
+  "styling": "Existing Cahootz homepage CSS plus calculator-only additive styles",
+  "motion": "Existing Cahootz button and control transitions with reduced-motion handling",
   "preserve": [
-    "Existing typography",
-    "Existing orange, paper, stone, and slate drawer palette",
-    "Existing spacing and rounded-corner language"
+    "Existing Cahootz header, wordmark, logo, typography, palette, spacing, section rhythm, and footer",
+    "Existing A/B middleware, analytics, and preview overrides",
+    "Existing waitlist API contract",
+    "Existing legal, contact, journal, and GitHub routes",
+    "Existing active-commons data as optional form suggestions"
   ]
 }

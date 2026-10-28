@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/trpc/client";
+import { usePostHog } from "posthog-js/react";
 
 interface CoopOption {
   coopId: string;
@@ -20,6 +21,7 @@ interface WaitlistSignupFormProps {
 }
 
 export function WaitlistSignupForm({ coops: initialCoops = [] }: WaitlistSignupFormProps) {
+  const posthog = usePostHog();
   const { data: coops = initialCoops } =
     api.coopConfig.listActiveCoops.useQuery(undefined, {
       initialData: initialCoops,
@@ -68,6 +70,9 @@ export function WaitlistSignupForm({ coops: initialCoops = [] }: WaitlistSignupF
       setResult(data);
 
       if (data.success) {
+        posthog.capture("homepage_experiment_waitlist_joined", {
+          form: "community-waitlist",
+        });
         formElement.reset();
         setSuggestedCoop("");
       }

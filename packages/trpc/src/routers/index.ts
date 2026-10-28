@@ -30,6 +30,7 @@ import { scMintEventsRouter } from "./sc-mint-events.js";
 import { stripeConnectRouter } from "./stripe-connect.js";
 import { scVerificationRouter } from "./sc-verification.js";
 import { platformConfigRouter } from "./platform-config.js";
+import { productDiscoveryRouter } from "./product-discovery.js";
 import { publicCoopInfoRouter } from "./public-coop-info.js";
 import { walletAuthRouter } from "./wallet-auth.js";
 import { waitlistRouter } from "./waitlist.js";
@@ -76,6 +77,7 @@ export const appRouter = router({
   stripeConnect: stripeConnectRouter,
   scVerification: scVerificationRouter,
   platformConfig: platformConfigRouter,
+  productDiscovery: productDiscoveryRouter,
   publicCoopInfo: publicCoopInfoRouter,
   walletAuth: walletAuthRouter,
   waitlist: waitlistRouter,

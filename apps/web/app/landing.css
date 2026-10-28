@@ -58,6 +58,7 @@ body {
   white-space: nowrap;
 }
 .brand img {
+  height: auto;
   object-fit: contain;
 }
 .header-nav {

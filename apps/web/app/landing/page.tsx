@@ -13,6 +13,7 @@ import { WaitlistSignupForm } from "@/components/waitlist-signup-form";
 import { env } from "@/env";
 import {
   DEFAULT_OFFER_PRICING,
+  OFFER_PRICING_LIMITS,
   type OfferPricingSettings,
 } from "@repo/validators/marketplace-offers";
 import { getFeaturedBlogPosts } from "@/lib/blog";
@@ -72,8 +73,13 @@ async function getHomepageProductCatalogs(): Promise<CommonsCatalog[]> {
   }
 }
 
-/** The Group Buy pricing rules a platform admin set, so the homepage matches real offers. */
+/**
+ * The Group Buy pricing rules a platform admin set, so the homepage matches
+ * real offers. Falls back to the defaults when there's no API (as in CI builds)
+ * or it doesn't answer within 3 seconds, so it can never hold up the page.
+ */
 async function getHomepagePricing(): Promise<OfferPricingSettings> {
+  if (!env.NEXT_PUBLIC_API_URL) return DEFAULT_OFFER_PRICING;
   try {
     const response = await fetch(
       `${env.NEXT_PUBLIC_API_URL}/trpc/productDiscovery.homepagePricing`,
@@ -81,13 +87,27 @@ async function getHomepagePricing(): Promise<OfferPricingSettings> {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         next: { revalidate: 900 },
+        signal: AbortSignal.timeout(3000),
       },
     );
     if (!response.ok) return DEFAULT_OFFER_PRICING;
     const data = (await response.json()) as {
-      result?: { data?: Partial<OfferPricingSettings> };
+      result?: { data?: Partial<Record<keyof OfferPricingSettings, unknown>> };
     };
-    return { ...DEFAULT_OFFER_PRICING, ...(data.result?.data ?? {}) };
+    const received = data.result?.data ?? {};
+    // Keep only whole numbers inside the allowed range; anything else uses the default.
+    return Object.fromEntries(
+      (Object.keys(DEFAULT_OFFER_PRICING) as (keyof OfferPricingSettings)[]).map((key) => {
+        const value = received[key];
+        const { min, max } = OFFER_PRICING_LIMITS[key];
+        return [
+          key,
+          typeof value === "number" && Number.isInteger(value) && value >= min && value <= max
+            ? value
+            : DEFAULT_OFFER_PRICING[key],
+        ];
+      }),
+    ) as unknown as OfferPricingSettings;
   } catch {
     return DEFAULT_OFFER_PRICING;
   }

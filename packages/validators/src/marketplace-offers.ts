@@ -361,6 +361,7 @@ export function suggestItemOfferPrice(params: {
 }): ItemOfferSuggestion | null {
   const pricing = params.pricing ?? DEFAULT_OFFER_PRICING;
   const commonsSplitBps = params.commonsSplitBps ?? 5000;
+  if (!Number.isFinite(params.regularPriceCents) || !Number.isFinite(params.bulkPriceCents)) return null;
   if (params.bulkPriceCents <= 0 || params.bulkPriceCents >= params.regularPriceCents) return null;
   const priceFor = (packSize: number) => {
     const regular = params.regularPriceCents * packSize;
@@ -369,8 +370,10 @@ export function suggestItemOfferPrice(params: {
     // Gross up so Stripe's typical fee comes out of what members pay, not the margin.
     let member = Math.ceil((vendor + margin + STRIPE_FEE_FIXED_CENTS) / (1 - STRIPE_FEE_PERCENT_BPS / 10000));
     // Raise the price until both shares clear the minimum (only ever a few cents).
-    while (!marginPasses(member, vendor, commonsSplitBps, pricing.minShareCents)) member++;
-    return { regular, vendor, member };
+    // The cap guards against settings that can never pass, such as a 0% or 100% split.
+    const cap = member + 10_000;
+    while (member < cap && !marginPasses(member, vendor, commonsSplitBps, pricing.minShareCents)) member++;
+    return { regular, vendor, member: marginPasses(member, vendor, commonsSplitBps, pricing.minShareCents) ? member : Number.POSITIVE_INFINITY };
   };
   let packSize = 1;
   let price = priceFor(1);

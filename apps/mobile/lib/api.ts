@@ -491,6 +491,8 @@ export interface PrivateGroupSummary {
   iconEmoji?: string | null;
   iconColor?: string | null;
   chattingCount: number;
+  // New posts and comments from others since you last opened the circle.
+  unreadCount?: number;
   welcomeTableNumber: number | null;
   welcomeTableStatus: 'OPEN' | 'FULL' | 'CLOSED' | null;
   capacity: number | null;
@@ -1355,6 +1357,31 @@ export const api = {
     return readTrpcResult<{ people: SearchPerson[]; posts: CommonsPost[] }>(
       response,
       'Search failed',
+    );
+  },
+
+  async listMentionMembers(
+    data: { coopId: string; query?: string; limit?: number },
+    sessionToken?: string | null,
+  ) {
+    const input = encodeURIComponent(
+      JSON.stringify({
+        coopId: data.coopId,
+        query: data.query ?? '',
+        limit: data.limit ?? 8,
+      }),
+    );
+    const response = await fetch(
+      `${API_BASE_URL}/trpc/commons.listMentionMembers?input=${input}`,
+      {
+        method: 'GET',
+        headers: createApiHeaders(null, sessionToken),
+      },
+    );
+
+    return readTrpcResult<{ members: SearchPerson[] }>(
+      response,
+      "We couldn't load this Commons' members",
     );
   },
 

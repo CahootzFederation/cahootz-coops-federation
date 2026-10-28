@@ -1045,6 +1045,72 @@ describe('commonsRouter', () => {
     ]);
   });
 
+  it('lists mention suggestions only from the selected Commons', async () => {
+    const sage = {
+      id: 'sage_garden',
+      name: 'Sage',
+      email: 'sage-garden@bot.cahootz.internal',
+      handle: 'sage-garden',
+      isBot: true,
+      roles: ['member', 'sage'],
+    };
+    const db = makeDb({
+      user: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValueOnce(ACTIVE_USER)
+          .mockResolvedValueOnce(sage),
+      },
+      userCoopMembership: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            user: {
+              id: 'user_2',
+              name: 'Maya R.',
+              email: 'maya@example.com',
+              handle: 'mayar',
+              isBot: false,
+              roles: ['member'],
+            },
+          },
+        ]),
+      },
+    });
+
+    const result = await callerFor(db, {
+      'x-session-token': 'token_1',
+    }).listMentionMembers({
+      coopId: 'garden',
+      query: 'ma',
+      limit: 8,
+    });
+
+    expect(result.members).toEqual([
+      {
+        id: 'user_2',
+        name: 'Maya R.',
+        handle: 'mayar',
+        isSage: false,
+      },
+    ]);
+    expect(db.userCoopMembership.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          coopId: 'garden',
+          status: 'ACTIVE',
+          userId: { not: ACTIVE_USER.id },
+          user: expect.objectContaining({
+            OR: [
+              { name: { contains: 'ma', mode: 'insensitive' } },
+              { handle: { contains: 'ma', mode: 'insensitive' } },
+            ],
+          }),
+        }),
+        take: 8,
+      }),
+    );
+  });
+
   describe('getPersonalPage commons', () => {
     const PROFILE_USER = {
       id: 'user_2',

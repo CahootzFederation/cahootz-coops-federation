@@ -1901,6 +1901,91 @@ export const commonsRouter = router({
       };
     }),
 
+  /**
+   * Active members that may be @mentioned in this Commons. This deliberately
+   * queries memberships instead of the platform-wide User table so people and
+   * Sage accounts from another Commons never leak into its composer.
+   */
+  listMentionMembers: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        coopId: z.string().min(1),
+        query: z.string().trim().max(80).default(''),
+        limit: z.number().int().min(1).max(30).default(8),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      await requireActiveCommonsMembership(
+        context.db,
+        context.accountUser.id,
+        input.coopId,
+      );
+
+      // Sage is created lazily, but opening a mention picker is enough reason
+      // to materialize this Commons' own account and membership.
+      const sage = await ensureSageBotUser(context.db, input.coopId);
+
+      const memberships = await context.db.userCoopMembership.findMany({
+        where: {
+          coopId: input.coopId,
+          status: 'ACTIVE',
+          userId: { not: context.accountUser.id },
+          user: {
+            deletedAt: null,
+            handle: { not: null },
+            ...(input.query
+              ? {
+                  OR: [
+                    { name: { contains: input.query, mode: 'insensitive' as const } },
+                    { handle: { contains: input.query, mode: 'insensitive' as const } },
+                  ],
+                }
+              : {}),
+          },
+        },
+        orderBy: [{ lastActiveAt: 'desc' }, { joinedAt: 'desc' }],
+        take: input.limit,
+        select: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              handle: true,
+              isBot: true,
+              roles: true,
+            },
+          },
+        },
+      });
+
+      const members = memberships.map(({ user }) => ({
+        id: user.id,
+        name: displayName(user),
+        handle: user.handle!,
+        isSage: isSageUser(user),
+      }));
+
+      // Preserve the picker's useful default: this Commons' Sage is pinned
+      // even when a busy Commons has more recent members than the result cap.
+      if (!input.query) {
+        return {
+          members: [
+            {
+              id: sage.id,
+              name: displayName(sage),
+              handle: sage.handle!,
+              isSage: true,
+            },
+            ...members.filter((member) => member.id !== sage.id),
+          ].slice(0, input.limit),
+        };
+      }
+
+      return { members };
+    }),
+
   applyToCommons: accountAuthenticatedProcedure
     .input(
       z.object({

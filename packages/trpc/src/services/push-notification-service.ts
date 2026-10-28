@@ -44,11 +44,23 @@ const KNOWN_EXPO_ERRORS = [
   "UNAUTHORIZED",
   "PUSH_TOO_MANY_NOTIFICATIONS",
   "PUSH_TOO_MANY_EXPERIENCE_IDS",
+  "ProviderError",
+  "ExpoError",
+  "DeveloperError",
 ];
 
 /** Provider messages can contain device tokens; keep only known error codes. */
 export function safeExpoErrorCode(code?: string) {
-  return KNOWN_EXPO_ERRORS.includes(code || "") ? code! : "UnknownProviderError";
+  if (!code) return "NoErrorCode";
+  return KNOWN_EXPO_ERRORS.includes(code) ? code : "UnknownProviderError";
+}
+
+/**
+ * The raw code for logs when it looks like a plain identifier, so a new Expo code
+ * shows up by name. Anything else (a token, a sentence) is dropped.
+ */
+export function loggableExpoErrorCode(code?: string) {
+  return code && /^[A-Za-z_]{1,40}$/.test(code) ? code : undefined;
 }
 
 /** Expo headers, with the access token when the project has push security turned on. */
@@ -190,7 +202,11 @@ export async function createNotificationAndPush(
           return;
         }
         const code = safeExpoErrorCode(ticket.details?.error);
-        console.warn("[push] Expo ticket rejected", { ...logContext, code });
+        console.warn("[push] Expo ticket rejected", {
+          ...logContext,
+          code,
+          rawCode: loggableExpoErrorCode(ticket.details?.error),
+        });
         tickets.push({ deviceId, status: "ERROR", errorCode: code });
         if (code === "DeviceNotRegistered" && deviceId) deadDevices.push(deviceId);
       });

@@ -124,6 +124,11 @@
       "import": "./dist/services/platform-admin.js",
       "require": "./dist/services/platform-admin.js"
     },
+    "./services/sage-dev-issues": {
+      "types": "./dist/services/sage-dev-issues.d.ts",
+      "import": "./dist/services/sage-dev-issues.js",
+      "require": "./dist/services/sage-dev-issues.js"
+    },
     "./services/sage-weekly-outreach": {
       "types": "./dist/services/sage-weekly-outreach.d.ts",
       "import": "./dist/services/sage-weekly-outreach.js",

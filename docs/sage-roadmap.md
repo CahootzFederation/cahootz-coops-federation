@@ -1,6 +1,6 @@
 # Sage product roadmap
 
-Last updated: 2026-10-25
+Last updated: 2026-10-27
 
 ## North star
 
@@ -57,6 +57,22 @@ The local-only command in `apps/api/scripts/publish-community-pulse-local.ts` ru
 The @mention picker reads active memberships from the selected Commons. It no longer uses the platform-wide people search or the original Commons' direct-message list. Opening the picker lazily creates that Commons' own Sage account and membership, so the right Sage remains available while people and Sage accounts from other Commons stay out. The write path applies the same membership rule: a hand-typed nonmember handle remains plain text and cannot create an out-of-scope mention notification.
 
 Verification: the tRPC suite passed (1,073 tests, 31 skipped), the tRPC build and mobile type-check passed, and the focused Playwright journey passed. The required full mobile E2E run also passed the new mention journey before the local Expo server exited; its final result was therefore not green (47 passed, 2 skipped, 2 did not run, 70 failed, with the later failures reporting port 8081 refused).
+
+## Sage issue ideas for the dev team (2026-10-27)
+
+Once a week by default, Sage drafts one GitHub issue about the biggest problem members seem to be hitting in the app. A platform admin can switch this to once a month on the web **Agent Playground → Sage issue ideas** panel; the choice is the `sage.devIssueCadence` `PlatformConfig` row (`WEEKLY` or `MONTHLY`). Members never see any of it.
+
+- **What Sage reads** (`gatherDevIssueSignals`, `services/sage-dev-issues.ts`): up to 40 in-app feedback reports, 20 published Community Pulse notes and 20 proposals from the last 7 days (or 30 when monthly), plus up to 60 open GitHub issue titles so it doesn't repeat one. Member text is cleansed as untrusted input, and E2E text is dropped. No DMs, member memory or private circles.
+- **What the issue says**: the model writes only the title, the problem and why it matters, and cites the records it used by ref. Code counts the cited records ("2 in-app reports from 2 members (2 bug reports)") and renders the body, so the numbers come from records, not the model. It doesn't suggest a code fix.
+- **Privacy** (`devIssuePrivacyFlags`): code blocks posting when the text has an email, phone number, link, @handle, a reporter's name, nickname or handle, a Commons ID or name, or six words in a row copied from a member. A blocked draft is still saved so the admin can see why, but Post is refused in code, not just disabled in the UI.
+- **Approval**: nothing reaches GitHub on its own. The admin reads the draft and clicks **Post to GitHub** (with a confirm) or **Dismiss**. Posting claims the draft atomically (`DRAFT → POSTING → POSTED`), puts it back to `DRAFT` if GitHub refuses, records who posted it and the issue number, and labels the issue `sage-suggestion`. A draft whose title is E2E test data is never sent.
+- **Schedule**: Trigger.dev task `sage-dev-issue-sweep` runs daily at 15:00 UTC. The draft's unique period key (`2026-W44` or `2026-10`) keeps it to one draft per week or month, across workers and the **Draft now** button. A new draft posts a Slack note. A crash sends the usual agent operational alert.
+- **Cost**: at most one model call per period (`COMMONS_AI_MODEL`, 700 output tokens, low reasoning), recorded as `AICostEvent` feature `sage-dev-issue` with no Commons. There's no model call when the window has no feedback, Pulse notes or proposals. It doesn't count toward any Commons' autonomy limit.
+- **Setup**: migration `20261027000000_sage_dev_issue_drafts`. For posting, set `GITHUB_ISSUES_TOKEN` (a fine-grained token with Issues: write on the repo) on the **web** deployment, where the Post route runs. `GITHUB_ISSUES_REPO` defaults to `CahootzFederation/cahootz-coops-federation`. Without the token Sage still drafts, and Post says the token is missing. A token on the Trigger worker only raises the GitHub rate limit for reading open issues.
+
+Verification: `sage-dev-issues.test.ts` (18 tests) passes, and the full tRPC suite passes (1,098 passed, 31 skipped). The tRPC build, mobile type-check, and Trigger bundle check pass. Playwright `admin-sage-dev-issues.spec.ts` (TESTING.md journey 78) passed locally against the web admin portal on a cloned database with the migration applied. The panel was checked by eye in the browser; the dark-theme outline buttons were fixed after that check.
+
+Limitations: nothing has run against a live model or the real GitHub API yet. The first live draft should be read closely before anyone trusts the privacy checks. The name check covers reporters and Commons, not people a member mentions inside their feedback; the copy check catches verbatim quotes, not close paraphrases. Those are the reasons posting needs a person. A dismissed draft holds its period, so **Draft now** won't make another until the next week or month. Small counts ("1 report from 1 member") are still shown.
 
 ## Current foundation
 
@@ -751,6 +767,7 @@ For every Sage behavior change:
 - 2026-10-20: Monday's post is a short, leader-style note phrased by a small model from facts code picks, and goals appear only when something moved on one. Proposal posts lead with the idea and mention the goal in passing, without gap numbers. Reverses the 2026-10-16 naming decision: members who pitched in are named in Sage's Monday and Friday posts by default, and an opt-out setting will come later (the user will write it). People who asked for help are never named.
 - 2026-10-25: @mention suggestions and stored mention resolution are scoped to active membership in the selected Commons. Opening the picker materializes that Commons' own Sage membership; Sages from other Commons and nonmember people are excluded. A hand-typed nonmember handle stays plain text and sends no mention alert.
 - 2026-10-18 (later): Platform admins can run Sage's proposal writer on demand from the web Commons AI page, with an option to skip the weekly limits, for onboarding and testing. Safety rules and code checks still apply.
+- 2026-10-27: Sage drafts one GitHub issue idea per week by default (an admin can switch to monthly) from feedback, Community Pulse and proposals. Only platform admins see the drafts, and a person must post each one to the public repo. Code checks for private details and blocks posting a draft that has any.
 
 ## Completed milestones
 

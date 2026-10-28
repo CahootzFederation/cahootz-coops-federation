@@ -2,10 +2,9 @@
 
 import type React from "react";
 import { Suspense, useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Store } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-
 import { api } from "@/lib/trpc/client";
+import { AlertCircle, CheckCircle2, Store } from "lucide-react";
 
 interface CoopOption {
   coopId: string;
@@ -20,7 +19,9 @@ interface BusinessSignupFormProps {
   coops?: CoopOption[];
 }
 
-function BusinessSignupFormContent({ coops: initialCoops = [] }: BusinessSignupFormProps) {
+function BusinessSignupFormContent({
+  coops: initialCoops = [],
+}: BusinessSignupFormProps) {
   const searchParams = useSearchParams();
   const { data: coops = initialCoops } =
     api.coopConfig.listActiveCoops.useQuery(undefined, {
@@ -56,7 +57,9 @@ function BusinessSignupFormContent({ coops: initialCoops = [] }: BusinessSignupF
     }
   }, [coopId, coopInterest, coops]);
 
-  const handleCoopInterestChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoopInterestChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const nextCoopInterest = event.target.value;
     const matchingCoop = coops.find((coop) => coop.name === nextCoopInterest);
 
@@ -71,7 +74,7 @@ function BusinessSignupFormContent({ coops: initialCoops = [] }: BusinessSignupF
 
     const formData = new FormData(e.currentTarget);
     const formElement = e.currentTarget; // Store reference before async operation
-    
+
     const businessData = {
       ownerName: formData.get("ownerName") as string,
       ownerEmail: formData.get("ownerEmail") as string,
@@ -93,20 +96,22 @@ function BusinessSignupFormContent({ coops: initialCoops = [] }: BusinessSignupF
       });
 
       console.log("Response status:", response.status, response.ok);
-      
+
       const data = await response.json();
       console.log("business-form response", data);
-      
+
       // Check if response was successful HTTP status
       if (!response.ok) {
         console.log("Response not OK, setting error state");
         setResult({
           success: false,
-          message: data.message || "Error submitting business signup. Please try again.",
+          message:
+            data.message ||
+            "Error submitting business signup. Please try again.",
         });
         return;
       }
-      
+
       console.log("Setting result data:", data);
       setResult(data);
 
@@ -176,7 +181,7 @@ function BusinessSignupFormContent({ coops: initialCoops = [] }: BusinessSignupF
                 id="ownerName"
                 name="ownerName"
                 type="text"
-                placeholder="John Smith"
+                placeholder="Business owner or contact"
                 required
                 disabled={isSubmitting}
                 className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-orange-300/50"
@@ -191,7 +196,7 @@ function BusinessSignupFormContent({ coops: initialCoops = [] }: BusinessSignupF
                 id="ownerEmail"
                 name="ownerEmail"
                 type="email"
-                placeholder="john@yourbusiness.com"
+                placeholder="you@yourbusiness.com"
                 required
                 disabled={isSubmitting}
                 className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-orange-300/50"
@@ -208,7 +213,7 @@ function BusinessSignupFormContent({ coops: initialCoops = [] }: BusinessSignupF
               id="businessName"
               name="businessName"
               type="text"
-              placeholder="Smith's Corner Store"
+              placeholder="Your business name"
               required
               disabled={isSubmitting}
               className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-300/50"
@@ -227,7 +232,7 @@ function BusinessSignupFormContent({ coops: initialCoops = [] }: BusinessSignupF
               id="businessAddress"
               name="businessAddress"
               type="text"
-              placeholder="123 Main St, Atlanta, GA 30309"
+              placeholder="Street, city, state, postal code"
               required
               disabled={isSubmitting}
               className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-300/50"
@@ -236,10 +241,7 @@ function BusinessSignupFormContent({ coops: initialCoops = [] }: BusinessSignupF
           </div>
 
           <div className="space-y-2">
-            <label
-              htmlFor="businessType"
-              className="block text-sm text-white"
-            >
+            <label htmlFor="businessType" className="block text-sm text-white">
               Business Type *
             </label>
             <select
@@ -271,7 +273,7 @@ function BusinessSignupFormContent({ coops: initialCoops = [] }: BusinessSignupF
             <textarea
               id="description"
               name="description"
-              placeholder="What products/services do you offer? How many customers do you serve? Any questions about Unity Coin integration?"
+              placeholder="What do you sell, who do you serve, and what order volume would make a shared-price offer possible?"
               disabled={isSubmitting}
               rows={3}
               className="w-full resize-none rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-orange-300/50"
@@ -312,8 +314,8 @@ function BusinessSignupFormContent({ coops: initialCoops = [] }: BusinessSignupF
           )}
 
           <p className="text-xs leading-6 text-slate-500">
-            * Required fields. You can choose an active commons above or type the
-            commons you want your business to help build.
+            * Required fields. You can choose an active commons above or type
+            the commons you want your business to help build.
           </p>
         </form>
       </div>

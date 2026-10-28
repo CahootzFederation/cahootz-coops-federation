@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { BlogCard } from "@/components/blog/blog-card";
 import { BusinessSignupForm } from "@/components/business-signup-form";
+import { HomepageExperimentTracker } from "@/components/homepage-experiment-tracker";
 import { MemberApplicationFlow } from "@/components/member-application-flow";
 import { TreasuryContributionCalculator } from "@/components/treasury-contribution-calculator";
 import { WaitlistSignupForm } from "@/components/waitlist-signup-form";
@@ -125,6 +126,7 @@ export default async function HomePage() {
 
   return (
     <div className="landing">
+      <HomepageExperimentTracker variant="community" />
       <header className="landing-header">
         <div className="landing-shell header-inner">
           <Link href="/" className="brand" aria-label="Cahootz home">

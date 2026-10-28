@@ -407,7 +407,7 @@ test.describe("family commons", () => {
 
       // The applicant can take it back.
       await shown(invitee.page, "Withdraw application", { exact: true }).click();
-      await expect(shown(invitee.page, "Membership required")).toBeVisible();
+      await expect(shown(invitee.page, "Members only", { exact: true })).toBeVisible();
     } finally {
       await member.context.close();
       await invitee.context.close();

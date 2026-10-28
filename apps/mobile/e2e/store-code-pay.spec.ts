@@ -59,22 +59,22 @@ test("member pays a store by typing its code, up to the confirm step", { tag: "@
     const coopId = await activeCoopId(page);
     storeCodeFixture(["setup", coopId, code]);
 
-    // You -> Pay a store -> Enter Code Manually.
+    // You -> Pay a store -> Type the code instead.
     await page.getByRole("tab", { name: "You" }).click();
     await shown(page, "Pay a store", { exact: true }).click();
     await expect(page).toHaveURL(/\/scan-pay$/);
-    await visibleButton(page, "Enter Code Manually").click();
+    await visibleButton(page, "Type the code instead").click();
 
     // A code that doesn't exist says so on screen.
     const codeBox = page.getByLabel("Store code").filter({ visible: true });
     await codeBox.fill("E2EQPNOSUCH");
-    await visibleButton(page, "Look Up Store").click();
+    await visibleButton(page, "Find store").click();
     await expect(shown(page, "We couldn't find a store with that code. Check the code and try again.")).toBeVisible();
 
     // The real code works even typed in lower case.
     await codeBox.fill(code.toLowerCase());
     await expect(codeBox).toHaveValue(code);
-    await visibleButton(page, "Look Up Store").click();
+    await visibleButton(page, "Find store").click();
 
     await expect(page).toHaveURL(new RegExp(`/quick-pay\\?code=${code}$`));
     await expect(shown(page, `Pay ${storeName}`, { exact: true })).toBeVisible();
@@ -98,12 +98,12 @@ test("member pays a store by typing its code, up to the confirm step", { tag: "@
 
     // Pay opens the existing confirmation; backing out sends nothing.
     await payButton.click();
-    await expect(shown(page, "Confirm Payment", { exact: true })).toBeVisible();
+    await expect(shown(page, "Confirm payment", { exact: true })).toBeVisible();
     await expect(shown(page, "$3.50", { exact: true }).first()).toBeVisible();
     // The shared confirm sheet (components/payment-confirmation-modal.tsx) has no button roles.
     await shown(page, "Cancel", { exact: true }).last().click();
-    await expect(shown(page, "Confirm Payment", { exact: true })).toHaveCount(0);
-    await expect(shown(page, "Payment Sent!", { exact: true })).toHaveCount(0);
+    await expect(shown(page, "Confirm payment", { exact: true })).toHaveCount(0);
+    await expect(shown(page, "Payment sent!", { exact: true })).toHaveCount(0);
     await expect(review).toBeVisible();
 
     // The store-code link still loads after a reload (the lookup carries the commons).
@@ -132,11 +132,11 @@ test("there is no Add Money anywhere in the wallet, and the old screen is gone",
 
     await shown(page, "Wallet", { exact: true }).click();
     await expect(page).toHaveURL(/\/payment-methods$/);
-    await expect(shown(page, "Wallet Address", { exact: true })).toBeVisible();
+    await expect(shown(page, "Wallet address", { exact: true })).toBeVisible();
     await expect(shown(page, addMoney)).toHaveCount(0);
 
     await page.goto("/explore");
-    await expect(shown(page, "Transaction History", { exact: true })).toBeVisible();
+    await expect(shown(page, "Transaction history", { exact: true })).toBeVisible();
     await expect(shown(page, addMoney)).toHaveCount(0);
 
     await page.goto("/fund-wallet");

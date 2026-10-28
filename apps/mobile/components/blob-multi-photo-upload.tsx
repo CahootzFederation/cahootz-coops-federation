@@ -28,8 +28,8 @@ export default function BlobMultiPhotoUpload({
   uploadType = 'product',
   resourceId,
   maxImages = 5,
-  title = "Upload Photos",
-  description = "Select multiple photos for your product gallery",
+  title = "Upload photos",
+  description = "Choose a few photos for your product gallery",
 }: BlobMultiPhotoUploadProps) {
   const [photos, setPhotos] = useState<UploadProgress[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -58,7 +58,7 @@ export default function BlobMultiPhotoUpload({
       }
     } catch (error) {
       console.error('Error picking photos:', error);
-      Alert.alert("Couldn't open your photos", "We couldn't open your photos. Please try again.");
+      Alert.alert("Couldn't open your photos", "We couldn't open your photos. Try again.");
     }
   };
 
@@ -68,7 +68,7 @@ export default function BlobMultiPhotoUpload({
 
   const uploadPhotos = async () => {
     if (photos.length === 0) {
-      Alert.alert('No photos selected', 'Please select photos first');
+      Alert.alert('No photos selected', 'Choose some photos first.');
       return;
     }
 
@@ -147,8 +147,8 @@ export default function BlobMultiPhotoUpload({
       const uploadedUrls = await Promise.all(uploadPromises);
 
       Alert.alert(
-        'Success!',
-        `${uploadedUrls.length} photo(s) uploaded successfully`,
+        'Photos uploaded',
+        `${uploadedUrls.length} photo(s) uploaded.`,
         [
           {
             text: 'OK',
@@ -158,7 +158,7 @@ export default function BlobMultiPhotoUpload({
       );
     } catch (error) {
       console.error('Upload error:', error);
-      Alert.alert("Some photos didn't upload", "Some of your photos didn't upload. Please try again.");
+      Alert.alert("Some photos didn't upload", "Some of your photos didn't upload. Try again.");
     } finally {
       setIsUploading(false);
     }
@@ -224,7 +224,7 @@ export default function BlobMultiPhotoUpload({
               onPress={() => setPhotos([])}
               className="bg-gray-200 dark:bg-gray-700 px-3 py-2 rounded-lg items-center"
             >
-              <Text className="text-sm text-gray-700 dark:text-gray-300">Clear All</Text>
+              <Text className="text-sm text-gray-700 dark:text-gray-300">Clear all</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -235,7 +235,7 @@ export default function BlobMultiPhotoUpload({
           className="bg-primary flex-row items-center justify-center py-4 rounded-xl"
         >
           <Ionicons name="images" size={20} color="white" />
-          <Text className="text-white font-semibold ml-2">Select Photos</Text>
+          <Text className="text-white font-semibold ml-2">Choose photos</Text>
         </TouchableOpacity>
       )}
 

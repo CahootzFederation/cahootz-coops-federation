@@ -16,7 +16,7 @@ interface PhotoUploadProps {
 export default function PhotoUpload({
   onUploadComplete,
   apiUrl,
-  title = "Profile Photo",
+  title = "Profile photo",
   description = "Upload a clear photo of yourself",
   resourceId = "temp",
 }: PhotoUploadProps) {
@@ -45,7 +45,7 @@ export default function PhotoUpload({
       }
     } catch (error) {
       console.error('Error picking photo:', error);
-      Alert.alert("Couldn't open your photos", "We couldn't open your photos. Please try again.");
+      Alert.alert("Couldn't open your photos", "We couldn't open your photos. Try again.");
     }
   };
 
@@ -70,13 +70,13 @@ export default function PhotoUpload({
       }
     } catch (error) {
       console.error('Error taking photo:', error);
-      Alert.alert("Couldn't open the camera", "We couldn't open the camera. Please try again.");
+      Alert.alert("Couldn't open the camera", "We couldn't open the camera. Try again.");
     }
   };
 
   const uploadPhoto = async () => {
     if (!photoUri) {
-      Alert.alert('No photo selected', 'Please take or select a photo first');
+      Alert.alert('No photo selected', 'Take or choose a photo first.');
       return;
     }
 
@@ -127,8 +127,8 @@ export default function PhotoUpload({
 
       // Success! Return the public URL (using key as CID for backward compatibility)
       Alert.alert(
-        'Success!',
-        'Your photo has been uploaded',
+        'Photo uploaded',
+        'Your photo is up.',
         [
           {
             text: 'OK',
@@ -171,7 +171,7 @@ export default function PhotoUpload({
             onPress={() => setPhotoUri(null)}
             className="bg-gray-200 px-3 py-2 rounded-lg items-center"
           >
-            <Text className="text-sm text-gray-700">Remove Photo</Text>
+            <Text className="text-sm text-gray-700">Remove photo</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -182,7 +182,7 @@ export default function PhotoUpload({
             className="bg-primary flex-row items-center justify-center py-4 rounded-xl"
           >
             <Ionicons name="camera" size={20} color="white" />
-            <Text className="text-white font-semibold ml-2">Take Photo</Text>
+            <Text className="text-white font-semibold ml-2">Take a photo</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -190,7 +190,7 @@ export default function PhotoUpload({
             className="bg-gray-200 flex-row items-center justify-center py-4 rounded-xl"
           >
             <Ionicons name="images" size={20} color="#374151" />
-            <Text className="text-gray-700 font-semibold ml-2">Choose from Library</Text>
+            <Text className="text-gray-700 font-semibold ml-2">Choose from your photos</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -202,7 +202,7 @@ export default function PhotoUpload({
           className="bg-green-600 flex-row items-center justify-center py-4 rounded-xl"
         >
           <Ionicons name="cloud-upload" size={20} color="white" />
-          <Text className="text-white font-semibold ml-2">Upload Photo</Text>
+          <Text className="text-white font-semibold ml-2">Upload photo</Text>
         </TouchableOpacity>
       )}
 

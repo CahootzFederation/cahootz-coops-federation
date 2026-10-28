@@ -96,15 +96,15 @@ export default function HistoryScreen() {
       case 'PROCESSING':
         return 'Processing';
       case 'PENDING_CLAIM':
-        return 'Awaiting claim';
+        return 'Waiting for them to accept it';
       case 'FAILED':
         return 'Failed';
       case 'EXPIRED':
         return 'Expired';
       case 'CLAIMED_TO_BANK':
-        return 'Claimed to bank';
+        return 'Accepted, sent to their bank';
       case 'CLAIMED_TO_SOULAAN':
-        return 'Claimed';
+        return 'Accepted';
       default:
         return status;
     }

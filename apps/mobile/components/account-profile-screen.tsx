@@ -92,7 +92,7 @@ export default function AccountProfileScreen() {
       await logout();
     } catch (error) {
       console.error('Logout error:', error);
-      Alert.alert('Sign out failed', 'Please try again.');
+      Alert.alert("Couldn't sign you out", 'Try again.');
     }
   };
 
@@ -107,12 +107,12 @@ export default function AccountProfileScreen() {
 
   const performDeleteAccount = async () => {
     if (!user) {
-      Alert.alert('Sign in required', 'Please sign in before deleting your account.');
+      Alert.alert('Sign in first', 'Sign in to delete your account.');
       return;
     }
 
     if (!user.walletAddress) {
-      Alert.alert('Wallet required', 'Your account needs a linked wallet before account deletion can be verified.');
+      Alert.alert("Your account isn't set up yet", 'We need to finish setting up your account before we can delete it. Try again in a minute.');
       return;
     }
 
@@ -124,7 +124,7 @@ export default function AccountProfileScreen() {
         return;
       }
 
-      Alert.alert('Account Deleted', result.message || 'Your account has been deleted.', [
+      Alert.alert('Account deleted', result.message || 'Your account has been deleted.', [
         { text: 'OK', onPress: () => void logout() },
       ]);
     } catch (error) {
@@ -138,9 +138,9 @@ export default function AccountProfileScreen() {
   const handleDeleteAccount = () => {
     if (isDeletingAccount) return;
 
-    Alert.alert('Delete Account?', 'This will deactivate your Cahootz account and sign you out.', [
+    Alert.alert('Delete your account?', 'This will deactivate your Cahootz account and sign you out.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete Account', style: 'destructive', onPress: () => void performDeleteAccount() },
+      { text: 'Delete account', style: 'destructive', onPress: () => void performDeleteAccount() },
     ]);
   };
 
@@ -183,7 +183,7 @@ export default function AccountProfileScreen() {
 
   const navItems: NavItem[] = [
     {
-      label: 'Personal Page',
+      label: 'Personal page',
       description: 'Posts, drafts, offers, projects, and saved thoughts',
       icon: UserCircle,
       href: '/(authenticated)/personal-page',
@@ -228,19 +228,19 @@ export default function AccountProfileScreen() {
       href: '/(authenticated)/sage-settings',
     },
     {
-      label: 'Community Board',
+      label: 'Community board',
       description: 'Board posts and links to real Commons tools',
       icon: Store,
       href: '/(tabs)/board',
     },
     {
-      label: 'Governance Proposals',
+      label: 'Proposals and votes',
       description: 'Votes, drafts, and member decisions',
       icon: Vote,
       href: '/(tabs)/proposals',
     },
     {
-      label: 'Privacy & Security',
+      label: 'Privacy and security',
       description: 'Account protection and wallet backup',
       icon: Shield,
       href: '/export-wallet',
@@ -266,19 +266,19 @@ export default function AccountProfileScreen() {
         ]
       : []),
     {
-      label: 'Help & Support',
+      label: 'Help and support',
       description: 'Get help with your Cahootz account',
       icon: HelpCircle,
     },
     {
-      label: isDeletingAccount ? 'Deleting Account...' : 'Delete Account',
+      label: isDeletingAccount ? 'Deleting account…' : 'Delete account',
       description: 'Deactivate this account',
       icon: Trash2,
       destructive: true,
       onPress: handleDeleteAccount,
     },
     {
-      label: `Sign Out (@${handle})`,
+      label: `Sign out (@${handle})`,
       description: 'Leave this device signed out',
       icon: LogOut,
       destructive: true,
@@ -363,7 +363,7 @@ export default function AccountProfileScreen() {
                 activeOpacity={0.75}
               >
                 <View className="min-w-0 flex-1">
-                  <Text className="text-xs font-black uppercase text-gray-500">Wallet Address</Text>
+                  <Text className="text-xs font-black uppercase text-gray-500">Wallet address</Text>
                   <Text className="mt-1 font-mono text-sm text-gray-800">{shortenAddress(user.walletAddress)}</Text>
                 </View>
                 {copiedAddress ? <Check size={18} color={PROFILE_THEME.success} /> : <Copy size={18} color={PROFILE_THEME.muted} />}
@@ -376,7 +376,7 @@ export default function AccountProfileScreen() {
               <View className="mb-3 h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: PROFILE_THEME.primarySoft }}>
                 <CircleEllipsis size={20} color={PROFILE_THEME.primary} />
               </View>
-              <Text className="text-xs font-black uppercase text-gray-500">Your Commons</Text>
+              <Text className="text-xs font-black uppercase text-gray-500">Your commons</Text>
               <Text className="mt-1 text-base font-black text-gray-950" numberOfLines={1}>
                 {commonsName}
               </Text>

@@ -45,9 +45,9 @@ test("a member reaches the commons info page from the drawer's info button and c
     await expect(page.getByText("Circles", { exact: true }).first()).toBeVisible();
 
     // Governance tab
-    await page.getByText("Governance", { exact: true }).click();
+    await page.getByText("How we decide", { exact: true }).click();
     await expect(page.getByText("How decisions work")).toBeVisible();
-    await expect(page.getByText("Funding thresholds")).toBeVisible();
+    await expect(page.getByText("Who needs to OK what")).toBeVisible();
     await expect(page.getByText("Recent proposals")).toBeVisible();
 
     // Back to Overview

@@ -110,7 +110,7 @@ export default function OrderDetailHybrid({ orderId }: OrderDetailHybridProps) {
             className="mt-3 bg-gray-800 px-6 rounded-xl items-center justify-center"
             style={{ minHeight: 48 }}
           >
-            <Text className="text-white font-semibold">Go Back</Text>
+            <Text className="text-white font-semibold">Go back</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -138,7 +138,7 @@ export default function OrderDetailHybrid({ orderId }: OrderDetailHybridProps) {
         >
           <ArrowLeft size={20} color="#fff" />
         </TouchableOpacity>
-        <Text className="text-white text-lg font-semibold">Order Details</Text>
+        <Text className="text-white text-lg font-semibold">Order details</Text>
         <View className="w-10" />
       </View>
 
@@ -182,29 +182,29 @@ export default function OrderDetailHybrid({ orderId }: OrderDetailHybridProps) {
 
         {/* Payment Breakdown */}
         <View className="px-6 py-2">
-          <Text className="text-gray-400 text-xs font-semibold uppercase mb-2">Payment Details</Text>
+          <Text className="text-gray-400 text-xs font-semibold uppercase mb-2">Payment details</Text>
           <View className="bg-gray-800 rounded-xl p-4">
             <View className="flex-row justify-between mb-2">
               <Text className="text-gray-400">Subtotal</Text>
               <Text className="text-white font-semibold">${transaction.listedAmount.toFixed(2)}</Text>
             </View>
             <View className="flex-row justify-between mb-2">
-              <Text className="text-gray-400">Platform Fee</Text>
+              <Text className="text-gray-400">Platform fee</Text>
               <Text className="text-white font-semibold">
                 ${(transaction.chargedAmount - transaction.listedAmount).toFixed(2)}
               </Text>
             </View>
             <View className="flex-row justify-between mb-2">
-              <Text className="text-gray-400">Wealth Fund Contribution</Text>
+              <Text className="text-gray-400">Wealth Fund contribution</Text>
               <Text className="text-white font-semibold">${transaction.treasuryFeeAmount.toFixed(2)}</Text>
             </View>
             <View className="h-px bg-gray-700 my-2" />
             <View className="flex-row justify-between mb-2">
-              <Text className="text-white font-semibold">Total Charged</Text>
+              <Text className="text-white font-semibold">Total charged</Text>
               <Text className="text-white font-bold text-lg">${transaction.chargedAmount.toFixed(2)}</Text>
             </View>
             <View className="flex-row justify-between">
-              <Text className="text-gray-400 text-sm">Merchant Received</Text>
+              <Text className="text-gray-400 text-sm">Store received</Text>
               <Text className="text-gray-300 text-sm">${transaction.merchantSettlementAmount.toFixed(2)}</Text>
             </View>
           </View>
@@ -227,13 +227,13 @@ export default function OrderDetailHybrid({ orderId }: OrderDetailHybridProps) {
                 </View>
               </View>
               <View className="flex-row justify-between mb-2">
-                <Text className="text-gray-400">Requested Amount</Text>
+                <Text className="text-gray-400">Amount requested</Text>
                 <Text className="text-white font-semibold">{scReward.requestedAmount} {coin.symbol}</Text>
               </View>
               {scReward.status === 'COMPLETED' && (
                 <>
                   <View className="flex-row justify-between mb-2">
-                    <Text className="text-gray-400">Mint Requested</Text>
+                    <Text className="text-gray-400">Reward added</Text>
                     <Text className="text-white font-semibold">{scReward.requestedAmount} {coin.symbol}</Text>
                   </View>
                 </>
@@ -260,7 +260,7 @@ export default function OrderDetailHybrid({ orderId }: OrderDetailHybridProps) {
               <View className="flex-row items-center">
                 <AlertCircle size={18} color="#9CA3AF" />
                 <Text className="text-gray-400 text-sm ml-2">
-                  This merchant is not yet eligible for {coin.symbol} rewards
+                  This store can&apos;t give {coin.symbol} rewards yet
                 </Text>
               </View>
             </View>
@@ -270,7 +270,7 @@ export default function OrderDetailHybrid({ orderId }: OrderDetailHybridProps) {
         {/* Shipping Address */}
         {transaction.shippingAddress && (
           <View className="px-6 py-2">
-            <Text className="text-gray-400 text-xs font-semibold uppercase mb-2">Shipping Address</Text>
+            <Text className="text-gray-400 text-xs font-semibold uppercase mb-2">Shipping address</Text>
             <View className="bg-gray-800 rounded-xl p-4 flex-row">
               <MapPin size={18} color="#9CA3AF" />
               <Text className="text-white ml-3 flex-1">{transaction.shippingAddress}</Text>

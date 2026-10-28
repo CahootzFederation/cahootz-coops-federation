@@ -34,7 +34,7 @@ export function FeeBreakdown({
       {/* Info Header */}
       <View className="flex-row items-center mb-3">
         <Info size={16} color="#3B82F6" />
-        <Text className="text-blue-800 font-semibold ml-2">Payment Breakdown</Text>
+        <Text className="text-blue-800 font-semibold ml-2">Payment breakdown</Text>
       </View>
 
       {/* Fee Details */}

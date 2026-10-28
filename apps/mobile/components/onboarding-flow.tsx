@@ -409,11 +409,11 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
   // sitting greyed out with no reason.
   const continuePastPersonalInfo = () => {
     const missing: string[] = [];
-    if (!formData.firstName.trim()) missing.push('First Name');
-    if (!formData.lastName.trim()) missing.push('Last Name');
+    if (!formData.firstName.trim()) missing.push('First name');
+    if (!formData.lastName.trim()) missing.push('Last name');
     if (!formData.email.trim()) missing.push('Email');
     if (missing.length > 0) {
-      setErrorMessage(`Please fill in these to continue:\n• ${missing.join('\n• ')}`);
+      setErrorMessage(`Fill these in to keep going:\n• ${missing.join('\n• ')}`);
       return;
     }
     nextStep();
@@ -422,7 +422,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
   const continuePastQuestions = () => {
     if (unansweredRequiredQuestions.length > 0) {
       setErrorMessage(
-        `Please answer these questions to continue:\n• ${unansweredRequiredQuestions.map((q) => q.label).join('\n• ')}`,
+        `Answer these to keep going:\n• ${unansweredRequiredQuestions.map((q) => q.label).join('\n• ')}`,
       );
       return;
     }
@@ -460,10 +460,10 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
       // Detailed validation with specific error messages
       const missingFields: string[] = [];
       
-      if (!formData.firstName) missingFields.push('First Name');
-      if (!formData.lastName) missingFields.push('Last Name');
+      if (!formData.firstName) missingFields.push('First name');
+      if (!formData.lastName) missingFields.push('Last name');
       if (!formData.email) missingFields.push('Email');
-      if (!formData.phone) missingFields.push('Phone Number');
+      if (!formData.phone) missingFields.push('Phone number');
       
       // Validate dynamic questions
       applicationQuestions.forEach((question) => {
@@ -480,7 +480,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
       if (!formData.agreeToPrivacy) missingFields.push('Check the box for the Privacy Policy');
       
       if (missingFields.length > 0) {
-        setErrorMessage(`Please finish these before you submit:\n• ${missingFields.join('\n• ')}`);
+        setErrorMessage(`Finish these before you send it:\n• ${missingFields.join('\n• ')}`);
         setSubmissionStatus('idle');
         return;
       }
@@ -488,7 +488,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
       // Email validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(formData.email)) {
-        setErrorMessage('Please enter a valid email address.');
+        setErrorMessage("That email doesn't look right. Check it and try again.");
         setSubmissionStatus('idle');
         return;
       }
@@ -517,7 +517,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
           }, 1000); // Show success state for 1 second before transitioning
       } else {
           setSubmissionStatus('idle');
-          setErrorMessage(result.message || 'Submission failed. Please try again.');
+          setErrorMessage(result.message || "We couldn't send your application. Try again.");
           console.error('❌ Submission failed:', result);
         }
       } catch (submitError) {
@@ -552,7 +552,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
     setLoginError('');
 
     try {
-      const result = await api.requestLoginCode(
+      await api.requestLoginCode(
         loginData.email,
         isDemoLoginEmail ? DEMO_COOP_ID : undefined
       );
@@ -560,7 +560,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
       setCodeSent(true);
       setCanResend(false);
       setResendTimer(60); // 60 second cooldown
-      Alert.alert('Code Sent', result.message || 'Check your email for the login code');
+      Alert.alert('Check your email', `We sent a code to ${loginData.email.trim()}.`);
     } catch (error) {
       console.error('Request code error:', error);
       setLoginError(friendlyError(error, "We couldn't send your code. Check the email address and try again."));
@@ -694,9 +694,9 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             <View className="bg-primary/15 p-3 rounded-2xl mb-4 self-start">
               <Icon as={Store} size={28} className="text-primary" />
             </View>
-            <Text className="text-3xl font-black text-foreground mb-2">Choose Your Commons</Text>
+            <Text className="text-3xl font-black text-foreground mb-2">Find your commons</Text>
             <Text className="text-muted-foreground leading-6">
-              Explore live communities, then apply when one feels aligned with your goals.
+              Look around, then apply to the one that fits you.
             </Text>
           </View>
         </View>
@@ -713,7 +713,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
           {isLoadingCoops && (
             <View className="items-center py-8">
               <ActivityIndicator size="large" color="#FF6B00" />
-              <Text className="text-muted-foreground mt-4">Loading available commons...</Text>
+              <Text className="text-muted-foreground mt-4">Loading commons…</Text>
             </View>
           )}
 
@@ -772,7 +772,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                         <Text className={`${subtextColorClass} text-sm leading-6 mb-4`}>{coop.description}</Text>
                         <View className="flex flex-row items-center justify-between">
                           <Badge className={useWhiteText ? "bg-white/20" : "bg-primary/15"}>
-                            <Text className={`text-sm font-semibold ${useWhiteText ? 'text-white' : 'text-foreground'}`}>Learn More</Text>
+                            <Text className={`text-sm font-semibold ${useWhiteText ? 'text-white' : 'text-foreground'}`}>Learn more</Text>
                           </Badge>
                         </View>
                       </CardContent>
@@ -786,7 +786,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
           {/* No Commons Available */}
           {!isLoadingCoops && coopsWithIcons.length === 0 && (
             <View className="items-center py-8">
-              <Text className="text-muted-foreground text-center">No commons available at this time.</Text>
+              <Text className="text-muted-foreground text-center">No commons are open right now. Check back soon.</Text>
             </View>
           )}
         </View>
@@ -802,7 +802,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             </Button>
             <Button variant="ghost" onPress={goToLogin}>
               <Text className="text-muted-foreground">Already a member? </Text>
-              <Text className="text-primary font-semibold">Sign In</Text>
+              <Text className="text-primary font-semibold">Sign in</Text>
             </Button>
           </View>
         </View>
@@ -847,7 +847,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             {/* Features */}
             <Card className="bg-card border-border mb-4">
               <CardContent className="p-5">
-                <Text className="font-semibold text-foreground mb-4">What You Get</Text>
+                <Text className="font-semibold text-foreground mb-4">What you get</Text>
                 <View className="gap-4">
                   {selectedCoop.features.map((feature, index) => (
                     <View key={index} className="flex flex-row gap-3">
@@ -870,7 +870,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                 <View className="flex flex-row items-start gap-2">
                   <Icon as={Shield} size={20} className="text-primary mt-0.5" />
                   <View className="flex-1">
-                    <Text className="font-medium text-primary mb-1">Eligibility</Text>
+                    <Text className="font-medium text-primary mb-1">Who can join</Text>
                     <Text className="text-sm text-muted-foreground">{selectedCoop.eligibility}</Text>
                   </View>
                 </View>
@@ -880,12 +880,12 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             {/* Action Buttons */}
             <View className="gap-3 mb-6">
               <Button className="bg-primary h-12 rounded-xl" onPress={startApplication}>
-                <Text className="text-primary-foreground font-black">Apply to Join {selectedCoop.name}</Text>
+                <Text className="text-primary-foreground font-black">Apply to join {selectedCoop.name}</Text>
                 <Icon as={ChevronRight} size={16} className="text-primary-foreground ml-2" />
               </Button>
               <Button variant="outline" onPress={prevStep} className="border-border bg-card h-12 rounded-xl">
                 <Icon as={ChevronLeft} size={16} className="text-foreground" />
-                <Text className="text-foreground ml-1">Back to Commons</Text>
+                <Text className="text-foreground ml-1">Back to all commons</Text>
               </Button>
             </View>
 
@@ -893,7 +893,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             <View className="items-center">
               <Button variant="ghost" onPress={goToLogin}>
                 <Text className="text-muted-foreground">Already a member? </Text>
-                <Text className="text-primary font-semibold">Sign In</Text>
+                <Text className="text-primary font-semibold">Sign in</Text>
               </Button>
             </View>
           </View>
@@ -915,9 +915,9 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
               <Icon as={Building} size={32} className="text-white" />
             </View>
             <Text className="text-2xl font-bold text-foreground mb-2 text-center">
-              Join {selectedCoop?.name || 'Commons'}
+              Join {selectedCoop?.name || 'a commons'}
             </Text>
-            <Text className="text-muted-foreground text-center">Step 1 of 4: Personal Information</Text>
+            <Text className="text-muted-foreground text-center">Step 1 of 4: About you</Text>
           </View>
 
           <Card className="bg-white border-border">
@@ -926,7 +926,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                 {/* Name Fields */}
                 <View className="flex flex-row gap-3">
                   <View className="flex-1">
-                    <Label className="text-foreground">First Name</Label>
+                    <Label className="text-foreground">First name</Label>
                     <Input
                       value={formData.firstName}
                       onChangeText={(text) => handleInputChange('firstName', text)}
@@ -935,7 +935,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                     />
                   </View>
                   <View className="flex-1">
-                    <Label className="text-foreground">Last Name</Label>
+                    <Label className="text-foreground">Last name</Label>
                     <Input
                       value={formData.lastName}
                       onChangeText={(text) => handleInputChange('lastName', text)}
@@ -963,7 +963,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
 
                 {/* Phone */}
                 <View>
-                  <Label className="text-foreground">Phone Number</Label>
+                  <Label className="text-foreground">Phone number</Label>
                   <Input
                     value={formData.phone}
                     onChangeText={(text) => handleInputChange('phone', text)}
@@ -999,7 +999,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
           <View className="items-center mt-6">
             <Button variant="ghost" onPress={goToLogin}>
               <Text className="text-muted-foreground">Have an account? </Text>
-              <Text className="font-semibold text-primary">Sign In</Text>
+              <Text className="font-semibold text-primary">Sign in</Text>
             </Button>
           </View>
         </View>
@@ -1021,7 +1021,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
               <Icon as={Heart} size={32} className="text-white" />
             </View>
             <Text className="text-2xl font-bold text-foreground mb-2 text-center">
-              {selectedCoop?.name} Application
+              Apply to {selectedCoop?.name}
             </Text>
             <Text className="text-muted-foreground text-center">Step 2 of 4: Tell us about yourself</Text>
           </View>
@@ -1043,7 +1043,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                   
                   {applicationQuestions.length === 0 && (
                     <View className="items-center py-8">
-                      <Text className="text-muted-foreground">No questions available for this commons.</Text>
+                      <Text className="text-muted-foreground">This commons doesn&apos;t have any questions for you. Tap Continue.</Text>
                     </View>
                   )}
                 </View>
@@ -1091,7 +1091,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                 <Icon as={Camera} size={32} className="text-white" />
               </View>
               <Text className="text-2xl font-bold text-foreground mb-2 text-center">
-                Introduce Yourself
+                Introduce yourself
               </Text>
               <Text className="text-muted-foreground text-center">
                 Step 3 of 4: Share a video and photo (optional but recommended)
@@ -1117,19 +1117,19 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                       handleInputChange('photoCID', cid);
                     }}
                     apiUrl={apiUrl}
-                    title="Profile Photo"
-                    description="Upload a clear photo of yourself"
+                    title="Profile photo"
+                    description="Add a clear photo of yourself"
                   />
                 </View>
 
                 {/* Info */}
                 <View className="bg-secondary border border-border rounded-2xl p-4 mt-6">
-                  <Text className="text-sm text-foreground font-semibold mb-2">Why upload media?</Text>
+                  <Text className="text-sm text-foreground font-semibold mb-2">Why add a video or photo?</Text>
                   <Text className="text-sm text-muted-foreground">
-                    • Helps community members get to know you{'\n'}
-                    • Increases your application approval chances{'\n'}
+                    • Helps members get to know you{'\n'}
+                    • Can help your application get approved{'\n'}
                     • Builds trust in the commons{'\n'}
-                    • Shows commitment to transparency
+                    • Shows you&apos;re open about who you are
                   </Text>
                 </View>
               </CardContent>
@@ -1146,7 +1146,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                 className="bg-primary"
               >
                 <Text className="text-white font-semibold">
-                  {formData.videoCID && formData.photoCID ? 'Continue' : 'Skip for Now'}
+                  {formData.videoCID && formData.photoCID ? 'Continue' : 'Skip for now'}
                 </Text>
                 <Icon as={ChevronRight} size={16} className="text-white ml-1" />
               </Button>
@@ -1170,9 +1170,9 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
               <Icon as={Shield} size={32} className="text-white" />
             </View>
             <Text className="text-2xl font-bold text-foreground mb-2 text-center">
-              {selectedCoop?.name} Application
+              Apply to {selectedCoop?.name}
             </Text>
-            <Text className="text-muted-foreground text-center">Step 4 of 4: Review & Submit</Text>
+            <Text className="text-muted-foreground text-center">Step 4 of 4: Review and send</Text>
           </View>
 
           <Card className="bg-white border-border">
@@ -1221,7 +1221,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                 <View className="flex flex-row items-start gap-3">
                   <Text className="text-2xl">⚠️</Text>
                   <View className="flex-1">
-                    <Text className="font-bold text-red-800 mb-1">Please check the form</Text>
+                    <Text className="font-bold text-red-800 mb-1">A few things still need you</Text>
                     <Text className="text-red-700 text-sm whitespace-pre-line">{errorMessage}</Text>
                   </View>
                 </View>
@@ -1241,9 +1241,9 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
               className={submissionStatus === 'success' ? 'bg-green-600' : 'bg-primary'}
             >
               <Text className="text-white font-semibold">
-                {submissionStatus === 'submitting' && '⏳ Submitting...'}
-                {submissionStatus === 'success' && '✅ Success!'}
-                {submissionStatus === 'idle' && 'Submit Application'}
+                {submissionStatus === 'submitting' && '⏳ Sending…'}
+                {submissionStatus === 'success' && '✅ Sent!'}
+                {submissionStatus === 'idle' && 'Send my application'}
               </Text>
               {submissionStatus === 'idle' && <Icon as={ChevronRight} size={16} className="text-white ml-1" />}
             </Button>
@@ -1266,9 +1266,9 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             <View className="bg-green-600 p-4 rounded-full mb-4">
               <Icon as={Award} size={40} className="text-white" />
             </View>
-            <Text className="text-2xl font-bold text-foreground mb-2 text-center">Application Submitted!</Text>
+            <Text className="text-2xl font-bold text-foreground mb-2 text-center">Got it! Your application is in.</Text>
             <Text className="text-muted-foreground text-center">
-              Welcome to the {selectedCoop?.name} community review process
+              Members of {selectedCoop?.name} will look it over next.
             </Text>
           </View>
 
@@ -1281,9 +1281,9 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                     <Text className="text-sm font-bold text-white">1</Text>
                   </View>
                   <View className="flex-1">
-                    <Text className="font-medium text-foreground">Community Review</Text>
+                    <Text className="font-medium text-foreground">Members read it</Text>
                     <Text className="text-sm text-muted-foreground">
-                      Current {selectedCoop?.name} members will review your application (1-2 weeks)
+                      {selectedCoop?.name} members will read your application. This usually takes 1–2 weeks.
                     </Text>
                   </View>
                 </View>
@@ -1292,8 +1292,8 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                     <Text className="text-sm font-bold text-white">2</Text>
                   </View>
                   <View className="flex-1">
-                    <Text className="font-medium text-foreground">Community Interview</Text>
-                    <Text className="text-sm text-muted-foreground">You may be invited to meet with community members</Text>
+                    <Text className="font-medium text-foreground">You may meet a few members</Text>
+                    <Text className="text-sm text-muted-foreground">They might ask to meet you and say hi.</Text>
                   </View>
                 </View>
                 <View className="flex flex-row items-start gap-3">
@@ -1303,7 +1303,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                   <View className="flex-1">
                     <Text className="font-medium text-foreground">Welcome to {selectedCoop?.name}</Text>
                     <Text className="text-sm text-muted-foreground">
-                      If approved, you&apos;ll receive onboarding materials and access
+                      If you&apos;re approved, we&apos;ll send you what you need to get started and open up your access.
                     </Text>
                   </View>
                 </View>
@@ -1332,7 +1332,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
           {/* Action Button */}
           <View className="mt-8">
             <Button className="w-full bg-primary" onPress={goToLogin}>
-              <Text className="text-white font-semibold">Continue to Sign In</Text>
+              <Text className="text-white font-semibold">Continue to sign in</Text>
             </Button>
           </View>
 

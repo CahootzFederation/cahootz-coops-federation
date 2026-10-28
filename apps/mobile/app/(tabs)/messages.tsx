@@ -258,7 +258,7 @@ export default function MessagesScreen() {
       <View className="flex-1 bg-stone-50">
         <View className="px-5 pt-14 pb-4" style={{ backgroundColor: '#12362D' }}>
           <Text className="text-2xl font-black text-white">Direct messages</Text>
-          <Text className="text-sm text-white/75">Create an account before sending private messages</Text>
+          <Text className="text-sm text-white/75">Sign in to send private messages</Text>
         </View>
         <View className="flex-1 justify-center px-6">
           <View className="rounded-xl border border-stone-200 bg-white p-5">
@@ -267,9 +267,9 @@ export default function MessagesScreen() {
                 <ShieldCheck size={21} color="#047857" />
               </View>
               <View className="flex-1">
-                <Text className="text-xl font-black text-gray-900">Account needed for DMs</Text>
+                <Text className="text-xl font-black text-gray-900">You&apos;ll need an account to message people</Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">
-                  You can read the Commons without signing in. Private follow-up needs an email-verified account.
+                  You can read the commons without signing in. To message someone, you&apos;ll need an account with a verified email.
                 </Text>
               </View>
             </View>
@@ -381,12 +381,12 @@ export default function MessagesScreen() {
           ) : visibleConversations.length === 0 ? (
             <View className="mt-3 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4">
               <Text className="font-bold text-gray-900">
-                {searchQuery ? 'No messages found' : 'No Commons members yet'}
+                {searchQuery ? 'No messages found' : 'No members here yet'}
               </Text>
               <Text className="mt-1 text-sm text-gray-600">
                 {searchQuery
                   ? 'Clear search or try another name.'
-                  : 'As people create accounts, they will appear here for private follow-up.'}
+                  : "As people join, they'll show up here so you can message them."}
               </Text>
             </View>
           ) : null}
@@ -401,9 +401,9 @@ export default function MessagesScreen() {
 
           {!selected ? (
             <View className="rounded-xl border border-stone-200 bg-white p-5">
-              <Text className="text-lg font-black text-gray-900">No conversation selected</Text>
+              <Text className="text-lg font-black text-gray-900">Pick someone to message</Text>
               <Text className="mt-1 text-sm leading-5 text-gray-600">
-                Pick a conversation above, or search for a Commons member to start a private follow-up.
+                Tap a conversation above, or search for someone in your commons to start one.
               </Text>
             </View>
           ) : (
@@ -438,7 +438,7 @@ export default function MessagesScreen() {
               {!isLoadingMessages && !conversationError && messages.length === 0 ? (
                 <View className="rounded-xl bg-stone-100 px-4 py-3">
                   <Text className="text-sm leading-5 text-gray-700">
-                    No private messages yet. Send the first note when it should not be public.
+                    No messages yet. Say hi, or send something that doesn&apos;t need to be public.
                   </Text>
                 </View>
               ) : null}
@@ -493,9 +493,9 @@ export default function MessagesScreen() {
             <View className="flex-row items-start gap-3">
               <ShieldCheck size={21} color="#FFB370" />
               <View className="flex-1">
-                <Text className="font-bold text-white">DMs should stay secondary</Text>
+                <Text className="font-bold text-white">Private messages</Text>
                 <Text className="mt-1 text-sm leading-5 text-white/75">
-                  Each DM is a private circle only the two of you can see. Use it for sensitive follow-up, steward outreach, and coordination. The main community knowledge should live in posts and comments.
+                  Messages are just between you two. If it would help others, share it as a post.
                 </Text>
               </View>
             </View>
@@ -507,9 +507,9 @@ export default function MessagesScreen() {
                 <Users size={20} color="#57534E" />
               </View>
               <View className="flex-1">
-                <Text className="font-bold text-gray-900">Move useful details back to comments</Text>
+                <Text className="font-bold text-gray-900">Found something others could use?</Text>
                 <Text className="mt-1 text-sm leading-5 text-gray-600">
-                  When a private exchange turns into something the commons should know, share it as a post.
+                  Post it, or add it as a comment, so the whole commons can find it later.
                 </Text>
               </View>
               <MessageCircle size={18} color="#78716C" />

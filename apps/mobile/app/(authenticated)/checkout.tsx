@@ -11,7 +11,7 @@ export default function CheckoutScreen() {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
         <View className="flex-1 items-center justify-center">
-          <Text className="text-gray-500 dark:text-gray-400">Invalid checkout</Text>
+          <Text className="text-gray-500 dark:text-gray-400">We couldn&apos;t open checkout. Go back and try again.</Text>
         </View>
       </SafeAreaView>
     );

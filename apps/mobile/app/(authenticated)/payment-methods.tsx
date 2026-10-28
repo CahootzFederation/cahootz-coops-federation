@@ -223,7 +223,7 @@ export default function PaymentMethodsScreen() {
                   activeOpacity={0.75}
                 >
                   <View className="flex-1 min-w-0">
-                    <Text className="text-gray-500 text-xs uppercase font-semibold">Wallet Address</Text>
+                    <Text className="text-gray-500 text-xs uppercase font-semibold">Wallet address</Text>
                     <Text className="text-gray-800 text-sm mt-0.5" style={{ fontFamily: 'monospace' }}>
                       {shortenAddress(user.walletAddress)}
                     </Text>
@@ -238,12 +238,12 @@ export default function PaymentMethodsScreen() {
                 activeOpacity={0.75}
               >
                 <KeyRound size={16} color="#374151" />
-                <Text className="text-gray-700 font-semibold text-sm">Export Wallet</Text>
+                <Text className="text-gray-700 font-semibold text-sm">Export wallet</Text>
               </TouchableOpacity>
             </View>
 
             {/* Card List */}
-            <Text className="text-gray-500 text-xs uppercase font-semibold mt-6 mb-2 px-1">Payment Methods</Text>
+            <Text className="text-gray-500 text-xs uppercase font-semibold mt-6 mb-2 px-1">Payment methods</Text>
             {methodsError ? (
               <View className="bg-white rounded-xl p-6 items-center">
                 <Text className="text-gray-700 text-center">{methodsError}</Text>
@@ -318,7 +318,7 @@ export default function PaymentMethodsScreen() {
               className="mt-4 bg-primary rounded-xl py-4 flex-row items-center justify-center"
             >
               <Plus size={20} color="white" />
-              <Text className="text-white font-semibold ml-2">Add Card</Text>
+              <Text className="text-white font-semibold ml-2">Add card</Text>
             </TouchableOpacity>
 
             {/* Info */}
@@ -347,7 +347,7 @@ export default function PaymentMethodsScreen() {
                 <CheckCircle size={32} color="#16A34A" />
               </View>
               <Text className="text-xl font-semibold text-gray-900 mb-2">
-                Card Added
+                Card added
               </Text>
               <Text className="text-gray-500 text-center mb-1">
                 Your {brandNames[addedCard?.brand || ''] || 'card'} ending in {addedCard?.last4} has been added.
@@ -371,7 +371,7 @@ export default function PaymentMethodsScreen() {
             <View className="bg-white rounded-2xl p-6 w-full max-w-sm">
               <View className="flex-row justify-between items-center mb-4">
                 <Text className="text-xl font-semibold text-gray-900">
-                  Remove Card
+                  Remove card
                 </Text>
                 <TouchableOpacity
                   onPress={() => {
@@ -410,7 +410,7 @@ export default function PaymentMethodsScreen() {
               )}
 
               <Text className="text-gray-500 text-center mb-6">
-                Are you sure you want to remove this card? This action cannot be undone.
+                Remove this card? You&apos;ll have to add it again if you want to use it later.
               </Text>
 
               <View className="flex-row gap-3">

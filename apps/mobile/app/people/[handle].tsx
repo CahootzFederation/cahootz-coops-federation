@@ -196,7 +196,7 @@ export default function PublicPersonPageScreen() {
             <ArrowLeft size={18} color={THEME.ink} strokeWidth={2.6} />
           </TouchableOpacity>
           <View className="min-w-0 flex-1">
-            <Text className="text-[10px] font-black uppercase text-gray-500">Personal Page</Text>
+            <Text className="text-[10px] font-black uppercase text-gray-500">Personal page</Text>
             <Text className="text-base font-black text-gray-950" numberOfLines={1}>
               {personDisplayHandle(routeHandle)}
             </Text>
@@ -253,7 +253,7 @@ export default function PublicPersonPageScreen() {
                 activeOpacity={0.82}
               >
                 <Text className="text-center text-sm font-black" style={{ color: THEME.primary }}>
-                  Edit Home Base
+                  Edit your page
                 </Text>
               </TouchableOpacity>
             ) : (

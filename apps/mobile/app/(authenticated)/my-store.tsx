@@ -152,7 +152,7 @@ export default function MyStoreScreen() {
           <View className="bg-yellow-100 dark:bg-yellow-900/30 px-3 py-1 rounded-full flex-row items-center">
             <Clock size={14} color="#CA8A04" />
             <Text className="text-yellow-700 dark:text-yellow-300 font-medium ml-1">
-              Pending Approval
+              Waiting for approval
             </Text>
           </View>
         );
@@ -207,7 +207,7 @@ export default function MyStoreScreen() {
             <ArrowLeft size={24} color="#374151" />
           </TouchableOpacity>
           <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">
-            My Store
+            My store
           </Text>
         </View>
         <View className="flex-1 items-center justify-center px-8">
@@ -233,13 +233,13 @@ export default function MyStoreScreen() {
             <ArrowLeft size={24} color="#374151" />
           </TouchableOpacity>
           <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">
-            My Store
+            My store
           </Text>
         </View>
         <View className="flex-1 items-center justify-center px-8">
           <Store size={64} color="#9CA3AF" />
           <Text className="text-xl font-bold text-gray-900 dark:text-white mt-4 text-center">
-            {storeId ? 'Store Not Found' : 'No Store Yet'}
+            {storeId ? 'Store not found' : 'No store yet'}
           </Text>
           <Text className="text-gray-500 dark:text-gray-400 text-center mt-2">
             {storeId 
@@ -251,7 +251,7 @@ export default function MyStoreScreen() {
             className="bg-primary px-8 py-4 rounded-xl mt-6"
           >
             <Text className="text-white font-bold">
-              {storeId ? 'View All Commons Stores' : 'Apply to Become a Commons Store'}
+              {storeId ? 'See all commons stores' : 'Apply to open a commons store'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -266,7 +266,7 @@ export default function MyStoreScreen() {
         <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900 dark:text-white">My Store</Text>
+        <Text className="text-lg font-semibold text-gray-900 dark:text-white">My store</Text>
         <TouchableOpacity onPress={() => router.push('/(authenticated)/my-stores' as any)}>
           <Grid size={24} color="#374151" />
         </TouchableOpacity>
@@ -341,8 +341,8 @@ export default function MyStoreScreen() {
                         : 'text-red-800 dark:text-red-200'
                     }`}>
                       {store.status === 'PENDING'
-                        ? 'Application Under Review'
-                        : 'Action Required'}
+                        ? 'Application being reviewed'
+                        : 'Needs your attention'}
                     </Text>
                     <Text className={`text-sm mt-1 ${
                       store.status === 'PENDING'
@@ -350,8 +350,8 @@ export default function MyStoreScreen() {
                         : 'text-red-700 dark:text-red-300'
                     }`}>
                       {store.status === 'PENDING'
-                        ? 'Your application is being reviewed. You will be notified once approved.'
-                        : 'Your payment setup needs attention. Tap "Continue Stripe Connect" below to fix any outstanding issues and activate your store.'}
+                        ? "We're looking at your application. We'll let you know once it's approved."
+                        : 'Your payment setup needs a few fixes. Tap "Continue Stripe setup" below to finish it and open your store.'}
                     </Text>
                   </View>
                 </View>
@@ -367,7 +367,7 @@ export default function MyStoreScreen() {
                       {formatPrice(store.totalSales)}
                     </Text>
                   </View>
-                  <Text className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total Sales</Text>
+                  <Text className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total sales</Text>
                 </View>
                 <View className="flex-1 items-center border-x border-gray-100 dark:border-gray-700">
                   <View className="flex-row items-center">
@@ -399,7 +399,7 @@ export default function MyStoreScreen() {
               <View className="flex-row items-start">
                 <AlertCircle size={20} color="#FF6B00" />
                 <View className="flex-1 ml-3">
-                  <Text className="text-gray-900 dark:text-white font-semibold">Finish Stripe Connect to go live</Text>
+                  <Text className="text-gray-900 dark:text-white font-semibold">Finish Stripe setup to go live</Text>
                   <Text className="text-gray-600 dark:text-gray-300 text-sm mt-1">
                     Your store becomes active as soon as Stripe enables charges. You do not need a separate admin approval for the base store.
                   </Text>
@@ -410,7 +410,7 @@ export default function MyStoreScreen() {
                 className="bg-primary py-3 rounded-xl mt-4"
               >
                 <Text className="text-center text-white font-semibold">
-                  {store.businessId ? 'Continue Stripe Connect' : 'Start Stripe Connect'}
+                  {store.businessId ? 'Continue Stripe setup' : 'Start Stripe setup'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -466,7 +466,7 @@ export default function MyStoreScreen() {
                   <QrCode size={24} color="white" />
                 </View>
                 <View className="flex-1 ml-4">
-                  <Text className="text-white font-bold text-lg">Accept Payment</Text>
+                  <Text className="text-white font-bold text-lg">Accept payment</Text>
                   <Text className="text-white/80 text-sm">Generate QR codes & payment links</Text>
                 </View>
                 <ChevronRight size={24} color="white" />
@@ -487,7 +487,7 @@ export default function MyStoreScreen() {
                   <Package size={24} color="white" />
                 </View>
                 <View className="flex-1 ml-4">
-                  <Text className="text-white font-bold text-lg">View Orders</Text>
+                  <Text className="text-white font-bold text-lg">See orders</Text>
                   <Text className="text-white/80 text-sm">Manage & fulfill customer orders</Text>
                 </View>
                 <View className="items-end">
@@ -538,7 +538,7 @@ export default function MyStoreScreen() {
                   onPress={() => router.push({ pathname: '/add-product', params: { storeId: store.id } })}
                   className="bg-primary px-6 py-3 rounded-xl mt-4"
                 >
-                  <Text className="text-white font-semibold">Add First Product</Text>
+                  <Text className="text-white font-semibold">Add your first product</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -599,7 +599,7 @@ export default function MyStoreScreen() {
                 What happens next?
               </Text>
               <Text className="text-primary dark:text-amber-300 text-sm text-center mt-2">
-                Complete Stripe Connect onboarding and refresh your status. Your store will go live as soon as Stripe enables charges.
+                Finish setting up Stripe, then check your status. Your store goes live as soon as Stripe lets you take payments.
               </Text>
             </View>
           </View>

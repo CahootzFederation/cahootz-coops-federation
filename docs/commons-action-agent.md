@@ -25,7 +25,7 @@ Sage reads a circle after 40 new items: circle posts, comments on circle posts, 
 
 ## Decision trails
 
-Every Sage decision records a decision trail: Commons posts and comments, circle windows, proposal reviews (create, resubmit, applied alternatives), proposal comment evaluations, and Sage's @mention and direct-message replies. Each trail records what Sage read, the evidence it used, what it considered, each policy check and whether it passed, what it did, and the live result and follow-up. Platform admins see all of them under **Decision trails** on the Commons AI actions page, filterable by agent. Members see trails for content they can already see once they turn on **Sage settings → Show Sage decision trails** in the app. Suggestion follow-ups, admin escalations, invitations of a named person and error details are admin-only.
+Every Sage decision records a decision trail: Commons posts and comments, circle windows, proposal reviews (create, resubmit, applied alternatives), proposal comment evaluations, and Sage's @mention and direct-message replies. Each trail records what Sage read, the evidence it used, what it considered, each policy check and whether it passed, what it did, and the live result and follow-up. Platform admins see all of them under **Decision trails** on the Commons AI actions page, filterable by agent. Members see trails for content they can already see once they turn on **Sage settings → Show how Sage decides** in the app. Suggestion follow-ups, admin escalations, invitations of a named person and error details are admin-only.
 
 ## Follow-ups, routed alerts and the daily review
 

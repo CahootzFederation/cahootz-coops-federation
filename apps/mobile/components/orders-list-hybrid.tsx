@@ -194,7 +194,7 @@ export default function OrdersListHybrid() {
         >
           <ArrowLeft size={20} color="#fff" />
         </TouchableOpacity>
-        <Text className="text-white text-lg font-semibold">My Orders</Text>
+        <Text className="text-white text-lg font-semibold">My orders</Text>
         <View className="w-10" />
       </View>
 
@@ -223,7 +223,7 @@ export default function OrdersListHybrid() {
         ) : transactions.length === 0 ? (
           <View className="flex-1 items-center justify-center py-20">
             <ShoppingBag size={64} color="#4B5563" />
-            <Text className="text-gray-400 text-lg font-semibold mt-4">No Orders Yet</Text>
+            <Text className="text-gray-400 text-lg font-semibold mt-4">No orders yet</Text>
             <Text className="text-gray-500 text-sm mt-2 text-center px-6">
               Your order history will appear here after you make your first purchase
             </Text>

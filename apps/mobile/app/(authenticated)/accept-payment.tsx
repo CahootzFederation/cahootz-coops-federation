@@ -190,7 +190,7 @@ export default function AcceptPaymentScreen() {
                 <ArrowLeft size={24} color="#111827" />
               </TouchableOpacity>
               <Text className="flex-1 text-center text-lg font-semibold text-gray-900">
-                Accept Payment
+                Accept payment
               </Text>
               <View className="w-10" />
             </View>
@@ -223,7 +223,7 @@ export default function AcceptPaymentScreen() {
                 <ArrowLeft size={24} color="#111827" />
               </TouchableOpacity>
               <Text className="flex-1 text-center text-lg font-semibold text-gray-900">
-                Accept Payment
+                Accept payment
               </Text>
               <View className="w-10" />
             </View>
@@ -257,7 +257,7 @@ export default function AcceptPaymentScreen() {
               <ArrowLeft size={24} color="#111827" />
             </TouchableOpacity>
             <Text className="flex-1 text-center text-lg font-semibold text-gray-900">
-              Accept Payment
+              Accept payment
             </Text>
             <TouchableOpacity
               onPress={() => router.push('/(authenticated)/store-payments' as any)}
@@ -271,7 +271,7 @@ export default function AcceptPaymentScreen() {
         <ScrollView {...keyboardInsetScrollProps} className="flex-1" showsVerticalScrollIndicator={false}>
           {/* Store QR Code */}
           <View className="bg-white mx-4 mt-4 rounded-2xl p-6 items-center">
-            <Text className="text-gray-500 text-sm mb-2">Your Store Code</Text>
+            <Text className="text-gray-500 text-sm mb-2">Your store code</Text>
             <Text className="text-gray-900 text-xl font-bold mb-4">{storeName}</Text>
 
             {shortCode && qrCodeData ? (
@@ -312,7 +312,7 @@ export default function AcceptPaymentScreen() {
                   <>
                     <QrCode size={20} color="white" />
                     <Text className="text-white font-semibold ml-2">
-                      Generate Store Code
+                      Make a store code
                     </Text>
                   </>
                 )}
@@ -323,7 +323,7 @@ export default function AcceptPaymentScreen() {
           {/* Create Payment Request */}
           <View className="bg-white mx-4 mt-4 rounded-2xl p-6">
             <Text className="text-gray-900 font-semibold text-lg mb-4">
-              Create Payment Request
+              Create payment request
             </Text>
 
             <View className="mb-4">
@@ -398,7 +398,7 @@ export default function AcceptPaymentScreen() {
         <View className="flex-1 bg-black/50 items-center justify-center p-6">
           <View className="bg-white rounded-2xl p-6 w-full max-w-sm">
             <Text className="text-xl font-bold text-gray-900 text-center mb-4">
-              Payment Request Created
+              Payment request created
             </Text>
 
             {paymentRequest && (
@@ -431,7 +431,7 @@ export default function AcceptPaymentScreen() {
                   className="bg-primary py-3 rounded-xl items-center flex-row justify-center mb-3"
                 >
                   <Share2 size={20} color="white" />
-                  <Text className="text-white font-semibold ml-2">Share Link</Text>
+                  <Text className="text-white font-semibold ml-2">Share link</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -446,7 +446,7 @@ export default function AcceptPaymentScreen() {
                   ) : (
                     <>
                       <Copy size={20} color="#6B7280" />
-                      <Text className="text-gray-700 font-semibold ml-2">Copy Link</Text>
+                      <Text className="text-gray-700 font-semibold ml-2">Copy link</Text>
                     </>
                   )}
                 </TouchableOpacity>

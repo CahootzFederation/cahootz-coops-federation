@@ -8,7 +8,7 @@ import { secureStorage } from '@/lib/secure-storage';
 
 const DISMISSED_KEY = 'cahootz.sageIntroDismissed';
 
-export const SAGE_ONE_LINER = "Sage is your commons' AI helper. It's a computer program, not a person.";
+export const SAGE_ONE_LINER = "Sage is your commons' helper. Sage is AI, not a person.";
 
 // Kept in step with the autonomy boundaries in AGENT.md ("Sage —
 // Constitutional Operating Agent"): low-risk, reversible actions may happen
@@ -29,7 +29,7 @@ const SECTIONS = [
   },
   {
     title: 'What always waits for a person',
-    body: 'Submitting a proposal, spending or moving money, changing who is a member, and making decisions for the group.',
+    body: 'Submitting a proposal for you, spending or moving money, changing who is a member, and making decisions for the group.',
   },
 ] as const;
 

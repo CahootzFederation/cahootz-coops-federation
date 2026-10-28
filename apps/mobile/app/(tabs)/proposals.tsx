@@ -26,6 +26,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useCommonsProposalActions } from '@/hooks/use-commons-proposal-actions';
 import { track } from '@/lib/analytics';
 import { proposalDetailHref, proposalDraftsHref } from '@/lib/proposal-navigation';
+import { proposalStatusLabel } from '@/lib/proposal-status';
 import { votingDeadlineShort } from '@/lib/voting-deadline';
 import { SubmitModal } from '../(authenticated)/proposals';
 
@@ -42,25 +43,6 @@ const DEFAULT_COMMONS: CommonsDirectoryItem = {
   isLocked: false,
   canApply: false,
 };
-
-function statusLabel(status: string) {
-  switch (status) {
-    case 'submitted':
-      return 'AI Review';
-    case 'votable':
-      return 'Deliberation';
-    case 'approved':
-      return 'Approved';
-    case 'funded':
-      return 'Funded';
-    case 'rejected':
-      return 'Rejected';
-    case 'withdrawn':
-      return 'Withdrawn';
-    default:
-      return status || 'Open';
-  }
-}
 
 function formatBudget(proposal: ProposalSummary) {
   const amount = proposal.budget?.amount;
@@ -235,7 +217,7 @@ function ProposalsHub() {
             <View className="min-w-0 flex-1">
               <View className="flex-row items-center gap-1.5">
                 <Text className="min-w-0 text-base font-black text-gray-950" numberOfLines={1}>
-                  Proposals &amp; Votes
+                  Proposals and votes
                 </Text>
                 {isAuthenticated ? (
                   <View className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5">
@@ -279,7 +261,7 @@ function ProposalsHub() {
         <View className="px-5 pt-4 pb-2">
           <Text className="text-2xl font-black text-gray-950">Turn conversations into decisions</Text>
           <Text className="mt-2 text-base leading-6 text-gray-600">
-            Showing proposals submitted inside {selectedCommons.name}.
+            Proposals from {selectedCommons.name}.
           </Text>
         </View>
 
@@ -301,11 +283,11 @@ function ProposalsHub() {
                     : !selectedCommons.isMember
                       ? 'Join this commons to propose'
                       : !user?.walletAddress
-                        ? 'Connect wallet to propose'
+                        ? 'Finish setting up your account to propose'
                         : 'Start a proposal'}
                 </Text>
                 <Text className="mt-1 text-sm leading-5 text-white/80">
-                  Commons AI can draft the need, options, people, budget, and vote language.
+                  Sage can help you write it up: the need, the options, who&apos;s involved, the cost, and what people vote on.
                 </Text>
               </View>
               <Plus size={20} color="white" />
@@ -375,12 +357,12 @@ function ProposalsHub() {
                 <Vote size={26} color={PRIMARY} />
               </View>
               <Text className="text-xl font-black text-gray-950">
-                {showActionableOnly ? 'You are caught up' : 'No proposals yet'}
+                {showActionableOnly ? "You're all caught up" : 'No proposals yet'}
               </Text>
               <Text className="mt-2 text-base leading-6 text-gray-600">
                 {showActionableOnly
                   ? `There are no proposals waiting for your vote in ${selectedCommons.name}.`
-                  : `Proposals created inside ${selectedCommons.name} will show here once they are ready for review.`}
+                  : `Proposals from ${selectedCommons.name} show up here once they're ready for review.`}
               </Text>
             </View>
           ) : (
@@ -410,14 +392,14 @@ function ProposalsHub() {
                       </View>
                       <View className="rounded-full bg-orange-50 px-3 py-1">
                         <Text className="text-xs font-black" style={{ color: PRIMARY }}>
-                          {statusLabel(proposal.status)}
+                          {proposalStatusLabel(proposal.status)}
                         </Text>
                       </View>
                     </View>
 
                     <View className="mt-4 flex-row items-center justify-between">
                       <View className="min-w-0 flex-1">
-                        <Text className="text-xs font-black uppercase text-gray-500">{proposal.category}</Text>
+                        <Text className="text-xs font-black uppercase text-gray-500">{proposal.category?.replace(/_/g, ' ')}</Text>
                         <Text className="mt-1 text-xs font-semibold text-gray-500" numberOfLines={1}>
                           {proposal.proposer?.displayName || 'Commons member'} · {timeAgo(proposal.createdAt)}
                         </Text>

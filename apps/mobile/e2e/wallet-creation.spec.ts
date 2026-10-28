@@ -8,7 +8,7 @@ const TEST_CODE = process.env.E2E_LOGIN_CODE || "000000";
 const CREATE_WALLET = "**/trpc/user.createWallet**";
 
 // Every signed-in member gets a wallet before the screens that need one:
-// at sign-in, and again (if that failed) before Proposals & Votes or You.
+// at sign-in, and again (if that failed) before Proposals and votes or You.
 // Each test uses its own throwaway member who starts with no wallet, so the
 // shared releaseclick fixtures are never changed.
 
@@ -80,7 +80,7 @@ test.describe("automatic wallet creation", () => {
     }
   });
 
-  test("Proposals & Votes creates the wallet first when sign-in couldn't", async ({ browser }) => {
+  test("Proposals and votes creates the wallet first when sign-in couldn't", async ({ browser }) => {
     const email = throwawayEmail("proposals");
     walletFixture("create", email);
     const context = await browser.newContext({ viewport: { width: 430, height: 932 } });
@@ -92,7 +92,7 @@ test.describe("automatic wallet creation", () => {
 
       await page.unroute(CREATE_WALLET);
       await openProposals(page);
-      await expect(shown(page, "Proposals & Votes", { exact: true }).first()).toBeVisible();
+      await expect(shown(page, "Proposals and votes", { exact: true }).first()).toBeVisible();
       await expect(shown(page, "Start a proposal", { exact: true })).toBeVisible();
 
       const after = walletFixture("lookup", email);
@@ -115,7 +115,7 @@ test.describe("automatic wallet creation", () => {
 
       await page.getByRole("tab", { name: "You" }).click();
       await expect(shown(page, "Wallet setup failed", { exact: true })).toBeVisible();
-      await expect(shown(page, `Sign Out (@${email.split("@")[0]!.replace(/[^a-z0-9]/g, "")})`)).toHaveCount(0);
+      await expect(shown(page, `Sign out (@${email.split("@")[0]!.replace(/[^a-z0-9]/g, "")})`)).toHaveCount(0);
       expect(walletFixture("lookup", email)).toMatchObject({ walletAddress: null, wallets: 0 });
 
       await page.unroute(CREATE_WALLET);

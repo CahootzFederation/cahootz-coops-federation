@@ -46,12 +46,12 @@ export default function CommonsProposalDrafts() {
 
   async function submit(draft: CommonsProposalDraft, title: string, body: string) {
     const id = draft.id;
-    if (!user?.walletAddress || !sessionToken) { setMessage('Connect a wallet before you send a proposal.'); return; }
+    if (!user?.walletAddress || !sessionToken) { setMessage('Finish setting up your account before you send a proposal.'); return; }
     setBusy(id); setMessage('');
     try {
       await api.saveCommonsProposalDraft(id, title, body, sessionToken);
       const proposal = await api.createProposal(`Proposal Title: ${title}\n\n${body}${changeText(draft)}`, user.walletAddress, coopId, id);
-      if (!proposal?.id) throw new Error('Proposal was created, but its receipt was unavailable. Check your proposals before trying again.');
+      if (!proposal?.id) throw new Error("Your proposal went in, but we couldn't confirm it. Check your proposals before you try again.");
       await api.markCommonsProposalDraftSubmitted(id, proposal.id, sessionToken);
       await client.invalidateQueries({ queryKey: ['commons-proposal-drafts', sessionToken] });
       router.replace({ pathname: '/(tabs)/proposal-detail', params: { id: proposal.id, coopId } } as any);

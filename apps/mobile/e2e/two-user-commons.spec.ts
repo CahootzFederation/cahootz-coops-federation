@@ -16,16 +16,16 @@ test("signing out one user does not sign out the other user", { tag: "@smoke" },
   try {
     await userA.page.getByLabel("Open menu").click();
     await userA.page
-      .getByText(/^Sign Out \(@.+\)$/)
+      .getByText(/^Sign out \(@.+\)$/)
       .click();
     // Signing out asks first; "Stay signed in" keeps the session.
     await expect(userA.page.getByText(/To sign back in, you'll need a new code/)).toBeVisible();
     await userA.page.getByRole("button", { name: "Stay signed in" }).click();
     await expect(
-      userA.page.getByText(/^Sign Out \(@.+\)$/),
+      userA.page.getByText(/^Sign out \(@.+\)$/),
     ).toBeVisible();
     await userA.page
-      .getByText(/^Sign Out \(@.+\)$/)
+      .getByText(/^Sign out \(@.+\)$/)
       .click();
     await userA.page.getByRole("button", { name: "Yes, sign out" }).click();
     await expect(userA.page.getByText("Welcome to Cahootz", { exact: true })).toBeVisible();

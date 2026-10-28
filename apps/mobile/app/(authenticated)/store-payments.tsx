@@ -201,7 +201,7 @@ export default function StorePaymentsScreen() {
               <ArrowLeft size={24} color="#111827" />
             </TouchableOpacity>
             <Text className="flex-1 text-center text-lg font-semibold text-gray-900">
-              Payment Requests
+              Payment requests
             </Text>
             <View className="w-10" />
           </View>
@@ -252,7 +252,7 @@ export default function StorePaymentsScreen() {
               onPress={() => router.back()}
               className="mt-6 bg-primary px-6 py-3 rounded-xl"
             >
-              <Text className="text-white font-semibold">Create Request</Text>
+              <Text className="text-white font-semibold">Create request</Text>
             </TouchableOpacity>
           </View>
         ) : (

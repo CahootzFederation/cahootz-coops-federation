@@ -43,10 +43,10 @@ const DEFAULT_COMMONS_PROFILE = {
 };
 
 const DRAWER_SECTIONS = [
-  { label: 'Personal Page', icon: UserCircle, action: '/(authenticated)/personal-page', requiresAuth: true },
-  { label: 'Commons Stores & Shops', icon: Store, action: '/(tabs)/store', requiresAuth: true },
-  { label: 'Messages & Direct Chat', icon: MessageCircle, action: '/(tabs)/messages' },
-  { label: 'Report a Problem or Idea', icon: MessageSquareWarning, action: '/(authenticated)/feedback', requiresAuth: true },
+  { label: 'Personal page', icon: UserCircle, action: '/(authenticated)/personal-page', requiresAuth: true },
+  { label: 'Stores and shops', icon: Store, action: '/(tabs)/store', requiresAuth: true },
+  { label: 'Messages', icon: MessageCircle, action: '/(tabs)/messages' },
+  { label: 'Report a problem or share an idea', icon: MessageSquareWarning, action: '/(authenticated)/feedback', requiresAuth: true },
 ];
 
 // Shared "hamburger" drawer - same navigation surface (switch commons, explore
@@ -142,7 +142,7 @@ export default function AppDrawer({
     ? [
         {
           id: PERSONAL_PAGE_DESTINATION_ID,
-          label: 'My Personal Page',
+          label: 'My personal page',
           accessStatus: 'ACTIVE' as const,
           icon: accountName.slice(0, 1).toUpperCase(),
           action: '/(authenticated)/personal-page',
@@ -337,7 +337,7 @@ export default function AppDrawer({
                           {item.id === PERSONAL_PAGE_DESTINATION_ID
                             ? 'Your page'
                             : hasAccountSession && 'isMember' in item && item.isMember
-                              ? (isActive ? 'Active Member' : 'Member')
+                              ? (isActive ? 'Active member' : 'Member')
                               : 'Public commons'}
                         </Text>
                       </View>
@@ -395,7 +395,7 @@ export default function AppDrawer({
             >
               <Compass size={14} color={THEME.primary} />
               <Text className="text-xs font-black" style={{ color: THEME.primary }}>
-                Explore all Commons directory
+                Browse all commons
               </Text>
             </TouchableOpacity>
 
@@ -417,7 +417,7 @@ export default function AppDrawer({
                     </View>
                     <View className="min-w-0 flex-1">
                       <Text className="text-sm font-black text-gray-900">Home</Text>
-                      <Text className="text-xs font-semibold text-stone-500">Circle View</Text>
+                      <Text className="text-xs font-semibold text-stone-500">Your circles</Text>
                     </View>
                     <ChevronRight size={15} color="#D6D3D1" />
                   </TouchableOpacity>
@@ -438,7 +438,7 @@ export default function AppDrawer({
                       <Scale size={17} color={THEME.primary} />
                     </View>
                     <View className="min-w-0 flex-1">
-                      <Text className="text-sm font-black text-gray-900">Proposals &amp; Votes</Text>
+                      <Text className="text-sm font-black text-gray-900">Proposals and votes</Text>
                       <Text className="text-xs font-semibold text-stone-500">Member decisions and voting</Text>
                     </View>
                     {proposalActions.actionableVoteCount > 0 ? (
@@ -546,7 +546,7 @@ export default function AppDrawer({
                 activeOpacity={0.8}
               >
                 <LogOut size={16} color="#DC2626" />
-                <Text className="text-sm font-black text-red-600">Sign Out (@{accountHandle})</Text>
+                <Text className="text-sm font-black text-red-600">Sign out (@{accountHandle})</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity

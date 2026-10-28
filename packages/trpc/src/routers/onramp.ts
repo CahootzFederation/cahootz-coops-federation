@@ -244,8 +244,8 @@ export const onrampRouter = router({
               userId,
               coopId,
               type: 'WALLET_FUNDED',
-              title: 'Wallet Funded',
-              body: `$${input.amountUSD.toFixed(2)} has been added to your wallet.`,
+              title: 'Money added',
+              body: `We added $${input.amountUSD.toFixed(2)} to your wallet.`,
               data: {
                 transactionId: transaction.id,
                 amountUSD: input.amountUSD,
@@ -263,7 +263,7 @@ export const onrampRouter = router({
             amountUSD: input.amountUSD,
             amountUC,
             mintTxHash,
-            message: `Successfully funded wallet with ${amountUC} UC`,
+            message: `Added ${amountUC} coins to your wallet.`,
           };
         } catch (error: any) {
           console.error('💥 Funding failed:', error);

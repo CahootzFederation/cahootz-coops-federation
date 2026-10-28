@@ -56,7 +56,7 @@ async function expandTrail(page: Page, outcome: RegExp) {
 // member can't see the trail of a direct message they aren't part of.
 test("decision trails cover proposal reviews, comment evaluations and Sage replies", { tag: "@sage" }, async ({ browser }) => {
   test.setTimeout(300_000);
-  // Every spec that flips "Show Sage decision trails" on a fixture account takes a turn (see support/exclusive.ts).
+  // Every spec that flips "Show how Sage decides" on a fixture account takes a turn (see support/exclusive.ts).
   await withExclusiveAccountSetting("sage-decision-trails", async () => {
     const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const memberA = await newSignedInPage(browser, USER_A_EMAIL);

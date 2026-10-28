@@ -151,7 +151,7 @@ async function memberVisibleTrails(
 }
 
 export const sageRouter = router({
-  /** The member's personal "Show Sage decision trails" app setting. */
+  /** The member's personal "Show how Sage decides" app setting. */
   trailSettings: accountAuthenticatedProcedure.query(async ({ ctx }) => {
     const context = ctx as AccountAuthenticatedContext;
     const user = await context.db.user.findUnique({ where: { id: context.accountUser.id }, select: { showSageDecisionTrails: true } });

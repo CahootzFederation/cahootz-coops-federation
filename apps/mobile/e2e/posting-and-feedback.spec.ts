@@ -157,7 +157,7 @@ test("a member reports a problem from the menu and it is saved for the team", as
 
   try {
     await page.getByLabel("Open menu").filter({ visible: true }).click();
-    await page.getByText("Report a Problem or Idea", { exact: true }).filter({ visible: true }).click();
+    await page.getByText("Report a problem or share an idea", { exact: true }).filter({ visible: true }).click();
     await expect(page.getByText("Report a problem", { exact: true })).toBeVisible();
 
     // An empty report isn't sent.

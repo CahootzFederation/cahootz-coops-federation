@@ -206,9 +206,9 @@ test("a member reacts to a post from the feed card", async ({ browser }) => {
   }
 });
 
-// Personal Page posts use the same reactions as Commons posts (❤️ is their
+// Personal page posts use the same reactions as Commons posts (❤️ is their
 // like). User B reacts to User A's page post from A's public profile, and
-// User A sees the reactions on their own Personal Page.
+// User A sees the reactions on their own personal page.
 test("a member reacts to a personal page post", async ({ browser }) => {
   test.setTimeout(180_000);
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

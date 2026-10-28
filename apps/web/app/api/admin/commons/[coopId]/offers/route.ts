@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { db } from '@repo/db';
-import { createOffer, listOffersForAdmin } from '@repo/trpc/services/marketplace-offers';
+import { createOffer, listOffersForAdmin, offerPricingSettings } from '@repo/trpc/services/marketplace-offers';
 
 import { adminErrorResponse, requirePlatformAdmin } from '@/lib/platform-admin-session';
 
@@ -10,7 +10,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ coo
   if ('response' in admin) return admin.response;
   const { coopId } = await params;
   try {
-    const [offers, allProducts] = await Promise.all([
+    const [offers, allProducts, pricing] = await Promise.all([
       listOffersForAdmin(db, coopId),
       // Products an offer can be built on: active items in any approved shop. A vendor
       // serving this Commons may be registered in another one; this Commons' shops come first.
@@ -20,12 +20,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ coo
         orderBy: [{ store: { name: 'asc' } }, { name: 'asc' }],
         take: 500,
       }),
+      offerPricingSettings(db),
     ]);
     const products = [
       ...allProducts.filter((product) => product.store.coopId === coopId),
       ...allProducts.filter((product) => product.store.coopId !== coopId),
     ];
-    return NextResponse.json({ offers, products });
+    return NextResponse.json({ offers, products, minShareCents: pricing.minShareCents });
   } catch (error) {
     return adminErrorResponse(error);
   }

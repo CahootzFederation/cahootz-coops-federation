@@ -1,12 +1,8 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
+import { ADMIN_BASE_URL, signInAdmin } from "./support/admin";
 import { apiFixture } from "./support/offers";
 
-// The platform admin portal and the public vendor reply page are on the web app
-// (E2E_ADMIN_BASE_URL). The admin email must be on PLATFORM_ADMIN_EMAILS for both
-// the web app and the API, as in admin-commons-ai.spec.ts.
-const ADMIN_BASE_URL = process.env.E2E_ADMIN_BASE_URL || "http://localhost:3000";
-const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || "e2e-admin@test.cahootz.local";
 const RUN = `vo${Date.now()}`;
 const AREA = `E2E Town ${RUN}`;
 const BUSINESS = `E2E ${RUN} Corner Market`;
@@ -15,17 +11,6 @@ const fixture = (args: string[]) => apiFixture("scripts/e2e-vendor-outreach.ts",
 test.afterAll(() => {
   fixture(["cleanup", RUN]);
 });
-
-async function signInAdmin(page: Page) {
-  await page.goto(`${ADMIN_BASE_URL}/portal/admin/login`);
-  await page.getByLabel("Email address").fill(ADMIN_EMAIL);
-  await page.getByRole("button", { name: "Email me a login code" }).click();
-  await expect(page.getByLabel("Login code")).toBeVisible();
-  const { code } = apiFixture("scripts/e2e-admin.ts", ["login-code", ADMIN_EMAIL]);
-  await page.getByLabel("Login code").fill(code);
-  await page.getByRole("button", { name: "Verify & Sign In" }).click();
-  await expect(page).toHaveURL(/\/portal\/admin(?!\/login)/);
-}
 
 test("an admin approves Sage's campaign, a vendor says yes, and the admin takes it from there", async ({ browser }) => {
   const { campaignId } = fixture(["setup", RUN]);

@@ -13,6 +13,7 @@ function matches(row: Row, where: Row | undefined, tables: Tables): boolean {
     if (key === "OR") return (condition as Row[]).some((w) => matches(row, w, tables));
     if (key === "offer") return matches(tables.marketplaceOffer.find((o) => o.id === row.offerId) ?? {}, condition, tables);
     if (key === "store") return matches(tables.store.find((s) => s.id === row.storeId) ?? {}, condition, tables);
+    if (key === "user") return matches({ isBot: false, ...(tables.user.find((u) => u.id === row.userId) ?? {}) }, condition, tables);
     if (key === "commitments") {
       const some = (condition as Row).some;
       return tables.offerCommitment.some((c) => c.offerId === row.id && matches(c, some, tables));
@@ -37,6 +38,8 @@ type Tables = {
   marketplaceOffer: Row[];
   offerCommitment: Row[];
   offerNotificationSend: Row[];
+  offerDigestSend: Row[];
+  platformConfig: Row[];
   notification: Row[];
   auditLog: Row[];
   user: Row[];
@@ -149,6 +152,8 @@ export function createFakeOfferDb() {
     marketplaceOffer: [],
     offerCommitment: [],
     offerNotificationSend: [],
+    offerDigestSend: [],
+    platformConfig: [],
     notification: [],
     auditLog: [],
     user: [],
@@ -162,6 +167,8 @@ export function createFakeOfferDb() {
     marketplaceOffer: model(tables, "marketplaceOffer", "offer"),
     offerCommitment: model(tables, "offerCommitment", "commit", [["offerId", "userId"], ["commerceTransactionId"]]),
     offerNotificationSend: model(tables, "offerNotificationSend", "send", [["offerId", "userId", "kind"]]),
+    offerDigestSend: model(tables, "offerDigestSend", "digest", [["coopId", "userId", "weekKey"]]),
+    platformConfig: model(tables, "platformConfig", "config", [["key"]]),
     notification: model(tables, "notification", "note"),
     auditLog: model(tables, "auditLog", "audit"),
     user: model(tables, "user", "user"),

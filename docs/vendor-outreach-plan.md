@@ -185,6 +185,15 @@ The product discovery bot (`docs/product-discovery.md`) finds bulk supplier item
 - **Start the Group Buy.** When a seller from an item search says yes, **Start the group buy** opens the offer form for that Commons as a Group Buy, filled in from the item: title, description, regular price and its source, the bot's per-person price as the member price, and the people needed as the unlock count. The admin picks the seller's product on Cahootz and enters the agreed amounts. The offer keeps `sourcedProductId`.
 - **Not done:** the seller still has to be on Cahootz with a payout account before the offer can be saved, and Sage never buys stock or sets a price.
 
+## One price rule for every deal (decided 2026-10-28)
+
+Real offers, item suggestions, Sage's item questions and the public homepage all use the same rule (`packages/validators/src/marketplace-offers.ts`):
+- **The split.** The vendor gets a set dollar amount, Stripe's fee comes out next, and what's left is split between the Commons and Cahootz (50/50 by default, adjustable per offer).
+- **No money-losing deals.** `checkOfferMargin` refuses any offer where, at the worst-case card fee (4.4% + 30¢), the Commons or Cahootz would get less than the minimum per unit (default 10¢). The form says how to fix it (the lowest member price, or the most the vendor can get), and `publishOffer` checks again.
+- **Item suggestions.** For a discovered item, the vendor amount is the bot's bulk price. The member price adds a margin (default 20% of the discount, so members keep about 80% of the savings) plus Stripe's fee. Cheap items come in packs so one payment is at least $15. An item only qualifies for Sage's question if members still save at least 15% and $1.
+- **Settings.** Platform admins change the minimum share, margin, pack size and minimum savings under **Group Buy pricing** on Product ideas (PlatformConfig `offers.*`, range-checked). The homepage reads them through `productDiscovery.homepagePricing`.
+- **Failed Group Buys.** Stripe keeps its fees when a failed Group Buy is refunded. The form shows that worst case, and Cahootz absorbs it during the pilot.
+
 ## Member referrals (mobile)
 
 A **Recommend a business** form, reached from the marketplace's Deals section and the vendor-less categories:

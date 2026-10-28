@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 
 import { estimateStripeFeeCents, offerSavings, splitOfferPayment } from "@repo/validators/marketplace-offers";
 
-import { requireActiveMember, requireSteward } from "../commons-membership.js";
+import { requireActiveMember } from "../commons-membership.js";
 import { requireStoreOwner } from "./lifecycle.js";
 import {
   ACTIVE_COMMITMENT_STATUSES,
@@ -167,64 +167,6 @@ export async function offerFinancials(db: Db, offerIds: string[]): Promise<Map<s
   }
   for (const s of savings) totals.get(s.offerId)!.verifiedSavingsCents = s._sum.savingsCents ?? 0;
   return totals;
-}
-
-// ── Stewards: aggregate numbers only, never names ────────
-
-export async function listOffersForSteward(db: Db, userId: string, coopId: string) {
-  await requireSteward(db, userId, coopId);
-  const offers = await db.marketplaceOffer.findMany({
-    where: { coopId, status: { not: "DRAFT" } },
-    include: offerInclude,
-    orderBy: { updatedAt: "desc" },
-    take: 50,
-  });
-  const ids = offers.map((o) => o.id);
-  const [committers, money] = await Promise.all([
-    db.offerCommitment.groupBy({
-      by: ["offerId"],
-      where: { offerId: { in: ids }, status: { in: [...ACTIVE_COMMITMENT_STATUSES] } },
-      _count: { _all: true },
-    }),
-    offerFinancials(db, ids),
-  ]);
-  const committerCount = new Map(committers.map((c) => [c.offerId, c._count._all]));
-  return offers.map((offer) => {
-    const totals = money.get(offer.id)!;
-    return {
-      id: offer.id,
-      offerType: offer.offerType,
-      status: offer.status,
-      title: offer.title,
-      description: offer.description,
-      vendorName: offer.store.name,
-      productName: offer.product.name,
-      regularPriceCents: offer.regularPriceCents,
-      regularPriceSource: offer.regularPriceSource,
-      memberPriceCents: offer.memberPriceCents,
-      ...offerSavings(offer.regularPriceCents, offer.memberPriceCents),
-      split: unitSplit(offer),
-      minimumCommitments: offer.minimumCommitments,
-      minimumPaidOrders: offer.minimumPaidOrders,
-      maximumQuantity: offer.maximumQuantity,
-      quantityPerMember: offer.quantityPerMember,
-      commitmentDeadline: offer.commitmentDeadline,
-      paymentWindowHours: offer.paymentWindowHours,
-      expiresAt: offer.expiresAt,
-      fulfillmentMethod: offer.fulfillmentMethod,
-      pickupLocation: offer.pickupLocation,
-      redemptionRules: offer.redemptionRules,
-      refundPolicy: offer.refundPolicy,
-      substitutionPolicy: offer.substitutionPolicy,
-      terms: offer.terms,
-      // Aggregates only.
-      committedQuantity: offer.committedQuantity,
-      householdCount: committerCount.get(offer.id) ?? 0,
-      paidOrders: totals.paidOrders,
-      verifiedSavingsCents: totals.verifiedSavingsCents,
-      commonsRevenueCents: totals.commonsRevenueCents,
-    };
-  });
 }
 
 // ── Vendors ──────────────────────────────────────────────

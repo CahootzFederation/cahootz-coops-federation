@@ -47,7 +47,6 @@ interface OfferDetail {
   commitmentDeadline: string | null;
   paymentDeadline: string | null;
   expiresAt: string | null;
-  stewardNote: string | null;
   cancelReason: string | null;
   commitments: Commitment[];
   financials: {
@@ -71,7 +70,9 @@ interface Action { label: string; body: Record<string, unknown>; confirm?: strin
 function actionsFor(offer: OfferDetail): Action[] {
   const actions: Action[] = [];
   const s = offer.status;
-  if (s === 'DRAFT') actions.push({ label: 'Send to stewards', body: { action: 'submit' } });
+  if (s === 'DRAFT') {
+    actions.push({ label: 'Publish to members', body: { action: 'publish' }, confirm: `Publish this offer? Members of this Commons will see it right away, and it can't be edited after that.` });
+  }
   if (s === 'LIVE') actions.push({ label: 'Pause', body: { action: 'pause' } });
   if (s === 'PAUSED') actions.push({ label: 'Resume', body: { action: 'resume' } });
   if (offer.offerType === 'GROUP_BUY') {
@@ -126,11 +127,7 @@ export default function OfferDetailPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "That didn't work.");
       setOffer(data.offer);
-      if (body.action === 'submit' && data.result?.stewardCount === 0) {
-        setNotice("Sent, but this Commons has no stewards yet, so nobody can approve it. Make someone a steward first.");
-      } else {
-        setNotice(`Done: ${action.label.toLowerCase()}.`);
-      }
+      setNotice(body.action === 'publish' ? 'Published. Members can see it now.' : `Done: ${action.label.toLowerCase()}.`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "That didn't work.");
     } finally {
@@ -170,9 +167,6 @@ export default function OfferDetailPage() {
         <p className="mt-1 text-sm text-slate-400">
           {offer.offerType === 'GROUP_BUY' ? 'Group buy' : 'Member deal'} · {offer.store.name} · {offer.product.name}
         </p>
-        {offer.stewardNote && offer.status === 'DRAFT' && (
-          <p className="mt-3 rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-200">A steward sent this back: {offer.stewardNote}</p>
-        )}
         {offer.cancelReason && <p className="mt-3 text-sm text-slate-400">Cancelled: {offer.cancelReason}</p>}
       </div>
 

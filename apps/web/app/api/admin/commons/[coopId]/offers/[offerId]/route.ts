@@ -9,9 +9,9 @@ import {
   getOfferForAdmin,
   openPayment,
   pauseOffer,
+  publishOffer,
   refundCommitment,
   resumeOffer,
-  submitForStewardApproval,
   updateFulfillment,
   updateOffer,
 } from '@repo/trpc/services/marketplace-offers';
@@ -52,7 +52,7 @@ export async function PUT(request: Request, { params }: Params) {
 }
 
 const actionSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('submit') }),
+  z.object({ action: z.literal('publish') }),
   z.object({ action: z.literal('pause') }),
   z.object({ action: z.literal('resume') }),
   z.object({ action: z.literal('closeEarly') }),
@@ -62,7 +62,7 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('refundCommitment'), commitmentId: z.string().min(1), reason: z.string().trim().min(3).max(500) }),
 ]);
 
-/** Status actions: submit for steward review, pause, cancel, open payment, and so on. */
+/** Status actions: publish to members, pause, cancel, open payment, and so on. */
 export async function POST(request: Request, { params }: Params) {
   const admin = await requirePlatformAdmin();
   if ('response' in admin) return admin.response;
@@ -72,8 +72,8 @@ export async function POST(request: Request, { params }: Params) {
     const body = actionSchema.parse(await request.json());
     let result: unknown = { ok: true };
     switch (body.action) {
-      case 'submit':
-        result = await submitForStewardApproval(db, admin.actorId, offerId);
+      case 'publish':
+        await publishOffer(db, admin.actorId, offerId);
         break;
       case 'pause':
         await pauseOffer(db, admin.actorId, offerId);

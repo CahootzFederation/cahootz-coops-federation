@@ -96,6 +96,7 @@ function demandDb(overrides: { members?: number; posts?: Array<Record<string, st
       update: vi.fn(async ({ where, data }: any) => Object.assign(actions.find((a) => a.id === where.id), data)),
     },
     commonsActionAudit: { create: vi.fn(async () => ({})) },
+    platformConfig: { findMany: vi.fn(async () => []) },
     // Approved product-discovery items for this Commons (none unless a test adds them).
     commonsProductMatch: {
       findMany: vi.fn(async () =>
@@ -159,7 +160,7 @@ describe("weekly demand check", () => {
     const result = await askCommonsAboutDeals("church", NOW, db);
     expect(result).toMatchObject({ asked: true, categoryKey: "household_essentials", productId: "pods", evidence: "approved_item" });
     expect(db.posts[0].title).toBe("A group buy on Laundry pods?");
-    expect(db.posts[0].content).toContain("Laundry pods (64 pods) runs about $28.89 on its own. If 12 of us buy together, it could come to about $12.17 each.");
+    expect(db.posts[0].content).toContain("Laundry pods (64 pods) runs about $28.89 on its own. If 12 of us buy together, it could come to about $16.29 each.");
     expect(db.posts[0].content).toContain("prices we found online");
     expect(db.actions[0].payload).toMatchObject({ dealCategory: "household_essentials", sourcedProductId: "pods", evidence: { kind: "approved_item" } });
 
@@ -178,6 +179,11 @@ describe("weekly demand check", () => {
     const result = await askCommonsAboutDeals("church", NOW, db);
     expect(result).toMatchObject({ asked: true, categoryKey: "groceries", productId: "rice", evidence: "need_posts" });
     expect(db.posts[0].title).toBe("A group buy on Jasmine rice, 25 lb?");
+  });
+
+  it("doesn't ask about an item when card fees would eat most of the savings", async () => {
+    const db = demandDb({ items: [{ productId: "bag", name: "Kids lunch bag", category: "School", price: { regularPriceCents: 530, bulkShareCents: 450 } }] });
+    expect((await askCommonsAboutDeals("church", NOW, db)).asked).toBe(false);
   });
 
   it("skips items whose price evidence has run out", async () => {

@@ -7,21 +7,22 @@ import type { Db, Tx } from "./shared.js";
 /**
  * Every allowed status change, per offer type. Anything not listed is refused.
  *
- * Member Deal: DRAFT → PENDING_STEWARD → LIVE ⇄ PAUSED → EXPIRED / CANCELLED
- * Group Buy:   DRAFT → PENDING_STEWARD → LIVE → AWAITING_VENDOR → PAYMENT_OPEN
+ * Member Deal: DRAFT → LIVE ⇄ PAUSED → EXPIRED / CANCELLED
+ * Group Buy:   DRAFT → LIVE → AWAITING_VENDOR → PAYMENT_OPEN
  *              → CONFIRMED → ORDERED → READY → FULFILLED, with EXPIRED (too few
  *              commitments), FAILED (too few payments) and CANCELLED as ends.
- * A steward sending an offer back returns it to DRAFT.
+ * A platform admin publishes a draft (DRAFT → LIVE). PENDING_STEWARD is no longer
+ * used; an offer left in it can still be published, put back to draft or cancelled.
  */
 export const OFFER_TRANSITIONS: Record<OfferType, Partial<Record<OfferStatus, readonly OfferStatus[]>>> = {
   MEMBER_DEAL: {
-    DRAFT: ["PENDING_STEWARD", "CANCELLED"],
+    DRAFT: ["LIVE", "CANCELLED"],
     PENDING_STEWARD: ["LIVE", "DRAFT", "CANCELLED"],
     LIVE: ["PAUSED", "EXPIRED", "CANCELLED"],
     PAUSED: ["LIVE", "EXPIRED", "CANCELLED"],
   },
   GROUP_BUY: {
-    DRAFT: ["PENDING_STEWARD", "CANCELLED"],
+    DRAFT: ["LIVE", "CANCELLED"],
     PENDING_STEWARD: ["LIVE", "DRAFT", "CANCELLED"],
     LIVE: ["PAUSED", "AWAITING_VENDOR", "EXPIRED", "CANCELLED"],
     PAUSED: ["LIVE", "EXPIRED", "CANCELLED"],

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { ADMIN_BASE_URL, signInAdmin } from "./support/admin";
 import { USER_A_EMAIL, USER_B_EMAIL, newSignedInPage } from "./support/auth";
-import { withExclusiveAccountSetting } from "./support/exclusive";
 import { OFFERS_COOP_ID, offersFixture, openOffersMarketplace, shown, visibleButton } from "./support/offers";
 
 const RUN = `E2E deal ${Date.now()}`;
@@ -43,31 +43,66 @@ test("a member sees a member deal's regular price, member price and saving, and 
   }
 });
 
-test("a new deal stays hidden until a steward approves it, and the steward only sees totals", async ({ browser }) =>
-  withExclusiveAccountSetting("e2e-offers-steward", async () => {
-    const title = `${RUN} beans`;
-    offersFixture(["steward", "on"]);
-    offersFixture(["create", JSON.stringify({ title, offerType: "MEMBER_DEAL", status: "PENDING_STEWARD" })]);
-    const member = await newSignedInPage(browser, USER_A_EMAIL);
-    const steward = await newSignedInPage(browser, USER_B_EMAIL);
-    try {
+test("a draft deal stays hidden until a platform admin publishes it, then every member hears about it that week", async ({ browser }) => {
+  const title = `${RUN} beans`;
+  const { offerId } = offersFixture(["create", JSON.stringify({ title, offerType: "MEMBER_DEAL", status: "DRAFT" })]);
+  const memberA = await newSignedInPage(browser, USER_A_EMAIL);
+  const memberB = await newSignedInPage(browser, USER_B_EMAIL);
+  const adminContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const admin = await adminContext.newPage();
+  try {
+    // A draft isn't shown to members.
+    await openOffersMarketplace(memberA.page);
+    await expect(memberA.page.getByRole("button", { name: `Member deal: ${title}` })).toHaveCount(0);
+
+    // The platform admin publishes it. No steward step.
+    await signInAdmin(admin);
+    await admin.goto(`${ADMIN_BASE_URL}/portal/admin/commons/${OFFERS_COOP_ID}/offers/${offerId}`);
+    await expect(admin.getByRole("heading", { name: title })).toBeVisible({ timeout: 60_000 });
+    admin.once("dialog", (dialog) => dialog.accept());
+    await admin.getByRole("button", { name: "Publish to members" }).click();
+    await expect(admin.getByText("Published. Members can see it now.")).toBeVisible();
+    await expect(admin.getByTestId("offer-status")).toHaveText("Live");
+
+    // Both members see it.
+    for (const member of [memberA, memberB]) {
       await openOffersMarketplace(member.page);
-      await expect(member.page.getByRole("button", { name: `Member deal: ${title}` })).toHaveCount(0);
-
-      await steward.page.goto(`/commons-offers?coopId=${OFFERS_COOP_ID}`);
-      const review = steward.page.getByLabel(`Review ${title}`);
-      await expect(review).toBeVisible();
-      await expect(review.getByText(/Stripe's fee is about \$0\.82, the vendor gets \$15\.00/)).toBeVisible();
-      await expect(shown(steward.page, /never who joined or paid/)).toBeVisible();
-      await review.getByRole("button", { name: "Approve" }).click();
-      await expect(steward.page.getByLabel(`Results for ${title}`)).toBeVisible();
-      await expect(steward.page.getByLabel(`Results for ${title}`).getByText(/households/)).toBeVisible();
-
-      await member.page.reload();
       await expect(member.page.getByRole("button", { name: `Member deal: ${title}` })).toBeVisible();
-    } finally {
-      offersFixture(["steward", "off"]);
-      await member.context.close();
-      await steward.context.close();
     }
-  }));
+
+    // Monday's notice goes to everyone in the Commons, and opens the marketplace.
+    offersFixture(["digest"]);
+    for (const member of [memberA, memberB]) {
+      await member.page.goto("/notifications");
+      await expect(shown(member.page, "This week's member deals").first()).toBeVisible();
+      await expect(shown(member.page, new RegExp(`${title}: \\$18\\.00, save 25%`)).first()).toBeVisible();
+    }
+    await shown(memberA.page, "This week's member deals").first().click();
+    await expect(shown(memberA.page, "Deals for members", { exact: true })).toBeVisible({ timeout: 60_000 });
+  } finally {
+    await memberA.context.close();
+    await memberB.context.close();
+    await adminContext.close();
+  }
+});
+
+test("the admin offer form warns when a deal could lose the Commons or Cahootz money", async ({ browser }) => {
+  const adminContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const admin = await adminContext.newPage();
+  try {
+    await signInAdmin(admin);
+    await admin.goto(`${ADMIN_BASE_URL}/portal/admin/commons/${OFFERS_COOP_ID}/offers`);
+    await admin.getByRole("button", { name: "New offer" }).click();
+    await admin.getByLabel("Regular price ($)").fill("24");
+    await admin.getByLabel("Member price ($)").fill("18");
+    await admin.getByLabel("Vendor gets ($ per unit)").fill("15");
+    await expect(admin.getByTestId("worst-case-split")).toContainText("With a pricier card (Stripe up to $1.09): Commons $0.95, Cahootz $0.96");
+    await expect(admin.getByRole("form", { name: "New offer" }).getByRole("alert")).toHaveCount(0);
+
+    // $18.00 - $16.75 leaves $1.25: fine at the usual card fee, not with a pricier card.
+    await admin.getByLabel("Vendor gets ($ per unit)").fill("16.75");
+    await expect(admin.getByRole("form", { name: "New offer" }).getByRole("alert")).toContainText("This deal could lose money. The Commons and Cahootz each need at least $0.10 per unit");
+  } finally {
+    await adminContext.close();
+  }
+});

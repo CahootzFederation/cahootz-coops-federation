@@ -1,7 +1,7 @@
 /** Plain names for offer statuses in the admin portal. */
 export const OFFER_STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Draft',
-  PENDING_STEWARD: 'Waiting for a steward',
+  PENDING_STEWARD: 'Not published',
   LIVE: 'Live',
   PAUSED: 'Paused',
   AWAITING_VENDOR: 'Waiting for vendor',

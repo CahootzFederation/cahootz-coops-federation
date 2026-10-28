@@ -18,11 +18,12 @@ import {
   commitToOffer,
   handleOfferPaymentRefunded,
   handleOfferPaymentSucceeded,
-  listOffersForSteward,
   mySavings,
   openPayment,
   runOfferSweep,
-  stewardApprove,
+  publishOffer,
+  sendWeeklyDealsDigest,
+  digestText,
 } from "../services/marketplace-offers/index.js";
 import { createFakeOfferDb, seedOfferWorld } from "./fixtures/fake-offer-db.js";
 
@@ -113,6 +114,10 @@ describe("offer status rules", () => {
     expect(canTransition("GROUP_BUY", "FULFILLED", "CANCELLED")).toBe(false);
     expect(canTransition("MEMBER_DEAL", "LIVE", "AWAITING_VENDOR")).toBe(false);
     expect(canTransition("MEMBER_DEAL", "PAUSED", "LIVE")).toBe(true);
+    // A platform admin publishes a draft straight to members; there's no steward step.
+    expect(canTransition("MEMBER_DEAL", "DRAFT", "LIVE")).toBe(true);
+    expect(canTransition("GROUP_BUY", "DRAFT", "LIVE")).toBe(true);
+    expect(canTransition("GROUP_BUY", "DRAFT", "PENDING_STEWARD")).toBe(false);
   });
 });
 
@@ -376,31 +381,25 @@ describe("offer sweep", () => {
   });
 });
 
-describe("stewards and vendors", () => {
+describe("publishing and vendors", () => {
   let db: any;
   beforeEach(() => {
     db = createFakeOfferDb();
-    seedOfferWorld(db, { status: "PENDING_STEWARD" });
-    db.marketplaceOffer.findMany = vi.fn(async () =>
-      db.tables.marketplaceOffer.map((o: any) => ({ ...o, store: { id: "store_1", name: "Corner Market" }, product: { id: "product_1", name: "Rice", imageUrl: null } })),
-    );
+    seedOfferWorld(db, { status: "DRAFT" });
   });
 
-  it("lets only a steward approve an offer", async () => {
-    await expect(stewardApprove(db, "member_1", "offer_1")).rejects.toThrow("steward");
-    await stewardApprove(db, "steward_1", "offer_1");
-    expect(db.tables.marketplaceOffer[0]).toMatchObject({ status: "LIVE", stewardApprovedById: "steward_1" });
+  it("lets a platform admin publish a draft straight to members", async () => {
+    const now = new Date();
+    await publishOffer(db, "admin_1", "offer_1", now);
+    expect(db.tables.marketplaceOffer[0]).toMatchObject({ status: "LIVE", publishedAt: now });
+    expect(db.tables.auditLog.at(-1)).toMatchObject({ action: "MARKETPLACE_OFFER_PUBLISHED", actorId: "admin_1" });
+    await expect(publishOffer(db, "admin_1", "offer_1", now)).rejects.toThrow();
   });
 
-  it("shows stewards totals, never who joined", async () => {
-    db.tables.marketplaceOffer[0].status = "LIVE";
-    await commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 2 });
-    const [offer] = await listOffersForSteward(db, "steward_1", "church");
-    expect(offer).toMatchObject({ committedQuantity: 2, householdCount: 1 });
-    const serialized = JSON.stringify(offer);
-    expect(serialized).not.toContain("member_1");
-    expect(serialized).not.toContain("555-0100");
-    expect(offer).not.toHaveProperty("commitments");
+  it("won't publish a draft whose end date has passed", async () => {
+    const late = new Date(db.tables.marketplaceOffer[0].commitmentDeadline.getTime() + DAY_MS);
+    await expect(publishOffer(db, "admin_1", "offer_1", late)).rejects.toThrow("end date has already passed");
+    expect(db.tables.marketplaceOffer[0].status).toBe("DRAFT");
   });
 
   it("opens a payment window when the vendor confirms", async () => {
@@ -411,5 +410,50 @@ describe("stewards and vendors", () => {
     expect(paymentDeadline.toISOString()).toBe("2026-11-04T12:00:00.000Z");
     expect(db.tables.marketplaceOffer[0].status).toBe("PAYMENT_OPEN");
     expect(db.tables.notification.find((n: any) => n.type === "GROUP_BUY_PAYMENT_OPEN").userId).toBe("member_1");
+  });
+});
+
+describe("weekly deals notice", () => {
+  const now = new Date("2026-11-02T15:00:00Z");
+  const deal = (overrides: Record<string, unknown> = {}) => ({
+    title: "Rice", offerType: "MEMBER_DEAL" as const, status: "LIVE", regularPriceCents: 2400, memberPriceCents: 1800,
+    committedQuantity: 0, minimumCommitments: null, commitmentDeadline: null, paymentDeadline: null,
+    expiresAt: new Date("2026-11-07T22:00:00Z"), ...overrides,
+  });
+
+  it("lists up to three deals in plain lines", () => {
+    const text = digestText([
+      deal(),
+      deal({ title: "Laundry pods", offerType: "GROUP_BUY", committedQuantity: 8, minimumCommitments: 12, commitmentDeadline: new Date("2026-11-06T22:00:00Z"), expiresAt: null }),
+      deal({ title: "Coffee", offerType: "GROUP_BUY", status: "PAYMENT_OPEN", memberPriceCents: 850, paymentDeadline: new Date("2026-11-05T22:00:00Z") }),
+      deal({ title: "Soap" }),
+    ]);
+    expect(text.title).toBe("This week's member deals");
+    expect(text.body.split("\n")).toEqual([
+      "Rice: $18.00, save 25%, ends Sat, Nov 7",
+      "Laundry pods group buy: 8 of 12 joined, closes Fri, Nov 6",
+      "Coffee: it's happening. Pay $8.50 by Thu, Nov 5",
+      "Plus 1 more in the marketplace.",
+    ]);
+  });
+
+  it("tells every active member of a Commons with live deals, once a week", async () => {
+    const db: any = createFakeOfferDb();
+    seedOfferWorld(db, { status: "LIVE" });
+    const members = db.tables.userCoopMembership.filter((m: any) => m.coopId === "church" && m.status === "ACTIVE").map((m: any) => m.userId);
+    const first = await sendWeeklyDealsDigest(db, now);
+    expect(first).toMatchObject({ commons: 1, sent: members.length });
+    const notices = db.tables.notification.filter((n: any) => n.type === "OFFER_WEEKLY_DIGEST");
+    expect(notices.map((n: any) => n.userId).sort()).toEqual([...members].sort());
+    expect(notices[0]).toMatchObject({ coopId: "church", title: "This week's member deals", data: { coopId: "church", lane: "marketplace" } });
+    expect((await sendWeeklyDealsDigest(db, now)).sent).toBe(0);
+    // A new week sends again.
+    expect((await sendWeeklyDealsDigest(db, new Date(now.getTime() + 7 * DAY_MS))).sent).toBe(members.length);
+  });
+
+  it("stays quiet when a Commons has no live deals", async () => {
+    const db: any = createFakeOfferDb();
+    seedOfferWorld(db, { status: "DRAFT" });
+    expect(await sendWeeklyDealsDigest(db, now)).toEqual({ commons: 0, sent: 0 });
   });
 });

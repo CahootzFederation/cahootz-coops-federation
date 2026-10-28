@@ -49,7 +49,7 @@ describe("discovered items", () => {
   let db: any;
   beforeEach(() => {
     db = createFakeOutreachDb();
-    for (const table of ["commonsProductProfile", "sourcedProduct", "commonsProductMatch", "productPriceObservation", "commonsAction", "vendorCampaign", "vendorProspect", "campaignProspect", "outreachMessage", "prospectSource", "auditLog"]) {
+    for (const table of ["platformConfig", "commonsProductProfile", "sourcedProduct", "commonsProductMatch", "productPriceObservation", "commonsAction", "vendorCampaign", "vendorProspect", "campaignProspect", "outreachMessage", "prospectSource", "auditLog"]) {
       db.tables[table] ??= [];
     }
   });
@@ -59,14 +59,15 @@ describe("discovered items", () => {
     expect(dealCategoryForItem({ category: "Travel", name: "Packing cubes", description: "Zip cubes for a suitcase" })).toBe("other");
   });
 
-  it("writes the item question from the bot's prices, labeled as what we found online", () => {
+  it("quotes what members would really pay, labeled as an estimate from prices found online", () => {
     const text = itemQuestionText({
       productId: "pods", name: "Laundry pods", supplierName: "Dropps", memberShare: "64 pods", regularPriceCents: 2889,
       bulkShareCents: 1217, peopleNeeded: 12, sourceUrl: "https://www.dropps.com/pods", observedAt: NOW.toISOString(),
+      packSize: 1, suggestedMemberPriceCents: 1629, suggestedVendorPayoutCents: 1217, packRegularPriceCents: 2889, membersNeeded: 12,
     });
     expect(text.title).toBe("A group buy on Laundry pods?");
     expect(text.body).toContain("about $28.89 on its own");
-    expect(text.body).toContain("If 12 of us buy together, it could come to about $12.17 each.");
+    expect(text.body).toContain("If 12 of us buy together, it could come to about $16.29 each.");
     expect(text.body).toContain("final price depends on the seller");
     expect(text.body).toContain("Nobody pays anything");
     expect(text.body).not.toMatch(/https?:/);
@@ -177,17 +178,41 @@ describe("discovered items", () => {
     expect((await loadReplyPage(db, replyToken("cp1"))).categoryLabel).toBe("Laundry pods");
   });
 
-  it("fills in a Group Buy draft from the item, with the price source", async () => {
+  it("fills in a Group Buy draft from the item by the same price rule as every offer", async () => {
     seedItem(db, { matchStatus: "APPROVED" });
     expect(await itemOfferDraft(db, "pods", NOW)).toEqual({
       sourcedProductId: "pods",
       title: "Laundry pods",
       description: "Plastic-free laundry detergent pods",
       regularPriceCents: 2889,
-      memberPriceCents: 1217,
+      // Vendor gets the bulk price; members pay that plus 20% of the discount and Stripe's fee.
+      memberPriceCents: 1629,
+      vendorPayoutCents: 1217,
+      commonsSplitBps: 5000,
       minimumCommitments: 12,
       memberShare: "64 pods",
+      feesEatSavings: false,
       regularPriceSource: "Dropps price on 2026-11-03: https://www.dropps.com/pods",
     });
+  });
+
+  it("sells a cheap item in packs, and leaves the price to the admin when fees eat the savings", async () => {
+    seedItem(db, { matchStatus: "APPROVED" });
+    Object.assign(db.tables.productPriceObservation[0], { regularPriceCents: 142, bulkShareCents: 57, memberShare: "1 toothbrush", peopleNeeded: 100 });
+    const brush = await itemOfferDraft(db, "pods", NOW);
+    expect(brush).toMatchObject({ title: "12 × Laundry pods", memberShare: "12 × 1 toothbrush", vendorPayoutCents: 684, regularPriceCents: 1704, minimumCommitments: 9 });
+    expect(brush.regularPriceSource).toContain("(12 × $1.42)");
+
+    Object.assign(db.tables.productPriceObservation[0], { regularPriceCents: 530, bulkShareCents: 450 });
+    expect(await itemOfferDraft(db, "pods", NOW)).toMatchObject({ memberPriceCents: null, feesEatSavings: true });
+  });
+
+  it("uses the platform admin's margin", async () => {
+    seedItem(db, { matchStatus: "APPROVED" });
+    db.tables.platformConfig = [{ key: "offers.itemMarginBps", value: "1000" }];
+    const draft = await itemOfferDraft(db, "pods", NOW);
+    // A 10% margin brings one pack under the $15 minimum payment, so it's sold two at a time, each cheaper than at 20%.
+    expect(draft.title).toBe("2 × Laundry pods");
+    expect(draft.memberPriceCents!).toBeLessThan(2 * 1629);
   });
 });

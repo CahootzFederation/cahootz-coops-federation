@@ -71,7 +71,7 @@ export default function StoreOffersScreen() {
         {!offers && !error ? <ActivityIndicator className="mt-10" color={colors.orange} /> : null}
         {offers?.length === 0 ? (
           <Text className="text-sm" style={{ color: colors.muted }}>
-            No offers yet. Cahootz sets these up with you; once a steward approves one, it shows here.
+            No offers yet. Cahootz sets these up with you; once one is published, it shows here.
           </Text>
         ) : null}
         {offers?.map((offer) => (

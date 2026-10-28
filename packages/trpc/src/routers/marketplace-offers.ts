@@ -8,14 +8,11 @@ import {
   commitToOffer,
   getOfferForMember,
   listOffersForMember,
-  listOffersForSteward,
   listOffersForVendor,
   mySavings,
   openPayment,
   requireStoreOwner,
   startOfferCheckout,
-  stewardApprove,
-  stewardSendBack,
   updateFulfillment,
   vendorMarkPickedUp,
   vendorRoster,
@@ -26,7 +23,7 @@ const coopInput = z.object({ coopId: z.string().min(1).max(100) });
 const offerInput = z.object({ offerId: z.string().min(1) });
 
 /**
- * Member Deals and Group Buys for members, stewards and vendors. Every call
+ * Member Deals and Group Buys for members and vendors. Every call
  * needs a signed-in session; identity always comes from the session, never
  * from the request. Platform admins manage offers through the web admin.
  */
@@ -69,19 +66,6 @@ export const marketplaceOffersRouter = router({
   mySavings: accountAuthenticatedProcedure
     .input(z.object({ coopId: z.string().min(1).max(100).optional() }))
     .query(({ ctx, input }) => mySavings(ctx.db, ctx.accountUser.id, input.coopId)),
-
-  // ── Stewards (aggregate numbers only) ──
-  stewardList: accountAuthenticatedProcedure
-    .input(coopInput)
-    .query(({ ctx, input }) => listOffersForSteward(ctx.db, ctx.accountUser.id, input.coopId)),
-
-  stewardApprove: accountAuthenticatedProcedure
-    .input(offerInput)
-    .mutation(({ ctx, input }) => stewardApprove(ctx.db, ctx.accountUser.id, input.offerId)),
-
-  stewardSendBack: accountAuthenticatedProcedure
-    .input(offerInput.extend({ note: z.string().trim().min(3).max(1000) }))
-    .mutation(({ ctx, input }) => stewardSendBack(ctx.db, ctx.accountUser.id, input.offerId, input.note)),
 
   // ── Vendors (shop owners) ──
   vendorList: accountAuthenticatedProcedure.query(({ ctx }) => listOffersForVendor(ctx.db, ctx.accountUser.id)),

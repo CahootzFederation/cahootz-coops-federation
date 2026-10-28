@@ -3,6 +3,17 @@
 import { useMemo, useState } from "react";
 import { HandCoins, ShoppingBasket, Target, UsersRound } from "lucide-react";
 
+import {
+  DEFAULT_OFFER_PRICING,
+  type OfferPricingSettings,
+} from "@repo/validators/marketplace-offers";
+
+import {
+  COMMONS_CATALOGS,
+  commonsPlanningRateBps,
+  type CommonsCatalog,
+} from "./group-buy-product-calculator";
+
 export const DEFAULT_GROUP_SIZE = 24;
 export const DEFAULT_UNITS_PER_PERSON = 1;
 export const DEFAULT_COMMONS_SHARE_BASIS_POINTS = 500;
@@ -122,7 +133,22 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-export function SharedPurchaseCalculator() {
+/**
+ * The planning rate is the Commons share as a percent of what members pay,
+ * averaged over the deals shown above (commonsPlanningRateBps), so this
+ * estimate uses the same price rule as real offers. Falls back to 5%.
+ */
+export function SharedPurchaseCalculator({
+  catalogs = COMMONS_CATALOGS,
+  pricing = DEFAULT_OFFER_PRICING,
+}: {
+  catalogs?: CommonsCatalog[];
+  pricing?: OfferPricingSettings;
+} = {}) {
+  const commonsShareBasisPoints = useMemo(
+    () => commonsPlanningRateBps(catalogs, pricing) ?? DEFAULT_COMMONS_SHARE_BASIS_POINTS,
+    [catalogs, pricing],
+  );
   const [purchaseAmount, setPurchaseAmount] = useState(
     DEFAULT_PURCHASE_AMOUNT_DOLLARS,
   );
@@ -131,8 +157,9 @@ export function SharedPurchaseCalculator() {
     () =>
       calculateSharedPurchaseImpact({
         purchaseAmountCents: Math.round(purchaseAmount * 100),
+        commonsShareBasisPoints,
       }),
-    [purchaseAmount],
+    [purchaseAmount, commonsShareBasisPoints],
   );
 
   const commonsSharePercent = impact.commonsShareBasisPoints / 100;
@@ -204,8 +231,9 @@ export function SharedPurchaseCalculator() {
             </span>
             <strong>{formatMoney(impact.commonsShareCents)}</strong>
             <p>
-              Using a {commonsSharePercent}% planning rate. Live offers show the
-              exact Commons amount before anyone commits.
+              Using a {commonsSharePercent}% planning rate, the average Commons
+              share on the deals above. Live offers show the exact Commons amount
+              before anyone commits.
             </p>
           </div>
         </div>

@@ -103,7 +103,7 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
 
   await expect(
     calculator.getByText("Your savings", { exact: true }).locator(".."),
-  ).toContainText("$13.38");
+  ).toContainText("$12.60");
 
   const coffee = calculator.getByRole("radio", {
     name: /Organic Fair Trade coffee/,
@@ -112,15 +112,19 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
     .getByText("Organic Fair Trade coffee", { exact: true })
     .click();
   await expect(coffee).toBeChecked();
-  await expect(calculator.getByText("$7.96", { exact: true })).toBeVisible();
+  // Same price rule as real offers: coffee comes in packs of two so the card fee doesn't eat the savings.
+  await expect(calculator.getByText("You pay for 2 × 12 oz bag")).toBeVisible();
+  await expect(calculator.getByText("$16.69", { exact: true })).toBeVisible();
   await expect(
     calculator.getByText("Your savings", { exact: true }).locator(".."),
-  ).toContainText("$4.03");
-  await expect(calculator.getByText("$0.51", { exact: true })).toHaveCount(2);
-  await expect(calculator.getByText("36 households")).toBeVisible();
+  ).toContainText("$7.29");
+  await expect(calculator.getByText("Card fee (about)")).toBeVisible();
+  await expect(calculator.getByText("$1.01", { exact: true })).toBeVisible();
+  await expect(calculator.getByText("$1.02", { exact: true }).first()).toBeVisible();
+  await expect(calculator.getByText("18 households")).toBeVisible();
   await expect(calculator.getByText("What that builds")).toBeVisible();
   await expect(
-    calculator.getByText("$18.36 goes into the Planet Commons"),
+    calculator.getByText("$18.18 goes into the Planet Commons"),
   ).toBeVisible();
   await expect(calculator.getByText("local cleanup supplies")).toBeVisible();
 
@@ -145,13 +149,13 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
   await expect(
     calculator.getByRole("radio", { name: /Rechargeable misting fan/ }),
   ).toBeChecked();
-  await expect(calculator.getByText("$12.16", { exact: true })).toBeVisible();
+  await expect(calculator.getByText("$25.37", { exact: true })).toBeVisible();
   await expect(
     calculator.getByText("Your savings", { exact: true }).locator(".."),
-  ).toContainText("$4.83");
-  await expect(calculator.getByText("$0.60", { exact: true })).toHaveCount(2);
-  await expect(calculator.getByText("Traveler Commons cut")).toBeVisible();
-  await expect(calculator.getByText("24 travelers")).toBeVisible();
+  ).toContainText("$8.61");
+  await expect(calculator.getByText("$1.20", { exact: true })).toBeVisible();
+  await expect(calculator.getByText("Traveler Commons share")).toBeVisible();
+  await expect(calculator.getByText("12 travelers")).toBeVisible();
   await expect(
     calculator.getByText("$14.40 goes into the Traveler Commons"),
   ).toBeVisible();
@@ -174,13 +178,13 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
     .click();
   await expect(foodContainers).toBeChecked();
 
-  await expect(calculator.getByText("$5.45", { exact: true })).toBeVisible();
+  await expect(calculator.getByText("$17.15", { exact: true })).toBeVisible();
   await expect(
     calculator.getByText("Your savings", { exact: true }).locator(".."),
-  ).toContainText("$0.80");
-  await expect(calculator.getByText("$0.10", { exact: true })).toHaveCount(2);
-  await expect(calculator.getByText("Family Commons cut")).toBeVisible();
-  await expect(calculator.getByText("6 households")).toBeVisible();
+  ).toContainText("$1.60");
+  await expect(calculator.getByText("$0.30", { exact: true })).toHaveCount(2);
+  await expect(calculator.getByText("Family Commons share")).toBeVisible();
+  await expect(calculator.getByText("2 households")).toBeVisible();
   await expect(
     calculator.getByText("$0.60 goes into the Family Commons"),
   ).toBeVisible();
@@ -195,7 +199,7 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
       exact: false,
     }),
   ).toBeVisible();
-  await expect(calculator.getByText("Blues of America cut")).toBeVisible();
+  await expect(calculator.getByText("Blues of America share")).toBeVisible();
   await expect(
     productCards.getByText("Union-printed reusable tote", { exact: true }),
   ).toBeVisible();
@@ -203,7 +207,7 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
     productCards.getByText("Fair Trade chocolate bar", { exact: true }),
   ).toBeVisible();
   await expect(
-    calculator.getByText("$6.00 goes into the Blues of America"),
+    calculator.getByText("$6.65 goes into the Blues of America"),
   ).toBeVisible();
   for (let index = 0; index < 4; index += 1) {
     await expectProductVisual(productCards.nth(index));
@@ -225,11 +229,24 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
       { exact: false },
     ),
   ).toBeVisible();
+  // The planning rate is the average Commons share on the deals above, so read it off the page.
+  const rateText = await sharedPurchaseCalculator
+    .getByText(/Using a [\d.]+% planning rate/)
+    .textContent();
+  const rateBps = Math.round(
+    Number(/Using a ([\d.]+)% planning rate/.exec(rateText ?? "")?.[1]) * 100,
+  );
+  expect(rateBps).toBeGreaterThan(0);
+  const shareFor = (dollars: number) => Math.round((dollars * 100 * rateBps) / 10000);
+  const money = (cents: number) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+  const goalLine = (shareCents: number, targetCents: number) =>
+    `${Math.min(100, Math.max(1, Math.round((shareCents / targetCents) * 100)))}% · about ${Math.ceil(targetCents / shareCents)} purchases this size`;
   await expect(
     sharedPurchaseCalculator.locator(
       ".shared-purchase-calculator__result > strong",
     ),
-  ).toHaveText("$5,000.00");
+  ).toHaveText(money(shareFor(100_000)));
   await expect(
     sharedPurchaseCalculator.getByText("$4,166.67", { exact: true }),
   ).toBeVisible();
@@ -263,7 +280,7 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
     sharedPurchaseCalculator.locator(
       ".shared-purchase-calculator__result > strong",
     ),
-  ).toHaveText("$100.00");
+  ).toHaveText(money(shareFor(2000)));
   await expect(
     sharedPurchaseCalculator.getByText("$83.33", { exact: true }),
   ).toBeVisible();
@@ -272,21 +289,13 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
       exact: true,
     }),
   ).toBeVisible();
-  await expect(
-    sharedPurchaseCalculator.getByText("40% · about 3 purchases this size", {
-      exact: true,
-    }),
-  ).toBeVisible();
-  await expect(
-    sharedPurchaseCalculator.getByText("10% · about 10 purchases this size", {
-      exact: true,
-    }),
-  ).toBeVisible();
-  await expect(
-    sharedPurchaseCalculator.getByText("2% · about 50 purchases this size", {
-      exact: true,
-    }),
-  ).toBeVisible();
+  for (const targetCents of [25_000, 100_000, 500_000]) {
+    await expect(
+      sharedPurchaseCalculator.getByText(goalLine(shareFor(2000), targetCents), {
+        exact: true,
+      }),
+    ).toBeVisible();
+  }
 
   await page.reload();
   await expect(

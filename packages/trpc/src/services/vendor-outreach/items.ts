@@ -6,7 +6,8 @@ import { db as defaultDb } from "@repo/db";
 import { auditLogEntry } from "../../lib/audit.js";
 import { CAMPAIGN_DAYS, approveCampaignSchema } from "./campaigns.js";
 import { dealCategoryByKey } from "./categories.js";
-import { currentObservation, dealCategoryForItem, itemSnapshot } from "./item-questions.js";
+import { offerPricingSettings } from "../marketplace-offers/pricing-settings.js";
+import { currentObservation, dealCategoryForItem, itemSnapshot, membersNeededFor, packLabel, suggestionFor } from "./item-questions.js";
 import { checkOutreachText } from "./outreach-check.js";
 
 type Db = typeof defaultDb;
@@ -33,6 +34,7 @@ async function audit(db: Db, actorId: string, action: string, resourceId: string
 
 /** Items waiting for review or already approved, with the price evidence behind them. */
 export async function listItemsForAdmin(db: Db = defaultDb, now = new Date()) {
+  const pricing = await offerPricingSettings(db);
   const matches = await db.commonsProductMatch.findMany({
     where: { status: { in: ["CANDIDATE", "APPROVED"] }, product: { status: { not: "REJECTED" } } },
     orderBy: [{ status: "asc" }, { fitScore: "desc" }, { createdAt: "desc" }],
@@ -50,6 +52,7 @@ export async function listItemsForAdmin(db: Db = defaultDb, now = new Date()) {
   return matches.map((match) => {
     const observation = match.product.priceObservations[0] ?? null;
     const expired = !!observation?.expiresAt && observation.expiresAt <= now;
+    const suggestion = observation ? suggestionFor(observation, pricing) : null;
     return {
       profileId: match.profileId,
       productId: match.productId,
@@ -80,6 +83,10 @@ export async function listItemsForAdmin(db: Db = defaultDb, now = new Date()) {
             observedAt: observation.observedAt,
             expired,
           }
+        : null,
+      // The deal we'd suggest, by the same price rule as every offer. Null when members wouldn't save anything.
+      suggestion: suggestion && observation
+        ? { ...suggestion, packLabel: packLabel(observation.memberShare, suggestion.packSize), membersNeeded: membersNeededFor(observation.peopleNeeded, suggestion.packSize) }
         : null,
       campaign: match.profile.coopId
         ? match.product.vendorCampaigns.find((campaign) => campaign.coopId === match.profile.coopId) ?? null
@@ -197,21 +204,33 @@ export async function startSellerSearch(db: Db, actorId: string, raw: z.input<ty
   return { campaignId: campaign.id };
 }
 
-/** What the offer form fills in when a Group Buy starts from a discovered item. */
+/**
+ * What the offer form fills in when a Group Buy starts from a discovered item:
+ * the suggested deal, by the same price rule as every offer. The vendor amount
+ * is the bot's bulk price, a starting point until the seller confirms theirs.
+ * When card fees would eat most of the savings, the member price is left for
+ * the admin to set.
+ */
 export async function itemOfferDraft(db: Db, productId: string, now = new Date()) {
   const product = await db.sourcedProduct.findUnique({ where: { id: productId } });
   if (!product || product.status === "REJECTED") notFound();
   const observation = await currentObservation(db, productId, now);
+  const suggestion = observation ? suggestionFor(observation, await offerPricingSettings(db)) : null;
+  const packSize = suggestion?.packSize ?? 1;
   const observedOn = observation?.observedAt.toISOString().slice(0, 10);
   return {
     sourcedProductId: product.id,
-    title: product.name.slice(0, 120),
+    title: (packSize > 1 ? `${packSize} × ${product.name}` : product.name).slice(0, 120),
     description: product.description.slice(0, 2000),
-    regularPriceCents: observation?.regularPriceCents ?? null,
-    // The bot's per-person bulk price is a starting point; the seller sets the real one.
-    memberPriceCents: observation?.bulkShareCents ?? null,
-    minimumCommitments: observation?.peopleNeeded ?? null,
-    memberShare: observation?.memberShare ?? null,
-    regularPriceSource: observation ? `${product.supplierName} price on ${observedOn}: ${observation.sourceUrl}`.slice(0, 200) : null,
+    regularPriceCents: suggestion?.regularPriceCents ?? observation?.regularPriceCents ?? null,
+    memberPriceCents: suggestion?.qualifies ? suggestion.memberPriceCents : null,
+    vendorPayoutCents: suggestion?.vendorPayoutCents ?? null,
+    commonsSplitBps: 5000,
+    minimumCommitments: observation ? membersNeededFor(observation.peopleNeeded, packSize) : null,
+    memberShare: observation ? packLabel(observation.memberShare, packSize) : null,
+    feesEatSavings: !!suggestion && !suggestion.qualifies,
+    regularPriceSource: observation
+      ? `${product.supplierName} price on ${observedOn}${packSize > 1 ? ` (${packSize} × $${(observation.regularPriceCents / 100).toFixed(2)})` : ""}: ${observation.sourceUrl}`.slice(0, 200)
+      : null,
   };
 }

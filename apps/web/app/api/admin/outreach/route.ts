@@ -11,6 +11,7 @@ import {
   outreachFunnel,
   outreachSettings,
 } from '@repo/trpc/services/vendor-outreach';
+import { offerPricingSettings } from '@repo/trpc/services/marketplace-offers';
 
 import { adminErrorResponse, requirePlatformAdmin } from '@/lib/platform-admin-session';
 
@@ -19,7 +20,7 @@ export async function GET() {
   const admin = await requirePlatformAdmin();
   if ('response' in admin) return admin.response;
   try {
-    const [demand, campaigns, prospects, items, sources, funnel, settings] = await Promise.all([
+    const [demand, campaigns, prospects, items, sources, funnel, settings, pricing] = await Promise.all([
       listDemandForAdmin(db),
       listCampaignsForAdmin(db),
       listProspectsForAdmin(db),
@@ -27,8 +28,10 @@ export async function GET() {
       listSourcesForAdmin(db),
       outreachFunnel(db),
       outreachSettings(db),
+      offerPricingSettings(db),
     ]);
     return NextResponse.json({ demand, campaigns, prospects, items, sources, funnel, sendingLive: settings.live,
+      pricing,
       categories: DEAL_CATEGORIES.map(({ key, label }) => ({ key, label })),
     });
   } catch (error) {

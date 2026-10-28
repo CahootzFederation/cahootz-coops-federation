@@ -4005,6 +4005,19 @@ model OfferNotificationSend {
   @@schema("public")
 }
 
+// One weekly "member deals" notification per member per Commons. Claimed before
+// sending, so a rerun of the weekly job never sends it twice.
+model OfferDigestSend {
+  id        String   @id @default(cuid())
+  coopId    String
+  userId    String
+  weekKey   String
+  createdAt DateTime @default(now())
+
+  @@unique([coopId, userId, weekKey])
+  @@schema("public")
+}
+
 enum OfferType {
   MEMBER_DEAL
   GROUP_BUY

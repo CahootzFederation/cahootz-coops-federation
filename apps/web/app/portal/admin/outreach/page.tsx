@@ -88,6 +88,27 @@ interface ItemRow {
     expired: boolean;
   } | null;
   campaign: { id: string; status: string } | null;
+  suggestion: {
+    packSize: number;
+    packLabel: string;
+    membersNeeded: number;
+    regularPriceCents: number;
+    memberPriceCents: number;
+    vendorPayoutCents: number;
+    stripeFeeCents: number;
+    commonsCents: number;
+    cahootzCents: number;
+    savingsPercent: number;
+    qualifies: boolean;
+  } | null;
+}
+
+interface Pricing {
+  minShareCents: number;
+  itemMarginBps: number;
+  itemMinOrderCents: number;
+  itemMinSavingsBps: number;
+  itemMinSavingsCents: number;
 }
 
 interface SourceRow {
@@ -136,6 +157,7 @@ export default function VendorOutreachPage() {
     funnel: Funnel;
     sendingLive: boolean;
     categories: Category[];
+    pricing: Pricing;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -260,13 +282,17 @@ export default function VendorOutreachPage() {
 
       {data && tab === 'items' && (
         data.items.length === 0 ? (
-          <Empty text="No product ideas yet. The product discovery bot adds them as it finds items for each Commons." />
+          <div className="space-y-3">
+            <PricingSettings pricing={data.pricing} busy={busy} post={post} />
+            <Empty text="No product ideas yet. The product discovery bot adds them as it finds items for each Commons." />
+          </div>
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-slate-400">
               Items the product discovery bot found for each Commons. Approve the good ones, then find a seller: Sage looks for a local shop
               or the supplier&apos;s wholesale contact. Sage may also ask the Commons about an approved item in its weekly question.
             </p>
+            <PricingSettings pricing={data.pricing} busy={busy} post={post} />
             {data.items.map((item) => (
               <ItemCard key={`${item.profileId}:${item.productId}`} item={item} categories={data.categories} busy={busy} post={post} />
             ))}
@@ -546,6 +572,21 @@ function ItemCard({ item, categories, busy, post }: { item: ItemRow; categories:
       ) : (
         <p className="mt-2 text-xs text-amber-200">No price yet.</p>
       )}
+      {item.suggestion && (
+        <div className="mt-2 rounded-md border border-white/10 bg-black/20 p-2 text-xs text-slate-300" data-testid="item-suggestion">
+          <p>
+            Suggested deal: <span className="font-semibold text-white">{money(item.suggestion.memberPriceCents)}</span> for {item.suggestion.packLabel}
+            {' '}(save {item.suggestion.savingsPercent}%), {item.suggestion.membersNeeded} households to unlock.
+          </p>
+          <p className="text-slate-400">
+            Vendor {money(item.suggestion.vendorPayoutCents)} · Stripe about {money(item.suggestion.stripeFeeCents)} · Commons{' '}
+            {money(item.suggestion.commonsCents)} · Cahootz {money(item.suggestion.cahootzCents)}
+          </p>
+          {!item.suggestion.qualifies && (
+            <p className="text-amber-200">Card fees eat most of the savings on this one, so Sage won&apos;t ask about it. You can still find a seller and set the price yourself.</p>
+          )}
+        </div>
+      )}
 
       {item.status === 'CANDIDATE' && (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -604,5 +645,49 @@ function ItemCard({ item, categories, busy, post }: { item: ItemRow; categories:
         )
       )}
     </div>
+  );
+}
+
+const PRICING_FIELDS: { key: keyof Pricing; label: string; unit: 'percent' | 'dollars' }[] = [
+  { key: 'itemMarginBps', label: 'Share of the savings kept for the Commons and Cahootz', unit: 'percent' },
+  { key: 'minShareCents', label: 'Least the Commons and Cahootz each get per unit', unit: 'dollars' },
+  { key: 'itemMinOrderCents', label: 'Smallest payment (cheap items come in packs)', unit: 'dollars' },
+  { key: 'itemMinSavingsBps', label: 'Members must save at least (percent)', unit: 'percent' },
+  { key: 'itemMinSavingsCents', label: 'Members must save at least (dollars)', unit: 'dollars' },
+];
+
+/** Platform admins set the Group Buy pricing rules. Every offer, item suggestion and Sage question uses them. */
+function PricingSettings({ pricing, busy, post }: { pricing: Pricing; busy: boolean; post: Post }) {
+  const toField = (key: keyof Pricing, unit: 'percent' | 'dollars') => (unit === 'percent' ? String(pricing[key] / 100) : (pricing[key] / 100).toFixed(2));
+  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(PRICING_FIELDS.map((f) => [f.key, toField(f.key, f.unit)])));
+  return (
+    <section className="rounded-[10px] border border-white/10 bg-white/[0.03] p-4" aria-label="Group Buy pricing">
+      <p className="font-semibold text-white">Group Buy pricing</p>
+      <p className="mt-1 text-xs text-slate-400">
+        The vendor gets their amount, Stripe&apos;s fee comes out next, and what&apos;s left is split between the Commons and Cahootz. No deal can be
+        saved or published if either one could get less than the minimum, even with a pricier card.
+      </p>
+      <div className="mt-3 grid gap-3 md:grid-cols-5">
+        {PRICING_FIELDS.map((field) => (
+          <label key={field.key} className="text-xs text-slate-300">
+            {field.label} ({field.unit === 'percent' ? '%' : '$'})
+            <input className={input} inputMode="decimal" value={values[field.key]} onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))} />
+          </label>
+        ))}
+      </div>
+      <button
+        className={`${primary} mt-3`}
+        disabled={busy}
+        onClick={() =>
+          post(
+            '/api/admin/outreach/settings',
+            Object.fromEntries(PRICING_FIELDS.map((f) => [f.key, Math.round(Number.parseFloat(values[f.key] || '0') * 100)])),
+            'Pricing saved. New suggestions and deals use it now.',
+          )
+        }
+      >
+        Save pricing
+      </button>
+    </section>
   );
 }

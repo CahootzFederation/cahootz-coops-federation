@@ -998,41 +998,6 @@ export interface OfferUnitSplit {
   commonsSplitBps: number;
 }
 
-/** An offer as a steward sees it: totals only, never who joined. */
-export interface StewardOffer {
-  id: string;
-  offerType: 'MEMBER_DEAL' | 'GROUP_BUY';
-  status: string;
-  title: string;
-  description: string | null;
-  vendorName: string;
-  productName: string;
-  regularPriceCents: number;
-  regularPriceSource: string;
-  memberPriceCents: number;
-  savingsCents: number;
-  savingsPercent: number;
-  split: OfferUnitSplit;
-  minimumCommitments: number | null;
-  minimumPaidOrders: number | null;
-  maximumQuantity: number | null;
-  quantityPerMember: number;
-  commitmentDeadline: string | null;
-  paymentWindowHours: number;
-  expiresAt: string | null;
-  fulfillmentMethod: 'PICKUP' | 'DELIVERY';
-  pickupLocation: string | null;
-  redemptionRules: string | null;
-  refundPolicy: string | null;
-  substitutionPolicy: string | null;
-  terms: string | null;
-  committedQuantity: number;
-  householdCount: number;
-  paidOrders: number;
-  verifiedSavingsCents: number;
-  commonsRevenueCents: number;
-}
-
 export interface VendorOffer {
   id: string;
   offerType: 'MEMBER_DEAL' | 'GROUP_BUY';
@@ -5076,15 +5041,6 @@ export const api = {
   },
   getMySavings(sessionToken: string, coopId?: string) {
     return offersQuery<MemberSavings>('mySavings', coopId ? { coopId } : {}, sessionToken, "We couldn't load your savings.");
-  },
-  listStewardOffers(coopId: string, sessionToken: string) {
-    return offersQuery<StewardOffer[]>('stewardList', { coopId }, sessionToken, "We couldn't load offers for review.");
-  },
-  approveOffer(offerId: string, sessionToken: string) {
-    return offersMutation<void>('stewardApprove', { offerId }, sessionToken, "The approval didn't go through. Please try again.");
-  },
-  sendOfferBack(offerId: string, note: string, sessionToken: string) {
-    return offersMutation<void>('stewardSendBack', { offerId, note }, sessionToken, "We couldn't send it back. Please try again.");
   },
   listVendorOffers(sessionToken: string) {
     return offersQuery<VendorOffer[]>('vendorList', undefined, sessionToken, "We couldn't load your offers.");

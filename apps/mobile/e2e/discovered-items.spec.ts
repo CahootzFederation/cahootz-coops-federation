@@ -1,11 +1,8 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
+import { ADMIN_BASE_URL, signInAdmin } from "./support/admin";
 import { apiFixture } from "./support/offers";
 
-// Like vendor-outreach.spec.ts: the admin portal and the vendor reply page are on the
-// web app (E2E_ADMIN_BASE_URL), and the admin email must be a platform admin.
-const ADMIN_BASE_URL = process.env.E2E_ADMIN_BASE_URL || "http://localhost:3000";
-const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || "e2e-admin@test.cahootz.local";
 const RUN = `di${Date.now()}`;
 const AREA = `E2E Town ${RUN}`;
 const ITEM = `E2E ${RUN} Laundry pods`;
@@ -15,17 +12,6 @@ const fixture = (args: string[]) => apiFixture("scripts/e2e-vendor-outreach.ts",
 test.afterAll(() => {
   fixture(["item-cleanup", RUN]);
 });
-
-async function signInAdmin(page: Page) {
-  await page.goto(`${ADMIN_BASE_URL}/portal/admin/login`);
-  await page.getByLabel("Email address").fill(ADMIN_EMAIL);
-  await page.getByRole("button", { name: "Email me a login code" }).click();
-  await expect(page.getByLabel("Login code")).toBeVisible();
-  const { code } = apiFixture("scripts/e2e-admin.ts", ["login-code", ADMIN_EMAIL]);
-  await page.getByLabel("Login code").fill(code);
-  await page.getByRole("button", { name: "Verify & Sign In" }).click();
-  await expect(page).toHaveURL(/\/portal\/admin(?!\/login)/);
-}
 
 test("an admin approves a bot-found item, Sage finds a seller, and the Group Buy form fills itself in", async ({ browser }) => {
   const { coopId } = fixture(["item-setup", RUN]);
@@ -44,6 +30,10 @@ test("an admin approves a bot-found item, Sage finds a seller, and the Group Buy
     await expect(card.getByTestId("item-status")).toHaveText("Needs review");
     await expect(card.getByText(/\$12\.17 each/)).toBeVisible();
     await expect(card.getByText(/when 12 people buy together/)).toBeVisible();
+    // The suggested deal uses the same price rule as every offer.
+    await expect(card.getByTestId("item-suggestion")).toContainText("Suggested deal: $16.29 for 64 pods (save 43%), 12 households to unlock.");
+    await expect(card.getByTestId("item-suggestion")).toContainText("Vendor $12.17 · Stripe about $0.77 · Commons $1.67 · Cahootz $1.68");
+    await expect(admin.getByRole("region", { name: "Group Buy pricing" })).toBeVisible();
     await expect(card.getByText(/Not checked: Shipping cost not checked/)).toBeVisible();
 
     // 2. Approving it, then starting a seller search near the Commons.
@@ -83,7 +73,10 @@ test("an admin approves a bot-found item, Sage finds a seller, and the Group Buy
     await expect(admin.getByTestId("offer-from-item")).toContainText(`Started from the product idea ${ITEM} (64 pods each)`, { timeout: 60_000 });
     await expect(admin.getByLabel("Title members see")).toHaveValue(ITEM);
     await expect(admin.getByLabel("Regular price ($)")).toHaveValue("28.89");
-    await expect(admin.getByLabel("Member price ($)")).toHaveValue("12.17");
+    await expect(admin.getByLabel("Member price ($)")).toHaveValue("16.29");
+    await expect(admin.getByLabel("Vendor gets ($ per unit)")).toHaveValue("12.17");
+    await expect(admin.getByLabel("Commons share of what's left (%)")).toHaveValue("50");
+    await expect(admin.getByRole("form", { name: "New offer" }).getByRole("alert")).toHaveCount(0);
     await expect(admin.getByLabel("Units needed to unlock")).toHaveValue("12");
     await expect(admin.getByLabel("Where the regular price comes from")).toHaveValue(/^E2E Supplier price on \d{4}-\d{2}-\d{2}: https:\/\/e2e-supplier\.test\//);
   } finally {

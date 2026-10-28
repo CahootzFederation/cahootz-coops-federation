@@ -32,9 +32,16 @@ interface OfferRow {
 const money = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 const toCents = (value: string) => Math.round(Number.parseFloat(value || '0') * 100);
 const percentToBps = (value: string) => Math.round(Number.parseFloat(value || '0') * 100);
-// Preview only; these mirror offerSavings(), estimateStripeFeeCents() and splitOfferPayment()
-// in @repo/validators. The server uses those for the real numbers, and Stripe's real fee once paid.
+// Preview only; these mirror offerSavings(), estimateStripeFeeCents(), worstCaseStripeFeeCents(),
+// splitOfferPayment() and checkOfferMargin() in @repo/validators. The server uses those for the real
+// numbers (and refuses a deal that fails the check), and Stripe's real fee once paid.
 const estimateStripeFee = (cents: number) => (cents > 0 ? Math.round((cents * 290) / 10000) + 30 : 0);
+const worstStripeFee = (cents: number) => (cents > 0 ? Math.round((cents * 440) / 10000) + 30 : 0);
+const shares = (member: number, fee: number, vendor: number, commonsBps: number) => {
+  const left = member - fee - vendor;
+  const commons = left > 0 ? Math.floor((left * commonsBps) / 10000) : 0;
+  return { left, commons, cahootz: left - commons };
+};
 const offerSavings = (regular: number, member: number) => {
   const savingsCents = Math.max(0, regular - member);
   return { savingsCents, savingsPercent: regular > 0 ? Math.floor((savingsCents * 100) / regular) : 0 };
@@ -79,7 +86,9 @@ export default function CommonsOffersPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   // Set when the form starts from a product idea (Vendor outreach → "Start the group buy").
-  const [fromItem, setFromItem] = useState<{ sourcedProductId: string; title: string; memberShare: string | null } | null>(null);
+  const [fromItem, setFromItem] = useState<{ sourcedProductId: string; title: string; memberShare: string | null; feesEatSavings: boolean } | null>(null);
+  // The least the Commons and Cahootz must each get per unit at the worst-case card fee (platform admin setting).
+  const [minShareCents, setMinShareCents] = useState(10);
 
   const load = useCallback(() => {
     if (!coopId) return;
@@ -90,6 +99,7 @@ export default function CommonsOffersPage() {
         if (!response.ok) throw new Error(data.error || "We couldn't load offers.");
         setOffers(data.offers);
         setProducts(data.products);
+        if (typeof data.minShareCents === 'number') setMinShareCents(data.minShareCents);
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "We couldn't load offers."))
       .finally(() => setLoading(false));
@@ -113,9 +123,11 @@ export default function CommonsOffersPage() {
           regularPrice: dollars(item.regularPriceCents),
           regularPriceSource: item.regularPriceSource ?? '',
           memberPrice: dollars(item.memberPriceCents),
+          vendorPayout: dollars(item.vendorPayoutCents),
+          commonsSharePercent: item.commonsSplitBps ? String(item.commonsSplitBps / 100) : emptyForm.commonsSharePercent,
           minimumCommitments: item.minimumCommitments ? String(item.minimumCommitments) : '',
         });
-        setFromItem({ sourcedProductId: item.sourcedProductId, title: item.title, memberShare: item.memberShare });
+        setFromItem({ sourcedProductId: item.sourcedProductId, title: item.title, memberShare: item.memberShare, feesEatSavings: !!item.feesEatSavings });
         setShowForm(true);
       })
       .catch((reason) => setFormError(reason instanceof Error ? reason.message : "We couldn't load that product idea."));
@@ -130,11 +142,14 @@ export default function CommonsOffersPage() {
     if (!regular || !member) return null;
     const { savingsCents, savingsPercent } = offerSavings(regular, member);
     const vendor = toCents(form.vendorPayout);
+    const commonsBps = percentToBps(form.commonsSharePercent);
     const stripeFee = estimateStripeFee(member);
-    const left = member - stripeFee - vendor;
-    const commons = left > 0 ? Math.floor((left * percentToBps(form.commonsSharePercent)) / 10000) : 0;
-    return { savingsCents, savingsPercent, member, stripeFee, vendor, left, commons, cahootz: left - commons, hasVendor: vendor > 0 };
-  }, [form.regularPrice, form.memberPrice, form.vendorPayout, form.commonsSharePercent]);
+    const typical = shares(member, stripeFee, vendor, commonsBps);
+    const worstFee = worstStripeFee(member);
+    const worst = shares(member, worstFee, vendor, commonsBps);
+    const losesMoney = vendor > 0 && (worst.commons < minShareCents || worst.cahootz < minShareCents);
+    return { savingsCents, savingsPercent, member, stripeFee, vendor, ...typical, worstFee, worst, losesMoney, hasVendor: vendor > 0 };
+  }, [form.regularPrice, form.memberPrice, form.vendorPayout, form.commonsSharePercent, minShareCents]);
 
   function chooseProduct(productId: string) {
     const product = products.find((p) => p.id === productId);
@@ -211,7 +226,7 @@ export default function CommonsOffersPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">Member deals and group buys</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Draft offers for {coopId}. A steward of this Commons approves each one before members see it.
+            Draft offers for {coopId}, then publish them. Members see an offer as soon as you publish it.
           </p>
         </div>
         <button
@@ -227,8 +242,10 @@ export default function CommonsOffersPage() {
         <form onSubmit={createDraft} className="space-y-5 rounded-[10px] border border-white/10 bg-white/[0.03] p-5" aria-label="New offer">
           {fromItem && (
             <p className="rounded-md border border-emerald-300/20 bg-emerald-300/5 p-3 text-xs text-emerald-100" data-testid="offer-from-item">
-              Started from the product idea {fromItem.title}{fromItem.memberShare ? ` (${fromItem.memberShare} each)` : ''}. The prices are what we
-              found online. Pick the seller&apos;s product, then set the member price and vendor amount you agreed with them.
+              Started from the product idea {fromItem.title}{fromItem.memberShare ? ` (${fromItem.memberShare} each)` : ''}. The vendor amount is the
+              bulk price we found online, and the member price adds 20% of the savings plus Stripe&apos;s fee. Pick the seller&apos;s product, then
+              change the amounts to what you agreed with them.
+              {fromItem.feesEatSavings ? ' Card fees eat most of the savings on this one, so set the member price yourself.' : ''}
             </p>
           )}
           <div className="flex gap-2" role="radiogroup" aria-label="Offer type">
@@ -305,12 +322,25 @@ export default function CommonsOffersPage() {
                   <div><dt className="text-xs text-slate-500">Cahootz</dt><dd className="text-white">{money(preview.cahootz)}</dd></div>
                 </dl>
               )}
-              {preview.hasVendor && preview.left <= 0 && (
-                <p className="mt-2 text-amber-300">
-                  After Stripe&apos;s fee there&apos;s nothing left for the Commons and Cahootz. Lower what the vendor gets or raise the member price.
+              {preview.hasVendor && (
+                <p className="mt-2 text-xs text-slate-400" data-testid="worst-case-split">
+                  With a pricier card (Stripe up to {money(preview.worstFee)}): Commons {money(Math.max(0, preview.worst.commons))}, Cahootz{' '}
+                  {money(Math.max(0, preview.worst.cahootz))}.
                 </p>
               )}
-              <p className="mt-2 text-xs text-slate-500">Stripe&apos;s fee is estimated at 2.9% + 30¢. Each payment records Stripe&apos;s real fee.</p>
+              {preview.losesMoney && (
+                <p className="mt-2 text-amber-300" role="alert">
+                  This deal could lose money. The Commons and Cahootz each need at least {money(minShareCents)} per unit even with a pricier card.
+                  Lower what the vendor gets or raise the member price.
+                </p>
+              )}
+              {isGroupBuy && Number(form.minimumPaidOrders) > 1 && (
+                <p className="mt-2 text-xs text-slate-400" data-testid="failure-cost">
+                  If this falls short and everyone who paid is refunded, Stripe keeps its fees: up to about{' '}
+                  {money((Number(form.minimumPaidOrders) - 1) * preview.stripeFee)}, paid by Cahootz.
+                </p>
+              )}
+              <p className="mt-2 text-xs text-slate-500">Stripe&apos;s fee is estimated at 2.9% + 30¢ (up to 4.4% + 30¢ for some cards). Each payment records Stripe&apos;s real fee.</p>
             </div>
           )}
 

@@ -6,8 +6,10 @@
  *   tsx --import ./dotenv.config.js scripts/e2e-marketplace-offers.ts create '<json>'
  *     Creates one offer in the shared private E2E commons on the E2E second
  *     commons shop's product. JSON: { title, offerType, status, minimumCommitments?, quantityPerMember? }
- *   ... steward <on|off>
- *     Makes User B a steward of the E2E commons (on) or puts them back (off).
+ *     status is DRAFT (a platform admin publishes it in the web admin) or LIVE.
+ *   ... digest
+ *     Sends this week's member deals notice for the E2E commons, as Monday's job does.
+ *     Clears the commons' claim rows first, so it sends even if it already ran this week.
  *   ... close-commitments <offerId>
  *     Moves the commitment deadline into the past and runs the real sweep.
  *   ... open-payment <offerId>
@@ -22,11 +24,11 @@ import {
   closeCommitmentsEarly,
   openPayment,
   runOfferSweep,
+  sendWeeklyDealsDigest,
 } from "../../../packages/trpc/src/services/marketplace-offers/index.js";
 
 const COOP_ID = "e2e-private-shared";
 const SHOP_NAME = "E2E Second Commons Shop";
-const USER_B_EMAIL = process.env.E2E_USER_B_EMAIL || "releaseclick2@test.cahootz.local";
 const DAY = 24 * 60 * 60 * 1000;
 
 function assertSafeTarget() {
@@ -47,7 +49,7 @@ async function create(raw: string) {
   const input = JSON.parse(raw) as {
     title: string;
     offerType: "MEMBER_DEAL" | "GROUP_BUY";
-    status: "LIVE" | "PENDING_STEWARD";
+    status: "LIVE" | "DRAFT";
     minimumCommitments?: number;
     quantityPerMember?: number;
   };
@@ -91,15 +93,9 @@ async function create(raw: string) {
   return { offerId: offer.id, coopId: COOP_ID };
 }
 
-async function steward(mode: string) {
-  const user = await db.user.findUnique({ where: { email: USER_B_EMAIL }, select: { id: true } });
-  if (!user) throw new Error(`No user ${USER_B_EMAIL}; run seed:test-users first`);
-  const roles = mode === "on" ? ["member", "steward"] : ["member"];
-  await db.userCoopMembership.update({
-    where: { userId_coopId: { userId: user.id, coopId: COOP_ID } },
-    data: { roles, status: "ACTIVE" },
-  });
-  return { roles };
+async function digest() {
+  await db.offerDigestSend.deleteMany({ where: { coopId: COOP_ID } });
+  return sendWeeklyDealsDigest(db, new Date(), { coopIds: [COOP_ID] });
 }
 
 async function closeCommitments(offerId: string) {
@@ -125,6 +121,8 @@ async function cleanup(prefix: string) {
     .filter((n) => ids.includes(((n.data ?? {}) as { offerId?: string }).offerId ?? ""))
     .map((n) => n.id);
   await db.notification.deleteMany({ where: { id: { in: alertIds } } });
+  // Weekly deals notices that listed this run's offers.
+  await db.notification.deleteMany({ where: { coopId: COOP_ID, type: "OFFER_WEEKLY_DIGEST", body: { contains: prefix } } });
   await db.auditLog.deleteMany({ where: { resourceId: { in: ids } } });
   await db.commerceTransaction.updateMany({ where: { offerId: { in: ids } }, data: { offerId: null } });
   await db.marketplaceOffer.deleteMany({ where: { id: { in: ids } } });
@@ -136,7 +134,7 @@ async function main() {
   const [command, arg] = process.argv.slice(2);
   let result: unknown;
   if (command === "create") result = await create(arg!);
-  else if (command === "steward") result = await steward(arg!);
+  else if (command === "digest") result = await digest();
   else if (command === "close-commitments") result = await closeCommitments(arg!);
   else if (command === "open-payment") result = await openPaymentWindow(arg!);
   else if (command === "cleanup") result = await cleanup(arg!);

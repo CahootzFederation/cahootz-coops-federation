@@ -7,7 +7,7 @@ import { isoWeekKey } from "../sage-community-rhythm.js";
 import { checkSageOutput } from "../untrusted-input.js";
 import { proposeCampaigns } from "./campaigns.js";
 import { dealCategoriesInText, dealCategoryByKey, dealCategoryForTheme, dealQuestionText } from "./categories.js";
-import { approvedItemsForCommons, itemQuestionText, type ItemSnapshot } from "./item-questions.js";
+import { approvedItemsForCommons, itemQuestionText, type PricedItem } from "./item-questions.js";
 
 type Db = typeof defaultDb;
 
@@ -44,7 +44,7 @@ export type DealEvidence =
 
 export interface AskedDealQuestion { categoryKey: string | null; productId?: string | null; createdAt: Date }
 
-export type DealItem = ItemSnapshot & { categoryKey: string };
+export type DealItem = PricedItem & { categoryKey: string };
 
 /** Group recent public Need posts by deal category, keeping only categories enough different members raised. */
 export function needPostEvidence(posts: Array<{ id: string; authorId: string; title: string; content: string }>): DealEvidence[] {

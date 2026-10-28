@@ -11,6 +11,10 @@ import { MemberApplicationFlow } from "@/components/member-application-flow";
 import { SharedPurchaseCalculator } from "@/components/shared-purchase-calculator";
 import { WaitlistSignupForm } from "@/components/waitlist-signup-form";
 import { env } from "@/env";
+import {
+  DEFAULT_OFFER_PRICING,
+  type OfferPricingSettings,
+} from "@repo/validators/marketplace-offers";
 import { getFeaturedBlogPosts } from "@/lib/blog";
 import { ArrowDownRight, ArrowRight, Github, MoveUpRight } from "lucide-react";
 
@@ -65,6 +69,27 @@ async function getHomepageProductCatalogs(): Promise<CommonsCatalog[]> {
       : [];
   } catch {
     return [];
+  }
+}
+
+/** The Group Buy pricing rules a platform admin set, so the homepage matches real offers. */
+async function getHomepagePricing(): Promise<OfferPricingSettings> {
+  try {
+    const response = await fetch(
+      `${env.NEXT_PUBLIC_API_URL}/trpc/productDiscovery.homepagePricing`,
+      {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        next: { revalidate: 900 },
+      },
+    );
+    if (!response.ok) return DEFAULT_OFFER_PRICING;
+    const data = (await response.json()) as {
+      result?: { data?: Partial<OfferPricingSettings> };
+    };
+    return { ...DEFAULT_OFFER_PRICING, ...(data.result?.data ?? {}) };
+  } catch {
+    return DEFAULT_OFFER_PRICING;
   }
 }
 
@@ -152,10 +177,13 @@ const faqs = [
 ];
 
 export default async function HomePage() {
-  const [coops, productCatalogs] = await Promise.all([
+  const [coops, productCatalogs, pricing] = await Promise.all([
     getActiveCoops(),
     getHomepageProductCatalogs(),
+    getHomepagePricing(),
   ]);
+  const shownCatalogs =
+    productCatalogs.length > 0 ? productCatalogs : undefined;
   const featuredPosts = getFeaturedBlogPosts(3);
 
   return (
@@ -332,11 +360,10 @@ export default async function HomePage() {
               </p>
             </div>
             <GroupBuyProductCalculator
-              catalogs={
-                productCatalogs.length > 0 ? productCatalogs : undefined
-              }
+              catalogs={shownCatalogs}
+              pricing={pricing}
             />
-            <SharedPurchaseCalculator />
+            <SharedPurchaseCalculator catalogs={shownCatalogs} pricing={pricing} />
           </div>
         </section>
 

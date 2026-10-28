@@ -1,10 +1,10 @@
 import { TRPCError } from "@trpc/server";
 
-import { offerInputSchema, type OfferInput, type OfferStatus } from "@repo/validators/marketplace-offers";
+import { checkOfferMargin, makeOfferInputSchema, offerInputSchema, type OfferInput, type OfferStatus } from "@repo/validators/marketplace-offers";
 
 import { auditLogEntry } from "../../lib/audit.js";
-import { notifyStewards, requireSteward, stewardIdsFor } from "../commons-membership.js";
 import { cancelOpenOfferCheckouts, refundOfferTransaction, type StripeClient } from "./payments.js";
+import { offerPricingSettings } from "./pricing-settings.js";
 import {
   ACTIVE_COMMITMENT_STATUSES,
   type Db,
@@ -48,8 +48,14 @@ function offerData(input: ReturnType<typeof offerInputSchema.parse>) {
 // ── Platform admin ───────────────────────────────────────
 
 /** A platform admin drafts an offer for one Commons, on a vendor's behalf. */
+/** The offer rules with the admin's current minimum share, so no deal can lose the Commons or Cahootz money. */
+async function parseOffer(db: Db, raw: OfferInput) {
+  const { minShareCents } = await offerPricingSettings(db);
+  return makeOfferInputSchema({ minShareCents }).parse(raw);
+}
+
 export async function createOffer(db: Db, actorId: string, coopId: string, raw: OfferInput) {
-  const input = offerInputSchema.parse(raw);
+  const input = await parseOffer(db, raw);
   const product = await db.product.findUnique({
     where: { id: input.productId },
     include: { store: { select: { id: true, status: true, deletedAt: true, businessId: true } } },
@@ -77,13 +83,13 @@ export async function createOffer(db: Db, actorId: string, coopId: string, raw: 
   return offer;
 }
 
-/** Drafts can be edited freely. Once a steward is looking at it, it's locked. */
+/** Drafts can be edited freely. Once it's published, it's locked. */
 export async function updateOffer(db: Db, actorId: string, offerId: string, raw: OfferInput) {
   const offer = await loadOffer(db, offerId);
   if (offer.status !== "DRAFT") {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Only drafts can be edited. Cancel this offer and make a new one instead." });
   }
-  const input = offerInputSchema.parse(raw);
+  const input = await parseOffer(db, raw);
   if (input.productId !== offer.productId || input.offerType !== offer.offerType) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "The product and offer type can't change. Make a new offer instead." });
   }
@@ -92,22 +98,22 @@ export async function updateOffer(db: Db, actorId: string, offerId: string, raw:
   return updated;
 }
 
-export async function submitForStewardApproval(db: Db, actorId: string, offerId: string, now = new Date()) {
+/**
+ * A platform admin publishes a draft, and members of that Commons see it right
+ * away. There's no steward step: the admin set the deal up with the vendor.
+ */
+export async function publishOffer(db: Db, actorId: string, offerId: string, now = new Date()) {
   const offer = await loadOffer(db, offerId);
   const deadline = offer.offerType === "MEMBER_DEAL" ? offer.expiresAt : offer.commitmentDeadline;
   if (!deadline || deadline <= now) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "The end date has already passed. Edit the draft first." });
   }
-  await requireTransition(db, offer, "PENDING_STEWARD");
-  await audit(db, actorId, "MARKETPLACE_OFFER_SUBMITTED", offer.id);
-  const stewardCount = (await stewardIdsFor(db, offer.coopId)).length;
-  await notifyStewards(db, offer.coopId, {
-    type: "OFFER_NEEDS_STEWARD_APPROVAL",
-    title: "A new offer needs your OK",
-    body: `${offer.store.name} wants to offer "${offer.title}" to your Commons. Take a look before members see it.`,
-    data: { offerId: offer.id },
-  });
-  return { stewardCount };
+  // Checked again here: the minimum share may have been raised since the draft was saved.
+  const { minShareCents } = await offerPricingSettings(db);
+  const margin = checkOfferMargin({ ...offer, minShareCents });
+  if (!margin.ok) throw new TRPCError({ code: "BAD_REQUEST", message: `${margin.message} Edit the draft first.` });
+  await requireTransition(db, offer, "LIVE", { publishedAt: now });
+  await audit(db, actorId, "MARKETPLACE_OFFER_PUBLISHED", offer.id);
 }
 
 export async function pauseOffer(db: Db, actorId: string, offerId: string) {
@@ -256,26 +262,6 @@ export async function updateFulfillment(db: Db, actorId: string, offerId: string
       body: notice.body(offer),
     });
   }
-}
-
-// ── Stewards ─────────────────────────────────────────────
-
-export async function stewardApprove(db: Db, userId: string, offerId: string, now = new Date()) {
-  const offer = await loadOffer(db, offerId);
-  await requireSteward(db, userId, offer.coopId);
-  const deadline = offer.offerType === "MEMBER_DEAL" ? offer.expiresAt : offer.commitmentDeadline;
-  if (!deadline || deadline <= now) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "This offer's end date has passed. Send it back so it can be fixed." });
-  }
-  await requireTransition(db, offer, "LIVE", { stewardApprovedById: userId, stewardApprovedAt: now, publishedAt: now, stewardNote: null });
-  await audit(db, userId, "MARKETPLACE_OFFER_STEWARD_APPROVED", offer.id);
-}
-
-export async function stewardSendBack(db: Db, userId: string, offerId: string, note: string) {
-  const offer = await loadOffer(db, offerId);
-  await requireSteward(db, userId, offer.coopId);
-  await requireTransition(db, offer, "DRAFT", { stewardNote: note.slice(0, 1000) });
-  await audit(db, userId, "MARKETPLACE_OFFER_STEWARD_SENT_BACK", offer.id, { note });
 }
 
 // ── Vendors ──────────────────────────────────────────────

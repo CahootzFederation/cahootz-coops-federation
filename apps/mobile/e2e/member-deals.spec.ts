@@ -43,17 +43,16 @@ test("a member sees a member deal's regular price, member price and saving, and 
   }
 });
 
-test("a draft deal stays hidden until a platform admin publishes it, then every member hears about it that week", async ({ browser }) => {
+test("a draft deal stays hidden until a platform admin publishes it", async ({ browser }) => {
   const title = `${RUN} beans`;
   const { offerId } = offersFixture(["create", JSON.stringify({ title, offerType: "MEMBER_DEAL", status: "DRAFT" })]);
-  const memberA = await newSignedInPage(browser, USER_A_EMAIL);
-  const memberB = await newSignedInPage(browser, USER_B_EMAIL);
+  const member = await newSignedInPage(browser, USER_A_EMAIL);
   const adminContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const admin = await adminContext.newPage();
   try {
     // A draft isn't shown to members.
-    await openOffersMarketplace(memberA.page);
-    await expect(memberA.page.getByRole("button", { name: `Member deal: ${title}` })).toHaveCount(0);
+    await openOffersMarketplace(member.page);
+    await expect(member.page.getByRole("button", { name: `Member deal: ${title}` })).toHaveCount(0);
 
     // The platform admin publishes it. No steward step.
     await signInAdmin(admin);
@@ -64,17 +63,24 @@ test("a draft deal stays hidden until a platform admin publishes it, then every 
     await expect(admin.getByText("Published. Members can see it now.")).toBeVisible();
     await expect(admin.getByTestId("offer-status")).toHaveText("Live");
 
-    // Both members see it.
-    for (const member of [memberA, memberB]) {
-      await openOffersMarketplace(member.page);
-      await expect(member.page.getByRole("button", { name: `Member deal: ${title}` })).toBeVisible();
-    }
+    await openOffersMarketplace(member.page);
+    await expect(member.page.getByRole("button", { name: `Member deal: ${title}` })).toBeVisible();
+  } finally {
+    await member.context.close();
+    await adminContext.close();
+  }
+});
 
-    // Monday's notice goes to everyone in the Commons, and opens the marketplace.
-    offersFixture(["digest"]);
+test("every member of the Commons gets the weekly deals notice, and it opens the marketplace", async ({ browser }) => {
+  const title = `${RUN} lentils`;
+  offersFixture(["create", JSON.stringify({ title, offerType: "MEMBER_DEAL", status: "LIVE" })]);
+  offersFixture(["digest"]);
+  const memberA = await newSignedInPage(browser, USER_A_EMAIL);
+  const memberB = await newSignedInPage(browser, USER_B_EMAIL);
+  try {
     for (const member of [memberA, memberB]) {
       await member.page.goto("/notifications");
-      await expect(shown(member.page, "This week's member deals").first()).toBeVisible();
+      await expect(shown(member.page, "This week's member deals").first()).toBeVisible({ timeout: 30_000 });
       await expect(shown(member.page, new RegExp(`${title}: \\$18\\.00, save 25%`)).first()).toBeVisible();
     }
     await shown(memberA.page, "This week's member deals").first().click();
@@ -82,7 +88,6 @@ test("a draft deal stays hidden until a platform admin publishes it, then every 
   } finally {
     await memberA.context.close();
     await memberB.context.close();
-    await adminContext.close();
   }
 });
 

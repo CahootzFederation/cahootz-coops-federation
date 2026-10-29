@@ -17,7 +17,7 @@ type Page = import("@playwright/test").Page;
 
 async function openOffer(page: Page, title: string) {
   await openOffersMarketplace(page);
-  await page.getByRole("button", { name: `Group buy: ${title}` }).click();
+  await page.getByRole("button", { name: `Group buy: ${title}` }).filter({ visible: true }).first().click();
   await expect(shown(page, title, { exact: true })).toBeVisible();
 }
 
@@ -119,10 +119,10 @@ test("two members commit without being charged, a reload doesn't double count, a
   });
 });
 
-test("when the goal is hit, saved cards are charged, and a declined card gets a plain notice and a way to pay", async ({ browser }) => {
+test("when the second member commits, the goal is hit and the first member hears the group buy is happening", async ({ browser }) => {
   await withExclusiveAccountSetting(CARD_LOCK, async () => {
     const goal = `${RUN} oil`;
-    const { offerId: goalId } = offersFixture(["create", JSON.stringify({ title: goal, offerType: "GROUP_BUY", status: "LIVE", minimumCommitments: 2 })]);
+    offersFixture(["create", JSON.stringify({ title: goal, offerType: "GROUP_BUY", status: "LIVE", minimumCommitments: 2 })]);
     offersFixture(["save-card", USER_A_EMAIL]);
     offersFixture(["save-card", USER_B_EMAIL]);
     const a = await newSignedInPage(browser, USER_A_EMAIL);
@@ -138,6 +138,25 @@ test("when the goal is hit, saved cards are charged, and a declined card gets a 
 
       await a.page.goto("/notifications");
       await expect(shown(a.page, "Your group buy is happening").first()).toBeVisible();
+    } finally {
+      await a.context.close();
+      await b.context.close();
+    }
+  });
+});
+
+// A separate test, so each stays within the 90-second limit.
+test("when the goal is hit, saved cards are charged, and a declined card gets a plain notice and a way to pay", async ({ browser }) => {
+  await withExclusiveAccountSetting(CARD_LOCK, async () => {
+    const goal = `${RUN} flour`;
+    const { offerId: goalId } = offersFixture(["create", JSON.stringify({ title: goal, offerType: "GROUP_BUY", status: "LIVE", minimumCommitments: 1 })]);
+    offersFixture(["save-card", USER_A_EMAIL]);
+    const a = await newSignedInPage(browser, USER_A_EMAIL);
+    try {
+      await openOffer(a.page, goal);
+      await fillAddress(a.page, "E2E Member A");
+      await commit(a.page);
+      await expect(shown(a.page, /that hit the goal/)).toBeVisible();
 
       // An admin closes it early, which charges every saved card. The fixture's stand-in
       // cards can't be charged, so this is the declined-card path.
@@ -150,7 +169,6 @@ test("when the goal is hit, saved cards are charged, and a declined card gets a 
       await expect(shown(a.page, `Your payment for ${goal} didn't go through`).first()).toBeVisible();
     } finally {
       await a.context.close();
-      await b.context.close();
     }
   });
 });

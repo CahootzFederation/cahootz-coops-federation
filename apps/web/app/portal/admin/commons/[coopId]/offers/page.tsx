@@ -309,33 +309,20 @@ export default function CommonsOffersPage() {
                 <strong className="text-emerald-300">{money(preview.savingsCents)} ({preview.savingsPercent}%)</strong>.
               </p>
               {preview.hasVendor && (
-                <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-5" aria-label="Where each unit's money goes">
+                <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-4" aria-label="Where each unit's money goes">
                   <div><dt className="text-xs text-slate-500">Member pays</dt><dd className="text-white">{money(preview.member)}</dd></div>
-                  <div><dt className="text-xs text-slate-500">Stripe fee (about)</dt><dd className="text-white">−{money(preview.stripeFee)}</dd></div>
                   <div><dt className="text-xs text-slate-500">Vendor gets</dt><dd className="text-white">{money(preview.vendor)}</dd></div>
                   <div><dt className="text-xs text-slate-500">Commons ({form.commonsSharePercent || 0}%)</dt><dd className="text-white">{money(preview.commons)}</dd></div>
                   <div><dt className="text-xs text-slate-500">Cahootz</dt><dd className="text-white">{money(preview.cahootz)}</dd></div>
                 </dl>
               )}
-              {preview.hasVendor && (
-                <p className="mt-2 text-xs text-slate-400" data-testid="worst-case-split">
-                  With a pricier card (Stripe up to {money(preview.worstFee)}): Commons {money(Math.max(0, preview.worst.commons))}, Cahootz{' '}
-                  {money(Math.max(0, preview.worst.cahootz))}.
-                </p>
-              )}
               {preview.losesMoney && (
                 <p className="mt-2 text-amber-300" role="alert">
-                  This deal could lose money. The Commons and Cahootz each need at least {money(minShareCents)} per unit even with a pricier card.
-                  Lower what the vendor gets or raise the member price.
+                  There isn&apos;t enough left to cover Stripe&apos;s card fee (up to {money(preview.worstFee)} on some cards) and still give the
+                  Commons and Cahootz at least {money(minShareCents)} each. Raise the member price or lower what the vendor gets. You can&apos;t
+                  save this group buy until then.
                 </p>
               )}
-              {Number(form.minimumPaidOrders) > 1 && (
-                <p className="mt-2 text-xs text-slate-400" data-testid="failure-cost">
-                  If this falls short and everyone who paid is refunded, Stripe keeps its fees: up to about{' '}
-                  {money((Number(form.minimumPaidOrders) - 1) * preview.stripeFee)}, paid by Cahootz.
-                </p>
-              )}
-              <p className="mt-2 text-xs text-slate-500">Stripe&apos;s fee is estimated at 2.9% + 30¢ (up to 4.4% + 30¢ for some cards). Each payment records Stripe&apos;s real fee.</p>
             </div>
           )}
 
@@ -417,7 +404,7 @@ export default function CommonsOffersPage() {
           {formError && <p className="text-sm text-red-300">{formError}</p>}
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || !!preview?.losesMoney}
             className="rounded-md bg-emerald-400 px-4 py-2 text-sm font-semibold text-black hover:bg-emerald-300 disabled:opacity-50"
           >
             {saving ? 'Saving…' : 'Save draft'}

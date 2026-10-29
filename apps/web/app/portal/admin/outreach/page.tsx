@@ -579,7 +579,7 @@ function ItemCard({ item, categories, busy, post }: { item: ItemRow; categories:
             {' '}(save {item.suggestion.savingsPercent}%), {item.suggestion.membersNeeded} households to unlock.
           </p>
           <p className="text-slate-400">
-            Vendor {money(item.suggestion.vendorPayoutCents)} · Stripe about {money(item.suggestion.stripeFeeCents)} · Commons{' '}
+            Vendor {money(item.suggestion.vendorPayoutCents)} · Commons{' '}
             {money(item.suggestion.commonsCents)} · Cahootz {money(item.suggestion.cahootzCents)}
           </p>
           {!item.suggestion.qualifies && (

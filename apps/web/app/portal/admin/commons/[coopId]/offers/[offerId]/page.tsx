@@ -220,7 +220,6 @@ export default function OfferDetailPage() {
         {stat('Member price', money(offer.memberPriceCents))}
         {stat('Saving per unit', `${money(offer.savingsCents)} (${offer.savingsPercent}%)`)}
         {stat('Vendor gets per unit', money(offer.split.vendorCents))}
-        {stat('Stripe fee per unit (about)', money(offer.split.estimatedStripeFeeCents))}
         {stat(`Commons per unit (${offer.split.commonsSplitBps / 100}% of what's left)`, money(offer.split.commonsCents))}
         {stat('Cahootz per unit', money(offer.split.cahootzCents))}
         {stat('Committed', `${offer.committedQuantity} of ${offer.minimumCommitments} needed${offer.maximumQuantity ? ` · ${offer.maximumQuantity} max` : ''}`)}

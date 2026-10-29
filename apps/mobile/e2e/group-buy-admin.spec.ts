@@ -102,12 +102,16 @@ test("the admin group buy form warns when a deal could lose the Commons or Cahoo
     await admin.getByLabel("Regular price ($)").fill("24");
     await admin.getByLabel("Member price ($)").fill("18");
     await admin.getByLabel("Vendor gets ($ per unit)").fill("15");
-    await expect(admin.getByTestId("worst-case-split")).toContainText("With a pricier card (Stripe up to $1.09): Commons $0.95, Cahootz $0.96");
-    await expect(admin.getByRole("form", { name: "New group buy" }).getByRole("alert")).toHaveCount(0);
+    // A deal that covers Stripe's fee says nothing about it.
+    const form = admin.getByRole("form", { name: "New group buy" });
+    await expect(form.getByRole("alert")).toHaveCount(0);
+    await expect(form.getByText(/Stripe/)).toHaveCount(0);
+    await expect(form.getByRole("button", { name: "Save draft" })).toBeEnabled();
 
-    // $18.00 - $16.75 leaves $1.25: fine at the usual card fee, not with a pricier card.
+    // $18.00 - $16.75 leaves $1.25: fine at the usual card fee, not with a pricier card ($1.09).
     await admin.getByLabel("Vendor gets ($ per unit)").fill("16.75");
-    await expect(admin.getByRole("form", { name: "New group buy" }).getByRole("alert")).toContainText("This deal could lose money. The Commons and Cahootz each need at least $0.10 per unit");
+    await expect(form.getByRole("alert")).toContainText("There isn't enough left to cover Stripe's card fee (up to $1.09 on some cards)");
+    await expect(form.getByRole("button", { name: "Save draft" })).toBeDisabled();
   } finally {
     await adminContext.close();
   }

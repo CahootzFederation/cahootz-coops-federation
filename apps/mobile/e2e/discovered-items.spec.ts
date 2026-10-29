@@ -32,7 +32,7 @@ test("an admin approves a bot-found item, Sage finds a seller, and the Group Buy
     await expect(card.getByText(/when 12 people buy together/)).toBeVisible();
     // The suggested deal uses the same price rule as every offer.
     await expect(card.getByTestId("item-suggestion")).toContainText("Suggested deal: $16.29 for 64 pods (save 43%), 12 households to unlock.");
-    await expect(card.getByTestId("item-suggestion")).toContainText("Vendor $12.17 · Stripe about $0.77 · Commons $1.67 · Cahootz $1.68");
+    await expect(card.getByTestId("item-suggestion")).toContainText("Vendor $12.17 · Commons $1.67 · Cahootz $1.68");
     await expect(admin.getByRole("region", { name: "Group Buy pricing" })).toBeVisible();
     await expect(card.getByText(/Not checked: Shipping cost not checked/)).toBeVisible();
 

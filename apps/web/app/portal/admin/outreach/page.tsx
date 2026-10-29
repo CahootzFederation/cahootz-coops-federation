@@ -371,7 +371,7 @@ function CampaignCard({ campaign, busy, post }: { campaign: CampaignRow; busy: b
   const url = `/api/admin/outreach/campaigns/${campaign.id}`;
   const evidence = campaign.demandEvidence ?? {};
   return (
-    <div className="rounded-[10px] border border-white/10 bg-white/[0.03] p-4" aria-label={`Campaign ${campaign.categoryLabel} for ${campaign.coopId}`} data-testid={`campaign-${campaign.id}`}>
+    <div className="rounded-[10px] border border-white/10 bg-white/[0.03] p-4" aria-label={`Campaign ${campaign.item?.name ?? campaign.categoryLabel} for ${campaign.coopId}`} data-testid={`campaign-${campaign.id}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-semibold text-white">{campaign.item?.name ?? campaign.categoryLabel} · {campaign.coopId}</p>

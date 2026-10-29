@@ -18,6 +18,9 @@
  *     Adds a product-discovery item for the run's commons ("E2E <runId> Laundry pods",
  *     waiting for review, with price evidence) and a member-recommended
  *     "E2E <runId> Soap Shop" in "E2E Town <runId>" that sells household basics.
+ *   ... item-search <runId>
+ *     Approves the item and starts its seller search near "E2E Town <runId>" (2 emails),
+ *     through the same services as the admin's Approve and Find a seller buttons.
  *   ... item-sweep <runId>
  *     Runs the outreach sweep for the item's seller search, as sweep does. Prints the token.
  *   ... item-cleanup <runId>
@@ -31,6 +34,7 @@ import { db } from "../../../packages/db/index.js";
 import { proposeCampaigns } from "../../../packages/trpc/src/services/vendor-outreach/campaigns.js";
 import { DEAL_INTEREST_SOURCE } from "../../../packages/trpc/src/services/vendor-outreach/demand.js";
 import { replyToken } from "../../../packages/trpc/src/services/vendor-outreach/email-builder.js";
+import { reviewItem, startSellerSearch } from "../../../packages/trpc/src/services/vendor-outreach/items.js";
 import { runOutreachSweep } from "../../../packages/trpc/src/services/vendor-outreach/outreach-sweep.js";
 
 // Each run gets its own commons id, so other journeys that clean up deal questions
@@ -157,6 +161,12 @@ async function itemSetup(runId: string) {
   return { profileId, productId, coopId: coopFor(runId) };
 }
 
+async function itemSearch(runId: string) {
+  const { profileId, productId } = itemIds(runId);
+  await reviewItem(db, "e2e-fixture", { profileId, productId, decision: "approve" });
+  return startSellerSearch(db, "e2e-fixture", { profileId, productId, area: `E2E Town ${runId}`, maxEmails: 2 });
+}
+
 async function itemSweep(runId: string) {
   const { productId, sellerEmail } = itemIds(runId);
   return sweepCampaign({ coopId: coopFor(runId), area: `E2E Town ${runId}`, sourcedProductId: productId }, sellerEmail);
@@ -175,7 +185,7 @@ async function itemCleanup(runId: string) {
 }
 
 const COMMANDS: Record<string, (runId: string) => Promise<unknown>> = {
-  setup, sweep, cleanup, "item-setup": itemSetup, "item-sweep": itemSweep, "item-cleanup": itemCleanup,
+  setup, sweep, cleanup, "item-setup": itemSetup, "item-search": itemSearch, "item-sweep": itemSweep, "item-cleanup": itemCleanup,
 };
 
 async function main() {

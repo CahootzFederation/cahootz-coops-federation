@@ -57,8 +57,7 @@ export async function registerForNativePushNotifications(
     source?: PushPromptSource;
     /**
      * Register only when permission is already granted; never show the OS
-     * prompt. Used on sign-in - the prompt itself waits for an in-app primer
-     * (see components/push-permission-primer.tsx).
+     * prompt.
      */
     neverAsk?: boolean;
   } = {}

@@ -15,6 +15,7 @@ import { sendOrderCompletedNotification } from "../services/slack-notification-s
 import { env } from "../env.js";
 import { FUNDING_BADGE_BY_TIER, FUNDING_BADGES, highestFundingBadge } from "../services/funding-badge-service.js";
 import { resolveStoreSettlementAccount } from "../services/funding-settlement-service.js";
+import { createNotificationAndPush } from "../services/push-notification-service.js";
 
 // Category validation - now accepts any string since categories are dynamic
 const StoreCategoryEnum = z.string().min(1).max(100);
@@ -3176,26 +3177,24 @@ export const storeRouter = router({
       }
 
       // Create notifications
-      await context.db.notification.createMany({
-        data: [
-          {
-            userId: buyer.id,
-            coopId: store.coopId,
-            type: 'ORDER_PLACED',
-            title: 'Order Placed',
-            body: `Your order from ${store.name} for $${totalUSD.toFixed(2)} has been placed.`,
-            data: { orderId: order.id, storeId: store.id, amount: totalUSD },
-          },
-          {
-            userId: store.owner.id,
-            coopId: store.coopId,
-            type: 'ORDER_RECEIVED',
-            title: 'New Order',
-            body: `You have a new order for $${totalUSD.toFixed(2)}.`,
-            data: { orderId: order.id, amount: totalUSD },
-          },
-        ],
-      });
+      await Promise.all([
+        createNotificationAndPush(context.db, {
+          userId: buyer.id,
+          coopId: store.coopId,
+          type: 'ORDER_PLACED',
+          title: 'Order Placed',
+          body: `Your order from ${store.name} for $${totalUSD.toFixed(2)} has been placed.`,
+          data: { orderId: order.id, storeId: store.id, amount: totalUSD },
+        }),
+        createNotificationAndPush(context.db, {
+          userId: store.owner.id,
+          coopId: store.coopId,
+          type: 'ORDER_RECEIVED',
+          title: 'New Order',
+          body: `You have a new order for $${totalUSD.toFixed(2)}.`,
+          data: { orderId: order.id, amount: totalUSD },
+        }),
+      ]);
 
       const orderEmailData = {
         orderId: order.id,
@@ -3687,18 +3686,16 @@ export const storeRouter = router({
         CANCELLED: 'has been cancelled',
       };
 
-      await context.db.notification.create({
+      await createNotificationAndPush(context.db, {
+        userId: order.buyerId,
+        coopId: order.store.coopId,
+        type: 'ORDER_STATUS_UPDATE',
+        title: 'Order Update',
+        body: `Your order ${statusMessages[input.status]}.${input.trackingNumber ? ` Tracking: ${input.trackingNumber}` : ''}`,
         data: {
-          userId: order.buyerId,
-          coopId: order.store.coopId,
-          type: 'ORDER_STATUS_UPDATE',
-          title: 'Order Update',
-          body: `Your order ${statusMessages[input.status]}.${input.trackingNumber ? ` Tracking: ${input.trackingNumber}` : ''}`,
-          data: {
-            orderId: order.id,
-            status: input.status,
-            trackingNumber: input.trackingNumber,
-          },
+          orderId: order.id,
+          status: input.status,
+          trackingNumber: input.trackingNumber,
         },
       });
 

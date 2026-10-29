@@ -193,6 +193,25 @@ describe("discovered items", () => {
       memberShare: "64 pods",
       feesEatSavings: false,
       regularPriceSource: "Dropps price on 2026-11-03: https://www.dropps.com/pods",
+      vendorProspectId: null,
+      vendorName: null,
+      vendorEmail: null,
+      vendorPhone: null,
+      vendorContactName: null,
+      imageUrl: null,
+    });
+  });
+
+  it("fills in the vendor from the seller who said yes, so nobody picks a marketplace shop", async () => {
+    seedItem(db, { matchStatus: "APPROVED" });
+    db.tables.vendorProspect.push({ id: "shop", businessName: "Corner Market", email: "owner@corner.test", phone: null, status: "INTERESTED" });
+    db.tables.vendorResponse = [{ id: "r1", prospectId: "shop", interest: "YES", contactName: "Dana", bestContact: "555-0100", respondedAt: NOW }];
+    expect(await itemOfferDraft(db, "pods", NOW, "shop")).toMatchObject({
+      vendorProspectId: "shop",
+      vendorName: "Corner Market",
+      vendorEmail: "owner@corner.test",
+      vendorPhone: "555-0100",
+      vendorContactName: "Dana",
     });
   });
 

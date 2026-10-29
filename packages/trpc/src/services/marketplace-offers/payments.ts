@@ -15,15 +15,17 @@ import { type Db, formatCents, notifyOnce } from "./shared.js";
 
 export type StripeClient = Pick<Stripe, "refunds" | "paymentIntents" | "checkout" | "charges">;
 
+
 export async function defaultStripe(): Promise<Stripe> {
   const StripeCtor = (await import("stripe")).default;
   return new StripeCtor(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-02-25.clover" });
 }
 
 /**
- * Refunds one offer payment in full and pulls the vendor's share back from
- * their Stripe account. The ledger, savings and SC reversal happen when
- * Stripe sends charge.refunded, the same as any other refund.
+ * Refunds one offer payment in full. Cahootz collected it, so the refund comes
+ * from Cahootz's Stripe balance. (Older offers paid through a shop pull the
+ * shop's share back too.) The ledger and savings change when Stripe sends
+ * charge.refunded, the same as any other refund.
  *
  * Safe to call twice: Stripe dedupes on the idempotency key. On failure the
  * error is saved on the commitment so admins see it and the sweep retries.
@@ -35,7 +37,7 @@ export async function refundOfferTransaction(
 ) {
   const transaction = await db.commerceTransaction.findUnique({
     where: { id: params.transactionId },
-    select: { id: true, offerId: true, status: true, stripePaymentIntentId: true, offerCommitment: { select: { id: true } } },
+    select: { id: true, offerId: true, status: true, stripePaymentIntentId: true, stripeDestinationAccountId: true, offerCommitment: { select: { id: true } } },
   });
   if (!transaction?.offerId || !transaction.stripePaymentIntentId) return { refunded: false, reason: "NOT_AN_OFFER_PAYMENT" as const };
   if (transaction.status === "REFUNDED") return { refunded: true, reason: "ALREADY_REFUNDED" as const };
@@ -45,7 +47,7 @@ export async function refundOfferTransaction(
     await client.refunds.create(
       {
         payment_intent: transaction.stripePaymentIntentId,
-        reverse_transfer: true,
+        ...(transaction.stripeDestinationAccountId ? { reverse_transfer: true } : {}),
         metadata: { commerceTransactionId: transaction.id, offerId: transaction.offerId, reason: params.reason },
       },
       { idempotencyKey: `offer-refund:${transaction.id}` },
@@ -82,7 +84,7 @@ export async function refundOfferTransaction(
 export async function handleOfferPaymentSucceeded(db: Db, transactionId: string, stripe?: StripeClient) {
   const transaction = await db.commerceTransaction.findUnique({
     where: { id: transactionId },
-    include: { offer: { include: { store: { select: { ownerId: true } } } } },
+    include: { offer: true },
   });
   const offer = transaction?.offer;
   if (!transaction || !offer) return { outcome: "NOT_AN_OFFER" as const };
@@ -95,12 +97,8 @@ export async function handleOfferPaymentSucceeded(db: Db, transactionId: string,
     !!commitment &&
     (commitment.status === "PAID" || commitment.status === "FULFILLED") &&
     commitment.commerceTransactionId !== transaction.id;
-  const stillPayable =
-    offer.offerType === "MEMBER_DEAL"
-      ? ["LIVE", "PAUSED", "EXPIRED"].includes(offer.status) // started before the deal ended
-      : offer.status === "PAYMENT_OPEN";
-  // A slow Member Deal payment still counts after the sweep released its hold.
-  const payableStatuses = offer.offerType === "MEMBER_DEAL" ? ["PAYMENT_PENDING", "COMMITTED", "CANCELLED"] : ["PAYMENT_PENDING", "COMMITTED"];
+  const stillPayable = offer.status === "PAYMENT_OPEN";
+  const payableStatuses = ["PAYMENT_PENDING", "COMMITTED"];
   const ownsSpot =
     !!commitment &&
     commitment.commerceTransactionId === transaction.id &&
@@ -131,7 +129,7 @@ export async function handleOfferPaymentSucceeded(db: Db, transactionId: string,
   const savingsCents = Math.max(0, commitment.regularUnitCents - commitment.memberUnitCents) * commitment.quantity;
   const marked = await db.offerCommitment.updateMany({
     where: { id: commitment.id, status: { in: payableStatuses as any } },
-    data: { status: "PAID", paidAt: new Date(), savingsCents, cancelledAt: null },
+    data: { status: "PAID", paidAt: new Date(), savingsCents, cancelledAt: null, chargeError: null },
   });
   if (marked.count === 0) return { outcome: "ALREADY_RECORDED" as const };
 
@@ -145,15 +143,6 @@ export async function handleOfferPaymentSucceeded(db: Db, transactionId: string,
     type: "OFFER_PAID",
     title: "You're all paid",
     body: `You paid ${formatCents(Math.round(transaction.chargedAmount * 100))} for ${offer.title} and saved ${formatCents(savingsCents)}.`,
-  });
-  await notifyOnce(db, {
-    offer,
-    userId: offer.store.ownerId,
-    kind: `vendor-paid:${transaction.id}`,
-    type: "VENDOR_OFFER_PAID",
-    title: "New paid order",
-    body: `${commitment.contactName ?? "A member"} paid for ${commitment.quantity} × ${offer.title}.`,
-    push: offer.offerType === "MEMBER_DEAL",
   });
   return { outcome: "PAID" as const, savingsCents };
 }

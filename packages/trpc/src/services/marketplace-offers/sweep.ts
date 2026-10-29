@@ -1,6 +1,7 @@
 import { auditLogEntry } from "../../lib/audit.js";
-import { backfillProcessingFees, cancelOpenOfferCheckouts, refundOfferTransaction, type StripeClient } from "./payments.js";
-import { refundPaidCommitments } from "./lifecycle.js";
+import { backfillProcessingFees, cancelOpenOfferCheckouts, refundOfferTransaction } from "./payments.js";
+import type { OfferStripe } from "./charges.js";
+import { chargeAfterGoal, refundPaidCommitments } from "./lifecycle.js";
 import {
   type Db,
   formatCents,
@@ -14,18 +15,14 @@ import { transitionOffer } from "./transitions.js";
 
 const SYSTEM_ACTOR = "system:offer-sweep";
 const HOUR = 60 * 60 * 1000;
-// An abandoned Member Deal checkout gives its unit back after this long.
-const DEAL_HOLD_MS = 2 * HOUR;
 
 export type OfferSweepResult = {
-  dealsExpired: number;
   groupBuysClosed: number;
   groupBuysExpired: number;
   remindersSent: number;
   groupBuysConfirmed: number;
   groupBuysFailed: number;
   refundsRetried: number;
-  dealHoldsReleased: number;
   processingFeesFilled: number;
 };
 
@@ -40,31 +37,18 @@ async function audit(db: Db, action: string, offerId: string, metadata?: Record<
  * claims its change with a status-matched update, so overlapping runs do the
  * work once; notices and refunds are deduped too.
  */
-export async function runOfferSweep(db: Db, now = new Date(), stripe?: StripeClient): Promise<OfferSweepResult> {
+export async function runOfferSweep(db: Db, now = new Date(), stripe?: OfferStripe): Promise<OfferSweepResult> {
   const result: OfferSweepResult = {
-    dealsExpired: 0,
     groupBuysClosed: 0,
     groupBuysExpired: 0,
     remindersSent: 0,
     groupBuysConfirmed: 0,
     groupBuysFailed: 0,
     refundsRetried: 0,
-    dealHoldsReleased: 0,
     processingFeesFilled: 0,
   };
 
-  // 1. Member Deals past their end date.
-  const endedDeals = await db.marketplaceOffer.findMany({
-    where: { offerType: "MEMBER_DEAL", status: { in: ["LIVE", "PAUSED"] }, expiresAt: { lte: now } },
-  });
-  for (const offer of endedDeals) {
-    if (await transitionOffer(db, offer, "EXPIRED")) {
-      result.dealsExpired++;
-      await audit(db, "MARKETPLACE_OFFER_EXPIRED", offer.id);
-    }
-  }
-
-  // 2. Group Buys whose commitment deadline passed: on to the vendor, or expired.
+  // 1. Group Buys whose commitment deadline passed: charge saved cards, or expired.
   const closingGroupBuys = await db.marketplaceOffer.findMany({
     where: { offerType: "GROUP_BUY", status: "LIVE", commitmentDeadline: { lte: now } },
   });
@@ -75,25 +59,16 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: StripeCli
       if (offer.status !== "LIVE") return null;
       const units = await sumActiveUnits(tx, offer.id);
       const met = units >= (offer.minimumCommitments ?? Number.POSITIVE_INFINITY);
-      const moved = await transitionOffer(tx, offer, met ? "AWAITING_VENDOR" : "EXPIRED", { committedQuantity: units });
+      const window = { paymentOpensAt: now, paymentDeadline: new Date(now.getTime() + offer.paymentWindowHours * HOUR) };
+      const moved = await transitionOffer(tx, offer, met ? "PAYMENT_OPEN" : "EXPIRED", { committedQuantity: units, ...(met ? window : {}) });
       return moved ? { met, units } : null;
     });
     if (!outcome) continue;
-    const offer = await db.marketplaceOffer.findUniqueOrThrow({
-      where: { id: candidate.id },
-      include: { store: { select: { ownerId: true } } },
-    });
+    const offer = candidate;
     await audit(db, outcome.met ? "MARKETPLACE_OFFER_COMMITMENTS_CLOSED" : "MARKETPLACE_OFFER_EXPIRED", offer.id, { units: outcome.units });
     if (outcome.met) {
       result.groupBuysClosed++;
-      await notifyOnce(db, {
-        offer,
-        userId: offer.store.ownerId,
-        kind: "vendor-confirm",
-        type: "VENDOR_OFFER_READY_TO_CONFIRM",
-        title: "Your group buy hit its goal",
-        body: `${outcome.units} committed to ${offer.title}. Confirm you can fill it, and we'll open payment for members.`,
-      });
+      await chargeAfterGoal(db, offer.id, stripe);
     } else {
       result.groupBuysExpired++;
       await notifyCommitters(db, offer, ["COMMITTED"], {
@@ -105,7 +80,7 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: StripeCli
     }
   }
 
-  // 3. Payment reminders, 24 hours and 2 hours before the window closes.
+  // 2. Reminders for members whose saved card didn't go through, 24 hours and 2 hours before the deadline.
   const openWindows = await db.marketplaceOffer.findMany({
     where: { offerType: "GROUP_BUY", status: "PAYMENT_OPEN", paymentDeadline: { gt: now, lte: new Date(now.getTime() + 24 * HOUR) } },
   });
@@ -113,7 +88,7 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: StripeCli
     const hoursLeft = (offer.paymentDeadline!.getTime() - now.getTime()) / HOUR;
     const kind = hoursLeft <= 2 ? "payment-reminder-2h" : "payment-reminder-24h";
     const unpaid = await db.offerCommitment.findMany({
-      where: { offerId: offer.id, status: { in: ["COMMITTED", "PAYMENT_PENDING"] } },
+      where: { offerId: offer.id, status: { in: ["COMMITTED", "PAYMENT_PENDING"] }, chargeError: { not: null } },
       select: { userId: true, quantity: true },
     });
     for (const commitment of unpaid) {
@@ -129,7 +104,7 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: StripeCli
     }
   }
 
-  // 4. Payment windows that closed: confirmed, or called off with refunds.
+  // 3. Payment windows that closed: confirmed, or called off with refunds.
   const closedWindows = await db.marketplaceOffer.findMany({
     where: { offerType: "GROUP_BUY", status: "PAYMENT_OPEN", paymentDeadline: { lte: now } },
   });
@@ -156,7 +131,7 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: StripeCli
       kind: "lapsed",
       type: "GROUP_BUY_EXPIRED",
       title: `Payment for ${offer.title} closed`,
-      body: "The payment window ended before you paid, so your spot was released. You weren't charged.",
+      body: "Your card didn't go through and the deadline passed, so your spot was released. You weren't charged."
     });
     if (outcome.met) {
       result.groupBuysConfirmed++;
@@ -164,7 +139,7 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: StripeCli
         kind: "confirmed",
         type: "GROUP_BUY_CONFIRMED",
         title: `${offer.title} is a go`,
-        body: "Enough people paid, so the vendor is placing the order. We'll tell you when it's ready.",
+        body: "Enough people paid, so we're sending the order to the vendor. We'll tell you when it ships.",
       });
     } else {
       result.groupBuysFailed++;
@@ -178,7 +153,7 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: StripeCli
     }
   }
 
-  // 5. Retry refunds that failed earlier.
+  // 4. Retry refunds that failed earlier.
   const stuckRefunds = await db.offerCommitment.findMany({
     where: {
       status: { in: ["PAID", "FULFILLED"] },
@@ -197,33 +172,7 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: StripeCli
     if (retried.refunded) result.refundsRetried++;
   }
 
-  // 6. Give back Member Deal units held by checkouts that were never paid.
-  const staleHolds = await db.offerCommitment.findMany({
-    where: {
-      status: "PAYMENT_PENDING",
-      updatedAt: { lte: new Date(now.getTime() - DEAL_HOLD_MS) },
-      offer: { offerType: "MEMBER_DEAL" },
-    },
-    select: { id: true, offerId: true },
-  });
-  for (const hold of staleHolds) {
-    const released = await db.$transaction(async (tx) => {
-      await lockOffer(tx, hold.offerId);
-      const updated = await tx.offerCommitment.updateMany({
-        where: { id: hold.id, status: "PAYMENT_PENDING", updatedAt: { lte: new Date(now.getTime() - DEAL_HOLD_MS) } },
-        data: { status: "CANCELLED", cancelledAt: now },
-      });
-      if (updated.count === 0) return false;
-      await tx.marketplaceOffer.update({
-        where: { id: hold.offerId },
-        data: { committedQuantity: await sumActiveUnits(tx, hold.offerId) },
-      });
-      return true;
-    });
-    if (released) result.dealHoldsReleased++;
-  }
-
-  // 7. Stripe's fee, for payments whose webhook arrived before Stripe had it.
+  // 5. Stripe's fee, for payments whose webhook arrived before Stripe had it.
   result.processingFeesFilled = await backfillProcessingFees(db, stripe).catch((error) => {
     console.error("[Offers] Processing fee backfill failed:", error);
     return 0;

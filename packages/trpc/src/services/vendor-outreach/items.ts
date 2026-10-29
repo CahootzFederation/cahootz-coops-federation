@@ -209,17 +209,31 @@ export async function startSellerSearch(db: Db, actorId: string, raw: z.input<ty
  * the suggested deal, by the same price rule as every offer. The vendor amount
  * is the bot's bulk price, a starting point until the seller confirms theirs.
  * When card fees would eat most of the savings, the member price is left for
- * the admin to set.
+ * the admin to set. When it starts from a seller who said yes, the vendor's
+ * name and contact come from their reply.
  */
-export async function itemOfferDraft(db: Db, productId: string, now = new Date()) {
+export async function itemOfferDraft(db: Db, productId: string, now = new Date(), prospectId?: string | null) {
   const product = await db.sourcedProduct.findUnique({ where: { id: productId } });
   if (!product || product.status === "REJECTED") notFound();
+  const prospect = prospectId
+    ? await db.vendorProspect.findUnique({
+        where: { id: prospectId },
+        include: { responses: { orderBy: { respondedAt: "desc" }, take: 1 } },
+      })
+    : null;
+  const reply = prospect?.responses[0];
   const observation = await currentObservation(db, productId, now);
   const suggestion = observation ? suggestionFor(observation, await offerPricingSettings(db)) : null;
   const packSize = suggestion?.packSize ?? 1;
   const observedOn = observation?.observedAt.toISOString().slice(0, 10);
   return {
     sourcedProductId: product.id,
+    vendorProspectId: prospect?.id ?? null,
+    vendorName: prospect?.businessName ?? null,
+    vendorEmail: prospect?.email ?? null,
+    vendorPhone: prospect?.phone ?? (reply?.bestContact && !reply.bestContact.includes("@") ? reply.bestContact : null),
+    vendorContactName: reply?.contactName ?? null,
+    imageUrl: product.imageUrl,
     title: (packSize > 1 ? `${packSize} × ${product.name}` : product.name).slice(0, 120),
     description: product.description.slice(0, 2000),
     regularPriceCents: suggestion?.regularPriceCents ?? observation?.regularPriceCents ?? null,

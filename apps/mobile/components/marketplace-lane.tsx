@@ -214,12 +214,12 @@ export default function MarketplaceLane({ initialCoopId }: { initialCoopId?: str
           <TextInput accessibilityLabel="Search marketplace" value={query} onChangeText={setQuery} placeholder="Search products and commons shops" placeholderTextColor="#A6998A" className="h-12 flex-1 px-3 text-sm" style={{ color: colors.ink }} />
         </View>
         {offers.length > 0 && !normalizedQuery ? (
-          <View className="mt-5 px-4" accessibilityLabel="Member deals and group buys">
+          <View className="mt-5 px-4" accessibilityLabel="Group buys">
             <Text className="text-lg font-black" style={{ color: colors.ink }}>
-              Deals for members
+              Group buys
             </Text>
             <Text className="mb-3 mt-0.5 text-xs font-semibold" style={{ color: colors.muted }}>
-              Lower prices from local vendors, just for this Commons.
+              Buy together for a lower price. Nobody pays unless enough people join.
             </Text>
             {offers.map((offer) => (
               <OfferCard key={offer.id} offer={offer} />

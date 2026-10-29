@@ -373,7 +373,7 @@ function CampaignCard({ campaign, busy, post }: { campaign: CampaignRow; busy: b
         <div>
           <p className="font-semibold text-white">{campaign.item?.name ?? campaign.categoryLabel} · {campaign.coopId}</p>
           <p className="text-xs text-slate-400">
-            {campaign.offerType === 'GROUP_BUY' ? 'Group buy' : 'Member deal'} · proposed {date(campaign.createdAt)}
+            Group buy · proposed {date(campaign.createdAt)}
             {campaign.expiresAt ? ` · ends ${date(campaign.expiresAt)}` : ''}
           </p>
         </div>
@@ -504,7 +504,7 @@ function ProspectCard({ prospect, busy, post }: { prospect: ProspectRow; busy: b
           <button className={primary} disabled={busy} onClick={() => post(url, { action: 'inTalks' }, `${prospect.businessName} marked in talks.`)}>Mark in talks</button>
         )}
         {prospect.item && ['INTERESTED', 'IN_TALKS'].includes(prospect.status) && (
-          <Link className={primary} href={`/portal/admin/commons/${prospect.item.coopId}/offers?item=${prospect.item.id}`}>
+          <Link className={primary} href={`/portal/admin/commons/${prospect.item.coopId}/offers?item=${prospect.item.id}&vendor=${prospect.id}`}>
             Start the group buy for {prospect.item.name}
           </Link>
         )}

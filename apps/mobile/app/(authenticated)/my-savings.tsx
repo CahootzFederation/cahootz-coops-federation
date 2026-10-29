@@ -54,12 +54,12 @@ export default function MySavingsScreen() {
                 {formatCents(savings.totalSavingsCents)}
               </Text>
               <Text className="mt-1 text-center text-xs font-semibold" style={{ color: colors.forest }}>
-                saved with member deals and group buys. Only paid orders count, and refunds come off.
+                saved with group buys. Only paid orders count, and refunds come off.
               </Text>
             </View>
             {savings.offers.length === 0 ? (
               <Text className="mt-5 text-center text-sm" style={{ color: colors.muted }}>
-                Nothing yet. Look for Deals for members in the marketplace.
+                Nothing yet. Look for Group buys in the marketplace.
               </Text>
             ) : (
               savings.offers.map((item) => (

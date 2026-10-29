@@ -497,19 +497,6 @@ export default function MyStoreScreen() {
                 <ChevronRight size={24} color="white" style={{ marginLeft: 8 }} />
               </LinearGradient>
             </TouchableOpacity>
-
-            {/* Member Deals and Group Buys */}
-            <TouchableOpacity
-              accessibilityRole="button"
-              onPress={() => router.push('/(authenticated)/store-offers' as any)}
-              className="bg-white dark:bg-gray-800 rounded-2xl p-5 flex-row items-center"
-            >
-              <View className="flex-1">
-                <Text className="text-gray-900 dark:text-white font-bold text-lg">Deals and group buys</Text>
-                <Text className="text-gray-600 dark:text-gray-300 text-sm">See who joined and update orders</Text>
-              </View>
-              <ChevronRight size={24} color="#9CA3AF" />
-            </TouchableOpacity>
           </View>
         )}
 

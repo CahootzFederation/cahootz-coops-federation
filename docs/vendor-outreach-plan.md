@@ -4,12 +4,12 @@ Status: approved 2026-10-26. Phases 1-5 are built. Real email sending waits on t
 
 ## Goal
 
-Find local businesses willing to give a Commons a Member Deal or Group Buy, without a person doing the legwork.
+Find local businesses willing to fill a Commons' Group Buy, without a person doing the legwork.
 
 - Sage spots what members want and checks that interest with the whole Commons.
 - Sage then proposes an outreach campaign to a platform admin.
 - Once a campaign is approved, Sage finds businesses and emails them on its own, within the campaign's limits.
-- When a business says yes, a platform admin takes over, closes the deal, and sets up the offer using the Member Deals system that already exists.
+- When a business says yes, a platform admin takes over, closes the deal, and sets up the Group Buy. The business never signs up for anything: Cahootz collects the payments, sends them the order list with delivery addresses, and pays them directly.
 
 ### Decisions made
 
@@ -149,7 +149,7 @@ Code builds each email. Sage writes only one short personal paragraph.
   - Configured by two new env vars, approved by you: `RESEND_OUTREACH_FROM_EMAIL` (the sender) and `OUTREACH_REPLY_TO_EMAIL` (a real inbox the team reads, for example `partners@cahootzcoops.com`).
   - Sending refuses to start until both are set and the mailing address is in `PlatformConfig`.
 - A new exported `sendVendorOutreachEmail` in `lib/email.ts` uses that sender and reply-to and adds the unsubscribe headers.
-- **The email links to one place:** the vendor reply page, which also explains how Member Deals and Group Buys work and how vendors get paid, so a vendor can learn about us before saying yes.
+- **The email links to one place:** the vendor reply page, which also explains how Group Buys work and how vendors get paid, so a vendor can learn about us before saying yes.
 - When Resend isn't configured (local runs and CI), messages are saved as DRY_RUN and not sent.
 
 **Limits, all enforced in code:**
@@ -160,7 +160,7 @@ Code builds each email. Sage writes only one short personal paragraph.
 
 ### 5. When the vendor answers
 
-There's a public reply page at `apps/web/app/v/[token]`, with a token per prospect and no sign-in. It starts with a short, plain explanation: what Cahootz Commons is, how Member Deals and Group Buys work, and how vendors get paid (a set dollar amount per item, with Stripe's fee and the community's share taken from the rest, never from the vendor's amount). Then it offers three choices:
+There's a public reply page at `apps/web/app/v/[token]`, with a token per prospect and no sign-in. It starts with a short, plain explanation: what Cahootz Commons is, how Group Buys work, and how vendors get paid (a set dollar amount per item, with Stripe's fee and the community's share taken from the rest, never from the vendor's amount; Cahootz sends the order list and pays them directly, with no app or sign-up). Then it offers three choices:
 
 - **"Yes, I'm interested":** the vendor gives a name, the best way to reach them, and optionally what they could offer. The prospect becomes INTERESTED, and platform admins get Slack and admin-portal alerts. **Sage stops here.**
 - **"Not right now":** the prospect becomes DECLINED, and Sage won't contact them again for 180 days.

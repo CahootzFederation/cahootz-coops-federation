@@ -510,7 +510,7 @@ export async function processSuccessfulPayment(params: {
 }): Promise<{
   transactionId: string;
   customerId: string;
-  businessId: string;
+  businessId: string | null;
   amountUSD: number;
   treasuryFeeUSD: number;
 }> {
@@ -620,7 +620,7 @@ export async function getTransactionByPaymentIntent(
 ): Promise<{
   id: string;
   customerId: string;
-  businessId: string;
+  businessId: string | null;
   status: string;
   listedAmount: number;
   chargedAmount: number;

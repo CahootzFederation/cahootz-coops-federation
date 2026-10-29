@@ -17,7 +17,6 @@ const day = (date: Date) =>
 
 type DigestOffer = {
   title: string;
-  offerType: "MEMBER_DEAL" | "GROUP_BUY";
   status: string;
   regularPriceCents: number;
   memberPriceCents: number;
@@ -25,42 +24,37 @@ type DigestOffer = {
   minimumCommitments: number | null;
   commitmentDeadline: Date | null;
   paymentDeadline: Date | null;
-  expiresAt: Date | null;
 };
 
-/** One short line per deal. */
+/** One short line per group buy. */
 export function digestLine(offer: DigestOffer): string {
-  if (offer.offerType === "GROUP_BUY") {
-    if (offer.status === "PAYMENT_OPEN") {
-      return `${offer.title}: it's happening. Pay ${money(offer.memberPriceCents)}${offer.paymentDeadline ? ` by ${day(offer.paymentDeadline)}` : ""}`;
-    }
-    const goal = offer.minimumCommitments ? `${offer.committedQuantity} of ${offer.minimumCommitments} joined` : `${offer.committedQuantity} joined`;
-    return `${offer.title} group buy: ${goal}${offer.commitmentDeadline ? `, closes ${day(offer.commitmentDeadline)}` : ""}`;
-  }
   const { savingsPercent } = offerSavings(offer.regularPriceCents, offer.memberPriceCents);
-  return `${offer.title}: ${money(offer.memberPriceCents)}, save ${savingsPercent}%${offer.expiresAt ? `, ends ${day(offer.expiresAt)}` : ""}`;
+  if (offer.status === "PAYMENT_OPEN") return `${offer.title}: it's happening, ${money(offer.memberPriceCents)} each (save ${savingsPercent}%)`;
+  const goal = offer.minimumCommitments ? `${offer.committedQuantity} of ${offer.minimumCommitments} joined` : `${offer.committedQuantity} joined`;
+  return `${offer.title}: ${money(offer.memberPriceCents)}, save ${savingsPercent}%. ${goal}${offer.commitmentDeadline ? `, closes ${day(offer.commitmentDeadline)}` : ""}`;
 }
 
 export function digestText(offers: DigestOffer[]): { title: string; body: string } {
   const lines = offers.slice(0, DIGEST_MAX_LINES).map(digestLine);
   const more = offers.length - lines.length;
   return {
-    title: "This week's member deals",
+    title: "This week's group buys",
     body: [...lines, ...(more > 0 ? [`Plus ${more} more in the marketplace.`] : [])].join("\n"),
   };
 }
 
-/** Sends this week's deals notice to every active member of each Commons that has live deals. Safe to run twice. */
+/** Sends this week's group buys notice to every active member of each Commons that has one going. Safe to run twice. */
 export async function sendWeeklyDealsDigest(db: Db, now = new Date(), options: { coopIds?: string[] } = {}) {
   const offers = await db.marketplaceOffer.findMany({
     where: {
       ...(options.coopIds ? { coopId: { in: options.coopIds } } : {}),
-      OR: [{ status: "LIVE" }, { offerType: "GROUP_BUY", status: "PAYMENT_OPEN" }],
+      offerType: "GROUP_BUY",
+      status: { in: ["LIVE", "PAYMENT_OPEN"] },
     },
     orderBy: { publishedAt: "desc" },
     select: {
-      coopId: true, title: true, offerType: true, status: true, regularPriceCents: true, memberPriceCents: true,
-      committedQuantity: true, minimumCommitments: true, commitmentDeadline: true, paymentDeadline: true, expiresAt: true,
+      coopId: true, title: true, status: true, regularPriceCents: true, memberPriceCents: true,
+      committedQuantity: true, minimumCommitments: true, commitmentDeadline: true, paymentDeadline: true,
     },
   });
   const byCommons = new Map<string, DigestOffer[]>();
@@ -89,7 +83,7 @@ export async function sendWeeklyDealsDigest(db: Db, now = new Date(), options: {
         title: text.title,
         body: text.body,
         data: { coopId, lane: "marketplace" },
-      }).catch((error) => console.error("[offers] Weekly deals notice failed:", error));
+      }).catch((error) => console.error("[offers] Weekly group buys notice failed:", error));
       sent++;
     }
   }

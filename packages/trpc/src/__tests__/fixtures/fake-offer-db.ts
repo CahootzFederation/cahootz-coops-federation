@@ -30,7 +30,8 @@ function matches(row: Row, where: Row | undefined, tables: Tables): boolean {
       if ("equals" in c && value !== c.equals) return false;
       return true;
     }
-    return value === condition;
+    // A missing column reads as null, as it does in the database.
+    return condition === null ? value == null : value === condition;
   });
 }
 
@@ -47,6 +48,9 @@ type Tables = {
   store: Row[];
   commerceTransaction: Row[];
   treasuryLedgerEntry: Row[];
+  paymentMethod: Row[];
+  userShippingAddress: Row[];
+  offerVendorPayout: Row[];
 };
 
 let idCounter = 0;
@@ -61,6 +65,8 @@ function withRelations(tables: Tables, table: keyof Tables, row: Row, include?: 
     const offer = tables.marketplaceOffer.find((o) => o.id === row.offerId);
     out.offer = offer ? withRelations(tables, "marketplaceOffer", offer, typeof include.offer === "object" ? include.offer.include ?? include.offer.select : undefined) : null;
   }
+  if (include.user) out.user = { ...(tables.user.find((u) => u.id === row.userId) ?? {}) };
+  if (include.vendorPayouts) out.vendorPayouts = tables.offerVendorPayout.filter((p) => p.offerId === row.id);
   if (include.offerCommitment) out.offerCommitment = tables.offerCommitment.find((c) => c.commerceTransactionId === row.id) ?? null;
   if (include.commitments) {
     const where = typeof include.commitments === "object" ? include.commitments.where : undefined;
@@ -161,6 +167,9 @@ export function createFakeOfferDb() {
     store: [],
     commerceTransaction: [],
     treasuryLedgerEntry: [],
+    paymentMethod: [],
+    userShippingAddress: [],
+    offerVendorPayout: [],
   };
   const db: any = {
     tables,
@@ -175,6 +184,9 @@ export function createFakeOfferDb() {
     store: model(tables, "store", "store"),
     commerceTransaction: model(tables, "commerceTransaction", "tx"),
     treasuryLedgerEntry: model(tables, "treasuryLedgerEntry", "led"),
+    paymentMethod: model(tables, "paymentMethod", "pm", [["stripePaymentMethodId"]]),
+    userShippingAddress: model(tables, "userShippingAddress", "addr", [["userId"]]),
+    offerVendorPayout: model(tables, "offerVendorPayout", "payout"),
     userCoopMembership: {
       ...model(tables, "userCoopMembership", "mem"),
       findUnique: vi.fn(async ({ where }: Row) => {
@@ -193,9 +205,12 @@ export function createFakeOfferDb() {
 
 export function seedOfferWorld(db: any, overrides: Row = {}) {
   const now = Date.now();
-  db.tables.store.push({ id: "store_1", name: "Corner Market", ownerId: "vendor_1", status: "APPROVED", deletedAt: null });
   for (const userId of ["member_1", "member_2", "member_3", "steward_1"]) {
-    db.tables.user.push({ id: userId, name: userId.replace("_", " "), phone: "555-0100" });
+    db.tables.user.push({ id: userId, name: userId.replace("_", " "), phone: "555-0100", stripeCustomerId: `cus_${userId}` });
+    db.tables.paymentMethod.push({
+      id: `pmrow_${userId}`, userId, stripePaymentMethodId: `pm_${userId}`, brand: "visa", last4: "4242",
+      expiryMonth: 12, expiryYear: 2034, isDefault: true, createdAt: new Date(),
+    });
     db.tables.userCoopMembership.push({
       userId,
       coopId: "church",
@@ -207,9 +222,8 @@ export function seedOfferWorld(db: any, overrides: Row = {}) {
     id: "offer_1",
     offerType: "GROUP_BUY",
     coopId: "church",
-    storeId: "store_1",
-    productId: "product_1",
-    businessId: "biz_1",
+    vendorName: "Corner Market",
+    vendorEmail: "orders@corner.test",
     title: "Family rice, 20 lb",
     description: null,
     regularPriceCents: 2400,
@@ -223,11 +237,10 @@ export function seedOfferWorld(db: any, overrides: Row = {}) {
     quantityPerMember: 2,
     committedQuantity: 0,
     commitmentDeadline: new Date(now + 24 * 3600 * 1000),
-    paymentWindowHours: 72,
+    paymentWindowHours: 48,
     paymentDeadline: null,
     expiresAt: null,
-    fulfillmentMethod: "PICKUP",
-    pickupLocation: "Church hall",
+    fulfillmentMethod: "DELIVERY",
     status: "LIVE",
     createdAt: new Date(),
     updatedAt: new Date(),

@@ -7,7 +7,7 @@ const REPO_ROOT = path.resolve(__dirname, "..", "..", "..", "..");
 /** The private E2E commons both fixture accounts belong to. */
 export const OFFERS_COOP_ID = "e2e-private-shared";
 
-/** Member Deals and Group Buys fixture (apps/api/scripts/e2e-marketplace-offers.ts). */
+/** Group Buys fixture (apps/api/scripts/e2e-marketplace-offers.ts). */
 export function offersFixture(args: string[]) {
   return apiFixture("scripts/e2e-marketplace-offers.ts", args);
 }

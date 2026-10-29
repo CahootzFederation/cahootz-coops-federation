@@ -19,8 +19,8 @@ const colors = {
 };
 
 /**
- * A Member Deal or Group Buy in the marketplace. The badge says which kind it
- * is, and the saving is spelled out so nobody has to work it out.
+ * A Group Buy in the marketplace, with the saving spelled out so nobody has to
+ * work it out.
  */
 export function OfferCard({ offer }: { offer: MarketplaceOffer }) {
   const isGroupBuy = offer.offerType === 'GROUP_BUY';

@@ -7,25 +7,28 @@ import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 
 import { OFFER_STATUS_LABELS } from '@/lib/offer-labels';
 
-interface Commitment {
-  id: string;
-  contactName: string | null;
-  contactPhone: string | null;
-  quantity: number;
+interface Address { name: string; line1: string; line2: string | null; city: string; state: string; postalCode: string }
+
+interface Order {
+  commitmentId: string;
   status: string;
-  savingsCents: number;
-  refundError: string | null;
-  committedAt: string;
+  quantity: number;
+  name: string;
+  phone: string | null;
+  address: Address | null;
+  paid: boolean;
+  shipped: boolean;
+  chargeError: string | null;
 }
 
 interface OfferDetail {
   id: string;
-  offerType: 'MEMBER_DEAL' | 'GROUP_BUY';
   status: string;
   title: string;
   description: string | null;
-  store: { name: string };
-  product: { name: string };
+  vendorName: string;
+  vendorEmail: string | null;
+  vendorPhone: string | null;
   regularPriceCents: number;
   regularPriceSource: string;
   memberPriceCents: number;
@@ -46,9 +49,10 @@ interface OfferDetail {
   quantityPerMember: number;
   commitmentDeadline: string | null;
   paymentDeadline: string | null;
-  expiresAt: string | null;
   cancelReason: string | null;
-  commitments: Commitment[];
+  orders: Order[];
+  vendorPay: { unitsSold: number; earnedCents: number; paidCents: number; owedCents: number };
+  vendorPayouts: { id: string; amountCents: number; paidAt: string; method: string; note: string | null }[];
   financials: {
     grossChargedCents: number;
     refundedCents: number;
@@ -64,6 +68,27 @@ interface OfferDetail {
 
 const money = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+const addressLines = (a: Address | null) =>
+  a ? [a.name, a.line1, a.line2, `${a.city}, ${a.state} ${a.postalCode}`].filter(Boolean).join(', ') : 'No address';
+
+/** The paid orders as plain text, ready to paste into an email to the vendor. */
+function ordersForVendor(offer: OfferDetail) {
+  const paid = offer.orders.filter((o) => o.paid && !o.shipped);
+  const lines = paid.map((o, i) => `${i + 1}. ${o.quantity} × ${offer.title}\n   ${addressLines(o.address)}${o.phone ? `\n   Phone: ${o.phone}` : ''}`);
+  const units = paid.reduce((sum, o) => sum + o.quantity, 0);
+  return `${offer.title}: ${units} to ship\n\n${lines.join('\n\n')}`;
+}
+
+/** The orders as a spreadsheet file. */
+function ordersCsv(offer: OfferDetail) {
+  const cell = (value: string | number | null | undefined) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const header = ['Name on order', 'Address line 1', 'Address line 2', 'City', 'State', 'ZIP', 'Phone', 'Quantity', 'Paid', 'Shipped'];
+  const rows = offer.orders.map((o) => [
+    o.address?.name ?? o.name, o.address?.line1, o.address?.line2, o.address?.city, o.address?.state, o.address?.postalCode,
+    o.phone, o.quantity, o.paid ? 'yes' : 'no', o.shipped ? 'yes' : 'no',
+  ]);
+  return [header, ...rows].map((row) => row.map(cell).join(',')).join('\n');
+}
 
 interface Action { label: string; body: Record<string, unknown>; confirm?: string; danger?: boolean }
 
@@ -71,21 +96,18 @@ function actionsFor(offer: OfferDetail): Action[] {
   const actions: Action[] = [];
   const s = offer.status;
   if (s === 'DRAFT') {
-    actions.push({ label: 'Publish to members', body: { action: 'publish' }, confirm: `Publish this offer? Members of this Commons will see it right away, and it can't be edited after that.` });
+    actions.push({ label: 'Publish to members', body: { action: 'publish' }, confirm: `Publish this group buy? Members of this Commons will see it right away, and it can't be edited after that.` });
   }
   if (s === 'LIVE') actions.push({ label: 'Pause', body: { action: 'pause' } });
   if (s === 'PAUSED') actions.push({ label: 'Resume', body: { action: 'resume' } });
-  if (offer.offerType === 'GROUP_BUY') {
-    if (s === 'LIVE' && offer.committedQuantity >= (offer.minimumCommitments ?? Infinity)) {
-      actions.push({ label: 'Close commitments now', body: { action: 'closeEarly' }, confirm: 'Close commitments now? No one else can join.' });
-    }
-    if (s === 'AWAITING_VENDOR') actions.push({ label: 'Open payment for the vendor', body: { action: 'openPayment' }, confirm: 'Only do this once the vendor has confirmed they can fill the order. Members will be asked to pay.' });
-    if (s === 'CONFIRMED') actions.push({ label: 'Mark ordered', body: { action: 'fulfillment', status: 'ORDERED' } });
-    if (s === 'ORDERED') actions.push({ label: 'Mark ready', body: { action: 'fulfillment', status: 'READY' } });
-    if (s === 'READY') actions.push({ label: 'Mark finished', body: { action: 'fulfillment', status: 'FULFILLED' } });
+  if (s === 'LIVE' && offer.committedQuantity >= (offer.minimumCommitments ?? Infinity)) {
+    actions.push({ label: 'Close and charge cards now', body: { action: 'closeEarly' }, confirm: "Close commitments now? No one else can join, and we'll charge everyone's saved card." });
   }
+  if (s === 'CONFIRMED') actions.push({ label: 'Mark sent to vendor', body: { action: 'fulfillment', status: 'ORDERED' }, confirm: 'Did you send the vendor the order list? Members will hear it was ordered.' });
+  if (s === 'ORDERED') actions.push({ label: 'Mark shipped', body: { action: 'fulfillment', status: 'READY' }, confirm: "Members will hear their order is on its way." });
+  if (s === 'READY') actions.push({ label: 'Mark finished', body: { action: 'fulfillment', status: 'FULFILLED' } });
   if (!['FULFILLED', 'EXPIRED', 'CANCELLED', 'FAILED'].includes(s)) {
-    actions.push({ label: 'Cancel offer', body: { action: 'cancel' }, danger: true });
+    actions.push({ label: 'Cancel group buy', body: { action: 'cancel' }, danger: true });
   }
   return actions;
 }
@@ -96,6 +118,7 @@ export default function OfferDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [payout, setPayout] = useState({ amount: '', paidAt: new Date().toISOString().slice(0, 10), method: '', note: '' });
   const base = `/api/admin/commons/${coopId}/offers/${offerId}`;
 
   const load = useCallback(() => {
@@ -127,7 +150,13 @@ export default function OfferDetailPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "That didn't work.");
       setOffer(data.offer);
-      setNotice(body.action === 'publish' ? 'Published. Members can see it now.' : `Done: ${action.label.toLowerCase()}.`);
+      setNotice(
+        body.action === 'publish'
+          ? 'Published. Members can see it now.'
+          : body.action === 'vendorPayout'
+            ? 'Vendor payment recorded.'
+            : `Done: ${action.label.toLowerCase()}.`,
+      );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "That didn't work.");
     } finally {
@@ -154,7 +183,7 @@ export default function OfferDetailPage() {
   return (
     <div className="space-y-6">
       <Link href={`/portal/admin/commons/${coopId}/offers`} className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-white">
-        <ArrowLeft className="h-4 w-4" /> All offers
+        <ArrowLeft className="h-4 w-4" /> All group buys
       </Link>
 
       <div>
@@ -165,7 +194,7 @@ export default function OfferDetailPage() {
           </span>
         </div>
         <p className="mt-1 text-sm text-slate-400">
-          {offer.offerType === 'GROUP_BUY' ? 'Group buy' : 'Member deal'} · {offer.store.name} · {offer.product.name}
+          Group buy · {offer.vendorName}
         </p>
         {offer.cancelReason && <p className="mt-3 text-sm text-slate-400">Cancelled: {offer.cancelReason}</p>}
       </div>
@@ -194,12 +223,10 @@ export default function OfferDetailPage() {
         {stat('Stripe fee per unit (about)', money(offer.split.estimatedStripeFeeCents))}
         {stat(`Commons per unit (${offer.split.commonsSplitBps / 100}% of what's left)`, money(offer.split.commonsCents))}
         {stat('Cahootz per unit', money(offer.split.cahootzCents))}
-        {offer.offerType === 'GROUP_BUY'
-          ? stat('Committed', `${offer.committedQuantity} of ${offer.minimumCommitments} needed${offer.maximumQuantity ? ` · ${offer.maximumQuantity} max` : ''}`)
-          : stat('Ends', when(offer.expiresAt))}
-        {offer.offerType === 'GROUP_BUY' && stat('Paid minimum', String(offer.minimumPaidOrders))}
-        {offer.offerType === 'GROUP_BUY' && stat('Commit by', when(offer.commitmentDeadline))}
-        {offer.offerType === 'GROUP_BUY' && stat('Pay by', when(offer.paymentDeadline))}
+        {stat('Committed', `${offer.committedQuantity} of ${offer.minimumCommitments} needed${offer.maximumQuantity ? ` · ${offer.maximumQuantity} max` : ''}`)}
+        {stat('Paid minimum', String(offer.minimumPaidOrders))}
+        {stat('Commit by', when(offer.commitmentDeadline))}
+        {stat('Declined cards pay by', when(offer.paymentDeadline))}
       </section>
 
       <section>
@@ -207,7 +234,7 @@ export default function OfferDetailPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Offer money">
           {stat('Members paid', money(f.grossChargedCents))}
           {stat('Refunded', money(f.refundedCents))}
-          {stat('Vendor proceeds', money(f.vendorProceedsCents))}
+          {stat('Vendor’s share', money(f.vendorProceedsCents))}
           {stat('Stripe fees', money(f.processingFeesCents))}
           {stat('Cahootz revenue', money(f.federationRevenueCents))}
           {stat('Commons revenue', money(f.commonsRevenueCents))}
@@ -222,33 +249,104 @@ export default function OfferDetailPage() {
           <ul className="mt-2 space-y-1 text-sm text-amber-100">
             {offer.exceptions.map((e) => (
               <li key={e.commitmentId}>
-                {e.refundError ? `Refund failed: ${e.refundError}` : e.paymentFailure ? `Payment failed: ${e.paymentFailure}` : 'Didn’t pay in time (spot released)'}
+                {e.refundError ? `Refund failed: ${e.refundError}` : e.paymentFailure ? `Card didn’t go through: ${e.paymentFailure}` : 'Didn’t pay in time (spot released)'}
               </li>
             ))}
           </ul>
         </section>
       )}
 
-      <section>
-        <h2 className="mb-2 text-sm font-semibold text-white">Members in this offer</h2>
-        {offer.commitments.length === 0 ? (
-          <p className="text-sm text-slate-400">Nobody yet.</p>
+      <section aria-label="Vendor">
+        <h2 className="mb-2 text-sm font-semibold text-white">Vendor</h2>
+        <div className="rounded-[10px] border border-white/10 bg-black/20 p-4 text-sm text-slate-300">
+          <p className="text-white">{offer.vendorName}</p>
+          <p className="mt-1 text-slate-400">{[offer.vendorEmail, offer.vendorPhone].filter(Boolean).join(' · ') || 'No contact saved'}</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3" aria-label="Vendor pay">
+            {stat(`Earned (${offer.vendorPay.unitsSold} sold)`, money(offer.vendorPay.earnedCents))}
+            {stat('Paid so far', money(offer.vendorPay.paidCents))}
+            {stat('We owe them', money(offer.vendorPay.owedCents))}
+          </div>
+          {offer.vendorPayouts.length > 0 && (
+            <ul className="mt-3 space-y-1 text-xs text-slate-400">
+              {offer.vendorPayouts.map((p) => (
+                <li key={p.id}>{money(p.amountCents)} by {p.method} on {new Date(p.paidAt).toLocaleDateString('en-US')}{p.note ? ` · ${p.note}` : ''}</li>
+              ))}
+            </ul>
+          )}
+          <form
+            className="mt-4 grid gap-2 sm:grid-cols-5"
+            aria-label="Record a vendor payment"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const amountCents = Math.round(Number.parseFloat(payout.amount || '0') * 100);
+              if (amountCents <= 0 || !payout.method.trim()) {
+                setError('Enter how much you paid the vendor and how (check, Zelle, ACH).');
+                return;
+              }
+              void run({
+                label: 'Record vendor payment',
+                body: { action: 'vendorPayout', amountCents, paidAt: payout.paidAt, method: payout.method, note: payout.note },
+              }).then(() => setPayout((current) => ({ ...current, amount: '', note: '' })));
+            }}
+          >
+            <input aria-label="Amount paid ($)" placeholder={`Amount ($${(offer.vendorPay.owedCents / 100).toFixed(2)} owed)`} inputMode="decimal" className="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-white" value={payout.amount} onChange={(e) => setPayout({ ...payout, amount: e.target.value })} />
+            <input aria-label="Date paid" type="date" className="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-white" value={payout.paidAt} onChange={(e) => setPayout({ ...payout, paidAt: e.target.value })} />
+            <input aria-label="How you paid" placeholder="Check, Zelle, ACH" className="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-white" value={payout.method} onChange={(e) => setPayout({ ...payout, method: e.target.value })} />
+            <input aria-label="Note" placeholder="Note (optional)" className="rounded-md border border-white/10 bg-black/30 px-3 py-2 text-white" value={payout.note} onChange={(e) => setPayout({ ...payout, note: e.target.value })} />
+            <button type="submit" disabled={busy} className="rounded-md border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 font-semibold text-emerald-100 hover:bg-emerald-300/20 disabled:opacity-50">
+              Mark vendor paid
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <section aria-label="Orders">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-white">Orders</h2>
+          {offer.orders.some((o) => o.paid) && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-white/15 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10"
+                onClick={() => {
+                  void navigator.clipboard.writeText(ordersForVendor(offer)).then(
+                    () => setNotice('Copied. Paste it into an email to the vendor.'),
+                    () => setError("We couldn't copy that. Use Download instead."),
+                  );
+                }}
+              >
+                Copy for vendor
+              </button>
+              <a
+                className="rounded-md border border-white/15 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10"
+                href={`data:text/csv;charset=utf-8,${encodeURIComponent(ordersCsv(offer))}`}
+                download={`${offer.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-orders.csv`}
+              >
+                Download spreadsheet
+              </a>
+            </div>
+          )}
+        </div>
+        {offer.orders.length === 0 ? (
+          <p className="text-sm text-slate-400">No orders yet.</p>
         ) : (
           <div className="overflow-x-auto rounded-[10px] border border-white/10">
             <table className="w-full text-left text-sm text-slate-300">
               <thead className="bg-white/[0.03] text-xs text-slate-500">
-                <tr><th className="p-3">Member</th><th className="p-3">Qty</th><th className="p-3">Status</th><th className="p-3">Saved</th><th className="p-3" /></tr>
+                <tr><th className="p-3">Ship to</th><th className="p-3">Phone</th><th className="p-3">Qty</th><th className="p-3">Status</th><th className="p-3" /></tr>
               </thead>
               <tbody>
-                {offer.commitments.map((c) => (
-                  <tr key={c.id} className="border-t border-white/5">
-                    <td className="p-3">{c.contactName ?? 'Member'}{c.contactPhone ? ` · ${c.contactPhone}` : ''}</td>
-                    <td className="p-3">{c.quantity}</td>
-                    <td className="p-3">{c.status.toLowerCase().replace('_', ' ')}{c.refundError ? ' (refund failed)' : ''}</td>
-                    <td className="p-3">{money(c.savingsCents)}</td>
-                    <td className="p-3 text-right">
-                      {(c.status === 'PAID' || c.status === 'FULFILLED') && (
-                        <button type="button" disabled={busy} onClick={() => run({ label: 'Refund', body: { action: 'refundCommitment', commitmentId: c.id } })} className="text-xs text-red-200 hover:underline">
+                {offer.orders.map((o) => (
+                  <tr key={o.commitmentId} className="border-t border-white/5">
+                    <td className="p-3">{addressLines(o.address)}</td>
+                    <td className="p-3">{o.phone ?? '—'}</td>
+                    <td className="p-3">{o.quantity}</td>
+                    <td className="p-3">
+                      {o.shipped ? 'Shipped' : o.paid ? 'Paid' : o.chargeError ? `Card didn’t go through` : o.status === 'COMMITTED' ? 'Card saved, not charged' : o.status.toLowerCase().replace('_', ' ')}
+                    </td>
+                    <td className="space-x-3 p-3 text-right">
+                      {o.paid && (
+                        <button type="button" disabled={busy} onClick={() => run({ label: 'Refund', body: { action: 'refundCommitment', commitmentId: o.commitmentId } })} className="text-xs text-red-200 hover:underline">
                           Refund
                         </button>
                       )}
@@ -259,6 +357,7 @@ export default function OfferDetailPage() {
             </table>
           </div>
         )}
+        <p className="mt-2 text-xs text-slate-500">Only platform admins can see members&apos; addresses. Share them only with this vendor.</p>
       </section>
     </div>
   );

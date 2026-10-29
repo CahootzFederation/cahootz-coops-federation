@@ -7,24 +7,20 @@ import type { Db, Tx } from "./shared.js";
 /**
  * Every allowed status change, per offer type. Anything not listed is refused.
  *
- * Member Deal: DRAFT → LIVE ⇄ PAUSED → EXPIRED / CANCELLED
- * Group Buy:   DRAFT → LIVE → AWAITING_VENDOR → PAYMENT_OPEN
- *              → CONFIRMED → ORDERED → READY → FULFILLED, with EXPIRED (too few
- *              commitments), FAILED (too few payments) and CANCELLED as ends.
+ * Group Buy:   DRAFT → LIVE → PAYMENT_OPEN (goal met; saved cards are charged)
+ *              → CONFIRMED → ORDERED → READY (shipped) → FULFILLED, with EXPIRED
+ *              (too few commitments), FAILED (too few payments) and CANCELLED as
+ *              ends. AWAITING_VENDOR is only left on older offers.
  * A platform admin publishes a draft (DRAFT → LIVE). PENDING_STEWARD is no longer
  * used; an offer left in it can still be published, put back to draft or cancelled.
  */
 export const OFFER_TRANSITIONS: Record<OfferType, Partial<Record<OfferStatus, readonly OfferStatus[]>>> = {
-  MEMBER_DEAL: {
-    DRAFT: ["LIVE", "CANCELLED"],
-    PENDING_STEWARD: ["LIVE", "DRAFT", "CANCELLED"],
-    LIVE: ["PAUSED", "EXPIRED", "CANCELLED"],
-    PAUSED: ["LIVE", "EXPIRED", "CANCELLED"],
-  },
+  // Member Deals are no longer offered; any old ones can only be cancelled.
+  MEMBER_DEAL: { LIVE: ["CANCELLED"], PAUSED: ["CANCELLED"], DRAFT: ["CANCELLED"] },
   GROUP_BUY: {
     DRAFT: ["LIVE", "CANCELLED"],
     PENDING_STEWARD: ["LIVE", "DRAFT", "CANCELLED"],
-    LIVE: ["PAUSED", "AWAITING_VENDOR", "EXPIRED", "CANCELLED"],
+    LIVE: ["PAUSED", "PAYMENT_OPEN", "AWAITING_VENDOR", "EXPIRED", "CANCELLED"],
     PAUSED: ["LIVE", "EXPIRED", "CANCELLED"],
     AWAITING_VENDOR: ["PAYMENT_OPEN", "CANCELLED"],
     PAYMENT_OPEN: ["CONFIRMED", "FAILED", "CANCELLED"],
@@ -44,10 +40,10 @@ const STATUS_WORDS: Record<OfferStatus, string> = {
   LIVE: "live",
   PAUSED: "paused",
   AWAITING_VENDOR: "waiting for the vendor",
-  PAYMENT_OPEN: "open for payment",
+  PAYMENT_OPEN: "charging cards",
   CONFIRMED: "confirmed",
   ORDERED: "ordered",
-  READY: "ready",
+  READY: "shipped",
   FULFILLED: "finished",
   EXPIRED: "expired",
   CANCELLED: "cancelled",

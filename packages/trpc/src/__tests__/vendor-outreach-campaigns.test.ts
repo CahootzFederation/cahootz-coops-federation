@@ -149,10 +149,10 @@ describe("campaign proposals and approval", () => {
     expect(sendSlackNotification).toHaveBeenCalledTimes(1);
   });
 
-  it("uses a member price for services", async () => {
+  it("looks for a group buy for every category, services included", async () => {
     question(db, { payload: { dealCategory: "auto_repair", interestCount: 6 } });
     await proposeCampaigns("church", NOW, db);
-    expect(db.tables.vendorCampaign[0].offerType).toBe("MEMBER_DEAL");
+    expect(db.tables.vendorCampaign[0].offerType).toBe("GROUP_BUY");
   });
 
   it("needs an area to approve, then runs for 30 days", async () => {

@@ -7,7 +7,6 @@ interface ReplyPage {
   businessName: string;
   categoryLabel: string;
   area: string | null;
-  offerType: 'MEMBER_DEAL' | 'GROUP_BUY';
   answered: 'YES' | 'NOT_NOW' | 'UNSUBSCRIBE' | null;
 }
 
@@ -116,14 +115,11 @@ function VendorReply() {
 
       <h2 className="mt-6 text-lg font-bold">How it works</h2>
       <ul className="mt-2 list-disc space-y-2 pl-5 text-base leading-relaxed">
-        {page.offerType === 'GROUP_BUY' ? (
-          <li>Members commit to buy together. Once enough commit and you confirm you can fill the order, they pay.</li>
-        ) : (
-          <li>Members of the community get a member price from you, any time during the deal.</li>
-        )}
-        <li>You set the member price and how much you get for each item. That amount is yours, with no fees taken out of it.</li>
-        <li>Members pay through Cahootz Commons, and we send your amount to your account.</li>
-        <li>Nobody pays anything until an order is confirmed with you, and you can say no to any order you can&apos;t fill.</li>
+        <li>Members commit to buy together. Nobody pays unless enough of them commit.</li>
+        <li>You set the price and how much you get for each item. That amount is yours, with no fees taken out of it.</li>
+        <li>When the order is on, Cahootz Commons collects the payments and sends you the list of names and delivery addresses. You ship to each household.</li>
+        <li>We pay you directly, by bank transfer, Zelle or check. There&apos;s no app to download and nothing to sign up for.</li>
+        <li>We agree on the order with you first, and you can say no to any order you can&apos;t fill.</li>
       </ul>
 
       <h2 className="mt-6 text-lg font-bold">Interested?</h2>

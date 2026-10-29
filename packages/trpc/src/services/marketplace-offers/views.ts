@@ -2,9 +2,7 @@ import { offerSavings } from "@repo/validators/marketplace-offers";
 
 import type { Prisma } from "@repo/db";
 
-type OfferWithStore = Prisma.MarketplaceOfferGetPayload<{
-  include: { store: { select: { id: true; name: true } }; product: { select: { id: true; name: true; imageUrl: true } } };
-}>;
+type OfferRow = Prisma.MarketplaceOfferGetPayload<Record<string, never>>;
 
 type OwnCommitment = {
   quantity: number;
@@ -12,13 +10,14 @@ type OwnCommitment = {
   savingsCents: number;
   committedAt: Date;
   paidAt: Date | null;
+  chargeError: string | null;
 } | null;
 
 /**
  * What a member sees: prices, savings already worked out, deadlines, terms and
  * their own commitment. Never other members' names or payments.
  */
-export function memberOfferView(offer: OfferWithStore, myCommitment: OwnCommitment, now = new Date()) {
+export function memberOfferView(offer: OfferRow, myCommitment: OwnCommitment, now = new Date()) {
   const { savingsCents, savingsPercent } = offerSavings(offer.regularPriceCents, offer.memberPriceCents);
   return {
     id: offer.id,
@@ -27,8 +26,8 @@ export function memberOfferView(offer: OfferWithStore, myCommitment: OwnCommitme
     coopId: offer.coopId,
     title: offer.title,
     description: offer.description,
-    vendor: { storeId: offer.store.id, name: offer.store.name },
-    product: { id: offer.product.id, name: offer.product.name, imageUrl: offer.product.imageUrl },
+    vendor: { name: offer.vendorName },
+    imageUrl: offer.imageUrl,
     regularPriceCents: offer.regularPriceCents,
     memberPriceCents: offer.memberPriceCents,
     savingsCents,
@@ -55,11 +54,6 @@ export function memberOfferView(offer: OfferWithStore, myCommitment: OwnCommitme
       offer.status === "LIVE" &&
       !!offer.commitmentDeadline &&
       offer.commitmentDeadline > now,
-    canBuy:
-      offer.offerType === "MEMBER_DEAL" &&
-      offer.status === "LIVE" &&
-      !!offer.expiresAt &&
-      offer.expiresAt > now,
     canPay:
       offer.offerType === "GROUP_BUY" &&
       offer.status === "PAYMENT_OPEN" &&
@@ -73,6 +67,7 @@ export function memberOfferView(offer: OfferWithStore, myCommitment: OwnCommitme
           savingsCents: myCommitment.savingsCents,
           committedAt: myCommitment.committedAt,
           paidAt: myCommitment.paidAt,
+          chargeError: myCommitment.chargeError,
           amountDueCents: offer.memberPriceCents * myCommitment.quantity,
         }
       : null,
@@ -81,7 +76,4 @@ export function memberOfferView(offer: OfferWithStore, myCommitment: OwnCommitme
 
 export type MemberOfferView = ReturnType<typeof memberOfferView>;
 
-export const offerInclude = {
-  store: { select: { id: true, name: true } },
-  product: { select: { id: true, name: true, imageUrl: true } },
-} as const;
+

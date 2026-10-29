@@ -9,6 +9,7 @@ const run = `e2e-offer-db-${Date.now()}`;
 const COOP = `${run}-coop`;
 const MEMBERS = 30;
 const CAP = 25;
+const ADDRESS = { name: "E2E member", line1: "1 Test St", line2: null, city: "Atlanta", state: "GA", postalCode: "30310" };
 
 describe.skipIf(!enabled)("Group Buy commitments in Postgres", () => {
   let db: typeof import("@repo/db").db;
@@ -19,24 +20,20 @@ describe.skipIf(!enabled)("Group Buy commitments in Postgres", () => {
   beforeAll(async () => {
     ({ db } = await import("@repo/db"));
     ({ commitToOffer } = await import("../services/marketplace-offers/index.js"));
-    const owner = await db.user.create({ data: { email: `${run}-vendor@test.cahootz.local` } });
     for (let i = 0; i < MEMBERS; i++) {
       const user = await db.user.create({ data: { email: `${run}-m${i}@test.cahootz.local`, name: `E2E member ${i}` } });
       userIds.push(user.id);
       await db.userCoopMembership.create({ data: { userId: user.id, coopId: COOP, status: "ACTIVE" } });
+      // Committing needs a saved card; it's never charged here.
+      await db.paymentMethod.create({
+        data: { userId: user.id, stripePaymentMethodId: `pm_${run}_${i}`, type: "card", brand: "visa", last4: "4242", expiryMonth: 12, expiryYear: 2034, isDefault: true },
+      });
     }
-    const business = await db.business.create({ data: { ownerId: owner.id, coopId: COOP, name: "E2E vendor", city: "Testville" } });
-    const store = await db.store.create({
-      data: { ownerId: owner.id, coopId: COOP, businessId: business.id, name: "E2E vendor", status: "APPROVED" },
-    });
-    const product = await db.product.create({ data: { storeId: store.id, name: "E2E rice", priceUSD: 24 } });
     const offer = await db.marketplaceOffer.create({
       data: {
         offerType: "GROUP_BUY",
         coopId: COOP,
-        storeId: store.id,
-        productId: product.id,
-        businessId: business.id,
+        vendorName: "E2E vendor",
         title: "E2E rice group buy",
         regularPriceCents: 2400,
         regularPriceSource: "Shelf price",
@@ -59,9 +56,6 @@ describe.skipIf(!enabled)("Group Buy commitments in Postgres", () => {
     await db.notification.deleteMany({ where: { coopId: COOP } });
     await db.auditLog.deleteMany({ where: { resourceId: offerId } });
     await db.marketplaceOffer.deleteMany({ where: { coopId: COOP } });
-    await db.product.deleteMany({ where: { store: { coopId: COOP } } });
-    await db.store.deleteMany({ where: { coopId: COOP } });
-    await db.business.deleteMany({ where: { coopId: COOP } });
     await db.userCoopMembership.deleteMany({ where: { coopId: COOP } });
     await db.user.deleteMany({ where: { email: { startsWith: run } } });
     await db.$disconnect();
@@ -69,7 +63,7 @@ describe.skipIf(!enabled)("Group Buy commitments in Postgres", () => {
 
   it("never lets more members in than the cap, even all at once", async () => {
     const results = await Promise.allSettled(
-      userIds.map((userId) => commitToOffer(db, { userId, offerId, quantity: 1 })),
+      userIds.map((userId) => commitToOffer(db, { userId, offerId, quantity: 1, shippingAddress: ADDRESS })),
     );
     const accepted = results.filter((r) => r.status === "fulfilled").length;
     const refused = results.filter((r) => r.status === "rejected");
@@ -89,7 +83,7 @@ describe.skipIf(!enabled)("Group Buy commitments in Postgres", () => {
   it("keeps one row when the same member taps commit several times at once", async () => {
     const member = userIds[0]!;
     const before = await db.offerCommitment.count({ where: { offerId, userId: member } });
-    await Promise.allSettled([1, 2, 3, 4, 5].map(() => commitToOffer(db, { userId: member, offerId, quantity: 1 })));
+    await Promise.allSettled([1, 2, 3, 4, 5].map(() => commitToOffer(db, { userId: member, offerId, quantity: 1, shippingAddress: ADDRESS })));
     const after = await db.offerCommitment.count({ where: { offerId, userId: member } });
     expect(before).toBeLessThanOrEqual(1);
     expect(after).toBe(1);

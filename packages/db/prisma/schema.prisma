@@ -109,6 +109,7 @@ model User {
   commonsCommentReactions    CommonsCommentReaction[]
   commonsPostReactions       CommonsPostReaction[]
   offerCommitments           OfferCommitment[]
+  shippingAddress            UserShippingAddress?
   vendorReferrals            VendorReferral[]
   circleChatPresence         CircleChatPresence[]
   eventsCreated              Event[]                    @relation("EventCreatedBy")
@@ -3485,9 +3486,9 @@ model CommerceTransaction {
 
   // Parties
   customerId String
-  customer   User     @relation(fields: [customerId], references: [id])
-  businessId String
-  business   Business @relation(fields: [businessId], references: [id])
+  customer   User      @relation(fields: [customerId], references: [id])
+  businessId String? // Null for Member Deals and Group Buys, which Cahootz collects itself
+  business   Business? @relation(fields: [businessId], references: [id])
   coopId     String
 
   // Pricing breakdown
@@ -3879,14 +3880,23 @@ model AnonymousProfile {
 // Regular listings never touch these tables.
 
 model MarketplaceOffer {
-  id               String          @id @default(cuid())
-  offerType        OfferType
-  coopId           String
-  storeId          String
-  store            Store           @relation(fields: [storeId], references: [id])
-  productId        String
-  product          Product         @relation(fields: [productId], references: [id])
-  businessId       String
+  id         String    @id @default(cuid())
+  offerType  OfferType
+  coopId     String
+  // Older offers were sold through a marketplace shop. New ones aren't: Cahootz
+  // collects every payment and works with the vendor by hand.
+  storeId    String?
+  store      Store?    @relation(fields: [storeId], references: [id])
+  productId  String?
+  product    Product?  @relation(fields: [productId], references: [id])
+  businessId String?
+
+  // Who fills the order. They never sign up; an admin sends them the order list.
+  vendorName       String
+  vendorEmail      String?
+  vendorPhone      String?
+  vendorProspectId String? // The outreach business that said yes, if it came from outreach
+  imageUrl         String?
   // The discovered item this offer came from, if any (product-discovery bot).
   sourcedProductId String?
   sourcedProduct   SourcedProduct? @relation(fields: [sourcedProductId], references: [id], onDelete: SetNull)
@@ -3918,7 +3928,7 @@ model MarketplaceOffer {
   paymentDeadline    DateTime?
   fulfillmentDate    DateTime?
 
-  fulfillmentMethod  OfferFulfillmentMethod @default(PICKUP)
+  fulfillmentMethod  OfferFulfillmentMethod @default(DELIVERY)
   pickupLocation     String?
   serviceArea        String?
   redemptionRules    String?
@@ -3942,6 +3952,7 @@ model MarketplaceOffer {
   commitments          OfferCommitment[]
   commerceTransactions CommerceTransaction[]
   notificationSends    OfferNotificationSend[]
+  vendorPayouts        OfferVendorPayout[]
 
   @@index([coopId, status])
   @@index([status, commitmentDeadline])
@@ -3965,9 +3976,14 @@ model OfferCommitment {
   quantity Int
   status   CommitmentStatus @default(COMMITTED)
 
-  // Shared with the vendor because the member ticked "share my name and phone".
-  contactName  String?
-  contactPhone String?
+  // Sent to the vendor so they can ship it. The member agrees when they order.
+  contactName     String?
+  contactPhone    String?
+  shippingAddress Json? // { name, line1, line2, city, state, postalCode } at the time of the order
+
+  // Group Buy: the card saved when the member committed, charged once the goal is met.
+  stripePaymentMethodId String?
+  chargeError           String? // Why the automatic charge didn't go through
 
   regularUnitCents Int
   memberUnitCents  Int
@@ -3993,6 +4009,41 @@ model OfferCommitment {
 
 // Claimed before an offer notification is sent, so a retried sweep never
 // sends the same notice twice.
+/**
+ * A payment Cahootz made to a vendor, by hand, for one offer.
+ */
+model OfferVendorPayout {
+  id           String           @id @default(cuid())
+  offerId      String
+  offer        MarketplaceOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  amountCents  Int
+  paidAt       DateTime
+  method       String // Check, Zelle, ACH...
+  note         String?
+  recordedById String
+  createdAt    DateTime         @default(now())
+
+  @@index([offerId])
+  @@schema("public")
+}
+
+/**
+ * Where a member wants deal orders shipped. Filled in for them next time.
+ */
+model UserShippingAddress {
+  userId     String   @id
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  postalCode String
+  updatedAt  DateTime @updatedAt
+
+  @@schema("public")
+}
+
 model OfferNotificationSend {
   id        String           @id @default(cuid())
   offerId   String

@@ -10,23 +10,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ coo
   if ('response' in admin) return admin.response;
   const { coopId } = await params;
   try {
-    const [offers, allProducts, pricing] = await Promise.all([
-      listOffersForAdmin(db, coopId),
-      // Products an offer can be built on: active items in any approved shop. A vendor
-      // serving this Commons may be registered in another one; this Commons' shops come first.
-      db.product.findMany({
-        where: { isActive: true, kind: 'STANDARD', store: { status: 'APPROVED', deletedAt: null, businessId: { not: null } } },
-        select: { id: true, name: true, priceUSD: true, store: { select: { id: true, name: true, coopId: true } } },
-        orderBy: [{ store: { name: 'asc' } }, { name: 'asc' }],
-        take: 500,
-      }),
-      offerPricingSettings(db),
-    ]);
-    const products = [
-      ...allProducts.filter((product) => product.store.coopId === coopId),
-      ...allProducts.filter((product) => product.store.coopId !== coopId),
-    ];
-    return NextResponse.json({ offers, products, minShareCents: pricing.minShareCents });
+    const [offers, pricing] = await Promise.all([listOffersForAdmin(db, coopId), offerPricingSettings(db)]);
+    return NextResponse.json({ offers, minShareCents: pricing.minShareCents });
   } catch (error) {
     return adminErrorResponse(error);
   }

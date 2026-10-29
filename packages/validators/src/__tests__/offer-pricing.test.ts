@@ -9,14 +9,16 @@ import {
 } from "../marketplace-offers";
 
 const base = {
-  offerType: "MEMBER_DEAL" as const,
-  productId: "p1",
+  offerType: "GROUP_BUY" as const,
+  vendorName: "Corner Market",
   title: "Rice",
   regularPriceCents: 2400,
   regularPriceSource: "Posted shelf price",
   memberPriceCents: 1800,
   vendorPayoutCents: 1500,
-  expiresAt: "2026-12-30",
+  minimumCommitments: 10,
+  minimumPaidOrders: 8,
+  commitmentDeadline: "2026-12-30",
 };
 
 describe("no deal loses the Commons or Cahootz money", () => {

@@ -1,15 +1,16 @@
 /**
- * Member Deals and Group Buys.
+ * Group Buys: a lower price that happens only when enough households commit.
  *
- * Offers sit on top of the regular marketplace: each one points at an existing
- * product and every purchase is a normal CommerceTransaction, paid through the
- * same Stripe destination charge. What differs is the price (the member price,
- * no markup), the split (the vendor gets a set amount; after Stripe's fee the
- * rest is split between the Commons and Cahootz) and, for Group Buys, a
- * commit-then-pay flow where nobody is charged until enough members commit and
- * the vendor confirms. A platform admin publishes each offer, and every member
- * hears about live deals in a weekly notification.
+ * Vendors never sign up. An offer names its vendor, and Cahootz collects every
+ * payment in its own Stripe account, sends the vendor the order list (names and
+ * delivery addresses) and pays them by hand. The member pays the member price
+ * with no markup; after Stripe's fee and the vendor's amount, the rest is split
+ * between the Commons and Cahootz. A Group Buy member saves a card and an
+ * address when they commit, and the card is charged only once the goal is met.
+ * A platform admin publishes each offer, and every member hears about live
+ * deals in a weekly notification.
  */
+export * from "./charges.js";
 export * from "./checkout.js";
 export * from "./commitments.js";
 export * from "./digest.js";

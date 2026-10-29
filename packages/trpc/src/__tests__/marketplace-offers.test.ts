@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { estimateStripeFeeCents, offerInputSchema, offerSavings, splitOfferPayment } from "@repo/validators/marketplace-offers";
 
+// Charging a saved card settles on the spot; the real version writes through the shared db.
+vi.mock("../services/payment-orchestration-service.js", () => ({
+  processSuccessfulPayment: vi.fn(async () => ({})),
+}));
+
 vi.mock("../services/treasury-ledger-service.js", () => ({
   recordFederationFee: vi.fn(async () => ({})),
   recordFederationFeeRefund: vi.fn(async () => ({})),
@@ -16,10 +21,12 @@ import {
   cancelCommitment,
   canTransition,
   commitToOffer,
+  closeCommitmentsEarly,
+  getOfferForAdmin,
   handleOfferPaymentRefunded,
   handleOfferPaymentSucceeded,
   mySavings,
-  openPayment,
+  recordVendorPayout,
   runOfferSweep,
   publishOffer,
   sendWeeklyDealsDigest,
@@ -28,11 +35,19 @@ import {
 import { createFakeOfferDb, seedOfferWorld } from "./fixtures/fake-offer-db.js";
 
 const DAY_MS = 86_400_000;
+const ADDRESS = { name: "Member One", line1: "1 Main St", line2: null, city: "Atlanta", state: "GA", postalCode: "30310" };
 
 function fakeStripe() {
   return {
     refunds: { create: vi.fn(async () => ({ id: "re_1" })) },
-    paymentIntents: { cancel: vi.fn(async () => ({})) },
+    paymentIntents: {
+      cancel: vi.fn(async () => ({})),
+      // pm_member_2's card is declined; every other saved card goes through.
+      create: vi.fn(async (params: any) => {
+        if (params.payment_method === "pm_member_2") throw Object.assign(new Error("Your card was declined."), { code: "card_declined" });
+        return { id: `pi_${params.metadata.offerCommitmentId}`, status: "succeeded", latest_charge: "ch_1" };
+      }),
+    },
     checkout: { sessions: { expire: vi.fn(async () => ({})) } },
     charges: { retrieve: vi.fn(async () => ({ balance_transaction: { fee: 134 } })) },
   } as any;
@@ -71,7 +86,7 @@ describe("offer pricing", () => {
 describe("offer input rules", () => {
   const base = {
     offerType: "GROUP_BUY" as const,
-    productId: "p1",
+    vendorName: "Corner Market",
     title: "Rice",
     regularPriceCents: 2400,
     regularPriceSource: "Shelf price",
@@ -101,21 +116,22 @@ describe("offer input rules", () => {
     expect(offerInputSchema.safeParse({ ...base, minimumPaidOrders: 11 }).success).toBe(false);
   });
 
-  it("needs an end date for a Member Deal", () => {
+  it("only takes group buys, each naming its vendor", () => {
     expect(offerInputSchema.safeParse({ ...base, offerType: "MEMBER_DEAL" }).success).toBe(false);
-    expect(offerInputSchema.safeParse({ ...base, offerType: "MEMBER_DEAL", expiresAt: "2026-11-30" }).success).toBe(true);
+    const { vendorName: _vendorName, ...noVendor } = base;
+    expect(offerInputSchema.safeParse(noVendor).success).toBe(false);
   });
 });
 
 describe("offer status rules", () => {
   it("only allows listed moves", () => {
-    expect(canTransition("GROUP_BUY", "LIVE", "AWAITING_VENDOR")).toBe(true);
-    expect(canTransition("GROUP_BUY", "LIVE", "PAYMENT_OPEN")).toBe(false);
+    // The goal is met: straight to charging saved cards, no vendor step in the app.
+    expect(canTransition("GROUP_BUY", "LIVE", "PAYMENT_OPEN")).toBe(true);
     expect(canTransition("GROUP_BUY", "FULFILLED", "CANCELLED")).toBe(false);
-    expect(canTransition("MEMBER_DEAL", "LIVE", "AWAITING_VENDOR")).toBe(false);
-    expect(canTransition("MEMBER_DEAL", "PAUSED", "LIVE")).toBe(true);
+    // Member Deals aren't offered anymore; an old one can only be cancelled.
+    expect(canTransition("MEMBER_DEAL", "DRAFT", "LIVE")).toBe(false);
+    expect(canTransition("MEMBER_DEAL", "LIVE", "CANCELLED")).toBe(true);
     // A platform admin publishes a draft straight to members; there's no steward step.
-    expect(canTransition("MEMBER_DEAL", "DRAFT", "LIVE")).toBe(true);
     expect(canTransition("GROUP_BUY", "DRAFT", "LIVE")).toBe(true);
     expect(canTransition("GROUP_BUY", "DRAFT", "PENDING_STEWARD")).toBe(false);
   });
@@ -129,10 +145,16 @@ describe("Group Buy commitments", () => {
   });
 
   it("commits without charging and keeps one row per member on a double tap", async () => {
-    await commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 1 });
-    await commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 1 });
+    await commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 1, shippingAddress: ADDRESS });
+    await commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 1, shippingAddress: ADDRESS });
     expect(db.tables.offerCommitment).toHaveLength(1);
-    expect(db.tables.offerCommitment[0]).toMatchObject({ status: "COMMITTED", quantity: 1, contactName: "member 1" });
+    expect(db.tables.offerCommitment[0]).toMatchObject({
+      status: "COMMITTED",
+      quantity: 1,
+      contactName: "member 1",
+      shippingAddress: ADDRESS,
+      stripePaymentMethodId: "pm_member_1",
+    });
     expect(db.tables.offerCommitment[0].savingsCents ?? 0).toBe(0);
     expect(db.tables.marketplaceOffer[0].committedQuantity).toBe(1);
     expect(db.tables.commerceTransaction).toHaveLength(0);
@@ -140,38 +162,45 @@ describe("Group Buy commitments", () => {
   });
 
   it("refuses commitments past the cap", async () => {
-    await commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 2 });
-    await commitToOffer(db, { userId: "member_2", offerId: "offer_1", quantity: 2 });
-    await expect(commitToOffer(db, { userId: "member_3", offerId: "offer_1", quantity: 2 })).rejects.toThrow("Only 1 left");
+    await commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 2, shippingAddress: ADDRESS });
+    await commitToOffer(db, { userId: "member_2", offerId: "offer_1", quantity: 2, shippingAddress: ADDRESS });
+    await expect(commitToOffer(db, { userId: "member_3", offerId: "offer_1", quantity: 2, shippingAddress: ADDRESS })).rejects.toThrow("Only 1 left");
     expect(db.tables.marketplaceOffer[0].committedQuantity).toBe(4);
   });
 
   it("refuses more than the per-member limit", async () => {
-    await expect(commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 3 })).rejects.toThrow("up to 2");
+    await expect(commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 3, shippingAddress: ADDRESS })).rejects.toThrow("up to 2");
+  });
+
+  it("needs a saved card, and keeps the address for the member's next order", async () => {
+    db.tables.paymentMethod = db.tables.paymentMethod.filter((m: any) => m.userId !== "member_1");
+    await expect(commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 1, shippingAddress: ADDRESS })).rejects.toThrow("Add a card first");
+    await commitToOffer(db, { userId: "member_2", offerId: "offer_1", quantity: 1, shippingAddress: ADDRESS });
+    expect(db.tables.userShippingAddress).toEqual([expect.objectContaining({ userId: "member_2", postalCode: "30310" })]);
   });
 
   it("refuses people who aren't members", async () => {
-    await expect(commitToOffer(db, { userId: "outsider", offerId: "offer_1", quantity: 1 })).rejects.toThrow("Only members");
+    await expect(commitToOffer(db, { userId: "outsider", offerId: "offer_1", quantity: 1, shippingAddress: ADDRESS })).rejects.toThrow("Only members");
   });
 
   it("tells committers once when the goal is reached", async () => {
-    await commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 2 });
-    const result = await commitToOffer(db, { userId: "member_2", offerId: "offer_1", quantity: 1 });
+    await commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 2, shippingAddress: ADDRESS });
+    const result = await commitToOffer(db, { userId: "member_2", offerId: "offer_1", quantity: 1, shippingAddress: ADDRESS });
     expect(result.thresholdReached).toBe(true);
-    await commitToOffer(db, { userId: "member_3", offerId: "offer_1", quantity: 1 });
+    await commitToOffer(db, { userId: "member_3", offerId: "offer_1", quantity: 1, shippingAddress: ADDRESS });
     const notices = db.tables.notification.filter((n: any) => n.type === "GROUP_BUY_THRESHOLD_REACHED");
     expect(notices.map((n: any) => n.userId).sort()).toEqual(["member_1", "member_2"]);
   });
 
   it("lets a member cancel before the deadline and frees the spot", async () => {
-    await commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 2 });
+    await commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 2, shippingAddress: ADDRESS });
     await cancelCommitment(db, { userId: "member_1", offerId: "offer_1" });
     expect(db.tables.offerCommitment[0].status).toBe("CANCELLED");
     expect(db.tables.marketplaceOffer[0].committedQuantity).toBe(0);
   });
 
   it("doesn't let a member cancel after the deadline", async () => {
-    await commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 1 });
+    await commitToOffer(db, { userId: "member_1", offerId: "offer_1", quantity: 1, shippingAddress: ADDRESS });
     db.tables.marketplaceOffer[0].commitmentDeadline = new Date(Date.now() - 1000);
     await expect(cancelCommitment(db, { userId: "member_1", offerId: "offer_1" })).rejects.toThrow("deadline has passed");
   });
@@ -243,14 +272,15 @@ describe("offer payments", () => {
     expect(recordStripeFeeShortfall).toHaveBeenCalledWith(expect.objectContaining({ amount: 0.34 }));
   });
 
-  it("refunds a payment that lands after the window closed", async () => {
+  it("refunds a payment that lands after the window closed, from Cahootz's own balance", async () => {
     db.tables.marketplaceOffer[0].status = "FAILED";
     const result = await handleOfferPaymentSucceeded(db, "tx_1", stripe);
     expect(result.outcome).toBe("REFUNDED_LATE_OR_DUPLICATE");
     expect(stripe.refunds.create).toHaveBeenCalledWith(
-      expect.objectContaining({ payment_intent: "pi_1", reverse_transfer: true }),
+      expect.not.objectContaining({ reverse_transfer: true }),
       { idempotencyKey: "offer-refund:tx_1" },
     );
+    expect(stripe.refunds.create.mock.calls[0][0]).toMatchObject({ payment_intent: "pi_1" });
     expect(db.tables.offerCommitment[0].savingsCents).toBe(0);
   });
 
@@ -318,17 +348,31 @@ describe("offer sweep", () => {
     expect(notice.body).toContain("weren't charged");
   });
 
-  it("hands a Group Buy that met its goal to the vendor", async () => {
+  it("charges every saved card when a Group Buy meets its goal, and a declined card gets a way to pay", async () => {
     seedOfferWorld(db, { commitmentDeadline: new Date(Date.now() - 1000) });
-    commit("member_1", 2);
-    commit("member_2", 1);
+    commit("member_1", 2, "COMMITTED", { stripePaymentMethodId: "pm_member_1" });
+    commit("member_2", 1, "COMMITTED", { stripePaymentMethodId: "pm_member_2" });
     const result = await runOfferSweep(db, new Date(), stripe);
     expect(result.groupBuysClosed).toBe(1);
-    expect(db.tables.marketplaceOffer[0].status).toBe("AWAITING_VENDOR");
-    expect(db.tables.notification.some((n: any) => n.userId === "vendor_1" && n.type === "VENDOR_OFFER_READY_TO_CONFIRM")).toBe(true);
-    // A second run does nothing new.
+    expect(db.tables.marketplaceOffer[0]).toMatchObject({ status: "PAYMENT_OPEN" });
+    expect(db.tables.marketplaceOffer[0].paymentDeadline).toBeInstanceOf(Date);
+
+    // Charged off-session to Cahootz's own account: no shop, no transfer.
+    expect(stripe.paymentIntents.create).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 3600, customer: "cus_member_1", payment_method: "pm_member_1", off_session: true, confirm: true }),
+      { idempotencyKey: "offer-charge:c_member_1" },
+    );
+    expect(stripe.paymentIntents.create.mock.calls[0][0]).not.toHaveProperty("transfer_data");
+    expect(db.tables.commerceTransaction[0]).toMatchObject({ businessId: null, merchantSettlementAmount: 30, chargedAmount: 36 });
+    expect(db.tables.offerCommitment.find((c: any) => c.userId === "member_1")).toMatchObject({ status: "PAID", savingsCents: 1200 });
+
+    const declined = db.tables.offerCommitment.find((c: any) => c.userId === "member_2");
+    expect(declined).toMatchObject({ status: "COMMITTED", chargeError: "Your card was declined." });
+    expect(db.tables.notification.find((n: any) => n.userId === "member_2" && n.title.includes("didn't go through")).body).toContain("Your card was declined.");
+
+    // A second run charges nobody twice.
     await runOfferSweep(db, new Date(), stripe);
-    expect(db.tables.notification.filter((n: any) => n.type === "VENDOR_OFFER_READY_TO_CONFIRM")).toHaveLength(1);
+    expect(stripe.paymentIntents.create).toHaveBeenCalledTimes(2);
   });
 
   it("confirms a Group Buy with enough payments and releases unpaid spots", async () => {
@@ -350,21 +394,12 @@ describe("offer sweep", () => {
     const result = await runOfferSweep(db, new Date(), stripe);
     expect(result.groupBuysFailed).toBe(1);
     expect(db.tables.marketplaceOffer[0].status).toBe("FAILED");
-    expect(stripe.refunds.create).toHaveBeenCalledWith(
-      expect.objectContaining({ payment_intent: "pi_1", reverse_transfer: true }),
-      { idempotencyKey: "offer-refund:tx_1" },
-    );
-  });
-
-  it("expires Member Deals past their end date", async () => {
-    seedOfferWorld(db, { offerType: "MEMBER_DEAL", expiresAt: new Date(Date.now() - 1000), commitmentDeadline: null });
-    const result = await runOfferSweep(db, new Date(), stripe);
-    expect(result.dealsExpired).toBe(1);
-    expect(db.tables.marketplaceOffer[0].status).toBe("EXPIRED");
+    expect(stripe.refunds.create.mock.calls[0][0]).toMatchObject({ payment_intent: "pi_1" });
+    expect(stripe.refunds.create.mock.calls[0][1]).toEqual({ idempotencyKey: "offer-refund:tx_1" });
   });
 
   it("fills in Stripe's fee on paid offer orders that are missing it", async () => {
-    seedOfferWorld(db, { offerType: "MEMBER_DEAL", expiresAt: new Date(Date.now() + DAY_MS), commitmentDeadline: null });
+    seedOfferWorld(db);
     db.tables.commerceTransaction.push({ id: "tx_fee", offerId: "offer_1", status: "COMPLETED", stripeChargeId: "ch_1", processingFeeAmount: null });
     const result = await runOfferSweep(db, new Date(), stripe);
     expect(result.processingFeesFilled).toBe(1);
@@ -372,9 +407,10 @@ describe("offer sweep", () => {
     expect(stripe.charges.retrieve).toHaveBeenCalledWith("ch_1", { expand: ["balance_transaction"] });
   });
 
-  it("sends each payment reminder once", async () => {
+  it("reminds a member whose card was declined to pay, once", async () => {
     seedOfferWorld(db, { status: "PAYMENT_OPEN", paymentDeadline: new Date(Date.now() + 20 * 3600_000) });
-    commit("member_1", 1);
+    commit("member_1", 1, "COMMITTED", { chargeError: "Your card was declined." });
+    commit("member_2", 1, "PAYMENT_PENDING");
     await runOfferSweep(db, new Date(), stripe);
     await runOfferSweep(db, new Date(), stripe);
     expect(db.tables.notification.filter((n: any) => n.type === "GROUP_BUY_PAYMENT_REMINDER")).toHaveLength(1);
@@ -402,42 +438,66 @@ describe("publishing and vendors", () => {
     expect(db.tables.marketplaceOffer[0].status).toBe("DRAFT");
   });
 
-  it("opens a payment window when the vendor confirms", async () => {
-    Object.assign(db.tables.marketplaceOffer[0], { status: "AWAITING_VENDOR" });
-    db.tables.offerCommitment.push({ id: "c1", offerId: "offer_1", userId: "member_1", quantity: 1, status: "COMMITTED" });
-    const now = new Date("2026-11-01T12:00:00Z");
-    const { paymentDeadline } = await openPayment(db, "vendor_1", "offer_1", now);
-    expect(paymentDeadline.toISOString()).toBe("2026-11-04T12:00:00.000Z");
-    expect(db.tables.marketplaceOffer[0].status).toBe("PAYMENT_OPEN");
-    expect(db.tables.notification.find((n: any) => n.type === "GROUP_BUY_PAYMENT_OPEN").userId).toBe("member_1");
+  it("lets an admin close early once the goal is met, which charges saved cards", async () => {
+    const stripe = fakeStripe();
+    Object.assign(db.tables.marketplaceOffer[0], { status: "LIVE" });
+    db.tables.offerCommitment.push(
+      { id: "c1", offerId: "offer_1", userId: "member_1", quantity: 2, status: "COMMITTED", stripePaymentMethodId: "pm_member_1", regularUnitCents: 2400, memberUnitCents: 1800 },
+      { id: "c3", offerId: "offer_1", userId: "member_3", quantity: 1, status: "COMMITTED", stripePaymentMethodId: "pm_member_3", regularUnitCents: 2400, memberUnitCents: 1800 },
+    );
+    const charges = await closeCommitmentsEarly(db, "admin_1", "offer_1", stripe, new Date("2026-11-01T12:00:00Z"));
+    expect(charges).toEqual({ paid: 2, processing: 0, failed: 0 });
+    expect(db.tables.marketplaceOffer[0]).toMatchObject({ status: "PAYMENT_OPEN" });
+    expect(db.tables.marketplaceOffer[0].paymentDeadline.toISOString()).toBe("2026-11-03T12:00:00.000Z");
+  });
+
+  it("refuses to close early before the goal is met", async () => {
+    Object.assign(db.tables.marketplaceOffer[0], { status: "LIVE" });
+    await expect(closeCommitmentsEarly(db, "admin_1", "offer_1", fakeStripe())).rejects.toThrow("hasn't hit its goal");
+  });
+
+  it("lists orders with addresses for the vendor, and tracks what Cahootz owes them", async () => {
+    db.tables.offerCommitment.push(
+      { id: "c1", offerId: "offer_1", userId: "member_1", quantity: 2, status: "PAID", contactName: "member 1", contactPhone: "555-0100", shippingAddress: ADDRESS, committedAt: new Date() },
+      { id: "c2", offerId: "offer_1", userId: "member_2", quantity: 1, status: "COMMITTED", contactName: "member 2", chargeError: "Your card was declined.", committedAt: new Date() },
+      { id: "c3", offerId: "offer_1", userId: "member_3", quantity: 1, status: "CANCELLED", committedAt: new Date() },
+    );
+    await recordVendorPayout(db, "admin_1", "offer_1", { amountCents: 1000, paidAt: new Date("2026-11-05"), method: "Zelle" });
+    await expect(recordVendorPayout(db, "admin_1", "offer_1", { amountCents: 0, paidAt: new Date(), method: "Zelle" })).rejects.toThrow("Enter the amount");
+    const offer = await getOfferForAdmin(db, "offer_1");
+    expect(offer.orders.map((o) => o.commitmentId)).toEqual(["c1", "c2"]);
+    expect(offer.orders[0]).toMatchObject({ paid: true, address: ADDRESS, phone: "555-0100" });
+    // Two units sold at $15.00 each, $10.00 paid so far.
+    expect(offer.vendorPay).toEqual({ unitsSold: 2, earnedCents: 3000, paidCents: 1000, owedCents: 2000 });
+    expect(db.tables.auditLog.at(-1)).toMatchObject({ action: "OFFER_VENDOR_PAID", actorId: "admin_1" });
   });
 });
 
-describe("weekly deals notice", () => {
+describe("weekly group buys notice", () => {
   const now = new Date("2026-11-02T15:00:00Z");
   const deal = (overrides: Record<string, unknown> = {}) => ({
-    title: "Rice", offerType: "MEMBER_DEAL" as const, status: "LIVE", regularPriceCents: 2400, memberPriceCents: 1800,
-    committedQuantity: 0, minimumCommitments: null, commitmentDeadline: null, paymentDeadline: null,
-    expiresAt: new Date("2026-11-07T22:00:00Z"), ...overrides,
+    title: "Rice", status: "LIVE", regularPriceCents: 2400, memberPriceCents: 1800,
+    committedQuantity: 3, minimumCommitments: 10, commitmentDeadline: new Date("2026-11-07T22:00:00Z"), paymentDeadline: null,
+    ...overrides,
   });
 
   it("lists up to three deals in plain lines", () => {
     const text = digestText([
       deal(),
-      deal({ title: "Laundry pods", offerType: "GROUP_BUY", committedQuantity: 8, minimumCommitments: 12, commitmentDeadline: new Date("2026-11-06T22:00:00Z"), expiresAt: null }),
-      deal({ title: "Coffee", offerType: "GROUP_BUY", status: "PAYMENT_OPEN", memberPriceCents: 850, paymentDeadline: new Date("2026-11-05T22:00:00Z") }),
+      deal({ title: "Laundry pods", committedQuantity: 8, minimumCommitments: 12, commitmentDeadline: new Date("2026-11-06T22:00:00Z") }),
+      deal({ title: "Coffee", status: "PAYMENT_OPEN", memberPriceCents: 850, regularPriceCents: 1200 }),
       deal({ title: "Soap" }),
     ]);
-    expect(text.title).toBe("This week's member deals");
+    expect(text.title).toBe("This week's group buys");
     expect(text.body.split("\n")).toEqual([
-      "Rice: $18.00, save 25%, ends Sat, Nov 7",
-      "Laundry pods group buy: 8 of 12 joined, closes Fri, Nov 6",
-      "Coffee: it's happening. Pay $8.50 by Thu, Nov 5",
+      "Rice: $18.00, save 25%. 3 of 10 joined, closes Sat, Nov 7",
+      "Laundry pods: $18.00, save 25%. 8 of 12 joined, closes Fri, Nov 6",
+      "Coffee: it's happening, $8.50 each (save 29%)",
       "Plus 1 more in the marketplace.",
     ]);
   });
 
-  it("tells every active member of a Commons with live deals, once a week", async () => {
+  it("tells every active member of a Commons with a group buy going, once a week", async () => {
     const db: any = createFakeOfferDb();
     seedOfferWorld(db, { status: "LIVE" });
     const members = db.tables.userCoopMembership.filter((m: any) => m.coopId === "church" && m.status === "ACTIVE").map((m: any) => m.userId);
@@ -445,13 +505,13 @@ describe("weekly deals notice", () => {
     expect(first).toMatchObject({ commons: 1, sent: members.length });
     const notices = db.tables.notification.filter((n: any) => n.type === "OFFER_WEEKLY_DIGEST");
     expect(notices.map((n: any) => n.userId).sort()).toEqual([...members].sort());
-    expect(notices[0]).toMatchObject({ coopId: "church", title: "This week's member deals", data: { coopId: "church", lane: "marketplace" } });
+    expect(notices[0]).toMatchObject({ coopId: "church", title: "This week's group buys", data: { coopId: "church", lane: "marketplace" } });
     expect((await sendWeeklyDealsDigest(db, now)).sent).toBe(0);
     // A new week sends again.
     expect((await sendWeeklyDealsDigest(db, new Date(now.getTime() + 7 * DAY_MS))).sent).toBe(members.length);
   });
 
-  it("stays quiet when a Commons has no live deals", async () => {
+  it("stays quiet when a Commons has no group buy going", async () => {
     const db: any = createFakeOfferDb();
     seedOfferWorld(db, { status: "DRAFT" });
     expect(await sendWeeklyDealsDigest(db, now)).toEqual({ commons: 0, sent: 0 });

@@ -15,6 +15,10 @@ interface CommercePaymentConfirmationProps {
   amountLabel: string;
   accentColor: string;
   cardholderName?: string;
+  /** 'setup' saves a card without charging it (a SetupIntent's client secret). */
+  mode?: 'payment' | 'setup';
+  /** The button text. Defaults to "Pay {amountLabel}". */
+  actionLabel?: string;
   onSuccess: () => void;
   onError: (message: string) => void;
 }
@@ -23,6 +27,8 @@ function CommercePaymentForm({
   clientSecret,
   amountLabel,
   accentColor,
+  mode = 'payment',
+  actionLabel,
   onSuccess,
   onError,
 }: Omit<CommercePaymentConfirmationProps, 'merchantName' | 'checkoutUrl'> & { clientSecret: string }) {
@@ -46,6 +52,22 @@ function CommercePaymentForm({
     };
 
     try {
+      if (mode === 'setup') {
+        const { error } = await stripe.confirmSetup({
+          elements,
+          confirmParams: { return_url: typeof window !== 'undefined' ? window.location.href : undefined },
+          redirect: 'if_required',
+        });
+        if (error) {
+          console.error('Stripe confirmSetup error:', error);
+          fail(friendlyError(error, "Your card wasn't saved."));
+          return;
+        }
+        setProcessing(false);
+        onSuccess();
+        return;
+      }
+
       const { paymentIntent, error: retrieveError } = await stripe.retrievePaymentIntent(clientSecret);
 
       if (paymentIntent?.status === 'succeeded') {
@@ -119,7 +141,7 @@ function CommercePaymentForm({
             <ShieldCheck size={20} color="#fff" />
           )}
           <Text className="ml-2 text-white text-base font-bold">
-            {processing ? 'Confirming...' : `Pay ${amountLabel}`}
+            {processing ? 'Confirming...' : actionLabel ?? `Pay ${amountLabel}`}
           </Text>
         </TouchableOpacity>
       </form>
@@ -132,6 +154,8 @@ export default function CommercePaymentConfirmation({
   merchantName,
   amountLabel,
   accentColor,
+  mode = 'payment',
+  actionLabel,
   onSuccess,
   onError,
 }: CommercePaymentConfirmationProps) {
@@ -164,9 +188,11 @@ export default function CommercePaymentConfirmation({
           <CreditCard size={20} color={accentColor} />
         </View>
         <View className="flex-1">
-          <Text className="text-gray-900 font-semibold">Secure card payment</Text>
+          <Text className="text-gray-900 font-semibold">{mode === 'setup' ? 'Save a card' : 'Secure card payment'}</Text>
           <Text className="text-gray-500 text-sm mt-1">
-            Enter a card with Stripe to complete your {merchantName ? `${merchantName} ` : ''}order.
+            {mode === 'setup'
+              ? "Stripe keeps your card safe. We won't charge it now."
+              : `Enter a card with Stripe to complete your ${merchantName ? `${merchantName} ` : ''}order.`}
           </Text>
         </View>
       </View>
@@ -177,6 +203,8 @@ export default function CommercePaymentConfirmation({
             clientSecret={clientSecret}
             amountLabel={amountLabel}
             accentColor={accentColor}
+            mode={mode}
+            actionLabel={actionLabel}
             onSuccess={onSuccess}
             onError={onError}
           />

@@ -56,7 +56,7 @@ export default function OffersReportPage() {
         <ArrowLeft className="h-4 w-4" /> Marketplace settings
       </Link>
       <div>
-        <h1 className="text-2xl font-bold text-white">Member deals and group buys report</h1>
+        <h1 className="text-2xl font-bold text-white">Group buys report</h1>
         <p className="mt-1 text-sm text-slate-400">
           Completed payments only, net of refunds. Savings count only once a member has paid.
         </p>
@@ -80,7 +80,7 @@ export default function OffersReportPage() {
                 <tr key={row.offerId} className="border-t border-white/5">
                   <td className="p-3">
                     <Link href={`/portal/admin/commons/${row.coopId}/offers/${row.offerId}`} className="text-white hover:underline">{row.title}</Link>
-                    <p className="text-xs text-slate-500">{row.offerType === 'GROUP_BUY' ? 'Group buy' : 'Member deal'} · {OFFER_STATUS_LABELS[row.status] ?? row.status}</p>
+                    <p className="text-xs text-slate-500">Group buy · {OFFER_STATUS_LABELS[row.status] ?? row.status}</p>
                   </td>
                   <td className="p-3">{row.coopId}</td>
                   <td className="p-3">{row.vendorName}</td>

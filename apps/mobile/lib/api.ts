@@ -944,7 +944,7 @@ async function readTrpcResult<T>(
   return result.result?.data as T;
 }
 
-/** A Member Deal or Group Buy as a member sees it (`marketplaceOffers.get`). */
+/** A Group Buy as a member sees it (`marketplaceOffers.get`). */
 export interface MarketplaceOffer {
   id: string;
   offerType: 'MEMBER_DEAL' | 'GROUP_BUY';
@@ -952,8 +952,8 @@ export interface MarketplaceOffer {
   coopId: string;
   title: string;
   description: string | null;
-  vendor: { storeId: string; name: string };
-  product: { id: string; name: string; imageUrl: string | null };
+  vendor: { name: string };
+  imageUrl: string | null;
   regularPriceCents: number;
   memberPriceCents: number;
   savingsCents: number;
@@ -976,7 +976,6 @@ export interface MarketplaceOffer {
   substitutionPolicy: string | null;
   terms: string | null;
   canCommit: boolean;
-  canBuy: boolean;
   canPay: boolean;
   myCommitment: {
     quantity: number;
@@ -984,50 +983,33 @@ export interface MarketplaceOffer {
     savingsCents: number;
     committedAt: string;
     paidAt: string | null;
+    chargeError: string | null;
     amountDueCents: number;
   } | null;
 }
 
-/** Where one unit's price goes. Stripe's fee is estimated; each payment records the real fee. */
-export interface OfferUnitSplit {
-  memberPaysCents: number;
-  estimatedStripeFeeCents: number;
-  vendorCents: number;
-  commonsCents: number;
-  cahootzCents: number;
-  commonsSplitBps: number;
-}
-
-export interface VendorOffer {
-  id: string;
-  offerType: 'MEMBER_DEAL' | 'GROUP_BUY';
-  status: string;
-  title: string;
-  productName: string;
-  memberPriceCents: number;
-  regularPriceCents: number;
-  split: OfferUnitSplit;
-  committedQuantity: number;
-  minimumCommitments: number | null;
-  minimumPaidOrders: number | null;
-  commitmentDeadline: string | null;
-  paymentDeadline: string | null;
-  expiresAt: string | null;
-  fulfillmentMethod: 'PICKUP' | 'DELIVERY';
-  pickupLocation: string | null;
-  paidOrders: number;
-  vendorProceedsCents: number;
-}
-
-export interface VendorRosterEntry {
-  commitmentId: string;
+/** Where a member wants deal orders shipped. Saved on their account for next time. */
+export interface ShippingAddress {
   name: string;
-  phone: string | null;
-  quantity: number;
-  paid: boolean;
-  pickedUp: boolean;
-  status: string;
-  committedAt: string;
+  line1: string;
+  line2: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+}
+
+export interface SavedCard {
+  brand: string;
+  last4: string;
+  expiryMonth: number;
+  expiryYear: number;
+}
+
+/** Starts saving a card with Stripe: a card form on the web, Stripe's page in the app. */
+export interface CardSetupSession {
+  setupId: string;
+  clientSecret: string | null;
+  checkoutUrl: string | null;
 }
 
 export interface OfferCheckoutSession {
@@ -5018,23 +5000,43 @@ export const api = {
     return readTrpcResult<MyBusinessReferral[]>(response, "We couldn't load your recommendations.");
   },
 
-  // ── Member Deals and Group Buys ──
+  // ── Group Buys ──
   listOffers(coopId: string, sessionToken: string) {
     return offersQuery<MarketplaceOffer[]>('listForCommons', { coopId }, sessionToken, "We couldn't load deals right now.");
   },
   getOffer(offerId: string, sessionToken: string) {
     return offersQuery<MarketplaceOffer>('get', { offerId }, sessionToken, "We couldn't load this offer.");
   },
-  commitToOffer(input: { offerId: string; quantity: number; contactPhone?: string }, sessionToken: string) {
+  getOrderDefaults(sessionToken: string) {
+    return offersQuery<{ shippingAddress: ShippingAddress | null; card: SavedCard | null }>(
+      'orderDefaults',
+      undefined,
+      sessionToken,
+      "We couldn't load your saved address and card.",
+    );
+  },
+  startCardSetup(input: { paymentUi: 'payment_intent' | 'hosted_checkout'; successUrl?: string; cancelUrl?: string }, sessionToken: string) {
+    return offersMutation<CardSetupSession>('startCardSetup', input, sessionToken, "We couldn't open the card form. Please try again.");
+  },
+  finishCardSetup(setupId: string, sessionToken: string) {
+    return offersMutation<SavedCard>('finishCardSetup', { setupId }, sessionToken, "Your card wasn't saved. Please add it again.");
+  },
+  commitToOffer(
+    input: { offerId: string; quantity: number; contactPhone?: string; shippingAddress: ShippingAddress },
+    sessionToken: string,
+  ) {
     return offersMutation<{ committedQuantity: number; quantity: number; thresholdReached: boolean }>(
-      'commit', { ...input, shareContact: true }, sessionToken, "Your spot didn't save. Please try again.",
+      'commit',
+      { ...input, shareContact: true },
+      sessionToken,
+      "Your spot didn't save. Please try again.",
     );
   },
   cancelOfferCommitment(offerId: string, sessionToken: string) {
     return offersMutation<{ committedQuantity: number }>('cancelCommitment', { offerId }, sessionToken, "We couldn't cancel your spot. Please try again.");
   },
   startOfferCheckout(
-    input: { offerId: string; quantity?: number; paymentUi: 'payment_intent' | 'hosted_checkout'; successUrl?: string; cancelUrl?: string },
+    input: { offerId: string; paymentUi: 'payment_intent' | 'hosted_checkout'; successUrl?: string; cancelUrl?: string },
     sessionToken: string,
   ) {
     return offersMutation<OfferCheckoutSession>('startCheckout', input, sessionToken, "We couldn't start checkout. Please try again.");
@@ -5042,21 +5044,7 @@ export const api = {
   getMySavings(sessionToken: string, coopId?: string) {
     return offersQuery<MemberSavings>('mySavings', coopId ? { coopId } : {}, sessionToken, "We couldn't load your savings.");
   },
-  listVendorOffers(sessionToken: string) {
-    return offersQuery<VendorOffer[]>('vendorList', undefined, sessionToken, "We couldn't load your offers.");
-  },
-  getVendorRoster(offerId: string, sessionToken: string) {
-    return offersQuery<VendorRosterEntry[]>('vendorRoster', { offerId }, sessionToken, "We couldn't load who joined.");
-  },
-  confirmOfferCapacity(offerId: string, sessionToken: string) {
-    return offersMutation<{ paymentDeadline: string }>('vendorConfirm', { offerId }, sessionToken, "We couldn't open payment. Please try again.");
-  },
-  updateOfferFulfillment(offerId: string, status: 'ORDERED' | 'READY' | 'FULFILLED', sessionToken: string) {
-    return offersMutation<{ ok: true }>('vendorUpdateFulfillment', { offerId, status }, sessionToken, "That update didn't save. Please try again.");
-  },
-  markOfferPickedUp(commitmentId: string, sessionToken: string) {
-    return offersMutation<{ ok: true }>('vendorMarkPickedUp', { commitmentId }, sessionToken, "That update didn't save. Please try again.");
-  },
+
 
   async getCommunityPulse(coopId: string, sessionToken: string) {
     const input = encodeURIComponent(JSON.stringify({ coopId }));

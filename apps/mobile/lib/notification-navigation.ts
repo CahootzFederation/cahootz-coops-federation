@@ -95,15 +95,11 @@ export function notificationDestination(
         circleId: id("circleId")!,
       },
     };
-  // The weekly member deals notice opens that Commons' marketplace.
+  // The weekly group buys notice opens that Commons' marketplace.
   if (notification.type === "OFFER_WEEKLY_DIGEST")
     return { pathname: "/(tabs)/board", params: { coopId: id("coopId") || notification.coopId, lane: "marketplace" } };
-  // Member Deals and Group Buys: vendors manage, members view.
-  if (id("offerId")) {
-    if (notification.type.startsWith("VENDOR_OFFER_"))
-      return { pathname: "/(authenticated)/store-offers", params: { offerId: id("offerId")! } };
-    return { pathname: "/(authenticated)/offer-detail", params: { id: id("offerId")! } };
-  }
+  // Group Buys. Vendors don't use the app; admins run them on the web.
+  if (id("offerId")) return { pathname: "/(authenticated)/offer-detail", params: { id: id("offerId")! } };
   if (id("orderId"))
     return {
       pathname: "/(authenticated)/order-detail",

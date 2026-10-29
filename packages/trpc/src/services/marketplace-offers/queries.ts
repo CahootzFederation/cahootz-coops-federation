@@ -3,7 +3,6 @@ import { TRPCError } from "@trpc/server";
 import { estimateStripeFeeCents, offerSavings, splitOfferPayment } from "@repo/validators/marketplace-offers";
 
 import { requireActiveMember } from "../commons-membership.js";
-import { requireStoreOwner } from "./lifecycle.js";
 import {
   ACTIVE_COMMITMENT_STATUSES,
   type Db,
@@ -11,7 +10,7 @@ import {
   notFound,
   PAID_COMMITMENT_STATUSES,
 } from "./shared.js";
-import { memberOfferView, offerInclude } from "./views.js";
+import { memberOfferView } from "./views.js";
 
 /**
  * How one unit's price is split, with Stripe's fee estimated (2.9% + 30¢).
@@ -34,7 +33,7 @@ export function unitSplit(offer: { memberPriceCents: number; vendorPayoutCents: 
   };
 }
 
-const commitmentSelect = { quantity: true, status: true, savingsCents: true, committedAt: true, paidAt: true } as const;
+const commitmentSelect = { quantity: true, status: true, savingsCents: true, committedAt: true, paidAt: true, chargeError: true } as const;
 
 // ── Members ──────────────────────────────────────────────
 
@@ -48,12 +47,11 @@ export async function listOffersForMember(db: Db, userId: string, coopId: string
     where: {
       coopId,
       OR: [
-        { offerType: "MEMBER_DEAL", status: "LIVE", expiresAt: { gt: now } },
         { offerType: "GROUP_BUY", status: { in: [...MEMBER_VISIBLE_GROUP_BUY_STATUSES] } },
         { commitments: { some: { userId, status: { not: "CANCELLED" } } }, status: { notIn: ["DRAFT", "PENDING_STEWARD"] } },
       ],
     },
-    include: { ...offerInclude, commitments: { where: { userId }, select: commitmentSelect } },
+    include: { commitments: { where: { userId }, select: commitmentSelect } },
     orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
     take: 50,
   });
@@ -63,7 +61,7 @@ export async function listOffersForMember(db: Db, userId: string, coopId: string
 export async function getOfferForMember(db: Db, userId: string, offerId: string, now = new Date()) {
   const offer = await db.marketplaceOffer.findUnique({
     where: { id: offerId },
-    include: { ...offerInclude, commitments: { where: { userId }, select: commitmentSelect } },
+    include: { commitments: { where: { userId }, select: commitmentSelect } },
   });
   if (!offer || offer.status === "DRAFT" || offer.status === "PENDING_STEWARD") notFound();
   await requireActiveMember(db, userId, offer.coopId);
@@ -82,7 +80,7 @@ export async function mySavings(db: Db, userId: string, coopId?: string) {
       savingsCents: { gt: 0 },
       ...(coopId ? { offer: { coopId } } : {}),
     },
-    include: { offer: { select: { id: true, title: true, offerType: true, coopId: true, store: { select: { name: true } } } } },
+    include: { offer: { select: { id: true, title: true, offerType: true, coopId: true, vendorName: true } } },
     orderBy: { paidAt: "desc" },
   });
   return {
@@ -91,7 +89,7 @@ export async function mySavings(db: Db, userId: string, coopId?: string) {
       offerId: c.offer.id,
       title: c.offer.title,
       offerType: c.offer.offerType,
-      vendorName: c.offer.store.name,
+      vendorName: c.offer.vendorName,
       quantity: c.quantity,
       paidCents: c.memberUnitCents * c.quantity,
       savingsCents: c.savingsCents,
@@ -100,7 +98,7 @@ export async function mySavings(db: Db, userId: string, coopId?: string) {
   };
 }
 
-// ── Money totals (shared by stewards, vendors and admins) ─
+// ── Money totals (for admins) ──────────────────────────
 
 export type OfferFinancials = {
   grossChargedCents: number;
@@ -169,70 +167,11 @@ export async function offerFinancials(db: Db, offerIds: string[]): Promise<Map<s
   return totals;
 }
 
-// ── Vendors ──────────────────────────────────────────────
-
-export async function listOffersForVendor(db: Db, userId: string) {
-  const offers = await db.marketplaceOffer.findMany({
-    where: { store: { ownerId: userId }, status: { notIn: ["DRAFT", "PENDING_STEWARD"] } },
-    include: offerInclude,
-    orderBy: { updatedAt: "desc" },
-    take: 50,
-  });
-  const money = await offerFinancials(db, offers.map((o) => o.id));
-  return offers.map((offer) => {
-    const totals = money.get(offer.id)!;
-    return {
-      id: offer.id,
-      offerType: offer.offerType,
-      status: offer.status,
-      title: offer.title,
-      productName: offer.product.name,
-      memberPriceCents: offer.memberPriceCents,
-      regularPriceCents: offer.regularPriceCents,
-      split: unitSplit(offer),
-      committedQuantity: offer.committedQuantity,
-      minimumCommitments: offer.minimumCommitments,
-      minimumPaidOrders: offer.minimumPaidOrders,
-      commitmentDeadline: offer.commitmentDeadline,
-      paymentDeadline: offer.paymentDeadline,
-      expiresAt: offer.expiresAt,
-      fulfillmentMethod: offer.fulfillmentMethod,
-      pickupLocation: offer.pickupLocation,
-      paidOrders: totals.paidOrders,
-      vendorProceedsCents: totals.vendorProceedsCents,
-    };
-  });
-}
-
-/**
- * Who committed, for planning and pickup. Members agreed to share their name
- * and phone when they committed. No payment details.
- */
-export async function vendorRoster(db: Db, userId: string, offerId: string) {
-  const offer = await requireStoreOwner(db, userId, offerId);
-  const commitments = await db.offerCommitment.findMany({
-    where: { offerId: offer.id, status: { not: "CANCELLED" } },
-    select: { id: true, contactName: true, contactPhone: true, quantity: true, status: true, committedAt: true, fulfilledAt: true },
-    orderBy: { committedAt: "asc" },
-  });
-  return commitments.map((c) => ({
-    commitmentId: c.id,
-    name: c.contactName ?? "A member",
-    phone: c.contactPhone,
-    quantity: c.quantity,
-    paid: c.status === "PAID" || c.status === "FULFILLED",
-    pickedUp: c.status === "FULFILLED",
-    status: c.status,
-    committedAt: c.committedAt,
-  }));
-}
-
 // ── Platform admin ───────────────────────────────────────
 
 export async function listOffersForAdmin(db: Db, coopId: string) {
   const offers = await db.marketplaceOffer.findMany({
     where: { coopId },
-    include: offerInclude,
     orderBy: { updatedAt: "desc" },
   });
   const money = await offerFinancials(db, offers.map((o) => o.id));
@@ -243,37 +182,90 @@ export async function getOfferForAdmin(db: Db, offerId: string) {
   const offer = await db.marketplaceOffer.findUnique({
     where: { id: offerId },
     include: {
-      ...offerInclude,
       commitments: {
         include: { commerceTransaction: { select: { id: true, status: true, chargedAmount: true, refundedAmount: true, failureReason: true } } },
         orderBy: { committedAt: "asc" },
       },
+      vendorPayouts: { orderBy: { paidAt: "desc" } },
     },
   });
   if (!offer) notFound();
   const money = await offerFinancials(db, [offer.id]);
   const exceptions = offer.commitments.filter(
-    (c) => c.refundError || c.status === "LAPSED" || c.commerceTransaction?.status === "FAILED",
+    (c) => c.refundError || c.chargeError || c.status === "LAPSED" || c.commerceTransaction?.status === "FAILED",
   );
+  const { commitments, vendorPayouts, ...rest } = offer;
   return {
-    ...offer,
+    ...rest,
     ...offerSavings(offer.regularPriceCents, offer.memberPriceCents),
     split: unitSplit(offer),
     financials: money.get(offer.id)!,
+    orders: offerOrders(commitments),
+    vendorPay: vendorPayStatus(offer, commitments, vendorPayouts),
+    vendorPayouts,
     exceptions: exceptions.map((c) => ({
       commitmentId: c.id,
       status: c.status,
       refundError: c.refundError,
-      paymentFailure: c.commerceTransaction?.failureReason ?? null,
+      paymentFailure: c.chargeError ?? c.commerceTransaction?.failureReason ?? null,
     })),
   };
+}
+
+type OrderRow = {
+  id: string;
+  status: string;
+  quantity: number;
+  contactName: string | null;
+  contactPhone: string | null;
+  shippingAddress: unknown;
+  paidAt: Date | null;
+  fulfilledAt: Date | null;
+  chargeError: string | null;
+};
+
+/**
+ * Every order, paid ones first, for the admin to send to the vendor. Only
+ * platform admins see this: it has members' names, phones and addresses.
+ */
+export function offerOrders(commitments: OrderRow[]) {
+  const rank = (status: string) => (status === "PAID" ? 0 : status === "FULFILLED" ? 1 : 2);
+  return commitments
+    .filter((c) => c.status !== "CANCELLED")
+    .sort((a, b) => rank(a.status) - rank(b.status))
+    .map((c) => ({
+      commitmentId: c.id,
+      status: c.status,
+      quantity: c.quantity,
+      name: c.contactName ?? "A member",
+      phone: c.contactPhone,
+      address: (c.shippingAddress as { name: string; line1: string; line2: string | null; city: string; state: string; postalCode: string } | null) ?? null,
+      paid: c.status === "PAID" || c.status === "FULFILLED",
+      shipped: c.status === "FULFILLED",
+      paidAt: c.paidAt,
+      chargeError: c.chargeError,
+    }));
+}
+
+/** What Cahootz owes the vendor: their amount for every unit paid for and kept, minus what's been paid. */
+export function vendorPayStatus(
+  offer: { vendorPayoutCents: number },
+  commitments: { status: string; quantity: number }[],
+  payouts: { amountCents: number }[],
+) {
+  const unitsSold = commitments
+    .filter((c) => c.status === "PAID" || c.status === "FULFILLED")
+    .reduce((sum, c) => sum + c.quantity, 0);
+  const earnedCents = unitsSold * offer.vendorPayoutCents;
+  const paidCents = payouts.reduce((sum, p) => sum + p.amountCents, 0);
+  return { unitsSold, earnedCents, paidCents, owedCents: Math.max(0, earnedCents - paidCents) };
 }
 
 /** Totals for every offer, split by Commons and vendor, for the platform report. */
 export async function offersReport(db: Db) {
   const offers = await db.marketplaceOffer.findMany({
     where: { status: { notIn: ["DRAFT"] } },
-    select: { id: true, coopId: true, title: true, offerType: true, status: true, store: { select: { name: true } } },
+    select: { id: true, coopId: true, title: true, offerType: true, status: true, vendorName: true },
   });
   const money = await offerFinancials(db, offers.map((o) => o.id));
   return offers.map((offer) => ({
@@ -282,7 +274,7 @@ export async function offersReport(db: Db) {
     title: offer.title,
     offerType: offer.offerType,
     status: offer.status,
-    vendorName: offer.store.name,
+    vendorName: offer.vendorName,
     ...money.get(offer.id)!,
   }));
 }

@@ -1,19 +1,26 @@
 /**
- * E2E fixture for the Member Deals and Group Buys journeys
- * (apps/mobile/e2e/member-deals.spec.ts, group-buys.spec.ts). Not part of the
+ * E2E fixture for the Group Buys journeys
+ * (apps/mobile/e2e/group-buy-admin.spec.ts, group-buys.spec.ts). Not part of the
  * product; only the Playwright specs call it.
  *
  *   tsx --import ./dotenv.config.js scripts/e2e-marketplace-offers.ts create '<json>'
- *     Creates one offer in the shared private E2E commons on the E2E second
- *     commons shop's product. JSON: { title, offerType, status, minimumCommitments?, quantityPerMember? }
+ *     Creates one offer in the shared private E2E commons from the vendor "E2E Corner
+ *     Market" (vendors never sign up). JSON: { title, status, minimumCommitments?, quantityPerMember? }
  *     status is DRAFT (a platform admin publishes it in the web admin) or LIVE.
  *   ... digest
- *     Sends this week's member deals notice for the E2E commons, as Monday's job does.
+ *     Sends this week's group buys notice for the E2E commons, as Monday's job does.
  *     Clears the commons' claim rows first, so it sends even if it already ran this week.
  *   ... close-commitments <offerId>
  *     Moves the commitment deadline into the past and runs the real sweep.
- *   ... open-payment <offerId>
- *     Closes commitments early (goal met) and opens payment, as the vendor would.
+ *   ... close-early <offerId>
+ *     Closes commitments early (goal met) and charges every saved card, as an admin would.
+ *   ... save-card <email>
+ *     Gives a test member a saved card, as if they added one with Stripe. It's a stand-in
+ *     with no Stripe customer, so charging it fails the way a declined card does.
+ *   ... card-reset <email>
+ *     Removes a test member's saved cards and delivery address.
+ *   ... orders <offerId>
+ *     Prints each order's status and delivery address.
  *   ... cleanup <titlePrefix>
  *     Removes offers whose title starts with the prefix, with their rows and alerts.
  *
@@ -22,13 +29,12 @@
 import { db } from "../../../packages/db/index.js";
 import {
   closeCommitmentsEarly,
-  openPayment,
   runOfferSweep,
   sendWeeklyDealsDigest,
 } from "../../../packages/trpc/src/services/marketplace-offers/index.js";
 
 const COOP_ID = "e2e-private-shared";
-const SHOP_NAME = "E2E Second Commons Shop";
+const VENDOR_NAME = "E2E Corner Market";
 const DAY = 24 * 60 * 60 * 1000;
 
 function assertSafeTarget() {
@@ -48,27 +54,18 @@ function assertSafeTarget() {
 async function create(raw: string) {
   const input = JSON.parse(raw) as {
     title: string;
-    offerType: "MEMBER_DEAL" | "GROUP_BUY";
     status: "LIVE" | "DRAFT";
     minimumCommitments?: number;
     quantityPerMember?: number;
   };
   if (!input.title.startsWith("E2E")) throw new Error("Fixture offer titles must start with E2E");
-  const store = await db.store.findFirst({
-    where: { name: SHOP_NAME, deletedAt: null },
-    include: { products: { where: { isActive: true }, take: 1 } },
-  });
-  const product = store?.products[0];
-  if (!store?.businessId || !product) throw new Error("Run pnpm -F @repo/db seed:e2e-marketplace first");
-  const isGroupBuy = input.offerType === "GROUP_BUY";
   const minimum = input.minimumCommitments ?? 3;
   const offer = await db.marketplaceOffer.create({
     data: {
-      offerType: input.offerType,
+      offerType: "GROUP_BUY",
       coopId: COOP_ID,
-      storeId: store.id,
-      productId: product.id,
-      businessId: store.businessId,
+      vendorName: VENDOR_NAME,
+      vendorEmail: "orders@e2e-corner-market.test",
       title: input.title,
       description: "E2E fixture offer.",
       regularPriceCents: 2400,
@@ -77,13 +74,11 @@ async function create(raw: string) {
       vendorPayoutCents: 1500,
       commonsSplitBps: 5000,
       quantityPerMember: input.quantityPerMember ?? 1,
-      minimumCommitments: isGroupBuy ? minimum : null,
-      minimumPaidOrders: isGroupBuy ? Math.max(1, minimum - 1) : null,
-      maximumQuantity: isGroupBuy ? 20 : null,
-      commitmentDeadline: isGroupBuy ? new Date(Date.now() + 3 * DAY) : null,
-      expiresAt: isGroupBuy ? null : new Date(Date.now() + 7 * DAY),
-      fulfillmentMethod: "PICKUP",
-      pickupLocation: "E2E fellowship hall",
+      minimumCommitments: minimum,
+      minimumPaidOrders: Math.max(1, minimum - 1),
+      maximumQuantity: 20,
+      commitmentDeadline: new Date(Date.now() + 3 * DAY),
+      fulfillmentMethod: "DELIVERY",
       refundPolicy: "Full refund if the group buy doesn't happen.",
       status: input.status,
       publishedAt: input.status === "LIVE" ? new Date() : null,
@@ -105,10 +100,41 @@ async function closeCommitments(offerId: string) {
   return { status: offer.status, summary };
 }
 
-async function openPaymentWindow(offerId: string) {
-  await closeCommitmentsEarly(db, "e2e-fixture", offerId);
-  const { paymentDeadline } = await openPayment(db, "e2e-fixture", offerId);
-  return { paymentDeadline };
+async function closeEarly(offerId: string) {
+  const charges = await closeCommitmentsEarly(db, "e2e-fixture", offerId);
+  const offer = await db.marketplaceOffer.findUniqueOrThrow({ where: { id: offerId }, select: { status: true } });
+  return { status: offer.status, charges };
+}
+
+async function testMember(email: string) {
+  if (!email.endsWith("@test.cahootz.local")) throw new Error("Only test.cahootz.local members");
+  return db.user.findUniqueOrThrow({ where: { email }, select: { id: true } });
+}
+
+async function saveCard(email: string) {
+  const user = await testMember(email);
+  await db.paymentMethod.updateMany({ where: { userId: user.id }, data: { isDefault: false } });
+  await db.paymentMethod.upsert({
+    where: { stripePaymentMethodId: `pm_e2e_${user.id}` },
+    create: { userId: user.id, stripePaymentMethodId: `pm_e2e_${user.id}`, type: "card", brand: "visa", last4: "4242", expiryMonth: 12, expiryYear: 2034, isDefault: true },
+    update: { isDefault: true },
+  });
+  return { userId: user.id };
+}
+
+async function cardReset(email: string) {
+  const user = await testMember(email);
+  const cards = await db.paymentMethod.deleteMany({ where: { userId: user.id } });
+  const addresses = await db.userShippingAddress.deleteMany({ where: { userId: user.id } });
+  return { cards: cards.count, addresses: addresses.count };
+}
+
+async function orders(offerId: string) {
+  const rows = await db.offerCommitment.findMany({
+    where: { offerId },
+    select: { status: true, quantity: true, shippingAddress: true, chargeError: true, user: { select: { email: true } } },
+  });
+  return rows.map(({ user, ...row }) => ({ email: user.email, ...row }));
 }
 
 async function cleanup(prefix: string) {
@@ -136,7 +162,10 @@ async function main() {
   if (command === "create") result = await create(arg!);
   else if (command === "digest") result = await digest();
   else if (command === "close-commitments") result = await closeCommitments(arg!);
-  else if (command === "open-payment") result = await openPaymentWindow(arg!);
+  else if (command === "close-early") result = await closeEarly(arg!);
+  else if (command === "save-card") result = await saveCard(arg!);
+  else if (command === "card-reset") result = await cardReset(arg!);
+  else if (command === "orders") result = await orders(arg!);
   else if (command === "cleanup") result = await cleanup(arg!);
   else throw new Error(`Unknown command ${command}`);
   console.log(`E2E_RESULT ${JSON.stringify(result)}`);

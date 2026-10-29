@@ -22,7 +22,6 @@ export const CAMPAIGN_DAYS = 30;
 const DAY_MS = 86_400_000;
 
 /** Services suit a member price; goods bought in bulk suit a Group Buy. */
-const MEMBER_DEAL_CATEGORIES = new Set(["auto_repair", "home_repair", "phones_internet"]);
 
 function notFound(): never {
   throw new TRPCError({ code: "NOT_FOUND", message: "We couldn't find that campaign." });
@@ -60,7 +59,7 @@ export async function proposeCampaigns(coopId: string, now = new Date(), db: Db 
         data: {
           coopId,
           category: category.key,
-          offerType: !productId && MEMBER_DEAL_CATEGORIES.has(category.key) ? "MEMBER_DEAL" : "GROUP_BUY",
+          offerType: "GROUP_BUY",
           searchTerms: productId && item?.name ? [item.name, category.label] : [category.label, ...category.keywords.slice(0, 3)],
           sourcedProductId: productId,
           demandActionId: question.id,

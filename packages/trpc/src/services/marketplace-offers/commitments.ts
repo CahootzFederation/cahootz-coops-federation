@@ -1,8 +1,11 @@
 import { TRPCError } from "@trpc/server";
 
+import type { ShippingAddress } from "@repo/validators/marketplace-offers";
+
 import { auditLogEntry } from "../../lib/audit.js";
 import { requireActiveMember } from "../commons-membership.js";
-import { createNotificationAndPush } from "../push-notification-service.js";
+import { requireSavedCard, saveShippingAddress } from "./charges.js";
+import { contactFor } from "./checkout.js";
 import {
   ACTIVE_COMMITMENT_STATUSES,
   type Db,
@@ -20,8 +23,10 @@ type CommitResult = {
 };
 
 /**
- * A member commits to a Group Buy. Nothing is charged. Committing shares the
- * member's name and phone with the vendor, which the app asks them to agree to.
+ * A member commits to a Group Buy with a saved card and a delivery address.
+ * Nothing is charged yet: the card is charged only if the goal is met.
+ * Committing shares the member's name, phone and address with the vendor, which
+ * the app asks them to agree to. The address is saved for their next order.
  *
  * Runs under the offer lock: the cap, the running total and the threshold check
  * all see the same numbers, and the unique (offer, member) key means a double
@@ -29,22 +34,23 @@ type CommitResult = {
  */
 export async function commitToOffer(
   db: Db,
-  params: { userId: string; offerId: string; quantity: number; contactPhone?: string },
+  params: { userId: string; offerId: string; quantity: number; contactPhone?: string; shippingAddress: ShippingAddress },
   now = new Date(),
 ): Promise<CommitResult> {
-  const offer = await db.marketplaceOffer.findUnique({
-    where: { id: params.offerId },
-    include: { store: { select: { ownerId: true, name: true } } },
-  });
+  const offer = await db.marketplaceOffer.findUnique({ where: { id: params.offerId } });
   if (!offer || offer.offerType !== "GROUP_BUY") notFound();
   await requireActiveMember(db, params.userId, offer.coopId);
 
-  const user = await db.user.findUnique({
-    where: { id: params.userId },
-    select: { name: true, nickname: true, handle: true, phone: true },
-  });
-  const contactName = user?.name || user?.nickname || user?.handle || "A member";
-  const contactPhone = params.contactPhone?.trim() || user?.phone || null;
+  const card = await requireSavedCard(db, params.userId);
+  const { contactName, contactPhone } = await contactFor(db, params.userId, params.contactPhone);
+  await saveShippingAddress(db, params.userId, params.shippingAddress);
+  const orderDetails = {
+    contactName,
+    contactPhone,
+    shippingAddress: params.shippingAddress,
+    stripePaymentMethodId: card.stripePaymentMethodId,
+    chargeError: null,
+  };
 
   const result = await db.$transaction(async (tx) => {
     await lockOffer(tx, offer.id);
@@ -82,8 +88,7 @@ export async function commitToOffer(
         userId: params.userId,
         quantity: params.quantity,
         status: "COMMITTED",
-        contactName,
-        contactPhone,
+        ...orderDetails,
         regularUnitCents: current.regularPriceCents,
         memberUnitCents: current.memberPriceCents,
         committedAt: now,
@@ -91,8 +96,7 @@ export async function commitToOffer(
       update: {
         quantity: params.quantity,
         status: "COMMITTED",
-        contactName,
-        contactPhone,
+        ...orderDetails,
         cancelledAt: null,
         ...(existing?.status === "CANCELLED" ? { committedAt: now } : {}),
       },
@@ -115,29 +119,15 @@ export async function commitToOffer(
       committedQuantity: after,
       quantity: params.quantity,
       thresholdReached: before < minimum && after >= minimum,
-      isNew: existing?.status !== "COMMITTED",
     };
   });
-
-  if (result.isNew) {
-    // Inbox only: the vendor gets one push when the goal is met, not one per member.
-    await createNotificationAndPush(db, {
-      userId: offer.store.ownerId,
-      coopId: offer.coopId,
-      type: "VENDOR_OFFER_COMMITMENT",
-      title: `${contactName} joined your group buy`,
-      body: `${offer.title}: ${result.committedQuantity} committed so far.`,
-      push: false,
-      data: { offerId: offer.id, coopId: offer.coopId },
-    }).catch((error) => console.error("Failed to notify vendor of commitment:", error));
-  }
 
   if (result.thresholdReached) {
     await notifyCommitters(db, offer, ACTIVE_COMMITMENT_STATUSES, {
       kind: "threshold-reached",
       type: "GROUP_BUY_THRESHOLD_REACHED",
       title: "Your group buy is happening",
-      body: `${offer.title} hit its goal. We'll let you know when it's time to pay ${formatCents(offer.memberPriceCents)} each. You haven't been charged.`,
+      body: `${offer.title} hit its goal. When commitments close, we'll charge your saved card ${formatCents(offer.memberPriceCents)} each. You haven't been charged yet.`,
     });
   }
 
@@ -163,7 +153,7 @@ export async function cancelCommitment(
     if (offer.status !== "LIVE" || !offer.commitmentDeadline || offer.commitmentDeadline <= now) {
       throw new TRPCError({
         code: "BAD_REQUEST",
-        message: "The commitment deadline has passed, so you can't cancel in the app. Message the vendor or a steward for help.",
+        message: "The commitment deadline has passed, so you can't cancel in the app. Reply to your order notice and we'll help.",
       });
     }
     await tx.offerCommitment.update({

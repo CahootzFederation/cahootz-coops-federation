@@ -78,10 +78,17 @@ const optionalText = (max: number) =>
  */
 export const makeOfferInputSchema = (pricing: Pick<OfferPricingSettings, "minShareCents"> = DEFAULT_OFFER_PRICING) => z
   .object({
-    offerType: z.enum(offerTypes),
-    productId: z.string().min(1),
+    // Only Group Buys are offered. MEMBER_DEAL stays in the type list for older rows.
+    offerType: z.literal("GROUP_BUY").default("GROUP_BUY"),
     title: z.string().trim().min(3).max(120),
     description: optionalText(2000),
+    imageUrl: z.string().trim().url("Use a full web address for the photo, starting with https://").max(1000).optional().nullable().or(z.literal("").transform(() => null)),
+    // The vendor never signs up. An admin sends them the order list and pays them.
+    vendorName: z.string().trim().min(2, "Add the vendor's name.").max(120),
+    vendorEmail: z.string().trim().email("That vendor email doesn't look right.").max(200).optional().nullable().or(z.literal("").transform(() => null)),
+    vendorPhone: optionalText(40),
+    /** The outreach business that said yes, if the offer came from outreach. */
+    vendorProspectId: z.string().min(1).optional().nullable(),
     regularPriceCents: z.number().int().positive(),
     regularPriceSource: z.string().trim().min(3).max(200),
     /** The discovered item (product-discovery bot) this offer came from, if any. */
@@ -94,16 +101,16 @@ export const makeOfferInputSchema = (pricing: Pick<OfferPricingSettings, "minSha
     maximumQuantity: z.number().int().positive().optional().nullable(),
     quantityPerMember: z.number().int().min(1).max(50).default(1),
     commitmentDeadline: z.coerce.date().optional().nullable(),
-    paymentWindowHours: z.number().int().min(1).max(14 * 24).default(72),
+    // Group Buy: how long a member whose card was declined has to pay another way.
+    paymentWindowHours: z.number().int().min(1).max(14 * 24).default(48),
     fulfillmentDate: z.coerce.date().optional().nullable(),
-    fulfillmentMethod: z.enum(offerFulfillmentMethods).default("PICKUP"),
+    fulfillmentMethod: z.enum(offerFulfillmentMethods).default("DELIVERY"),
     pickupLocation: optionalText(300),
     serviceArea: optionalText(300),
     redemptionRules: optionalText(2000),
     refundPolicy: optionalText(2000),
     substitutionPolicy: optionalText(2000),
     terms: optionalText(4000),
-    expiresAt: z.coerce.date().optional().nullable(),
   })
   .superRefine((offer, ctx) => {
     if (offer.memberPriceCents >= offer.regularPriceCents) {
@@ -134,16 +141,6 @@ export const makeOfferInputSchema = (pricing: Pick<OfferPricingSettings, "minSha
         path: ["quantityPerMember"],
         message: "The limit per member can't be more than the total available.",
       });
-    }
-    if (offer.offerType === "MEMBER_DEAL") {
-      if (!offer.expiresAt) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["expiresAt"],
-          message: "Pick the date this deal ends.",
-        });
-      }
-      return;
     }
     if (!offer.minimumCommitments) {
       ctx.addIssue({
@@ -193,12 +190,24 @@ export const offerInputSchema = makeOfferInputSchema();
 export type OfferInput = z.input<typeof offerInputSchema>;
 export type ParsedOfferInput = z.output<typeof offerInputSchema>;
 
+/** Where a member wants a deal order shipped. Saved on their account for next time. */
+export const shippingAddressSchema = z.object({
+  name: z.string().trim().min(2, "Add the name for the delivery.").max(120),
+  line1: z.string().trim().min(3, "Add the street address.").max(200),
+  line2: z.string().trim().max(200).optional().nullable().transform((value) => (value ? value : null)),
+  city: z.string().trim().min(2, "Add the city.").max(100),
+  state: z.string().trim().min(2, "Add the state.").max(50),
+  postalCode: z.string().trim().regex(/^\d{5}(-\d{4})?$/, "Use a 5-digit ZIP code."),
+});
+export type ShippingAddress = z.output<typeof shippingAddressSchema>;
+
 export const commitToOfferSchema = z.object({
   offerId: z.string().min(1),
   quantity: z.number().int().min(1).max(50),
-  // The member has to tick "share my name and phone with the vendor".
+  // The member has to agree to share their name, phone and address with the vendor.
   shareContact: z.literal(true),
   contactPhone: z.string().trim().max(40).optional(),
+  shippingAddress: shippingAddressSchema,
 });
 
 export interface OfferSavings {

@@ -154,8 +154,10 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
     await recordProcessingFee(paymentResult.transactionId, paymentIntent.latest_charge);
     const offerResult = await handleOfferPaymentSucceeded(db, paymentResult.transactionId);
     console.log(`🏷️ [Stripe Webhook] Offer payment: ${offerResult.outcome}`);
-    if (offerResult.outcome === 'REFUNDED_LATE_OR_DUPLICATE') return;
   }
+
+  // Shop purchases go on to SC rewards. Offer payments go to Cahootz, with no shop.
+  if (!paymentResult.businessId) return;
 
   // Step 2c: Evaluate and execute SC rewards
   // Get business and customer wallet addresses

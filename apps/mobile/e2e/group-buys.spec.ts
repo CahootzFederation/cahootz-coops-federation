@@ -36,15 +36,12 @@ async function commit(page: Page) {
   await visibleButton(page, "Commit").click();
 }
 
-test("members commit with a saved card and an address, nobody is charged yet, and one cancels", async ({ browser }) => {
+test("committing asks for each missing piece in plain words, then keeps the address for next time", async ({ browser }) => {
   await withExclusiveAccountSetting(CARD_LOCK, async () => {
     const title = `${RUN} flour`;
     const { offerId } = offersFixture(["create", JSON.stringify({ title, offerType: "GROUP_BUY", status: "LIVE", minimumCommitments: 3 })]);
     offersFixture(["card-reset", USER_A_EMAIL]);
-    offersFixture(["card-reset", USER_B_EMAIL]);
-    offersFixture(["save-card", USER_B_EMAIL]);
     const a = await newSignedInPage(browser, USER_A_EMAIL);
-    const b = await newSignedInPage(browser, USER_B_EMAIL);
     try {
       await openOffer(a.page, title);
       await expect(shown(a.page, /You won't be charged now/)).toBeVisible();
@@ -71,6 +68,32 @@ test("members commit with a saved card and an address, nobody is charged yet, an
       await expect(shown(a.page, /Tick the box to share your name, phone and address/)).toBeVisible();
       await commit(a.page);
       await expect(shown(a.page, /You're in. You haven't been charged/)).toBeVisible();
+
+      // The order carries the address, and the account keeps it for next time.
+      const orders = offersFixture(["orders", offerId]) as Array<{ email: string; status: string; shippingAddress: { name: string; postalCode: string } }>;
+      expect(orders.find((o) => o.email === USER_A_EMAIL)).toMatchObject({ status: "COMMITTED", shippingAddress: { name: "E2E Member A", postalCode: "30310" } });
+      const next = `${RUN} beans`;
+      offersFixture(["create", JSON.stringify({ title: next, offerType: "GROUP_BUY", status: "LIVE", minimumCommitments: 3 })]);
+      await openOffer(a.page, next);
+      await expect(shown(a.page, "E2E Member A, 12 E2E Lane, Atlanta, GA 30310", { exact: true })).toBeVisible();
+    } finally {
+      await a.context.close();
+    }
+  });
+});
+
+test("two members commit without being charged, a reload doesn't double count, and one cancels", async ({ browser }) => {
+  await withExclusiveAccountSetting(CARD_LOCK, async () => {
+    const title = `${RUN} rice`;
+    offersFixture(["create", JSON.stringify({ title, offerType: "GROUP_BUY", status: "LIVE", minimumCommitments: 3 })]);
+    offersFixture(["save-card", USER_A_EMAIL]);
+    offersFixture(["save-card", USER_B_EMAIL]);
+    const a = await newSignedInPage(browser, USER_A_EMAIL);
+    const b = await newSignedInPage(browser, USER_B_EMAIL);
+    try {
+      await openOffer(a.page, title);
+      await fillAddress(a.page, "E2E Member A");
+      await commit(a.page);
       await expect(shown(a.page, "1 of 3 committed", { exact: true })).toBeVisible();
 
       await openOffer(b.page, title);
@@ -84,21 +107,11 @@ test("members commit with a saved card and an address, nobody is charged yet, an
       await expect(shown(a.page, "You're in for 1.", { exact: true })).toBeVisible();
       await expect(visibleButton(a.page, "Commit")).toHaveCount(0);
 
-      // The order carries the address, and the account keeps it for next time.
-      const orders = offersFixture(["orders", offerId]) as Array<{ email: string; status: string; shippingAddress: { name: string; postalCode: string } }>;
-      expect(orders.find((o) => o.email === USER_A_EMAIL)).toMatchObject({ status: "COMMITTED", shippingAddress: { name: "E2E Member A", postalCode: "30310" } });
-
       await visibleButton(a.page, "Cancel my spot").click();
       await expect(shown(a.page, /Your spot is cancelled. You weren't charged/)).toBeVisible();
 
       await b.page.reload();
       await expect(shown(b.page, "1 of 3 committed", { exact: true })).toBeVisible();
-
-      // Next time, the saved address is filled in.
-      const next = `${RUN} beans`;
-      offersFixture(["create", JSON.stringify({ title: next, offerType: "GROUP_BUY", status: "LIVE", minimumCommitments: 3 })]);
-      await openOffer(a.page, next);
-      await expect(shown(a.page, "E2E Member A, 12 E2E Lane, Atlanta, GA 30310", { exact: true })).toBeVisible();
     } finally {
       await a.context.close();
       await b.context.close();

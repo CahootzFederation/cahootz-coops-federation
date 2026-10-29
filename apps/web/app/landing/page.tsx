@@ -7,10 +7,10 @@ import { BlogCard } from "@/components/blog/blog-card";
 import { BusinessSignupForm } from "@/components/business-signup-form";
 import { GroupBuyProductCalculator } from "@/components/group-buy-product-calculator";
 import { HomepageExperimentTracker } from "@/components/homepage-experiment-tracker";
-import { MemberApplicationFlow } from "@/components/member-application-flow";
 import { SharedPurchaseCalculator } from "@/components/shared-purchase-calculator";
 import { WaitlistSignupForm } from "@/components/waitlist-signup-form";
 import { env } from "@/env";
+import { MEMBER_APP_STORE_URL } from "@/lib/member-app";
 import {
   DEFAULT_OFFER_PRICING,
   OFFER_PRICING_LIMITS,
@@ -136,7 +136,6 @@ export const metadata: Metadata = {
 
 const GITHUB_REPOSITORY_URL =
   "https://github.com/CahootzFederation/cahootz-coops-federation";
-const MEMBER_APP_URL = "https://app.cahootz.coop";
 
 const pathways = [
   {
@@ -227,7 +226,7 @@ export default async function HomePage() {
             <Link href="/blog">Journal</Link>
           </nav>
           <a className="header-action" href="#join">
-            Join a commons <ArrowRight size={16} />
+            Join the waitlist <ArrowRight size={16} />
           </a>
         </div>
       </header>
@@ -249,11 +248,11 @@ export default async function HomePage() {
                 and help decide what your community does next.
               </p>
               <div className="hero-actions">
-                <a className="button button-primary" href={MEMBER_APP_URL}>
-                  Open the member app <MoveUpRight size={18} />
+                <a className="button button-primary" href="#join">
+                  Join the waitlist <ArrowDownRight size={18} />
                 </a>
-                <a className="text-link" href="#how-it-works">
-                  See how it works <ArrowDownRight size={18} />
+                <a className="text-link" href={MEMBER_APP_STORE_URL}>
+                  Get the app <MoveUpRight size={18} />
                 </a>
               </div>
             </div>
@@ -342,8 +341,8 @@ export default async function HomePage() {
                 </div>
                 {pathway.index === "02" && (
                   <div className="pathway-links">
-                    <a className="text-link pathway-link" href={MEMBER_APP_URL}>
-                      Open the member app <MoveUpRight size={17} />
+                    <a className="text-link pathway-link" href={MEMBER_APP_STORE_URL}>
+                      Get the app <MoveUpRight size={17} />
                     </a>
                     <a className="text-link pathway-link" href="#business-form">
                       Bring your business into the commons{" "}
@@ -426,8 +425,9 @@ export default async function HomePage() {
                 <h2>Find a commons to join.</h2>
               </div>
               <p>
-                Each commons has its own purpose and application. Start with the
-                one that feels like yours.
+                Each commons has its own purpose. Pick the one that feels like
+                yours and join its waitlist. We&apos;ll let you know when it
+                opens up.
               </p>
             </div>
             {coops.length > 0 ? (
@@ -446,14 +446,12 @@ export default async function HomePage() {
                       </p>
                     </div>
                     <div className="commons-row-actions">
-                      <Link href={`/${coop.coopId}/application`}>
-                        Apply <ArrowRight size={17} />
+                      <Link
+                        href={`/?commons=${encodeURIComponent(coop.coopId)}#join`}
+                        aria-label={`Join the waitlist for ${coop.name}`}
+                      >
+                        Join the waitlist <ArrowRight size={17} />
                       </Link>
-                      {coop.hasPublishedPublicPage && (
-                        <Link href={`/c/${coop.coopId}`}>
-                          Explore page <MoveUpRight size={17} />
-                        </Link>
-                      )}
                     </div>
                   </article>
                 ))}
@@ -475,9 +473,9 @@ export default async function HomePage() {
               <p className="eyebrow">YOUR NEXT STEP</p>
               <h2>There is a place for you in this.</h2>
               <p>
-                Choose a live commons and apply with the questions that
-                community has set. If yours is still taking shape, tell us where
-                you want to build.
+                We&apos;re letting people in a few at a time. Join the
+                waitlist and tell us which commons you&apos;re interested in.
+                If yours isn&apos;t listed yet, tell us where you want to build.
               </p>
               <div className="join-aside">
                 <span>FOR MEMBERS</span>
@@ -485,17 +483,14 @@ export default async function HomePage() {
               </div>
             </div>
             <div className="join-forms">
-              <Suspense fallback={<div className="form-loading" />}>
-                <MemberApplicationFlow />
-              </Suspense>
+              <div className="waitlist-panel" id="waitlist">
+                <h3>Join the waitlist</h3>
+                <p>It takes a minute. Then get the app so you&apos;re ready.</p>
+                <Suspense fallback={<div className="form-loading" />}>
+                  <WaitlistSignupForm coops={coops} />
+                </Suspense>
+              </div>
               <div className="join-secondary">
-                <div className="waitlist-panel">
-                  <h3>Don&apos;t see your commons?</h3>
-                  <p>Tell us what community you want to join or create.</p>
-                  <Suspense fallback={<div className="form-loading" />}>
-                    <WaitlistSignupForm coops={coops} />
-                  </Suspense>
-                </div>
                 <div id="business-form">
                   <Suspense fallback={<div className="form-loading" />}>
                     <BusinessSignupForm coops={coops} />

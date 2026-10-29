@@ -15,6 +15,7 @@ import { render, toPlainText } from "@react-email/render";
 import { Resend } from "resend";
 
 import { env } from "../env.js";
+import { memberAppLinkUrl } from "../services/onboarding-drip-config.js";
 
 type EmailRecipient = string | string[];
 const DEFAULT_NETWORK_NAME = "Cahootz Co-ops";
@@ -759,42 +760,50 @@ export async function sendOrderEmails({
   await Promise.all(sends);
 }
 
-function slugify(str: string): string {
-  return str.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-}
-
-function WaitlistWelcomeEmail({ coopId }: { coopId?: string | null }) {
-  const slug = coopId ? slugify(coopId) : null;
-  const applicationUrl = slug
-    ? `https://cahootzcoops.com/${slug}/application`
-    : "https://cahootzcoops.com/application";
+function WaitlistWelcomeEmail({ commonsName }: { commonsName?: string | null }) {
+  const appUrl = memberAppLinkUrl();
+  const waitingFor = commonsName ? `${commonsName} opens up` : "a commons near you opens up";
 
   return h(
     EmailShell,
-    { preview: "Thanks for signing up for the wait list." },
-    h(Heading, { style: styles.heading }, "Hey,"),
+    { preview: "You're on the Cahootz waitlist." },
+    h(Heading, { style: styles.heading }, "You're on the list"),
     h(
       Text,
       { style: styles.text },
-      "Thanks for signing up for the wait list. I was wondering if you wanted to fill out an application.",
+      `Thanks for joining the waitlist. We're letting people in a few at a time, and we'll email you when ${waitingFor}.`,
     ),
-    h(Button, { href: applicationUrl, style: styles.button }, applicationUrl),
     h(
       Text,
       { style: styles.text },
-      "Also if you're open to it I wanted to interview a few people to get an idea of what they are looking for from their co-op.",
+      "While you wait, get the Cahootz Commons app on your iPhone so you're ready to sign in.",
+    ),
+    h(
+      Section,
+      { style: { marginTop: "22px" } },
+      h(Button, { href: appUrl, style: styles.button }, "Get the app"),
+    ),
+    h(
+      Text,
+      { style: styles.text },
+      "One more thing: we're talking with a few people about what they want from their commons. If you're up for a short chat, just reply to this email.",
     ),
   );
 }
 
+/** The waitlist email's HTML, without sending it (tests). */
+export async function renderWaitlistWelcomeEmail(commonsName?: string | null) {
+  return render(h(WaitlistWelcomeEmail, { commonsName }));
+}
+
 export async function sendWaitlistWelcomeEmail(
   email: string,
-  coopId?: string | null,
+  commonsName?: string | null,
 ): Promise<void> {
   await sendEmail({
     to: email,
-    subject: "Thanks for signing up for the wait list",
-    react: h(WaitlistWelcomeEmail, { coopId }),
+    subject: "You're on the Cahootz waitlist",
+    react: h(WaitlistWelcomeEmail, { commonsName }),
   });
 }
 

@@ -43,7 +43,7 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
   await expect(navigation.locator('a[href="/blog"]')).toHaveText("Journal");
   await expect(
     page.locator("header.landing-header").getByRole("link", {
-      name: "Join a commons",
+      name: "Join the waitlist",
     }),
   ).toBeVisible();
 
@@ -71,8 +71,14 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
     page.getByRole("heading", { name: "Unlock a better price together." }),
   ).toBeVisible();
   await expect(
-    page.locator(".hero").getByRole("link", { name: "Open the member app" }),
-  ).toHaveAttribute("href", "https://app.cahootz.coop");
+    page.locator(".hero").getByRole("link", { name: "Join the waitlist" }),
+  ).toHaveAttribute("href", "#join");
+  await expect(
+    page.locator(".hero").getByRole("link", { name: "Get the app" }),
+  ).toHaveAttribute(
+    "href",
+    "https://apps.apple.com/us/app/cahootz-commons/id6772781102",
+  );
 
   const calculator = page.getByRole("region", {
     name: "Commons shared-price calculator",

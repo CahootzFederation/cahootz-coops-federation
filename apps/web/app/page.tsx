@@ -5,7 +5,6 @@ import Link from "next/link";
 import { BlogCard } from "@/components/blog/blog-card";
 import { BusinessSignupForm } from "@/components/business-signup-form";
 import { HomepageExperimentTracker } from "@/components/homepage-experiment-tracker";
-import { MemberApplicationFlow } from "@/components/member-application-flow";
 import { TreasuryContributionCalculator } from "@/components/treasury-contribution-calculator";
 import { WaitlistSignupForm } from "@/components/waitlist-signup-form";
 import { env } from "@/env";
@@ -104,7 +103,7 @@ const faqs = [
   },
   {
     q: "How do I join?",
-    a: "Get an invite from someone already in, or apply to a commons below. Then download the app and join.",
+    a: "Get an invite from someone already in, or join the waitlist for a commons below. Then download the app and sign in.",
   },
   {
     q: "Is there an Android app?",
@@ -333,8 +332,8 @@ export default async function HomePage() {
                 <span>01</span>
                 <strong>Get an invite.</strong>
                 <p>
-                  A member or guide invites you, or you apply to a commons
-                  below.
+                  A member or guide invites you, or you join the waitlist for
+                  a commons below.
                 </p>
               </li>
               <li>
@@ -355,7 +354,7 @@ export default async function HomePage() {
             <div className="get-in-actions">
               <AppStoreButton />
               <a className="text-link" href="#join">
-                No invite? Apply or start a commons <ArrowRight size={18} />
+                No invite? Join the waitlist <ArrowRight size={18} />
               </a>
             </div>
           </div>
@@ -369,8 +368,9 @@ export default async function HomePage() {
                 <h2>Find a commons to join.</h2>
               </div>
               <p>
-                Each commons has its own purpose and application. Start with the
-                one that feels like yours.
+                Each commons has its own purpose. Pick the one that feels like
+                yours and join its waitlist. We&apos;ll let you know when it
+                opens up.
               </p>
             </div>
             {coops.length > 0 ? (
@@ -389,8 +389,11 @@ export default async function HomePage() {
                       </p>
                     </div>
                     <div className="commons-row-actions">
-                      <Link href={`/${coop.coopId}/application`}>
-                        Apply <ArrowRight size={17} />
+                      <Link
+                        href={`/?commons=${encodeURIComponent(coop.coopId)}#join`}
+                        aria-label={`Join the waitlist for ${coop.name}`}
+                      >
+                        Join the waitlist <ArrowRight size={17} />
                       </Link>
                     </div>
                   </article>
@@ -413,9 +416,9 @@ export default async function HomePage() {
               <p className="eyebrow">YOUR NEXT STEP</p>
               <h2>There is a place for you in this.</h2>
               <p>
-                Choose a live commons and apply with the questions that
-                community has set. If yours is still taking shape, tell us where
-                you want to build.
+                We&apos;re letting people in a few at a time. Join the
+                waitlist and tell us which commons you&apos;re interested in.
+                If yours isn&apos;t listed yet, tell us where you want to build.
               </p>
               <div className="join-aside">
                 <span>FOR MEMBERS</span>
@@ -424,17 +427,14 @@ export default async function HomePage() {
               </div>
             </div>
             <div className="join-forms">
-              <Suspense fallback={<div className="form-loading" />}>
-                <MemberApplicationFlow />
-              </Suspense>
+              <div className="waitlist-panel" id="waitlist">
+                <h3>Join the waitlist</h3>
+                <p>It takes a minute. Then get the app so you&apos;re ready.</p>
+                <Suspense fallback={<div className="form-loading" />}>
+                  <WaitlistSignupForm coops={coops} />
+                </Suspense>
+              </div>
               <div className="join-secondary">
-                <div className="waitlist-panel">
-                  <h3>Don&apos;t see your commons?</h3>
-                  <p>Tell us what community you want to join or create.</p>
-                  <Suspense fallback={<div className="form-loading" />}>
-                    <WaitlistSignupForm coops={coops} />
-                  </Suspense>
-                </div>
                 <div id="business-form">
                   <Suspense fallback={<div className="form-loading" />}>
                     <BusinessSignupForm coops={coops} />

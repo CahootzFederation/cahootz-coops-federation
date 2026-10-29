@@ -503,11 +503,6 @@ export default async function HomePage() {
         </section>
       </main>
 
-      <div className="sticky-app-bar">
-        <span>Cahootz Commons for iPhone</span>
-        <AppStoreButton>Get the app</AppStoreButton>
-      </div>
-
       <footer className="landing-footer">
         <div className="landing-shell footer-inner">
           <div>

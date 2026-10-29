@@ -20,6 +20,7 @@ import {
 } from "../services/stripe-customer.js";
 import { toE164, normalizePhoneForSearch } from "../lib/phone.js";
 import { convertUSDToUC } from "../utils/currency-converter.js";
+import { createNotificationAndPush } from "../services/push-notification-service.js";
 
 /**
  * The account that owns the signed-in wallet. Payment records are only ever
@@ -866,17 +867,15 @@ export const p2pRouter = router({
         });
 
         // Create notification
-        await context.db.notification.create({
+        await createNotificationAndPush(context.db, {
+          userId: input.userId,
+          coopId,
+          type: 'WITHDRAWAL_INITIATED',
+          title: 'Withdrawal Processing',
+          body: `Your withdrawal of $${input.amountUSD.toFixed(2)} to account ending in ${bankAccount.last4} is being processed.`,
           data: {
-            userId: input.userId,
-            coopId,
-            type: 'WITHDRAWAL_INITIATED',
-            title: 'Withdrawal Processing',
-            body: `Your withdrawal of $${input.amountUSD.toFixed(2)} to account ending in ${bankAccount.last4} is being processed.`,
-            data: {
-              withdrawalId: withdrawal.id,
-              amountUSD: input.amountUSD,
-            },
+            withdrawalId: withdrawal.id,
+            amountUSD: input.amountUSD,
           },
         });
 

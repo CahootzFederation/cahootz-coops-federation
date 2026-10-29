@@ -58,6 +58,43 @@ export async function listOffersForMember(db: Db, userId: string, coopId: string
   return offers.map(({ commitments, ...offer }) => memberOfferView(offer, commitments[0] ?? null, now));
 }
 
+/**
+ * Group buys from every Commons the member actively belongs to, for the
+ * "All group buys" page: open ones, plus any they joined. Each carries its
+ * Commons' name.
+ */
+export async function listOffersAcrossCommons(db: Db, userId: string, now = new Date()) {
+  const memberships = await db.userCoopMembership.findMany({
+    where: { userId, status: "ACTIVE" },
+    select: { coopId: true },
+  });
+  const coopIds = memberships.map((m) => m.coopId);
+  if (coopIds.length === 0) return [];
+  const [offers, configs] = await Promise.all([
+    db.marketplaceOffer.findMany({
+      where: {
+        coopId: { in: coopIds },
+        OR: [
+          { offerType: "GROUP_BUY", status: { in: [...MEMBER_VISIBLE_GROUP_BUY_STATUSES] } },
+          { commitments: { some: { userId, status: { not: "CANCELLED" } } }, status: { notIn: ["DRAFT", "PENDING_STEWARD"] } },
+        ],
+      },
+      include: { commitments: { where: { userId }, select: commitmentSelect } },
+      orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+      take: 100,
+    }),
+    db.coopConfig.findMany({
+      where: { coopId: { in: coopIds }, isActive: true },
+      select: { coopId: true, name: true },
+    }),
+  ]);
+  const names = new Map(configs.map((c) => [c.coopId, c.name]));
+  return offers.map(({ commitments, ...offer }) => ({
+    ...memberOfferView(offer, commitments[0] ?? null, now),
+    commonsName: names.get(offer.coopId) ?? null,
+  }));
+}
+
 export async function getOfferForMember(db: Db, userId: string, offerId: string, now = new Date()) {
   const offer = await db.marketplaceOffer.findUnique({
     where: { id: offerId },

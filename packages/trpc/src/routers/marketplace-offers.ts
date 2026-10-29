@@ -8,6 +8,7 @@ import {
   commitToOffer,
   finishCardSetup,
   getOfferForMember,
+  listOffersAcrossCommons,
   listOffersForMember,
   myOrderDefaults,
   mySavings,
@@ -30,6 +31,9 @@ export const marketplaceOffersRouter = router({
   listForCommons: accountAuthenticatedProcedure
     .input(coopInput)
     .query(({ ctx, input }) => listOffersForMember(ctx.db, ctx.accountUser.id, input.coopId)),
+
+  /** Group buys from every Commons the member belongs to, for the All group buys page. */
+  listAll: accountAuthenticatedProcedure.query(({ ctx }) => listOffersAcrossCommons(ctx.db, ctx.accountUser.id)),
 
   get: accountAuthenticatedProcedure
     .input(offerInput)

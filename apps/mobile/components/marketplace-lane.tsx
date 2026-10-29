@@ -215,9 +215,23 @@ export default function MarketplaceLane({ initialCoopId }: { initialCoopId?: str
         </View>
         {offers.length > 0 && !normalizedQuery ? (
           <View className="mt-5 px-4" accessibilityLabel="Group buys">
-            <Text className="text-lg font-black" style={{ color: colors.ink }}>
-              Group buys
-            </Text>
+            <View className="flex-row items-center justify-between">
+              <Text className="text-lg font-black" style={{ color: colors.ink }}>
+                Group buys
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="link"
+                accessibilityLabel="See all group buys"
+                onPress={() => router.push('/(authenticated)/group-buys' as any)}
+                hitSlop={8}
+                className="flex-row items-center"
+              >
+                <Text className="text-sm font-black" style={{ color: colors.orange }}>
+                  See all
+                </Text>
+                <ChevronRight size={16} color={colors.orange} />
+              </TouchableOpacity>
+            </View>
             <Text className="mb-3 mt-0.5 text-xs font-semibold" style={{ color: colors.muted }}>
               Buy together for a lower price. Nobody pays unless enough people join.
             </Text>

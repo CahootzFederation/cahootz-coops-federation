@@ -53,7 +53,6 @@ export default function OfferDetailScreen() {
   const [offer, setOffer] = useState<MarketplaceOffer | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
-  const [shareContact, setShareContact] = useState(false);
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
@@ -143,10 +142,6 @@ export default function OfferDetailScreen() {
     }
     if (!card) {
       setMessage({ tone: 'error', text: "Add a card first. We'll only charge it if the group buy happens." });
-      return false;
-    }
-    if (!shareContact) {
-      setMessage({ tone: 'error', text: `Tick the box to share your name, phone and address with ${offer.vendor.name}. They need it to ship your order.` });
       return false;
     }
     return true;
@@ -371,24 +366,6 @@ export default function OfferDetailScreen() {
     </View>
   );
 
-  const consent = (
-    <TouchableOpacity
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: shareContact }}
-      aria-checked={shareContact}
-      accessibilityLabel={`Share my name, phone and address with ${offer.vendor.name}`}
-      onPress={() => setShareContact((v) => !v)}
-      className="mt-4 flex-row items-start"
-    >
-      <View className="mr-3 mt-0.5 h-5 w-5 items-center justify-center rounded border" style={{ borderColor: colors.ink, backgroundColor: shareContact ? colors.ink : '#FFFFFF' }}>
-        {shareContact ? <Check size={14} color="#FFFFFF" /> : null}
-      </View>
-      <Text className="flex-1 text-sm" style={{ color: colors.ink }}>
-        Share my name, phone and address with {offer.vendor.name} so they can ship my order.
-      </Text>
-    </TouchableOpacity>
-  );
-
   return (
     <SafeAreaView className="flex-1" edges={['top']} style={{ backgroundColor: colors.paper }}>
       <View className="flex-row items-center px-4 py-3">
@@ -478,9 +455,8 @@ export default function OfferDetailScreen() {
               {offer.quantityPerMember > 1 ? stepper : null}
               {shipTo}
               {cardRow}
-              {consent}
               <Text className="mt-3 text-xs" style={{ color: colors.muted }}>
-                You won&apos;t be charged now. If it reaches its goal, we&apos;ll charge your card {formatCents(offer.memberPriceCents * quantity)}.
+                You won&apos;t be charged now. If it reaches its goal, we&apos;ll charge your card {formatCents(offer.memberPriceCents * quantity)}. When you commit, we&apos;ll share your name, phone and address with {offer.vendor.name} so they can ship your order.
               </Text>
               <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={commit} className="mt-3 items-center justify-center rounded-xl" style={{ backgroundColor: colors.ink, minHeight: 48, opacity: busy ? 0.6 : 1 }}>
                 <Text className="font-black text-white">{busy ? 'Saving…' : 'Commit'}</Text>

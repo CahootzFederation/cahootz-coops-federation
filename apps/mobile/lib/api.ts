@@ -5002,7 +5002,10 @@ export const api = {
 
   // ── Group Buys ──
   listOffers(coopId: string, sessionToken: string) {
-    return offersQuery<MarketplaceOffer[]>('listForCommons', { coopId }, sessionToken, "We couldn't load deals right now.");
+    return offersQuery<MarketplaceOffer[]>('listForCommons', { coopId }, sessionToken, "We couldn't load group buys right now.");
+  },
+  listAllOffers(sessionToken: string) {
+    return offersQuery<(MarketplaceOffer & { commonsName: string | null })[]>('listAll', undefined, sessionToken, "We couldn't load group buys right now.");
   },
   getOffer(offerId: string, sessionToken: string) {
     return offersQuery<MarketplaceOffer>('get', { offerId }, sessionToken, "We couldn't load this offer.");

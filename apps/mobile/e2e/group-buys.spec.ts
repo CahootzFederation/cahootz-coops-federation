@@ -32,7 +32,6 @@ async function fillAddress(page: Page, name: string) {
 }
 
 async function commit(page: Page) {
-  await page.getByRole("checkbox", { name: `Share my name, phone and address with ${VENDOR}` }).filter({ visible: true }).click();
   await visibleButton(page, "Commit").click();
 }
 
@@ -47,7 +46,7 @@ test("committing asks for each missing piece in plain words, then keeps the addr
       await expect(shown(a.page, /You won't be charged now/)).toBeVisible();
       await expect(shown(a.page, /Ships to your address/)).toBeVisible();
 
-      // Each missing piece gets a plain reason: the address, then a card, then the consent.
+      // Each missing piece gets a plain reason: the address, then a card.
       await visibleButton(a.page, "Commit").click();
       await expect(shown(a.page, "Add the name for the delivery.", { exact: true })).toBeVisible();
       await fillAddress(a.page, "E2E Member A");
@@ -64,8 +63,9 @@ test("committing asks for each missing piece in plain words, then keeps the addr
       await a.page.reload();
       await expect(shown(a.page, "Visa ending in 4242", { exact: true })).toBeVisible();
       await fillAddress(a.page, "E2E Member A");
-      await visibleButton(a.page, "Commit").click();
-      await expect(shown(a.page, /Tick the box to share your name, phone and address/)).toBeVisible();
+      // There's no checkbox: committing is agreeing to share the delivery details, and the form says so.
+      await expect(a.page.getByRole("checkbox")).toHaveCount(0);
+      await expect(shown(a.page, new RegExp(`When you commit, we'll share your name, phone and address with ${VENDOR} so they can ship your order`))).toBeVisible();
       await commit(a.page);
       await expect(shown(a.page, /You're in. You haven't been charged/)).toBeVisible();
 
@@ -189,6 +189,37 @@ test("a group buy that misses its goal by the deadline expires and charges nobod
       await expect(visibleButton(a.page, /^Pay /)).toHaveCount(0);
       await a.page.goto("/notifications");
       await expect(shown(a.page, `${expiring} didn't happen this time`).first()).toBeVisible();
+    } finally {
+      await a.context.close();
+    }
+  });
+});
+
+test("See all lists every open group buy with its Commons, and one you joined moves to You joined", async ({ browser }) => {
+  await withExclusiveAccountSetting(CARD_LOCK, async () => {
+    const title = `${RUN} pasta`;
+    offersFixture(["create", JSON.stringify({ title, offerType: "GROUP_BUY", status: "LIVE", minimumCommitments: 3 })]);
+    offersFixture(["save-card", USER_A_EMAIL]);
+    const a = await newSignedInPage(browser, USER_A_EMAIL);
+    try {
+      await openOffersMarketplace(a.page);
+      await a.page.getByRole("link", { name: "See all group buys" }).filter({ visible: true }).click();
+      await expect(a.page).toHaveURL(/group-buys/);
+      const card = a.page.getByLabel("Open group buys").getByRole("button", { name: `Group buy: ${title}` }).filter({ visible: true }).first();
+      await expect(card).toBeVisible();
+      await expect(card).toContainText(`From ${VENDOR} · E2E Shared Private Commons`);
+
+      await card.click();
+      await expect(shown(a.page, title, { exact: true })).toBeVisible();
+      await fillAddress(a.page, "E2E Member A");
+      await commit(a.page);
+      await expect(shown(a.page, /You're in/).first()).toBeVisible();
+
+      await a.page.goto("/group-buys");
+      await expect(a.page.getByLabel("Group buys you joined").getByRole("button", { name: `Group buy: ${title}` }).filter({ visible: true }).first()).toContainText(
+        "You're in for 1. You haven't been charged.",
+      );
+      await expect(a.page.getByLabel("Open group buys").getByRole("button", { name: `Group buy: ${title}` }).filter({ visible: true })).toHaveCount(0);
     } finally {
       await a.context.close();
     }

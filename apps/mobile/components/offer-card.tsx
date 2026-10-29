@@ -22,8 +22,9 @@ const colors = {
  * A Group Buy in the marketplace, with the saving spelled out so nobody has to
  * work it out.
  */
-export function OfferCard({ offer }: { offer: MarketplaceOffer }) {
+export function OfferCard({ offer, commonsName }: { offer: MarketplaceOffer; commonsName?: string | null }) {
   const isGroupBuy = offer.offerType === 'GROUP_BUY';
+  const joined = offer.status === 'LIVE' && offer.myCommitment && offer.myCommitment.status !== 'CANCELLED' ? offer.myCommitment : null;
   const progress = isGroupBuy && offer.minimumCommitments ? Math.min(1, offer.committedQuantity / offer.minimumCommitments) : 0;
   return (
     <TouchableOpacity
@@ -47,6 +48,7 @@ export function OfferCard({ offer }: { offer: MarketplaceOffer }) {
       </Text>
       <Text className="mt-0.5 text-xs font-semibold" style={{ color: colors.muted }}>
         From {offer.vendor.name}
+        {commonsName ? ` · ${commonsName}` : ''}
       </Text>
       <View className="mt-3 flex-row flex-wrap items-baseline">
         <Text className="text-xs font-semibold line-through" style={{ color: colors.muted }} accessibilityLabel={`Regular price ${formatCents(offer.regularPriceCents)}`}>
@@ -67,6 +69,11 @@ export function OfferCard({ offer }: { offer: MarketplaceOffer }) {
       <Text className="mt-2 text-xs font-semibold" style={{ color: colors.muted }}>
         {offerStatusLine(offer)}
       </Text>
+      {joined ? (
+        <Text className="mt-1 text-xs font-black" style={{ color: colors.forest }}>
+          You're in for {joined.quantity}. You haven't been charged.
+        </Text>
+      ) : null}
     </TouchableOpacity>
   );
 }

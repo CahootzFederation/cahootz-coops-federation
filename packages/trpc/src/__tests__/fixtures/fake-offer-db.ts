@@ -51,6 +51,7 @@ type Tables = {
   paymentMethod: Row[];
   userShippingAddress: Row[];
   offerVendorPayout: Row[];
+  coopConfig: Row[];
 };
 
 let idCounter = 0;
@@ -170,6 +171,7 @@ export function createFakeOfferDb() {
     paymentMethod: [],
     userShippingAddress: [],
     offerVendorPayout: [],
+    coopConfig: [],
   };
   const db: any = {
     tables,
@@ -187,6 +189,7 @@ export function createFakeOfferDb() {
     paymentMethod: model(tables, "paymentMethod", "pm", [["stripePaymentMethodId"]]),
     userShippingAddress: model(tables, "userShippingAddress", "addr", [["userId"]]),
     offerVendorPayout: model(tables, "offerVendorPayout", "payout"),
+    coopConfig: model(tables, "coopConfig", "cfg"),
     userCoopMembership: {
       ...model(tables, "userCoopMembership", "mem"),
       findUnique: vi.fn(async ({ where }: Row) => {

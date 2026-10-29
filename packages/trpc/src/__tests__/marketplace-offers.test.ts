@@ -25,6 +25,7 @@ import {
   getOfferForAdmin,
   handleOfferPaymentRefunded,
   handleOfferPaymentSucceeded,
+  listOffersAcrossCommons,
   mySavings,
   recordVendorPayout,
   runOfferSweep,
@@ -515,5 +516,38 @@ describe("weekly group buys notice", () => {
     const db: any = createFakeOfferDb();
     seedOfferWorld(db, { status: "DRAFT" });
     expect(await sendWeeklyDealsDigest(db, now)).toEqual({ commons: 0, sent: 0 });
+  });
+});
+
+describe("all group buys across Commons", () => {
+  it("lists open group buys from every active Commons with the Commons name, plus ones the member joined, and nothing from other Commons", async () => {
+    const db = createFakeOfferDb();
+    seedOfferWorld(db);
+    db.tables.coopConfig.push({ coopId: "church", name: "Church Commons", isActive: true });
+    db.tables.coopConfig.push({ coopId: "block", name: "Block Club", isActive: true });
+    db.tables.userCoopMembership.push({ userId: "member_1", coopId: "block", status: "ACTIVE", roles: ["member"] });
+    db.tables.userCoopMembership.push({ userId: "member_1", coopId: "left", status: "LEFT", roles: ["member"] });
+    const base = db.tables.marketplaceOffer[0];
+    db.tables.marketplaceOffer.push(
+      { ...base, id: "offer_block", coopId: "block", title: "Diapers" },
+      { ...base, id: "offer_draft", coopId: "block", title: "Draft", status: "DRAFT" },
+      { ...base, id: "offer_left", coopId: "left", title: "Not mine" },
+      { ...base, id: "offer_stranger", coopId: "elsewhere", title: "Elsewhere" },
+      { ...base, id: "offer_done", coopId: "church", title: "Joined and done", status: "EXPIRED" },
+    );
+    db.tables.offerCommitment.push({ id: "c_done", offerId: "offer_done", userId: "member_1", quantity: 1, status: "COMMITTED", savingsCents: 0 });
+
+    const list = await listOffersAcrossCommons(db, "member_1");
+
+    expect(list.map((o: any) => o.id).sort()).toEqual(["offer_1", "offer_block", "offer_done"]);
+    expect(list.find((o: any) => o.id === "offer_block")).toMatchObject({ commonsName: "Block Club", coopId: "block" });
+    expect(list.find((o: any) => o.id === "offer_1")).toMatchObject({ commonsName: "Church Commons", myCommitment: null });
+    expect(list.find((o: any) => o.id === "offer_done")?.myCommitment).toMatchObject({ status: "COMMITTED", quantity: 1 });
+  });
+
+  it("returns nothing for someone in no Commons", async () => {
+    const db = createFakeOfferDb();
+    seedOfferWorld(db);
+    expect(await listOffersAcrossCommons(db, "nobody")).toEqual([]);
   });
 });

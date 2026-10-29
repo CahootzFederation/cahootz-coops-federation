@@ -372,6 +372,11 @@ test("community homepage variant remains available as the experiment control", a
       name: "Cahootz home",
     }),
   ).toBeVisible();
+  // The community page points people to the waitlist, not the App Store.
+  await expect(
+    page.locator("header.landing-header").getByRole("link", { name: "Join the waitlist" }),
+  ).toHaveAttribute("href", "#join");
+  await expect(page.locator('a[href*="apps.apple.com"]')).toHaveCount(0);
 
   await page.goto(new URL("/", MARKETING_BASE_URL).toString());
   await expect(

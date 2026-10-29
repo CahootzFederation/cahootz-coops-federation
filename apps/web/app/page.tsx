@@ -13,24 +13,20 @@ import {
   ArrowDownRight,
   ArrowRight,
   Github,
-  Smartphone,
 } from "lucide-react";
 
 import "./landing.css";
 
-const APP_STORE_URL =
-  "https://apps.apple.com/us/app/cahootz-commons/id6772781102";
-
-function AppStoreButton({
-  children = "Download on the App Store",
+function WaitlistButton({
+  children = "Join the waitlist",
   className = "button button-primary",
 }: {
   children?: ReactNode;
   className?: string;
 }) {
   return (
-    <a className={className} href={APP_STORE_URL} target="_blank" rel="noreferrer">
-      <Smartphone size={18} /> {children}
+    <a className={className} href="#join">
+      {children} <ArrowDownRight size={18} />
     </a>
   );
 }
@@ -107,7 +103,7 @@ const faqs = [
   },
   {
     q: "Is there an Android app?",
-    a: "Not yet. Cahootz Commons is on iPhone today and Android is coming. Join the interest list below and we'll tell you when it's ready.",
+    a: "Not yet. Cahootz Commons is on iPhone today and Android is coming. Join the waitlist below and we'll tell you when it's ready.",
   },
   {
     q: "Who is Sage?",
@@ -145,13 +141,8 @@ export default async function HomePage() {
             <a href="#find-a-commons">Find a commons</a>
             <Link href="/blog">Journal</Link>
           </nav>
-          <a
-            className="header-action"
-            href={APP_STORE_URL}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Get the app <ArrowRight size={16} />
+          <a className="header-action" href="#join">
+            Join the waitlist <ArrowRight size={16} />
           </a>
         </div>
       </header>
@@ -173,7 +164,7 @@ export default async function HomePage() {
                 where your community comes together, every day.
               </p>
               <div className="hero-actions">
-                <AppStoreButton />
+                <WaitlistButton />
                 <a className="button button-secondary" href="#get-in">
                   Have an invite? <ArrowRight size={18} />
                 </a>
@@ -181,9 +172,6 @@ export default async function HomePage() {
                   See how it works <ArrowDownRight size={18} />
                 </a>
               </div>
-              <p className="hero-note">
-                Free on iPhone. Android is coming soon.
-              </p>
             </div>
             <div
               className="commons-map"
@@ -278,7 +266,7 @@ export default async function HomePage() {
           ))}
           <div className="section-cta">
             <span>Your people are already there.</span>
-            <AppStoreButton />
+            <WaitlistButton />
           </div>
         </section>
 
@@ -310,7 +298,7 @@ export default async function HomePage() {
                   feeling like you&apos;re bothering anyone.
                 </li>
               </ul>
-              <AppStoreButton>Meet Sage in the app</AppStoreButton>
+              <WaitlistButton>Join the waitlist to meet Sage</WaitlistButton>
             </div>
           </div>
         </section>
@@ -340,7 +328,8 @@ export default async function HomePage() {
                 <span>02</span>
                 <strong>Download the app.</strong>
                 <p>
-                  Get Cahootz Commons free on the App Store.
+                  When your commons opens up, get the free Cahootz Commons
+                  app and sign in.
                 </p>
               </li>
               <li>
@@ -352,10 +341,7 @@ export default async function HomePage() {
               </li>
             </ol>
             <div className="get-in-actions">
-              <AppStoreButton />
-              <a className="text-link" href="#join">
-                No invite? Join the waitlist <ArrowRight size={18} />
-              </a>
+              <WaitlistButton />
             </div>
           </div>
         </section>
@@ -420,11 +406,6 @@ export default async function HomePage() {
                 waitlist and tell us which commons you&apos;re interested in.
                 If yours isn&apos;t listed yet, tell us where you want to build.
               </p>
-              <div className="join-aside">
-                <span>FOR MEMBERS</span>
-                <strong>Already invited? Get the app and sign in.</strong>
-                <AppStoreButton className="button button-secondary" />
-              </div>
             </div>
             <div className="join-forms">
               <div className="waitlist-panel" id="waitlist">
@@ -494,11 +475,7 @@ export default async function HomePage() {
         <section className="final-cta">
           <div className="landing-shell final-cta-inner">
             <h2>Your community is already here.</h2>
-            <AppStoreButton>Download Cahootz Commons for iPhone</AppStoreButton>
-            <a className="text-link" href="#join">
-              On Android? Tell us and we&apos;ll let you know{" "}
-              <ArrowRight size={18} />
-            </a>
+            <WaitlistButton />
           </div>
         </section>
       </main>

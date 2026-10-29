@@ -4,7 +4,6 @@ import { apiFixture } from "./support/offers";
 
 const MARKETING_BASE_URL = process.env.E2E_MARKETING_BASE_URL;
 const RUN = `${Date.now()}`;
-const APP_STORE_URL = "https://apps.apple.com/us/app/cahootz-commons/id6772781102";
 const COMMONS_ID = "e2e-market";
 const COMMONS_NAME = "E2E Market Commons";
 const fixture = (args: string[]) => apiFixture("scripts/e2e-waitlist.ts", args);
@@ -14,7 +13,7 @@ test.afterAll(() => {
 });
 
 for (const variant of ["community", "group-buy"] as const) {
-  test(`${variant} homepage: people join the waitlist for the commons they pick, then get sent to the app`, async ({ page }) => {
+  test(`${variant} homepage: people join the waitlist for the commons they pick`, async ({ page }) => {
     test.skip(!MARKETING_BASE_URL, "Set E2E_MARKETING_BASE_URL to the running apps/web origin.");
     if (!MARKETING_BASE_URL) return;
     const pickedEmail = `e2e-waitlist-${variant}-picked-${RUN}@test.cahootz.local`;
@@ -41,8 +40,9 @@ for (const variant of ["community", "group-buy"] as const) {
     await form.getByRole("button", { name: "Join the waitlist" }).click();
 
     const joined = page.getByRole("status", { name: "You're on the waitlist" });
-    await expect(joined).toContainText(`We'll let you know when ${COMMONS_NAME} opens up.`);
-    await expect(joined.getByRole("link", { name: "Get the app" })).toHaveAttribute("href", APP_STORE_URL);
+    await expect(joined).toContainText(`We'll email you when ${COMMONS_NAME} opens up.`);
+    // Joining the waitlist doesn't send people to the app yet.
+    await expect(joined.getByRole("link")).toHaveCount(0);
 
     // Someone whose commons isn't listed has to say where they are.
     await joined.getByRole("button", { name: "Add someone else" }).click();
@@ -55,7 +55,7 @@ for (const variant of ["community", "group-buy"] as const) {
     await expect(form.getByRole("alert")).toHaveText("Tell us where you are or what you want to start.");
     await form.getByLabel("Where are you, or what do you want to start?").fill(otherPlace);
     await form.getByRole("button", { name: "Join the waitlist" }).click();
-    await expect(joined).toContainText(`We'll let you know when ${otherPlace} opens up.`);
+    await expect(joined).toContainText(`We'll email you when ${otherPlace} opens up.`);
 
     // Both signups were saved with the commons each person named.
     const saved = fixture(["find", RUN]) as Array<{ email: string; coopId: string | null; notes: string | null }>;

@@ -15,7 +15,6 @@ import { render, toPlainText } from "@react-email/render";
 import { Resend } from "resend";
 
 import { env } from "../env.js";
-import { memberAppLinkUrl } from "../services/onboarding-drip-config.js";
 
 type EmailRecipient = string | string[];
 const DEFAULT_NETWORK_NAME = "Cahootz Co-ops";
@@ -761,7 +760,6 @@ export async function sendOrderEmails({
 }
 
 function WaitlistWelcomeEmail({ commonsName }: { commonsName?: string | null }) {
-  const appUrl = memberAppLinkUrl();
   const waitingFor = commonsName ? `${commonsName} opens up` : "a commons near you opens up";
 
   return h(
@@ -772,16 +770,6 @@ function WaitlistWelcomeEmail({ commonsName }: { commonsName?: string | null }) 
       Text,
       { style: styles.text },
       `Thanks for joining the waitlist. We're letting people in a few at a time, and we'll email you when ${waitingFor}.`,
-    ),
-    h(
-      Text,
-      { style: styles.text },
-      "While you wait, get the Cahootz Commons app on your iPhone so you're ready to sign in.",
-    ),
-    h(
-      Section,
-      { style: { marginTop: "22px" } },
-      h(Button, { href: appUrl, style: styles.button }, "Get the app"),
     ),
     h(
       Text,

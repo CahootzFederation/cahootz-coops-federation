@@ -410,7 +410,7 @@ export default async function HomePage() {
             <div className="join-forms">
               <div className="waitlist-panel" id="waitlist">
                 <h3>Join the waitlist</h3>
-                <p>It takes a minute. Then get the app so you&apos;re ready.</p>
+                <p>It takes a minute.</p>
                 <Suspense fallback={<div className="form-loading" />}>
                   <WaitlistSignupForm coops={coops} />
                 </Suspense>

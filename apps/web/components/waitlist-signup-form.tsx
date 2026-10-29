@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MEMBER_APP_STORE_URL } from "@/lib/member-app";
 import { api } from "@/lib/trpc/client";
 import { usePostHog } from "posthog-js/react";
 
@@ -27,8 +26,8 @@ const SOMEWHERE_ELSE = "somewhere-else";
 
 /**
  * The homepage waitlist. People pick the commons they're interested in (a
- * "Join the waitlist" link on a commons row preselects it with ?commons=), and
- * after signing up they're pointed to the member app.
+ * "Join the waitlist" link on a commons row preselects it with ?commons=). It
+ * doesn't link to the app; people hear from us when their commons opens up.
  */
 export function WaitlistSignupForm({ coops: initialCoops = [] }: WaitlistSignupFormProps) {
   const posthog = usePostHog();
@@ -109,15 +108,8 @@ export function WaitlistSignupForm({ coops: initialCoops = [] }: WaitlistSignupF
       <div className="space-y-4" role="status" aria-label="You're on the waitlist">
         <h3 className="text-xl font-semibold text-[#1a1a1a]">You&apos;re on the list.</h3>
         <p className="text-[#1a1a1a]">
-          We&apos;ll let you know when {joinedCommons} opens up. While you wait, get the Cahootz
-          app so you&apos;re ready to go.
+          We&apos;ll email you when {joinedCommons} opens up.
         </p>
-        <a
-          className="inline-flex w-full items-center justify-center rounded-md bg-[#1a1a1a] px-4 py-2 font-semibold text-white hover:bg-[#252525]"
-          href={MEMBER_APP_STORE_URL}
-        >
-          Get the app
-        </a>
         <button
           type="button"
           className="text-sm font-medium text-[#1a1a1a] underline"

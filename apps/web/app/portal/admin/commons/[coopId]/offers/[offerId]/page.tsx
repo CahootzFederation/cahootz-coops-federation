@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 
+import { ConfirmDialog } from '@/components/admin/confirm-dialog';
+import type { ConfirmRequest } from '@/components/admin/confirm-dialog';
 import { OFFER_STATUS_LABELS } from '@/lib/offer-labels';
 
 interface Address { name: string; line1: string; line2: string | null; city: string; state: string; postalCode: string }
@@ -90,24 +92,63 @@ function ordersCsv(offer: OfferDetail) {
   return [header, ...rows].map((row) => row.map(cell).join(',')).join('\n');
 }
 
-interface Action { label: string; body: Record<string, unknown>; confirm?: string; danger?: boolean }
+interface Action { label: string; body: Record<string, unknown>; confirm?: ConfirmRequest; danger?: boolean }
 
 function actionsFor(offer: OfferDetail): Action[] {
   const actions: Action[] = [];
   const s = offer.status;
   if (s === 'DRAFT') {
-    actions.push({ label: 'Publish to members', body: { action: 'publish' }, confirm: `Publish this group buy? Members of this Commons will see it right away, and it can't be edited after that.` });
+    actions.push({
+      label: 'Publish to members',
+      body: { action: 'publish' },
+      confirm: {
+        title: 'Publish this group buy?',
+        description: "Members of this Commons will see it right away, and it can't be edited after that.",
+        confirmLabel: 'Publish',
+      },
+    });
   }
   if (s === 'LIVE') actions.push({ label: 'Pause', body: { action: 'pause' } });
   if (s === 'PAUSED') actions.push({ label: 'Resume', body: { action: 'resume' } });
   if (s === 'LIVE' && offer.committedQuantity >= (offer.minimumCommitments ?? Infinity)) {
-    actions.push({ label: 'Close and charge cards now', body: { action: 'closeEarly' }, confirm: "Close commitments now? No one else can join, and we'll charge everyone's saved card." });
+    actions.push({
+      label: 'Close and charge cards now',
+      body: { action: 'closeEarly' },
+      confirm: {
+        title: 'Close it and charge cards now?',
+        description: "No one else can join, and we'll charge everyone's saved card right away.",
+        confirmLabel: 'Close and charge',
+      },
+    });
   }
-  if (s === 'CONFIRMED') actions.push({ label: 'Mark sent to vendor', body: { action: 'fulfillment', status: 'ORDERED' }, confirm: 'Did you send the vendor the order list? Members will hear it was ordered.' });
-  if (s === 'ORDERED') actions.push({ label: 'Mark shipped', body: { action: 'fulfillment', status: 'READY' }, confirm: "Members will hear their order is on its way." });
+  if (s === 'CONFIRMED') {
+    actions.push({
+      label: 'Mark sent to vendor',
+      body: { action: 'fulfillment', status: 'ORDERED' },
+      confirm: { title: 'Sent the order list?', description: 'Members will hear their order was placed with the vendor.', confirmLabel: 'Mark sent' },
+    });
+  }
+  if (s === 'ORDERED') {
+    actions.push({
+      label: 'Mark shipped',
+      body: { action: 'fulfillment', status: 'READY' },
+      confirm: { title: 'Did it ship?', description: 'Members will hear their order is on its way.', confirmLabel: 'Mark shipped' },
+    });
+  }
   if (s === 'READY') actions.push({ label: 'Mark finished', body: { action: 'fulfillment', status: 'FULFILLED' } });
   if (!['FULFILLED', 'EXPIRED', 'CANCELLED', 'FAILED'].includes(s)) {
-    actions.push({ label: 'Cancel group buy', body: { action: 'cancel' }, danger: true });
+    actions.push({
+      label: 'Cancel group buy',
+      body: { action: 'cancel' },
+      danger: true,
+      confirm: {
+        title: 'Cancel this group buy?',
+        description: "Anyone who paid gets a full refund. Anyone who hasn't won't be charged. This can't be undone.",
+        confirmLabel: 'Cancel group buy',
+        danger: true,
+        reasonLabel: 'Why are you cancelling? Members see this.',
+      },
+    });
   }
   return actions;
 }
@@ -118,6 +159,7 @@ export default function OfferDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<Action | null>(null);
   const [payout, setPayout] = useState({ amount: '', paidAt: new Date().toISOString().slice(0, 10), method: '', note: '' });
   const base = `/api/admin/commons/${coopId}/offers/${offerId}`;
 
@@ -133,15 +175,17 @@ export default function OfferDetailPage() {
 
   useEffect(load, [load]);
 
-  async function run(action: Action | { label: string; body: Record<string, unknown> }) {
-    let body = action.body;
-    if (body.action === 'cancel' || body.action === 'refundCommitment') {
-      const reason = window.prompt(body.action === 'cancel' ? 'Why are you cancelling? Members who paid get a full refund.' : 'Why are you refunding this member?');
-      if (!reason || reason.trim().length < 3) return;
-      body = { ...body, reason };
-    } else if ('confirm' in action && action.confirm && !window.confirm(action.confirm)) {
+  /** Asks first in a dialog when the action has a confirm step; otherwise runs it. */
+  async function run(action: Action) {
+    if (action.confirm) {
+      setPending(action);
       return;
     }
+    await perform(action);
+  }
+
+  async function perform(action: Action, reason?: string) {
+    const body = reason ? { ...action.body, reason } : action.body;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -345,7 +389,22 @@ export default function OfferDetailPage() {
                     </td>
                     <td className="space-x-3 p-3 text-right">
                       {o.paid && (
-                        <button type="button" disabled={busy} onClick={() => run({ label: 'Refund', body: { action: 'refundCommitment', commitmentId: o.commitmentId } })} className="text-xs text-red-200 hover:underline">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            run({
+                              label: 'Refund',
+                              body: { action: 'refundCommitment', commitmentId: o.commitmentId },
+                              confirm: {
+                                title: `Refund ${o.name}?`,
+                                description: `They get their full payment back for ${o.quantity} × ${offer.title}.`,
+                                confirmLabel: 'Refund',
+                                danger: true,
+                                reasonLabel: 'Why are you refunding this member?',
+                              },
+                            })
+                          } className="text-xs text-red-200 hover:underline">
                           Refund
                         </button>
                       )}
@@ -358,6 +417,13 @@ export default function OfferDetailPage() {
         )}
         <p className="mt-2 text-xs text-slate-500">Only platform admins can see members&apos; addresses. Share them only with this vendor.</p>
       </section>
+      <ConfirmDialog
+        request={pending?.confirm ?? null}
+        onClose={() => setPending(null)}
+        onConfirm={(reason) => {
+          if (pending) void perform(pending, reason);
+        }}
+      />
     </div>
   );
 }

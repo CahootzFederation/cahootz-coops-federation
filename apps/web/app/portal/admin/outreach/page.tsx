@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, ArrowLeft, Loader2, MessageCircleQuestion, Package, Store } from 'lucide-react';
 
+import { ConfirmDialog } from '@/components/admin/confirm-dialog';
+
 interface DemandRow {
   id: string;
   coopId: string;
@@ -362,6 +364,7 @@ function Empty({ text }: { text: string }) {
 type Post = (url: string, body: unknown, done: string) => Promise<void>;
 
 function CampaignCard({ campaign, busy, post }: { campaign: CampaignRow; busy: boolean; post: Post }) {
+  const [confirmReject, setConfirmReject] = useState(false);
   const [area, setArea] = useState(campaign.area ?? '');
   const [maxEmails, setMaxEmails] = useState(String(campaign.maxEmails));
   const [pitch, setPitch] = useState(campaign.pitchPoints ?? '');
@@ -420,13 +423,15 @@ function CampaignCard({ campaign, busy, post }: { campaign: CampaignRow; busy: b
             <button
               className={danger}
               disabled={busy}
-              onClick={() => {
-                const reason = window.prompt('Why not? (Sage will see this next time.)');
-                if (reason && reason.trim().length >= 3) void post(url, { action: 'reject', reason }, 'Campaign rejected.');
-              }}
+              onClick={() => setConfirmReject(true)}
             >
               Reject
             </button>
+            <ConfirmDialog
+              request={confirmReject ? { title: 'Reject this campaign?', description: "Sage won't reach out for it.", confirmLabel: 'Reject', danger: true, reasonLabel: 'Why not? Sage will see this next time.' } : null}
+              onClose={() => setConfirmReject(false)}
+              onConfirm={(reason) => void post(url, { action: 'reject', reason }, 'Campaign rejected.')}
+            />
           </div>
         </div>
       )}
@@ -464,6 +469,7 @@ function CampaignCard({ campaign, busy, post }: { campaign: CampaignRow; busy: b
 }
 
 function ProspectCard({ prospect, busy, post }: { prospect: ProspectRow; busy: boolean; post: Post }) {
+  const [confirmConverted, setConfirmConverted] = useState(false);
   const url = `/api/admin/outreach/prospects/${prospect.id}`;
   const response = prospect.latestResponse;
   return (
@@ -512,10 +518,7 @@ function ProspectCard({ prospect, busy, post }: { prospect: ProspectRow; busy: b
           <button
             className={primary}
             disabled={busy}
-            onClick={() => {
-              const offerId = window.prompt('Paste the offer id from the offer admin page:');
-              if (offerId?.trim()) void post(url, { action: 'converted', offerId: offerId.trim() }, `${prospect.businessName} marked as a live deal.`);
-            }}
+            onClick={() => setConfirmConverted(true)}
           >
             Deal created
           </button>
@@ -523,6 +526,20 @@ function ProspectCard({ prospect, busy, post }: { prospect: ProspectRow; busy: b
         {!['DECLINED', 'UNSUBSCRIBED', 'CONVERTED'].includes(prospect.status) && (
           <button className={quiet} disabled={busy} onClick={() => post(url, { action: 'declined' }, `${prospect.businessName} marked not interested.`)}>Not interested</button>
         )}
+        <ConfirmDialog
+          request={
+            confirmConverted
+              ? {
+                  title: `Link ${prospect.businessName} to a group buy`,
+                  description: 'Group buys started from this page link themselves. Use this for one you set up another way.',
+                  confirmLabel: 'Mark as a live deal',
+                  reasonLabel: "The group buy's id, from the end of its page address",
+                }
+              : null
+          }
+          onClose={() => setConfirmConverted(false)}
+          onConfirm={(offerId) => void post(url, { action: 'converted', offerId }, `${prospect.businessName} marked as a live deal.`)}
+        />
         {!['UNSUBSCRIBED', 'SKIPPED'].includes(prospect.status) && (
           <button className={danger} disabled={busy} onClick={() => post(url, { action: 'doNotEmail' }, `We won't email ${prospect.businessName}.`)}>Do not email</button>
         )}
@@ -532,6 +549,7 @@ function ProspectCard({ prospect, busy, post }: { prospect: ProspectRow; busy: b
 }
 
 function ItemCard({ item, categories, busy, post }: { item: ItemRow; categories: Category[]; busy: boolean; post: Post }) {
+  const [confirmEverywhere, setConfirmEverywhere] = useState(false);
   const [area, setArea] = useState('');
   const [maxEmails, setMaxEmails] = useState('10');
   const [category, setCategory] = useState(item.categoryKey);
@@ -599,14 +617,15 @@ function ItemCard({ item, categories, busy, post }: { item: ItemRow; categories:
           <button
             className={danger}
             disabled={busy}
-            onClick={() => {
-              if (window.confirm(`Turn down ${item.name} for every Commons? The bot won't suggest it again.`)) {
-                void post(url, { action: 'review', ...keys, decision: 'reject', everywhere: true }, `${item.name} turned down everywhere.`);
-              }
-            }}
+            onClick={() => setConfirmEverywhere(true)}
           >
             Turn down everywhere
           </button>
+          <ConfirmDialog
+            request={confirmEverywhere ? { title: `Turn down ${item.name} for every Commons?`, description: "The bot won't suggest it again.", confirmLabel: 'Turn down everywhere', danger: true } : null}
+            onClose={() => setConfirmEverywhere(false)}
+            onConfirm={() => void post(url, { action: 'review', ...keys, decision: 'reject', everywhere: true }, `${item.name} turned down everywhere.`)}
+          />
         </div>
       )}
 

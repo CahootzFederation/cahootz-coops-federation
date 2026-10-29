@@ -59,8 +59,11 @@ test("a draft group buy stays hidden until a platform admin publishes it", async
     await signInAdmin(admin);
     await admin.goto(`${ADMIN_BASE_URL}/portal/admin/commons/${OFFERS_COOP_ID}/offers/${offerId}`);
     await expect(admin.getByRole("heading", { name: title })).toBeVisible({ timeout: 60_000 });
-    admin.once("dialog", (dialog) => dialog.accept());
     await admin.getByRole("button", { name: "Publish to members" }).click();
+    // A real dialog, not the browser's confirm box.
+    const confirm = admin.getByRole("alertdialog", { name: "Publish this group buy?" });
+    await expect(confirm).toContainText("Members of this Commons will see it right away");
+    await confirm.getByRole("button", { name: "Publish", exact: true }).click();
     await expect(admin.getByText("Published. Members can see it now.")).toBeVisible();
     await expect(admin.getByTestId("offer-status")).toHaveText("Live");
 
@@ -118,6 +121,40 @@ test("the admin group buy form warns when a deal could lose the Commons or Cahoo
     await admin.getByLabel("Vendor gets ($ per unit)").fill("16.75");
     await expect(form.getByRole("alert")).toContainText("There isn't enough left to cover Stripe's card fee (up to $1.09 on some cards)");
     await expect(form.getByRole("button", { name: "Save draft" })).toBeDisabled();
+  } finally {
+    await adminContext.close();
+  }
+});
+
+test("the admin can publish a new group buy straight from the form, after a dialog", async ({ browser }) => {
+  const title = `${RUN} oats`;
+  const adminContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const admin = await adminContext.newPage();
+  try {
+    await signInAdmin(admin);
+    await admin.goto(`${ADMIN_BASE_URL}/portal/admin/commons/${OFFERS_COOP_ID}/offers`);
+    await admin.getByRole("button", { name: "New group buy" }).click();
+    const form = admin.getByRole("form", { name: "New group buy" });
+    await form.getByLabel("Vendor", { exact: true }).fill("E2E Corner Market");
+    await form.getByLabel("Title members see").fill(title);
+    await form.getByLabel("Regular price ($)").fill("24");
+    await form.getByLabel("Where the regular price comes from").fill("Posted shelf price");
+    await form.getByLabel("Member price ($)").fill("18");
+    await form.getByLabel("Member price ($)").press("Tab");
+    await expect(form.getByLabel("Vendor gets ($ per unit)")).toHaveValue("15.47");
+    await form.getByLabel("Units needed to unlock").fill("10");
+    await form.getByLabel("Units that must be paid for").fill("8");
+    await form.getByLabel("Last day to commit").fill("2030-01-15T23:59");
+
+    await form.getByRole("button", { name: "Publish", exact: true }).click();
+    const confirm = admin.getByRole("alertdialog", { name: "Publish this group buy?" });
+    // Going back publishes nothing.
+    await confirm.getByRole("button", { name: "Go back" }).click();
+    await expect(confirm).toHaveCount(0);
+    await form.getByRole("button", { name: "Publish", exact: true }).click();
+    await admin.getByRole("alertdialog", { name: "Publish this group buy?" }).getByRole("button", { name: "Publish", exact: true }).click();
+    await expect(admin.getByRole("status")).toHaveText(`Published ${title}. Members can see it now.`);
+    await expect(admin.getByRole("link", { name: new RegExp(title) })).toContainText("Live");
   } finally {
     await adminContext.close();
   }

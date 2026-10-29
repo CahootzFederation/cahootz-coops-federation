@@ -7,6 +7,7 @@ import { AlertCircle, ArrowLeft, ChevronRight, Loader2, Plus, Users } from 'luci
 
 import { suggestVendorPayoutCents } from '@repo/validators/marketplace-offers';
 
+import { ConfirmDialog } from '@/components/admin/confirm-dialog';
 import { OFFER_STATUS_LABELS as STATUS_LABELS } from '@/lib/offer-labels';
 
 interface OfferRow {
@@ -78,6 +79,8 @@ export default function CommonsOffersPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [confirmPublish, setConfirmPublish] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   // Set when the form starts from a product idea (Vendor outreach → "Start the group buy").
   const [fromItem, setFromItem] = useState<{
@@ -184,8 +187,14 @@ export default function CommonsOffersPage() {
 
   async function createDraft(event: React.FormEvent) {
     event.preventDefault();
+    await save(false);
+  }
+
+  /** Saves the group buy, and publishes it to members right after when asked. */
+  async function save(publish: boolean) {
     setSaving(true);
     setFormError(null);
+    setNotice(null);
     const optionalInt = (value: string) => (value ? Number.parseInt(value, 10) : null);
     const body = {
       offerType: 'GROUP_BUY',
@@ -225,6 +234,21 @@ export default function CommonsOffersPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "We couldn't save the draft.");
+      if (publish) {
+        const published = await fetch(`/api/admin/commons/${coopId}/offers/${data.offer.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'publish' }),
+        });
+        const result = await published.json();
+        setNotice(
+          published.ok
+            ? `Published ${data.offer.title}. Members can see it now.`
+            : `${data.offer.title} was saved as a draft, but it wasn't published: ${result.error ?? 'something went wrong'} Open it below to fix it and publish.`,
+        );
+      } else {
+        setNotice(`Saved ${data.offer.title} as a draft.`);
+      }
       setForm(emptyForm);
       setVendorSuggested(false);
       setFromItem(null);
@@ -439,15 +463,43 @@ export default function CommonsOffersPage() {
           </div>
 
           {formError && <p className="text-sm text-red-300">{formError}</p>}
-          <button
-            type="submit"
-            disabled={saving || !!preview?.losesMoney}
-            className="rounded-md bg-emerald-400 px-4 py-2 text-sm font-semibold text-black hover:bg-emerald-300 disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : 'Save draft'}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={saving || !!preview?.losesMoney}
+              onClick={(event) => {
+                // Same checks as saving (required fields), then ask before members see it.
+                if (event.currentTarget.form?.reportValidity()) setConfirmPublish(true);
+              }}
+              className="rounded-md bg-emerald-400 px-4 py-2 text-sm font-semibold text-black hover:bg-emerald-300 disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Publish'}
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !!preview?.losesMoney}
+              className="rounded-md border border-white/15 px-4 py-2 text-sm font-semibold text-slate-100 hover:bg-white/10 disabled:opacity-50"
+            >
+              Save draft
+            </button>
+          </div>
         </form>
       )}
+
+      <ConfirmDialog
+        request={
+          confirmPublish
+            ? {
+                title: 'Publish this group buy?',
+                description: "Members of this Commons will see it right away, and it can't be edited after that.",
+                confirmLabel: 'Publish',
+              }
+            : null
+        }
+        onClose={() => setConfirmPublish(false)}
+        onConfirm={() => void save(true)}
+      />
+      {notice && <p className="text-sm text-emerald-300" role="status">{notice}</p>}
 
       {loading && <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>}
       {error && <div className="flex gap-2 rounded-[8px] border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300"><AlertCircle className="h-4 w-4 shrink-0" />{error}</div>}

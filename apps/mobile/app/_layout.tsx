@@ -15,6 +15,7 @@ import Toast from 'react-native-toast-message';
 
 import { NotificationResponseHandler } from '@/components/notification-response-handler';
 import { InAppAlertPopup } from '@/components/in-app-alert-popup';
+import { PushPermissionGate } from '@/components/push-permission-gate';
 import { PendingInvitationResume } from '@/components/pending-invitation-resume';
 import { AnalyticsTracker } from '@/components/analytics-tracker';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
@@ -182,6 +183,7 @@ function RootLayout() {
                     </View>
                     <AppBottomNavigation />
                     <InAppAlertPopup />
+                    <PushPermissionGate />
                   </View>
                   <StatusBar style="dark" />
                   <PortalHost />

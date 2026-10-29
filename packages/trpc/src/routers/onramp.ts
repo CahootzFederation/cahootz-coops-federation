@@ -8,6 +8,7 @@ import { paymentService } from "../services/payment/index.js";
 import { chargePaymentMethod } from "../services/stripe-customer.js";
 import { mintUCToUser } from "../services/wallet-service.js";
 import { convertUSDToUC, createParityAmounts } from "../utils/currency-converter.js";
+import { createNotificationAndPush } from "../services/push-notification-service.js";
 
 export const onrampRouter = router({
   /**
@@ -239,19 +240,17 @@ export const onrampRouter = router({
 
           // Create notification
           const coopId = (ctx as CoopScopedContext).coopId || '???';
-          await context.db.notification.create({
+          await createNotificationAndPush(context.db, {
+            userId,
+            coopId,
+            type: 'WALLET_FUNDED',
+            title: 'Wallet Funded',
+            body: `$${input.amountUSD.toFixed(2)} has been added to your wallet.`,
             data: {
-              userId,
-              coopId,
-              type: 'WALLET_FUNDED',
-              title: 'Wallet Funded',
-              body: `$${input.amountUSD.toFixed(2)} has been added to your wallet.`,
-              data: {
-                transactionId: transaction.id,
-                amountUSD: input.amountUSD,
-                amountUC,
-                mintTxHash,
-              },
+              transactionId: transaction.id,
+              amountUSD: input.amountUSD,
+              amountUC,
+              mintTxHash,
             },
           });
 

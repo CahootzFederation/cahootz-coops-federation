@@ -100,8 +100,14 @@ test("the admin group buy form warns when a deal could lose the Commons or Cahoo
     await admin.goto(`${ADMIN_BASE_URL}/portal/admin/commons/${OFFERS_COOP_ID}/offers`);
     await admin.getByRole("button", { name: "New group buy" }).click();
     await admin.getByLabel("Regular price ($)").fill("24");
+    const vendor = admin.getByLabel("Vendor gets ($ per unit)");
+    await expect(vendor).toHaveAccessibleDescription(/What we pay the vendor for each one/);
+    // Leaving the member price fills an empty vendor amount by the price rule ($18 - Stripe's ~$0.82 - 20% of the savings).
     await admin.getByLabel("Member price ($)").fill("18");
-    await admin.getByLabel("Vendor gets ($ per unit)").fill("15");
+    await admin.getByLabel("Member price ($)").press("Tab");
+    await expect(vendor).toHaveValue("15.47");
+    await expect(vendor).toHaveAccessibleDescription(/Filled in from the member price, keeping 20% of the savings/);
+    await vendor.fill("15");
     // A deal that covers Stripe's fee says nothing about it.
     const form = admin.getByRole("form", { name: "New group buy" });
     await expect(form.getByRole("alert")).toHaveCount(0);

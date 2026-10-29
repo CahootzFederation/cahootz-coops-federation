@@ -11,7 +11,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ coo
   const { coopId } = await params;
   try {
     const [offers, pricing] = await Promise.all([listOffersForAdmin(db, coopId), offerPricingSettings(db)]);
-    return NextResponse.json({ offers, minShareCents: pricing.minShareCents });
+    return NextResponse.json({ offers, minShareCents: pricing.minShareCents, itemMarginBps: pricing.itemMarginBps });
   } catch (error) {
     return adminErrorResponse(error);
   }

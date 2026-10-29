@@ -5,6 +5,7 @@ import {
   DEFAULT_OFFER_PRICING,
   makeOfferInputSchema,
   suggestItemOfferPrice,
+  suggestVendorPayoutCents,
   worstCaseStripeFeeCents,
 } from "../marketplace-offers";
 
@@ -94,5 +95,26 @@ describe("suggested price for a discovered item", () => {
       if (!suggestion) continue;
       expect(checkOfferMargin({ memberPriceCents: suggestion.memberPriceCents, vendorPayoutCents: suggestion.vendorPayoutCents, commonsSplitBps: 5000, minShareCents: DEFAULT_OFFER_PRICING.minShareCents }).ok).toBe(true);
     }
+  });
+});
+
+describe("suggested vendor amount for a member price", () => {
+  it("gives the vendor what's left after Stripe's fee and the Commons and Cahootz margin", () => {
+    // $200 regular, $150 member: Stripe about $4.65, 20% of the $68.32 discount from regular = $13.66 kept.
+    expect(suggestVendorPayoutCents({ regularPriceCents: 20000, memberPriceCents: 15000 })).toBe(13168);
+    const vendor = suggestVendorPayoutCents({ regularPriceCents: 2400, memberPriceCents: 1800 })!;
+    expect(vendor).toBe(1547);
+    expect(checkOfferMargin({ memberPriceCents: 1800, vendorPayoutCents: vendor, commonsSplitBps: 5000, minShareCents: 10 }).ok).toBe(true);
+  });
+
+  it("never suggests an amount that fails the worst-case card fee check", () => {
+    const vendor = suggestVendorPayoutCents({ regularPriceCents: 2400, memberPriceCents: 1800, pricing: { itemMarginBps: 500, minShareCents: 100 } })!;
+    expect(checkOfferMargin({ memberPriceCents: 1800, vendorPayoutCents: vendor, commonsSplitBps: 5000, minShareCents: 100 }).ok).toBe(true);
+  });
+
+  it("suggests nothing when there's no saving or no room for a vendor", () => {
+    expect(suggestVendorPayoutCents({ regularPriceCents: 1800, memberPriceCents: 1800 })).toBeNull();
+    expect(suggestVendorPayoutCents({ regularPriceCents: 0, memberPriceCents: 1800 })).toBeNull();
+    expect(suggestVendorPayoutCents({ regularPriceCents: 100000, memberPriceCents: 50 })).toBeNull();
   });
 });

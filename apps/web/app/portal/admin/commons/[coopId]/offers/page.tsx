@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AlertCircle, ArrowLeft, ChevronRight, Loader2, Plus, Users } from 'lucide-react';
 
+import { suggestVendorPayoutCents } from '@repo/validators/marketplace-offers';
+
 import { OFFER_STATUS_LABELS as STATUS_LABELS } from '@/lib/offer-labels';
 
 interface OfferRow {
@@ -88,6 +90,10 @@ export default function CommonsOffersPage() {
   } | null>(null);
   // The least the Commons and Cahootz must each get per unit at the worst-case card fee (platform admin setting).
   const [minShareCents, setMinShareCents] = useState(10);
+  // The Commons and Cahootz share of the discount used to suggest what the vendor gets (platform admin setting).
+  const [itemMarginBps, setItemMarginBps] = useState(2000);
+  // Set when the vendor amount was filled in for the admin, so the form can say so.
+  const [vendorSuggested, setVendorSuggested] = useState(false);
 
   const load = useCallback(() => {
     if (!coopId) return;
@@ -98,6 +104,7 @@ export default function CommonsOffersPage() {
         if (!response.ok) throw new Error(data.error || "We couldn't load offers.");
         setOffers(data.offers);
         if (typeof data.minShareCents === 'number') setMinShareCents(data.minShareCents);
+        if (typeof data.itemMarginBps === 'number') setItemMarginBps(data.itemMarginBps);
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "We couldn't load offers."))
       .finally(() => setLoading(false));
@@ -142,6 +149,20 @@ export default function CommonsOffersPage() {
       })
       .catch((reason) => setFormError(reason instanceof Error ? reason.message : "We couldn't load that product idea."));
   }, []);
+
+  /** Once a member price is in, fill an empty vendor amount by the same price rule as every offer. */
+  function suggestVendor() {
+    if (form.vendorPayout.trim()) return;
+    const cents = suggestVendorPayoutCents({
+      regularPriceCents: toCents(form.regularPrice),
+      memberPriceCents: toCents(form.memberPrice),
+      pricing: { itemMarginBps, minShareCents },
+      commonsSplitBps: percentToBps(form.commonsSharePercent),
+    });
+    if (cents == null) return;
+    setForm((current) => ({ ...current, vendorPayout: (cents / 100).toFixed(2) }));
+    setVendorSuggested(true);
+  }
 
   const set = (key: keyof typeof emptyForm) => (event: { target: { value: string } }) =>
     setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -205,6 +226,7 @@ export default function CommonsOffersPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "We couldn't save the draft.");
       setForm(emptyForm);
+      setVendorSuggested(false);
       setFromItem(null);
       setShowForm(false);
       load();
@@ -280,7 +302,7 @@ export default function CommonsOffersPage() {
             </label>
             <label className={label}>
               Regular price ($)
-              <input className={input} inputMode="decimal" value={form.regularPrice} onChange={set('regularPrice')} required />
+              <input className={input} inputMode="decimal" value={form.regularPrice} onChange={set('regularPrice')} onBlur={suggestVendor} required />
             </label>
             <label className={label}>
               Where the regular price comes from
@@ -288,12 +310,27 @@ export default function CommonsOffersPage() {
             </label>
             <label className={label}>
               Member price ($)
-              <input className={input} inputMode="decimal" value={form.memberPrice} onChange={set('memberPrice')} required />
+              <input className={input} inputMode="decimal" value={form.memberPrice} onChange={set('memberPrice')} onBlur={suggestVendor} required />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className={label}>
                 Vendor gets ($ per unit)
-                <input className={input} inputMode="decimal" value={form.vendorPayout} onChange={set('vendorPayout')} required />
+                <input
+                  className={input}
+                  inputMode="decimal"
+                  value={form.vendorPayout}
+                  onChange={(event) => {
+                    setVendorSuggested(false);
+                    set('vendorPayout')(event);
+                  }}
+                  aria-describedby="vendor-payout-help"
+                  required
+                />
+                <span id="vendor-payout-help" className="mt-1 block text-[11px] font-normal leading-snug text-slate-400">
+                  {vendorSuggested
+                    ? `Filled in from the member price, keeping ${itemMarginBps / 100}% of the savings for the Commons and Cahootz. Change it to what you agreed with the vendor.`
+                    : 'What we pay the vendor for each one, out of what members pay. The Commons and Cahootz split what’s left.'}
+                </span>
               </label>
               <label className={label}>
                 Commons share of what&apos;s left (%)

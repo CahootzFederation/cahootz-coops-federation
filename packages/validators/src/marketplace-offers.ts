@@ -339,6 +339,32 @@ export function checkOfferMargin(params: {
   return { ok: false, worst, message, minMemberPriceCents, maxVendorPayoutCents };
 }
 
+/**
+ * What the vendor could get per unit for a member price the admin typed in,
+ * by the same rule as item suggestions: after Stripe's estimated fee, the
+ * Commons and Cahootz keep the margin share of the discount off the regular
+ * price, and the vendor gets the rest. Lowered if needed so the deal passes the
+ * worst-case card fee check. Null when no vendor amount would work.
+ */
+export function suggestVendorPayoutCents(params: {
+  regularPriceCents: number;
+  memberPriceCents: number;
+  pricing?: Pick<OfferPricingSettings, "itemMarginBps" | "minShareCents">;
+  commonsSplitBps?: number;
+}): number | null {
+  const pricing = params.pricing ?? DEFAULT_OFFER_PRICING;
+  const commonsSplitBps = params.commonsSplitBps ?? 5000;
+  const { regularPriceCents: regular, memberPriceCents: member } = params;
+  if (!(regular > 0) || !(member > 0) || member >= regular) return null;
+  // member = vendor + margin × (regular − vendor) + fee, solved for vendor.
+  const margin = pricing.itemMarginBps / 10000;
+  let vendor = Math.floor((member - estimateStripeFeeCents(member) - margin * regular) / (1 - margin));
+  if (vendor <= 0) return null;
+  const check = checkOfferMargin({ memberPriceCents: member, vendorPayoutCents: vendor, commonsSplitBps, minShareCents: pricing.minShareCents });
+  if (!check.ok) vendor = check.maxVendorPayoutCents ?? 0;
+  return vendor > 0 ? vendor : null;
+}
+
 export interface ItemOfferSuggestion {
   /** How many of the item's member shares one member buys in one payment. */
   packSize: number;

@@ -65,7 +65,7 @@ describe("discovered items", () => {
       bulkShareCents: 1217, peopleNeeded: 12, sourceUrl: "https://www.dropps.com/pods", observedAt: NOW.toISOString(),
       packSize: 1, suggestedMemberPriceCents: 1629, suggestedVendorPayoutCents: 1217, packRegularPriceCents: 2889, membersNeeded: 12,
     });
-    expect(text.title).toBe("A group buy on Laundry pods?");
+    expect(text.title).toBe("A group deal on Laundry pods?");
     expect(text.body).toContain("about $28.89 on its own");
     expect(text.body).toContain("If 12 of us buy together, it could come to about $16.29 each.");
     expect(text.body).toContain("final price depends on the seller");

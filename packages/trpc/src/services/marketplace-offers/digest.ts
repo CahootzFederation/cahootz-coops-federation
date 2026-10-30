@@ -38,7 +38,7 @@ export function digestText(offers: DigestOffer[]): { title: string; body: string
   const lines = offers.slice(0, DIGEST_MAX_LINES).map(digestLine);
   const more = offers.length - lines.length;
   return {
-    title: "This week's group buys",
+    title: "This week's group deals",
     body: [...lines, ...(more > 0 ? [`Plus ${more} more in the marketplace.`] : [])].join("\n"),
   };
 }

@@ -16,8 +16,8 @@ test("a member sees a group buy's regular price, group price and saving in the m
   const member = await newSignedInPage(browser, USER_A_EMAIL);
   try {
     await openOffersMarketplace(member.page);
-    await expect(shown(member.page, "Group buys", { exact: true })).toBeVisible();
-    const card = member.page.getByRole("button", { name: `Group buy: ${title}` });
+    await expect(shown(member.page, "Group deals", { exact: true })).toBeVisible();
+    const card = member.page.getByRole("button", { name: `Group deal: ${title}` });
     await expect(card).toBeVisible();
     await expect(card.getByText("$24.00")).toBeVisible();
     await expect(card.getByText("$18.00")).toBeVisible();
@@ -59,7 +59,7 @@ test("a draft group buy stays hidden until a platform admin publishes it", async
   try {
     // A draft isn't shown to members.
     await openOffersMarketplace(member.page);
-    await expect(member.page.getByRole("button", { name: `Group buy: ${title}` })).toHaveCount(0);
+    await expect(member.page.getByRole("button", { name: `Group deal: ${title}` })).toHaveCount(0);
 
     // The platform admin publishes it. No steward step.
     await signInAdmin(admin);
@@ -74,7 +74,7 @@ test("a draft group buy stays hidden until a platform admin publishes it", async
     await expect(admin.getByTestId("offer-status")).toHaveText("Live");
 
     await openOffersMarketplace(member.page);
-    await expect(member.page.getByRole("button", { name: `Group buy: ${title}` })).toBeVisible();
+    await expect(member.page.getByRole("button", { name: `Group deal: ${title}` })).toBeVisible();
   } finally {
     await member.context.close();
     await adminContext.close();
@@ -90,11 +90,11 @@ test("every member of the Commons gets the weekly group buys notice, and it open
   try {
     for (const member of [memberA, memberB]) {
       await member.page.goto("/notifications");
-      await expect(shown(member.page, "This week's group buys").first()).toBeVisible({ timeout: 30_000 });
+      await expect(shown(member.page, "This week's group deals").first()).toBeVisible({ timeout: 30_000 });
       await expect(shown(member.page, new RegExp(`${title}: was \\$24\\.00, now \\$18\\.00\\. Save \\$6\\.00\\. 0 of 3 joined`)).first()).toBeVisible();
     }
-    await shown(memberA.page, "This week's group buys").first().click();
-    await expect(shown(memberA.page, "Group buys", { exact: true })).toBeVisible({ timeout: 60_000 });
+    await shown(memberA.page, "This week's group deals").first().click();
+    await expect(shown(memberA.page, "Group deals", { exact: true })).toBeVisible({ timeout: 60_000 });
   } finally {
     await memberA.context.close();
     await memberB.context.close();

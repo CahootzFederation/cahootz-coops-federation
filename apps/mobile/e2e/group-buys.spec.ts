@@ -17,7 +17,7 @@ type Page = import("@playwright/test").Page;
 
 async function openOffer(page: Page, title: string) {
   await openOffersMarketplace(page);
-  await page.getByRole("button", { name: `Group buy: ${title}` }).filter({ visible: true }).first().click();
+  await page.getByRole("button", { name: `Group deal: ${title}` }).filter({ visible: true }).first().click();
   await expect(shown(page, title, { exact: true })).toBeVisible();
 }
 
@@ -59,7 +59,7 @@ test("committing asks for each missing piece in plain words, then keeps the addr
       await a.page.getByLabel("ZIP code").filter({ visible: true }).fill("30310");
       await expect(visibleButton(a.page, "Add a card")).toBeVisible();
       await visibleButton(a.page, "Commit").click();
-      await expect(shown(a.page, /Add a card first. We'll only charge it if the group buy happens/)).toBeVisible();
+      await expect(shown(a.page, /Add a card first. We'll only charge it if the group deal happens/)).toBeVisible();
 
       // Stand-in for saving a card with Stripe; the card form itself is Stripe's.
       offersFixture(["save-card", USER_A_EMAIL]);
@@ -140,7 +140,7 @@ test("when the second member commits, the goal is hit and the first member hears
       await expect(shown(b.page, /that hit the goal/)).toBeVisible();
 
       await a.page.goto("/notifications");
-      await expect(shown(a.page, "Your group buy is happening").first()).toBeVisible();
+      await expect(shown(a.page, "Your group deal is happening").first()).toBeVisible();
     } finally {
       await a.context.close();
       await b.context.close();
@@ -206,9 +206,9 @@ test("See all lists every open group buy with its Commons, and one you joined mo
     const a = await newSignedInPage(browser, USER_A_EMAIL);
     try {
       await openOffersMarketplace(a.page);
-      await a.page.getByRole("link", { name: "See all group buys" }).filter({ visible: true }).click();
+      await a.page.getByRole("link", { name: "See all group deals" }).filter({ visible: true }).click();
       await expect(a.page).toHaveURL(/group-buys/);
-      const card = a.page.getByLabel("Open group buys").getByRole("button", { name: `Group buy: ${title}` }).filter({ visible: true }).first();
+      const card = a.page.getByLabel("Open group deals").getByRole("button", { name: `Group deal: ${title}` }).filter({ visible: true }).first();
       await expect(card).toBeVisible();
       await expect(card).toContainText(`From ${VENDOR} · E2E Shared Private Commons`);
 
@@ -219,10 +219,10 @@ test("See all lists every open group buy with its Commons, and one you joined mo
       await expect(shown(a.page, /You're in/).first()).toBeVisible();
 
       await a.page.goto("/group-buys");
-      await expect(a.page.getByLabel("Group buys you joined").getByRole("button", { name: `Group buy: ${title}` }).filter({ visible: true }).first()).toContainText(
+      await expect(a.page.getByLabel("Group deals you joined").getByRole("button", { name: `Group deal: ${title}` }).filter({ visible: true }).first()).toContainText(
         "You're in for 1. You haven't been charged.",
       );
-      await expect(a.page.getByLabel("Open group buys").getByRole("button", { name: `Group buy: ${title}` }).filter({ visible: true })).toHaveCount(0);
+      await expect(a.page.getByLabel("Open group deals").getByRole("button", { name: `Group deal: ${title}` }).filter({ visible: true })).toHaveCount(0);
     } finally {
       await a.context.close();
     }
@@ -242,7 +242,7 @@ test("a group buy you joined shows on the Board under the search, with a picture
       await expect(shown(a.page, /You're in/).first()).toBeVisible();
 
       const upFront = (page: Page) =>
-        page.getByLabel("Group buys", { exact: true }).getByRole("button", { name: `Group buy: ${title}` }).filter({ visible: true }).first();
+        page.getByLabel("Group deals", { exact: true }).getByRole("button", { name: `Group deal: ${title}` }).filter({ visible: true }).first();
       await a.page.goto(`/board?coopId=${OFFERS_COOP_ID}`);
       await expect(upFront(a.page)).toContainText(/You're in · 1 of 3 · deal ends /);
       // The fixture group buy has no photo, so it gets the stand-in picture.
@@ -259,7 +259,7 @@ test("a group buy you joined shows on the Board under the search, with a picture
       await visibleButton(a.page, "Cancel my spot").click();
       await expect(shown(a.page, /Your spot is cancelled. You weren't charged/)).toBeVisible();
       await a.page.getByRole("button", { name: "Go back" }).filter({ visible: true }).first().click();
-      const card = a.page.getByRole("button", { name: `Group buy: ${title}` }).filter({ visible: true }).first();
+      const card = a.page.getByRole("button", { name: `Group deal: ${title}` }).filter({ visible: true }).first();
       await expect(card.getByText("Save $6.00", { exact: true })).toBeVisible();
       await expect(card).toContainText(/0 of 3 joined · deal ends /);
       await expect(card).not.toContainText("You're in");

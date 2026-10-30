@@ -144,7 +144,7 @@ export default function OfferDetailScreen() {
       return false;
     }
     if (!card) {
-      setMessage({ tone: 'error', text: "Add a card first. We'll only charge it if the group buy happens." });
+      setMessage({ tone: 'error', text: "Add a card first. We'll only charge it if the group deal happens." });
       return false;
     }
     return true;
@@ -422,7 +422,7 @@ export default function OfferDetailScreen() {
 
         {isGroupBuy ? (
           <View className="mt-3 rounded-2xl border bg-white p-4" style={{ borderColor: colors.line }}>
-            <Text className="text-sm font-black" style={{ color: colors.ink }} accessibilityLabel="Group buy progress">
+            <Text className="text-sm font-black" style={{ color: colors.ink }} accessibilityLabel="Group deal progress">
               {offer.minimumCommitments && offer.committedQuantity >= offer.minimumCommitments
                 ? `${offer.committedQuantity} committed · goal of ${offer.minimumCommitments} met`
                 : `${offer.committedQuantity} of ${offer.minimumCommitments} committed`}

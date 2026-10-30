@@ -62,7 +62,7 @@ export function GroupBuysStrip({ style }: { style?: object }) {
   // Yours first, then open ones, so a group buy you cancel stays put and just loses its "You're in".
   const shown = [...joined, ...open].slice(0, 10);
   if (shown.length === 0) return null;
-  const title = 'Group buys';
+  const title = 'Group deals';
 
   return (
     <View accessibilityLabel={title} style={style}>
@@ -75,7 +75,7 @@ export function GroupBuysStrip({ style }: { style?: object }) {
         </View>
         <TouchableOpacity
           accessibilityRole="link"
-          accessibilityLabel="See all group buys"
+          accessibilityLabel="See all group deals"
           onPress={() => router.push('/(authenticated)/group-buys' as any)}
           hitSlop={8}
           className="flex-row items-center"
@@ -94,7 +94,7 @@ export function GroupBuysStrip({ style }: { style?: object }) {
             <TouchableOpacity
               key={offer.id}
               accessibilityRole="button"
-              accessibilityLabel={`Group buy: ${offer.title}`}
+              accessibilityLabel={`Group deal: ${offer.title}`}
               onPress={() => router.push(`/offer-detail?id=${offer.id}` as any)}
               className="rounded-2xl border bg-white p-3"
               style={{ width: 220, borderColor: needsPay ? colors.red : colors.line }}

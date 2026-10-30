@@ -56,7 +56,7 @@ export async function commitToOffer(
     await lockOffer(tx, offer.id);
     const current = await tx.marketplaceOffer.findUniqueOrThrow({ where: { id: offer.id } });
     if (current.status !== "LIVE" || !current.commitmentDeadline || current.commitmentDeadline <= now) {
-      throw new TRPCError({ code: "BAD_REQUEST", message: "This group buy isn't taking commitments anymore." });
+      throw new TRPCError({ code: "BAD_REQUEST", message: "This group deal isn't taking commitments anymore." });
     }
     if (params.quantity > current.quantityPerMember) {
       throw new TRPCError({
@@ -69,7 +69,7 @@ export async function commitToOffer(
       where: { offerId_userId: { offerId: offer.id, userId: params.userId } },
     });
     if (existing && existing.status !== "COMMITTED" && existing.status !== "CANCELLED") {
-      throw new TRPCError({ code: "CONFLICT", message: "You're already in this group buy." });
+      throw new TRPCError({ code: "CONFLICT", message: "You're already in this group deal." });
     }
 
     const othersUnits = await sumActiveUnits(tx, offer.id, params.userId);
@@ -77,7 +77,7 @@ export async function commitToOffer(
       const left = Math.max(0, current.maximumQuantity - othersUnits);
       throw new TRPCError({
         code: "CONFLICT",
-        message: left > 0 ? `Only ${left} left. Try a smaller amount.` : "This group buy is full.",
+        message: left > 0 ? `Only ${left} left. Try a smaller amount.` : "This group deal is full.",
       });
     }
 
@@ -126,7 +126,7 @@ export async function commitToOffer(
     await notifyCommitters(db, offer, ACTIVE_COMMITMENT_STATUSES, {
       kind: "threshold-reached",
       type: "GROUP_BUY_THRESHOLD_REACHED",
-      title: "Your group buy is happening",
+      title: "Your group deal is happening",
       body: `${offer.title} hit its goal. When commitments close, we'll charge your saved card ${formatCents(offer.memberPriceCents)} each. You haven't been charged yet.`,
     });
   }

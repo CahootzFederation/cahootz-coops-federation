@@ -17,7 +17,7 @@ export function formatOfferDateTime(iso: string | null) {
 
 export function offerTypeLabel(offer: Pick<MarketplaceOffer, 'offerType'>) {
   // Only Group Buys are offered now; an older Member Deal still reads plainly.
-  return offer.offerType === 'GROUP_BUY' ? 'Group buy' : 'Deal';
+  return offer.offerType === 'GROUP_BUY' ? 'Group deal' : 'Deal';
 }
 
 /** One plain line on where an offer stands, from the member's side. */

@@ -97,7 +97,7 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: OfferStri
         userId: commitment.userId,
         kind,
         type: "GROUP_BUY_PAYMENT_REMINDER",
-        title: hoursLeft <= 2 ? "Last call to pay" : "Reminder: pay for your group buy",
+        title: hoursLeft <= 2 ? "Last call to pay" : "Reminder: pay for your group deal",
         body: `Pay ${formatCents(offer.memberPriceCents * commitment.quantity)} for ${offer.title} in the next ${hoursLeft <= 2 ? "2 hours" : "day"} to keep your spot.`,
       });
       if (sent) result.remindersSent++;
@@ -143,7 +143,7 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: OfferStri
       });
     } else {
       result.groupBuysFailed++;
-      await refundPaidCommitments(db, offer.id, "Group buy didn't reach its paid minimum", SYSTEM_ACTOR, stripe);
+      await refundPaidCommitments(db, offer.id, "Group deal didn't reach its paid minimum", SYSTEM_ACTOR, stripe);
       await notifyCommitters(db, offer, ["PAID", "REFUNDED"], {
         kind: "failed",
         type: "GROUP_BUY_FAILED_REFUNDED",

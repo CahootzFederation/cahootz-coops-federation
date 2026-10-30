@@ -140,7 +140,7 @@ export async function finishCardSetup(db: Db, params: { userId: string; setupId:
 export async function requireSavedCard(db: Db, userId: string) {
   const card = await defaultCard(db, userId);
   if (!card) {
-    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Add a card first. We'll only charge it if the group buy happens." });
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Add a card first. We'll only charge it if the group deal happens." });
   }
   return card;
 }

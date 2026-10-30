@@ -159,7 +159,7 @@ describe("weekly demand check", () => {
     const db = demandDb({ items: [{ productId: "pods", name: "Laundry pods", category: "Household", description: "Concentrated laundry detergent pods" }] });
     const result = await askCommonsAboutDeals("church", NOW, db);
     expect(result).toMatchObject({ asked: true, categoryKey: "household_essentials", productId: "pods", evidence: "approved_item" });
-    expect(db.posts[0].title).toBe("A group buy on Laundry pods?");
+    expect(db.posts[0].title).toBe("A group deal on Laundry pods?");
     expect(db.posts[0].content).toContain("Laundry pods (64 pods) runs about $28.89 on its own. If 12 of us buy together, it could come to about $16.29 each.");
     expect(db.posts[0].content).toContain("prices we found online");
     expect(db.actions[0].payload).toMatchObject({ dealCategory: "household_essentials", sourcedProductId: "pods", evidence: { kind: "approved_item" } });
@@ -178,7 +178,7 @@ describe("weekly demand check", () => {
     });
     const result = await askCommonsAboutDeals("church", NOW, db);
     expect(result).toMatchObject({ asked: true, categoryKey: "groceries", productId: "rice", evidence: "need_posts" });
-    expect(db.posts[0].title).toBe("A group buy on Jasmine rice, 25 lb?");
+    expect(db.posts[0].title).toBe("A group deal on Jasmine rice, 25 lb?");
   });
 
   it("doesn't ask about an item when card fees would eat most of the savings", async () => {

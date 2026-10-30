@@ -214,14 +214,14 @@ export default function MarketplaceLane({ initialCoopId }: { initialCoopId?: str
           <TextInput accessibilityLabel="Search marketplace" value={query} onChangeText={setQuery} placeholder="Search products and commons shops" placeholderTextColor="#A6998A" className="h-12 flex-1 px-3 text-sm" style={{ color: colors.ink }} />
         </View>
         {offers.length > 0 && !normalizedQuery ? (
-          <View className="mt-5 px-4" accessibilityLabel="Group buys">
+          <View className="mt-5 px-4" accessibilityLabel="Group deals">
             <View className="flex-row items-center justify-between">
               <Text className="text-lg font-black" style={{ color: colors.ink }}>
-                Group buys
+                Group deals
               </Text>
               <TouchableOpacity
                 accessibilityRole="link"
-                accessibilityLabel="See all group buys"
+                accessibilityLabel="See all group deals"
                 onPress={() => router.push('/(authenticated)/group-buys' as any)}
                 hitSlop={8}
                 className="flex-row items-center"

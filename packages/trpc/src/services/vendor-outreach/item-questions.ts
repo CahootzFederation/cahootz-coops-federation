@@ -103,7 +103,7 @@ export function pricedItem(
  */
 export function itemQuestionText(item: PricedItem): { title: string; body: string } {
   return {
-    title: `A group buy on ${item.name}?`,
+    title: `A group deal on ${item.name}?`,
     body: [
       `${item.name} (${packLabel(item.memberShare, item.packSize)}) runs about ${money(item.packRegularPriceCents)} on its own. If ${item.membersNeeded} of us buy together, it could come to about ${money(item.suggestedMemberPriceCents)} each. That's from prices we found online, so the final price depends on the seller.`,
       "Would you buy one?",

@@ -489,7 +489,7 @@ describe("weekly group buys notice", () => {
       deal({ title: "Coffee", status: "PAYMENT_OPEN", memberPriceCents: 850, regularPriceCents: 1200 }),
       deal({ title: "Soap" }),
     ]);
-    expect(text.title).toBe("This week's group buys");
+    expect(text.title).toBe("This week's group deals");
     expect(text.body.split("\n")).toEqual([
       "Rice: was $24.00, now $18.00. Save $6.00. 3 of 10 joined, deal ends Sat, Nov 7",
       "Laundry pods: was $24.00, now $18.00. Save $6.00. 8 of 12 joined, deal ends Fri, Nov 6",
@@ -506,7 +506,7 @@ describe("weekly group buys notice", () => {
     expect(first).toMatchObject({ commons: 1, sent: members.length });
     const notices = db.tables.notification.filter((n: any) => n.type === "OFFER_WEEKLY_DIGEST");
     expect(notices.map((n: any) => n.userId).sort()).toEqual([...members].sort());
-    expect(notices[0]).toMatchObject({ coopId: "church", title: "This week's group buys", data: { coopId: "church", lane: "marketplace" } });
+    expect(notices[0]).toMatchObject({ coopId: "church", title: "This week's group deals", data: { coopId: "church", lane: "marketplace" } });
     expect((await sendWeeklyDealsDigest(db, now)).sent).toBe(0);
     // A new week sends again.
     expect((await sendWeeklyDealsDigest(db, new Date(now.getTime() + 7 * DAY_MS))).sent).toBe(members.length);

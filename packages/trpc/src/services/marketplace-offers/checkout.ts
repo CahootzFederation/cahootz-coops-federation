@@ -61,7 +61,7 @@ export async function contactFor(db: Db, userId: string, phone?: string) {
 async function requireGroupBuyPaymentSpot(db: Db, params: { offerId: string; userId: string }, now: Date) {
   const offer = await db.marketplaceOffer.findUniqueOrThrow({ where: { id: params.offerId } });
   if (offer.status !== "PAYMENT_OPEN" || !offer.paymentDeadline || offer.paymentDeadline <= now) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "Payment for this group buy isn't open." });
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Payment for this group deal isn't open." });
   }
   const commitment = await db.offerCommitment.findUnique({
     where: { offerId_userId: { offerId: offer.id, userId: params.userId } },
@@ -69,7 +69,7 @@ async function requireGroupBuyPaymentSpot(db: Db, params: { offerId: string; use
   if (!commitment || (commitment.status !== "COMMITTED" && commitment.status !== "PAYMENT_PENDING")) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: commitment?.status === "PAID" ? "You've already paid for this one." : "Only members who committed can pay for this group buy.",
+      message: commitment?.status === "PAID" ? "You've already paid for this one." : "Only members who committed can pay for this group deal.",
     });
   }
   return commitment;

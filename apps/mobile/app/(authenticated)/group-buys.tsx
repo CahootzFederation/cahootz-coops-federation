@@ -36,7 +36,7 @@ export default function GroupBuysScreen() {
       setOffers(await api.listAllOffers(sessionToken));
       setError(null);
     } catch (reason) {
-      setError(friendlyError(reason, "We couldn't load group buys right now. Pull down to try again."));
+      setError(friendlyError(reason, "We couldn't load group deals right now. Pull down to try again."));
     }
   }, [sessionToken]);
 
@@ -55,7 +55,7 @@ export default function GroupBuysScreen() {
         <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back" className="h-11 w-11 items-center justify-center">
           <ArrowLeft size={22} color={colors.ink} />
         </TouchableOpacity>
-        <Text className="ml-2 text-base font-black" style={{ color: colors.ink }}>All group buys</Text>
+        <Text className="ml-2 text-base font-black" style={{ color: colors.ink }}>All group deals</Text>
       </View>
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
@@ -69,18 +69,18 @@ export default function GroupBuysScreen() {
               From every Commons you&apos;re in. Nobody pays unless enough people join.
             </Text>
             {mine.length > 0 ? (
-              <View accessibilityLabel="Group buys you joined">
+              <View accessibilityLabel="Group deals you joined">
                 <Text className="mb-2 text-lg font-black" style={{ color: colors.ink }}>You joined</Text>
                 {mine.map((offer) => (
                   <OfferCard key={offer.id} offer={offer} commonsName={offer.commonsName} />
                 ))}
               </View>
             ) : null}
-            <View accessibilityLabel="Open group buys" className={mine.length > 0 ? 'mt-4' : ''}>
+            <View accessibilityLabel="Open group deals" className={mine.length > 0 ? 'mt-4' : ''}>
               <Text className="mb-2 text-lg font-black" style={{ color: colors.ink }}>Open now</Text>
               {open.length === 0 ? (
                 <Text className="text-sm" style={{ color: colors.muted }}>
-                  {mine.length > 0 ? "That's all of them for now." : "No group buys are open in your Commons right now. We'll let you know when one starts."}
+                  {mine.length > 0 ? "That's all of them for now." : "No group deals are open in your Commons right now. We'll let you know when one starts."}
                 </Text>
               ) : (
                 open.map((offer) => <OfferCard key={offer.id} offer={offer} commonsName={offer.commonsName} />)

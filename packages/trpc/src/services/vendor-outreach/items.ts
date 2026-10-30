@@ -44,7 +44,7 @@ export async function listItemsForAdmin(db: Db = defaultDb, now = new Date()) {
       product: {
         include: {
           priceObservations: { orderBy: { observedAt: "desc" }, take: 1 },
-          vendorCampaigns: { select: { id: true, coopId: true, status: true }, orderBy: { createdAt: "desc" } },
+          vendorCampaigns: { select: { id: true, coopId: true, status: true, endReason: true }, orderBy: { createdAt: "desc" } },
         },
       },
     },

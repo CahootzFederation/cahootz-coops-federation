@@ -58,6 +58,7 @@ Health and money themes stay excluded, as they are today.
   - Limits: `maxEmails` (default 10), `maxSearches` (default 5), `expiresAt` (default 30 days).
   - What the pitch can say: `pitchPoints`, edited and approved by the admin.
   - Status: PROPOSED → APPROVED → ACTIVE ⇄ PAUSED → COMPLETED, EXPIRED or REJECTED.
+  - A search that reaches nobody ends right away as COMPLETED with `endReason` (NO_SOURCES, NOTHING_FOUND, NOTHING_FOUND_NO_WEB_SEARCH or NONE_REACHABLE). The admin gets a Slack alert, the Outreach page shows "found no sellers" and what to try, and a product idea can start a new search. The Outreach page warns when every built-in source is off.
   - Records: `proposedAt`, `approvedById`, `approvedAt`, `rejectReason`.
 - **`ProspectSource`**
   - Fields: `type` (CAHOOTZ_SHOPS, MEMBER_REFERRALS, WEB_SEARCH, DIRECTORY_SITE), `name`, `config` (for example a directory domain plus query hints), `suggestedBy` (sage or an admin), `status` (SUGGESTED, ENABLED or DISABLED).

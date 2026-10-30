@@ -23,6 +23,11 @@
  *     through the same services as the admin's Approve and Find a seller buttons.
  *   ... item-sweep <runId>
  *     Runs the outreach sweep for the item's seller search, as sweep does. Prints the token.
+ *   ... item-search-nowhere <runId>
+ *     Like item-search, but near "E2E Nowhere <runId>", where no business is.
+ *   ... item-sweep-empty <runId>
+ *     Runs the sweep for an active seller search that has no sellers in its area (shop
+ *     matching and web search off, as above) and prints how the search ended.
  *   ... item-cleanup <runId>
  *     Deletes the item, its profile, seller search, draft offer and the business.
  *
@@ -167,9 +172,36 @@ async function itemSearch(runId: string) {
   return startSellerSearch(db, "e2e-fixture", { profileId, productId, area: `E2E Town ${runId}`, maxEmails: 2 });
 }
 
+/** Like item-search, but near "E2E Nowhere <runId>", where no business is. */
+async function itemSearchNowhere(runId: string) {
+  const { profileId, productId } = itemIds(runId);
+  await reviewItem(db, "e2e-fixture", { profileId, productId, decision: "approve" });
+  return startSellerSearch(db, "e2e-fixture", { profileId, productId, area: `E2E Nowhere ${runId}`, maxEmails: 2 });
+}
+
 async function itemSweep(runId: string) {
   const { productId, sellerEmail } = itemIds(runId);
   return sweepCampaign({ coopId: coopFor(runId), area: `E2E Town ${runId}`, sourcedProductId: productId }, sellerEmail);
+}
+
+/** Runs the real sweep for a seller search the admin started somewhere with no sellers; reports how it ended. */
+async function itemSweepEmpty(runId: string) {
+  const { productId } = itemIds(runId);
+  const campaign = await db.vendorCampaign.findFirstOrThrow({ where: { coopId: coopFor(runId), sourcedProductId: productId, status: "ACTIVE" } });
+  const toggled = await db.prospectSource.findMany({ where: { type: { in: ["CAHOOTZ_SHOP", "WEB_SEARCH"] }, status: "ENABLED" }, select: { id: true } });
+  await db.prospectSource.updateMany({ where: { id: { in: toggled.map((source) => source.id) } }, data: { status: "DISABLED" } });
+  try {
+    await runOutreachSweep(db, new Date(), {
+      ignoreSendingWindow: true,
+      resolveMx: async () => true,
+      draft: async () => null,
+      research: async () => ({ businesses: [], suggestedSources: [] }),
+    });
+  } finally {
+    await db.prospectSource.updateMany({ where: { id: { in: toggled.map((source) => source.id) } }, data: { status: "ENABLED" } });
+  }
+  const ended = await db.vendorCampaign.findUniqueOrThrow({ where: { id: campaign.id }, select: { status: true, endReason: true, area: true } });
+  return ended;
 }
 
 async function itemCleanup(runId: string) {
@@ -185,7 +217,7 @@ async function itemCleanup(runId: string) {
 }
 
 const COMMANDS: Record<string, (runId: string) => Promise<unknown>> = {
-  setup, sweep, cleanup, "item-setup": itemSetup, "item-search": itemSearch, "item-sweep": itemSweep, "item-cleanup": itemCleanup,
+  setup, sweep, cleanup, "item-setup": itemSetup, "item-search": itemSearch, "item-sweep": itemSweep, "item-search-nowhere": itemSearchNowhere, "item-sweep-empty": itemSweepEmpty, "item-cleanup": itemCleanup,
 };
 
 async function main() {

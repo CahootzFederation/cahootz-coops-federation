@@ -34,6 +34,7 @@ interface CampaignRow {
   searchesUsed: number;
   status: string;
   rejectReason: string | null;
+  endReason: NoSellersReason | null;
   expiresAt: string | null;
   createdAt: string;
   counts: { found: number; queued: number; sent: number; responded: number; skipped: number };
@@ -89,7 +90,7 @@ interface ItemRow {
     observedAt: string;
     expired: boolean;
   } | null;
-  campaign: { id: string; status: string } | null;
+  campaign: { id: string; status: string; endReason: NoSellersReason | null } | null;
   suggestion: {
     packSize: number;
     packLabel: string;
@@ -124,6 +125,31 @@ interface SourceRow {
 }
 
 type Funnel = Record<string, number>;
+
+type NoSellersReason = 'NO_SOURCES' | 'NOTHING_FOUND' | 'NOTHING_FOUND_NO_WEB_SEARCH' | 'NONE_REACHABLE';
+const BUILT_IN_SOURCES = ['CAHOOTZ_SHOP', 'MEMBER_REFERRAL', 'WEB_SEARCH'];
+
+const NO_SELLERS_SHORT: Record<NoSellersReason, string> = {
+  NO_SOURCES: 'every place to search was turned off.',
+  NOTHING_FOUND: 'nothing turned up in that area.',
+  NOTHING_FOUND_NO_WEB_SEARCH: "nothing turned up, and web search didn't run.",
+  NONE_REACHABLE: 'businesses were found, but none could be emailed.',
+};
+
+/** Why a seller search found nobody, and what to try next. */
+function noSellersText(reason: NoSellersReason, area: string | null, found: number) {
+  const near = area ? ` near ${area}` : '';
+  switch (reason) {
+    case 'NO_SOURCES':
+      return 'Every place to search is turned off, so Sage had nowhere to look. Turn one on under Sources, then start a new search.';
+    case 'NOTHING_FOUND':
+      return `Sage searched${near} and found no businesses that sell this. Try a bigger area, like the whole city or county.`;
+    case 'NOTHING_FOUND_NO_WEB_SEARCH':
+      return `No shops on Cahootz or member recommendations matched${near}, and web search didn't run (it's off under Sources, or Sage isn't allowed to act for this Commons). Turn web search on or try a bigger area.`;
+    case 'NONE_REACHABLE':
+      return `Sage found ${found} ${found === 1 ? 'business' : 'businesses'}${near}, but none can be emailed (the reasons are listed below). You could call them, or try a bigger area.`;
+  }
+}
 
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 const date = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -215,6 +241,13 @@ export default function VendorOutreachPage() {
           local businesses within its limits. When a business says yes, it lands here for you to follow up.
         </p>
       </div>
+
+      {data && !data.sources.some((source) => source.status === 'ENABLED' && BUILT_IN_SOURCES.includes(source.type)) && (
+        <div role="alert" className="rounded-[8px] border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-100">
+          Every place to search is turned off (shops on Cahootz, member recommendations and web search), so new seller searches will find nobody.
+          Turn at least one on under Sources.
+        </div>
+      )}
 
       {data && !data.sendingLive && (
         <div className="rounded-[8px] border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
@@ -380,7 +413,11 @@ function CampaignCard({ campaign, busy, post }: { campaign: CampaignRow; busy: b
             {campaign.expiresAt ? ` · ends ${date(campaign.expiresAt)}` : ''}
           </p>
         </div>
-        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-slate-200" data-testid="campaign-status">{campaign.status.toLowerCase()}</span>
+        {campaign.endReason ? (
+          <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-xs text-amber-100" data-testid="campaign-status">found no sellers</span>
+        ) : (
+          <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-slate-200" data-testid="campaign-status">{campaign.status.toLowerCase()}</span>
+        )}
       </div>
       <p className="mt-2 text-sm text-slate-300">
         {evidence.source === 'discovered_item'
@@ -442,6 +479,11 @@ function CampaignCard({ campaign, busy, post }: { campaign: CampaignRow; busy: b
             Near {campaign.area} · up to {campaign.maxEmails} emails · web searches {campaign.searchesUsed}/{campaign.maxSearches}
             {campaign.rejectReason ? ` · rejected: ${campaign.rejectReason}` : ''}
           </p>
+          {campaign.endReason && (
+            <p className="mt-2 rounded-md border border-amber-400/30 bg-amber-400/10 p-2 text-sm text-amber-100" data-testid="no-sellers">
+              {noSellersText(campaign.endReason, campaign.area, campaign.counts.found)}
+            </p>
+          )}
           <div className="mt-2 grid grid-cols-5 gap-2 text-sm">
             {(['found', 'queued', 'sent', 'responded', 'skipped'] as const).map((key) => (
               <div key={key}><p className="text-xs capitalize text-slate-500">{key}</p><p className="font-semibold text-white">{campaign.counts[key]}</p></div>
@@ -634,6 +676,11 @@ function ItemCard({ item, categories, busy, post }: { item: ItemRow; categories:
           <p className="mt-3 text-xs text-emerald-200">Seller search {openSearch.status.toLowerCase()}. See it under Campaigns.</p>
         ) : (
           <div className="mt-3 grid gap-3 md:grid-cols-3">
+            {item.campaign?.endReason && (
+              <p className="text-xs text-amber-200 md:col-span-3" data-testid="item-no-sellers">
+                The last seller search found no sellers: {NO_SELLERS_SHORT[item.campaign.endReason]} Try again below, maybe with a bigger area.
+              </p>
+            )}
             <label className="text-xs text-slate-300">
               Search near (city or area)
               <input className={input} value={area} onChange={(e) => setArea(e.target.value)} placeholder="Atlanta, GA" />

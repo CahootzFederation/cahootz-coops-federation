@@ -9,6 +9,7 @@ const fixture = (args: string[]) => apiFixture("scripts/e2e-vendor-outreach.ts",
 test.afterAll(() => {
   fixture(["item-cleanup", `${RUN}a`]);
   fixture(["item-cleanup", `${RUN}b`]);
+  fixture(["item-cleanup", `${RUN}c`]);
 });
 
 test("an admin reviews a bot-found item, approves it and starts a seller search", async ({ browser }) => {
@@ -101,5 +102,31 @@ test("a seller says yes to Sage's email, and the Group Buy form fills itself in 
   } finally {
     await adminContext.close();
     await vendorContext.close();
+  }
+});
+
+test("a seller search that finds nobody says so and why, and the product idea offers to try again", async ({ browser }) => {
+  const run = `${RUN}c`;
+  const item = `E2E ${run} Laundry pods`;
+  const { coopId } = fixture(["item-setup", run]);
+  fixture(["item-search-nowhere", run]);
+  // The real sweep: no shop, member recommendation or web result near E2E Nowhere.
+  expect(fixture(["item-sweep-empty", run])).toMatchObject({ status: "COMPLETED", endReason: "NOTHING_FOUND_NO_WEB_SEARCH" });
+  const adminContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const admin = await adminContext.newPage();
+  try {
+    await signInAdmin(admin);
+    await admin.goto(`${ADMIN_BASE_URL}/portal/admin/outreach`);
+    await expect(admin.getByRole("heading", { name: "Vendor outreach" })).toBeVisible({ timeout: 60_000 });
+    const campaign = admin.getByLabel(`Campaign ${item} for ${coopId}`);
+    await expect(campaign.getByTestId("campaign-status")).toHaveText("found no sellers");
+    await expect(campaign.getByTestId("no-sellers")).toContainText(`No shops on Cahootz or member recommendations matched near E2E Nowhere ${run}, and web search didn't run`);
+
+    await admin.getByRole("tab", { name: /product ideas/ }).click();
+    const card = admin.getByLabel(`Product idea ${item}`);
+    await expect(card.getByTestId("item-no-sellers")).toHaveText("The last seller search found no sellers: nothing turned up, and web search didn't run. Try again below, maybe with a bigger area.");
+    await expect(card.getByRole("button", { name: "Find a seller" })).toBeVisible();
+  } finally {
+    await adminContext.close();
   }
 });

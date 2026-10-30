@@ -234,6 +234,51 @@ describe("finding and checking businesses", () => {
     await discoverForCampaign(db, db.tables.vendorCampaign[0].id, { now: NOW, research, resolveMx: mxYes });
     expect(research).not.toHaveBeenCalled();
   });
+
+  it("ends a search that reaches nobody right away, says why, and tells the admins", async () => {
+    const nothing = vi.fn(async () => ({ businesses: [], suggestedSources: [] }));
+    const campaign = await activeCampaign(db);
+    vi.mocked(sendSlackNotification).mockClear();
+    expect(await discoverForCampaign(db, campaign.id, { now: NOW, research: nothing, resolveMx: mxYes })).toMatchObject({ found: 0, endReason: "NOTHING_FOUND" });
+    expect(campaign).toMatchObject({ status: "COMPLETED", endReason: "NOTHING_FOUND" });
+    expect(vi.mocked(sendSlackNotification).mock.calls[0][0].text).toContain("found no sellers: nothing turned up in that area.");
+    // The sweep doesn't pick it up again.
+    expect((await discoverForCampaign(db, campaign.id, { now: NOW, research: nothing, resolveMx: mxYes })).found).toBe(0);
+  });
+
+  it("names the reason: sources off, web search off, or businesses found but none we can email", async () => {
+    const nothing = vi.fn(async () => ({ businesses: [], suggestedSources: [] }));
+    db.tables.prospectSource = [];
+    let campaign = await activeCampaign(db);
+    expect((await discoverForCampaign(db, campaign.id, { now: NOW, research: nothing, resolveMx: mxYes })).endReason).toBe("NO_SOURCES");
+    expect(nothing).not.toHaveBeenCalled();
+
+    db = createFakeOutreachDb();
+    seedSources(db, ["CAHOOTZ_SHOP", "MEMBER_REFERRAL"]);
+    campaign = await activeCampaign(db);
+    expect((await discoverForCampaign(db, campaign.id, { now: NOW, research: nothing, resolveMx: mxYes })).endReason).toBe("NOTHING_FOUND_NO_WEB_SEARCH");
+
+    db = createFakeOutreachDb();
+    seedSources(db);
+    campaign = await activeCampaign(db);
+    const phoneOnly = vi.fn(async () => ({
+      businesses: [{ name: "Phone Only Deli", website: null, email: null, phone: "555-0100", address: null, city: "Atlanta", contactSourceUrl: "https://example.org", whyFit: "Local deli." }],
+      suggestedSources: [],
+    }));
+    expect(await discoverForCampaign(db, campaign.id, { now: NOW, research: phoneOnly, resolveMx: mxYes })).toMatchObject({ found: 1, queued: 0, endReason: "NONE_REACHABLE" });
+    expect(campaign.status).toBe("COMPLETED");
+  });
+
+  it("leaves a search running when at least one business can be emailed", async () => {
+    const campaign = await activeCampaign(db);
+    const one = vi.fn(async () => ({
+      businesses: [{ name: "Sunrise Grocery", website: "sunrisegrocery.com", email: "owner@sunrisegrocery.com", phone: null, address: null, city: "Atlanta", contactSourceUrl: "https://sunrisegrocery.com", whyFit: "Grocery." }],
+      suggestedSources: [],
+    }));
+    expect((await discoverForCampaign(db, campaign.id, { now: NOW, research: one, resolveMx: mxYes })).endReason).toBeNull();
+    expect(campaign.status).toBe("ACTIVE");
+    expect(campaign.endReason).toBeUndefined();
+  });
 });
 
 describe("the outreach sweep", () => {

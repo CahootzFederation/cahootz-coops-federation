@@ -1,6 +1,7 @@
 import type { Context } from "../../context.js";
 
 import { sageAutonomyAllowed } from "../sage-autonomy.js";
+import { sendSlackNotification } from "../slack-notification-service.js";
 import { dealCategoryByKey } from "./categories.js";
 import { businessDomain, normalizeEmail } from "./referrals.js";
 import { runVendorResearch, type ResearchRunner } from "./research-agent.js";
@@ -78,9 +79,9 @@ function inArea(area: string | null, city: string | null | undefined) {
 export async function discoverForCampaign(db: Db, campaignId: string, deps: DiscoveryDeps = {}) {
   const now = deps.now ?? new Date();
   const campaign = await db.vendorCampaign.findUnique({ where: { id: campaignId } });
-  if (!campaign || campaign.status !== "ACTIVE" || campaign.discoveredAt) return { found: 0, queued: 0, skipped: 0, searched: false };
+  if (!campaign || campaign.status !== "ACTIVE" || campaign.discoveredAt) return { found: 0, queued: 0, skipped: 0, searched: false, endReason: null };
   const category = dealCategoryByKey(campaign.category);
-  if (!category) return { found: 0, queued: 0, skipped: 0, searched: false };
+  if (!category) return { found: 0, queued: 0, skipped: 0, searched: false, endReason: null };
 
   const sources = await enabledSourceTypes(db);
   const prospectIds = new Set<string>();
@@ -160,6 +161,36 @@ export async function discoverForCampaign(db: Db, campaignId: string, deps: Disc
       if ((error as { code?: string }).code !== "P2002") throw error;
     }
   }
-  await db.vendorCampaign.update({ where: { id: campaign.id }, data: { discoveredAt: now } });
-  return { found: prospectIds.size, queued, skipped, searched };
+  if (queued > 0) {
+    await db.vendorCampaign.update({ where: { id: campaign.id }, data: { discoveredAt: now } });
+    return { found: prospectIds.size, queued, skipped, searched, endReason: null };
+  }
+
+  // Nobody to email: end the search now and say why, instead of quietly marking it done later.
+  const endReason = noSellersReason({ sources, found: prospectIds.size, searched });
+  await db.vendorCampaign.update({ where: { id: campaign.id }, data: { discoveredAt: now, status: "COMPLETED", endReason } });
+  const what = campaign.sourcedProductId
+    ? (await db.sourcedProduct.findUnique({ where: { id: campaign.sourcedProductId }, select: { name: true } }))?.name ?? category.label
+    : category.label;
+  await sendSlackNotification({
+    text: `Seller search for ${what} near ${campaign.area} found no sellers: ${NO_SELLERS_SUMMARY[endReason]} See Vendor Outreach in the admin portal.`,
+  }).catch(() => false);
+  return { found: prospectIds.size, queued, skipped, searched, endReason };
+}
+
+export type NoSellersReason = "NO_SOURCES" | "NOTHING_FOUND" | "NOTHING_FOUND_NO_WEB_SEARCH" | "NONE_REACHABLE";
+
+/** Short reasons for the admin alert. The admin page has the longer "what to do next". */
+export const NO_SELLERS_SUMMARY: Record<NoSellersReason, string> = {
+  NO_SOURCES: "every place to search is turned off.",
+  NOTHING_FOUND: "nothing turned up in that area.",
+  NOTHING_FOUND_NO_WEB_SEARCH: "nothing turned up, and web search didn't run.",
+  NONE_REACHABLE: "businesses were found, but none could be emailed.",
+};
+
+export function noSellersReason(params: { sources: Set<string>; found: number; searched: boolean }): NoSellersReason {
+  const builtIn = ["CAHOOTZ_SHOP", "MEMBER_REFERRAL", "WEB_SEARCH"];
+  if (!builtIn.some((type) => params.sources.has(type))) return "NO_SOURCES";
+  if (params.found > 0) return "NONE_REACHABLE";
+  return params.searched ? "NOTHING_FOUND" : "NOTHING_FOUND_NO_WEB_SEARCH";
 }

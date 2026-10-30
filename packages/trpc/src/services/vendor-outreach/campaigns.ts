@@ -181,6 +181,7 @@ export async function listCampaignsForAdmin(db: Db = defaultDb) {
       searchesUsed: campaign.searchesUsed,
       status: campaign.status,
       rejectReason: campaign.rejectReason,
+      endReason: campaign.endReason,
       approvedAt: campaign.approvedAt,
       expiresAt: campaign.expiresAt,
       createdAt: campaign.createdAt,

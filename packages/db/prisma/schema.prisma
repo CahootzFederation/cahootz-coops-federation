@@ -4221,6 +4221,8 @@ model VendorCampaign {
   searchesUsed     Int                  @default(0)
   status           VendorCampaignStatus @default(PROPOSED)
   rejectReason     String?
+  // Why a seller search ended without reaching anyone: NO_SOURCES, NOTHING_FOUND, NOTHING_FOUND_NO_WEB_SEARCH, NONE_REACHABLE.
+  endReason        String?
   approvedById     String?
   approvedAt       DateTime?
   discoveredAt     DateTime?

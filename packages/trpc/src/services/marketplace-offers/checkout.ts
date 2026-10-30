@@ -1,8 +1,7 @@
 import { TRPCError } from "@trpc/server";
 
-import { requireActiveMember } from "../commons-membership.js";
 import { createOfferPayment, type OfferStripe } from "./charges.js";
-import { type Db, notFound } from "./shared.js";
+import { type Db, memberCommonsFor, notFound } from "./shared.js";
 
 export type OfferCheckoutInput = {
   userId: string;
@@ -20,7 +19,7 @@ export type OfferCheckoutInput = {
 export async function startOfferCheckout(db: Db, input: OfferCheckoutInput, now = new Date(), stripe?: OfferStripe) {
   const offer = await db.marketplaceOffer.findUnique({ where: { id: input.offerId } });
   if (!offer || offer.offerType !== "GROUP_BUY") notFound();
-  await requireActiveMember(db, input.userId, offer.coopId);
+  await memberCommonsFor(db, input.userId, offer);
   if (input.paymentUi === "hosted_checkout" && (!input.successUrl || !input.cancelUrl)) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Hosted checkout needs a return address." });
   }

@@ -3,7 +3,8 @@ import { z } from "zod";
 export const offerTypes = ["MEMBER_DEAL", "GROUP_BUY"] as const;
 export type OfferType = (typeof offerTypes)[number];
 
-export const offerFulfillmentMethods = ["PICKUP", "DELIVERY"] as const;
+// SERVICE is work done for the member (tech help, a website): nothing ships, so no address.
+export const offerFulfillmentMethods = ["PICKUP", "DELIVERY", "SERVICE"] as const;
 
 export const offerStatuses = [
   "DRAFT",
@@ -94,7 +95,8 @@ export const makeOfferInputSchema = (pricing: Pick<OfferPricingSettings, "minSha
     /** The discovered item (product-discovery bot) this offer came from, if any. */
     sourcedProductId: z.string().min(1).optional().nullable(),
     memberPriceCents: z.number().int().positive(),
-    vendorPayoutCents: z.number().int().positive(),
+    // Zero when Cahootz does the work itself.
+    vendorPayoutCents: z.number().int().nonnegative(),
     commonsSplitBps: z.number().int().min(0).max(10000).default(5000),
     minimumCommitments: z.number().int().positive().optional().nullable(),
     minimumPaidOrders: z.number().int().positive().optional().nullable(),
@@ -207,7 +209,8 @@ export const commitToOfferSchema = z.object({
   // The member has to agree to share their name, phone and address with the vendor.
   shareContact: z.literal(true),
   contactPhone: z.string().trim().max(40).optional(),
-  shippingAddress: shippingAddressSchema,
+  // Required unless the deal is a service, where nothing ships.
+  shippingAddress: shippingAddressSchema.optional(),
 });
 
 export interface OfferSavings {

@@ -7,6 +7,7 @@ import {
   ACTIVE_COMMITMENT_STATUSES,
   type Db,
   MEMBER_VISIBLE_GROUP_BUY_STATUSES,
+  memberCommonsFor,
   notFound,
   PAID_COMMITMENT_STATUSES,
 } from "./shared.js";
@@ -37,15 +38,22 @@ const commitmentSelect = { quantity: true, status: true, savingsCents: true, com
 
 // ── Members ──────────────────────────────────────────────
 
+/** Who can see a deal: just this Commons' members, or everyone's when it's open to every Commons. */
+const inCommons = (coopIds: string[]) => ({ OR: [{ coopId: { in: coopIds } }, { coopId: null }] });
+
+/** The label for an every-Commons deal on the All group deals page. */
+export const EVERY_COMMONS_LABEL = "Every Commons";
+
 /**
  * Offers a member can see in one Commons: live deals, Group Buys in progress,
- * and any offer they took part in (so they can see how it ended).
+ * and any offer they took part in (so they can see how it ended). Deals open to
+ * every Commons show up in each one.
  */
 export async function listOffersForMember(db: Db, userId: string, coopId: string, now = new Date()) {
   await requireActiveMember(db, userId, coopId);
   const offers = await db.marketplaceOffer.findMany({
     where: {
-      coopId,
+      AND: [inCommons([coopId])],
       OR: [
         { offerType: "GROUP_BUY", status: { in: [...MEMBER_VISIBLE_GROUP_BUY_STATUSES] } },
         { commitments: { some: { userId, status: { not: "CANCELLED" } } }, status: { notIn: ["DRAFT", "PENDING_STEWARD"] } },
@@ -73,7 +81,7 @@ export async function listOffersAcrossCommons(db: Db, userId: string, now = new 
   const [offers, configs] = await Promise.all([
     db.marketplaceOffer.findMany({
       where: {
-        coopId: { in: coopIds },
+        AND: [inCommons(coopIds)],
         OR: [
           { offerType: "GROUP_BUY", status: { in: [...MEMBER_VISIBLE_GROUP_BUY_STATUSES] } },
           { commitments: { some: { userId, status: { not: "CANCELLED" } } }, status: { notIn: ["DRAFT", "PENDING_STEWARD"] } },
@@ -91,7 +99,7 @@ export async function listOffersAcrossCommons(db: Db, userId: string, now = new 
   const names = new Map(configs.map((c) => [c.coopId, c.name]));
   return offers.map(({ commitments, ...offer }) => ({
     ...memberOfferView(offer, commitments[0] ?? null, now),
-    commonsName: names.get(offer.coopId) ?? null,
+    commonsName: offer.coopId ? names.get(offer.coopId) ?? null : EVERY_COMMONS_LABEL,
   }));
 }
 
@@ -101,7 +109,7 @@ export async function getOfferForMember(db: Db, userId: string, offerId: string,
     include: { commitments: { where: { userId }, select: commitmentSelect } },
   });
   if (!offer || offer.status === "DRAFT" || offer.status === "PENDING_STEWARD") notFound();
-  await requireActiveMember(db, userId, offer.coopId);
+  await memberCommonsFor(db, userId, offer);
   const { commitments, ...rest } = offer;
   const mine = commitments[0] ?? null;
   if (offer.status === "PAUSED" && !mine) notFound();
@@ -115,7 +123,8 @@ export async function mySavings(db: Db, userId: string, coopId?: string) {
       userId,
       status: { in: [...PAID_COMMITMENT_STATUSES] },
       savingsCents: { gt: 0 },
-      ...(coopId ? { offer: { coopId } } : {}),
+      // An every-Commons deal counts toward the Commons the member joined it through.
+      ...(coopId ? { OR: [{ offer: { coopId } }, { offer: { coopId: null }, coopId }] } : {}),
     },
     include: { offer: { select: { id: true, title: true, offerType: true, coopId: true, vendorName: true } } },
     orderBy: { paidAt: "desc" },
@@ -206,9 +215,10 @@ export async function offerFinancials(db: Db, offerIds: string[]): Promise<Map<s
 
 // ── Platform admin ───────────────────────────────────────
 
+/** One Commons' offers, plus the ones open to every Commons. */
 export async function listOffersForAdmin(db: Db, coopId: string) {
   const offers = await db.marketplaceOffer.findMany({
-    where: { coopId },
+    where: inCommons([coopId]),
     orderBy: { updatedAt: "desc" },
   });
   const money = await offerFinancials(db, offers.map((o) => o.id));
@@ -316,6 +326,7 @@ export async function offersReport(db: Db) {
   }));
 }
 
-export function assertCoop(offer: { coopId: string }, coopId: string) {
-  if (offer.coopId !== coopId) throw new TRPCError({ code: "NOT_FOUND", message: "That offer isn't in this Commons." });
+/** An every-Commons offer can be managed from any Commons' admin page. */
+export function assertCoop(offer: { coopId: string | null }, coopId: string) {
+  if (offer.coopId !== null && offer.coopId !== coopId) throw new TRPCError({ code: "NOT_FOUND", message: "That offer isn't in this Commons." });
 }

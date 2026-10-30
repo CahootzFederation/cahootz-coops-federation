@@ -268,3 +268,44 @@ test("a group buy you joined shows on the Board under the search, with a picture
     }
   });
 });
+
+test("a service deal open to every Commons asks for no address, and a fresh round goes up once it hits its goal", async ({ browser }) => {
+  await withExclusiveAccountSetting(CARD_LOCK, async () => {
+    const title = `${RUN} tech help`;
+    offersFixture(["create", JSON.stringify({ title, status: "LIVE", minimumCommitments: 2, quantityPerMember: 3, everyCommons: true, service: true, repeats: true })]);
+    offersFixture(["save-card", USER_A_EMAIL]);
+    offersFixture(["save-card", USER_B_EMAIL]);
+    const a = await newSignedInPage(browser, USER_A_EMAIL);
+    const b = await newSignedInPage(browser, USER_B_EMAIL);
+    try {
+      await openOffer(a.page, title);
+      await expect(shown(a.page, /reaches out to get you set up once you're charged/)).toBeVisible();
+      await expect(shown(a.page, "Visa ending in 4242", { exact: true })).toBeVisible();
+      // Nothing ships, so there's no address to fill in, and the form says only name and phone are shared.
+      await expect(a.page.getByLabel("Street address").filter({ visible: true })).toHaveCount(0);
+      await expect(shown(a.page, "How to reach you", { exact: true })).toBeVisible();
+      await expect(shown(a.page, new RegExp(`we'll share your name and phone with ${VENDOR} so they can get you set up`))).toBeVisible();
+      await commit(a.page);
+      await expect(shown(a.page, /You're in. You haven't been charged/)).toBeVisible();
+      await expect(shown(a.page, "1 of 2 committed", { exact: true })).toBeVisible();
+
+      await openOffer(b.page, title);
+      await expect(shown(b.page, "Visa ending in 4242", { exact: true })).toBeVisible();
+      await commit(b.page);
+      // A repeating deal closes as soon as it fills, not at its end date.
+      await expect(shown(b.page, /that hit the goal! Within the hour, we'll charge your saved card/)).toBeVisible();
+
+      offersFixture(["sweep"]);
+      await a.page.goto("/group-buys");
+      const card = (section: string) =>
+        a.page.getByLabel(section).getByRole("button", { name: `Group deal: ${title}` }).filter({ visible: true }).first();
+      // The round A joined is charging cards, and a fresh round is open for anyone.
+      await expect(card("Group deals you joined")).toContainText(/Charging saved cards now|Your card didn't go through/);
+      await expect(card("Open group deals")).toContainText(`From ${VENDOR} · Every Commons`);
+      await expect(card("Open group deals")).toContainText("0 of 2 committed");
+    } finally {
+      await a.context.close();
+      await b.context.close();
+    }
+  });
+});

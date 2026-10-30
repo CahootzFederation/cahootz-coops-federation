@@ -26,6 +26,7 @@ import {
   handleOfferPaymentRefunded,
   handleOfferPaymentSucceeded,
   listOffersAcrossCommons,
+  listOffersForMember,
   mySavings,
   recordVendorPayout,
   runOfferSweep,
@@ -551,5 +552,138 @@ describe("all group buys across Commons", () => {
     const db = createFakeOfferDb();
     seedOfferWorld(db);
     expect(await listOffersAcrossCommons(db, "nobody")).toEqual([]);
+  });
+});
+
+describe("repeating group deals open to every Commons", () => {
+  let db: any;
+  let stripe: any;
+  // Like the Cahootz starter deals: no outside vendor, nothing ships, repeats every 30 days.
+  const techHelp = {
+    id: "offer_tech",
+    coopId: null,
+    vendorName: "Cahootz",
+    title: "Tech help for your business",
+    regularPriceCents: 5000,
+    memberPriceCents: 3000,
+    vendorPayoutCents: 0,
+    minimumCommitments: 3,
+    minimumPaidOrders: 1,
+    maximumQuantity: null,
+    quantityPerMember: 10,
+    fulfillmentMethod: "SERVICE",
+    repeats: true,
+    roundDays: 30,
+  };
+
+  beforeEach(() => {
+    db = createFakeOfferDb();
+    stripe = fakeStripe();
+    seedOfferWorld(db, techHelp);
+    // member_3 belongs to a second Commons too; outsider belongs to none.
+    db.tables.userCoopMembership.find((m: any) => m.userId === "member_3").coopId = "block";
+    db.tables.user.push({ id: "outsider", name: "outsider" });
+    db.tables.coopConfig.push({ coopId: "church", name: "Church Commons", isActive: true }, { coopId: "block", name: "Block Club", isActive: true });
+  });
+
+  it("shows up in every Commons and lets members of any Commons join without an address", async () => {
+    expect((await listOffersForMember(db, "member_1", "church")).map((o: any) => o.id)).toEqual(["offer_tech"]);
+    expect((await listOffersForMember(db, "member_3", "block")).map((o: any) => o.id)).toEqual(["offer_tech"]);
+    expect((await listOffersAcrossCommons(db, "member_3"))[0]).toMatchObject({ commonsName: "Every Commons", repeats: true, fulfillmentMethod: "SERVICE" });
+
+    await commitToOffer(db, { userId: "member_1", offerId: "offer_tech", quantity: 1 });
+    await commitToOffer(db, { userId: "member_3", offerId: "offer_tech", quantity: 1 });
+    expect(db.tables.offerCommitment.map((c: any) => [c.userId, c.coopId, c.shippingAddress ?? null])).toEqual([
+      ["member_1", "church", null],
+      ["member_3", "block", null],
+    ]);
+    expect(db.tables.userShippingAddress).toHaveLength(0);
+    await expect(commitToOffer(db, { userId: "outsider", offerId: "offer_tech", quantity: 1 })).rejects.toThrow("Join a Commons first");
+  });
+
+  it("still needs an address for a deal that ships", async () => {
+    db.tables.marketplaceOffer[0].fulfillmentMethod = "DELIVERY";
+    await expect(commitToOffer(db, { userId: "member_1", offerId: "offer_tech", quantity: 1 })).rejects.toThrow("Add the address");
+  });
+
+  it("closes as soon as it hits its goal, charges cards, credits each member's Commons, and posts a fresh copy", async () => {
+    await commitToOffer(db, { userId: "member_1", offerId: "offer_tech", quantity: 2 });
+    const reached = await commitToOffer(db, { userId: "member_3", offerId: "offer_tech", quantity: 1 });
+    expect(reached.thresholdReached).toBe(true);
+    expect(db.tables.notification.find((n: any) => n.type === "GROUP_BUY_THRESHOLD_REACHED").body).toContain("Within the hour");
+
+    const now = new Date();
+    const result = await runOfferSweep(db, now, stripe);
+    expect(result).toMatchObject({ groupBuysClosed: 1, repeatsPosted: 1 });
+
+    const [closed, next] = db.tables.marketplaceOffer;
+    expect(closed).toMatchObject({ id: "offer_tech", status: "PAYMENT_OPEN", committedQuantity: 3 });
+    expect(next).toMatchObject({
+      status: "LIVE",
+      coopId: null,
+      repeats: true,
+      committedQuantity: 0,
+      repeatedFromId: "offer_tech",
+      title: "Tech help for your business",
+      memberPriceCents: 3000,
+      fulfillmentMethod: "SERVICE",
+    });
+    expect(next.commitmentDeadline.getTime()).toBe(now.getTime() + 30 * DAY_MS);
+
+    // $30 an hour, charged to Cahootz; each payment credits the member's own Commons.
+    expect(stripe.paymentIntents.create).toHaveBeenCalledWith(expect.objectContaining({ amount: 6000 }), expect.anything());
+    expect(db.tables.commerceTransaction.map((t: any) => [t.customerId, t.coopId])).toEqual([
+      ["member_1", "church"],
+      ["member_3", "block"],
+    ]);
+    const opened = db.tables.notification.find((n: any) => n.type === "GROUP_BUY_PAYMENT_OPEN" && n.userId === "member_3");
+    expect(opened).toMatchObject({ coopId: "block" });
+    expect(opened.body).toContain("Cahootz will reach out to get you set up.");
+
+    // The next run leaves the fresh copy alone until it fills too.
+    expect((await runOfferSweep(db, now, stripe)).repeatsPosted).toBe(0);
+    expect(db.tables.marketplaceOffer).toHaveLength(2);
+  });
+
+  it("starts fresh when a round ends short of its goal", async () => {
+    await commitToOffer(db, { userId: "member_1", offerId: "offer_tech", quantity: 1 });
+    db.tables.marketplaceOffer[0].commitmentDeadline = new Date(Date.now() - 1000);
+    const result = await runOfferSweep(db, new Date(), stripe);
+    expect(result).toMatchObject({ groupBuysExpired: 1, repeatsPosted: 1 });
+    expect(db.tables.marketplaceOffer.map((o: any) => o.status)).toEqual(["EXPIRED", "LIVE"]);
+    expect(stripe.paymentIntents.create).not.toHaveBeenCalled();
+    expect(db.tables.notification.find((n: any) => n.type === "GROUP_BUY_EXPIRED").body).toContain("A new round just opened");
+  });
+
+  it("stops repeating once a copy is cancelled", async () => {
+    db.tables.marketplaceOffer[0].status = "CANCELLED";
+    db.tables.marketplaceOffer[0].commitmentDeadline = new Date(Date.now() - 1000);
+    expect((await runOfferSweep(db, new Date(), stripe)).repeatsPosted).toBe(0);
+    expect(db.tables.marketplaceOffer).toHaveLength(1);
+  });
+
+  it("lists every-Commons deals in the weekly notice once per member", async () => {
+    db.tables.userCoopMembership.push({ userId: "member_1", coopId: "block", status: "ACTIVE", roles: ["member"] });
+    const result = await sendWeeklyDealsDigest(db, new Date("2026-11-02T15:00:00Z"));
+    const notices = db.tables.notification.filter((n: any) => n.type === "OFFER_WEEKLY_DIGEST");
+    expect(notices.map((n: any) => n.userId).sort()).toEqual(["member_1", "member_2", "member_3", "steward_1"]);
+    expect(result.sent).toBe(4);
+    expect(notices[0].body).toContain("Tech help for your business: was $50.00, now $30.00");
+  });
+
+  it("allows a deal where Cahootz does the work and pays no vendor", () => {
+    const parsed = offerInputSchema.safeParse({
+      title: "A free website for your business",
+      vendorName: "Cahootz",
+      regularPriceCents: 5000,
+      regularPriceSource: "Cahootz's regular monthly price",
+      memberPriceCents: 3000,
+      vendorPayoutCents: 0,
+      minimumCommitments: 20,
+      minimumPaidOrders: 1,
+      commitmentDeadline: new Date(Date.now() + DAY_MS),
+      fulfillmentMethod: "SERVICE",
+    });
+    expect(parsed.success).toBe(true);
   });
 });

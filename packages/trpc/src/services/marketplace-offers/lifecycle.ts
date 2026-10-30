@@ -6,10 +6,12 @@ import { auditLogEntry } from "../../lib/audit.js";
 import { chargeGroupBuy, type OfferStripe } from "./charges.js";
 import { cancelOpenOfferCheckouts, refundOfferTransaction, type StripeClient } from "./payments.js";
 import { offerPricingSettings } from "./pricing-settings.js";
+import { postNextRound } from "./repeats.js";
 import {
   ACTIVE_COMMITMENT_STATUSES,
   type Db,
   formatCents,
+  fulfillmentWords,
   lockOffer,
   notFound,
   notifyCommitters,
@@ -116,7 +118,7 @@ export async function resumeOffer(db: Db, actorId: string, offerId: string) {
 /**
  * Ends a Group Buy's commitment period now instead of at the deadline and
  * charges everyone's saved card. Only allowed once the goal is met, so nobody
- * loses a deal that might still fill.
+ * loses a deal that might still fill. A repeating deal posts its next copy.
  */
 export async function closeCommitmentsEarly(db: Db, actorId: string, offerId: string, stripe?: OfferStripe, now = new Date()) {
   const moved = await db.$transaction(async (tx) => {
@@ -128,6 +130,7 @@ export async function closeCommitmentsEarly(db: Db, actorId: string, offerId: st
       throw new TRPCError({ code: "BAD_REQUEST", message: "This group buy hasn't hit its goal yet, so it can't close early." });
     }
     await requireTransition(tx, offer, "PAYMENT_OPEN", { committedQuantity: units, ...paymentWindow(offer, now) });
+    await postNextRound(tx, offer, now);
     return offer;
   });
   await audit(db, actorId, "MARKETPLACE_OFFER_CLOSED_EARLY", moved.id);
@@ -149,7 +152,7 @@ export async function chargeAfterGoal(db: Db, offerId: string, stripe?: OfferStr
     kind: "payment-open",
     type: "GROUP_BUY_PAYMENT_OPEN",
     title: `${offer.title} is happening`,
-    body: `It reached its goal, so we're charging your saved card ${formatCents(offer.memberPriceCents)} each. We'll let you know when it ships.`,
+    body: `It reached its goal, so we're charging your saved card ${formatCents(offer.memberPriceCents)} each. ${fulfillmentWords(offer).next}`,
   });
   return chargeGroupBuy(db, offer.id, stripe);
 }
@@ -205,19 +208,21 @@ export async function refundCommitment(db: Db, actorId: string, commitmentId: st
   return refundOfferTransaction(db, { transactionId: commitment.commerceTransactionId, reason, actorId }, stripe);
 }
 
-const FULFILLMENT_NOTICES: Partial<Record<OfferStatus, { type: string; title: (t: string) => string; body: (o: { fulfillmentMethod: string; pickupLocation: string | null }) => string }>> = {
+const FULFILLMENT_NOTICES: Partial<Record<OfferStatus, { type: string; title: (t: string, o: { fulfillmentMethod: string }) => string; body: (o: { fulfillmentMethod: string; pickupLocation: string | null }) => string }>> = {
   ORDERED: {
     type: "OFFER_ORDERED",
     title: (title) => `${title} is ordered`,
-    body: () => "We sent your order to the vendor. We'll tell you when it ships.",
+    body: (offer) => (offer.fulfillmentMethod === "SERVICE" ? "We let the vendor know. They'll reach out to get you set up." : "We sent your order to the vendor. We'll tell you when it ships."),
   },
   READY: {
     type: "OFFER_READY",
-    title: (title) => `${title} is on its way`,
+    title: (title, offer) => (offer.fulfillmentMethod === "SERVICE" ? `${title} is set up` : `${title} is on its way`),
     body: (offer) =>
       offer.fulfillmentMethod === "PICKUP"
         ? `Your order is ready for pickup${offer.pickupLocation ? ` at ${offer.pickupLocation}` : ""}.`
-        : "The vendor shipped your order to the address you gave us.",
+        : offer.fulfillmentMethod === "SERVICE"
+          ? "You're all set up. Reach out to us if anything isn't right."
+          : "The vendor shipped your order to the address you gave us.",
   },
 };
 
@@ -234,7 +239,7 @@ export async function updateFulfillment(db: Db, actorId: string, offerId: string
     await notifyCommitters(db, offer, ["PAID"], {
       kind: `fulfillment:${to}`,
       type: notice.type,
-      title: notice.title(offer.title),
+      title: notice.title(offer.title, offer),
       body: notice.body(offer),
     });
   }

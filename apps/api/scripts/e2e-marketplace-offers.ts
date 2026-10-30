@@ -5,13 +5,17 @@
  *
  *   tsx --import ./dotenv.config.js scripts/e2e-marketplace-offers.ts create '<json>'
  *     Creates one offer in the shared private E2E commons from the vendor "E2E Corner
- *     Market" (vendors never sign up). JSON: { title, status, minimumCommitments?, quantityPerMember? }
- *     status is DRAFT (a platform admin publishes it in the web admin) or LIVE.
+ *     Market" (vendors never sign up). JSON: { title, status, minimumCommitments?, quantityPerMember?,
+ *     everyCommons?, service?, repeats? }. status is DRAFT (a platform admin publishes it in the
+ *     web admin) or LIVE. everyCommons opens it to every Commons, service means nothing ships
+ *     (no address), and repeats posts a fresh copy when it hits its goal or ends short.
  *   ... digest
  *     Sends this week's group buys notice for the E2E commons, as Monday's job does.
  *     Clears the commons' claim rows first, so it sends even if it already ran this week.
  *   ... close-commitments <offerId>
  *     Moves the commitment deadline into the past and runs the real sweep.
+ *   ... sweep
+ *     Runs the real 15-minute sweep once (closes repeating deals that hit their goal).
  *   ... close-early <offerId>
  *     Closes commitments early (goal met) and charges every saved card, as an admin would.
  *   ... save-card <email>
@@ -57,13 +61,16 @@ async function create(raw: string) {
     status: "LIVE" | "DRAFT";
     minimumCommitments?: number;
     quantityPerMember?: number;
+    everyCommons?: boolean;
+    service?: boolean;
+    repeats?: boolean;
   };
   if (!input.title.startsWith("E2E")) throw new Error("Fixture offer titles must start with E2E");
   const minimum = input.minimumCommitments ?? 3;
   const offer = await db.marketplaceOffer.create({
     data: {
       offerType: "GROUP_BUY",
-      coopId: COOP_ID,
+      coopId: input.everyCommons ? null : COOP_ID,
       vendorName: VENDOR_NAME,
       vendorEmail: "orders@e2e-corner-market.test",
       title: input.title,
@@ -78,7 +85,9 @@ async function create(raw: string) {
       minimumPaidOrders: Math.max(1, minimum - 1),
       maximumQuantity: 20,
       commitmentDeadline: new Date(Date.now() + 3 * DAY),
-      fulfillmentMethod: "DELIVERY",
+      fulfillmentMethod: input.service ? "SERVICE" : "DELIVERY",
+      repeats: input.repeats ?? false,
+      roundDays: input.repeats ? 30 : null,
       refundPolicy: "Full refund if the group buy doesn't happen.",
       status: input.status,
       publishedAt: input.status === "LIVE" ? new Date() : null,
@@ -142,10 +151,12 @@ async function cleanup(prefix: string) {
   const offers = await db.marketplaceOffer.findMany({ where: { title: { startsWith: prefix } }, select: { id: true } });
   const ids = offers.map((offer) => offer.id);
   if (ids.length === 0) return { removed: 0 };
-  const notifications = await db.notification.findMany({ where: { coopId: COOP_ID }, select: { id: true, data: true } });
-  const alertIds = notifications
-    .filter((n) => ids.includes(((n.data ?? {}) as { offerId?: string }).offerId ?? ""))
-    .map((n) => n.id);
+  // An every-Commons offer's alerts go to each member's own Commons, so match on the offer, not the Commons.
+  const notifications = await db.notification.findMany({
+    where: { OR: ids.map((id) => ({ data: { path: ["offerId"], equals: id } })) },
+    select: { id: true },
+  });
+  const alertIds = notifications.map((n) => n.id);
   await db.notification.deleteMany({ where: { id: { in: alertIds } } });
   // Weekly deals notices that listed this run's offers.
   await db.notification.deleteMany({ where: { coopId: COOP_ID, type: "OFFER_WEEKLY_DIGEST", body: { contains: prefix } } });
@@ -163,6 +174,7 @@ async function main() {
   else if (command === "digest") result = await digest();
   else if (command === "close-commitments") result = await closeCommitments(arg!);
   else if (command === "close-early") result = await closeEarly(arg!);
+  else if (command === "sweep") result = await runOfferSweep(db);
   else if (command === "save-card") result = await saveCard(arg!);
   else if (command === "card-reset") result = await cardReset(arg!);
   else if (command === "orders") result = await orders(arg!);

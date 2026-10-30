@@ -2,9 +2,11 @@ import { auditLogEntry } from "../../lib/audit.js";
 import { backfillProcessingFees, cancelOpenOfferCheckouts, refundOfferTransaction } from "./payments.js";
 import type { OfferStripe } from "./charges.js";
 import { chargeAfterGoal, refundPaidCommitments } from "./lifecycle.js";
+import { postNextRound } from "./repeats.js";
 import {
   type Db,
   formatCents,
+  fulfillmentWords,
   lockOffer,
   notifyCommitters,
   notifyOnce,
@@ -17,6 +19,7 @@ const SYSTEM_ACTOR = "system:offer-sweep";
 const HOUR = 60 * 60 * 1000;
 
 export type OfferSweepResult = {
+  repeatsPosted: number;
   groupBuysClosed: number;
   groupBuysExpired: number;
   remindersSent: number;
@@ -39,6 +42,7 @@ async function audit(db: Db, action: string, offerId: string, metadata?: Record<
  */
 export async function runOfferSweep(db: Db, now = new Date(), stripe?: OfferStripe): Promise<OfferSweepResult> {
   const result: OfferSweepResult = {
+    repeatsPosted: 0,
     groupBuysClosed: 0,
     groupBuysExpired: 0,
     remindersSent: 0,
@@ -48,7 +52,31 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: OfferStri
     processingFeesFilled: 0,
   };
 
+  // 0. Repeating deals close the moment they hit their goal, and a fresh copy goes up.
+  const repeating = await db.marketplaceOffer.findMany({
+    where: { offerType: "GROUP_BUY", status: "LIVE", repeats: true, minimumCommitments: { not: null } },
+  });
+  for (const candidate of repeating.filter((o) => o.committedQuantity >= o.minimumCommitments!)) {
+    const outcome = await db.$transaction(async (tx) => {
+      await lockOffer(tx, candidate.id);
+      const offer = await tx.marketplaceOffer.findUniqueOrThrow({ where: { id: candidate.id } });
+      if (offer.status !== "LIVE") return null;
+      const units = await sumActiveUnits(tx, offer.id);
+      if (units < offer.minimumCommitments!) return null;
+      const window = { paymentOpensAt: now, paymentDeadline: new Date(now.getTime() + offer.paymentWindowHours * HOUR) };
+      if (!(await transitionOffer(tx, offer, "PAYMENT_OPEN", { committedQuantity: units, ...window }))) return null;
+      const next = await postNextRound(tx, offer, now);
+      return { units, nextId: next?.id };
+    });
+    if (!outcome) continue;
+    await audit(db, "MARKETPLACE_OFFER_COMMITMENTS_CLOSED", candidate.id, { units: outcome.units, nextRoundId: outcome.nextId });
+    result.groupBuysClosed++;
+    if (outcome.nextId) result.repeatsPosted++;
+    await chargeAfterGoal(db, candidate.id, stripe);
+  }
+
   // 1. Group Buys whose commitment deadline passed: charge saved cards, or expired.
+  // A repeating one posts a fresh copy either way.
   const closingGroupBuys = await db.marketplaceOffer.findMany({
     where: { offerType: "GROUP_BUY", status: "LIVE", commitmentDeadline: { lte: now } },
   });
@@ -61,11 +89,14 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: OfferStri
       const met = units >= (offer.minimumCommitments ?? Number.POSITIVE_INFINITY);
       const window = { paymentOpensAt: now, paymentDeadline: new Date(now.getTime() + offer.paymentWindowHours * HOUR) };
       const moved = await transitionOffer(tx, offer, met ? "PAYMENT_OPEN" : "EXPIRED", { committedQuantity: units, ...(met ? window : {}) });
-      return moved ? { met, units } : null;
+      if (!moved) return null;
+      const next = await postNextRound(tx, offer, now);
+      return { met, units, nextId: next?.id };
     });
     if (!outcome) continue;
     const offer = candidate;
-    await audit(db, outcome.met ? "MARKETPLACE_OFFER_COMMITMENTS_CLOSED" : "MARKETPLACE_OFFER_EXPIRED", offer.id, { units: outcome.units });
+    if (outcome.nextId) result.repeatsPosted++;
+    await audit(db, outcome.met ? "MARKETPLACE_OFFER_COMMITMENTS_CLOSED" : "MARKETPLACE_OFFER_EXPIRED", offer.id, { units: outcome.units, nextRoundId: outcome.nextId });
     if (outcome.met) {
       result.groupBuysClosed++;
       await chargeAfterGoal(db, offer.id, stripe);
@@ -75,7 +106,9 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: OfferStri
         kind: "expired",
         type: "GROUP_BUY_EXPIRED",
         title: `${offer.title} didn't happen this time`,
-        body: `Not enough people committed by the deadline (${outcome.units} of ${offer.minimumCommitments}). You weren't charged.`,
+        body: offer.repeats
+          ? `Not enough people committed by the deadline (${outcome.units} of ${offer.minimumCommitments}). You weren't charged. A new round just opened if you want to join again.`
+          : `Not enough people committed by the deadline (${outcome.units} of ${offer.minimumCommitments}). You weren't charged.`,
       });
     }
   }
@@ -139,7 +172,7 @@ export async function runOfferSweep(db: Db, now = new Date(), stripe?: OfferStri
         kind: "confirmed",
         type: "GROUP_BUY_CONFIRMED",
         title: `${offer.title} is a go`,
-        body: "Enough people paid, so we're sending the order to the vendor. We'll tell you when it ships.",
+        body: fulfillmentWords(offer).confirmed,
       });
     } else {
       result.groupBuysFailed++;

@@ -50,6 +50,7 @@ export function memberOfferView(offer: OfferRow, myCommitment: OwnCommitment, no
     fulfillmentDate: offer.fulfillmentDate,
     expiresAt: offer.expiresAt,
     fulfillmentMethod: offer.fulfillmentMethod,
+    repeats: offer.repeats,
     pickupLocation: offer.pickupLocation,
     serviceArea: offer.serviceArea,
     redemptionRules: offer.redemptionRules,

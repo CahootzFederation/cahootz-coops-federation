@@ -23,20 +23,22 @@ export function offerTypeLabel(offer: Pick<MarketplaceOffer, 'offerType'>) {
 /** One plain line on where an offer stands, from the member's side. */
 export function offerStatusLine(offer: MarketplaceOffer) {
   const mine = offer.myCommitment;
+  const service = offer.fulfillmentMethod === 'SERVICE';
   switch (offer.status) {
     case 'LIVE':
       return `${offer.committedQuantity} of ${offer.minimumCommitments} committed · deal ends ${formatOfferDate(offer.commitmentDeadline)}`;
     case 'AWAITING_VENDOR':
       return 'Goal met! Getting the order ready';
     case 'PAYMENT_OPEN':
-      if (mine?.status === 'PAID') return "You're paid. We'll tell you when it ships";
+      if (mine?.status === 'PAID') return service ? `You're paid. ${offer.vendor.name} will reach out to get you set up` : "You're paid. We'll tell you when it ships";
       if (mine?.chargeError) return `Your card didn't go through. Pay by ${formatOfferDateTime(offer.paymentDeadline)}`;
       return 'Goal met! Charging saved cards now';
     case 'CONFIRMED':
-      return "It's happening. We're sending the order to the vendor";
+      return service ? `It's happening. ${offer.vendor.name} will reach out to get you set up` : "It's happening. We're sending the order to the vendor";
     case 'ORDERED':
-      return 'Ordered. We’ll tell you when it ships';
+      return service ? `${offer.vendor.name} is getting you set up` : 'Ordered. We’ll tell you when it ships';
     case 'READY':
+      if (service) return "You're all set up";
       return offer.fulfillmentMethod === 'PICKUP' ? `Ready for pickup${offer.pickupLocation ? ` at ${offer.pickupLocation}` : ''}` : 'On its way to you';
     case 'FULFILLED':
       return 'All done';

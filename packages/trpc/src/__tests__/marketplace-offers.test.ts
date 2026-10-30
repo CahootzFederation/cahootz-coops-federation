@@ -33,6 +33,7 @@ import {
   publishOffer,
   sendWeeklyDealsDigest,
   digestText,
+  ensureStarterDeals,
 } from "../services/marketplace-offers/index.js";
 import { createFakeOfferDb, seedOfferWorld } from "./fixtures/fake-offer-db.js";
 
@@ -685,5 +686,33 @@ describe("repeating group deals open to every Commons", () => {
       fulfillmentMethod: "SERVICE",
     });
     expect(parsed.success).toBe(true);
+  });
+});
+
+describe("Cahootz starter deals", () => {
+  it("posts tech help and the free website once, open to every Commons, and never brings back a cancelled one", async () => {
+    const db: any = createFakeOfferDb();
+    const now = new Date();
+    expect(await ensureStarterDeals(db, now)).toEqual({ created: 2 });
+    expect(db.tables.marketplaceOffer.map((o: any) => [o.title, o.memberPriceCents, o.regularPriceCents, o.quantityPerMember])).toEqual([
+      ["Tech help for your business", 3000, 5000, 10],
+      ["A free website for your business", 3000, 5000, 1],
+    ]);
+    expect(db.tables.marketplaceOffer[0]).toMatchObject({
+      coopId: null,
+      vendorName: "Cahootz",
+      vendorPayoutCents: 0,
+      minimumCommitments: 20,
+      fulfillmentMethod: "SERVICE",
+      status: "LIVE",
+      repeats: true,
+      roundDays: 30,
+    });
+    expect(db.tables.marketplaceOffer[0].commitmentDeadline.getTime()).toBe(now.getTime() + 30 * DAY_MS);
+
+    // Every later sweep leaves them alone, including one an admin cancelled.
+    db.tables.marketplaceOffer[1].status = "CANCELLED";
+    expect(await ensureStarterDeals(db, now)).toEqual({ created: 0 });
+    expect(db.tables.marketplaceOffer).toHaveLength(2);
   });
 });

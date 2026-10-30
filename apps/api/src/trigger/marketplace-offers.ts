@@ -1,6 +1,7 @@
 import { logger, schedules } from "@trigger.dev/sdk";
 import { db } from "../../../../packages/db/index.js";
 import { sendWeeklyDealsDigest } from "../../../../packages/trpc/src/services/marketplace-offers/digest.js";
+import { ensureStarterDeals } from "../../../../packages/trpc/src/services/marketplace-offers/starter-deals.js";
 import { runOfferSweep } from "../../../../packages/trpc/src/services/marketplace-offers/sweep.js";
 
 // Member Deals and Group Buys: expires ended deals, closes Group Buy commitment
@@ -8,14 +9,17 @@ import { runOfferSweep } from "../../../../packages/trpc/src/services/marketplac
 // and frees abandoned deal checkouts. Rules: packages/trpc/src/services/marketplace-offers.
 // Each step claims its change with a status-matched update and notices are
 // claimed in OfferNotificationSend, so an overlapping or retried run is harmless.
+// It also posts the Cahootz starter deals the first time it runs after a deploy.
 export const marketplaceOfferSweep = schedules.task({
   id: "marketplace-offer-sweep",
   cron: "*/15 * * * *",
   maxDuration: 600,
   run: async () => {
+    const starter = await ensureStarterDeals(db);
+    if (starter.created > 0) logger.info("Posted Cahootz starter deals", starter);
     const summary = await runOfferSweep(db);
     logger.info("Marketplace offer sweep completed", { ...summary });
-    return summary;
+    return { ...summary, starterDealsPosted: starter.created };
   },
 });
 

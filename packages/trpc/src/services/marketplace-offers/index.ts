@@ -21,6 +21,7 @@ export * from "./payments.js";
 export * from "./pricing-settings.js";
 export * from "./queries.js";
 export * from "./repeats.js";
+export * from "./starter-deals.js";
 export * from "./sweep.js";
 export { canTransition, OFFER_TRANSITIONS } from "./transitions.js";
 export { memberOfferView } from "./views.js";

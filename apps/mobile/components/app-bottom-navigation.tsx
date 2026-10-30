@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { OfflineBanner } from '@/components/offline-banner';
 
 const destinations = [
   { label: 'Commons', href: '/(tabs)' as const, icon: LayoutGrid },
@@ -51,47 +52,57 @@ export function AppBottomNavigation() {
 
   // Onboarding, sign-in, and the commons application are focused, full-screen
   // flows: a stray tab tap there would throw away what the person typed.
-  if (isLoading || !isAuthenticated || !user?.onboardingCompletedAt || !hasCommons) return null;
-  if (screen === 'profile-onboarding') return null;
-  if (!isAuthenticated && !coopId && (screen === 'index' || screen === '' || screen === '(tabs)')) return null;
-  if (isSignInEntry(entry) && (screen === 'index' || screen === '' || screen === '(tabs)')) return null;
+  const hidden =
+    isLoading ||
+    !isAuthenticated ||
+    !user?.onboardingCompletedAt ||
+    !hasCommons ||
+    screen === 'profile-onboarding' ||
+    (!isAuthenticated && !coopId && (screen === 'index' || screen === '' || screen === '(tabs)')) ||
+    (isSignInEntry(entry) && (screen === 'index' || screen === '' || screen === '(tabs)'));
+
+  // The offline note sits just above the tabs, or at the very bottom without them.
+  if (hidden) return <OfflineBanner bottomInset={insets.bottom} />;
 
   return (
-    <View accessibilityRole="tablist" accessibilityLabel="Main navigation" style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-      {destinations
-        // The board and its marketplace are members-only.
-        .filter(({ label }) => isAuthenticated || label !== 'Board')
-        .map(({ label, href, icon: Icon }) => {
-        const selected = active === label;
-        const color = selected ? DESIGN.actionText : DESIGN.muted;
-        const onPress = () => {
-          // Circle feeds are destinations inside the already-selected
-          // Commons tab. Re-selecting that tab must not add Circle View to
-          // the root stack or discard the circle someone is reading.
-          if (label === 'Commons' && selected) {
-            return;
-          }
-          router.navigate(href);
-        };
-        return (
-          <TouchableOpacity
-            key={label}
-            accessibilityRole="tab"
-            accessibilityLabel={label}
-            accessibilityState={{ selected }}
-            aria-selected={selected}
-            onPress={onPress}
-            style={styles.item}
-          >
-            <View>
-              <Icon size={24} color={color} />
-              {label === 'Alerts' && hasUnread ? <View accessibilityLabel="Unread alerts" style={styles.dot} /> : null}
-            </View>
-            <Text style={[styles.label, { color }]}>{label}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
+    <>
+      <OfflineBanner />
+      <View accessibilityRole="tablist" accessibilityLabel="Main navigation" style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        {destinations
+          // The board and its marketplace are members-only.
+          .filter(({ label }) => isAuthenticated || label !== 'Board')
+          .map(({ label, href, icon: Icon }) => {
+          const selected = active === label;
+          const color = selected ? DESIGN.actionText : DESIGN.muted;
+          const onPress = () => {
+            // Circle feeds are destinations inside the already-selected
+            // Commons tab. Re-selecting that tab must not add Circle View to
+            // the root stack or discard the circle someone is reading.
+            if (label === 'Commons' && selected) {
+              return;
+            }
+            router.navigate(href);
+          };
+          return (
+            <TouchableOpacity
+              key={label}
+              accessibilityRole="tab"
+              accessibilityLabel={label}
+              accessibilityState={{ selected }}
+              aria-selected={selected}
+              onPress={onPress}
+              style={styles.item}
+            >
+              <View>
+                <Icon size={24} color={color} />
+                {label === 'Alerts' && hasUnread ? <View accessibilityLabel="Unread alerts" style={styles.dot} /> : null}
+              </View>
+              <Text style={[styles.label, { color }]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </>
   );
 }
 

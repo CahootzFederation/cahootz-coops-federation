@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
+import { useRefreshOnReconnect } from '@/hooks/use-connectivity';
 import { api } from '@/lib/api';
 import { DESIGN } from '@/constants/design';
 import { Input } from '@/components/ui/input';
@@ -44,6 +45,10 @@ export default function CircleView({ coopId }: { coopId: string }) {
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [defaultSavingId, setDefaultSavingId] = useState<string | null>(null);
   const [defaultError, setDefaultError] = useState('');
+  useRefreshOnReconnect(() => {
+    setReloadKey((key) => key + 1);
+    setCommonsReloadKey((key) => key + 1);
+  });
 
   // Single fetch per focus - no polling. Live updates are planned via
   // websockets later; until then "chatting" counts can go stale while you

@@ -24,6 +24,7 @@ import { PaymentConfirmationProvider } from '@/components/payment-confirmation-p
 import StripeWrapper from '@/components/providers/StripeWrapper';
 import { toastConfig } from '@/lib/toast-config';
 import { useNavigationReady } from '@/hooks/use-navigation-ready';
+import { onReconnect } from '@/lib/connectivity';
 import * as Sentry from '@sentry/react-native';
 import { colorScheme as nativeWindColorScheme } from 'nativewind';
 
@@ -141,6 +142,9 @@ function RootLayout() {
   useEffect(() => {
     nativeWindColorScheme.set('light');
   }, []);
+
+  // Screens built on React Query catch up on their own once back online.
+  useEffect(() => onReconnect(() => void queryClient.refetchQueries({ type: 'active' })), []);
 
   // Handle deep links once the navigator can take them (see useNavigationReady).
   const navigationReady = useNavigationReady();

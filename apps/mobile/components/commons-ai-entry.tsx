@@ -43,6 +43,7 @@ import { Text } from '@/components/ui/text';
 import { AiBadge } from '@/components/ai-badge';
 import { SageAvatar } from '@/components/sage-avatar';
 import { useAuth } from '@/contexts/auth-context';
+import { useRefreshOnReconnect } from '@/hooks/use-connectivity';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
 import { track } from '@/lib/analytics';
@@ -270,6 +271,7 @@ export default function CommonsAiEntry({
   const [feedLoadFailed, setFeedLoadFailed] = useState(false);
   const [feedLoading, setFeedLoading] = useState(true);
   const [feedReloadKey, setFeedReloadKey] = useState(0);
+  useRefreshOnReconnect(() => setFeedReloadKey((key) => key + 1));
   const [loadMoreError, setLoadMoreError] = useState('');
   const [circleName, setCircleName] = useState<string | null>(null);
   const [circleIsMember, setCircleIsMember] = useState<boolean | null>(null);

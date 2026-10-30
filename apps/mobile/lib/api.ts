@@ -12,6 +12,8 @@ import type { CommonsPostTag } from './post-types';
 import { getApiUrl, getWebUrl, networkConfig } from './config';
 import { ApiError, apiError, httpError } from './friendly-error';
 import { coopConfig } from './coop-config';
+import { reportReachable, reportUnreachable } from './connectivity';
+import { offlineCacheKey, readOfflineResponse, saveOfflineResponse } from './offline-cache';
 
 /**
  * Resolve the coopId to use for public marketplace queries.
@@ -91,17 +93,88 @@ async function checkForSessionExpiry(response: Response) {
   }
 }
 
+/**
+ * Offline support, in the same wrapper.
+ *
+ * Reads (GET) from our API are saved on the phone when they succeed. When a
+ * read can't reach the API (no connection, or no answer within
+ * READ_TIMEOUT_MS), the last saved answer for that account is returned
+ * instead, marked with SAVED_RESPONSE_HEADER, and lib/connectivity.ts shows
+ * the offline banner. Anything that sends or changes data is never saved or
+ * replayed: it fails as before and the screen says it couldn't connect.
+ */
+export const READ_TIMEOUT_MS = 15_000;
+export const SAVED_RESPONSE_HEADER = 'x-cahootz-saved';
+
+function headerValue(headers: HeadersInit | undefined, name: string) {
+  if (!headers) return '';
+  if (typeof Headers !== 'undefined' && headers instanceof Headers) return headers.get(name) ?? '';
+  if (Array.isArray(headers)) return headers.find(([key]) => key.toLowerCase() === name)?.[1] ?? '';
+  const record = headers as Record<string, string>;
+  const key = Object.keys(record).find((candidate) => candidate.toLowerCase() === name);
+  return key ? record[key] : '';
+}
+
+function isSavableRead(url: string, init: RequestInit | undefined) {
+  const method = (init?.method ?? 'GET').toUpperCase();
+  return method === 'GET' && url.startsWith(`${API_BASE_URL}/trpc/`);
+}
+
+/** Who a read belongs to, so saved answers never cross accounts. */
+function readIdentity(init: RequestInit | undefined) {
+  return `${headerValue(init?.headers, 'x-session-token')}|${headerValue(init?.headers, 'x-wallet-address')}`;
+}
+
+/** Aborts after `ms`, or when the caller's own signal aborts. */
+function withTimeout(init: RequestInit | undefined, ms: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  const callerSignal = init?.signal;
+  if (callerSignal) {
+    if (callerSignal.aborted) controller.abort();
+    else callerSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+  return { init: { ...init, signal: controller.signal }, done: () => clearTimeout(timer) };
+}
+
 function installSessionExpiryInterceptor() {
   const baseFetch = globalThis.__soulaanOriginalFetch ?? globalThis.fetch;
   globalThis.__soulaanOriginalFetch = baseFetch;
 
-  globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
-    const response = await baseFetch(...args);
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : (input as Request).url;
+    const ours = url.startsWith(API_BASE_URL);
+    const savable = isSavableRead(url, init);
+    const cacheKey = savable ? offlineCacheKey(url, readIdentity(init)) : '';
 
-    const url =
-      typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
-    if (response.status === 401 && url.startsWith(API_BASE_URL)) {
+    let response: Response;
+    const timed = savable ? withTimeout(init, READ_TIMEOUT_MS) : null;
+    try {
+      response = await baseFetch(input, timed ? timed.init : init);
+    } catch (error) {
+      // The caller cancelled it (e.g. left the screen): not a connection problem.
+      if (init?.signal?.aborted || !ours) throw error;
+      const saved = savable ? await readOfflineResponse(cacheKey) : null;
+      reportUnreachable(saved !== null);
+      if (saved === null) throw error;
+      return new Response(saved, {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', [SAVED_RESPONSE_HEADER]: '1' },
+      });
+    } finally {
+      timed?.done();
+    }
+
+    if (ours) reportReachable();
+    if (response.status === 401 && ours) {
       void checkForSessionExpiry(response);
+    }
+    if (savable && response.ok) {
+      void response
+        .clone()
+        .text()
+        .then((body) => saveOfflineResponse(cacheKey, body))
+        .catch(() => {});
     }
 
     return response;

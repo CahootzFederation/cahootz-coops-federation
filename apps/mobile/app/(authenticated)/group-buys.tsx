@@ -66,7 +66,7 @@ export default function GroupBuysScreen() {
         {offers ? (
           <>
             <Text className="mb-4 text-xs font-semibold" style={{ color: colors.muted }}>
-              From every Commons you're in. Nobody pays unless enough people join.
+              From every Commons you&apos;re in. Nobody pays unless enough people join.
             </Text>
             {mine.length > 0 ? (
               <View accessibilityLabel="Group buys you joined">

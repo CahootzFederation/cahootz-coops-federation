@@ -71,7 +71,7 @@ export function OfferCard({ offer, commonsName }: { offer: MarketplaceOffer; com
       </Text>
       {joined ? (
         <Text className="mt-1 text-xs font-black" style={{ color: colors.forest }}>
-          You're in for {joined.quantity}. You haven't been charged.
+          You&apos;re in for {joined.quantity}. You haven&apos;t been charged.
         </Text>
       ) : null}
     </TouchableOpacity>

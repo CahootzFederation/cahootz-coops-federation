@@ -3,7 +3,7 @@ import { db } from "@repo/db";
 // Model work Sage starts on its own (not at a member's request). Only these features count toward
 // the autonomy limit, and only these features pause when it is reached. Member-requested Sage
 // conversations, proposal reviews, and everything else keep working.
-export const AUTONOMOUS_SAGE_FEATURES = ["commons-action-agent", "sage-trend-detect", "sage-steward", "sage-relevance-check", "sage-pre-vote", "sage-proposal-writer", "sage-goal-map", "sage-goal-proposal", "sage-monday-note"] as const;
+export const AUTONOMOUS_SAGE_FEATURES = ["commons-action-agent", "sage-trend-detect", "sage-steward", "sage-relevance-check", "sage-pre-vote", "sage-proposal-writer", "sage-goal-map", "sage-goal-proposal", "sage-monday-note", "vendor-outreach-research", "vendor-outreach-draft"] as const;
 
 // Defaults match the CommonsAgentSetting column defaults; a Commons with no setting row uses them.
 export const DEFAULT_SAGE_AUTONOMY_MONTHLY_USD = 5;

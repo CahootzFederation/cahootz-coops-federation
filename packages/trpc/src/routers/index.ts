@@ -44,6 +44,8 @@ import { commonsActionsRouter } from "./commons-actions.js";
 import { commonsActionsAdminRouter } from "./commons-actions-admin.js";
 import { sageRouter } from "./sage.js";
 import { communityPulseRouter } from "./community-pulse.js";
+import { marketplaceOffersRouter } from "./marketplace-offers.js";
+import { vendorOutreachRouter } from "./vendor-outreach.js";
 
 export const appRouter = router({
   communityPulse: communityPulseRouter,
@@ -72,6 +74,8 @@ export const appRouter = router({
   proposalExpert: proposalExpertRouter,
   treasury: treasuryRouter,
   commerce: commerceTransactionsRouter,
+  marketplaceOffers: marketplaceOffersRouter,
+  vendorOutreach: vendorOutreachRouter,
   treasuryLedger: treasuryLedgerRouter,
   scMintEvents: scMintEventsRouter,
   stripeConnect: stripeConnectRouter,

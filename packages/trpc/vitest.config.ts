@@ -20,6 +20,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.{test,spec}.{js,ts}'],
+    // Real-database tests run separately (vitest.db.config.ts).
+    exclude: ['src/**/*.db.test.ts', 'node_modules/**'],
     setupFiles: ['./src/__tests__/setup.ts'],
     // Prevent hanging in CI/CD
     watch: false,

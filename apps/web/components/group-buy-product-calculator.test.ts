@@ -1,7 +1,10 @@
+import { DEFAULT_OFFER_PRICING } from "@repo/validators/marketplace-offers";
+
 import {
   BLUES_OF_AMERICA_PRODUCTS,
   calculateProductSplit,
   COMMONS_CATALOGS,
+  commonsPlanningRateBps,
   FAMILY_COMMONS_PRODUCTS,
   PLANET_BUY_PRODUCTS,
   TRAVELER_COMMONS_PRODUCTS,
@@ -96,20 +99,23 @@ describe("Commons product split", () => {
     );
   });
 
-  it("reconciles the buyer savings and both cuts to the public retail price", () => {
+  it("uses the same price rule as real offers: seller, card fee, then the Commons and Cahootz", () => {
     for (const catalog of COMMONS_CATALOGS) {
       for (const product of catalog.products) {
         const split = calculateProductSplit(product);
 
         expect(
-          split.bulkShareCents +
+          split.vendorCents +
+            split.stripeFeeCents +
             split.commonsCutCents +
-            split.cahootzCutCents +
-            split.memberSavingsCents,
-        ).toBe(split.regularPriceCents);
+            split.cahootzCutCents,
+        ).toBe(split.memberPriceCents);
         expect(split.memberPriceCents + split.memberSavingsCents).toBe(
           split.regularPriceCents,
         );
+        // No deal shown loses the Commons or Cahootz money.
+        expect(split.commonsCutCents).toBeGreaterThan(0);
+        expect(split.cahootzCutCents).toBeGreaterThan(0);
       }
     }
   });
@@ -123,16 +129,20 @@ describe("Commons product split", () => {
       throw new Error("Laundry-pod fixture is missing");
     }
 
-    expect(calculateProductSplit(laundryPods)).toMatchObject({
-      bulkShareCents: 1217,
+    expect(calculateProductSplit(laundryPods)).toEqual({
+      packSize: 1,
+      regularPriceCents: 2889,
+      vendorCents: 1217,
+      stripeFeeCents: 77,
       commonsCutCents: 167,
-      cahootzCutCents: 167,
-      memberSavingsCents: 1338,
-      memberPriceCents: 1551,
+      cahootzCutCents: 168,
+      memberSavingsCents: 1260,
+      memberPriceCents: 1629,
+      membersNeeded: 12,
     });
   });
 
-  it("calculates the organic-coffee shared price", () => {
+  it("sells a cheap item in packs so the card fee doesn't eat the savings", () => {
     const coffee = PLANET_BUY_PRODUCTS.find(
       ({ id }) => id === "organic-coffee",
     );
@@ -141,16 +151,15 @@ describe("Commons product split", () => {
       throw new Error("Organic-coffee fixture is missing");
     }
 
-    expect(calculateProductSplit(coffee)).toMatchObject({
-      bulkShareCents: 694,
-      commonsCutCents: 51,
-      cahootzCutCents: 51,
-      memberSavingsCents: 403,
-      memberPriceCents: 796,
-    });
+    const split = calculateProductSplit(coffee);
+    expect(split.packSize).toBe(2);
+    expect(split.vendorCents).toBe(2 * coffee.bulkShareCents);
+    expect(split.regularPriceCents).toBe(2 * coffee.regularPriceCents);
+    expect(split.membersNeeded).toBe(Math.ceil(coffee.peopleNeeded / 2));
+    expect(split.memberPriceCents).toBeGreaterThanOrEqual(1500);
   });
 
-  it("calculates a Traveler Commons shared price", () => {
+  it("uses the platform admin's margin", () => {
     const mistingFan = TRAVELER_COMMONS_PRODUCTS.find(
       ({ id }) => id === "water-fan",
     );
@@ -159,27 +168,34 @@ describe("Commons product split", () => {
       throw new Error("Traveler misting-fan fixture is missing");
     }
 
-    expect(calculateProductSplit(mistingFan)).toMatchObject({
-      bulkShareCents: 1096,
-      commonsCutCents: 60,
-      cahootzCutCents: 60,
-      memberSavingsCents: 483,
-      memberPriceCents: 1216,
+    const standard = calculateProductSplit(mistingFan);
+    const lower = calculateProductSplit(mistingFan, {
+      ...DEFAULT_OFFER_PRICING,
+      itemMarginBps: 1000,
+      itemMinOrderCents: 0,
     });
+    expect(lower.memberPriceCents).toBeLessThan(standard.memberPriceCents);
+    expect(lower.commonsCutCents).toBeLessThan(standard.commonsCutCents);
   });
 
-  it("does not create negative savings when there is no bulk discount", () => {
+  it("shows the regular price when there is no bulk discount", () => {
     expect(
       calculateProductSplit({
         regularPriceCents: 1200,
         bulkShareCents: 1400,
       }),
     ).toMatchObject({
-      grossDiscountCents: 0,
       commonsCutCents: 0,
       cahootzCutCents: 0,
       memberSavingsCents: 0,
-      memberPriceCents: 1400,
+      memberPriceCents: 1200,
     });
+  });
+
+  it("works out the Commons planning rate from the deals shown", () => {
+    const rate = commonsPlanningRateBps(COMMONS_CATALOGS);
+    expect(rate).toBeGreaterThan(0);
+    expect(rate).toBeLessThan(2000);
+    expect(commonsPlanningRateBps([])).toBeNull();
   });
 });

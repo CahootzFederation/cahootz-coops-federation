@@ -26,6 +26,11 @@ import { burnSC } from '@repo/trpc/services/sc-token-service';
 import { grantFundingBadgesForTransaction } from '@repo/trpc/services/funding-badge-service';
 import { sendOrderCompletedNotification } from '@repo/trpc/services/slack-notification-service';
 import { sendOrderEmails } from '@repo/trpc/services/email-service';
+import {
+  defaultStripe,
+  handleOfferPaymentRefunded,
+  handleOfferPaymentSucceeded,
+} from '@repo/trpc/services/marketplace-offers';
 import { db } from '@repo/db';
 
 /**
@@ -119,12 +124,19 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
 
   console.log(`✅ [Stripe Webhook] Payment processed: transaction ${paymentResult.transactionId}`);
 
+  const ledgerTransaction = await db.commerceTransaction.findUnique({
+    where: { id: paymentResult.transactionId },
+    select: { coopId: true, offerId: true },
+  });
+
   // Step 2b: Record treasury ledger entry only when this checkout actually has a treasury contribution.
-  if (paymentResult.treasuryFeeUSD > 0) {
+  // Offer payments record their shares from Stripe's real fee (handleOfferPaymentSucceeded).
+  if (paymentResult.treasuryFeeUSD > 0 && !ledgerTransaction?.offerId) {
     await recordFeeCollection({
       sourceTransactionId: paymentResult.transactionId,
       amount: paymentResult.treasuryFeeUSD,
       currency: 'USD',
+      coopId: ledgerTransaction?.coopId,
       metadata: {
         stripePaymentIntentId: paymentIntent.id,
         stripeChargeId: paymentIntent.latest_charge as string,
@@ -135,6 +147,17 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
   } else {
     console.log(`ℹ️ [Stripe Webhook] No treasury fee for transaction ${paymentResult.transactionId}; skipping ledger entry`);
   }
+
+  // Step 2b-ii: Member Deal / Group Buy payments: mark the spot paid, record the
+  // saving and the federation share, and refund late or duplicate payments.
+  if (ledgerTransaction?.offerId) {
+    await recordProcessingFee(paymentResult.transactionId, paymentIntent.latest_charge);
+    const offerResult = await handleOfferPaymentSucceeded(db, paymentResult.transactionId);
+    console.log(`🏷️ [Stripe Webhook] Offer payment: ${offerResult.outcome}`);
+  }
+
+  // Shop purchases go on to SC rewards. Offer payments go to Cahootz, with no shop.
+  if (!paymentResult.businessId) return;
 
   // Step 2c: Evaluate and execute SC rewards
   // Get business and customer wallet addresses
@@ -287,6 +310,29 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event) {
   console.log(`🎉 [Stripe Webhook] Payment processing complete!`);
 }
 
+/**
+ * Saves what Stripe kept as its processing fee, so offer reports can show
+ * vendor proceeds, Cahootz and Commons shares, and Stripe's cut separately.
+ * Best effort: a missing fee never blocks the payment.
+ */
+async function recordProcessingFee(transactionId: string, latestCharge: string | Stripe.Charge | null) {
+  try {
+    const chargeId = typeof latestCharge === 'string' ? latestCharge : latestCharge?.id;
+    if (!chargeId) return;
+    const stripe = await defaultStripe();
+    const charge = await stripe.charges.retrieve(chargeId, { expand: ['balance_transaction'] });
+    const balance = charge.balance_transaction;
+    if (balance && typeof balance === 'object') {
+      await db.commerceTransaction.update({
+        where: { id: transactionId },
+        data: { processingFeeAmount: balance.fee / 100 },
+      });
+    }
+  } catch (error) {
+    console.warn(`⚠️ [Stripe Webhook] Couldn't read the processing fee for ${transactionId}:`, error instanceof Error ? error.message : error);
+  }
+}
+
 function getStringFromMetadata(
   metadata: Record<string, unknown> | null,
   key: string,
@@ -396,14 +442,26 @@ async function handleChargeRefunded(event: Stripe.Event) {
   ]);
 
   const treasuryReversal = transaction.treasuryFeeAmount * incrementalRatio;
-  if (treasuryReversal > 0) {
+  // Offer refunds reverse what was actually credited (handleOfferPaymentRefunded).
+  if (treasuryReversal > 0 && !transaction.offerId) {
     await recordRefund({
       sourceTransactionId: transaction.id,
       amount: treasuryReversal,
       currency: transaction.currency,
+      coopId: transaction.coopId,
       reason: isFullRefund ? 'Stripe payment fully refunded' : 'Stripe payment partially refunded',
       idempotencyKey: `${charge.id}:${charge.amount_refunded}`,
       metadata: { stripeChargeId: charge.id, refundedAmount, incrementalRefund },
+    });
+  }
+
+  if (transaction.offerId) {
+    await handleOfferPaymentRefunded(db, {
+      transactionId: transaction.id,
+      refundedAmount,
+      chargedAmount: charge.amount / 100,
+      incrementalRatio,
+      idempotencyKey: `${charge.id}:${charge.amount_refunded}`,
     });
   }
 

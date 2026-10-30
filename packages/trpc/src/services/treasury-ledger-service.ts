@@ -23,6 +23,7 @@ export async function recordFeeCollection(params: {
   sourceTransactionId: string;
   amount: number;
   currency: string;
+  coopId?: string;
   metadata?: Record<string, unknown>;
 }): Promise<{
   id: string;
@@ -59,6 +60,7 @@ export async function recordFeeCollection(params: {
       sourceTransactionType: 'COMMERCE_FEE',
       accountType: 'TREASURY_FEES',
       entryType: 'FEE_COLLECTION',
+      coopId: params.coopId,
       amount,
       currency: currency.toUpperCase(),
       direction: 'CREDIT', // Increases treasury balance
@@ -89,6 +91,7 @@ export async function recordRefund(params: {
   currency: string;
   reason: string;
   idempotencyKey?: string;
+  coopId?: string;
   metadata?: Record<string, unknown>;
 }): Promise<{
   id: string;
@@ -130,6 +133,7 @@ export async function recordRefund(params: {
       sourceTransactionType: 'REFUND',
       accountType: 'TREASURY_FEES',
       entryType: 'REFUND',
+      coopId: params.coopId,
       amount,
       currency: currency.toUpperCase(),
       direction: 'DEBIT', // Decreases treasury balance
@@ -147,6 +151,93 @@ export async function recordRefund(params: {
     amount: entry.amount,
     occurredAt: entry.occurredAt,
   };
+}
+
+/**
+ * Record the Cahootz federation share of a Member Deal or Group Buy payment.
+ * Kept in PLATFORM_FEES so it never mixes with the Commons treasury share.
+ */
+export async function recordFederationFee(params: {
+  sourceTransactionId: string;
+  coopId: string;
+  amount: number;
+  currency: string;
+}) {
+  const existing = await db.treasuryLedgerEntry.findFirst({
+    where: { sourceTransactionId: params.sourceTransactionId, sourceTransactionType: 'FEDERATION_FEE' },
+  });
+  if (existing) return existing;
+  return db.treasuryLedgerEntry.create({
+    data: {
+      sourceTransactionId: params.sourceTransactionId,
+      sourceTransactionType: 'FEDERATION_FEE',
+      accountType: 'PLATFORM_FEES',
+      entryType: 'FEE_COLLECTION',
+      coopId: params.coopId,
+      amount: params.amount,
+      currency: params.currency.toUpperCase(),
+      direction: 'CREDIT',
+      description: 'Federation share of a member offer payment',
+    },
+  });
+}
+
+/** When Stripe's fee on an offer payment is more than what's left after the vendor, Cahootz covers the gap. */
+export async function recordStripeFeeShortfall(params: {
+  sourceTransactionId: string;
+  coopId: string;
+  amount: number;
+  currency: string;
+}) {
+  const existing = await db.treasuryLedgerEntry.findFirst({
+    where: { sourceTransactionId: params.sourceTransactionId, sourceTransactionType: 'STRIPE_FEE_SHORTFALL' },
+  });
+  if (existing) return existing;
+  return db.treasuryLedgerEntry.create({
+    data: {
+      sourceTransactionId: params.sourceTransactionId,
+      sourceTransactionType: 'STRIPE_FEE_SHORTFALL',
+      accountType: 'PLATFORM_FEES',
+      entryType: 'ADJUSTMENT',
+      coopId: params.coopId,
+      amount: params.amount,
+      currency: params.currency.toUpperCase(),
+      direction: 'DEBIT',
+      description: "Stripe's fee was more than what was left after the vendor on a member offer",
+    },
+  });
+}
+
+/** Reverse the federation share, in proportion, when an offer payment is refunded. */
+export async function recordFederationFeeRefund(params: {
+  sourceTransactionId: string;
+  coopId: string;
+  amount: number;
+  currency: string;
+  idempotencyKey: string;
+}) {
+  const existing = await db.treasuryLedgerEntry.findFirst({
+    where: {
+      sourceTransactionId: params.sourceTransactionId,
+      sourceTransactionType: 'FEDERATION_REFUND',
+      metadata: { path: ['idempotencyKey'], equals: params.idempotencyKey },
+    },
+  });
+  if (existing) return existing;
+  return db.treasuryLedgerEntry.create({
+    data: {
+      sourceTransactionId: params.sourceTransactionId,
+      sourceTransactionType: 'FEDERATION_REFUND',
+      accountType: 'PLATFORM_FEES',
+      entryType: 'REFUND',
+      coopId: params.coopId,
+      amount: params.amount,
+      currency: params.currency.toUpperCase(),
+      direction: 'DEBIT',
+      description: 'Federation share returned on a refunded member offer',
+      metadata: { idempotencyKey: params.idempotencyKey },
+    },
+  });
 }
 
 /**

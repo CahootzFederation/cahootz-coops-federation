@@ -16,7 +16,12 @@
 import { db } from '@repo/db';
 import type Stripe from 'stripe';
 import { TRPCError } from '@trpc/server';
-import { calculateCheckoutPricing } from './checkout-pricing-service.js';
+import {
+  calculateCheckoutPricing,
+  calculateOfferPricing,
+  type CheckoutPriceBreakdown,
+  type OfferFeeShares,
+} from './checkout-pricing-service.js';
 
 export { calculatePriceBreakdown } from './checkout-pricing-service.js';
 
@@ -67,6 +72,54 @@ export async function getActiveFeeConfig(): Promise<{
 }
 
 /**
+ * A Member Deal or Group Buy purchase. When present, the transaction uses the
+ * offer's member price, vendor amount and split instead of FeeConfig.
+ */
+export interface OfferCheckout extends OfferFeeShares {
+  offerId: string;
+  commitmentId: string;
+  memberUnitCents: number;
+  quantity: number;
+}
+
+async function resolveTransactionPricing(params: {
+  listedAmountCents: number;
+  applyTreasuryFee: boolean;
+  offer?: OfferCheckout;
+}): Promise<{
+  breakdown: CheckoutPriceBreakdown;
+  federationFeeAmount: number;
+  platformMarkupBps: number;
+  treasuryFeeBps: number;
+}> {
+  if (params.offer) {
+    const breakdown = calculateOfferPricing(params.offer);
+    return {
+      breakdown,
+      federationFeeAmount: breakdown.federationFeeAmount,
+      platformMarkupBps: 0,
+      treasuryFeeBps: params.offer.commonsSplitBps,
+    };
+  }
+  const feeConfig = await getActiveFeeConfig();
+  const pricing = calculateCheckoutPricing({
+    listedAmountCents: params.listedAmountCents,
+    feeConfig,
+    applyTreasuryFee: params.applyTreasuryFee,
+  });
+  return {
+    breakdown: pricing.breakdown,
+    federationFeeAmount: 0,
+    platformMarkupBps: pricing.feeConfig.platformMarkupBps,
+    treasuryFeeBps: pricing.feeConfig.treasuryFeeBps,
+  };
+}
+
+function offerStripeMetadata(offer?: OfferCheckout): Record<string, string> {
+  return offer ? { offerId: offer.offerId, offerCommitmentId: offer.commitmentId } : {};
+}
+
+/**
  * Create a commerce transaction and Stripe payment intent
  * 
  * @param params - Transaction parameters
@@ -81,6 +134,7 @@ export async function createCommerceTransaction(params: {
   applyTreasuryFee?: boolean;
   currency?: string;
   metadata?: Record<string, unknown>;
+  offer?: OfferCheckout;
 }): Promise<{
   transaction: {
     id: string;
@@ -135,13 +189,7 @@ export async function createCommerceTransaction(params: {
     });
   }
 
-  // Get active fee config
-  const feeConfig = await getActiveFeeConfig();
-  const pricing = calculateCheckoutPricing({
-    listedAmountCents,
-    feeConfig,
-    applyTreasuryFee,
-  });
+  const pricing = await resolveTransactionPricing({ listedAmountCents, applyTreasuryFee, offer: params.offer });
   const breakdown = pricing.breakdown;
 
   console.log(`💰 [Payment Orchestration] Price breakdown:`, {
@@ -166,8 +214,10 @@ export async function createCommerceTransaction(params: {
       status: 'PENDING',
       metadata: metadata as any,
       // Store fee snapshot for historical accuracy
-      platformMarkupBps: pricing.feeConfig.platformMarkupBps,
-      treasuryFeeBps: pricing.feeConfig.treasuryFeeBps,
+      platformMarkupBps: pricing.platformMarkupBps,
+      treasuryFeeBps: pricing.treasuryFeeBps,
+      offerId: params.offer?.offerId,
+      federationFeeAmount: pricing.federationFeeAmount / 100,
     },
   });
 
@@ -195,6 +245,7 @@ export async function createCommerceTransaction(params: {
       commerceTransactionId: transaction.id,
       customerId,
       businessId,
+      ...offerStripeMetadata(params.offer),
     },
   });
 
@@ -289,6 +340,7 @@ export async function createHostedCommerceCheckoutSession(params: {
   applyTreasuryFee?: boolean;
   currency?: string;
   metadata?: Record<string, unknown>;
+  offer?: OfferCheckout;
 }): Promise<{
   transaction: {
     id: string;
@@ -350,12 +402,7 @@ export async function createHostedCommerceCheckoutSession(params: {
     });
   }
 
-  const feeConfig = await getActiveFeeConfig();
-  const pricing = calculateCheckoutPricing({
-    listedAmountCents,
-    feeConfig,
-    applyTreasuryFee,
-  });
+  const pricing = await resolveTransactionPricing({ listedAmountCents, applyTreasuryFee, offer: params.offer });
   const breakdown = pricing.breakdown;
 
   const transaction = await db.commerceTransaction.create({
@@ -370,8 +417,10 @@ export async function createHostedCommerceCheckoutSession(params: {
       currency: currency.toUpperCase(),
       status: 'PENDING',
       metadata: metadata as any,
-      platformMarkupBps: pricing.feeConfig.platformMarkupBps,
-      treasuryFeeBps: pricing.feeConfig.treasuryFeeBps,
+      platformMarkupBps: pricing.platformMarkupBps,
+      treasuryFeeBps: pricing.treasuryFeeBps,
+      offerId: params.offer?.offerId,
+      federationFeeAmount: pricing.federationFeeAmount / 100,
     },
   });
 
@@ -395,6 +444,7 @@ export async function createHostedCommerceCheckoutSession(params: {
       commerceTransactionId: transaction.id,
       customerId,
       businessId,
+      ...offerStripeMetadata(params.offer),
     },
     payment_intent_data: {
       transfer_data: {
@@ -405,6 +455,7 @@ export async function createHostedCommerceCheckoutSession(params: {
         commerceTransactionId: transaction.id,
         customerId,
         businessId,
+        ...offerStripeMetadata(params.offer),
       },
     },
     expand: ['payment_intent'],
@@ -459,7 +510,7 @@ export async function processSuccessfulPayment(params: {
 }): Promise<{
   transactionId: string;
   customerId: string;
-  businessId: string;
+  businessId: string | null;
   amountUSD: number;
   treasuryFeeUSD: number;
 }> {
@@ -569,7 +620,7 @@ export async function getTransactionByPaymentIntent(
 ): Promise<{
   id: string;
   customerId: string;
-  businessId: string;
+  businessId: string | null;
   status: string;
   listedAmount: number;
   chargedAmount: number;

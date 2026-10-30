@@ -94,7 +94,8 @@ test("Sage shows it is thinking while it writes a reply in Messages", async ({ b
 
       await expect(member.page.getByText("Sage is thinking…")).toBeVisible();
       await expect(member.page.getByTestId("sage-avatar-thinking")).toBeVisible();
-      await expect(member.page.getByText(note)).toBeVisible();
+      // Exact: the conversation list's "You: …" preview can show the same words.
+      await expect(member.page.getByText(note, { exact: true })).toBeVisible();
 
       await expect(member.page.getByText("Sage is thinking…")).toBeHidden({ timeout: 120_000 });
       // Exact, so the conversation list's "You: …" preview doesn't count: one bubble, not two.
@@ -102,7 +103,7 @@ test("Sage shows it is thinking while it writes a reply in Messages", async ({ b
 
       await member.page.unroute("**/trpc/groups.sendDirect*");
       await member.page.reload();
-      await expect(member.page.getByText(note)).toBeVisible();
+      await expect(member.page.getByText(note, { exact: true })).toBeVisible();
       await expect(member.page.getByTestId("sage-avatar-thinking")).toHaveCount(0);
     } finally {
       const groupId = await sageDmGroupId(member.page, sageUserId).catch(() => undefined);

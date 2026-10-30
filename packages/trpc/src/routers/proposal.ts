@@ -1342,7 +1342,13 @@ function mapDbToOutput(dbRecord: any): ProposalOutput {
     },
     alternatives: dbRecord.alternatives ?? [],
     bestAlternative: dbRecord.bestAlternative ?? undefined,
-    decision: dbRecord.decision ?? "advance",
+    // A proposal saved when the AI review failed is stored as "pending"; it isn't votable yet,
+    // which is what needs_info means. Unknown values must not break the whole list.
+    decision: dbRecord.decision == null
+      ? "advance"
+      : (["advance", "revise", "block", "needs_info"] as const).includes(dbRecord.decision)
+        ? dbRecord.decision
+        : "needs_info",
     decisionReasons: dbRecord.decisionReasons ?? [],
     missing_data: dbRecord.missingData ?? [],
     councilRequired: dbRecord.councilRequired ?? false,

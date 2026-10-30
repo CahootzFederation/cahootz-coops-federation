@@ -1,3 +1,5 @@
+import { estimateStripeFeeCents, splitOfferPayment } from '@repo/validators/marketplace-offers';
+
 import { SC_REWARD_RATE } from '../constants/sc-rewards.js';
 
 export interface CheckoutFeeConfig {
@@ -83,5 +85,51 @@ export function calculateCheckoutPricing(params: {
     feeConfig: checkoutFeeConfig,
     breakdown: calculatePriceBreakdown(listedAmountCents, checkoutFeeConfig),
     expectedScReward: calculateCheckoutScReward(listedAmountCents),
+  };
+}
+
+export interface OfferFeeShares {
+  /** What the vendor gets per unit, in cents. */
+  vendorUnitCents: number;
+  /** The Commons' share of what's left after Stripe and the vendor, in basis points (5000 = half). */
+  commonsSplitBps: number;
+}
+
+export interface OfferPriceBreakdown extends CheckoutPriceBreakdown {
+  federationFeeAmount: number;
+  estimatedStripeFeeAmount: number;
+}
+
+/**
+ * Member Deal and Group Buy pricing. The member pays the member price and
+ * nothing more: there is no checkout markup. The vendor gets the fixed amount
+ * set on the offer. Stripe's fee comes off what the member pays, and what's left
+ * is split between the Commons and Cahootz. Never reads FeeConfig.
+ *
+ * Shares here use an estimated Stripe fee; they're recomputed from Stripe's real
+ * fee once the payment settles (marketplace-offers/payments.ts finalizeOfferShares).
+ * All amounts are in cents. `treasuryFeeAmount` is the Commons share.
+ */
+export function calculateOfferPricing(params: {
+  memberUnitCents: number;
+  quantity: number;
+} & OfferFeeShares): OfferPriceBreakdown {
+  const listedAmount = params.memberUnitCents * params.quantity;
+  const vendorAmount = params.vendorUnitCents * params.quantity;
+  const split = splitOfferPayment({
+    chargedCents: listedAmount,
+    vendorCents: vendorAmount,
+    stripeFeeCents: estimateStripeFeeCents(listedAmount),
+    commonsSplitBps: params.commonsSplitBps,
+  });
+  return {
+    listedAmount,
+    chargedAmount: listedAmount,
+    merchantSettlementAmount: vendorAmount,
+    platformMarkupAmount: 0,
+    treasuryFeeAmount: split.commonsCents,
+    federationFeeAmount: split.cahootzCents,
+    estimatedStripeFeeAmount: split.stripeFeeCents,
+    platformFeeAmount: listedAmount - vendorAmount,
   };
 }

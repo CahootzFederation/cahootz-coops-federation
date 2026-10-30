@@ -5,6 +5,12 @@ import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { Check, ImageOff, UsersRound } from "lucide-react";
 
+import {
+  DEFAULT_OFFER_PRICING,
+  suggestItemOfferPrice,
+  type OfferPricingSettings,
+} from "@repo/validators/marketplace-offers";
+
 export interface CommonsProduct {
   id: string;
   name: string;
@@ -31,14 +37,23 @@ export interface CommonsCatalog {
   products: CommonsProduct[];
 }
 
+/**
+ * One member's payment, by the same rule as every real offer: the vendor gets
+ * the bulk price, Stripe's card fee comes out, and what's left is split between
+ * the Commons and Cahootz. Cheap items come in packs so one payment is big
+ * enough for the card fee. All amounts are for one pack.
+ */
 export interface ProductSplit {
+  packSize: number;
   regularPriceCents: number;
-  bulkShareCents: number;
-  grossDiscountCents: number;
+  vendorCents: number;
+  stripeFeeCents: number;
   commonsCutCents: number;
   cahootzCutCents: number;
   memberSavingsCents: number;
   memberPriceCents: number;
+  /** Households needed when each buys one pack. */
+  membersNeeded: number;
 }
 
 const COMMONS_FUNDING_EXAMPLES: Record<string, string[]> = {
@@ -430,29 +445,64 @@ export const COMMONS_CATALOGS: CommonsCatalog[] = [
 ];
 
 export function calculateProductSplit(
-  product: Pick<CommonsProduct, "regularPriceCents" | "bulkShareCents">,
+  product: Pick<CommonsProduct, "regularPriceCents" | "bulkShareCents"> &
+    Partial<Pick<CommonsProduct, "peopleNeeded">>,
+  pricing: OfferPricingSettings = DEFAULT_OFFER_PRICING,
 ): ProductSplit {
-  const grossDiscountCents = Math.max(
-    0,
-    product.regularPriceCents - product.bulkShareCents,
-  );
-  const commonsCutCents = Math.round(grossDiscountCents * 0.1);
-  const cahootzCutCents = Math.round(grossDiscountCents * 0.1);
-  const memberSavingsCents = Math.max(
-    0,
-    grossDiscountCents - commonsCutCents - cahootzCutCents,
-  );
-
-  return {
+  const suggestion = suggestItemOfferPrice({
     regularPriceCents: product.regularPriceCents,
-    bulkShareCents: product.bulkShareCents,
-    grossDiscountCents,
-    commonsCutCents,
-    cahootzCutCents,
-    memberSavingsCents,
-    memberPriceCents:
-      product.bulkShareCents + commonsCutCents + cahootzCutCents,
+    bulkPriceCents: product.bulkShareCents,
+    pricing,
+  });
+  const packSize = suggestion?.packSize ?? 1;
+  const membersNeeded = Math.max(
+    2,
+    Math.ceil((product.peopleNeeded ?? 2) / packSize),
+  );
+  if (!suggestion) {
+    // No real discount: members would just pay the regular price.
+    return {
+      packSize,
+      regularPriceCents: product.regularPriceCents,
+      vendorCents: product.regularPriceCents,
+      stripeFeeCents: 0,
+      commonsCutCents: 0,
+      cahootzCutCents: 0,
+      memberSavingsCents: 0,
+      memberPriceCents: product.regularPriceCents,
+      membersNeeded,
+    };
+  }
+  return {
+    packSize,
+    regularPriceCents: suggestion.regularPriceCents,
+    vendorCents: suggestion.vendorPayoutCents,
+    stripeFeeCents: suggestion.stripeFeeCents,
+    commonsCutCents: suggestion.commonsCents,
+    cahootzCutCents: suggestion.cahootzCents,
+    memberSavingsCents: suggestion.savingsCents,
+    memberPriceCents: suggestion.memberPriceCents,
+    membersNeeded,
   };
+}
+
+/**
+ * The Commons share as a percent of what members pay, averaged over the shown
+ * products, in basis points. The funding estimate below the catalog uses it.
+ */
+export function commonsPlanningRateBps(
+  catalogs: CommonsCatalog[],
+  pricing: OfferPricingSettings = DEFAULT_OFFER_PRICING,
+): number | null {
+  const rates = catalogs
+    .flatMap((catalog) => catalog.products)
+    .map((product) => calculateProductSplit(product, pricing))
+    .filter((split) => split.memberPriceCents > 0 && split.commonsCutCents > 0)
+    .map((split) => split.commonsCutCents / split.memberPriceCents);
+  if (rates.length === 0) return null;
+  return Math.round(
+    (rates.reduce((sum, rate) => sum + rate, 0) / rates.length) * 10000,
+  );
 }
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -474,8 +524,10 @@ function formatFundingExamples(examples: string[]): string {
 
 export function GroupBuyProductCalculator({
   catalogs = COMMONS_CATALOGS,
+  pricing = DEFAULT_OFFER_PRICING,
 }: {
   catalogs?: CommonsCatalog[];
+  pricing?: OfferPricingSettings;
 }) {
   const activeCatalogs = catalogs.length > 0 ? catalogs : COMMONS_CATALOGS;
   const [selectedCommonsId, setSelectedCommonsId] = useState<
@@ -509,21 +561,25 @@ export function GroupBuyProductCalculator({
   const split = useMemo(
     () =>
       selectedProduct
-        ? calculateProductSplit(selectedProduct)
-        : calculateProductSplit({
-            regularPriceCents: 0,
-            bulkShareCents: 0,
-          }),
-    [selectedProduct],
+        ? calculateProductSplit(selectedProduct, pricing)
+        : calculateProductSplit(
+            { regularPriceCents: 0, bulkShareCents: 0 },
+            pricing,
+          ),
+    [selectedProduct, pricing],
   );
 
   if (!selectedCommons || !selectedProduct) return null;
 
-  const memberDiscountPercent = Math.round(
-    (split.memberSavingsCents / split.regularPriceCents) * 100,
-  );
-  const groupCommonsTotalCents =
-    split.commonsCutCents * selectedProduct.peopleNeeded;
+  const memberDiscountPercent =
+    split.regularPriceCents > 0
+      ? Math.floor((split.memberSavingsCents / split.regularPriceCents) * 100)
+      : 0;
+  const groupCommonsTotalCents = split.commonsCutCents * split.membersNeeded;
+  const packLabel =
+    split.packSize > 1
+      ? `${split.packSize} × ${selectedProduct.memberShare}`
+      : selectedProduct.memberShare;
   const fundingExamples =
     selectedCommons.fundingExamples?.length > 0
       ? selectedCommons.fundingExamples
@@ -668,7 +724,7 @@ export function GroupBuyProductCalculator({
                 </span>
                 <span className="planet-product-card__group">
                   <UsersRound aria-hidden="true" size={16} />
-                  {product.peopleNeeded} needed
+                  {calculateProductSplit(product, pricing).membersNeeded} needed
                 </span>
                 <span className="planet-product-card__check" aria-hidden="true">
                   <Check size={16} strokeWidth={3} />
@@ -689,8 +745,7 @@ export function GroupBuyProductCalculator({
               <UsersRound aria-hidden="true" size={20} />
               <span>
                 <strong>
-                  {selectedProduct.peopleNeeded}{" "}
-                  {selectedCommons.participantLabel}
+                  {split.membersNeeded} {selectedCommons.participantLabel}
                 </strong>
                 needed to open this price
               </span>
@@ -720,7 +775,7 @@ export function GroupBuyProductCalculator({
           <div className="planet-breakdown__money">
             <div className="planet-breakdown__headline">
               <span>
-                You pay
+                You pay for {packLabel}
                 <small>Regularly {formatMoney(split.regularPriceCents)}</small>
               </span>
               <strong>{formatMoney(split.memberPriceCents)}</strong>
@@ -728,15 +783,19 @@ export function GroupBuyProductCalculator({
 
             <dl className="planet-breakdown__rows">
               <div>
-                <dt>Bulk product cost</dt>
-                <dd>{formatMoney(split.bulkShareCents)}</dd>
+                <dt>Seller gets</dt>
+                <dd>{formatMoney(split.vendorCents)}</dd>
               </div>
               <div>
-                <dt>{selectedCommons.name} cut</dt>
+                <dt>Card fee (about)</dt>
+                <dd>{formatMoney(split.stripeFeeCents)}</dd>
+              </div>
+              <div>
+                <dt>{selectedCommons.name} share</dt>
                 <dd>{formatMoney(split.commonsCutCents)}</dd>
               </div>
               <div>
-                <dt>Cahootz cut</dt>
+                <dt>Cahootz share</dt>
                 <dd>{formatMoney(split.cahootzCutCents)}</dd>
               </div>
               <div className="planet-breakdown__savings">
@@ -749,14 +808,12 @@ export function GroupBuyProductCalculator({
             </dl>
 
             <div className="planet-breakdown__group-total">
-              <p>When all {selectedProduct.peopleNeeded} spots fill</p>
+              <p>When all {split.membersNeeded} spots fill</p>
               <dl>
                 <div>
                   <dt>Members keep</dt>
                   <dd>
-                    {formatMoney(
-                      split.memberSavingsCents * selectedProduct.peopleNeeded,
-                    )}
+                    {formatMoney(split.memberSavingsCents * split.membersNeeded)}
                   </dd>
                 </div>
                 <div>
@@ -766,9 +823,7 @@ export function GroupBuyProductCalculator({
                 <div>
                   <dt>Cahootz gets</dt>
                   <dd>
-                    {formatMoney(
-                      split.cahootzCutCents * selectedProduct.peopleNeeded,
-                    )}
+                    {formatMoney(split.cahootzCutCents * split.membersNeeded)}
                   </dd>
                 </div>
               </dl>
@@ -789,8 +844,10 @@ export function GroupBuyProductCalculator({
       </div>
 
       <p className="planet-deal-tool__note">
-        About 80% of the public bulk discount stays with the buyer, 10% supports
-        the {selectedCommons.name}, and 10% supports Cahootz. Prices were
+        Members keep about {100 - pricing.itemMarginBps / 100}% of the savings.
+        The seller gets the bulk price, the card fee comes out next, and what&apos;s
+        left is split between the {selectedCommons.name} and Cahootz. Small items
+        come in packs so the card fee doesn&apos;t eat the savings. Prices were
         checked in October 2026; availability can change. Examples do not
         include supplier confirmation, wholesale eligibility, shipping, or tax.
         No brand shown is affiliated with Cahootz.

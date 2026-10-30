@@ -8,6 +8,7 @@ import { AlertCircle, ArrowLeft, ChevronRight, Loader2, Plus, Users } from 'luci
 import { suggestVendorPayoutCents } from '@repo/validators/marketplace-offers';
 
 import { ConfirmDialog } from '@/components/admin/confirm-dialog';
+import { CompactImageUpload } from '@/components/portal/compact-image-upload';
 import { OFFER_STATUS_LABELS as STATUS_LABELS } from '@/lib/offer-labels';
 
 interface OfferRow {
@@ -316,10 +317,20 @@ export default function CommonsOffersPage() {
               Title members see
               <input className={input} value={form.title} onChange={set('title')} required minLength={3} maxLength={120} />
             </label>
-            <label className={label}>
-              Photo web address (optional)
-              <input className={input} type="url" placeholder="https://" value={form.imageUrl} onChange={set('imageUrl')} />
-            </label>
+            <div className={label}>
+              Photo (optional)
+              <div className="mt-1">
+                <CompactImageUpload
+                  uploadType="offer"
+                  coopId={coopId}
+                  resourceId={coopId}
+                  label={form.imageUrl ? 'Change photo' : 'Upload a photo'}
+                  value={form.imageUrl}
+                  onChange={(url) => setForm((current) => ({ ...current, imageUrl: url }))}
+                />
+              </div>
+              <input className={`${input} mt-2`} type="url" aria-label="Or paste a photo web address" placeholder="Or paste a web address: https://" value={form.imageUrl} onChange={set('imageUrl')} />
+            </div>
             <label className={`${label} md:col-span-2`}>
               Description
               <textarea className={input} rows={2} value={form.description} onChange={set('description')} />

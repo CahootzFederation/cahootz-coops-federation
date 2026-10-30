@@ -141,6 +141,9 @@ test("the admin can publish a new group buy straight from the form, after a dial
     await admin.goto(`${ADMIN_BASE_URL}/portal/admin/commons/${OFFERS_COOP_ID}/offers`);
     await admin.getByRole("button", { name: "New group buy" }).click();
     const form = admin.getByRole("form", { name: "New group buy" });
+    // A photo can be uploaded (stored in the app's Blob bucket) or pasted as a web address.
+    await expect(form.getByRole("button", { name: "Upload a photo" })).toBeVisible();
+    await expect(form.getByLabel("Or paste a photo web address")).toBeVisible();
     await form.getByLabel("Vendor", { exact: true }).fill("E2E Corner Market");
     await form.getByLabel("Title members see").fill(title);
     await form.getByLabel("Regular price ($)").fill("24");

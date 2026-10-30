@@ -4,6 +4,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { ChevronRight, Users } from 'lucide-react-native';
 
 import { OfferImage } from '@/components/offer-image';
+import { OfferPrice } from '@/components/offer-price';
 import { Text } from '@/components/ui/text';
 import { DESIGN } from '@/constants/design';
 import { useAuth } from '@/contexts/auth-context';
@@ -32,7 +33,7 @@ function cardLine(offer: MarketplaceOffer) {
   const mine = activeSpot(offer);
   if (mine && offer.status === 'LIVE') return `You're in · ${offer.committedQuantity} of ${offer.minimumCommitments} · deal ends ${formatOfferDate(offer.commitmentDeadline)}`;
   if (mine) return offerStatusLine(offer);
-  return `${formatCents(offer.memberPriceCents)} · save ${offer.savingsPercent}% · ${offer.committedQuantity} of ${offer.minimumCommitments} joined`;
+  return `${offer.committedQuantity} of ${offer.minimumCommitments} joined · deal ends ${formatOfferDate(offer.commitmentDeadline)}`;
 }
 
 /**
@@ -102,6 +103,9 @@ export function GroupBuysStrip({ style }: { style?: object }) {
               <Text className="mt-2 text-sm font-black" style={{ color: colors.ink }} numberOfLines={1}>
                 {offer.title}
               </Text>
+              <View className="mt-1">
+                <OfferPrice offer={offer} size="sm" />
+              </View>
               <Text className="mt-1 text-xs font-semibold" style={{ color: needsPay ? colors.red : activeSpot(offer) ? colors.forest : colors.muted }} numberOfLines={2}>
                 {cardLine(offer)}
               </Text>

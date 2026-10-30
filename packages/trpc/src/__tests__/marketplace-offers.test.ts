@@ -491,9 +491,9 @@ describe("weekly group buys notice", () => {
     ]);
     expect(text.title).toBe("This week's group buys");
     expect(text.body.split("\n")).toEqual([
-      "Rice: $18.00, save 25%. 3 of 10 joined, deal ends Sat, Nov 7",
-      "Laundry pods: $18.00, save 25%. 8 of 12 joined, deal ends Fri, Nov 6",
-      "Coffee: it's happening, $8.50 each (save 29%)",
+      "Rice: was $24.00, now $18.00. Save $6.00. 3 of 10 joined, deal ends Sat, Nov 7",
+      "Laundry pods: was $24.00, now $18.00. Save $6.00. 8 of 12 joined, deal ends Fri, Nov 6",
+      "Coffee: it's happening, $8.50 each (save $3.50)",
       "Plus 1 more in the marketplace.",
     ]);
   });
@@ -542,6 +542,8 @@ describe("all group buys across Commons", () => {
     expect(list.map((o: any) => o.id).sort()).toEqual(["offer_1", "offer_block", "offer_done"]);
     expect(list.find((o: any) => o.id === "offer_block")).toMatchObject({ commonsName: "Block Club", coopId: "block" });
     expect(list.find((o: any) => o.id === "offer_1")).toMatchObject({ commonsName: "Church Commons", myCommitment: null });
+    // $18.00 - $15.00 to the vendor - about $0.82 card fee = $2.18, half to the Commons.
+    expect(list.find((o: any) => o.id === "offer_1")?.commonsCentsPerUnit).toBe(109);
     expect(list.find((o: any) => o.id === "offer_done")?.myCommitment).toMatchObject({ status: "COMMITTED", quantity: 1 });
   });
 

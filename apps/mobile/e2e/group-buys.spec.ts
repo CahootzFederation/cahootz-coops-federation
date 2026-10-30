@@ -22,6 +22,9 @@ async function openOffer(page: Page, title: string) {
 }
 
 async function fillAddress(page: Page, name: string) {
+  // Wait for the saved address and card to load, or the form swaps out from under the typing.
+  await expect(page.getByText("Loading your address and card…").filter({ visible: true })).toHaveCount(0);
+  await expect(page.getByText("Card", { exact: true }).filter({ visible: true }).first()).toBeVisible();
   const change = page.getByRole("button", { name: "Change address" }).filter({ visible: true });
   if (await change.count()) await change.click();
   await page.getByLabel("Name for the delivery").filter({ visible: true }).fill(name);
@@ -257,7 +260,8 @@ test("a group buy you joined shows on the Board under the search, with a picture
       await expect(shown(a.page, /Your spot is cancelled. You weren't charged/)).toBeVisible();
       await a.page.getByRole("button", { name: "Go back" }).filter({ visible: true }).first().click();
       const card = a.page.getByRole("button", { name: `Group buy: ${title}` }).filter({ visible: true }).first();
-      await expect(card).toContainText(/\$18\.00 · save 25% · 0 of 3 joined/);
+      await expect(card.getByText("Save $6.00", { exact: true })).toBeVisible();
+      await expect(card).toContainText(/0 of 3 joined · deal ends /);
       await expect(card).not.toContainText("You're in");
     } finally {
       await a.context.close();

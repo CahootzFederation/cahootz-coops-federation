@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { ChevronRight, Tag, Users } from 'lucide-react-native';
 
 import { OfferImage } from '@/components/offer-image';
+import { OfferPrice } from '@/components/offer-price';
 import { Text } from '@/components/ui/text';
 import { DESIGN } from '@/constants/design';
 import type { MarketplaceOffer } from '@/lib/api';
@@ -54,16 +55,8 @@ export function OfferCard({ offer, commonsName }: { offer: MarketplaceOffer; com
         From {offer.vendor.name}
         {commonsName ? ` · ${commonsName}` : ''}
       </Text>
-      <View className="mt-3 flex-row flex-wrap items-baseline">
-        <Text className="text-xs font-semibold line-through" style={{ color: colors.muted }} accessibilityLabel={`Regular price ${formatCents(offer.regularPriceCents)}`}>
-          {formatCents(offer.regularPriceCents)}
-        </Text>
-        <Text className="ml-2 text-xl font-black" style={{ color: colors.ink }} accessibilityLabel={`Member price ${formatCents(offer.memberPriceCents)}`}>
-          {formatCents(offer.memberPriceCents)}
-        </Text>
-        <Text className="ml-2 text-xs font-black" style={{ color: colors.forest }}>
-          You save {formatCents(offer.savingsCents)} ({offer.savingsPercent}%)
-        </Text>
+      <View className="mt-3">
+        <OfferPrice offer={offer} />
       </View>
       {isGroupBuy && offer.status === 'LIVE' ? (
         <View className="mt-3 h-2 overflow-hidden rounded-full" style={{ backgroundColor: '#EEE3D3' }} accessibilityLabel={`${offer.committedQuantity} of ${offer.minimumCommitments} committed`}>

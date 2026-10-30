@@ -958,6 +958,8 @@ export interface MarketplaceOffer {
   memberPriceCents: number;
   savingsCents: number;
   savingsPercent: number;
+  /** About what the Commons keeps from each one. */
+  commonsCentsPerUnit: number;
   regularPriceSource: string;
   quantityPerMember: number;
   minimumCommitments: number | null;

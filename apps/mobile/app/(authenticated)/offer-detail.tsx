@@ -61,6 +61,7 @@ export default function OfferDetailScreen() {
   const [address, setAddress] = useState<ShippingAddress>(emptyAddress);
   const [editingAddress, setEditingAddress] = useState(true);
   const [card, setCard] = useState<SavedCard | null>(null);
+  const [defaultsLoaded, setDefaultsLoaded] = useState(false);
   const [cardSetup, setCardSetup] = useState<CardSetupSession | null>(null);
 
   const load = useCallback(async () => {
@@ -91,7 +92,8 @@ export default function OfferDetailScreen() {
         }
         setCard(defaults.card);
       })
-      .catch((error) => console.warn('Could not load saved address and card:', error));
+      .catch((error) => console.warn('Could not load saved address and card:', error))
+      .finally(() => setDefaultsLoaded(true));
   }, [sessionToken]);
 
   useEffect(() => {
@@ -402,9 +404,19 @@ export default function OfferDetailScreen() {
           <View className="mt-1 flex-row justify-between">
             <Text className="text-sm font-black" style={{ color: colors.forest }}>You save</Text>
             <Text className="text-sm font-black" style={{ color: colors.forest }}>
-              {formatCents(offer.savingsCents)} ({offer.savingsPercent}%)
+              {formatCents(offer.savingsCents)}
             </Text>
           </View>
+          {offer.commonsCentsPerUnit > 0 ? (
+            <View className="mt-3 rounded-xl px-3 py-2" style={{ backgroundColor: colors.goldSoft }}>
+              <Text className="text-sm font-black" style={{ color: colors.ink }}>
+                Your Commons gets about {formatCents(offer.commonsCentsPerUnit)} from each one
+              </Text>
+              <Text className="mt-0.5 text-[11px]" style={{ color: colors.muted }}>
+                It comes out of the group price, not on top of it.
+              </Text>
+            </View>
+          ) : null}
           <Text className="mt-2 text-[11px]" style={{ color: colors.muted }}>Regular price: {offer.regularPriceSource}. No extra fees at checkout.</Text>
         </View>
 
@@ -457,12 +469,21 @@ export default function OfferDetailScreen() {
           {offer.canCommit && !committed ? (
             <View className="rounded-2xl border bg-white p-4" style={{ borderColor: colors.line }}>
               {offer.quantityPerMember > 1 ? stepper : null}
-              {shipTo}
-              {cardRow}
+              {defaultsLoaded ? (
+                <>
+                  {shipTo}
+                  {cardRow}
+                </>
+              ) : (
+                <View className="flex-row items-center py-3">
+                  <ActivityIndicator color={colors.orange} />
+                  <Text className="ml-2 text-sm" style={{ color: colors.muted }}>Loading your address and card…</Text>
+                </View>
+              )}
               <Text className="mt-3 text-xs" style={{ color: colors.muted }}>
                 You won&apos;t be charged now. If it reaches its goal, we&apos;ll charge your card {formatCents(offer.memberPriceCents * quantity)}. When you commit, we&apos;ll share your name, phone and address with {offer.vendor.name} so they can ship your order.
               </Text>
-              <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={commit} className="mt-3 items-center justify-center rounded-xl" style={{ backgroundColor: colors.ink, minHeight: 48, opacity: busy ? 0.6 : 1 }}>
+              <TouchableOpacity accessibilityRole="button" disabled={busy || !defaultsLoaded} onPress={commit} className="mt-3 items-center justify-center rounded-xl" style={{ backgroundColor: colors.ink, minHeight: 48, opacity: busy || !defaultsLoaded ? 0.6 : 1 }}>
                 <Text className="font-black text-white">{busy ? 'Saving…' : 'Commit'}</Text>
               </TouchableOpacity>
             </View>

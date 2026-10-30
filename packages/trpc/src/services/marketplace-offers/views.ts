@@ -1,4 +1,4 @@
-import { offerSavings } from "@repo/validators/marketplace-offers";
+import { estimateStripeFeeCents, offerSavings, splitOfferPayment } from "@repo/validators/marketplace-offers";
 
 import type { Prisma } from "@repo/db";
 
@@ -32,6 +32,13 @@ export function memberOfferView(offer: OfferRow, myCommitment: OwnCommitment, no
     memberPriceCents: offer.memberPriceCents,
     savingsCents,
     savingsPercent,
+    // About what the Commons keeps from each one, after the vendor and a typical card fee.
+    commonsCentsPerUnit: splitOfferPayment({
+      chargedCents: offer.memberPriceCents,
+      vendorCents: offer.vendorPayoutCents,
+      stripeFeeCents: estimateStripeFeeCents(offer.memberPriceCents),
+      commonsSplitBps: offer.commonsSplitBps,
+    }).commonsCents,
     regularPriceSource: offer.regularPriceSource,
     quantityPerMember: offer.quantityPerMember,
     minimumCommitments: offer.minimumCommitments,

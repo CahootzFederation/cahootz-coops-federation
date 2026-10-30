@@ -21,15 +21,21 @@ test("a member sees a group buy's regular price, group price and saving in the m
     await expect(card).toBeVisible();
     await expect(card.getByText("$24.00")).toBeVisible();
     await expect(card.getByText("$18.00")).toBeVisible();
-    await expect(card.getByText("You save $6.00 (25%)")).toBeVisible();
+    await expect(card.getByText("Save $6.00", { exact: true })).toBeVisible();
+    // The regular price is crossed out, so the saving reads at a glance.
+    await expect(card.getByLabel("Regular price $24.00")).toHaveCSS("text-decoration-line", "line-through");
+    await expect(card).not.toContainText("%");
+    await expect(card).not.toContainText("Your Commons gets");
 
     await card.click();
     await expect(member.page).toHaveURL(/offer-detail/);
     await expect(shown(member.page, title, { exact: true })).toBeVisible();
     await expect(shown(member.page, "Group price", { exact: true })).toBeVisible();
-    await expect(shown(member.page, "$6.00 (25%)", { exact: true })).toBeVisible();
+    await expect(shown(member.page, "$6.00", { exact: true })).toBeVisible();
     await expect(shown(member.page, /No extra fees at checkout/)).toBeVisible();
     await expect(shown(member.page, /Ships to your address/)).toBeVisible();
+    // The detail page, not the list, says what the Commons gets.
+    await expect(shown(member.page, "Your Commons gets about $1.09 from each one", { exact: true })).toBeVisible();
 
     // What the member would be charged is exactly the group price times the quantity.
     await expect(shown(member.page, /we'll charge your card \$18\.00/)).toBeVisible();
@@ -38,7 +44,7 @@ test("a member sees a group buy's regular price, group price and saving in the m
 
     // Reloading keeps the same numbers.
     await member.page.reload();
-    await expect(shown(member.page, "$6.00 (25%)", { exact: true })).toBeVisible();
+    await expect(shown(member.page, "$6.00", { exact: true })).toBeVisible();
   } finally {
     await member.context.close();
   }
@@ -85,7 +91,7 @@ test("every member of the Commons gets the weekly group buys notice, and it open
     for (const member of [memberA, memberB]) {
       await member.page.goto("/notifications");
       await expect(shown(member.page, "This week's group buys").first()).toBeVisible({ timeout: 30_000 });
-      await expect(shown(member.page, new RegExp(`${title}: \\$18\\.00, save 25%\\. 0 of 3 joined`)).first()).toBeVisible();
+      await expect(shown(member.page, new RegExp(`${title}: was \\$24\\.00, now \\$18\\.00\\. Save \\$6\\.00\\. 0 of 3 joined`)).first()).toBeVisible();
     }
     await shown(memberA.page, "This week's group buys").first().click();
     await expect(shown(memberA.page, "Group buys", { exact: true })).toBeVisible({ timeout: 60_000 });

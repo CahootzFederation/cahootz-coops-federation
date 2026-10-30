@@ -3,6 +3,7 @@ import { TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { ChevronRight, Tag, Users } from 'lucide-react-native';
 
+import { OfferImage } from '@/components/offer-image';
 import { Text } from '@/components/ui/text';
 import { DESIGN } from '@/constants/design';
 import type { MarketplaceOffer } from '@/lib/api';
@@ -34,6 +35,9 @@ export function OfferCard({ offer, commonsName }: { offer: MarketplaceOffer; com
       className="mb-3 rounded-2xl border bg-white p-4"
       style={{ borderColor: colors.line }}
     >
+      <View className="mb-3">
+        <OfferImage uri={offer.imageUrl} height={140} />
+      </View>
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center rounded-full px-2.5 py-1" style={{ backgroundColor: isGroupBuy ? colors.goldSoft : colors.forestSoft }}>
           {isGroupBuy ? <Users size={13} color={colors.orange} /> : <Tag size={13} color={colors.forest} />}

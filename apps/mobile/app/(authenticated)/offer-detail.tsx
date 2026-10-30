@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Check, CheckCircle2, CreditCard, MapPin, Minus, Plus, Tag, Truck, Users } from 'lucide-react-native';
 
 import CommercePaymentConfirmation from '@/components/commerce-payment-confirmation';
+import { OfferImage } from '@/components/offer-image';
 import { Text } from '@/components/ui/text';
 import { DESIGN } from '@/constants/design';
 import { useAuth } from '@/contexts/auth-context';
@@ -378,6 +379,9 @@ export default function OfferDetailScreen() {
       </View>
 
       <ScrollView {...keyboardInsetScrollProps} className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
+        <View className="mb-4">
+          <OfferImage uri={offer.imageUrl} height={200} radius={16} />
+        </View>
         <View className="self-start flex-row items-center rounded-full px-2.5 py-1" style={{ backgroundColor: isGroupBuy ? colors.goldSoft : colors.forestSoft }}>
           {isGroupBuy ? <Users size={13} color={colors.orange} /> : <Tag size={13} color={colors.forest} />}
           <Text className="ml-1 text-[11px] font-black" style={{ color: isGroupBuy ? colors.orange : colors.forest }}>{offerTypeLabel(offer)}</Text>
@@ -415,14 +419,14 @@ export default function OfferDetailScreen() {
               <View className="h-full rounded-full" style={{ width: `${Math.min(100, (offer.committedQuantity / (offer.minimumCommitments || 1)) * 100)}%`, backgroundColor: colors.orange }} />
             </View>
             <Text className="mt-2 text-xs" style={{ color: colors.muted }}>
-              {offer.status === 'LIVE' ? `Commitments close ${formatOfferDateTime(offer.commitmentDeadline)}` : offerStatusLine(offer)}
+              {offer.status === 'LIVE' ? `Deal ends ${formatOfferDateTime(offer.commitmentDeadline)}` : offerStatusLine(offer)}
             </Text>
           </View>
         ) : null}
 
         <View className="mt-3 rounded-2xl border bg-white p-4" style={{ borderColor: colors.line }}>
           {offer.status === 'LIVE'
-            ? detailRow(<Users size={16} color={colors.muted} />, 'How it works', `Commit by ${formatOfferDateTime(offer.commitmentDeadline)} with a saved card. We'll only charge it if ${offer.minimumCommitments} are committed. If it falls short, you pay nothing.`)
+            ? detailRow(<Users size={16} color={colors.muted} />, 'How it works', `Commit before the deal ends on ${formatOfferDateTime(offer.commitmentDeadline)} with a saved card. We'll only charge it if ${offer.minimumCommitments} are committed. If it falls short, you pay nothing.`)
             : null}
           {offer.quantityPerMember > 1 ? detailRow(<Check size={16} color={colors.muted} />, 'Limit', `Up to ${offer.quantityPerMember} per household`) : null}
           {offer.fulfillmentMethod === 'PICKUP'

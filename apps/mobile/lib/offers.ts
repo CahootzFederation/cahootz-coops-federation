@@ -25,7 +25,7 @@ export function offerStatusLine(offer: MarketplaceOffer) {
   const mine = offer.myCommitment;
   switch (offer.status) {
     case 'LIVE':
-      return `${offer.committedQuantity} of ${offer.minimumCommitments} committed · closes ${formatOfferDate(offer.commitmentDeadline)}`;
+      return `${offer.committedQuantity} of ${offer.minimumCommitments} committed · deal ends ${formatOfferDate(offer.commitmentDeadline)}`;
     case 'AWAITING_VENDOR':
       return 'Goal met! Getting the order ready';
     case 'PAYMENT_OPEN':

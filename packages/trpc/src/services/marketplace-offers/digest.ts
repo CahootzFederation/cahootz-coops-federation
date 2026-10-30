@@ -31,7 +31,7 @@ export function digestLine(offer: DigestOffer): string {
   const { savingsPercent } = offerSavings(offer.regularPriceCents, offer.memberPriceCents);
   if (offer.status === "PAYMENT_OPEN") return `${offer.title}: it's happening, ${money(offer.memberPriceCents)} each (save ${savingsPercent}%)`;
   const goal = offer.minimumCommitments ? `${offer.committedQuantity} of ${offer.minimumCommitments} joined` : `${offer.committedQuantity} joined`;
-  return `${offer.title}: ${money(offer.memberPriceCents)}, save ${savingsPercent}%. ${goal}${offer.commitmentDeadline ? `, closes ${day(offer.commitmentDeadline)}` : ""}`;
+  return `${offer.title}: ${money(offer.memberPriceCents)}, save ${savingsPercent}%. ${goal}${offer.commitmentDeadline ? `, deal ends ${day(offer.commitmentDeadline)}` : ""}`;
 }
 
 export function digestText(offers: DigestOffer[]): { title: string; body: string } {

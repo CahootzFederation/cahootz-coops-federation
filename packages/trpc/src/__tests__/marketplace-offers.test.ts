@@ -491,8 +491,8 @@ describe("weekly group buys notice", () => {
     ]);
     expect(text.title).toBe("This week's group buys");
     expect(text.body.split("\n")).toEqual([
-      "Rice: $18.00, save 25%. 3 of 10 joined, closes Sat, Nov 7",
-      "Laundry pods: $18.00, save 25%. 8 of 12 joined, closes Fri, Nov 6",
+      "Rice: $18.00, save 25%. 3 of 10 joined, deal ends Sat, Nov 7",
+      "Laundry pods: $18.00, save 25%. 8 of 12 joined, deal ends Fri, Nov 6",
       "Coffee: it's happening, $8.50 each (save 29%)",
       "Plus 1 more in the marketplace.",
     ]);

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { USER_A_EMAIL, USER_B_EMAIL, newSignedInPage } from "./support/auth";
 import { withExclusiveAccountSetting } from "./support/exclusive";
-import { offersFixture, openOffersMarketplace, shown, visibleButton } from "./support/offers";
+import { OFFERS_COOP_ID, offersFixture, openOffersMarketplace, shown, visibleButton } from "./support/offers";
 
 const RUN = `E2E group ${Date.now()}`;
 const VENDOR = "E2E Corner Market";
@@ -220,6 +220,45 @@ test("See all lists every open group buy with its Commons, and one you joined mo
         "You're in for 1. You haven't been charged.",
       );
       await expect(a.page.getByLabel("Open group buys").getByRole("button", { name: `Group buy: ${title}` }).filter({ visible: true })).toHaveCount(0);
+    } finally {
+      await a.context.close();
+    }
+  });
+});
+
+test("a group buy you joined shows on the Board under the search, with a picture, and goes back to not joined after you cancel", async ({ browser }) => {
+  await withExclusiveAccountSetting(CARD_LOCK, async () => {
+    const title = `${RUN} coffee`;
+    offersFixture(["create", JSON.stringify({ title, offerType: "GROUP_BUY", status: "LIVE", minimumCommitments: 3 })]);
+    offersFixture(["save-card", USER_A_EMAIL]);
+    const a = await newSignedInPage(browser, USER_A_EMAIL);
+    try {
+      await openOffer(a.page, title);
+      await fillAddress(a.page, "E2E Member A");
+      await commit(a.page);
+      await expect(shown(a.page, /You're in/).first()).toBeVisible();
+
+      const upFront = (page: Page) =>
+        page.getByLabel("Group buys", { exact: true }).getByRole("button", { name: `Group buy: ${title}` }).filter({ visible: true }).first();
+      await a.page.goto(`/board?coopId=${OFFERS_COOP_ID}`);
+      await expect(upFront(a.page)).toContainText(/You're in · 1 of 3 · deal ends /);
+      // The fixture group buy has no photo, so it gets the stand-in picture.
+      await expect(upFront(a.page).getByTestId("offer-image-placeholder")).toBeVisible();
+      // It sits under the board's search box.
+      const searchBox = await a.page.getByLabel("Search community board").filter({ visible: true }).boundingBox();
+      const strip = await upFront(a.page).boundingBox();
+      expect(strip!.y).toBeGreaterThan(searchBox!.y);
+      await upFront(a.page).click();
+      await expect(shown(a.page, title, { exact: true })).toBeVisible();
+      await expect(shown(a.page, "You're in for 1.", { exact: true })).toBeVisible();
+
+      // Cancelling puts the Board card back to how it looked before joining.
+      await visibleButton(a.page, "Cancel my spot").click();
+      await expect(shown(a.page, /Your spot is cancelled. You weren't charged/)).toBeVisible();
+      await a.page.getByRole("button", { name: "Go back" }).filter({ visible: true }).first().click();
+      const card = a.page.getByRole("button", { name: `Group buy: ${title}` }).filter({ visible: true }).first();
+      await expect(card).toContainText(/\$18\.00 · save 25% · 0 of 3 joined/);
+      await expect(card).not.toContainText("You're in");
     } finally {
       await a.context.close();
     }

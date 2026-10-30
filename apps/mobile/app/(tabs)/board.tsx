@@ -37,6 +37,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, resolveCoopId } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
+import { GroupBuysStrip } from '@/components/group-buys-strip';
 
 type ApiBoardLane = 'all' | 'needs' | 'offers' | 'events';
 type BoardLane = 'index' | 'all' | 'needs' | 'offers' | 'events' | 'marketplace';
@@ -332,6 +333,8 @@ export default function BoardScreen() {
             ) : null}
           </View>
         </View>
+
+        {isIndex && !query ? <GroupBuysStrip style={{ paddingHorizontal: 16, paddingTop: 16 }} /> : null}
 
         {isIndex && !query ? (
           <BoardIndex

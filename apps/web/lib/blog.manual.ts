@@ -28,11 +28,11 @@ export const manualBlogPosts: BlogPost[] = [
       },
       {
         type: "paragraph",
-        text: 'In “<a href="/blog/what-is-a-demand-coop">What Is a Demand Co-op</a>,” we explored how organized spending could help communities build businesses and shared assets. Here, we want to focus on a practical place to begin: products and services that we already use daily on our computers.',
+        text: 'In “<a href="/blog/what-is-a-demand-coop">What is a Demand Coop</a>,” we explored how organized spending could help communities build businesses and shared assets. Here, we want to focus on a practical place to begin: products and services that we already use daily on our computers.',
       },
       {
         type: "paragraph",
-        text: "What could we get together that would be harder, more expensive, or less convenient to obtain individually—but that we could now build for a fraction of the cost?",
+        text: "What could we get as a group that would be harder, more expensive, or less convenient to obtain individually—but that we could now build for a fraction of the cost?",
       },
       { type: "heading", level: 2, text: "Our shared needs" },
       {
@@ -70,7 +70,7 @@ export const manualBlogPosts: BlogPost[] = [
       },
       {
         type: "paragraph",
-        text: "As engineers, we have plenty of shared products that would be easy to build now: a source-code manager, a cloud provider, an email client, and direct messaging. Where do we have clear demand?",
+        text: "If you’re an engineer, there are plenty of shared products that would be easy to build now: a source-code manager, a cloud provider, an email client, and direct messaging. Where do we have clear demand?",
       },
       {
         type: "paragraph",
@@ -139,10 +139,6 @@ export const manualBlogPosts: BlogPost[] = [
       {
         type: "paragraph",
         text: '<strong>Looking for something?</strong> <a href="/#waitlist">Join the waitlist.</a> Maybe there’s a subscription that costs too much, a tool that never quite does what you need, or a service you’ve been putting off paying for. Those are the kinds of needs we want to bring together.',
-      },
-      {
-        type: "paragraph",
-        text: "Over time, the treasury gives us money to put toward priorities we choose together—housing, training, and businesses that create steady work.",
       },
       {
         type: "paragraph",

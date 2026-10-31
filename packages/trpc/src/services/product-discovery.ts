@@ -116,9 +116,28 @@ const SAVE_FIND_PARAMETERS = {
     goalFit: { type: "string", enum: ["fits", "does_not_fit"], description: "Only when the input has a charter and goals" },
     goalFitReason: text("Which goal it helps or misses, in one sentence"),
   },
-  required: [] as string[],
+  required: [
+    "name", "description", "category", "brand", "supplierName", "sourceUrl", "memberShare", "peopleNeeded",
+    "regularPriceCents", "bulkShareCents", "purpose", "fitScore", "fitReason", "verifiedFacts", "risksOrUnverifiedClaims",
+  ],
   additionalProperties: true as const,
 };
+
+const NEEDED_FIELDS = [
+  ["name", "a name"], ["supplierName", "a supplier"], ["sourceUrl", "a link"], ["memberShare", "what one member gets"],
+  ["peopleNeeded", "how many people are needed"], ["regularPriceCents", "a regular price"], ["bulkShareCents", "a bulk price"],
+  ["fitScore", "a fit score"], ["fitReason", "a reason it fits"], ["purpose", "why members would want it"],
+  ["description", "a description"], ["category", "a category"], ["brand", "a brand"],
+] as const;
+
+/** Why a find couldn't be saved, in plain words, for the run's log. */
+export function dropReason(candidate: Partial<Record<string, unknown>>): string {
+  const missing = NEEDED_FIELDS.filter(([key]) => candidate[key] === undefined || candidate[key] === null || candidate[key] === "").map(([, label]) => label);
+  if (missing.length > 0) return `missing ${missing.join(", ")}`;
+  if (!normalizePublicHttpUrl(String(candidate.sourceUrl))) return "its link isn't a public web page";
+  if (Number(candidate.bulkShareCents) >= Number(candidate.regularPriceCents)) return "the bulk price isn't lower than the regular price";
+  return "some details didn't check out";
+}
 
 /**
  * The finds to keep from one run: the final answer's list, or, when the bot
@@ -796,11 +815,12 @@ export async function runProductDiscoveryForProfile(params: {
       commons,
       onProgress: report,
     });
-    const valid = discovery.candidates
-      .map(candidateForStorage)
-      .filter((candidate): candidate is ProductDiscoveryCandidate =>
-        Boolean(candidate),
-      );
+    const valid: ProductDiscoveryCandidate[] = [];
+    for (const found of discovery.candidates) {
+      const stored = candidateForStorage(found);
+      if (stored) valid.push(stored);
+      else report({ kind: "step", text: cleanText(`Dropped ${found.name || "a find"}: ${dropReason(found)}`, 300) });
+    }
     // Without a charter there's nothing to check, so any goal verdict is ignored.
     const offGoal = (candidate: ProductDiscoveryCandidate) =>
       Boolean(commons) && candidate.goalFit === "does_not_fit";
@@ -816,7 +836,7 @@ export async function runProductDiscoveryForProfile(params: {
       kind: "step",
       text: [
         `The bot returned ${discovery.candidates.length} find${discovery.candidates.length === 1 ? "" : "s"}`,
-        dropped > 0 ? `${dropped} dropped for missing details (a price, link, score or reason)` : "",
+        dropped > 0 ? `${dropped} dropped` : "",
         missed > 0 ? `${missed} kept that didn't fit the goals` : "",
       ].filter(Boolean).join(", ") + ". Saving them now.",
     });

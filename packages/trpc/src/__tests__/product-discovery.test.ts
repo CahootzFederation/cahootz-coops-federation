@@ -8,6 +8,7 @@ import {
   limitSharedProductsBetweenCatalogs,
   listHomepageProductCatalogs,
   normalizePublicHttpUrl,
+  dropReason,
   pickCandidates,
   ProductDiscoveryOutputSchema,
   progressFromModelEvent,
@@ -425,9 +426,15 @@ describe("product discovery", () => {
     });
     expect(created).toHaveLength(1);
     const final = updates.find((u) => u.status === "SUCCEEDED")!;
-    expect((final.progress as Array<{ text: string }>).map((e) => e.text)).toContain(
-      "The bot returned 2 finds, 1 dropped for missing details (a price, link, score or reason). Saving them now.",
-    );
+    const log = (final.progress as Array<{ text: string }>).map((e) => e.text);
+    expect(log).toContain("Dropped No score: missing a fit score");
+    expect(log).toContain("The bot returned 2 finds, 1 dropped. Saving them now.");
+  });
+
+  it("says in plain words why a find was dropped", () => {
+    expect(dropReason({ ...candidate(), regularPriceCents: 325, bulkShareCents: 325 })).toBe("the bulk price isn't lower than the regular price");
+    expect(dropReason({ ...candidate(), sourceUrl: "ftp://supplier.example/x" })).toBe("its link isn't a public web page");
+    expect(dropReason({ name: "Kit", fitScore: 80 })).toMatch(/^missing a supplier, a link, /);
   });
 
   it("trims a wordy find to the stored limits instead of dropping it", async () => {

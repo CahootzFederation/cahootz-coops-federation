@@ -33,6 +33,26 @@ Trigger.dev runs `product-discovery-sweep` daily at 13:20 UTC. Each enabled
 profile independently defaults to a seven-day interval, five successful runs
 per UTC month, and four candidates per run.
 
+Every real Commons and family gets a profile. The sweep and the admin
+**Product ideas** tab both call `ensureCommonsProductProfiles`
+(`packages/trpc/src/services/commons-product-profiles.ts`), which makes a
+profile (key `commons-<coopId>`) for any active, non-demo Commons without one.
+It starts from the Commons' name and description, with a generic "repeat
+purchases bought together in bulk" brief and the default exclusions; the
+charter and goals are read at search time, and an admin can edit the brief.
+These profiles are never on the public homepage, since families are private.
+The sweep only runs profiles linked to an open, non-demo Commons, never-searched
+ones first, and starts at most 20 searches a day so it ends well inside its
+hour; the rest go first the next day. Expect about one gpt-5-nano search per
+Commons a week, capped at five a month each.
+
+The four original example profiles (Planet, Traveler, Family, Blues of America)
+became private Commons in migration `20261101000000_product_profile_commons`:
+"Planet Commons", "Traveler Commons", "Family Commons" and "Blues of America",
+each with a starter charter and three goals, `APPLICATION_REQUIRED` and
+`isPrivate`, stewarded by deon@appmunki.com when that account exists. A Commons
+that already had one of those names is linked instead of duplicated.
+
 For every due profile the job:
 
 1. Scores verified products already used by other Commons and adds relevant
@@ -87,7 +107,9 @@ scheduled ones included; each change is audited as
 `PRODUCT_DISCOVERY_PROFILE_UPDATED` with the before and after.
 
 Platform admins can also start an extra run from **Find products now** on the
-**Product ideas** tab (`/portal/admin/outreach`). It checks the profile is
+**Product ideas** tab (`/portal/admin/outreach`). Its picker lists every real
+Commons and family by its current name, grouped under Commons and Families;
+profiles with no Commons and demo Commons are left out. It checks the profile is
 turned on and has no run in progress (a run stuck for over 30 minutes no longer
 blocks), then queues `run-product-discovery` in Trigger.dev with
 `source: "admin"` and writes a `PRODUCT_DISCOVERY_STARTED` audit entry. These

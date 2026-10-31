@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ArrowLeft, Loader2, MessageCircleQuestion, Package, Store } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ExternalLink, Loader2, MessageCircleQuestion, Package, Store } from 'lucide-react';
 
 import { ConfirmDialog } from '@/components/admin/confirm-dialog';
 
@@ -71,6 +71,7 @@ interface ItemRow {
   fitScore: number;
   fitReason: string;
   purpose: string;
+  foundAt: string;
   name: string;
   brand: string;
   supplierName: string;
@@ -636,6 +637,12 @@ function ItemCard({ item, categories, busy, post }: { item: ItemRow; categories:
           {item.status === 'APPROVED' ? 'Approved' : 'Needs review'}
         </span>
       </div>
+      <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-300" data-testid="item-found">
+        <span>Found {date(item.foundAt)}</span>
+        <a className="inline-flex items-center gap-1 font-semibold text-emerald-200 underline hover:text-emerald-100" href={item.sourceUrl} target="_blank" rel="noreferrer">
+          See it on {item.supplierName} <ExternalLink className="h-3 w-3" />
+        </a>
+      </p>
       <p className="mt-2 text-xs text-slate-300">{item.purpose}</p>
       <p className="mt-1 text-xs text-slate-500">Why it fits: {item.fitReason}</p>
       {price ? (
@@ -643,7 +650,7 @@ function ItemCard({ item, categories, busy, post }: { item: ItemRow; categories:
           <span className="text-slate-500 line-through">{money(price.regularPriceCents)}</span>{' '}
           <span className="font-semibold text-white">{money(price.bulkShareCents)} each</span> for {price.memberShare} when {price.peopleNeeded} people buy together
           <span className="block text-xs text-slate-500">
-            Price from <a className="underline" href={price.sourceUrl} target="_blank" rel="noreferrer">{item.supplierName}</a> on {date(price.observedAt)}
+            Price checked on {date(price.observedAt)} at <a className="underline" href={price.sourceUrl} target="_blank" rel="noreferrer">{item.supplierName}</a>
             {price.comparisonUrl ? <> · <a className="underline" href={price.comparisonUrl} target="_blank" rel="noreferrer">regular price</a></> : null}
             {price.expired ? ' · out of date' : ''}
           </span>

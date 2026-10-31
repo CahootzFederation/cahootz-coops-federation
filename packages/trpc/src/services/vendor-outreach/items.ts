@@ -62,6 +62,7 @@ export async function listItemsForAdmin(db: Db = defaultDb, now = new Date()) {
       fitScore: match.fitScore,
       fitReason: match.fitReason,
       purpose: match.purpose,
+      foundAt: match.createdAt,
       name: match.product.name,
       brand: match.product.brand,
       supplierName: match.product.supplierName,

@@ -91,7 +91,10 @@ describe("discovered items", () => {
   it("lets a platform admin approve an item, which marks it checked", async () => {
     seedItem(db);
     const [row] = await listItemsForAdmin(db, NOW);
-    expect(row).toMatchObject({ name: "Laundry pods", coopId: "church", status: "CANDIDATE", categoryKey: "household_essentials" });
+    expect(row).toMatchObject({
+      name: "Laundry pods", coopId: "church", status: "CANDIDATE", categoryKey: "household_essentials",
+      foundAt: NOW, sourceUrl: "https://www.dropps.com/pods",
+    });
     expect(row.price).toMatchObject({ bulkShareCents: 1217, peopleNeeded: 12, risks: ["Shipping not checked"], expired: false });
 
     await reviewItem(db, "admin", { profileId: "profile-family", productId: "pods", decision: "approve" }, NOW);

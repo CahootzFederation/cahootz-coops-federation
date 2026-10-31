@@ -27,6 +27,10 @@ test("an admin reviews a bot-found item, approves it and starts a seller search"
     await admin.getByRole("tab", { name: /product ideas/ }).click();
     const card = admin.getByLabel(`Product idea ${item}`);
     await expect(card.getByTestId("item-status")).toHaveText("Needs review");
+    // When the bot found it, and a link to the vendor's own page for the deal.
+    const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    await expect(card.getByTestId("item-found")).toContainText(`Found ${today}`);
+    await expect(card.getByRole("link", { name: "See it on E2E Supplier" })).toHaveAttribute("href", `https://e2e-supplier.test/${run}/laundry-pods`);
     await expect(card.getByText(/\$12\.17 each/)).toBeVisible();
     await expect(card.getByText(/when 12 people buy together/)).toBeVisible();
     // The suggested deal uses the same price rule as every offer.

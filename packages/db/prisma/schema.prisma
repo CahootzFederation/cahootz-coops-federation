@@ -2668,6 +2668,10 @@ model CommonsProductMatch {
   fitReason          String                    @db.Text
   purpose            String                    @db.Text
   tone               String                    @default("mint")
+  // Checked against the linked Commons' charter and goals: FITS or DOES_NOT_FIT,
+  // with the reason. Null when the profile has no Commons (nothing to check).
+  goalFit            String?
+  goalFitReason      String?                   @db.Text
   isHomepageFeatured Boolean                   @default(false)
   displayOrder       Int                       @default(0)
   discoveredByRunId  String?
@@ -2727,6 +2731,8 @@ model ProductDiscoveryRun {
   savedProductCount Int                       @default(0)
   savedMatchCount   Int                       @default(0)
   error             String?                   @db.Text
+  // What the run did as it went, for admins to watch: [{ at, kind: step|search|page|find, text, url? }], capped.
+  progress          Json                      @default("[]")
   startedAt         DateTime                  @default(now())
   finishedAt        DateTime?
   createdAt         DateTime                  @default(now())

@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ArrowLeft, ExternalLink, Loader2, MessageCircleQuestion, Package, Store } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CircleDot, ExternalLink, Globe, Loader2, MessageCircleQuestion, Package, Search, Sparkles, Store } from 'lucide-react';
 
 import { ConfirmDialog } from '@/components/admin/confirm-dialog';
 
@@ -72,6 +72,8 @@ interface ItemRow {
   fitReason: string;
   purpose: string;
   foundAt: string;
+  goalFit: 'FITS' | 'DOES_NOT_FIT' | null;
+  goalFitReason: string | null;
   name: string;
   brand: string;
   supplierName: string;
@@ -141,6 +143,27 @@ interface DiscoveryProfile {
     savedMatchCount: number;
     error: string | null;
   } | null;
+}
+
+interface ProgressEntry {
+  at: string;
+  kind: 'step' | 'search' | 'page' | 'find';
+  text: string;
+  url?: string;
+}
+
+interface DiscoveryRun {
+  id: string;
+  status: 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'SKIPPED';
+  trigger: string;
+  startedAt: string;
+  finishedAt: string | null;
+  candidateCount: number;
+  savedMatchCount: number;
+  error: string | null;
+  progress: ProgressEntry[];
+  running: boolean;
+  seconds: number | null;
 }
 
 type Funnel = Record<string, number>;
@@ -233,8 +256,10 @@ export default function VendorOutreachPage() {
       if (!response.ok) throw new Error(result.error || "That didn't work.");
       setNotice(done);
       load();
+      return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "That didn't work.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -338,7 +363,7 @@ export default function VendorOutreachPage() {
       {data && tab === 'items' && (
         data.items.length === 0 ? (
           <div className="space-y-3">
-            <FindProducts profiles={data.discoveryProfiles} busy={busy} post={post} />
+            <FindProducts profiles={data.discoveryProfiles} busy={busy} post={post} onFinished={load} />
             <PricingSettings pricing={data.pricing} busy={busy} post={post} />
             <Empty text="No product ideas yet. The product discovery bot adds them as it finds items for each Commons." />
           </div>
@@ -348,11 +373,27 @@ export default function VendorOutreachPage() {
               Items the product discovery bot found for each Commons. Approve the good ones, then find a seller: Sage looks for a local shop
               or the supplier&apos;s wholesale contact. Sage may also ask the Commons about an approved item in its weekly question.
             </p>
-            <FindProducts profiles={data.discoveryProfiles} busy={busy} post={post} />
+            <FindProducts profiles={data.discoveryProfiles} busy={busy} post={post} onFinished={load} />
             <PricingSettings pricing={data.pricing} busy={busy} post={post} />
-            {data.items.map((item) => (
+            {data.items.filter((item) => !offGoal(item)).map((item) => (
               <ItemCard key={`${item.profileId}:${item.productId}`} item={item} categories={data.categories} busy={busy} post={post} />
             ))}
+            {data.items.some(offGoal) && (
+              <details className="rounded-[10px] border border-white/10 bg-black/20 p-4" aria-label="Didn't fit the goals">
+                <summary className="cursor-pointer text-sm font-semibold text-white">
+                  Didn&apos;t fit the goals ({data.items.filter(offGoal).length})
+                </summary>
+                <p className="mt-2 text-xs text-slate-400">
+                  Good deals the bot came across that don&apos;t match their Commons&apos; charter or goals. They&apos;re kept here in case you want one.
+                  Sage won&apos;t ask anyone about them unless you approve them.
+                </p>
+                <div className="mt-3 space-y-3">
+                  {data.items.filter(offGoal).map((item) => (
+                    <ItemCard key={`${item.profileId}:${item.productId}`} item={item} categories={data.categories} busy={busy} post={post} />
+                  ))}
+                </div>
+              </details>
+            )}
           </div>
         )
       )}
@@ -416,7 +457,7 @@ function Empty({ text }: { text: string }) {
   return <div className="rounded-[8px] border border-dashed border-white/15 p-10 text-center text-slate-400">{text}</div>;
 }
 
-type Post = (url: string, body: unknown, done: string) => Promise<void>;
+type Post = (url: string, body: unknown, done: string) => Promise<boolean>;
 
 function CampaignCard({ campaign, busy, post }: { campaign: CampaignRow; busy: boolean; post: Post }) {
   const [confirmReject, setConfirmReject] = useState(false);
@@ -643,8 +684,13 @@ function ItemCard({ item, categories, busy, post }: { item: ItemRow; categories:
           See it on {item.supplierName} <ExternalLink className="h-3 w-3" />
         </a>
       </p>
+      {item.goalFit && (
+        <p className={`mt-2 text-xs ${item.goalFit === 'FITS' ? 'text-emerald-200' : 'text-amber-200'}`} data-testid="item-goal-fit">
+          {item.goalFit === 'FITS' ? 'Fits the goals' : "Doesn't fit the goals"}{item.goalFitReason ? `: ${item.goalFitReason}` : '.'}
+        </p>
+      )}
       <p className="mt-2 text-xs text-slate-300">{item.purpose}</p>
-      <p className="mt-1 text-xs text-slate-500">Why it fits: {item.fitReason}</p>
+      <p className="mt-1 text-xs text-slate-500">Why the bot picked it: {item.fitReason}</p>
       {price ? (
         <div className="mt-2 text-sm text-slate-200">
           <span className="text-slate-500 line-through">{money(price.regularPriceCents)}</span>{' '}
@@ -742,10 +788,13 @@ function ItemCard({ item, categories, busy, post }: { item: ItemRow; categories:
   );
 }
 
+/** Waiting for review and outside its Commons' charter or goals, so it sits in its own folded list. */
+const offGoal = (item: ItemRow) => item.status === 'CANDIDATE' && item.goalFit === 'DOES_NOT_FIT';
+
 /** What a profile's last product search did, in a few words. */
 function lastRunText(profile: DiscoveryProfile) {
   const run = profile.latestRun;
-  if (profile.running) return 'Searching now. New ideas show up here in a few minutes.';
+  if (profile.running) return '';
   if (!run) return 'Never searched yet.';
   const when = new Date(run.startedAt).toLocaleString();
   if (run.status === 'SUCCEEDED') {
@@ -757,16 +806,114 @@ function lastRunText(profile: DiscoveryProfile) {
   return `Last search started ${when} and never finished.`;
 }
 
-/** Start the product discovery bot for one Commons profile now instead of waiting for its schedule. */
-function FindProducts({ profiles, busy, post }: { profiles: DiscoveryProfile[]; busy: boolean; post: Post }) {
+const STARTED_BY: Record<string, string> = { admin: 'Started here', scheduled: 'Scheduled', manual: 'Started by hand' };
+
+function duration(seconds: number) {
+  const s = Math.max(0, Math.round(seconds));
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+function runSummary(run: DiscoveryRun) {
+  if (run.status === 'SUCCEEDED') return run.savedMatchCount === 0 ? 'nothing new' : `${run.savedMatchCount} new idea${run.savedMatchCount === 1 ? '' : 's'}`;
+  if (run.status === 'SKIPPED') return `skipped: ${run.error ?? 'over the monthly limit'}`;
+  if (run.status === 'FAILED') return `didn't finish: ${run.error ?? 'no reason given'}`;
+  return 'never finished';
+}
+
+const PROGRESS_ICON = { step: CircleDot, search: Search, page: Globe, find: Sparkles };
+
+/** A run's step-by-step log: what it searched for, pages it opened and what it found, timed from the start. */
+function ProgressLog({ run }: { run: DiscoveryRun }) {
+  if (run.progress.length === 0) {
+    return <p className="text-xs text-slate-500">No step-by-step log for this one. It ran before logs were kept, or hasn&apos;t started yet.</p>;
+  }
+  const start = new Date(run.startedAt).getTime();
+  return (
+    <ol className="space-y-1" aria-label="Search steps">
+      {run.progress.map((entry, index) => {
+        const Icon = PROGRESS_ICON[entry.kind] ?? CircleDot;
+        const label = entry.kind === 'search' ? `Searched “${entry.text}”` : entry.kind === 'page' ? `Looked at ${entry.text}` : entry.kind === 'find' ? `Found ${entry.text}` : entry.text;
+        return (
+          <li key={index} className={`flex items-start gap-2 text-xs ${entry.kind === 'find' ? 'text-emerald-200' : 'text-slate-300'}`}>
+            <span className="w-11 shrink-0 tabular-nums text-slate-500">{duration((new Date(entry.at).getTime() - start) / 1000)}</span>
+            <Icon className="mt-0.5 h-3 w-3 shrink-0" />
+            <span>
+              {entry.url ? <a className="underline" href={entry.url} target="_blank" rel="noreferrer">{label}</a> : label}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** Start the product discovery bot for one Commons profile now, watch it work, and look back at past searches. */
+function FindProducts({ profiles, busy, post, onFinished }: { profiles: DiscoveryProfile[]; busy: boolean; post: Post; onFinished: () => void }) {
   const [key, setKey] = useState(() => profiles.find((p) => p.isEnabled)?.key ?? profiles[0]?.key ?? '');
+  const [history, setHistory] = useState<{ estimateSeconds: number | null; runs: DiscoveryRun[] } | null>(null);
+  const [waitingSince, setWaitingSince] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const watchedRun = useRef<string | null>(null);
   const profile = profiles.find((p) => p.key === key);
+
+  const refresh = useCallback(() => {
+    if (!key) return;
+    fetch(`/api/admin/outreach/discovery?profileKey=${encodeURIComponent(key)}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => body && setHistory(body))
+      .catch(() => undefined);
+  }, [key]);
+  useEffect(() => {
+    setHistory(null);
+    setWaitingSince(null);
+    watchedRun.current = null;
+    refresh();
+  }, [refresh]);
+
+  const live = history?.runs.find((run) => run.running) ?? null;
+  const watching = Boolean(live) || waitingSince !== null;
+  useEffect(() => {
+    if (!watching) return;
+    const poll = setInterval(refresh, 3000);
+    const clock = setInterval(() => setNow(Date.now()), 1000);
+    return () => {
+      clearInterval(poll);
+      clearInterval(clock);
+    };
+  }, [watching, refresh]);
+
+  // When the search we were watching ends, stop and reload the ideas so new ones show up.
+  useEffect(() => {
+    const newest = history?.runs[0];
+    if (live) {
+      watchedRun.current = live.id;
+      setWaitingSince(null);
+      return;
+    }
+    const startedSinceAsked = waitingSince !== null && newest && new Date(newest.startedAt).getTime() >= waitingSince - 10_000;
+    if (watchedRun.current || startedSinceAsked) {
+      watchedRun.current = null;
+      setWaitingSince(null);
+      onFinished();
+    } else if (waitingSince !== null && Date.now() - waitingSince > 120_000) {
+      setWaitingSince(null);
+    }
+  }, [history, live, waitingSince, onFinished]);
+
   if (profiles.length === 0) return null;
+  const elapsed = live ? (now - new Date(live.startedAt).getTime()) / 1000 : 0;
+  const estimate = history?.estimateSeconds ?? null;
+  const finds = live ? live.progress.filter((entry) => entry.kind === 'find').length : 0;
+  const past = history?.runs.filter((run) => !run.running) ?? [];
+
   return (
     <section className="rounded-[10px] border border-white/10 bg-white/[0.03] p-4" aria-label="Find products">
       <p className="font-semibold text-white">Find products now</p>
       <p className="mt-1 text-xs text-slate-400">
-        The bot searches the web for bulk deals that fit this profile. It already runs on its own about once a week. Searches you start here are
+        The bot searches the web for bulk deals that fit this profile and, when it&apos;s linked to a Commons, that Commons&apos; charter and goals.
+        It already runs on its own about once a week. Searches you start here are
         extra: they don&apos;t count toward the monthly limit or change the schedule. Anything it finds lands here as an idea for you to review.
         Members don&apos;t see it until you approve it and start a Group Buy.
       </p>
@@ -783,8 +930,14 @@ function FindProducts({ profiles, busy, post }: { profiles: DiscoveryProfile[]; 
         </label>
         <button
           className={primary}
-          disabled={busy || !profile || !profile.isEnabled || profile.running}
-          onClick={() => post('/api/admin/outreach/discovery', { profileKey: key }, `Searching for products for ${profile?.name}. New ideas show up here in a few minutes. Refresh to check.`)}
+          disabled={busy || !profile || !profile.isEnabled || profile.running || watching}
+          onClick={async () => {
+            const asked = Date.now();
+            if (await post('/api/admin/outreach/discovery', { profileKey: key }, `Searching for products for ${profile?.name}. You can watch it below.`)) {
+              setWaitingSince(asked);
+              refresh();
+            }
+          }}
         >
           Find products
         </button>
@@ -792,8 +945,61 @@ function FindProducts({ profiles, busy, post }: { profiles: DiscoveryProfile[]; 
       {profile && (
         <p className="mt-2 text-xs text-slate-400">
           {profile.runsThisMonth} of {profile.monthlyRunLimit} scheduled searches used this month
-          {profile.extraRunsThisMonth > 0 ? `, plus ${profile.extraRunsThisMonth} extra started here` : ''}. {lastRunText(profile)}
+          {profile.extraRunsThisMonth > 0 ? `, plus ${profile.extraRunsThisMonth} extra started here` : ''}. {live || waitingSince ? '' : lastRunText(profile)}
         </p>
+      )}
+
+      {waitingSince !== null && !live && (
+        <p className="mt-3 flex items-center gap-2 text-sm text-slate-200" role="status">
+          <Loader2 className="h-4 w-4 animate-spin" /> Starting the search…
+        </p>
+      )}
+      {live && (
+        <div className="mt-3 rounded-md border border-emerald-300/30 bg-emerald-300/5 p-3" role="status" aria-label="Search progress">
+          <p className="flex flex-wrap items-center gap-2 text-sm text-white">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="font-semibold">Searching now</span>
+            <span className="text-slate-300" data-testid="search-elapsed">{duration(elapsed)} so far</span>
+            <span className="text-slate-400">
+              {estimate === null ? '· no time estimate yet' : elapsed < estimate ? `· about ${duration(estimate - elapsed)} left` : '· taking longer than usual'}
+            </span>
+            <span className="text-emerald-200">· {finds} find{finds === 1 ? '' : 's'} so far</span>
+          </p>
+          <div className="mt-2">
+            <ProgressLog run={live} />
+          </div>
+        </div>
+      )}
+
+      {past.length > 0 && (
+        <div className="mt-4" aria-label="Past searches" role="group">
+          <p className="text-xs font-semibold text-slate-300">Past searches</p>
+          <ul className="mt-1 space-y-1">
+            {past.map((run) => (
+              <li key={run.id}>
+                <details className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                  <summary className="cursor-pointer text-xs text-slate-300">
+                    {new Date(run.startedAt).toLocaleString()} · {STARTED_BY[run.trigger] ?? run.trigger}
+                    {run.seconds ? ` · took ${duration(run.seconds)}` : ''} · <span className={run.status === 'SUCCEEDED' ? 'text-emerald-200' : 'text-amber-200'}>{runSummary(run)}</span>
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    {run.progress.length > 0 && (
+                      <p className="text-xs text-slate-500">
+                        {[
+                          plural(run.progress.filter((e) => e.kind === 'search').length, 'search', 'searches'),
+                          `${plural(run.progress.filter((e) => e.kind === 'page').length, 'page')} opened`,
+                          `${plural(run.progress.filter((e) => e.kind === 'find').length, 'find')} noted`,
+                          `${run.candidateCount} returned`,
+                        ].join(' · ')}
+                      </p>
+                    )}
+                    <ProgressLog run={run} />
+                  </div>
+                </details>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );

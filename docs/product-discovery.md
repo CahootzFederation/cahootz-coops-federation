@@ -39,6 +39,19 @@ For every due profile the job:
    cross-Commons links as `CANDIDATE` matches.
 2. Runs a bounded web-search research agent for additional public supplier
    candidates.
+   When the profile is linked to a Commons (`coopId`), the agent also gets that
+   Commons' active charter (up to 4,000 characters) and goals (up to 12). It
+   looks for products that help those goals and marks every candidate
+   `goalFit` = `FITS` or `DOES_NOT_FIT`, with a one-sentence `goalFitReason`.
+   A run keeps up to `maxCandidatesPerRun` finds that fit, plus up to two
+   strong deals that don't fit, so an admin can decide. Those are saved like
+   any other candidate, shown folded under **Didn't fit the goals** on Product
+   ideas with their reason, and never reach Sage's weekly deal question
+   unless an admin approves them. Profiles with no Commons have nothing to
+   check, so `goalFit` stays empty. This adds input tokens to the same single
+   model call; it adds no calls. The model's text fields aren't length-checked
+   in its output schema (one wordy field used to fail the whole run); they're
+   trimmed to the stored limits when saved.
 3. Validates URLs and price invariants, deduplicates products by a SHA-256 hash
    of the canonical source URL, and appends new price evidence.
 4. Saves new products and matches as `CANDIDATE`. The job never marks an item
@@ -52,6 +65,16 @@ The manual Trigger task is `run-product-discovery`. A local/manual run can use:
 ```bash
 pnpm -F @cahootz/api product-discovery:run traveler
 ```
+
+Every run keeps a step-by-step log in `ProductDiscoveryRun.progress` (up to
+80 entries): its own steps, each web search and page the model opens (read
+from the streamed response as they finish), and each find the model notes
+with a small `note_find` tool before its final answer. The log is saved as
+the run goes. `finishedAt` is the real finish time, so run lengths are known;
+runs from before this have no length. Product ideas shows a running search
+live (time so far, an estimate from the median of the last 20 finished
+searches, finds so far and the log, refreshed every 3 seconds) and the
+profile's last 10 searches with their logs.
 
 Platform admins can also start an extra run from **Find products now** on the
 **Product ideas** tab (`/portal/admin/outreach`). It checks the profile is

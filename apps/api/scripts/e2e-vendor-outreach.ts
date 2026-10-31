@@ -28,14 +28,21 @@
  *   ... item-sweep-empty <runId>
  *     Runs the sweep for an active seller search that has no sellers in its area (shop
  *     matching and web search off, as above) and prints how the search ended.
+ *   ... item-off-goal <runId>
+ *     Adds a second item, "E2E <runId> Party cups", that the bot marked as not fitting the
+ *     Commons' goals, with its reason.
  *   ... item-discovery-off <runId>
  *     Turns off product search for the run's profile, as if another admin just did.
  *   ... item-discovery-used <runId>
  *     Turns the profile back on with a limit of 1 search a month and records one finished
- *     scheduled search this month that found 2 ideas (so its monthly searches are used up)
- *     and, a minute earlier, one extra search an admin started.
+ *     scheduled search this month that took 1m 35s, found 2 ideas and has a step-by-step log
+ *     (so its monthly searches are used up) and, earlier, one extra search an admin started.
+ *   ... item-discovery-live <runId>
+ *     Records a search that's running now, 20 seconds in, with one web search in its log.
+ *   ... item-discovery-finish <runId>
+ *     Finishes that search with 1 new idea.
  *   ... item-cleanup <runId>
- *     Deletes the item, its profile and discovery runs, seller search, draft offer and the business.
+ *     Deletes the items, their profile and discovery runs, seller search, draft offer and the business.
  *
  * Prints one JSON line prefixed with "E2E_RESULT ". Refuses production and non-local databases.
  */
@@ -155,7 +162,10 @@ async function itemSetup(runId: string) {
     },
   });
   await db.commonsProductMatch.create({
-    data: { profileId, productId, fitScore: 88, fitReason: "Families buy laundry soap every month.", purpose: "Cheaper laundry for every household." },
+    data: {
+      profileId, productId, fitScore: 88, fitReason: "Families buy laundry soap every month.", purpose: "Cheaper laundry for every household.",
+      goalFit: "FITS", goalFitReason: "Helps the goal of cheaper household basics.",
+    },
   });
   await db.productPriceObservation.create({
     data: {
@@ -210,6 +220,31 @@ async function itemSweepEmpty(runId: string) {
   return ended;
 }
 
+async function itemOffGoal(runId: string) {
+  const { profileId } = itemIds(runId);
+  const productId = `e2e-offgoal-${runId}`;
+  const sourceUrl = `https://e2e-supplier.test/${runId}/party-cups`;
+  await db.sourcedProduct.create({
+    data: {
+      id: productId, sourceKey: createHash("sha256").update(sourceUrl).digest("hex"), sourceUrl, name: `E2E ${runId} Party cups`,
+      description: "Single-use plastic cups by the case.", category: "Party supplies", brand: "E2E Brand", supplierName: "E2E Supplier",
+    },
+  });
+  await db.commonsProductMatch.create({
+    data: {
+      profileId, productId, fitScore: 60, fitReason: "Families host parties.", purpose: "Cheaper party cups.",
+      goalFit: "DOES_NOT_FIT", goalFitReason: "Single-use plastic works against the goal to waste less.",
+    },
+  });
+  await db.productPriceObservation.create({
+    data: {
+      id: `e2e-offgoal-price-${runId}`, productId, sourceUrl, memberShare: "500 cups", peopleNeeded: 10, regularPriceCents: 4000, bulkShareCents: 2000,
+      verifiedFacts: ["Public case price"], risksOrUnverifiedClaims: [], evidenceHash: `e2e-offgoal-${runId}`,
+    },
+  });
+  return { productId };
+}
+
 async function itemDiscoveryOff(runId: string) {
   await db.commonsProductProfile.update({ where: { id: itemIds(runId).profileId }, data: { isEnabled: false } });
   return { off: true };
@@ -219,17 +254,53 @@ async function itemDiscoveryUsed(runId: string) {
   const { profileId } = itemIds(runId);
   await db.commonsProductProfile.update({ where: { id: profileId }, data: { isEnabled: true, monthlyRunLimit: 1 } });
   const now = new Date();
-  const earlier = new Date(now.getTime() - 60_000);
+  const started = new Date(now.getTime() - 95_000);
+  const earlier = new Date(now.getTime() - 300_000);
+  const at = (seconds: number) => new Date(started.getTime() + seconds * 1_000).toISOString();
   await db.productDiscoveryRun.createMany({
     data: [
       {
         profileId, idempotencyKey: `e2e:${runId}:used`, status: "SUCCEEDED", trigger: "scheduled", query: "E2E",
-        candidateCount: 2, savedProductCount: 2, savedMatchCount: 2, startedAt: now, finishedAt: now,
+        candidateCount: 2, savedProductCount: 2, savedMatchCount: 2, startedAt: started, finishedAt: now,
+        progress: [
+          { at: at(0), kind: "step", text: "Searching the web" },
+          { at: at(12), kind: "search", text: "E2E bulk laundry pods" },
+          { at: at(30), kind: "page", text: "e2e-supplier.test", url: `https://e2e-supplier.test/${runId}/laundry-pods` },
+          { at: at(70), kind: "find", text: `E2E ${runId} Laundry pods from E2E Supplier`, url: `https://e2e-supplier.test/${runId}/laundry-pods` },
+          { at: at(95), kind: "step", text: "Done. 2 new ideas to review." },
+        ],
       },
       { profileId, idempotencyKey: `e2e:${runId}:extra`, status: "SUCCEEDED", trigger: "admin", query: "E2E", startedAt: earlier, finishedAt: earlier },
     ],
   });
   return { used: true };
+}
+
+async function itemDiscoveryLive(runId: string) {
+  const started = new Date(Date.now() - 20_000);
+  await db.productDiscoveryRun.create({
+    data: {
+      profileId: itemIds(runId).profileId, idempotencyKey: `e2e:${runId}:live`, status: "RUNNING", trigger: "admin", query: "E2E", startedAt: started,
+      progress: [
+        { at: started.toISOString(), kind: "step", text: "Searching the web" },
+        { at: new Date(started.getTime() + 8_000).toISOString(), kind: "search", text: "E2E party supplies wholesale" },
+      ],
+    },
+  });
+  return { live: true };
+}
+
+async function itemDiscoveryFinish(runId: string) {
+  const run = await db.productDiscoveryRun.findUniqueOrThrow({ where: { idempotencyKey: `e2e:${runId}:live` } });
+  const progress = Array.isArray(run.progress) ? run.progress : [];
+  await db.productDiscoveryRun.update({
+    where: { id: run.id },
+    data: {
+      status: "SUCCEEDED", candidateCount: 1, savedProductCount: 1, savedMatchCount: 1, finishedAt: new Date(),
+      progress: [...progress, { at: new Date().toISOString(), kind: "step", text: "Done. 1 new idea to review." }],
+    },
+  });
+  return { finished: true };
 }
 
 async function itemCleanup(runId: string) {
@@ -239,14 +310,15 @@ async function itemCleanup(runId: string) {
   await db.commonsAction.deleteMany({ where: { coopId: coopFor(runId) } });
   await db.vendorProspect.deleteMany({ where: { emailNormalized: sellerEmail } });
   await db.outreachSuppression.deleteMany({ where: { email: sellerEmail } });
-  await db.sourcedProduct.deleteMany({ where: { id: productId } });
+  await db.sourcedProduct.deleteMany({ where: { id: { in: [productId, `e2e-offgoal-${runId}`] } } });
   await db.commonsProductProfile.deleteMany({ where: { id: profileId } });
   return { cleaned: true };
 }
 
 const COMMANDS: Record<string, (runId: string) => Promise<unknown>> = {
   setup, sweep, cleanup, "item-setup": itemSetup, "item-search": itemSearch, "item-sweep": itemSweep, "item-search-nowhere": itemSearchNowhere, "item-sweep-empty": itemSweepEmpty,
-  "item-discovery-off": itemDiscoveryOff, "item-discovery-used": itemDiscoveryUsed, "item-cleanup": itemCleanup,
+  "item-off-goal": itemOffGoal, "item-discovery-off": itemDiscoveryOff,
+  "item-discovery-live": itemDiscoveryLive, "item-discovery-finish": itemDiscoveryFinish, "item-discovery-used": itemDiscoveryUsed, "item-cleanup": itemCleanup,
 };
 
 async function main() {

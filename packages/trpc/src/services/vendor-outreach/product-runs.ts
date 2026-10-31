@@ -124,3 +124,49 @@ async function dispatchProductDiscovery(profileKey: string, requestId: string) {
   const { tasks } = await import("@trigger.dev/sdk");
   await tasks.trigger("run-product-discovery", { profileKey, requestId, source: "admin" }, { idempotencyKey: requestId, idempotencyKeyTTL: "1h" });
 }
+
+const HISTORY_SIZE = 10;
+const ESTIMATE_SAMPLE = 20;
+
+/**
+ * One profile's recent product searches, newest first, with each one's step-by-step
+ * log, plus how long a search usually takes (the median of recent finished ones
+ * across every profile; null until there are some to go by).
+ */
+export async function listDiscoveryRunsForAdmin(db: Db, rawProfileKey: string, now = new Date()) {
+  const profileKey = z.string().trim().min(1).max(100).parse(rawProfileKey);
+  const profile = await db.commonsProductProfile.findUnique({ where: { key: profileKey }, select: { id: true } });
+  if (!profile) throw new TRPCError({ code: "NOT_FOUND", message: "We couldn't find that product profile. Refresh and try again." });
+  const [runs, finished] = await Promise.all([
+    db.productDiscoveryRun.findMany({
+      where: { profileId: profile.id },
+      orderBy: { startedAt: "desc" },
+      take: HISTORY_SIZE,
+      select: {
+        id: true, status: true, trigger: true, startedAt: true, finishedAt: true,
+        candidateCount: true, savedMatchCount: true, error: true, progress: true,
+      },
+    }),
+    db.productDiscoveryRun.findMany({
+      where: { status: "SUCCEEDED", finishedAt: { not: null } },
+      orderBy: { startedAt: "desc" },
+      take: ESTIMATE_SAMPLE,
+      select: { startedAt: true, finishedAt: true },
+    }),
+  ]);
+  // Runs from before finish times were real have a zero length, so they don't count.
+  const lengths = finished
+    .map((run) => Math.round((run.finishedAt!.getTime() - run.startedAt.getTime()) / 1_000))
+    .filter((seconds) => seconds > 0)
+    .sort((a, b) => a - b);
+  const estimateSeconds = lengths.length > 0 ? lengths[Math.floor(lengths.length / 2)]! : null;
+  return {
+    estimateSeconds,
+    runs: runs.map((run) => ({
+      ...run,
+      progress: Array.isArray(run.progress) ? run.progress : [],
+      running: run.status === "RUNNING" && now.getTime() - run.startedAt.getTime() < RUN_STALE_MS,
+      seconds: run.finishedAt ? Math.max(0, Math.round((run.finishedAt.getTime() - run.startedAt.getTime()) / 1_000)) : null,
+    })),
+  };
+}

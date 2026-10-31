@@ -2,9 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { ProductDiscoveryCandidate } from "../services/product-discovery.js";
 import {
+  buildDiscoveryInput,
+  buildDiscoveryInstructions,
   limitSharedProductsBetweenCatalogs,
   listHomepageProductCatalogs,
   normalizePublicHttpUrl,
+  progressFromModelEvent,
   runProductDiscoveryForProfile,
   scoreExistingProductForProfile,
 } from "../services/product-discovery.js";
@@ -275,6 +278,174 @@ describe("product discovery", () => {
     expect(admin.productDiscoveryRun.create).toHaveBeenCalledWith({ data: expect.objectContaining({ trigger: "admin" }) });
     expect(admin.productDiscoveryRun.count).not.toHaveBeenCalled();
     expect(admin.commonsProductProfile.update).not.toHaveBeenCalled();
+  });
+
+  it("checks every find against the linked Commons' charter and goals, and keeps a few that miss", async () => {
+    function fakeDatabase(coopId: string | null) {
+      const matches: Array<Record<string, unknown>> = [];
+      let n = 0;
+      return {
+        matches,
+        coopConfig: {
+          findFirst: vi.fn().mockResolvedValue({
+            charterText: "We buy from Black-owned and local businesses first. No tobacco or alcohol.",
+            missionGoals: [
+              { key: "health", label: "Better health", description: "Cheaper healthy food for families" },
+              { key: "wealth", label: "Keep money local", priorityWeight: 2 },
+            ],
+          }),
+        },
+        commonsProductProfile: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: "profile-family", key: "family", coopId, name: "Family Commons", description: "Household needs",
+            searchPrompt: "Find household staples", searchTerms: ["household"], excludedTerms: [], maxCandidatesPerRun: 2,
+            monthlyRunLimit: 5, isEnabled: true,
+          }),
+          update: vi.fn().mockResolvedValue({}),
+        },
+        productDiscoveryRun: {
+          create: vi.fn().mockResolvedValue({ id: "run-1", status: "RUNNING" }),
+          count: vi.fn().mockResolvedValue(0),
+          update: vi.fn().mockResolvedValue({}),
+          findUnique: vi.fn(),
+          updateMany: vi.fn(),
+        },
+        commonsProductMatch: {
+          findMany: vi.fn().mockResolvedValue([]),
+          findUnique: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockImplementation(({ data }) => {
+            matches.push(data);
+            return Promise.resolve({});
+          }),
+        },
+        sourcedProduct: {
+          findMany: vi.fn().mockResolvedValue([]),
+          findUnique: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockImplementation(() => Promise.resolve({ id: `p${++n}`, status: "CANDIDATE" })),
+        },
+        productPriceObservation: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({}) },
+        aIEvaluation: { create: vi.fn().mockResolvedValue({}) },
+        $transaction: vi.fn().mockImplementation((operations) => Promise.all(operations)),
+      };
+    }
+    const found = (name: string, goalFit: "fits" | "does_not_fit") =>
+      candidate({ name, sourceUrl: `https://supplier.example/${name}`, goalFit, goalFitReason: `${name} reason` });
+    const results = [
+      found("rice", "fits"), found("beans", "fits"), found("oats", "fits"),
+      found("cigars", "does_not_fit"), found("wine", "does_not_fit"), found("vape", "does_not_fit"),
+    ];
+
+    const linked = fakeDatabase("family-coop");
+    const provider = { discover: vi.fn().mockResolvedValue({ candidates: results }) };
+    await runProductDiscoveryForProfile({ profileKey: "family", idempotencyKey: "a", now: NOW, database: linked as never, provider });
+    // The search gets the charter and goals.
+    expect(provider.discover).toHaveBeenCalledWith(expect.objectContaining({
+      commons: {
+        charter: "We buy from Black-owned and local businesses first. No tobacco or alcohol.",
+        goals: [
+          { label: "Better health", description: "Cheaper healthy food for families" },
+          { label: "Keep money local", description: "" },
+        ],
+      },
+    }));
+    // Up to the run's limit of finds that fit, plus up to two that don't, each with its reason.
+    expect(linked.matches.map((m) => [m.goalFit, m.goalFitReason])).toEqual([
+      ["FITS", "rice reason"], ["FITS", "beans reason"],
+      ["DOES_NOT_FIT", "cigars reason"], ["DOES_NOT_FIT", "wine reason"],
+    ]);
+    expect(linked.matches.every((m) => m.status === "CANDIDATE")).toBe(true);
+
+    // A profile with no Commons has nothing to check, so the bot's verdict is ignored.
+    const unlinked = fakeDatabase(null);
+    const plain = { discover: vi.fn().mockResolvedValue({ candidates: results }) };
+    await runProductDiscoveryForProfile({ profileKey: "family", idempotencyKey: "b", now: NOW, database: unlinked as never, provider: plain });
+    expect(plain.discover).toHaveBeenCalledWith(expect.objectContaining({ commons: null }));
+    expect(unlinked.coopConfig.findFirst).not.toHaveBeenCalled();
+    expect(unlinked.matches.map((m) => m.goalFit)).toEqual([null, null]);
+  });
+
+  function simpleDatabase(updates: Array<Record<string, unknown>> = [], observations: Array<Record<string, unknown>> = []) {
+    return {
+      commonsProductProfile: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "p", key: "traveler", coopId: null, name: "Traveler", description: "Travel", searchPrompt: "Find travel gear",
+          searchTerms: [], excludedTerms: [], maxCandidatesPerRun: 4, monthlyRunLimit: 5, isEnabled: true,
+        }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      productDiscoveryRun: {
+        create: vi.fn().mockResolvedValue({ id: "r", status: "RUNNING" }),
+        count: vi.fn().mockResolvedValue(0),
+        update: vi.fn().mockImplementation(({ data }) => { updates.push(data); return Promise.resolve({}); }),
+        findUnique: vi.fn(),
+        updateMany: vi.fn(),
+      },
+      commonsProductMatch: { findMany: vi.fn().mockResolvedValue([]), findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({}) },
+      sourcedProduct: { findMany: vi.fn().mockResolvedValue([]), findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "n", status: "CANDIDATE" }) },
+      productPriceObservation: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockImplementation(({ data }) => { observations.push(data); return Promise.resolve({}); }),
+      },
+      aIEvaluation: { create: vi.fn().mockResolvedValue({}) },
+      $transaction: vi.fn().mockImplementation((operations) => Promise.all(operations)),
+    };
+  }
+
+  it("trims a wordy find to the stored limits instead of dropping it", async () => {
+    const created: Array<Record<string, unknown>> = [];
+    const wordy = candidate({ memberShare: "One kit per person, ".repeat(20) });
+    await runProductDiscoveryForProfile({
+      profileKey: "traveler", idempotencyKey: "w", now: NOW, database: simpleDatabase([], created) as never,
+      provider: { discover: vi.fn().mockResolvedValue({ candidates: [wordy] }) },
+    });
+    expect(created).toHaveLength(1);
+    expect((created[0].memberShare as string).length).toBeLessThanOrEqual(120);
+  });
+
+  it("logs each step, search, page and find as the run goes, and keeps the log on the finished run", async () => {
+    const updates: Array<Record<string, unknown>> = [];
+    await runProductDiscoveryForProfile({
+      profileKey: "traveler", idempotencyKey: "log", now: NOW, database: simpleDatabase(updates) as never,
+      provider: {
+        discover: vi.fn().mockImplementation(async ({ onProgress }) => {
+          onProgress({ kind: "search", text: "bulk travel bottles wholesale" });
+          onProgress({ kind: "page", text: "supplier.example", url: "https://supplier.example/wholesale-bottles" });
+          onProgress({ kind: "find", text: "Refillable travel bottle set from Example Supplier" });
+          return { candidates: [candidate()] };
+        }),
+      },
+    });
+    // Progress is saved while it runs, not only at the end.
+    expect(updates.filter((u) => "progress" in u && !("status" in u)).length).toBeGreaterThan(0);
+    const final = updates.find((u) => u.status === "SUCCEEDED")!;
+    expect((final.progress as Array<{ kind: string; text: string }>).map((e) => `${e.kind}: ${e.text}`)).toEqual([
+      "step: Checking ideas other Commons already use",
+      "step: Searching the web",
+      "search: bulk travel bottles wholesale",
+      "page: supplier.example",
+      "find: Refillable travel bottle set from Example Supplier",
+      "step: The bot returned 1 find. Saving them now.",
+      "step: Done. 1 new idea to review.",
+    ]);
+  });
+
+  it("reads web searches and page visits from the model's live stream", () => {
+    const done = (action: Record<string, unknown>) => ({ type: "response.output_item.done", item: { type: "web_search_call", action } });
+    expect(progressFromModelEvent(done({ type: "search", query: "bulk rice wholesale" }))).toEqual({ kind: "search", text: "bulk rice wholesale" });
+    expect(progressFromModelEvent(done({ type: "open_page", url: "https://www.webstaurantstore.com/rice" }))).toEqual({
+      kind: "page", text: "webstaurantstore.com", url: "https://www.webstaurantstore.com/rice",
+    });
+    expect(progressFromModelEvent(done({ type: "open_page", url: "javascript:alert(1)" }))).toBeNull();
+    expect(progressFromModelEvent({ type: "response.output_text.delta" })).toBeNull();
+  });
+
+  it("puts the charter and goals in the bot's brief only when there is a Commons to check", () => {
+    const commons = { charter: "Local first.", goals: [{ label: "Keep money local", description: "" }] };
+    const input = buildDiscoveryInput({ profile: { name: "Family Commons", description: "Households" }, query: "Find staples", commons, today: NOW });
+    expect(input).toContain("Commons goals:\n- Keep money local\nCommons charter:\nLocal first.");
+    expect(buildDiscoveryInstructions(4, commons)).toMatch(/up to 2 strong deals you came across that don't fit/);
+    expect(buildDiscoveryInput({ profile: { name: "Family Commons", description: "Households" }, query: "Find staples", commons: null, today: NOW })).not.toContain("charter");
+    expect(buildDiscoveryInstructions(4, null)).toContain("Leave goalFit and goalFitReason out.");
   });
 
   it("maps only approved, verified, source-backed matches to the homepage", async () => {

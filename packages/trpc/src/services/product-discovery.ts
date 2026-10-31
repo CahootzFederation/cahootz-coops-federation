@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { Agent, run, webSearchTool } from "@openai/agents";
+import { Agent, run, tool, webSearchTool } from "@openai/agents";
 import { z } from "zod";
 
 import { db, Prisma } from "@repo/db";
@@ -9,6 +9,21 @@ import { recordAgentResultCost } from "./ai-cost.js";
 const PRODUCT_DISCOVERY_AGENT_KEY = "shared-price-product-discovery";
 const DEFAULT_MODEL = "gpt-5-nano";
 const MAX_SOURCE_TEXT_LENGTH = 2_000;
+const MAX_CHARTER_LENGTH = 4_000;
+const MAX_GOALS = 12;
+// Strong deals that miss the charter or goals are kept for an admin to look at, a few per run.
+const MAX_OFF_GOAL_PER_RUN = 2;
+// A run's step-by-step log is for watching it, so a long run keeps its first entries.
+const MAX_PROGRESS_ENTRIES = 80;
+
+/** One thing a run did, shown live to admins: a step, a web search, a page it opened, or a find. */
+export interface DiscoveryProgressEntry {
+  at: string;
+  kind: "step" | "search" | "page" | "find";
+  text: string;
+  url?: string;
+}
+type ReportProgress = (entry: Omit<DiscoveryProgressEntry, "at">) => void;
 const VALID_TONES = new Set(["pear", "sky", "mint", "coral", "lavender"]);
 
 const ProductCandidateSchema = z.object({
@@ -31,10 +46,30 @@ const ProductCandidateSchema = z.object({
   tone: z.enum(["pear", "sky", "mint", "coral", "lavender"]),
   verifiedFacts: z.array(z.string().min(1).max(500)).max(12),
   risksOrUnverifiedClaims: z.array(z.string().min(1).max(500)).max(12),
+  goalFit: z.enum(["fits", "does_not_fit"]).optional(),
+  goalFitReason: z.string().max(1_000).optional(),
 });
 
+// What the model must return. Text lengths aren't enforced here: one wordy field
+// would otherwise throw out the whole run. candidateForStorage trims text to the
+// stored limits and drops anything still invalid.
 const ProductDiscoveryOutputSchema = z.object({
-  candidates: z.array(ProductCandidateSchema).max(8),
+  candidates: z.array(
+    ProductCandidateSchema.extend({
+      name: z.string(),
+      description: z.string(),
+      category: z.string(),
+      brand: z.string(),
+      supplierName: z.string(),
+      imageAlt: z.string().optional().default(""),
+      memberShare: z.string(),
+      purpose: z.string(),
+      fitReason: z.string(),
+      goalFitReason: z.string().optional(),
+      verifiedFacts: z.array(z.string()),
+      risksOrUnverifiedClaims: z.array(z.string()),
+    }),
+  ),
 });
 
 export type ProductDiscoveryCandidate = z.infer<typeof ProductCandidateSchema>;
@@ -102,11 +137,19 @@ interface DiscoveryProfile {
   monthlyRunLimit: number;
 }
 
+/** The linked Commons' charter and goals, which every candidate is checked against. */
+export interface CommonsGoals {
+  charter: string;
+  goals: Array<{ label: string; description: string }>;
+}
+
 export interface ProductDiscoveryProvider {
   discover(input: {
     profile: DiscoveryProfile;
     query: string;
     model: string;
+    commons: CommonsGoals | null;
+    onProgress?: ReportProgress;
   }): Promise<{
     candidates: ProductDiscoveryCandidate[];
     rawInput?: unknown;
@@ -153,7 +196,27 @@ function evidenceHash(candidate: ProductDiscoveryCandidate): string {
 function candidateForStorage(
   candidate: ProductDiscoveryCandidate,
 ): ProductDiscoveryCandidate | null {
-  const parsed = ProductCandidateSchema.safeParse(candidate);
+  const cut = (value: unknown, max: number) =>
+    typeof value === "string" ? cleanText(value, max) : value;
+  const list = (value: unknown) =>
+    Array.isArray(value)
+      ? value.slice(0, 12).map((item) => cut(item, 500))
+      : value;
+  const parsed = ProductCandidateSchema.safeParse({
+    ...candidate,
+    name: cut(candidate.name, 160),
+    description: cut(candidate.description, MAX_SOURCE_TEXT_LENGTH),
+    category: cut(candidate.category, 80),
+    brand: cut(candidate.brand, 120),
+    supplierName: cut(candidate.supplierName, 160),
+    imageAlt: cut(candidate.imageAlt, 300),
+    memberShare: cut(candidate.memberShare, 120),
+    purpose: cut(candidate.purpose, 1_000),
+    fitReason: cut(candidate.fitReason, 1_000),
+    goalFitReason: cut(candidate.goalFitReason, 1_000),
+    verifiedFacts: list(candidate.verifiedFacts),
+    risksOrUnverifiedClaims: list(candidate.risksOrUnverifiedClaims),
+  });
   if (!parsed.success) return null;
 
   const sourceUrl = normalizePublicHttpUrl(parsed.data.sourceUrl);
@@ -181,6 +244,7 @@ function candidateForStorage(
     memberShare: cleanText(parsed.data.memberShare, 120),
     purpose: cleanText(parsed.data.purpose, 1_000),
     fitReason: cleanText(parsed.data.fitReason, 1_000),
+    goalFitReason: cleanText(parsed.data.goalFitReason ?? "", 1_000),
     verifiedFacts: parsed.data.verifiedFacts.map((fact) =>
       cleanText(fact, 500),
     ),
@@ -246,8 +310,101 @@ function buildDiscoveryQuery(profile: DiscoveryProfile): string {
     .join("\n");
 }
 
+/** The active charter and goals of the Commons a profile is linked to, or null when there's nothing to check. */
+export async function loadCommonsGoals(
+  database: typeof db,
+  coopId: string | null,
+): Promise<CommonsGoals | null> {
+  if (!coopId) return null;
+  const config = await database.coopConfig.findFirst({
+    where: { coopId, isActive: true },
+    orderBy: { version: "desc" },
+    select: { charterText: true, missionGoals: true },
+  });
+  if (!config) return null;
+  const goals = (Array.isArray(config.missionGoals) ? config.missionGoals : [])
+    .flatMap((goal) => {
+      const value = goal as { label?: unknown; description?: unknown };
+      return typeof value.label === "string" && value.label.trim()
+        ? [{
+            label: cleanText(value.label, 200),
+            description: typeof value.description === "string" ? cleanText(value.description, 500) : "",
+          }]
+        : [];
+    })
+    .slice(0, MAX_GOALS);
+  const charter = cleanText(config.charterText ?? "", MAX_CHARTER_LENGTH);
+  return charter || goals.length > 0 ? { charter, goals } : null;
+}
+
+export function buildDiscoveryInstructions(maxCandidates: number, commons: CommonsGoals | null): string {
+  return [
+    "Find real bulk or wholesale products that could support a shared-price offer for one Commons.",
+    "Use web_search. Prefer primary supplier, manufacturer, wholesale, distributor, or official product pages.",
+    "Every candidate needs a public supplier URL, a defensible per-member bulk price, a public comparison price, a minimum participant count, and short source-backed facts.",
+    "Do not invent discounts, prices, minimum quantities, images, certifications, product claims, or supplier relationships.",
+    "If a price or minimum order is unclear, omit the candidate instead of estimating it.",
+    "Use risksOrUnverifiedClaims for shipping, tax, wholesale eligibility, stock, geography, or any claim that still needs human verification.",
+    "These are review candidates only. Do not describe them as approved, live, affiliated, or purchasable through Cahootz.",
+    "Each time you settle on a candidate, call note_find once with its name, supplier and page URL, before your final answer. It only records progress.",
+    ...(commons
+      ? [
+          "The Commons' charter and goals are in the input. Look for products that help those goals, and check every candidate against them.",
+          'Set goalFit to "fits" when the product clearly helps at least one goal and nothing in the charter rules it out. Otherwise set "does_not_fit".',
+          "In goalFitReason, name the goal it helps, or say which goal it misses or which part of the charter it conflicts with, in one plain sentence.",
+          `Return no more than ${maxCandidates} strong candidates that fit; fewer is better than weak evidence.`,
+          `You may also return up to ${MAX_OFF_GOAL_PER_RUN} strong deals you came across that don't fit, marked "does_not_fit", so a person can decide. Don't search for extra ones just to fill this.`,
+        ]
+      : [
+          "Leave goalFit and goalFitReason out.",
+          `Return no more than ${maxCandidates} strong candidates; fewer is better than weak evidence.`,
+        ]),
+  ].join("\n");
+}
+
+export function buildDiscoveryInput(params: {
+  profile: Pick<DiscoveryProfile, "name" | "description">;
+  query: string;
+  commons: CommonsGoals | null;
+  today: Date;
+}): string {
+  const { commons } = params;
+  return [
+    `Today: ${params.today.toISOString().slice(0, 10)}`,
+    `Commons: ${params.profile.name}`,
+    `Commons description: ${params.profile.description}`,
+    ...(commons
+      ? [
+          "Commons goals:",
+          ...(commons.goals.length > 0
+            ? commons.goals.map((goal) => `- ${goal.label}${goal.description ? `: ${goal.description}` : ""}`)
+            : ["- (none listed)"]),
+          "Commons charter:",
+          commons.charter || "(none written)",
+        ]
+      : []),
+    "Product research brief:",
+    params.query,
+  ].join("\n");
+}
+
+/** A finished web search or page visit from the model's raw stream, as a progress line; null for anything else. */
+export function progressFromModelEvent(raw: unknown): Omit<DiscoveryProgressEntry, "at"> | null {
+  const event = raw as { type?: string; item?: { type?: string; action?: { type?: string; query?: unknown; url?: unknown } } } | null;
+  if (event?.type !== "response.output_item.done" || event.item?.type !== "web_search_call") return null;
+  const action = event.item.action;
+  if (action?.type === "search" && typeof action.query === "string" && action.query.trim()) {
+    return { kind: "search", text: cleanText(action.query, 300) };
+  }
+  if (action?.type === "open_page" && typeof action.url === "string") {
+    const url = normalizePublicHttpUrl(action.url);
+    return url ? { kind: "page", text: new URL(url).hostname.replace(/^www\./, ""), url } : null;
+  }
+  return null;
+}
+
 const openAiProductDiscoveryProvider: ProductDiscoveryProvider = {
-  async discover({ profile, query, model }) {
+  async discover({ profile, query, model, commons, onProgress }) {
     if (!process.env.OPENAI_API_KEY) {
       throw new Error("OPENAI_API_KEY is required for product discovery.");
     }
@@ -256,28 +413,35 @@ const openAiProductDiscoveryProvider: ProductDiscoveryProvider = {
       name: "Shared-price Product Research Agent",
       model,
       outputType: ProductDiscoveryOutputSchema,
-      tools: [webSearchTool()],
+      tools: [
+        webSearchTool(),
+        tool({
+          name: "note_find",
+          description: "Record that you settled on a candidate, so people watching the search can see it. Returns nothing useful.",
+          parameters: z.object({ name: z.string(), supplier: z.string(), url: z.string() }),
+          execute: async ({ name, supplier, url }) => {
+            onProgress?.({
+              kind: "find",
+              text: cleanText(`${name} from ${supplier}`, 300),
+              url: normalizePublicHttpUrl(url) ?? undefined,
+            });
+            return "Noted.";
+          },
+        }),
+      ],
       modelSettings: { toolChoice: "auto" },
-      instructions: [
-        "Find real bulk or wholesale products that could support a shared-price offer for one Commons.",
-        "Use web_search. Prefer primary supplier, manufacturer, wholesale, distributor, or official product pages.",
-        "Every candidate needs a public supplier URL, a defensible per-member bulk price, a public comparison price, a minimum participant count, and short source-backed facts.",
-        "Do not invent discounts, prices, minimum quantities, images, certifications, product claims, or supplier relationships.",
-        "If a price or minimum order is unclear, omit the candidate instead of estimating it.",
-        "Use risksOrUnverifiedClaims for shipping, tax, wholesale eligibility, stock, geography, or any claim that still needs human verification.",
-        "These are review candidates only. Do not describe them as approved, live, affiliated, or purchasable through Cahootz.",
-        `Return no more than ${profile.maxCandidatesPerRun} strong candidates; fewer is better than weak evidence.`,
-      ].join("\n"),
+      instructions: buildDiscoveryInstructions(profile.maxCandidatesPerRun, commons),
     });
 
-    const input = [
-      `Today: ${new Date().toISOString().slice(0, 10)}`,
-      `Commons: ${profile.name}`,
-      `Commons description: ${profile.description}`,
-      "Product research brief:",
-      query,
-    ].join("\n");
-    const result = await run(agent, input);
+    const input = buildDiscoveryInput({ profile, query, commons, today: new Date() });
+    const result = await run(agent, input, { stream: true });
+    // Web searches happen inside one model response, so they're read from the raw stream as they finish.
+    for await (const event of result) {
+      if (event.type !== "raw_model_stream_event" || event.data.type !== "model") continue;
+      const entry = progressFromModelEvent(event.data.event);
+      if (entry) onProgress?.(entry);
+    }
+    await result.completed;
     await recordAgentResultCost({
       coopId: profile.coopId,
       feature: PRODUCT_DISCOVERY_AGENT_KEY,
@@ -299,7 +463,7 @@ const openAiProductDiscoveryProvider: ProductDiscoveryProvider = {
       ).output;
 
     return {
-      candidates: output?.candidates ?? [],
+      candidates: (output?.candidates ?? []) as ProductDiscoveryCandidate[],
       rawInput: { input, model },
       rawOutput: output ?? null,
     };
@@ -481,6 +645,25 @@ export async function runProductDiscoveryForProfile(params: {
   if (!acquiredRun.created) {
     return { runId: runRecord.id, status: "duplicate" as const };
   }
+  // Tests pass a fixed clock; real runs stamp the actual finish time so durations mean something.
+  const finishedAt = () => params.now ?? new Date();
+
+  const progress: DiscoveryProgressEntry[] = [];
+  let progressSaved: Promise<unknown> = Promise.resolve();
+  const report: ReportProgress = (entry) => {
+    if (progress.length >= MAX_PROGRESS_ENTRIES) return;
+    progress.push({ ...entry, at: new Date().toISOString() });
+    const snapshot = [...progress];
+    // Saved in order, one at a time; a failed write only loses a progress line.
+    progressSaved = progressSaved
+      .then(() =>
+        database.productDiscoveryRun.update({
+          where: { id: runRecord.id },
+          data: { progress: snapshot as unknown as Prisma.InputJsonValue },
+        }),
+      )
+      .catch(() => undefined);
+  };
 
   const overMonthlyLimit =
     trigger !== "admin" &&
@@ -498,17 +681,26 @@ export async function runProductDiscoveryForProfile(params: {
       data: {
         status: "SKIPPED",
         error: `Monthly run limit of ${profile.monthlyRunLimit} reached.`,
-        finishedAt: now,
+        finishedAt: finishedAt(),
       },
     });
     return { runId: runRecord.id, status: "skipped_limit" as const };
   }
 
   try {
+    report({ kind: "step", text: "Checking ideas other Commons already use" });
     const crossCommonsCount = await addCrossCommonsCandidates({
       database,
       profile,
       runId: runRecord.id,
+    });
+    if (crossCommonsCount > 0) {
+      report({ kind: "step", text: `Added ${crossCommonsCount} idea${crossCommonsCount === 1 ? "" : "s"} other Commons use` });
+    }
+    const commons = await loadCommonsGoals(database, profile.coopId);
+    report({
+      kind: "step",
+      text: commons ? "Searching the web with this Commons' charter and goals in mind" : "Searching the web",
     });
     const discovery = await (
       params.provider ?? openAiProductDiscoveryProvider
@@ -516,13 +708,41 @@ export async function runProductDiscoveryForProfile(params: {
       profile,
       query,
       model,
+      commons,
+      onProgress: report,
     });
-    const candidates = discovery.candidates
+    const valid = discovery.candidates
       .map(candidateForStorage)
       .filter((candidate): candidate is ProductDiscoveryCandidate =>
         Boolean(candidate),
-      )
-      .slice(0, profile.maxCandidatesPerRun);
+      );
+    // Without a charter there's nothing to check, so any goal verdict is ignored.
+    const offGoal = (candidate: ProductDiscoveryCandidate) =>
+      Boolean(commons) && candidate.goalFit === "does_not_fit";
+    const candidates = [
+      ...valid
+        .filter((candidate) => !offGoal(candidate))
+        .slice(0, profile.maxCandidatesPerRun),
+      ...valid.filter(offGoal).slice(0, MAX_OFF_GOAL_PER_RUN),
+    ];
+    const dropped = discovery.candidates.length - valid.length;
+    const missed = candidates.filter(offGoal).length;
+    report({
+      kind: "step",
+      text: [
+        `The bot returned ${discovery.candidates.length} find${discovery.candidates.length === 1 ? "" : "s"}`,
+        dropped > 0 ? `${dropped} dropped for no clear price or link` : "",
+        missed > 0 ? `${missed} kept that didn't fit the goals` : "",
+      ].filter(Boolean).join(", ") + ". Saving them now.",
+    });
+
+    const goalFitFields = (candidate: ProductDiscoveryCandidate) =>
+      commons
+        ? {
+            goalFit: offGoal(candidate) ? "DOES_NOT_FIT" : "FITS",
+            goalFitReason: candidate.goalFitReason || null,
+          }
+        : { goalFit: null, goalFitReason: null };
 
     let savedProductCount = 0;
     let savedMatchCount = crossCommonsCount;
@@ -603,6 +823,7 @@ export async function runProductDiscoveryForProfile(params: {
             fitReason: candidate.fitReason,
             purpose: candidate.purpose,
             tone: candidate.tone,
+            ...goalFitFields(candidate),
             discoveredByRunId: runRecord.id,
           },
         });
@@ -620,12 +841,18 @@ export async function runProductDiscoveryForProfile(params: {
             fitReason: candidate.fitReason,
             purpose: candidate.purpose,
             tone: candidate.tone,
+            ...goalFitFields(candidate),
             discoveredByRunId: runRecord.id,
           },
         });
       }
     }
 
+    report({
+      kind: "step",
+      text: savedMatchCount === 0 ? "Done. Nothing new this time." : `Done. ${savedMatchCount} new idea${savedMatchCount === 1 ? "" : "s"} to review.`,
+    });
+    await progressSaved;
     await database.$transaction([
       database.productDiscoveryRun.update({
         where: { id: runRecord.id },
@@ -634,7 +861,8 @@ export async function runProductDiscoveryForProfile(params: {
           candidateCount: discovery.candidates.length,
           savedProductCount,
           savedMatchCount,
-          finishedAt: now,
+          progress: progress as unknown as Prisma.InputJsonValue,
+          finishedAt: finishedAt(),
         },
       }),
       ...(trigger === "admin"
@@ -672,12 +900,15 @@ export async function runProductDiscoveryForProfile(params: {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Product discovery failed.";
+    report({ kind: "step", text: `Stopped: ${cleanText(message, 200)}` });
+    await progressSaved;
     await database.productDiscoveryRun.update({
       where: { id: runRecord.id },
       data: {
         status: "FAILED",
         error: cleanText(message, 2_000),
-        finishedAt: now,
+        progress: progress as unknown as Prisma.InputJsonValue,
+        finishedAt: finishedAt(),
       },
     });
     await database.aIEvaluation

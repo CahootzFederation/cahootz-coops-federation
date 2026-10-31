@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { listDiscoveryProfilesForAdmin, startProductDiscoveryRun } from "../services/vendor-outreach/product-runs.js";
+import { listDiscoveryProfilesForAdmin, listDiscoveryRunsForAdmin, startProductDiscoveryRun } from "../services/vendor-outreach/product-runs.js";
 
 const NOW = new Date("2026-11-03T15:00:00Z");
 const MINUTE = 60_000;
@@ -106,5 +106,33 @@ describe("starting product discovery from the admin page", () => {
       expect.objectContaining({ key: "family", runsThisMonth: 0, extraRunsThisMonth: 0, running: false, latestRun: null }),
     ]);
     expect(rows[0]).not.toHaveProperty("id");
+  });
+
+  it("shows a profile's past searches with their logs, and estimates time from recent finished searches", async () => {
+    const at = (minutesAgo: number) => new Date(NOW.getTime() - minutesAgo * MINUTE);
+    const runs = [
+      { id: "live", status: "RUNNING", trigger: "admin", startedAt: at(1), finishedAt: null, progress: [{ kind: "search", text: "bulk rice" }] },
+      { id: "done", status: "SUCCEEDED", trigger: "scheduled", startedAt: at(30), finishedAt: new Date(at(30).getTime() + 120_000), progress: [] },
+      { id: "old", status: "SUCCEEDED", trigger: "scheduled", startedAt: at(90), finishedAt: at(90), progress: null },
+    ];
+    const finished = [
+      { startedAt: at(30), finishedAt: new Date(at(30).getTime() + 120_000) },
+      { startedAt: at(60), finishedAt: new Date(at(60).getTime() + 200_000) },
+      { startedAt: at(80), finishedAt: new Date(at(80).getTime() + 60_000) },
+      // Recorded before finish times were real: no length, so it isn't counted.
+      { startedAt: at(90), finishedAt: at(90) },
+    ];
+    const db = {
+      commonsProductProfile: { findUnique: vi.fn(async () => ({ id: "p-traveler" })) },
+      productDiscoveryRun: { findMany: vi.fn(async ({ where }: any) => (where.profileId ? runs : finished)) },
+    };
+    const result = await listDiscoveryRunsForAdmin(db as any, "traveler", NOW);
+    expect(result.estimateSeconds).toBe(120);
+    expect(result.runs.map((r) => [r.id, r.running, r.seconds, r.progress.length])).toEqual([
+      ["live", true, null, 1],
+      ["done", false, 120, 0],
+      ["old", false, 0, 0],
+    ]);
+    await expect(listDiscoveryRunsForAdmin({ commonsProductProfile: { findUnique: vi.fn(async () => null) } } as any, "nope", NOW)).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });

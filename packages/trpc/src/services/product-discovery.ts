@@ -141,14 +141,15 @@ export function dropReason(candidate: Partial<Record<string, unknown>>): string 
 
 /**
  * The finds to keep from one run: the final answer's list, or, when the bot
- * stopped before a usable final answer, what it saved along the way (each page
- * once).
+ * stopped before a usable final answer, what it saved along the way (each
+ * product once).
  */
 export function pickCandidates(finalCandidates: ProductDiscoveryCandidate[] | undefined, saved: ProductDiscoveryCandidate[]) {
   if (finalCandidates && finalCandidates.length > 0) return finalCandidates;
   const seen = new Set<string>();
   return saved.filter((candidate) => {
-    const key = candidate.sourceUrl ?? candidate.name ?? "";
+    // Several products can share one supplier page, so a repeat is the same page and name.
+    const key = `${candidate.sourceUrl ?? ""}|${(candidate.name ?? "").toLowerCase()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

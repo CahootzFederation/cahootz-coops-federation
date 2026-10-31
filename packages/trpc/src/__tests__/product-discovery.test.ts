@@ -414,6 +414,10 @@ describe("product discovery", () => {
     // Saved twice, kept once.
     expect(pickCandidates(undefined, [a, b, a])).toEqual([a, b]);
     expect(pickCandidates([], [b])).toEqual([b]);
+    // Two products on one supplier page are both kept.
+    const kitA = candidate({ name: "8 pc kit", sourceUrl: "https://kits.example/bulk" });
+    const kitB = candidate({ name: "10 pc kit", sourceUrl: "https://kits.example/bulk" });
+    expect(pickCandidates(undefined, [kitA, kitB])).toEqual([kitA, kitB]);
   });
 
   it("drops only the incomplete find and keeps the rest", async () => {

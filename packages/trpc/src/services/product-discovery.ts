@@ -51,27 +51,40 @@ const ProductCandidateSchema = z.object({
   goalFitReason: z.string().max(1_000).optional(),
 });
 
-// What the model is asked to return. Nothing per item is enforced here (lengths,
-// or even which fields are present): the library rejects the whole answer when
-// one item fails, which threw away every good find. candidateForStorage checks
-// each item on its own, trims text to the stored limits and drops what's left
-// incomplete.
-const ProductDiscoveryOutputSchema = z.object({
+// What the model is asked to return. Nothing per item can fail here: the library
+// rejects the whole answer when one field does (too long, missing, a number sent
+// as text), which threw away every good find. Text and numbers are coerced, and
+// a field that still can't be read is left empty. candidateForStorage then checks
+// each item on its own, trims text to the stored limits and drops what's incomplete.
+const lenient = <T extends z.ZodTypeAny>(schema: T) => schema.optional().catch(undefined);
+const agentText = lenient(z.coerce.string());
+const agentNumber = lenient(z.coerce.number());
+const agentTextList = lenient(z.array(z.coerce.string()));
+export const ProductDiscoveryOutputSchema = z.object({
   candidates: z.array(
-    ProductCandidateSchema.extend({
-      name: z.string(),
-      description: z.string(),
-      category: z.string(),
-      brand: z.string(),
-      supplierName: z.string(),
-      imageAlt: z.string().optional().default(""),
-      memberShare: z.string(),
-      purpose: z.string(),
-      fitReason: z.string(),
-      goalFitReason: z.string().optional(),
-      verifiedFacts: z.array(z.string()),
-      risksOrUnverifiedClaims: z.array(z.string()),
-    }).partial(),
+    z.object({
+      name: agentText,
+      description: agentText,
+      category: agentText,
+      brand: agentText,
+      supplierName: agentText,
+      imageUrl: agentText,
+      imageAlt: agentText,
+      sourceUrl: agentText,
+      comparisonUrl: agentText,
+      memberShare: agentText,
+      peopleNeeded: agentNumber,
+      regularPriceCents: agentNumber,
+      bulkShareCents: agentNumber,
+      purpose: agentText,
+      fitScore: agentNumber,
+      fitReason: agentText,
+      tone: lenient(z.enum(["pear", "sky", "mint", "coral", "lavender"])),
+      verifiedFacts: agentTextList,
+      risksOrUnverifiedClaims: agentTextList,
+      goalFit: lenient(z.enum(["fits", "does_not_fit"])),
+      goalFitReason: agentText,
+    }),
   ),
 });
 
@@ -207,12 +220,16 @@ function candidateForStorage(
       : value;
   const parsed = ProductCandidateSchema.safeParse({
     ...candidate,
+    // The display color is cosmetic, so a missing or unknown one falls back instead of dropping the find.
+    tone: VALID_TONES.has(candidate.tone) ? candidate.tone : "mint",
+    imageUrl: candidate.imageUrl ?? "",
+    comparisonUrl: candidate.comparisonUrl ?? "",
     name: cut(candidate.name, 160),
     description: cut(candidate.description, MAX_SOURCE_TEXT_LENGTH),
     category: cut(candidate.category, 80),
     brand: cut(candidate.brand, 120),
     supplierName: cut(candidate.supplierName, 160),
-    imageAlt: cut(candidate.imageAlt, 300),
+    imageAlt: cut(candidate.imageAlt ?? "", 300),
     memberShare: cut(candidate.memberShare, 120),
     purpose: cut(candidate.purpose, 1_000),
     fitReason: cut(candidate.fitReason, 1_000),

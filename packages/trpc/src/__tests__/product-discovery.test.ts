@@ -8,6 +8,7 @@ import {
   limitSharedProductsBetweenCatalogs,
   listHomepageProductCatalogs,
   normalizePublicHttpUrl,
+  ProductDiscoveryOutputSchema,
   progressFromModelEvent,
   runProductDiscoveryForProfile,
   scoreExistingProductForProfile,
@@ -391,6 +392,18 @@ describe("product discovery", () => {
       $transaction: vi.fn().mockImplementation((operations) => Promise.all(operations)),
     };
   }
+
+  it("never rejects the model's whole answer over one bad field", () => {
+    const parsed = ProductDiscoveryOutputSchema.parse({
+      candidates: [
+        { ...candidate(), memberShare: 64, fitScore: "85", tone: "neon", name: "x".repeat(500) },
+        { name: "Half a find", fitScore: "not a number", verifiedFacts: "not a list" },
+      ],
+    });
+    expect(parsed.candidates).toHaveLength(2);
+    expect(parsed.candidates[0]).toMatchObject({ memberShare: "64", fitScore: 85, tone: undefined });
+    expect(parsed.candidates[1]).toMatchObject({ name: "Half a find", fitScore: undefined, verifiedFacts: undefined });
+  });
 
   it("drops only the incomplete find and keeps the rest", async () => {
     const updates: Array<Record<string, unknown>> = [];

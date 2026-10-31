@@ -5,6 +5,7 @@ import {
   DEAL_CATEGORIES,
   listCampaignsForAdmin,
   listDemandForAdmin,
+  listDiscoveryProfilesForAdmin,
   listItemsForAdmin,
   listProspectsForAdmin,
   listSourcesForAdmin,
@@ -20,7 +21,7 @@ export async function GET() {
   const admin = await requirePlatformAdmin();
   if ('response' in admin) return admin.response;
   try {
-    const [demand, campaigns, prospects, items, sources, funnel, settings, pricing] = await Promise.all([
+    const [demand, campaigns, prospects, items, sources, funnel, settings, pricing, discoveryProfiles] = await Promise.all([
       listDemandForAdmin(db),
       listCampaignsForAdmin(db),
       listProspectsForAdmin(db),
@@ -29,9 +30,11 @@ export async function GET() {
       outreachFunnel(db),
       outreachSettings(db),
       offerPricingSettings(db),
+      listDiscoveryProfilesForAdmin(db),
     ]);
     return NextResponse.json({ demand, campaigns, prospects, items, sources, funnel, sendingLive: settings.live,
       pricing,
+      discoveryProfiles,
       categories: DEAL_CATEGORIES.map(({ key, label }) => ({ key, label })),
     });
   } catch (error) {

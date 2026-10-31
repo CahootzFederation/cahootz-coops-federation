@@ -10,6 +10,7 @@ test.afterAll(() => {
   fixture(["item-cleanup", `${RUN}a`]);
   fixture(["item-cleanup", `${RUN}b`]);
   fixture(["item-cleanup", `${RUN}c`]);
+  fixture(["item-cleanup", `${RUN}d`]);
 });
 
 test("an admin reviews a bot-found item, approves it and starts a seller search", async ({ browser }) => {
@@ -26,6 +27,11 @@ test("an admin reviews a bot-found item, approves it and starts a seller search"
     await admin.getByRole("tab", { name: /product ideas/ }).click();
     const card = admin.getByLabel(`Product idea ${item}`);
     await expect(card.getByTestId("item-status")).toHaveText("Needs review");
+    // When the bot found it, and a link to the vendor's own page for the deal.
+    const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    await expect(card.getByTestId("item-found")).toContainText(`Found ${today}`);
+    await expect(card.getByRole("link", { name: "See it on E2E Supplier" })).toHaveAttribute("href", `https://e2e-supplier.test/${run}/laundry-pods`);
+    await expect(card.getByTestId("item-goal-fit")).toHaveText("Fits the goals: Helps the goal of cheaper household basics.");
     await expect(card.getByText(/\$12\.17 each/)).toBeVisible();
     await expect(card.getByText(/when 12 people buy together/)).toBeVisible();
     // The suggested deal uses the same price rule as every offer.
@@ -126,6 +132,97 @@ test("a seller search that finds nobody says so and why, and the product idea of
     const card = admin.getByLabel(`Product idea ${item}`);
     await expect(card.getByTestId("item-no-sellers")).toHaveText("The last seller search found no sellers: nothing turned up, and web search didn't run. Try again below, maybe with a bigger area.");
     await expect(card.getByRole("button", { name: "Find a seller" })).toBeVisible();
+  } finally {
+    await adminContext.close();
+  }
+});
+
+test("an admin starts an extra product search from Product ideas, outside the monthly limit, and hears why when it can't run", async ({ browser }) => {
+  const run = `${RUN}d`;
+  const profile = `E2E ${run} Families`;
+  fixture(["item-setup", run]);
+  fixture(["item-off-goal", run]);
+  const adminContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const admin = await adminContext.newPage();
+  try {
+    await signInAdmin(admin);
+    await admin.goto(`${ADMIN_BASE_URL}/portal/admin/outreach`);
+    await expect(admin.getByRole("heading", { name: "Vendor outreach" })).toBeVisible({ timeout: 60_000 });
+    await admin.getByRole("tab", { name: /product ideas/ }).click();
+    // A find that doesn't fit the Commons' goals is kept, folded away with the reason, until an admin approves it.
+    const offGoal = `Product idea E2E ${run} Party cups`;
+    const folded = admin.getByRole("group", { name: "Didn't fit the goals" });
+    await expect(admin.getByLabel(offGoal)).toBeHidden();
+    await folded.getByText(/Didn't fit the goals \(\d+\)/).click();
+    const cups = folded.getByLabel(offGoal);
+    await expect(cups.getByTestId("item-goal-fit")).toHaveText("Doesn't fit the goals: Single-use plastic works against the goal to waste less.");
+    await cups.getByRole("button", { name: "Approve" }).click();
+    await expect(admin.getByText(`E2E ${run} Party cups approved for ${profile}.`)).toBeVisible();
+    await expect(folded.getByLabel(offGoal)).toHaveCount(0);
+    await expect(admin.getByLabel(offGoal).getByTestId("item-status")).toHaveText("Approved");
+
+    const finder = admin.getByRole("region", { name: "Find products" });
+    await finder.getByLabel("Profile").selectOption({ label: profile });
+    await expect(finder.getByText("0 of 5 scheduled searches used this month. Never searched yet.")).toBeVisible();
+
+    // Changing what the bot looks for on the profile sticks for later searches.
+    const brief = finder.getByRole("group", { name: "Edit what it looks for" });
+    await brief.getByText("Edit what it looks for").click();
+    // Too short a brief is turned down with a plain reason.
+    await brief.getByLabel("What to find").fill("Soap");
+    await brief.getByRole("button", { name: "Save what it looks for" }).click();
+    await expect(admin.getByText("Say what to find in at least a few words.")).toBeVisible();
+    await brief.getByLabel("What to find").fill("Find bulk dish soap and laundry basics with public case prices.");
+    await brief.getByLabel("Themes (separate with commas)").fill("laundry, E2E dish soap");
+    await brief.getByRole("button", { name: "Save what it looks for" }).click();
+    await expect(admin.getByText(`Saved. Searches for ${profile} will use this from now on.`)).toBeVisible();
+    await admin.reload();
+    await admin.getByRole("tab", { name: /product ideas/ }).click();
+    await finder.getByLabel("Profile").selectOption({ label: profile });
+    await brief.getByText("Edit what it looks for").click();
+    await expect(brief.getByLabel("What to find")).toHaveValue("Find bulk dish soap and laundry basics with public case prices.");
+    await expect(brief.getByLabel("Themes (separate with commas)")).toHaveValue("laundry, E2E dish soap");
+    const hintBox = finder.getByLabel("What to look for this time (optional)");
+    await hintBox.fill("E2E bulk dish soap");
+
+    // Turned off after the page loaded: the click reaches the server, which says no without running the bot.
+    fixture(["item-discovery-off", run]);
+    await finder.getByRole("button", { name: "Find products" }).click();
+    await expect(admin.getByText(`Product search is turned off for ${profile}, so it can't run.`)).toBeVisible();
+    // A refused start keeps the hint, so it isn't lost.
+    await expect(hintBox).toHaveValue("E2E bulk dish soap");
+
+    // With the month's scheduled searches used up, an admin can still search: extras are counted apart.
+    fixture(["item-discovery-used", run]);
+    await admin.reload();
+    await admin.getByRole("tab", { name: /product ideas/ }).click();
+    await finder.getByLabel("Profile").selectOption({ label: profile });
+    await expect(finder.getByText(/1 of 1 scheduled searches used this month, plus 1 extra started here\. Last search .*: 2 new ideas\./)).toBeVisible({ timeout: 60_000 });
+    await expect(finder.getByRole("button", { name: "Find products" })).toBeEnabled();
+
+    // Past searches keep their step-by-step log: how long it took, what it searched and what it found.
+    const past = finder.getByRole("group", { name: "Past searches" });
+    // An admin's extra search shows what they asked it to look for.
+    await past.getByText(/Started here · nothing new/).click();
+    await expect(past.getByText("You asked for: E2E bulk dish soap")).toBeVisible();
+    await past.getByText(/Scheduled · took 1m 35s · 2 new ideas/).click();
+    await expect(past.getByText("1 search · 1 page opened · 1 find noted · 2 returned")).toBeVisible();
+    await expect(past.getByText("Searched “E2E bulk laundry pods”")).toBeVisible();
+    await expect(past.getByRole("link", { name: `Found E2E ${run} Laundry pods from E2E Supplier` })).toBeVisible();
+
+    // A running search shows how long it's been going and what it's doing, and updates by itself when it ends.
+    fixture(["item-discovery-live", run]);
+    await admin.reload();
+    await admin.getByRole("tab", { name: /product ideas/ }).click();
+    await finder.getByLabel("Profile").selectOption({ label: profile });
+    const live = finder.getByRole("status", { name: "Search progress" });
+    await expect(live.getByText("Searching now")).toBeVisible({ timeout: 60_000 });
+    await expect(live.getByTestId("search-elapsed")).toHaveText(/^\d+s so far$/);
+    await expect(live.getByText("Searched “E2E party supplies wholesale”")).toBeVisible();
+    await expect(finder.getByRole("button", { name: "Find products" })).toBeDisabled();
+    fixture(["item-discovery-finish", run]);
+    await expect(live).toBeHidden({ timeout: 20_000 });
+    await expect(past.getByText(/Started here · took \d+s · 1 new idea/)).toBeVisible();
   } finally {
     await adminContext.close();
   }

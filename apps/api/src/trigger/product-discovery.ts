@@ -16,13 +16,15 @@ function isDue(
 export const runProductDiscovery = task({
   id: "run-product-discovery",
   maxDuration: 1_800,
-  run: async (payload: { profileKey: string; requestId?: string }) => {
+  // source "admin": a platform admin's extra search, outside the monthly limit.
+  run: async (payload: { profileKey: string; requestId?: string; source?: "admin"; hint?: string }) => {
     const profileKey = payload.profileKey?.trim();
     if (!profileKey) throw new Error("profileKey is required.");
 
     const result = await runProductDiscoveryForProfile({
       profileKey,
-      trigger: "manual",
+      trigger: payload.source === "admin" ? "admin" : "manual",
+      hint: payload.hint,
       idempotencyKey:
         payload.requestId?.trim() || `manual:${profileKey}:${randomUUID()}`,
     });

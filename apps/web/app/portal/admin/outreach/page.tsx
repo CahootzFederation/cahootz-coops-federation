@@ -912,13 +912,16 @@ function FindProducts({ profiles, busy, post, onFinished }: { profiles: Discover
   const [hint, setHint] = useState('');
   const [now, setNow] = useState(() => Date.now());
   const watchedRun = useRef<string | null>(null);
+  const shownKey = useRef(key);
+  shownKey.current = key;
   const profile = profiles.find((p) => p.key === key);
 
   const refresh = useCallback(() => {
     if (!key) return;
     fetch(`/api/admin/outreach/discovery?profileKey=${encodeURIComponent(key)}`)
       .then((response) => (response.ok ? response.json() : null))
-      .then((body) => body && setHistory(body))
+      // A slow answer for a Commons the admin has since switched away from is dropped.
+      .then((body) => body && shownKey.current === key && setHistory(body))
       .catch(() => undefined);
   }, [key]);
   useEffect(() => {

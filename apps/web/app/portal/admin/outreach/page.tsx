@@ -124,6 +124,24 @@ interface SourceRow {
   status: 'SUGGESTED' | 'ENABLED' | 'DISABLED';
 }
 
+interface DiscoveryProfile {
+  key: string;
+  name: string;
+  coopId: string | null;
+  isEnabled: boolean;
+  monthlyRunLimit: number;
+  runsThisMonth: number;
+  extraRunsThisMonth: number;
+  running: boolean;
+  latestRun: {
+    status: 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'SKIPPED';
+    startedAt: string;
+    savedProductCount: number;
+    savedMatchCount: number;
+    error: string | null;
+  } | null;
+}
+
 type Funnel = Record<string, number>;
 
 type NoSellersReason = 'NO_SOURCES' | 'NOTHING_FOUND' | 'NOTHING_FOUND_NO_WEB_SEARCH' | 'NONE_REACHABLE';
@@ -186,6 +204,7 @@ export default function VendorOutreachPage() {
     sendingLive: boolean;
     categories: Category[];
     pricing: Pricing;
+    discoveryProfiles: DiscoveryProfile[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -318,6 +337,7 @@ export default function VendorOutreachPage() {
       {data && tab === 'items' && (
         data.items.length === 0 ? (
           <div className="space-y-3">
+            <FindProducts profiles={data.discoveryProfiles} busy={busy} post={post} />
             <PricingSettings pricing={data.pricing} busy={busy} post={post} />
             <Empty text="No product ideas yet. The product discovery bot adds them as it finds items for each Commons." />
           </div>
@@ -327,6 +347,7 @@ export default function VendorOutreachPage() {
               Items the product discovery bot found for each Commons. Approve the good ones, then find a seller: Sage looks for a local shop
               or the supplier&apos;s wholesale contact. Sage may also ask the Commons about an approved item in its weekly question.
             </p>
+            <FindProducts profiles={data.discoveryProfiles} busy={busy} post={post} />
             <PricingSettings pricing={data.pricing} busy={busy} post={post} />
             {data.items.map((item) => (
               <ItemCard key={`${item.profileId}:${item.productId}`} item={item} categories={data.categories} busy={busy} post={post} />
@@ -711,6 +732,63 @@ function ItemCard({ item, categories, busy, post }: { item: ItemRow; categories:
         )
       )}
     </div>
+  );
+}
+
+/** What a profile's last product search did, in a few words. */
+function lastRunText(profile: DiscoveryProfile) {
+  const run = profile.latestRun;
+  if (profile.running) return 'Searching now. New ideas show up here in a few minutes.';
+  if (!run) return 'Never searched yet.';
+  const when = new Date(run.startedAt).toLocaleString();
+  if (run.status === 'SUCCEEDED') {
+    const found = run.savedMatchCount;
+    return `Last search ${when}: ${found === 0 ? 'nothing new' : `${found} new idea${found === 1 ? '' : 's'}`}.`;
+  }
+  if (run.status === 'SKIPPED') return `Last search ${when} was skipped: ${run.error ?? 'over the monthly limit'}`;
+  if (run.status === 'FAILED') return `Last search ${when} didn't finish: ${run.error ?? 'no reason given'}`;
+  return `Last search started ${when} and never finished.`;
+}
+
+/** Start the product discovery bot for one Commons profile now instead of waiting for its schedule. */
+function FindProducts({ profiles, busy, post }: { profiles: DiscoveryProfile[]; busy: boolean; post: Post }) {
+  const [key, setKey] = useState(() => profiles.find((p) => p.isEnabled)?.key ?? profiles[0]?.key ?? '');
+  const profile = profiles.find((p) => p.key === key);
+  if (profiles.length === 0) return null;
+  return (
+    <section className="rounded-[10px] border border-white/10 bg-white/[0.03] p-4" aria-label="Find products">
+      <p className="font-semibold text-white">Find products now</p>
+      <p className="mt-1 text-xs text-slate-400">
+        The bot searches the web for bulk deals that fit this profile. It already runs on its own about once a week. Searches you start here are
+        extra: they don&apos;t count toward the monthly limit or change the schedule. Anything it finds lands here as an idea for you to review.
+        Members don&apos;t see it until you approve it and start a Group Buy.
+      </p>
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="text-xs text-slate-300">
+          Profile
+          <select className={input} value={key} onChange={(e) => setKey(e.target.value)}>
+            {profiles.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.name}{p.isEnabled ? '' : ' (turned off)'}{p.coopId ? '' : ' (no Commons yet)'}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          className={primary}
+          disabled={busy || !profile || !profile.isEnabled || profile.running}
+          onClick={() => post('/api/admin/outreach/discovery', { profileKey: key }, `Searching for products for ${profile?.name}. New ideas show up here in a few minutes. Refresh to check.`)}
+        >
+          Find products
+        </button>
+      </div>
+      {profile && (
+        <p className="mt-2 text-xs text-slate-400">
+          {profile.runsThisMonth} of {profile.monthlyRunLimit} scheduled searches used this month
+          {profile.extraRunsThisMonth > 0 ? `, plus ${profile.extraRunsThisMonth} extra started here` : ''}. {lastRunText(profile)}
+        </p>
+      )}
+    </section>
   );
 }
 

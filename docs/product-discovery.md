@@ -53,6 +53,19 @@ The manual Trigger task is `run-product-discovery`. A local/manual run can use:
 pnpm -F @cahootz/api product-discovery:run traveler
 ```
 
+Platform admins can also start an extra run from **Find products now** on the
+**Product ideas** tab (`/portal/admin/outreach`). It checks the profile is
+turned on and has no run in progress (a run stuck for over 30 minutes no longer
+blocks), then queues `run-product-discovery` in Trigger.dev with
+`source: "admin"` and writes a `PRODUCT_DISCOVERY_STARTED` audit entry. These
+runs are stored with trigger `admin`: they don't count toward or get stopped by
+the profile's monthly limit, and they don't move `lastDiscoveredAt`, so the
+scheduled cadence stays the same. One run at a time per profile is the only
+bound on them. Without a usable `TRIGGER_SECRET_KEY` the run happens in the web
+process during local development and is refused in production. The tab shows
+scheduled searches used this month, extra admin searches, and what the latest
+run found. Like every run, admin runs only add candidates.
+
 It requires the migrated database and `OPENAI_API_KEY`. Set
 `PRODUCT_DISCOVERY_MODEL` only when intentionally overriding the default
 low-cost model.

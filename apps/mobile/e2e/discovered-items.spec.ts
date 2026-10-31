@@ -10,6 +10,7 @@ test.afterAll(() => {
   fixture(["item-cleanup", `${RUN}a`]);
   fixture(["item-cleanup", `${RUN}b`]);
   fixture(["item-cleanup", `${RUN}c`]);
+  fixture(["item-cleanup", `${RUN}d`]);
 });
 
 test("an admin reviews a bot-found item, approves it and starts a seller search", async ({ browser }) => {
@@ -126,6 +127,38 @@ test("a seller search that finds nobody says so and why, and the product idea of
     const card = admin.getByLabel(`Product idea ${item}`);
     await expect(card.getByTestId("item-no-sellers")).toHaveText("The last seller search found no sellers: nothing turned up, and web search didn't run. Try again below, maybe with a bigger area.");
     await expect(card.getByRole("button", { name: "Find a seller" })).toBeVisible();
+  } finally {
+    await adminContext.close();
+  }
+});
+
+test("an admin starts an extra product search from Product ideas, outside the monthly limit, and hears why when it can't run", async ({ browser }) => {
+  const run = `${RUN}d`;
+  const profile = `E2E ${run} Families`;
+  fixture(["item-setup", run]);
+  const adminContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const admin = await adminContext.newPage();
+  try {
+    await signInAdmin(admin);
+    await admin.goto(`${ADMIN_BASE_URL}/portal/admin/outreach`);
+    await expect(admin.getByRole("heading", { name: "Vendor outreach" })).toBeVisible({ timeout: 60_000 });
+    await admin.getByRole("tab", { name: /product ideas/ }).click();
+    const finder = admin.getByRole("region", { name: "Find products" });
+    await finder.getByLabel("Profile").selectOption({ label: profile });
+    await expect(finder.getByText("0 of 5 scheduled searches used this month. Never searched yet.")).toBeVisible();
+
+    // Turned off after the page loaded: the click reaches the server, which says no without running the bot.
+    fixture(["item-discovery-off", run]);
+    await finder.getByRole("button", { name: "Find products" }).click();
+    await expect(admin.getByText(`Product search is turned off for ${profile}, so it can't run.`)).toBeVisible();
+
+    // With the month's scheduled searches used up, an admin can still search: extras are counted apart.
+    fixture(["item-discovery-used", run]);
+    await admin.reload();
+    await admin.getByRole("tab", { name: /product ideas/ }).click();
+    await finder.getByLabel("Profile").selectOption({ label: profile });
+    await expect(finder.getByText(/1 of 1 scheduled searches used this month, plus 1 extra started here\. Last search .*: 2 new ideas\./)).toBeVisible({ timeout: 60_000 });
+    await expect(finder.getByRole("button", { name: "Find products" })).toBeEnabled();
   } finally {
     await adminContext.close();
   }

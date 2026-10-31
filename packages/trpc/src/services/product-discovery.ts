@@ -425,7 +425,12 @@ async function addCrossCommonsCandidates(params: {
 
 export async function runProductDiscoveryForProfile(params: {
   profileKey: string;
-  trigger?: "scheduled" | "manual";
+  /**
+   * "admin" is a platform admin's extra search from the outreach page. It
+   * neither counts toward nor is stopped by the profile's monthly limit, and
+   * it leaves the profile's schedule where it was.
+   */
+  trigger?: "scheduled" | "manual" | "admin";
   idempotencyKey?: string;
   now?: Date;
   provider?: ProductDiscoveryProvider;
@@ -477,14 +482,17 @@ export async function runProductDiscoveryForProfile(params: {
     return { runId: runRecord.id, status: "duplicate" as const };
   }
 
-  const completedThisMonth = await database.productDiscoveryRun.count({
-    where: {
-      profileId: profile.id,
-      status: "SUCCEEDED",
-      startedAt: { gte: startOfUtcMonth(now) },
-    },
-  });
-  if (completedThisMonth >= profile.monthlyRunLimit) {
+  const overMonthlyLimit =
+    trigger !== "admin" &&
+    (await database.productDiscoveryRun.count({
+      where: {
+        profileId: profile.id,
+        status: "SUCCEEDED",
+        trigger: { not: "admin" },
+        startedAt: { gte: startOfUtcMonth(now) },
+      },
+    })) >= profile.monthlyRunLimit;
+  if (overMonthlyLimit) {
     await database.productDiscoveryRun.update({
       where: { id: runRecord.id },
       data: {
@@ -629,10 +637,14 @@ export async function runProductDiscoveryForProfile(params: {
           finishedAt: now,
         },
       }),
-      database.commonsProductProfile.update({
-        where: { id: profile.id },
-        data: { lastDiscoveredAt: now },
-      }),
+      ...(trigger === "admin"
+        ? []
+        : [
+            database.commonsProductProfile.update({
+              where: { id: profile.id },
+              data: { lastDiscoveredAt: now },
+            }),
+          ]),
       database.aIEvaluation.create({
         data: {
           agentKey: PRODUCT_DISCOVERY_AGENT_KEY,

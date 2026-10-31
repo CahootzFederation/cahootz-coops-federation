@@ -17,6 +17,7 @@ export * from "./admin.js";
 export * from "./campaigns.js";
 export * from "./outreach-check.js";
 export * from "./pipeline.js";
+export * from "./product-runs.js";
 export * from "./responses.js";
 export * from "./settings.js";
 export * from "./sources.js";

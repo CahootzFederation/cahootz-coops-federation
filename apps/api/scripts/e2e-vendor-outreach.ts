@@ -28,8 +28,14 @@
  *   ... item-sweep-empty <runId>
  *     Runs the sweep for an active seller search that has no sellers in its area (shop
  *     matching and web search off, as above) and prints how the search ended.
+ *   ... item-discovery-off <runId>
+ *     Turns off product search for the run's profile, as if another admin just did.
+ *   ... item-discovery-used <runId>
+ *     Turns the profile back on with a limit of 1 search a month and records one finished
+ *     scheduled search this month that found 2 ideas (so its monthly searches are used up)
+ *     and, a minute earlier, one extra search an admin started.
  *   ... item-cleanup <runId>
- *     Deletes the item, its profile, seller search, draft offer and the business.
+ *     Deletes the item, its profile and discovery runs, seller search, draft offer and the business.
  *
  * Prints one JSON line prefixed with "E2E_RESULT ". Refuses production and non-local databases.
  */
@@ -204,6 +210,28 @@ async function itemSweepEmpty(runId: string) {
   return ended;
 }
 
+async function itemDiscoveryOff(runId: string) {
+  await db.commonsProductProfile.update({ where: { id: itemIds(runId).profileId }, data: { isEnabled: false } });
+  return { off: true };
+}
+
+async function itemDiscoveryUsed(runId: string) {
+  const { profileId } = itemIds(runId);
+  await db.commonsProductProfile.update({ where: { id: profileId }, data: { isEnabled: true, monthlyRunLimit: 1 } });
+  const now = new Date();
+  const earlier = new Date(now.getTime() - 60_000);
+  await db.productDiscoveryRun.createMany({
+    data: [
+      {
+        profileId, idempotencyKey: `e2e:${runId}:used`, status: "SUCCEEDED", trigger: "scheduled", query: "E2E",
+        candidateCount: 2, savedProductCount: 2, savedMatchCount: 2, startedAt: now, finishedAt: now,
+      },
+      { profileId, idempotencyKey: `e2e:${runId}:extra`, status: "SUCCEEDED", trigger: "admin", query: "E2E", startedAt: earlier, finishedAt: earlier },
+    ],
+  });
+  return { used: true };
+}
+
 async function itemCleanup(runId: string) {
   const { profileId, productId, sellerEmail } = itemIds(runId);
   await db.marketplaceOffer.deleteMany({ where: { sourcedProductId: productId, status: "DRAFT" } });
@@ -217,7 +245,8 @@ async function itemCleanup(runId: string) {
 }
 
 const COMMANDS: Record<string, (runId: string) => Promise<unknown>> = {
-  setup, sweep, cleanup, "item-setup": itemSetup, "item-search": itemSearch, "item-sweep": itemSweep, "item-search-nowhere": itemSearchNowhere, "item-sweep-empty": itemSweepEmpty, "item-cleanup": itemCleanup,
+  setup, sweep, cleanup, "item-setup": itemSetup, "item-search": itemSearch, "item-sweep": itemSweep, "item-search-nowhere": itemSearchNowhere, "item-sweep-empty": itemSweepEmpty,
+  "item-discovery-off": itemDiscoveryOff, "item-discovery-used": itemDiscoveryUsed, "item-cleanup": itemCleanup,
 };
 
 async function main() {

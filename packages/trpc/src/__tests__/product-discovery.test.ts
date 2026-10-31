@@ -228,6 +228,55 @@ describe("product discovery", () => {
     );
   });
 
+  it("lets an admin's extra search run past the monthly limit without counting it or moving the schedule", async () => {
+    function fakeDatabase(monthlyRunLimit: number) {
+      return {
+        commonsProductProfile: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: "profile-traveler", key: "traveler", coopId: null, name: "Traveler Commons", description: "Travel essentials",
+            searchPrompt: "Find travel essentials", searchTerms: ["travel"], excludedTerms: [], maxCandidatesPerRun: 4,
+            monthlyRunLimit, isEnabled: true,
+          }),
+          update: vi.fn().mockResolvedValue({}),
+        },
+        productDiscoveryRun: {
+          create: vi.fn().mockResolvedValue({ id: "run-1", status: "RUNNING" }),
+          // Five scheduled searches already finished this month.
+          count: vi.fn().mockResolvedValue(5),
+          update: vi.fn().mockResolvedValue({}),
+          findUnique: vi.fn(),
+          updateMany: vi.fn(),
+        },
+        commonsProductMatch: { findMany: vi.fn().mockResolvedValue([]) },
+        sourcedProduct: { findMany: vi.fn().mockResolvedValue([]) },
+        aIEvaluation: { create: vi.fn().mockResolvedValue({}) },
+        $transaction: vi.fn().mockImplementation((operations) => Promise.all(operations)),
+      };
+    }
+    const provider = { discover: vi.fn().mockResolvedValue({ candidates: [] }) };
+
+    const scheduled = fakeDatabase(5);
+    const skipped = await runProductDiscoveryForProfile({
+      profileKey: "traveler", trigger: "scheduled", idempotencyKey: "scheduled:traveler", now: NOW, database: scheduled as never, provider,
+    });
+    expect(skipped).toMatchObject({ status: "skipped_limit" });
+    // Only non-admin searches count toward the limit.
+    expect(scheduled.productDiscoveryRun.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({ status: "SUCCEEDED", trigger: { not: "admin" } }),
+    });
+
+    // Even a limit of 0, which stops every scheduled search, doesn't stop an admin's.
+    const admin = fakeDatabase(0);
+    const extra = await runProductDiscoveryForProfile({
+      profileKey: "traveler", trigger: "admin", idempotencyKey: "admin:traveler:1", now: NOW, database: admin as never, provider,
+    });
+    expect(extra).toMatchObject({ status: "succeeded" });
+    expect(provider.discover).toHaveBeenCalledTimes(1);
+    expect(admin.productDiscoveryRun.create).toHaveBeenCalledWith({ data: expect.objectContaining({ trigger: "admin" }) });
+    expect(admin.productDiscoveryRun.count).not.toHaveBeenCalled();
+    expect(admin.commonsProductProfile.update).not.toHaveBeenCalled();
+  });
+
   it("maps only approved, verified, source-backed matches to the homepage", async () => {
     const database = {
       commonsProductProfile: {

@@ -392,6 +392,21 @@ describe("product discovery", () => {
     };
   }
 
+  it("drops only the incomplete find and keeps the rest", async () => {
+    const updates: Array<Record<string, unknown>> = [];
+    const created: Array<Record<string, unknown>> = [];
+    const { fitScore: _missing, ...noScore } = candidate({ name: "No score", sourceUrl: "https://supplier.example/no-score" });
+    await runProductDiscoveryForProfile({
+      profileKey: "traveler", idempotencyKey: "partial", now: NOW, database: simpleDatabase(updates, created) as never,
+      provider: { discover: vi.fn().mockResolvedValue({ candidates: [noScore as ProductDiscoveryCandidate, candidate()] }) },
+    });
+    expect(created).toHaveLength(1);
+    const final = updates.find((u) => u.status === "SUCCEEDED")!;
+    expect((final.progress as Array<{ text: string }>).map((e) => e.text)).toContain(
+      "The bot returned 2 finds, 1 dropped for missing details (a price, link, score or reason). Saving them now.",
+    );
+  });
+
   it("trims a wordy find to the stored limits instead of dropping it", async () => {
     const created: Array<Record<string, unknown>> = [];
     const wordy = candidate({ memberShare: "One kit per person, ".repeat(20) });

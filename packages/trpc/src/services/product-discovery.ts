@@ -51,9 +51,11 @@ const ProductCandidateSchema = z.object({
   goalFitReason: z.string().max(1_000).optional(),
 });
 
-// What the model must return. Text lengths aren't enforced here: one wordy field
-// would otherwise throw out the whole run. candidateForStorage trims text to the
-// stored limits and drops anything still invalid.
+// What the model is asked to return. Nothing per item is enforced here (lengths,
+// or even which fields are present): the library rejects the whole answer when
+// one item fails, which threw away every good find. candidateForStorage checks
+// each item on its own, trims text to the stored limits and drops what's left
+// incomplete.
 const ProductDiscoveryOutputSchema = z.object({
   candidates: z.array(
     ProductCandidateSchema.extend({
@@ -69,7 +71,7 @@ const ProductDiscoveryOutputSchema = z.object({
       goalFitReason: z.string().optional(),
       verifiedFacts: z.array(z.string()),
       risksOrUnverifiedClaims: z.array(z.string()),
-    }),
+    }).partial(),
   ),
 });
 
@@ -742,7 +744,7 @@ export async function runProductDiscoveryForProfile(params: {
       kind: "step",
       text: [
         `The bot returned ${discovery.candidates.length} find${discovery.candidates.length === 1 ? "" : "s"}`,
-        dropped > 0 ? `${dropped} dropped for no clear price or link` : "",
+        dropped > 0 ? `${dropped} dropped for missing details (a price, link, score or reason)` : "",
         missed > 0 ? `${missed} kept that didn't fit the goals` : "",
       ].filter(Boolean).join(", ") + ". Saving them now.",
     });

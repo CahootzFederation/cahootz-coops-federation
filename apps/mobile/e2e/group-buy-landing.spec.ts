@@ -393,3 +393,23 @@ test("community homepage variant remains available as the experiment control", a
     ),
   ).toBe(false);
 });
+
+
+test("homepage defaults to group-buy without PostHog and preserves community preview", async ({ page }) => {
+  test.skip(!MARKETING_BASE_URL || process.env.E2E_MARKETING_NO_POSTHOG !== "1",
+    "Start apps/web with NEXT_PUBLIC_POSTHOG_KEY empty and set E2E_MARKETING_NO_POSTHOG=1.");
+  if (!MARKETING_BASE_URL) return;
+  await page.goto(new URL("/", MARKETING_BASE_URL).toString());
+  await expect(page.locator(".landing.group-buy-homepage")).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".landing.group-buy-homepage")).toBeVisible();
+  await page.goto(new URL("/?homepage=community", MARKETING_BASE_URL).toString());
+  await expect(page.locator(".landing")).toBeVisible();
+  await expect(page.locator(".group-buy-homepage")).toHaveCount(0);
+  await page.getByRole("link", { name: "Cahootz home", exact: true }).click();
+  await expect(page.locator(".group-buy-homepage")).toHaveCount(0);
+  await page.goto(new URL("/?homepage=auto", MARKETING_BASE_URL).toString());
+  await expect(page.locator(".landing.group-buy-homepage")).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".landing.group-buy-homepage")).toBeVisible();
+});

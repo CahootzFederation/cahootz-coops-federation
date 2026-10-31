@@ -8,6 +8,7 @@ import {
   limitSharedProductsBetweenCatalogs,
   listHomepageProductCatalogs,
   normalizePublicHttpUrl,
+  pickCandidates,
   ProductDiscoveryOutputSchema,
   progressFromModelEvent,
   runProductDiscoveryForProfile,
@@ -403,6 +404,15 @@ describe("product discovery", () => {
     expect(parsed.candidates).toHaveLength(2);
     expect(parsed.candidates[0]).toMatchObject({ memberShare: "64", fitScore: 85, tone: undefined });
     expect(parsed.candidates[1]).toMatchObject({ name: "Half a find", fitScore: undefined, verifiedFacts: undefined });
+  });
+
+  it("keeps the finds the bot saved along the way when its final answer is missing", () => {
+    const a = candidate({ name: "A", sourceUrl: "https://supplier.example/a" });
+    const b = candidate({ name: "B", sourceUrl: "https://supplier.example/b" });
+    expect(pickCandidates([a], [b])).toEqual([a]);
+    // Saved twice, kept once.
+    expect(pickCandidates(undefined, [a, b, a])).toEqual([a, b]);
+    expect(pickCandidates([], [b])).toEqual([b]);
   });
 
   it("drops only the incomplete find and keeps the rest", async () => {

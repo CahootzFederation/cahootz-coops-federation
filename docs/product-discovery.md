@@ -69,7 +69,7 @@ pnpm -F @cahootz/api product-discovery:run traveler
 Every run keeps a step-by-step log in `ProductDiscoveryRun.progress` (up to
 80 entries): its own steps, each web search and page the model opens (read
 from the streamed response as they finish), and each find the model notes
-with a small `note_find` tool before its final answer. The log is saved as
+with a `save_find` tool that carries the whole find. If the bot then stops without a usable final answer, the run keeps what it saved. Its output schema coerces or blanks bad fields instead of failing, so one bad item is dropped on its own. The log is saved as
 the run goes. `finishedAt` is the real finish time, so run lengths are known;
 runs from before this have no length. Product ideas shows a running search
 live (time so far, an estimate from the median of the last 20 finished

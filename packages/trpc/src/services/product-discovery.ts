@@ -60,9 +60,7 @@ const lenient = <T extends z.ZodTypeAny>(schema: T) => schema.optional().catch(u
 const agentText = lenient(z.coerce.string());
 const agentNumber = lenient(z.coerce.number());
 const agentTextList = lenient(z.array(z.coerce.string()));
-export const ProductDiscoveryOutputSchema = z.object({
-  candidates: z.array(
-    z.object({
+const AgentCandidateSchema = z.object({
       name: agentText,
       description: agentText,
       category: agentText,
@@ -82,11 +80,61 @@ export const ProductDiscoveryOutputSchema = z.object({
       tone: lenient(z.enum(["pear", "sky", "mint", "coral", "lavender"])),
       verifiedFacts: agentTextList,
       risksOrUnverifiedClaims: agentTextList,
-      goalFit: lenient(z.enum(["fits", "does_not_fit"])),
-      goalFitReason: agentText,
-    }),
-  ),
+  goalFit: lenient(z.enum(["fits", "does_not_fit"])),
+  goalFitReason: agentText,
 });
+export const ProductDiscoveryOutputSchema = z.object({ candidates: z.array(AgentCandidateSchema) });
+
+const text = (description: string) => ({ type: "string", description });
+const count = (description: string) => ({ type: "number", description });
+const textList = (description: string) => ({ type: "array", items: { type: "string" }, description });
+// save_find takes one candidate. Zod tool parameters need strict mode, which can't
+// leave fields out, so this is plain JSON schema and the arguments go through
+// AgentCandidateSchema like the final answer.
+const SAVE_FIND_PARAMETERS = {
+  type: "object" as const,
+  properties: {
+    name: text("Product name"),
+    description: text("What it is, in a sentence or two"),
+    category: text("Product category"),
+    brand: text("Brand"),
+    supplierName: text("Who sells it"),
+    imageUrl: text("Public image URL, if any"),
+    imageAlt: text("Short image description"),
+    sourceUrl: text("Public supplier page with the bulk price"),
+    comparisonUrl: text("Public page with the regular price"),
+    memberShare: text("What one member gets, for example '4 bottles'"),
+    peopleNeeded: count("How many members must join to reach the bulk price"),
+    regularPriceCents: count("Regular price for one member's share, in cents"),
+    bulkShareCents: count("Bulk price for one member's share, in cents"),
+    purpose: text("Why members would want it"),
+    fitScore: count("0 to 100, how well it fits the brief"),
+    fitReason: text("Why it fits the brief"),
+    tone: { type: "string", enum: ["pear", "sky", "mint", "coral", "lavender"], description: "Display color" },
+    verifiedFacts: textList("Facts checked on the source page"),
+    risksOrUnverifiedClaims: textList("Anything not checked yet"),
+    goalFit: { type: "string", enum: ["fits", "does_not_fit"], description: "Only when the input has a charter and goals" },
+    goalFitReason: text("Which goal it helps or misses, in one sentence"),
+  },
+  required: [] as string[],
+  additionalProperties: true as const,
+};
+
+/**
+ * The finds to keep from one run: the final answer's list, or, when the bot
+ * stopped before a usable final answer, what it saved along the way (each page
+ * once).
+ */
+export function pickCandidates(finalCandidates: ProductDiscoveryCandidate[] | undefined, saved: ProductDiscoveryCandidate[]) {
+  if (finalCandidates && finalCandidates.length > 0) return finalCandidates;
+  const seen = new Set<string>();
+  return saved.filter((candidate) => {
+    const key = candidate.sourceUrl ?? candidate.name ?? "";
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 export type ProductDiscoveryCandidate = z.infer<typeof ProductCandidateSchema>;
 
@@ -369,7 +417,7 @@ export function buildDiscoveryInstructions(maxCandidates: number, commons: Commo
     "If a price or minimum order is unclear, omit the candidate instead of estimating it.",
     "Use risksOrUnverifiedClaims for shipping, tax, wholesale eligibility, stock, geography, or any claim that still needs human verification.",
     "These are review candidates only. Do not describe them as approved, live, affiliated, or purchasable through Cahootz.",
-    "Each time you settle on a candidate, call note_find once with its name, supplier and page URL, before your final answer. It only records progress.",
+    "Each time you settle on a candidate, call save_find once with all of its fields (the same fields as an item in your final answer). Then finish with your final answer listing every candidate you saved.",
     ...(commons
       ? [
           "The Commons' charter and goals are in the input. Look for products that help those goals, and check every candidate against them.",
@@ -432,6 +480,8 @@ const openAiProductDiscoveryProvider: ProductDiscoveryProvider = {
       throw new Error("OPENAI_API_KEY is required for product discovery.");
     }
 
+    // Finds are kept as they're saved, so a run that ends badly still has them.
+    const saved: ProductDiscoveryCandidate[] = [];
     const agent = new Agent({
       name: "Shared-price Product Research Agent",
       model,
@@ -439,16 +489,21 @@ const openAiProductDiscoveryProvider: ProductDiscoveryProvider = {
       tools: [
         webSearchTool(),
         tool({
-          name: "note_find",
-          description: "Record that you settled on a candidate, so people watching the search can see it. Returns nothing useful.",
-          parameters: z.object({ name: z.string(), supplier: z.string(), url: z.string() }),
-          execute: async ({ name, supplier, url }) => {
+          name: "save_find",
+          description: "Save one candidate you settled on, with all its fields, before your final answer.",
+          parameters: SAVE_FIND_PARAMETERS,
+          strict: false,
+          execute: async (args) => {
+            const parsed = AgentCandidateSchema.safeParse(args);
+            if (!parsed.success) return "Couldn't read that find. Send it again with its fields.";
+            const find = parsed.data as ProductDiscoveryCandidate;
+            saved.push(find);
             onProgress?.({
               kind: "find",
-              text: cleanText(`${name} from ${supplier}`, 300),
-              url: normalizePublicHttpUrl(url) ?? undefined,
+              text: cleanText(`${find.name ?? "A product"}${find.supplierName ? ` from ${find.supplierName}` : ""}`, 300),
+              url: (find.sourceUrl && normalizePublicHttpUrl(find.sourceUrl)) || undefined,
             });
-            return "Noted.";
+            return "Saved.";
           },
         }),
       ],
@@ -457,14 +512,27 @@ const openAiProductDiscoveryProvider: ProductDiscoveryProvider = {
     });
 
     const input = buildDiscoveryInput({ profile, query, commons, today: new Date() });
-    const result = await run(agent, input, { stream: true });
-    // Web searches happen inside one model response, so they're read from the raw stream as they finish.
-    for await (const event of result) {
-      if (event.type !== "raw_model_stream_event" || event.data.type !== "model") continue;
-      const entry = progressFromModelEvent(event.data.event);
-      if (entry) onProgress?.(entry);
+    // Each saved find takes a turn, on top of the searching and the final answer.
+    const maxTurns = profile.maxCandidatesPerRun + MAX_OFF_GOAL_PER_RUN + 8;
+    const result = await run(agent, input, { stream: true, maxTurns });
+    let output: z.infer<typeof ProductDiscoveryOutputSchema> | undefined;
+    try {
+      // Web searches happen inside one model response, so they're read from the raw stream as they finish.
+      for await (const event of result) {
+        if (event.type !== "raw_model_stream_event" || event.data.type !== "model") continue;
+        const entry = progressFromModelEvent(event.data.event);
+        if (entry) onProgress?.(entry);
+      }
+      await result.completed;
+      output = (result as unknown as { finalOutput?: z.infer<typeof ProductDiscoveryOutputSchema> }).finalOutput;
+    } catch (error) {
+      if (saved.length === 0) throw error;
+      const message = error instanceof Error ? error.message : "it stopped early";
+      onProgress?.({
+        kind: "step",
+        text: cleanText(`The bot didn't finish its answer (${message}), so its ${saved.length} saved find${saved.length === 1 ? " is" : "s are"} used instead.`, 300),
+      });
     }
-    await result.completed;
     await recordAgentResultCost({
       coopId: profile.coopId,
       feature: PRODUCT_DISCOVERY_AGENT_KEY,
@@ -472,23 +540,10 @@ const openAiProductDiscoveryProvider: ProductDiscoveryProvider = {
       result,
     }).catch(console.error);
 
-    const output =
-      (
-        result as unknown as {
-          finalOutput?: z.infer<typeof ProductDiscoveryOutputSchema>;
-          output?: z.infer<typeof ProductDiscoveryOutputSchema>;
-        }
-      ).finalOutput ??
-      (
-        result as unknown as {
-          output?: z.infer<typeof ProductDiscoveryOutputSchema>;
-        }
-      ).output;
-
     return {
-      candidates: (output?.candidates ?? []) as ProductDiscoveryCandidate[],
+      candidates: pickCandidates(output?.candidates as ProductDiscoveryCandidate[] | undefined, saved),
       rawInput: { input, model },
-      rawOutput: output ?? null,
+      rawOutput: output ?? { savedFinds: saved },
     };
   },
 };

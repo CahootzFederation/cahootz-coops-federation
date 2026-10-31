@@ -8,7 +8,8 @@ import { OFFER_STATUS_LABELS } from '@/lib/offer-labels';
 
 interface ReportRow {
   offerId: string;
-  coopId: string;
+  /** Empty when the deal is open to every Commons. */
+  coopId: string | null;
   title: string;
   offerType: string;
   status: string;
@@ -79,10 +80,15 @@ export default function OffersReportPage() {
               {rows.map((row) => (
                 <tr key={row.offerId} className="border-t border-white/5">
                   <td className="p-3">
-                    <Link href={`/portal/admin/commons/${row.coopId}/offers/${row.offerId}`} className="text-white hover:underline">{row.title}</Link>
+                    {row.coopId ? (
+                      <Link href={`/portal/admin/commons/${row.coopId}/offers/${row.offerId}`} className="text-white hover:underline">{row.title}</Link>
+                    ) : (
+                      // Every Commons' group buys page lists it, so open it from any of them.
+                      <span className="text-white" title="Open it from any Commons' group buys page">{row.title}</span>
+                    )}
                     <p className="text-xs text-slate-500">Group buy · {OFFER_STATUS_LABELS[row.status] ?? row.status}</p>
                   </td>
-                  <td className="p-3">{row.coopId}</td>
+                  <td className="p-3">{row.coopId ?? 'Every Commons'}</td>
                   <td className="p-3">{row.vendorName}</td>
                   <td className="p-3">{row.paidOrders}</td>
                   {COLUMNS.map(([key]) => <td key={key} className="p-3 text-right">{money(row[key] as number)}</td>)}

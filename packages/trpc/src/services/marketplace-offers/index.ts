@@ -8,7 +8,9 @@
  * between the Commons and Cahootz. A Group Buy member saves a card and an
  * address when they commit, and the card is charged only once the goal is met.
  * A platform admin publishes each offer, and every member hears about live
- * deals in a weekly notification.
+ * deals in a weekly notification. A deal can be open to every Commons, can be a
+ * service (nothing ships, so no address), and can repeat: a fresh copy goes up
+ * as soon as one hits its goal or ends short.
  */
 export * from "./charges.js";
 export * from "./checkout.js";
@@ -18,6 +20,8 @@ export * from "./lifecycle.js";
 export * from "./payments.js";
 export * from "./pricing-settings.js";
 export * from "./queries.js";
+export * from "./repeats.js";
+export * from "./starter-deals.js";
 export * from "./sweep.js";
 export { canTransition, OFFER_TRANSITIONS } from "./transitions.js";
 export { memberOfferView } from "./views.js";

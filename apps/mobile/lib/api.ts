@@ -949,7 +949,8 @@ export interface MarketplaceOffer {
   id: string;
   offerType: 'MEMBER_DEAL' | 'GROUP_BUY';
   status: string;
-  coopId: string;
+  /** Empty when the deal is open to every Commons. */
+  coopId: string | null;
   title: string;
   description: string | null;
   vendor: { name: string };
@@ -970,7 +971,9 @@ export interface MarketplaceOffer {
   paymentDeadline: string | null;
   fulfillmentDate: string | null;
   expiresAt: string | null;
-  fulfillmentMethod: 'PICKUP' | 'DELIVERY';
+  fulfillmentMethod: 'PICKUP' | 'DELIVERY' | 'SERVICE';
+  /** A fresh copy goes up as soon as this one hits its goal, so it closes within the hour. */
+  repeats: boolean;
   pickupLocation: string | null;
   serviceArea: string | null;
   redemptionRules: string | null;
@@ -5027,7 +5030,7 @@ export const api = {
     return offersMutation<SavedCard>('finishCardSetup', { setupId }, sessionToken, "Your card wasn't saved. Please add it again.");
   },
   commitToOffer(
-    input: { offerId: string; quantity: number; contactPhone?: string; shippingAddress: ShippingAddress },
+    input: { offerId: string; quantity: number; contactPhone?: string; shippingAddress?: ShippingAddress },
     sessionToken: string,
   ) {
     return offersMutation<{ committedQuantity: number; quantity: number; thresholdReached: boolean }>(

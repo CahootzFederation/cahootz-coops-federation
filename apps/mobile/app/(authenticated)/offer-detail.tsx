@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Check, CheckCircle2, CreditCard, MapPin, Minus, Plus, Tag, Truck, Users } from 'lucide-react-native';
+import { ArrowLeft, Check, CheckCircle2, CreditCard, MapPin, Minus, Plus, Tag, Truck, Users, Wrench } from 'lucide-react-native';
 
 import CommercePaymentConfirmation from '@/components/commerce-payment-confirmation';
 import { OfferImage } from '@/components/offer-image';
@@ -127,6 +127,8 @@ export default function OfferDetailScreen() {
   }
 
   const isGroupBuy = offer.offerType === 'GROUP_BUY';
+  // A service (tech help, a website) doesn't ship, so there's no address to ask for.
+  const isService = offer.fulfillmentMethod === 'SERVICE';
   const mine = offer.myCommitment;
   const committed = mine?.status === 'COMMITTED' || mine?.status === 'PAYMENT_PENDING';
   const paid = mine?.status === 'PAID' || mine?.status === 'FULFILLED';
@@ -137,7 +139,7 @@ export default function OfferDetailScreen() {
   /** Checks what every order needs. Returns false and shows why if something's missing. */
   function readyToOrder() {
     if (!offer) return false;
-    const problem = addressProblem(address);
+    const problem = isService ? null : addressProblem(address);
     if (problem) {
       setEditingAddress(true);
       setMessage({ tone: 'error', text: problem });
@@ -191,7 +193,7 @@ export default function OfferDetailScreen() {
     track('group_buy_commit_started', { offer_id: offer.id });
     try {
       const result = await api.commitToOffer(
-        { offerId: offer.id, quantity, contactPhone: phone.trim() || undefined, shippingAddress: address },
+        { offerId: offer.id, quantity, contactPhone: phone.trim() || undefined, shippingAddress: isService ? undefined : address },
         sessionToken,
       );
       track('group_buy_committed', { offer_id: offer.id, quantity, threshold_reached: result.thresholdReached });
@@ -199,7 +201,7 @@ export default function OfferDetailScreen() {
       setMessage({
         tone: 'ok',
         text: result.thresholdReached
-          ? "You're in, and that hit the goal! When commitments close, we'll charge your saved card. You haven't been charged yet."
+          ? `You're in, and that hit the goal! ${offer.repeats ? 'Within the hour' : 'When commitments close'}, we'll charge your saved card. You haven't been charged yet.`
           : "You're in. You haven't been charged. We'll only charge your card if it reaches its goal.",
       });
       await load();
@@ -256,7 +258,7 @@ export default function OfferDetailScreen() {
     setPayment(null);
     setMessage({
       tone: 'ok',
-      text: `Payment of ${formatCents(payment.totalChargedCents)} received. You saved ${formatCents(offer.savingsCents * unitsToBuy)}. We'll tell you when it ships.`,
+      text: `Payment of ${formatCents(payment.totalChargedCents)} received. You saved ${formatCents(offer.savingsCents * unitsToBuy)}. ${isService ? `${offer.vendor.name} will reach out to get you set up.` : "We'll tell you when it ships."}`,
     });
     // The webhook marks the order paid a moment later.
     setTimeout(() => void load(), 2500);
@@ -324,6 +326,22 @@ export default function OfferDetailScreen() {
           </TouchableOpacity>
         </View>
       )}
+      <TextInput
+        accessibilityLabel="Phone for the vendor"
+        value={phone}
+        onChangeText={setPhone}
+        placeholder="Phone (optional)"
+        placeholderTextColor="#A6998A"
+        keyboardType="phone-pad"
+        className="mt-2 h-11 rounded-xl border px-3 text-sm"
+        style={{ borderColor: colors.line, color: colors.ink }}
+      />
+    </View>
+  );
+
+  const reachYou = (
+    <View className="mt-4" accessibilityLabel="How to reach you">
+      <Text className="text-sm font-black" style={{ color: colors.ink }}>How to reach you</Text>
       <TextInput
         accessibilityLabel="Phone for the vendor"
         value={phone}
@@ -441,7 +459,9 @@ export default function OfferDetailScreen() {
             ? detailRow(<Users size={16} color={colors.muted} />, 'How it works', `Commit before the deal ends on ${formatOfferDateTime(offer.commitmentDeadline)} with a saved card. We'll only charge it if ${offer.minimumCommitments} are committed. If it falls short, you pay nothing.`)
             : null}
           {offer.quantityPerMember > 1 ? detailRow(<Check size={16} color={colors.muted} />, 'Limit', `Up to ${offer.quantityPerMember} per household`) : null}
-          {offer.fulfillmentMethod === 'PICKUP'
+          {isService
+            ? detailRow(<Wrench size={16} color={colors.muted} />, 'How you get it', [`${offer.vendor.name} reaches out to get you set up once you're charged`, offer.serviceArea].filter(Boolean).join(' · '))
+            : offer.fulfillmentMethod === 'PICKUP'
             ? detailRow(<MapPin size={16} color={colors.muted} />, 'Pickup', [offer.pickupLocation, offer.fulfillmentDate ? formatOfferDate(offer.fulfillmentDate) : null].filter(Boolean).join(' · ') || 'Details from the vendor')
             : detailRow(<Truck size={16} color={colors.muted} />, 'Delivery', ['Ships to your address', offer.serviceArea, offer.fulfillmentDate ? `by ${formatOfferDate(offer.fulfillmentDate)}` : null].filter(Boolean).join(' · '))}
           {detailRow(<CheckCircle2 size={16} color={colors.muted} />, 'How to redeem', offer.redemptionRules)}
@@ -471,17 +491,19 @@ export default function OfferDetailScreen() {
               {offer.quantityPerMember > 1 ? stepper : null}
               {defaultsLoaded ? (
                 <>
-                  {shipTo}
+                  {isService ? reachYou : shipTo}
                   {cardRow}
                 </>
               ) : (
                 <View className="flex-row items-center py-3">
                   <ActivityIndicator color={colors.orange} />
-                  <Text className="ml-2 text-sm" style={{ color: colors.muted }}>Loading your address and card…</Text>
+                  <Text className="ml-2 text-sm" style={{ color: colors.muted }}>{isService ? 'Loading your card…' : 'Loading your address and card…'}</Text>
                 </View>
               )}
               <Text className="mt-3 text-xs" style={{ color: colors.muted }}>
-                You won&apos;t be charged now. If it reaches its goal, we&apos;ll charge your card {formatCents(offer.memberPriceCents * quantity)}. When you commit, we&apos;ll share your name, phone and address with {offer.vendor.name} so they can ship your order.
+                You won&apos;t be charged now. If it reaches its goal, we&apos;ll charge your card {formatCents(offer.memberPriceCents * quantity)}. {isService
+                  ? `When you commit, we'll share your name and phone with ${offer.vendor.name} so they can get you set up.`
+                  : `When you commit, we'll share your name, phone and address with ${offer.vendor.name} so they can ship your order.`}
               </Text>
               <TouchableOpacity accessibilityRole="button" disabled={busy || !defaultsLoaded} onPress={commit} className="mt-3 items-center justify-center rounded-xl" style={{ backgroundColor: colors.ink, minHeight: 48, opacity: busy || !defaultsLoaded ? 0.6 : 1 }}>
                 <Text className="font-black text-white">{busy ? 'Saving…' : 'Commit'}</Text>

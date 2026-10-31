@@ -3,7 +3,6 @@ import { TRPCError } from "@trpc/server";
 import type { ShippingAddress } from "@repo/validators/marketplace-offers";
 
 import { auditLogEntry } from "../../lib/audit.js";
-import { requireActiveMember } from "../commons-membership.js";
 import { requireSavedCard, saveShippingAddress } from "./charges.js";
 import { contactFor } from "./checkout.js";
 import {
@@ -11,6 +10,7 @@ import {
   type Db,
   formatCents,
   lockOffer,
+  memberCommonsFor,
   notFound,
   notifyCommitters,
   sumActiveUnits,
@@ -23,10 +23,11 @@ type CommitResult = {
 };
 
 /**
- * A member commits to a Group Buy with a saved card and a delivery address.
- * Nothing is charged yet: the card is charged only if the goal is met.
- * Committing shares the member's name, phone and address with the vendor, which
- * the app asks them to agree to. The address is saved for their next order.
+ * A member commits to a Group Buy with a saved card and a delivery address
+ * (none for a service, where nothing ships). Nothing is charged yet: the card
+ * is charged only if the goal is met. Committing shares the member's name,
+ * phone and address with the vendor, which the app asks them to agree to. The
+ * address is saved for their next order.
  *
  * Runs under the offer lock: the cap, the running total and the threshold check
  * all see the same numbers, and the unique (offer, member) key means a double
@@ -34,20 +35,25 @@ type CommitResult = {
  */
 export async function commitToOffer(
   db: Db,
-  params: { userId: string; offerId: string; quantity: number; contactPhone?: string; shippingAddress: ShippingAddress },
+  params: { userId: string; offerId: string; quantity: number; contactPhone?: string; shippingAddress?: ShippingAddress },
   now = new Date(),
 ): Promise<CommitResult> {
   const offer = await db.marketplaceOffer.findUnique({ where: { id: params.offerId } });
   if (!offer || offer.offerType !== "GROUP_BUY") notFound();
-  await requireActiveMember(db, params.userId, offer.coopId);
+  const coopId = await memberCommonsFor(db, params.userId, offer);
+  const ships = offer.fulfillmentMethod !== "SERVICE";
+  if (ships && !params.shippingAddress) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Add the address we should ship your order to." });
+  }
 
   const card = await requireSavedCard(db, params.userId);
   const { contactName, contactPhone } = await contactFor(db, params.userId, params.contactPhone);
-  await saveShippingAddress(db, params.userId, params.shippingAddress);
+  if (ships && params.shippingAddress) await saveShippingAddress(db, params.userId, params.shippingAddress);
   const orderDetails = {
+    coopId,
     contactName,
     contactPhone,
-    shippingAddress: params.shippingAddress,
+    shippingAddress: ships ? params.shippingAddress : undefined,
     stripePaymentMethodId: card.stripePaymentMethodId,
     chargeError: null,
   };
@@ -123,11 +129,13 @@ export async function commitToOffer(
   });
 
   if (result.thresholdReached) {
+    // A repeating deal closes as soon as it hits its goal (the sweep runs every 15 minutes).
+    const when = offer.repeats ? "Within the hour" : "When commitments close";
     await notifyCommitters(db, offer, ACTIVE_COMMITMENT_STATUSES, {
       kind: "threshold-reached",
       type: "GROUP_BUY_THRESHOLD_REACHED",
       title: "Your group deal is happening",
-      body: `${offer.title} hit its goal. When commitments close, we'll charge your saved card ${formatCents(offer.memberPriceCents)} each. You haven't been charged yet.`,
+      body: `${offer.title} hit its goal. ${when}, we'll charge your saved card ${formatCents(offer.memberPriceCents)} each. You haven't been charged yet.`,
     });
   }
 

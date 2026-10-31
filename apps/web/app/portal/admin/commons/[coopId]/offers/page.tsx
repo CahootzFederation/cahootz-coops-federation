@@ -13,6 +13,8 @@ import { OFFER_STATUS_LABELS as STATUS_LABELS } from '@/lib/offer-labels';
 
 interface OfferRow {
   id: string;
+  coopId: string | null;
+  repeats: boolean;
   status: string;
   title: string;
   vendorName: string;
@@ -63,7 +65,7 @@ const emptyForm = {
   commitmentDeadline: '',
   paymentWindowHours: '48',
   fulfillmentDate: '',
-  fulfillmentMethod: 'DELIVERY' as 'PICKUP' | 'DELIVERY',
+  fulfillmentMethod: 'DELIVERY' as 'PICKUP' | 'DELIVERY' | 'SERVICE',
   pickupLocation: '',
   serviceArea: '',
   redemptionRules: '',
@@ -438,10 +440,11 @@ export default function CommonsOffersPage() {
               <select className={input} value={form.fulfillmentMethod} onChange={set('fulfillmentMethod')}>
                 <option value="DELIVERY">Vendor ships to their address</option>
                 <option value="PICKUP">Pickup</option>
+                <option value="SERVICE">A service (nothing ships)</option>
               </select>
             </label>
             <label className={label}>
-              {form.fulfillmentMethod === 'PICKUP' ? 'Pickup location' : 'Where it ships (optional)'}
+              {form.fulfillmentMethod === 'PICKUP' ? 'Pickup location' : form.fulfillmentMethod === 'SERVICE' ? 'Where it&apos;s offered (optional)' : 'Where it ships (optional)'}
               <input
                 className={input}
                 value={form.fulfillmentMethod === 'PICKUP' ? form.pickupLocation : form.serviceArea}
@@ -533,6 +536,8 @@ export default function CommonsOffersPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="font-semibold text-white">{offer.title}</h2>
                   <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-slate-200">{STATUS_LABELS[offer.status] ?? offer.status}</span>
+                  {offer.coopId === null && <span className="rounded-full bg-sky-300/10 px-2 py-0.5 text-xs text-sky-200">Every Commons</span>}
+                  {offer.repeats && <span className="rounded-full bg-amber-300/10 px-2 py-0.5 text-xs text-amber-200">Repeats</span>}
                 </div>
                 <p className="mt-1 text-sm text-slate-400">
                   Group buy · {offer.vendorName}

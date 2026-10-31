@@ -115,13 +115,13 @@ export async function handleOfferPaymentSucceeded(db: Db, transactionId: string,
     );
     await createNotificationAndPush(db, {
       userId: transaction.customerId,
-      coopId: offer.coopId,
+      coopId: transaction.coopId,
       type: "OFFER_REFUNDED",
       title: "We're refunding a payment",
       body: alreadyPaidElsewhere
         ? `You'd already paid for ${offer.title}, so we're refunding the extra ${formatCents(Math.round(transaction.chargedAmount * 100))}.`
         : `${offer.title} closed before your payment went through, so we're refunding ${formatCents(Math.round(transaction.chargedAmount * 100))}.`,
-      data: { offerId: offer.id, coopId: offer.coopId },
+      data: { offerId: offer.id, coopId: transaction.coopId },
     }).catch((error) => console.error("Failed to send late-payment notice:", error));
     return { outcome: "REFUNDED_LATE_OR_DUPLICATE" as const };
   }

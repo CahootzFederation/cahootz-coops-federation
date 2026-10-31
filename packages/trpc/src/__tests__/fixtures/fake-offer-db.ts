@@ -3,7 +3,7 @@ import { vi } from "vitest";
 /**
  * A small in-memory stand-in for the Prisma calls the marketplace offer
  * service makes. Supports the where-clause shapes that service uses
- * (equality, in/notIn/not, lte/gt/gte, the `offer` relation filter).
+ * (equality, AND/OR, in/notIn/not, lte/gt/gte, the `offer` relation filter).
  */
 type Row = Record<string, any>;
 
@@ -11,6 +11,7 @@ function matches(row: Row, where: Row | undefined, tables: Tables): boolean {
   if (!where) return true;
   return Object.entries(where).every(([key, condition]) => {
     if (key === "OR") return (condition as Row[]).some((w) => matches(row, w, tables));
+    if (key === "AND") return (condition as Row[]).every((w) => matches(row, w, tables));
     if (key === "offer") return matches(tables.marketplaceOffer.find((o) => o.id === row.offerId) ?? {}, condition, tables);
     if (key === "store") return matches(tables.store.find((s) => s.id === row.storeId) ?? {}, condition, tables);
     if (key === "user") return matches({ isBot: false, ...(tables.user.find((u) => u.id === row.userId) ?? {}) }, condition, tables);

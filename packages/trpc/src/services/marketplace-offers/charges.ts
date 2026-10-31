@@ -148,8 +148,8 @@ export async function requireSavedCard(db: Db, userId: string) {
 // ── Payments to Cahootz ──────────────────────────────────
 
 type ChargeTarget = {
-  offer: { id: string; title: string; coopId: string; offerType: string; vendorPayoutCents: number; commonsSplitBps: number };
-  commitment: { id: string; userId: string; quantity: number; memberUnitCents: number; regularUnitCents: number };
+  offer: { id: string; title: string; coopId: string | null; offerType: string; vendorPayoutCents: number; commonsSplitBps: number };
+  commitment: { id: string; userId: string; coopId: string | null; quantity: number; memberUnitCents: number; regularUnitCents: number };
 };
 
 /** The payment record, with the vendor's amount held for Cahootz to pay out by hand. */
@@ -160,11 +160,14 @@ async function createOfferTransaction(db: Db, { offer, commitment }: ChargeTarge
     vendorUnitCents: offer.vendorPayoutCents,
     commonsSplitBps: offer.commonsSplitBps,
   });
+  // An every-Commons deal credits the Commons this member joined through.
+  const coopId = offer.coopId ?? commitment.coopId;
+  if (!coopId) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "We couldn't tell which Commons this order belongs to." });
   const transaction = await db.commerceTransaction.create({
     data: {
       customerId: commitment.userId,
       businessId: null,
-      coopId: offer.coopId,
+      coopId,
       listedAmount: pricing.listedAmount / 100,
       chargedAmount: pricing.chargedAmount / 100,
       merchantSettlementAmount: pricing.merchantSettlementAmount / 100,
@@ -315,6 +318,7 @@ export async function chargeSavedCard(db: Db, commitmentId: string, stripe?: Off
     await notifyOnce(db, {
       offer,
       userId: commitment.userId,
+      coopId: commitment.coopId,
       kind: "charge-failed",
       type: "GROUP_BUY_PAYMENT_OPEN",
       title: `Your payment for ${offer.title} didn't go through`,

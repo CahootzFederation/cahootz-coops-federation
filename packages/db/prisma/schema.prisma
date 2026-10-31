@@ -3882,7 +3882,9 @@ model AnonymousProfile {
 model MarketplaceOffer {
   id         String    @id @default(cuid())
   offerType  OfferType
-  coopId     String
+  // Empty means the deal is open to members of every Commons. Each member's
+  // payment credits the Commons they joined through (OfferCommitment.coopId).
+  coopId     String?
   // Older offers were sold through a marketplace shop. New ones aren't: Cahootz
   // collects every payment and works with the vendor by hand.
   storeId    String?
@@ -3946,6 +3948,13 @@ model MarketplaceOffer {
   cancelledAt         DateTime?
   cancelReason        String?
 
+  // A repeating deal goes up again on its own: a fresh copy is posted as soon
+  // as this one hits its goal, or when it ends short of it. Each copy runs for
+  // roundDays. Cancelling a copy stops the repeat.
+  repeats        Boolean @default(false)
+  roundDays      Int?
+  repeatedFromId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -3960,6 +3969,7 @@ model MarketplaceOffer {
   @@index([status, expiresAt])
   @@index([storeId])
   @@index([sourcedProductId])
+  @@index([repeats, status])
   @@schema("public")
 }
 
@@ -3972,6 +3982,9 @@ model OfferCommitment {
   offer   MarketplaceOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
   userId  String
   user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // The Commons whose share this member's payment goes to. Same as the offer's
+  // Commons, or for an every-Commons deal, the one the member belongs to.
+  coopId  String?
 
   quantity Int
   status   CommitmentStatus @default(COMMITTED)
@@ -4079,6 +4092,7 @@ enum OfferType {
 enum OfferFulfillmentMethod {
   PICKUP
   DELIVERY
+  SERVICE // Work done for the member (tech help, a website). Nothing ships, so no address.
 
   @@schema("public")
 }

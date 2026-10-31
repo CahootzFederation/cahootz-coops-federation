@@ -8,6 +8,8 @@ import { type Db, isUniqueViolation } from "./shared.js";
  * Once a week, every active member of a Commons with live deals hears about
  * them in one notification. Stewards get the same notice as everyone else;
  * deals are run by platform admins. Text comes from the records, never a model.
+ * Deals open to every Commons are listed in every Commons' notice, but a member
+ * whose Commons have nothing else going gets them only once a week.
  */
 export const DIGEST_MAX_LINES = 3;
 
@@ -16,6 +18,7 @@ const day = (date: Date) =>
   date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" });
 
 type DigestOffer = {
+  coopId?: string | null;
   title: string;
   status: string;
   regularPriceCents: number;
@@ -47,7 +50,7 @@ export function digestText(offers: DigestOffer[]): { title: string; body: string
 export async function sendWeeklyDealsDigest(db: Db, now = new Date(), options: { coopIds?: string[] } = {}) {
   const offers = await db.marketplaceOffer.findMany({
     where: {
-      ...(options.coopIds ? { coopId: { in: options.coopIds } } : {}),
+      ...(options.coopIds ? { OR: [{ coopId: { in: options.coopIds } }, { coopId: null }] } : {}),
       offerType: "GROUP_BUY",
       status: { in: ["LIVE", "PAYMENT_OPEN"] },
     },
@@ -57,18 +60,33 @@ export async function sendWeeklyDealsDigest(db: Db, now = new Date(), options: {
       committedQuantity: true, minimumCommitments: true, commitmentDeadline: true, paymentDeadline: true,
     },
   });
+  const everyCommons = offers.filter((offer) => offer.coopId === null);
   const byCommons = new Map<string, DigestOffer[]>();
-  for (const offer of offers) byCommons.set(offer.coopId, [...(byCommons.get(offer.coopId) ?? []), offer]);
+  for (const offer of offers) {
+    if (offer.coopId) byCommons.set(offer.coopId, [...(byCommons.get(offer.coopId) ?? []), offer]);
+  }
+  if (everyCommons.length > 0) {
+    const commons = await db.coopConfig.findMany({
+      where: { isActive: true, ...(options.coopIds ? { coopId: { in: options.coopIds } } : {}) },
+      select: { coopId: true },
+      distinct: ["coopId"],
+    });
+    // Commons with their own deals go first, so those notices carry the every-Commons ones.
+    for (const { coopId } of commons) if (!byCommons.has(coopId)) byCommons.set(coopId, []);
+    for (const [coopId, list] of byCommons) byCommons.set(coopId, [...list, ...everyCommons]);
+  }
 
   const weekKey = isoWeekKey(now);
   let sent = 0;
   for (const [coopId, list] of byCommons) {
     const text = digestText(list);
+    const onlyEveryCommons = list.every((offer) => offer.coopId === null);
     const members = await db.userCoopMembership.findMany({
       where: { coopId, status: "ACTIVE", user: { isBot: false } },
       select: { userId: true },
     });
     for (const { userId } of members) {
+      if (onlyEveryCommons && (await db.offerDigestSend.findFirst({ where: { userId, weekKey }, select: { id: true } }))) continue;
       // Claim first: one notice per member, Commons and week.
       try {
         await db.offerDigestSend.create({ data: { coopId, userId, weekKey } });

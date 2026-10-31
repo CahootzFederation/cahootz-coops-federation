@@ -5,11 +5,14 @@ The public homepage is controlled by the PostHog feature flag
 
 Configure it in PostHog as a multivariate flag with these exact variants:
 
-- `community`: 50% (control and safe fallback)
-- `group-buy`: 50% (shared-purchase positioning)
+- `community`: 0% (community option)
+- `group-buy`: 100% (current default positioning)
 
-The application defaults to `community` when PostHog is unavailable, the flag
-is disabled, or PostHog returns an unknown value. A boolean flag is also
+The application defaults to `group-buy` when PostHog is unavailable, no project
+key is configured, or PostHog returns an unknown or missing value. An explicit
+`community` result still selects the community page. A disabled boolean flag
+returns `false` and therefore selects community. Set the active multivariate
+flag to 100% `group-buy` to show it to everyone without a preview override. A boolean flag is also
 supported: `false` maps to `community` and `true` maps to `group-buy`.
 
 ## Local and review overrides

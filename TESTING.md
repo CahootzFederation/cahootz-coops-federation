@@ -463,3 +463,12 @@ The normal-commons referral journey also checks that submitting an application c
 ### Community Pulse publication
 
 `packages/trpc/src/__tests__/sage-community-pulse.test.ts` checks evidence scope, small-group suppression, self replies, bounded samples, daily cadence, deduplication, source references, and supersession without rewriting feedback targets. The browser publication journey uses `e2e-human-ai-feedback.ts publish` / `cleanup-published`; it never fabricates a Pulse row directly. For a first local publication outside tests, run `pnpm -F @cahootz/api exec tsx --import ./dotenv.config.js scripts/publish-community-pulse-local.ts cahootz`. The command refuses nonlocal/production databases. Normal publication runs through Sage's existing wake cycle.
+
+### Homepage default regression
+
+The default-homepage journey in `group-buy-landing.spec.ts` checks a fresh visit,
+reload, community preview persistence through the home link, and clearing that
+preview back to group-buy. Start the marketing app with
+`NEXT_PUBLIC_POSTHOG_KEY= pnpm -F @cahootz/web dev`, then run
+`CI=1 E2E_MARKETING_NO_POSTHOG=1 E2E_MARKETING_BASE_URL=http://127.0.0.1:3000 pnpm test:e2e:mobile group-buy-landing --project=mobile-web --no-deps`.
+This journey creates no content and does not need the mobile/API services.

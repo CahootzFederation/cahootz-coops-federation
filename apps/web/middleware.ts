@@ -84,7 +84,7 @@ async function getHomepageVariant(
 
   if (!env.NEXT_PUBLIC_POSTHOG_KEY) {
     return {
-      variant: "community",
+      variant: "group-buy",
       distinctId,
       preview: requestedPreview === "auto" ? "auto" : null,
     };
@@ -101,17 +101,17 @@ async function getHomepageVariant(
     );
 
     return {
-      variant: variant ?? "community",
+      variant: variant ?? "group-buy",
       distinctId,
       preview: requestedPreview === "auto" ? "auto" : null,
     };
   } catch (error) {
     console.warn(
-      "Homepage feature flag evaluation failed; using community.",
+      "Homepage feature flag evaluation failed; using group-buy.",
       error,
     );
     return {
-      variant: "community",
+      variant: "group-buy",
       distinctId,
       preview: requestedPreview === "auto" ? "auto" : null,
     };

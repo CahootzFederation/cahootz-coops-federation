@@ -76,6 +76,16 @@ live (time so far, an estimate from the median of the last 20 finished
 searches, finds so far and the log, refreshed every 3 seconds) and the
 profile's last 10 searches with their logs.
 
+Admins can steer the bot two ways from **Find products now**. **What to look
+for this time** is a one-time hint (up to 1,000 characters, text and/or
+links): it goes first in that search's brief, is stored on the run
+(`ProductDiscoveryRun.hint`) and shown with it, and the bot still follows the
+profile, its exclusions and the Commons' charter and goals. **Edit what it
+looks for** changes the profile's standing brief (`searchPrompt`,
+`description`, `searchTerms`, `excludedTerms`) for every later search,
+scheduled ones included; each change is audited as
+`PRODUCT_DISCOVERY_PROFILE_UPDATED` with the before and after.
+
 Platform admins can also start an extra run from **Find products now** on the
 **Product ideas** tab (`/portal/admin/outreach`). It checks the profile is
 turned on and has no run in progress (a run stuck for over 30 minutes no longer

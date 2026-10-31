@@ -36,7 +36,8 @@
  *   ... item-discovery-used <runId>
  *     Turns the profile back on with a limit of 1 search a month and records one finished
  *     scheduled search this month that took 1m 35s, found 2 ideas and has a step-by-step log
- *     (so its monthly searches are used up) and, earlier, one extra search an admin started.
+ *     (so its monthly searches are used up) and, earlier, one extra search an admin started
+ *     with the hint "E2E bulk dish soap".
  *   ... item-discovery-live <runId>
  *     Records a search that's running now, 20 seconds in, with one web search in its log.
  *   ... item-discovery-finish <runId>
@@ -270,7 +271,7 @@ async function itemDiscoveryUsed(runId: string) {
           { at: at(95), kind: "step", text: "Done. 2 new ideas to review." },
         ],
       },
-      { profileId, idempotencyKey: `e2e:${runId}:extra`, status: "SUCCEEDED", trigger: "admin", query: "E2E", startedAt: earlier, finishedAt: earlier },
+      { profileId, idempotencyKey: `e2e:${runId}:extra`, status: "SUCCEEDED", trigger: "admin", query: "E2E", hint: "E2E bulk dish soap", startedAt: earlier, finishedAt: earlier },
     ],
   });
   return { used: true };

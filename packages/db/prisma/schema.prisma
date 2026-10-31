@@ -2727,6 +2727,8 @@ model ProductDiscoveryRun {
   trigger           String
   model             String?
   query             String                    @db.Text
+  // What an admin asked this one search to look for (text and/or links), if anything.
+  hint              String?                   @db.Text
   candidateCount    Int                       @default(0)
   savedProductCount Int                       @default(0)
   savedMatchCount   Int                       @default(0)

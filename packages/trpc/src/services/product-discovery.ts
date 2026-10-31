@@ -10,6 +10,7 @@ const PRODUCT_DISCOVERY_AGENT_KEY = "shared-price-product-discovery";
 const DEFAULT_MODEL = "gpt-5-nano";
 const MAX_SOURCE_TEXT_LENGTH = 2_000;
 const MAX_CHARTER_LENGTH = 4_000;
+export const MAX_HINT_LENGTH = 1_000;
 const MAX_GOALS = 12;
 // Strong deals that miss the charter or goals are kept for an admin to look at, a few per run.
 const MAX_OFF_GOAL_PER_RUN = 2;
@@ -297,9 +298,12 @@ export function scoreExistingProductForProfile(
   return Math.min(100, Math.round((matches.length / tokens.size) * 100));
 }
 
-function buildDiscoveryQuery(profile: DiscoveryProfile): string {
+export function buildDiscoveryQuery(profile: Pick<DiscoveryProfile, "searchPrompt" | "searchTerms" | "excludedTerms" | "maxCandidatesPerRun">, hint?: string | null): string {
   return [
     profile.searchPrompt,
+    hint
+      ? `For this search only, an admin asked you to look for: "${hint}". Start there and open any links they gave. Still follow the rest of this brief, the exclusions, and the Commons' charter and goals.`
+      : "",
     `Useful product themes: ${profile.searchTerms.join(", ") || "everyday essentials"}.`,
     profile.excludedTerms.length > 0
       ? `Exclude: ${profile.excludedTerms.join(", ")}.`
@@ -481,6 +485,7 @@ async function createRun(params: {
   trigger: string;
   model: string;
   query: string;
+  hint: string | null;
 }) {
   try {
     return {
@@ -493,6 +498,7 @@ async function createRun(params: {
           trigger: params.trigger,
           model: params.model,
           query: params.query,
+          hint: params.hint,
         },
       }),
     };
@@ -596,6 +602,8 @@ export async function runProductDiscoveryForProfile(params: {
    */
   trigger?: "scheduled" | "manual" | "admin";
   idempotencyKey?: string;
+  /** What an admin asked this one search to look for (text and/or links). */
+  hint?: string | null;
   now?: Date;
   provider?: ProductDiscoveryProvider;
   model?: string;
@@ -624,7 +632,8 @@ export async function runProductDiscoveryForProfile(params: {
   if (!profile.isEnabled)
     throw new Error(`Product discovery is disabled for ${profile.name}.`);
 
-  const query = buildDiscoveryQuery(profile);
+  const hint = params.hint ? cleanText(params.hint, MAX_HINT_LENGTH) || null : null;
+  const query = buildDiscoveryQuery(profile, hint);
   const model =
     params.model ?? process.env.PRODUCT_DISCOVERY_MODEL ?? DEFAULT_MODEL;
   const trigger = params.trigger ?? "manual";
@@ -638,6 +647,7 @@ export async function runProductDiscoveryForProfile(params: {
     trigger,
     model,
     query,
+    hint,
   });
   const runRecord = acquiredRun.run;
   if (!runRecord)
@@ -698,6 +708,7 @@ export async function runProductDiscoveryForProfile(params: {
       report({ kind: "step", text: `Added ${crossCommonsCount} idea${crossCommonsCount === 1 ? "" : "s"} other Commons use` });
     }
     const commons = await loadCommonsGoals(database, profile.coopId);
+    if (hint) report({ kind: "step", text: `Following your hint: ${cleanText(hint, 200)}` });
     report({
       kind: "step",
       text: commons ? "Searching the web with this Commons' charter and goals in mind" : "Searching the web",

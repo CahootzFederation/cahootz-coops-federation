@@ -4,6 +4,7 @@ import type { ProductDiscoveryCandidate } from "../services/product-discovery.js
 import {
   buildDiscoveryInput,
   buildDiscoveryInstructions,
+  buildDiscoveryQuery,
   limitSharedProductsBetweenCatalogs,
   listHomepageProductCatalogs,
   normalizePublicHttpUrl,
@@ -427,6 +428,21 @@ describe("product discovery", () => {
       "step: The bot returned 1 find. Saving them now.",
       "step: Done. 1 new idea to review.",
     ]);
+  });
+
+  it("puts an admin's one-time hint first in the brief and keeps it on the run", async () => {
+    const updates: Array<Record<string, unknown>> = [];
+    const database = simpleDatabase(updates);
+    const provider = { discover: vi.fn().mockResolvedValue({ candidates: [] }) };
+    await runProductDiscoveryForProfile({
+      profileKey: "traveler", trigger: "admin", idempotencyKey: "hint", hint: "  rolling carry-on bags  ", now: NOW, database: database as never, provider,
+    });
+    expect(database.productDiscoveryRun.create).toHaveBeenCalledWith({ data: expect.objectContaining({ hint: "rolling carry-on bags" }) });
+    expect(provider.discover.mock.calls[0][0].query).toContain('an admin asked you to look for: "rolling carry-on bags"');
+    const final = updates.find((u) => u.status === "SUCCEEDED")!;
+    expect((final.progress as Array<{ text: string }>).map((e) => e.text)).toContain("Following your hint: rolling carry-on bags");
+
+    expect(buildDiscoveryQuery({ searchPrompt: "Find gear", searchTerms: [], excludedTerms: [], maxCandidatesPerRun: 4 })).not.toContain("admin asked");
   });
 
   it("reads web searches and page visits from the model's live stream", () => {

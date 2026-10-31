@@ -27,6 +27,10 @@ export async function listDiscoveryProfilesForAdmin(db: Db, now = new Date()) {
       coopId: true,
       isEnabled: true,
       monthlyRunLimit: true,
+      description: true,
+      searchPrompt: true,
+      searchTerms: true,
+      excludedTerms: true,
       discoveryRuns: {
         orderBy: { startedAt: "desc" },
         take: 1,
@@ -68,7 +72,10 @@ export async function listDiscoveryProfilesForAdmin(db: Db, now = new Date()) {
   });
 }
 
-export const startDiscoveryRunSchema = z.object({ profileKey: z.string().trim().min(1).max(100) });
+export const startDiscoveryRunSchema = z.object({
+  profileKey: z.string().trim().min(1).max(100),
+  hint: z.string().trim().max(1_000, "Keep the hint under 1,000 characters.").optional(),
+});
 
 /**
  * Start an extra product-discovery run for one profile from the admin page and
@@ -80,9 +87,11 @@ export async function startProductDiscoveryRun(
   db: Db,
   actorId: string,
   raw: z.input<typeof startDiscoveryRunSchema>,
-  options: { now?: Date; dispatch?: (profileKey: string, requestId: string) => Promise<void> } = {},
+  options: { now?: Date; dispatch?: (profileKey: string, requestId: string, hint: string | undefined) => Promise<void> } = {},
 ) {
-  const { profileKey } = startDiscoveryRunSchema.parse(raw);
+  const parsed = startDiscoveryRunSchema.parse(raw);
+  const { profileKey } = parsed;
+  const hint = parsed.hint || undefined;
   const now = options.now ?? new Date();
   const profile = await db.commonsProductProfile.findUnique({
     where: { key: profileKey },
@@ -99,14 +108,17 @@ export async function startProductDiscoveryRun(
   if (running) throw new TRPCError({ code: "CONFLICT", message: `A product search for ${profile.name} is already running. Give it a few minutes.` });
 
   const requestId = `admin:${profile.key}:${randomUUID()}`;
-  await (options.dispatch ?? dispatchProductDiscovery)(profile.key, requestId);
+  await (options.dispatch ?? dispatchProductDiscovery)(profile.key, requestId, hint);
   await db.auditLog.create({
-    data: auditLogEntry({ actorId, action: "PRODUCT_DISCOVERY_STARTED", resource: "CommonsProductProfile", resourceId: profile.id, metadata: { requestId } }),
+    data: auditLogEntry({
+      actorId, action: "PRODUCT_DISCOVERY_STARTED", resource: "CommonsProductProfile", resourceId: profile.id,
+      metadata: { requestId, ...(hint ? { hint } : {}) },
+    }),
   });
   return { ok: true as const, profileName: profile.name };
 }
 
-async function dispatchProductDiscovery(profileKey: string, requestId: string) {
+async function dispatchProductDiscovery(profileKey: string, requestId: string, hint: string | undefined) {
   if (useLocalFallback()) {
     // A serverless request can't outlive its response, so production needs Trigger.
     if (process.env.NODE_ENV === "production") {
@@ -116,13 +128,13 @@ async function dispatchProductDiscovery(profileKey: string, requestId: string) {
       });
     }
     const { runProductDiscoveryForProfile } = await import("../product-discovery.js");
-    void runProductDiscoveryForProfile({ profileKey, trigger: "admin", idempotencyKey: requestId }).catch((error) => {
+    void runProductDiscoveryForProfile({ profileKey, trigger: "admin", idempotencyKey: requestId, hint }).catch((error) => {
       console.error("[product discovery] local run failed", error);
     });
     return;
   }
   const { tasks } = await import("@trigger.dev/sdk");
-  await tasks.trigger("run-product-discovery", { profileKey, requestId, source: "admin" }, { idempotencyKey: requestId, idempotencyKeyTTL: "1h" });
+  await tasks.trigger("run-product-discovery", { profileKey, requestId, source: "admin", ...(hint ? { hint } : {}) }, { idempotencyKey: requestId, idempotencyKeyTTL: "1h" });
 }
 
 const HISTORY_SIZE = 10;
@@ -144,7 +156,7 @@ export async function listDiscoveryRunsForAdmin(db: Db, rawProfileKey: string, n
       take: HISTORY_SIZE,
       select: {
         id: true, status: true, trigger: true, startedAt: true, finishedAt: true,
-        candidateCount: true, savedMatchCount: true, error: true, progress: true,
+        candidateCount: true, savedMatchCount: true, error: true, progress: true, hint: true,
       },
     }),
     db.productDiscoveryRun.findMany({
@@ -170,3 +182,46 @@ export async function listDiscoveryRunsForAdmin(db: Db, rawProfileKey: string, n
     })),
   };
 }
+
+const termList = z
+  .array(z.string().trim().min(1).max(60, "Keep each word or phrase under 60 characters."))
+  .max(20, "Use 20 or fewer.");
+
+export const updateDiscoveryProfileSchema = z.object({
+  profileKey: z.string().trim().min(1).max(100),
+  searchPrompt: z.string().trim().min(10, "Say what to find in at least a few words.").max(1_000, "Keep what to find under 1,000 characters."),
+  description: z.string().trim().min(3, "Add a short line about who this is for.").max(500, "Keep the description under 500 characters."),
+  searchTerms: termList,
+  excludedTerms: termList,
+});
+
+/**
+ * Change what the product bot looks for on one profile: its brief, description,
+ * themes and never-suggest list. Every later search uses it, scheduled ones too.
+ * The before and after go in the audit log.
+ */
+export async function updateDiscoveryProfile(db: Db, actorId: string, raw: z.input<typeof updateDiscoveryProfileSchema>) {
+  const input = updateDiscoveryProfileSchema.parse(raw);
+  const unique = (terms: string[]) => [...new Map(terms.map((term) => [term.toLowerCase(), term])).values()];
+  const profile = await db.commonsProductProfile.findUnique({
+    where: { key: input.profileKey },
+    select: { id: true, name: true, searchPrompt: true, description: true, searchTerms: true, excludedTerms: true },
+  });
+  if (!profile) throw new TRPCError({ code: "NOT_FOUND", message: "We couldn't find that product profile. Refresh and try again." });
+  const next = {
+    searchPrompt: input.searchPrompt,
+    description: input.description,
+    searchTerms: unique(input.searchTerms),
+    excludedTerms: unique(input.excludedTerms),
+  };
+  await db.commonsProductProfile.update({ where: { id: profile.id }, data: next });
+  const { id, name, ...before } = profile;
+  await db.auditLog.create({
+    data: auditLogEntry({
+      actorId, action: "PRODUCT_DISCOVERY_PROFILE_UPDATED", resource: "CommonsProductProfile", resourceId: id,
+      metadata: { before, after: next },
+    }),
+  });
+  return { ok: true as const, profileName: name };
+}
+

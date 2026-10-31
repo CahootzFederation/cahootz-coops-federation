@@ -165,10 +165,32 @@ test("an admin starts an extra product search from Product ideas, outside the mo
     await finder.getByLabel("Profile").selectOption({ label: profile });
     await expect(finder.getByText("0 of 5 scheduled searches used this month. Never searched yet.")).toBeVisible();
 
+    // Changing what the bot looks for on the profile sticks for later searches.
+    const brief = finder.getByRole("group", { name: "Edit what it looks for" });
+    await brief.getByText("Edit what it looks for").click();
+    // Too short a brief is turned down with a plain reason.
+    await brief.getByLabel("What to find").fill("Soap");
+    await brief.getByRole("button", { name: "Save what it looks for" }).click();
+    await expect(admin.getByText("Say what to find in at least a few words.")).toBeVisible();
+    await brief.getByLabel("What to find").fill("Find bulk dish soap and laundry basics with public case prices.");
+    await brief.getByLabel("Themes (separate with commas)").fill("laundry, E2E dish soap");
+    await brief.getByRole("button", { name: "Save what it looks for" }).click();
+    await expect(admin.getByText(`Saved. Searches for ${profile} will use this from now on.`)).toBeVisible();
+    await admin.reload();
+    await admin.getByRole("tab", { name: /product ideas/ }).click();
+    await finder.getByLabel("Profile").selectOption({ label: profile });
+    await brief.getByText("Edit what it looks for").click();
+    await expect(brief.getByLabel("What to find")).toHaveValue("Find bulk dish soap and laundry basics with public case prices.");
+    await expect(brief.getByLabel("Themes (separate with commas)")).toHaveValue("laundry, E2E dish soap");
+    const hintBox = finder.getByLabel("What to look for this time (optional)");
+    await hintBox.fill("E2E bulk dish soap");
+
     // Turned off after the page loaded: the click reaches the server, which says no without running the bot.
     fixture(["item-discovery-off", run]);
     await finder.getByRole("button", { name: "Find products" }).click();
     await expect(admin.getByText(`Product search is turned off for ${profile}, so it can't run.`)).toBeVisible();
+    // A refused start keeps the hint, so it isn't lost.
+    await expect(hintBox).toHaveValue("E2E bulk dish soap");
 
     // With the month's scheduled searches used up, an admin can still search: extras are counted apart.
     fixture(["item-discovery-used", run]);
@@ -180,6 +202,9 @@ test("an admin starts an extra product search from Product ideas, outside the mo
 
     // Past searches keep their step-by-step log: how long it took, what it searched and what it found.
     const past = finder.getByRole("group", { name: "Past searches" });
+    // An admin's extra search shows what they asked it to look for.
+    await past.getByText(/Started here · nothing new/).click();
+    await expect(past.getByText("You asked for: E2E bulk dish soap")).toBeVisible();
     await past.getByText(/Scheduled · took 1m 35s · 2 new ideas/).click();
     await expect(past.getByText("1 search · 1 page opened · 1 find noted · 2 returned")).toBeVisible();
     await expect(past.getByText("Searched “E2E bulk laundry pods”")).toBeVisible();

@@ -133,6 +133,10 @@ interface DiscoveryProfile {
   coopId: string | null;
   isEnabled: boolean;
   monthlyRunLimit: number;
+  description: string;
+  searchPrompt: string;
+  searchTerms: string[];
+  excludedTerms: string[];
   runsThisMonth: number;
   extraRunsThisMonth: number;
   running: boolean;
@@ -162,6 +166,7 @@ interface DiscoveryRun {
   savedMatchCount: number;
   error: string | null;
   progress: ProgressEntry[];
+  hint: string | null;
   running: boolean;
   seconds: number | null;
 }
@@ -849,11 +854,61 @@ function ProgressLog({ run }: { run: DiscoveryRun }) {
   );
 }
 
+const toList = (text: string) => text.split(/[,\n]/).map((part) => part.trim()).filter(Boolean);
+
+/** Change what the bot looks for on a profile. Every later search uses it, scheduled ones too. */
+function BriefEditor({ profile, busy, post }: { profile: DiscoveryProfile; busy: boolean; post: Post }) {
+  const [searchPrompt, setSearchPrompt] = useState(profile.searchPrompt);
+  const [description, setDescription] = useState(profile.description);
+  const [themes, setThemes] = useState(profile.searchTerms.join(', '));
+  const [never, setNever] = useState(profile.excludedTerms.join(', '));
+  return (
+    <details className="mt-3 rounded-md border border-white/10 bg-black/20 px-3 py-2" aria-label="Edit what it looks for">
+      <summary className="cursor-pointer text-xs font-semibold text-slate-200">Edit what it looks for</summary>
+      <p className="mt-2 text-xs text-slate-400">
+        This is {profile.name}&apos;s standing brief. Changes apply to every search from now on, including the weekly ones.
+      </p>
+      <div className="mt-2 grid gap-3">
+        <label className="text-xs text-slate-300">
+          What to find
+          <textarea className={`${input} min-h-[64px]`} maxLength={1000} value={searchPrompt} onChange={(e) => setSearchPrompt(e.target.value)} />
+        </label>
+        <label className="text-xs text-slate-300">
+          Who it&apos;s for
+          <input className={input} maxLength={500} value={description} onChange={(e) => setDescription(e.target.value)} />
+        </label>
+        <label className="text-xs text-slate-300">
+          Themes (separate with commas)
+          <input className={input} value={themes} onChange={(e) => setThemes(e.target.value)} />
+        </label>
+        <label className="text-xs text-slate-300">
+          Never suggest (separate with commas)
+          <input className={input} value={never} onChange={(e) => setNever(e.target.value)} />
+        </label>
+      </div>
+      <button
+        className={`${primary} mt-3`}
+        disabled={busy}
+        onClick={() =>
+          post(
+            '/api/admin/outreach/discovery/profile',
+            { profileKey: profile.key, searchPrompt, description, searchTerms: toList(themes), excludedTerms: toList(never) },
+            `Saved. Searches for ${profile.name} will use this from now on.`,
+          )
+        }
+      >
+        Save what it looks for
+      </button>
+    </details>
+  );
+}
+
 /** Start the product discovery bot for one Commons profile now, watch it work, and look back at past searches. */
 function FindProducts({ profiles, busy, post, onFinished }: { profiles: DiscoveryProfile[]; busy: boolean; post: Post; onFinished: () => void }) {
   const [key, setKey] = useState(() => profiles.find((p) => p.isEnabled)?.key ?? profiles[0]?.key ?? '');
   const [history, setHistory] = useState<{ estimateSeconds: number | null; runs: DiscoveryRun[] } | null>(null);
   const [waitingSince, setWaitingSince] = useState<number | null>(null);
+  const [hint, setHint] = useState('');
   const [now, setNow] = useState(() => Date.now());
   const watchedRun = useRef<string | null>(null);
   const profile = profiles.find((p) => p.key === key);
@@ -933,8 +988,10 @@ function FindProducts({ profiles, busy, post, onFinished }: { profiles: Discover
           disabled={busy || !profile || !profile.isEnabled || profile.running || watching}
           onClick={async () => {
             const asked = Date.now();
-            if (await post('/api/admin/outreach/discovery', { profileKey: key }, `Searching for products for ${profile?.name}. You can watch it below.`)) {
+            const body = hint.trim() ? { profileKey: key, hint: hint.trim() } : { profileKey: key };
+            if (await post('/api/admin/outreach/discovery', body, `Searching for products for ${profile?.name}. You can watch it below.`)) {
               setWaitingSince(asked);
+              setHint('');
               refresh();
             }
           }}
@@ -942,12 +999,27 @@ function FindProducts({ profiles, busy, post, onFinished }: { profiles: Discover
           Find products
         </button>
       </div>
+      <label className="mt-3 block text-xs text-slate-300">
+        What to look for this time (optional)
+        <textarea
+          className={`${input} min-h-[64px]`}
+          maxLength={1000}
+          value={hint}
+          onChange={(e) => setHint(e.target.value)}
+          placeholder="For example: bulk diapers and wipes, rice and beans for church meals, or paste a supplier's page"
+        />
+      </label>
+      <p className="mt-1 text-xs text-slate-500">
+        Just for this search. The bot starts here, opens any links you paste, and still follows the profile and the Commons&apos; goals.
+      </p>
       {profile && (
         <p className="mt-2 text-xs text-slate-400">
           {profile.runsThisMonth} of {profile.monthlyRunLimit} scheduled searches used this month
           {profile.extraRunsThisMonth > 0 ? `, plus ${profile.extraRunsThisMonth} extra started here` : ''}. {live || waitingSince ? '' : lastRunText(profile)}
         </p>
       )}
+
+      {profile && <BriefEditor key={profile.key} profile={profile} busy={busy} post={post} />}
 
       {waitingSince !== null && !live && (
         <p className="mt-3 flex items-center gap-2 text-sm text-slate-200" role="status">
@@ -965,6 +1037,7 @@ function FindProducts({ profiles, busy, post, onFinished }: { profiles: Discover
             </span>
             <span className="text-emerald-200">· {finds} find{finds === 1 ? '' : 's'} so far</span>
           </p>
+          {live.hint && <p className="mt-2 text-xs text-slate-300">You asked for: {live.hint}</p>}
           <div className="mt-2">
             <ProgressLog run={live} />
           </div>
@@ -983,6 +1056,7 @@ function FindProducts({ profiles, busy, post, onFinished }: { profiles: Discover
                     {run.seconds ? ` · took ${duration(run.seconds)}` : ''} · <span className={run.status === 'SUCCEEDED' ? 'text-emerald-200' : 'text-amber-200'}>{runSummary(run)}</span>
                   </summary>
                   <div className="mt-2 space-y-2">
+                    {run.hint && <p className="text-xs text-slate-300">You asked for: {run.hint}</p>}
                     {run.progress.length > 0 && (
                       <p className="text-xs text-slate-500">
                         {[

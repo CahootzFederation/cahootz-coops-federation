@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { listDiscoveryProfilesForAdmin, listDiscoveryRunsForAdmin, startProductDiscoveryRun } from "../services/vendor-outreach/product-runs.js";
+import {
+  listDiscoveryProfilesForAdmin,
+  listDiscoveryRunsForAdmin,
+  startProductDiscoveryRun,
+  updateDiscoveryProfile,
+} from "../services/vendor-outreach/product-runs.js";
 
 const NOW = new Date("2026-11-03T15:00:00Z");
 const MINUTE = 60_000;
@@ -51,16 +56,16 @@ function fakeDb(profiles: Array<Record<string, unknown>>, runs: Run[]) {
 const traveler = { id: "p-traveler", key: "traveler", name: "Traveler", coopId: "travel", isEnabled: true, monthlyRunLimit: 2 };
 
 describe("starting product discovery from the admin page", () => {
-  let dispatch: ReturnType<typeof vi.fn<(profileKey: string, requestId: string) => Promise<void>>>;
+  let dispatch: ReturnType<typeof vi.fn<(profileKey: string, requestId: string, hint: string | undefined) => Promise<void>>>;
   beforeEach(() => {
-    dispatch = vi.fn(async (_profileKey: string, _requestId: string) => undefined);
+    dispatch = vi.fn(async (_profileKey: string, _requestId: string, _hint: string | undefined) => undefined);
   });
 
   it("hands the run to the job and records who started it", async () => {
     const db = fakeDb([traveler], []);
     const result = await startProductDiscoveryRun(db as any, "admin-1", { profileKey: "traveler" }, { now: NOW, dispatch });
     expect(result).toEqual({ ok: true, profileName: "Traveler" });
-    expect(dispatch).toHaveBeenCalledWith("traveler", expect.stringMatching(/^admin:traveler:/));
+    expect(dispatch).toHaveBeenCalledWith("traveler", expect.stringMatching(/^admin:traveler:/), undefined);
     expect(db.audits).toEqual([expect.objectContaining({ actorId: "admin-1", action: "PRODUCT_DISCOVERY_STARTED", resourceId: "p-traveler" })]);
   });
 
@@ -134,5 +139,65 @@ describe("starting product discovery from the admin page", () => {
       ["old", false, 0, 0],
     ]);
     await expect(listDiscoveryRunsForAdmin({ commonsProductProfile: { findUnique: vi.fn(async () => null) } } as any, "nope", NOW)).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("passes a one-time hint to the search and records it, and turns down one that's too long", async () => {
+    const db = fakeDb([traveler], []);
+    await startProductDiscoveryRun(db as any, "admin-1", { profileKey: "traveler", hint: "  bulk diapers and wipes  " }, { now: NOW, dispatch });
+    expect(dispatch).toHaveBeenCalledWith("traveler", expect.any(String), "bulk diapers and wipes");
+    expect(db.audits).toEqual([expect.objectContaining({ metadata: expect.objectContaining({ hint: "bulk diapers and wipes" }) })]);
+
+    // A blank hint is the same as none.
+    await startProductDiscoveryRun(fakeDb([traveler], []) as any, "admin-1", { profileKey: "traveler", hint: "   " }, { now: NOW, dispatch });
+    expect(dispatch).toHaveBeenLastCalledWith("traveler", expect.any(String), undefined);
+
+    await expect(
+      startProductDiscoveryRun(fakeDb([traveler], []) as any, "admin-1", { profileKey: "traveler", hint: "x".repeat(1_001) }, { now: NOW, dispatch }),
+    ).rejects.toMatchObject({ issues: [expect.objectContaining({ message: "Keep the hint under 1,000 characters." })] });
+  });
+
+  it("lets an admin change what a profile looks for, keeps the before and after, and checks the input", async () => {
+    const updates: unknown[] = [];
+    const audits: any[] = [];
+    const db = {
+      commonsProductProfile: {
+        findUnique: vi.fn(async ({ where }: any) =>
+          where.key === "family"
+            ? { id: "p-family", name: "Family Commons", searchPrompt: "Find household staples", description: "Families", searchTerms: ["household"], excludedTerms: [] }
+            : null,
+        ),
+        update: vi.fn(async (args: unknown) => updates.push(args)),
+      },
+      auditLog: { create: vi.fn(async ({ data }: any) => audits.push(data)) },
+    };
+    const result = await updateDiscoveryProfile(db as any, "admin-1", {
+      profileKey: "family",
+      searchPrompt: "  Find bulk diapers, wipes and baby food with public case prices.  ",
+      description: "Young families",
+      searchTerms: ["diapers", " wipes ", "Diapers"],
+      excludedTerms: ["formula samples"],
+    });
+    expect(result).toEqual({ ok: true, profileName: "Family Commons" });
+    expect(updates).toEqual([{
+      where: { id: "p-family" },
+      data: {
+        searchPrompt: "Find bulk diapers, wipes and baby food with public case prices.",
+        description: "Young families",
+        searchTerms: ["Diapers", "wipes"],
+        excludedTerms: ["formula samples"],
+      },
+    }]);
+    expect(audits[0]).toMatchObject({
+      action: "PRODUCT_DISCOVERY_PROFILE_UPDATED",
+      resourceId: "p-family",
+      metadata: { before: { searchTerms: ["household"] }, after: { searchTerms: ["Diapers", "wipes"] } },
+    });
+
+    await expect(
+      updateDiscoveryProfile(db as any, "admin-1", { profileKey: "family", searchPrompt: "short", description: "Young families", searchTerms: [], excludedTerms: [] }),
+    ).rejects.toMatchObject({ issues: [expect.objectContaining({ message: "Say what to find in at least a few words." })] });
+    await expect(
+      updateDiscoveryProfile(db as any, "admin-1", { profileKey: "nope", searchPrompt: "Find household staples", description: "Families", searchTerms: [], excludedTerms: [] }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });

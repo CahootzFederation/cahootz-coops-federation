@@ -76,3 +76,35 @@ test("an admin approves Sage's campaign, a vendor says yes, and the admin takes 
     await vendorContext.close();
   }
 });
+
+test("an admin sets the mailing address outreach emails carry, and outreach never sends from a test copy", async ({ browser }) => {
+  const run = `${RUN}m`;
+  fixture(["postal-address-backup", run]);
+  const adminContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const admin = await adminContext.newPage();
+  try {
+    await signInAdmin(admin);
+    await admin.goto(`${ADMIN_BASE_URL}/portal/admin/outreach`);
+    await expect(admin.getByRole("heading", { name: "Vendor outreach" })).toBeVisible({ timeout: 60_000 });
+    const box = admin.getByRole("region", { name: "Mailing address" });
+    const field = box.getByLabel("Street, city, state and ZIP");
+
+    // Too little to be a real address is turned down with a plain reason.
+    await field.fill("Main St");
+    await box.getByRole("button", { name: "Save address" }).click();
+    await expect(admin.getByText("Add the full mailing address: street, city, state and ZIP.")).toBeVisible();
+
+    // Two typed lines are saved as one line for the email footer, and it's still there after a reload.
+    await field.fill(`E2E ${run} 1 Main Street\nTestville, CA 94000`);
+    await box.getByRole("button", { name: "Save address" }).click();
+    await expect(admin.getByText("Mailing address saved. Every outreach email will show it.")).toBeVisible();
+    await admin.reload();
+    await expect(field).toHaveValue(`E2E ${run} 1 Main Street, Testville, CA 94000`, { timeout: 60_000 });
+
+    // With the address set, a test copy still only saves previews, and says why.
+    await expect(admin.getByText("Email isn't sending yet: emails are saved as previews (dry run). Outreach only sends from the live site, never from a test or local copy.")).toBeVisible();
+  } finally {
+    await adminContext.close();
+    fixture(["postal-address-restore", run]);
+  }
+});

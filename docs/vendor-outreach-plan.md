@@ -1,6 +1,6 @@
 # Vendor finding and outreach: plan
 
-Status: approved 2026-10-26. Phases 1-5 are built. Real email sending waits on the outreach sender address, the reply inbox and the mailing address (until then emails are saved as dry runs). Bounce handling from Resend webhooks is not built yet.
+Status: approved 2026-10-26. Phases 1-5 are built. Real email sends only from the live site once the email service (`RESEND_API_KEY`) and the mailing address are set (until then emails are saved as dry runs). Bounce handling from Resend webhooks is not built yet.
 
 ## Goal
 
@@ -145,10 +145,11 @@ Code builds each email. Sage writes only one short personal paragraph.
 - If the check fails, the email goes out without the paragraph rather than with bad text.
 
 **Sending:**
-- **Sender:** a new outreach address on its own sending subdomain, separate from login codes and receipts, shown as "Cahootz Commons". A suggested address is `partners@deals.cahootzcoops.com`.
-  - Cold email gets more spam complaints than transactional mail. Keeping it on its own subdomain means a bad week of outreach can't push login codes into spam.
-  - Configured by two new env vars, approved by you: `RESEND_OUTREACH_FROM_EMAIL` (the sender) and `OUTREACH_REPLY_TO_EMAIL` (a real inbox the team reads, for example `partners@cahootzcoops.com`).
-  - Sending refuses to start until both are set and the mailing address is in `PlatformConfig`.
+- **Sender (changed 2026-11-01, user decision):** outreach comes from the same address as every other Cahootz email (`RESEND_FROM_EMAIL`, default `support@mail.cahootzcoops.com`), shown as "Cahootz Commons", and replies go to that address.
+  - `RESEND_OUTREACH_FROM_EMAIL` and `OUTREACH_REPLY_TO_EMAIL` are now optional. Set them to move outreach onto its own sender and reply inbox (for example `partners@deals.cahootzcoops.com`).
+  - The trade-off: cold email gets more spam complaints than transactional mail, so a bad week of outreach could push login codes into spam. Daily limits keep volume low; move to a separate sender if it grows.
+  - Real email only leaves the live site (`NODE_ENV=production`). Local copies, E2E runs and CI always save previews.
+  - Sending refuses to start until the mailing address is set. Platform admins set it in the **Mailing address** box on Vendor outreach (audited as `OUTREACH_POSTAL_ADDRESS_UPDATED`); migration `20261101010000_outreach_postal_address` sets it to 2261 Market Street STE 16357, San Francisco, CA 94114 if none is saved.
 - A new exported `sendVendorOutreachEmail` in `lib/email.ts` uses that sender and reply-to and adds the unsubscribe headers.
 - **The email links to one place:** the vendor reply page, which also explains how Group Buys work and how vendors get paid, so a vendor can learn about us before saying yes.
 - When Resend isn't configured (local runs and CI), messages are saved as DRY_RUN and not sent.
@@ -321,8 +322,8 @@ New feature keys (`vendor-outreach-research`, `vendor-outreach-draft`) are added
 
 ## Open decisions
 
-1. **Mailing address for the email footer.** US anti-spam law (CAN-SPAM) requires one. We'd keep it as a `PlatformConfig` value, and sending is refused until it's set.
-2. **The new sending address.** Pick the address and subdomain, add the DNS records Resend gives you (SPF, DKIM, and a DMARC policy) for that subdomain, and set up the reply inbox. This needs someone with DNS and Resend access.
+1. **Mailing address for the email footer.** Decided 2026-11-01: 2261 Market Street STE 16357, San Francisco, CA 94114, kept in `PlatformConfig` and editable on Vendor outreach.
+2. **The sending address.** Decided 2026-11-01: the usual Cahootz sender. Check that its address receives replies, or set `OUTREACH_REPLY_TO_EMAIL` to an inbox the team reads.
 3. **Disclosing automation.** The emails won't say they're automated. Some states, California for example, restrict bots that hide what they are in order to make a sale, so include this in the legal check. Never signing as a fake person keeps the risk low.
 4. **Limits.** Are 10 emails per campaign, 20 a day across the platform, and one follow-up the right defaults?
 5. **Personal email addresses.** If a business lists a personal-looking address (for example gmail), contact it or skip it?

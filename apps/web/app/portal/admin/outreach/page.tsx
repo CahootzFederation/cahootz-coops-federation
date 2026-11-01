@@ -232,6 +232,7 @@ export default function VendorOutreachPage() {
     sources: SourceRow[];
     funnel: Funnel;
     sendingLive: boolean;
+    sending: { senderReady: boolean; liveSite: boolean; postalAddress: string | null };
     categories: Category[];
     pricing: Pricing;
     discoveryProfiles: DiscoveryProfile[];
@@ -302,11 +303,16 @@ export default function VendorOutreachPage() {
 
       {data && !data.sendingLive && (
         <div className="rounded-[8px] border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
-          Email isn&apos;t sending yet: emails are saved as previews (dry run). Real sending starts once the outreach sender
-          (<code>RESEND_OUTREACH_FROM_EMAIL</code>, <code>OUTREACH_REPLY_TO_EMAIL</code>) and the mailing address
-          (platform setting <code>outreach.postalAddress</code>) are set.
+          Email isn&apos;t sending yet: emails are saved as previews (dry run).{' '}
+          {!data.sending.postalAddress
+            ? 'Add the mailing address below to start sending.'
+            : !data.sending.liveSite
+              ? 'Outreach only sends from the live site, never from a test or local copy.'
+              : <>The email service isn&apos;t set up here (<code>RESEND_API_KEY</code> is missing).</>}
         </div>
       )}
+
+      {data && <MailingAddress key={data.sending.postalAddress ?? ''} saved={data.sending.postalAddress} busy={busy} post={post} />}
 
       {f && (
         <section aria-label="Outreach funnel" className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
@@ -1086,6 +1092,31 @@ function FindProducts({ profiles, busy, post, onFinished }: { profiles: Discover
           </ul>
         </div>
       )}
+    </section>
+  );
+}
+
+/** The mailing address printed at the bottom of every outreach email. Outreach doesn't send without one. */
+function MailingAddress({ saved, busy, post }: { saved: string | null; busy: boolean; post: Post }) {
+  const [value, setValue] = useState(saved ?? '');
+  return (
+    <section className="rounded-[10px] border border-white/10 bg-white/[0.03] p-4" aria-label="Mailing address">
+      <p className="font-semibold text-white">Mailing address</p>
+      <p className="mt-1 text-xs text-slate-400">
+        US law requires a real mailing address in business emails, so it goes at the bottom of every outreach email, above the unsubscribe link.
+        Outreach emails come from the same address as your other Cahootz emails, and replies go there too.
+      </p>
+      <label className="mt-3 block text-xs text-slate-300">
+        Street, city, state and ZIP
+        <textarea className={input} rows={2} value={value} onChange={(e) => setValue(e.target.value)} placeholder="2261 Market Street STE 16357, San Francisco, CA 94114" />
+      </label>
+      <button
+        className={`${primary} mt-3`}
+        disabled={busy || !value.trim()}
+        onClick={() => post('/api/admin/outreach/settings/mailing-address', { postalAddress: value }, 'Mailing address saved. Every outreach email will show it.')}
+      >
+        Save address
+      </button>
     </section>
   );
 }

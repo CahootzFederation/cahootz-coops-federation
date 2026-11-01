@@ -33,6 +33,7 @@ export async function GET() {
       listDiscoveryProfilesForAdmin(db),
     ]);
     return NextResponse.json({ demand, campaigns, prospects, items, sources, funnel, sendingLive: settings.live,
+      sending: { senderReady: settings.senderReady, liveSite: settings.liveSite, postalAddress: settings.savedPostalAddress },
       pricing,
       discoveryProfiles,
       categories: DEAL_CATEGORIES.map(({ key, label }) => ({ key, label })),

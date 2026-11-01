@@ -49,6 +49,11 @@
  *   ... item-cleanup <runId>
  *     Deletes the items, their profile and discovery runs, seller search, draft offer and the business.
  *
+ *   ... postal-address-backup <runId>
+ *     Keeps a copy of the outreach mailing address (or that there was none) so the journey can change it.
+ *   ... postal-address-restore <runId>
+ *     Puts the mailing address back the way postal-address-backup found it.
+ *
  * Prints one JSON line prefixed with "E2E_RESULT ". Refuses production and non-local databases.
  */
 import { createHash } from "node:crypto";
@@ -350,10 +355,29 @@ async function itemCleanup(runId: string) {
   return { cleaned: true };
 }
 
+const POSTAL_KEY = "outreach.postalAddress";
+const NO_ADDRESS = "__none__";
+
+async function postalAddressBackup(runId: string) {
+  const row = await db.platformConfig.findUnique({ where: { key: POSTAL_KEY } });
+  await db.platformConfig.create({ data: { key: `e2e-backup:${runId}`, value: row?.value ?? NO_ADDRESS } });
+  return { backedUp: true };
+}
+
+async function postalAddressRestore(runId: string) {
+  const backup = await db.platformConfig.findUnique({ where: { key: `e2e-backup:${runId}` } });
+  if (!backup) return { restored: false };
+  if (backup.value === NO_ADDRESS) await db.platformConfig.deleteMany({ where: { key: POSTAL_KEY } });
+  else await db.platformConfig.upsert({ where: { key: POSTAL_KEY }, create: { key: POSTAL_KEY, value: backup.value }, update: { value: backup.value } });
+  await db.platformConfig.delete({ where: { key: backup.key } });
+  return { restored: true };
+}
+
 const COMMANDS: Record<string, (runId: string) => Promise<unknown>> = {
   setup, sweep, cleanup, "item-setup": itemSetup, "item-search": itemSearch, "item-sweep": itemSweep, "item-search-nowhere": itemSearchNowhere, "item-sweep-empty": itemSweepEmpty,
   "item-off-goal": itemOffGoal, "item-discovery-off": itemDiscoveryOff,
   "item-discovery-live": itemDiscoveryLive, "item-discovery-finish": itemDiscoveryFinish, "item-discovery-used": itemDiscoveryUsed, "item-cleanup": itemCleanup, "item-commons-picker": itemCommonsPicker,
+  "postal-address-backup": postalAddressBackup, "postal-address-restore": postalAddressRestore,
 };
 
 async function main() {

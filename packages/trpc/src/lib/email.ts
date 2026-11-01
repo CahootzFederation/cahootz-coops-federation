@@ -626,12 +626,22 @@ async function sendEmail({
 }
 
 /**
- * The outreach sender: a business email to a local vendor, from the separate
- * outreach address so outreach never affects delivery of login codes. Callers
- * must check outreachEmailReady() first; this throws when it isn't set up.
+ * The outreach sender: a business email to a local vendor. It comes from the
+ * same address as every other email, unless RESEND_OUTREACH_FROM_EMAIL sets a
+ * separate one (safer for login-code delivery if outreach volume grows).
+ * Replies go to OUTREACH_REPLY_TO_EMAIL, or else to the sender. It only sends
+ * from the live site. Callers must check outreachEmailReady() first; this
+ * throws when it isn't set up.
  */
 export function outreachEmailReady() {
-  return isEmailConfigured() && !!process.env.RESEND_OUTREACH_FROM_EMAIL && !!process.env.OUTREACH_REPLY_TO_EMAIL;
+  return process.env.NODE_ENV === "production" && isEmailConfigured();
+}
+
+export function outreachSender() {
+  const address = process.env.RESEND_OUTREACH_FROM_EMAIL?.trim() || env.RESEND_FROM_EMAIL || DEFAULT_FROM_EMAIL;
+  // A sender that already carries a display name ("Name <a@b>") is used as is.
+  const bare = address.match(/<([^>]+)>/)?.[1] ?? address;
+  return { from: address.includes("<") ? address : `Cahootz Commons <${address}>`, replyTo: process.env.OUTREACH_REPLY_TO_EMAIL?.trim() || bare };
 }
 
 export async function sendVendorOutreachEmail(input: {
@@ -642,14 +652,15 @@ export async function sendVendorOutreachEmail(input: {
   oneClickUnsubscribeUrl: string;
 }) {
   if (!outreachEmailReady()) throw new Error("Outreach email is not set up");
+  const sender = outreachSender();
   const resend = new Resend(env.RESEND_API_KEY);
   const result = await resend.emails.send({
-    from: `Cahootz Commons <${process.env.RESEND_OUTREACH_FROM_EMAIL}>`,
+    from: sender.from,
     to: input.to,
     subject: input.subject,
     html: input.html,
     text: input.text,
-    replyTo: process.env.OUTREACH_REPLY_TO_EMAIL,
+    replyTo: sender.replyTo,
     headers: {
       "List-Unsubscribe": `<${input.oneClickUnsubscribeUrl}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",

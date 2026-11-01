@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import { logger, schedules, task } from "@trigger.dev/sdk";
 
 import { db } from "../../../../packages/db/index.js";
+import { ensureCommonsProductProfiles } from "../../../../packages/trpc/src/services/commons-product-profiles.js";
 import { runProductDiscoveryForProfile } from "../../../../packages/trpc/src/services/product-discovery.js";
+
+// Runs go one after another and take a couple of minutes each, so one sweep
+// stops well inside its hour. Profiles left over run first the next day.
+const MAX_RUNS_PER_SWEEP = 20;
 
 function isDue(
   profile: { lastDiscoveredAt: Date | null; discoveryIntervalHours: number },
@@ -34,24 +39,34 @@ export const runProductDiscovery = task({
 });
 
 // The sweep runs daily but each profile owns its cadence and monthly call cap.
-// That lets a new Commons opt into weekly discovery without multiplying model
-// calls every time the platform adds another scheduled task.
+// Every Commons and family gets a profile here, so each one is searched about
+// weekly without adding another scheduled task per Commons.
 export const productDiscoverySweep = schedules.task({
   id: "product-discovery-sweep",
   cron: "20 13 * * *",
   maxDuration: 3_600,
   run: async () => {
     const now = new Date();
+    const createdProfiles = await ensureCommonsProductProfiles(db);
+    // Only profiles for an open, real Commons: anything else has no one to buy for.
+    const openCommons = await db.coopConfig.findMany({
+      where: { isActive: true, isDemo: false },
+      select: { coopId: true },
+    });
     const profiles = await db.commonsProductProfile.findMany({
-      where: { isEnabled: true },
+      where: {
+        isEnabled: true,
+        coopId: { in: [...new Set(openCommons.map(({ coopId }) => coopId))] },
+      },
       select: {
         key: true,
         name: true,
         lastDiscoveredAt: true,
         discoveryIntervalHours: true,
       },
-      orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
-      take: 100,
+      // Never-searched profiles first, then the longest-waiting.
+      orderBy: [{ lastDiscoveredAt: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }],
+      take: 500,
     });
     const outcomes: Array<{
       profileKey: string;
@@ -60,11 +75,17 @@ export const productDiscoverySweep = schedules.task({
       message?: string;
     }> = [];
 
+    let started = 0;
     for (const profile of profiles) {
       if (!isDue(profile, now)) {
         outcomes.push({ profileKey: profile.key, status: "not_due" });
         continue;
       }
+      if (started >= MAX_RUNS_PER_SWEEP) {
+        outcomes.push({ profileKey: profile.key, status: "deferred" });
+        continue;
+      }
+      started += 1;
 
       try {
         const result = await runProductDiscoveryForProfile({
@@ -96,6 +117,7 @@ export const productDiscoverySweep = schedules.task({
 
     logger.info("Product discovery sweep completed", {
       profileCount: profiles.length,
+      createdProfiles,
       dueCount: outcomes.filter(({ status }) => status !== "not_due").length,
       outcomes,
     });

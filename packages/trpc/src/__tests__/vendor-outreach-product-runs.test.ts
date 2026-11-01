@@ -12,8 +12,12 @@ const MINUTE = 60_000;
 
 interface Run { profileId: string; status: string; startedAt: Date; trigger?: string; savedMatchCount?: number }
 
-function fakeDb(profiles: Array<Record<string, unknown>>, runs: Run[]) {
+interface Config { coopId: string; name: string; joinPolicy?: string; isDemo?: boolean; isActive?: boolean; description?: string | null }
+
+function fakeDb(profiles: Array<Record<string, unknown>>, runs: Run[], configs: Config[] = []) {
   const audits: unknown[] = [];
+  const matchesCoop = (p: Record<string, unknown>, where: any) =>
+    !where?.coopId || (where.coopId.not === null ? p.coopId != null : true);
   const inWindow = (run: Run, where: any) =>
     (!where.profileId || run.profileId === where.profileId) &&
     (!where.status || run.status === where.status) &&
@@ -23,8 +27,12 @@ function fakeDb(profiles: Array<Record<string, unknown>>, runs: Run[]) {
     audits,
     commonsProductProfile: {
       findUnique: vi.fn(async ({ where }: any) => profiles.find((p) => p.key === where.key) ?? null),
-      findMany: vi.fn(async () =>
-        profiles.map((p) => ({
+      createMany: vi.fn(async ({ data }: any) => {
+        for (const row of data) profiles.push({ id: `p-${row.key}`, isEnabled: true, monthlyRunLimit: 5, ...row });
+        return { count: data.length };
+      }),
+      findMany: vi.fn(async ({ where }: any = {}) =>
+        profiles.filter((p) => matchesCoop(p, where)).map((p) => ({
           ...p,
           discoveryRuns: runs
             .filter((r) => r.profileId === p.id)
@@ -48,6 +56,15 @@ function fakeDb(profiles: Array<Record<string, unknown>>, runs: Run[]) {
           return { profileId, trigger, _count: { _all: n } };
         });
       }),
+    },
+    coopConfig: {
+      findMany: vi.fn(async ({ where }: any) =>
+        configs
+          .filter((c) => (c.isActive ?? true) === where.isActive)
+          .filter((c) => where.isDemo === undefined || (c.isDemo ?? false) === where.isDemo)
+          .filter((c) => !where.coopId?.in || where.coopId.in.includes(c.coopId))
+          .map((c) => ({ joinPolicy: "APPLICATION_REQUIRED", isDemo: false, description: null, displayMission: null, ...c })),
+      ),
     },
     auditLog: { create: vi.fn(async ({ data }: any) => audits.push(data)) },
   };
@@ -98,19 +115,50 @@ describe("starting product discovery from the admin page", () => {
     expect(db.audits).toEqual([]);
   });
 
-  it("lists each profile's scheduled usage, its extra searches and its latest run", async () => {
-    const family = { id: "p-family", key: "family", name: "Family", coopId: null, isEnabled: true, monthlyRunLimit: 5 };
+  it("lists each Commons' scheduled usage, its extra searches and its latest run", async () => {
+    const family = { id: "p-family", key: "family", name: "Family", coopId: "fam-1", isEnabled: true, monthlyRunLimit: 5 };
     const db = fakeDb([traveler, family], [
       { profileId: "p-traveler", status: "SUCCEEDED", startedAt: new Date(NOW.getTime() - 90 * MINUTE), savedMatchCount: 3 },
       { profileId: "p-traveler", status: "SUCCEEDED", trigger: "admin", startedAt: new Date(NOW.getTime() - 60 * MINUTE) },
       { profileId: "p-traveler", status: "RUNNING", startedAt: new Date(NOW.getTime() - 2 * MINUTE) },
+    ], [
+      { coopId: "travel", name: "Traveler Commons" },
+      { coopId: "fam-1", name: "The Robinsons", joinPolicy: "INVITE_ONLY" },
     ]);
     const rows = await listDiscoveryProfilesForAdmin(db as any, NOW);
     expect(rows).toEqual([
-      expect.objectContaining({ key: "traveler", runsThisMonth: 1, extraRunsThisMonth: 1, running: true, latestRun: expect.objectContaining({ status: "RUNNING" }) }),
-      expect.objectContaining({ key: "family", runsThisMonth: 0, extraRunsThisMonth: 0, running: false, latestRun: null }),
+      expect.objectContaining({ key: "traveler", name: "Traveler Commons", isFamily: false, runsThisMonth: 1, extraRunsThisMonth: 1, running: true, latestRun: expect.objectContaining({ status: "RUNNING" }) }),
+      expect.objectContaining({ key: "family", name: "The Robinsons", isFamily: true, runsThisMonth: 0, extraRunsThisMonth: 0, running: false, latestRun: null }),
     ]);
     expect(rows[0]).not.toHaveProperty("id");
+  });
+
+  it("lists the real Commons and families: makes a profile for a Commons without one, and leaves out unlinked profiles and demos", async () => {
+    const orphan = { id: "p-planet", key: "planet", name: "Planet", coopId: null, isEnabled: true, monthlyRunLimit: 5 };
+    const demo = { id: "p-demo", key: "demo", name: "Demo", coopId: "demo-1", isEnabled: true, monthlyRunLimit: 5 };
+    const db = fakeDb([traveler, orphan, demo], [], [
+      { coopId: "travel", name: "Traveler Commons" },
+      { coopId: "demo-1", name: "Demo Commons", isDemo: true },
+      { coopId: "fam-2", name: "Granny Squad", joinPolicy: "INVITE_ONLY", description: "Keeping the family stocked." },
+      { coopId: "block-club", name: "Block Club" },
+    ]);
+    const rows = await listDiscoveryProfilesForAdmin(db as any, NOW);
+    expect(rows.map((row) => [row.name, row.isFamily])).toEqual([
+      ["Block Club", false],
+      ["Traveler Commons", false],
+      ["Granny Squad", true],
+    ]);
+    const made = db.commonsProductProfile.createMany.mock.calls[0]![0].data;
+    expect(made).toEqual([
+      expect.objectContaining({ key: "commons-fam-2", coopId: "fam-2", name: "Granny Squad", description: "Keeping the family stocked.", participantLabel: "family members" }),
+      expect.objectContaining({ key: "commons-block-club", coopId: "block-club", name: "Block Club", description: "Things Block Club members buy again and again." }),
+    ]);
+    // New profiles never go on the public homepage: families are private.
+    expect(made.every((row: any) => !("isHomepageVisible" in row))).toBe(true);
+
+    // Once every Commons has a profile, listing again makes no more.
+    await listDiscoveryProfilesForAdmin(db as any, NOW);
+    expect(db.commonsProductProfile.createMany).toHaveBeenCalledTimes(1);
   });
 
   it("shows a profile's past searches with their logs, and estimates time from recent finished searches", async () => {

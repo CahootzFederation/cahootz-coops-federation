@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db as defaultDb } from "@repo/db";
 
 import { auditLogEntry } from "../../lib/audit.js";
+import { ensureCommonsProductProfiles } from "../commons-product-profiles.js";
 import { useLocalFallback } from "../sage-dispatch.js";
 
 type Db = typeof defaultDb;
@@ -17,9 +18,15 @@ function startOfUtcMonth(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 }
 
-/** Each product-discovery profile with this month's usage and its latest run, for the Product ideas tab. */
+/**
+ * Every Commons and family's product profile with this month's usage and its
+ * latest run, for the Product ideas tab. A Commons without a profile gets one
+ * first. Profiles not linked to a Commons have no one to buy for, so they're left out.
+ */
 export async function listDiscoveryProfilesForAdmin(db: Db, now = new Date()) {
+  await ensureCommonsProductProfiles(db);
   const profiles = await db.commonsProductProfile.findMany({
+    where: { coopId: { not: null } },
     select: {
       id: true,
       key: true,
@@ -46,8 +53,15 @@ export async function listDiscoveryProfilesForAdmin(db: Db, now = new Date()) {
       },
     },
     orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
-    take: 100,
+    take: 500,
   });
+  const commons = await db.coopConfig.findMany({
+    where: { isActive: true, coopId: { in: profiles.map((profile) => profile.coopId!) } },
+    orderBy: { version: "desc" },
+    select: { coopId: true, name: true, joinPolicy: true, isDemo: true },
+  });
+  const commonsById = new Map<string, (typeof commons)[number]>();
+  for (const config of commons) if (!commonsById.has(config.coopId)) commonsById.set(config.coopId, config);
   const counts = await db.productDiscoveryRun.groupBy({
     by: ["profileId", "trigger"],
     where: { status: "SUCCEEDED", startedAt: { gte: startOfUtcMonth(now) } },
@@ -60,16 +74,21 @@ export async function listDiscoveryProfilesForAdmin(db: Db, now = new Date()) {
     const totals = row.trigger === "admin" ? extraByProfile : usedByProfile;
     totals.set(row.profileId, (totals.get(row.profileId) ?? 0) + row._count._all);
   }
-  return profiles.map(({ id, discoveryRuns, ...profile }) => {
+  return profiles.flatMap(({ id, discoveryRuns, ...profile }) => {
+    const config = commonsById.get(profile.coopId!);
+    // A Commons that was closed or is a demo isn't someone to buy for.
+    if (!config || config.isDemo) return [];
     const latest = discoveryRuns[0] ?? null;
-    return {
+    return [{
       ...profile,
+      name: config.name?.trim() || profile.name,
+      isFamily: config.joinPolicy === "INVITE_ONLY",
       runsThisMonth: usedByProfile.get(id) ?? 0,
       extraRunsThisMonth: extraByProfile.get(id) ?? 0,
       running: Boolean(latest && latest.status === "RUNNING" && now.getTime() - latest.startedAt.getTime() < RUN_STALE_MS),
       latestRun: latest,
-    };
-  });
+    }];
+  }).sort((a, b) => Number(a.isFamily) - Number(b.isFamily) || a.name.localeCompare(b.name));
 }
 
 export const startDiscoveryRunSchema = z.object({

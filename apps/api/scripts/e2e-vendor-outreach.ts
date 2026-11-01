@@ -15,7 +15,8 @@
  *   ... cleanup <runId>
  *     Deletes the run's question, campaign, business, messages and replies.
  *   ... item-setup <runId>
- *     Adds a product-discovery item for the run's commons ("E2E <runId> Laundry pods",
+ *     Makes the run's commons a real family, "E2E <runId> Families", with its product profile.
+ *     Adds a product-discovery item for it ("E2E <runId> Laundry pods",
  *     waiting for review, with price evidence) and a member-recommended
  *     "E2E <runId> Soap Shop" in "E2E Town <runId>" that sells household basics.
  *   ... item-search <runId>
@@ -31,6 +32,9 @@
  *   ... item-off-goal <runId>
  *     Adds a second item, "E2E <runId> Party cups", that the bot marked as not fitting the
  *     Commons' goals, with its reason.
+ *   ... item-commons-picker <runId>
+ *     Adds a second Commons, "E2E <runId> Neighbors", with no product profile yet, and a
+ *     profile "E2E <runId> Orphan profile" that isn't linked to any Commons.
  *   ... item-discovery-off <runId>
  *     Turns off product search for the run's profile, as if another admin just did.
  *   ... item-discovery-used <runId>
@@ -147,9 +151,25 @@ async function cleanup(runId: string) {
 
 const itemIds = (runId: string) => ({ profileId: `e2e-profile-${runId}`, productId: `e2e-item-${runId}`, sellerEmail: `soap-${runId}@e2e-vendor.test` });
 
+/** A minimal active Commons the admin Product ideas picker can list. */
+async function createCommons(coopId: string, name: string, joinPolicy: "INVITE_ONLY" | "APPLICATION_REQUIRED") {
+  await db.coopConfig.create({
+    data: {
+      coopId, version: 1, isActive: true, name, slug: coopId, isPrivate: true, joinPolicy,
+      charterText: `${name} buys household basics together.`,
+      missionGoals: [{ key: "cheaper_basics", label: "Cheaper household basics", priorityWeight: 1 }],
+      structuralWeights: { feasibility: 0.4, risk: 0.35, accountability: 0.25 },
+      scoreMix: { missionWeight: 0.6, structuralWeight: 0.4 },
+      proposalCategories: [{ key: "other", label: "Other", isActive: true }],
+      sectorExclusions: [], createdBy: "e2e",
+    },
+  });
+}
+
 async function itemSetup(runId: string) {
   const { profileId, productId, sellerEmail } = itemIds(runId);
   const sourceUrl = `https://e2e-supplier.test/${runId}/laundry-pods`;
+  await createCommons(coopFor(runId), `E2E ${runId} Families`, "INVITE_ONLY");
   await db.commonsProductProfile.create({
     data: {
       id: profileId, key: `e2e-${runId}`, coopId: coopFor(runId), name: `E2E ${runId} Families`, description: "E2E profile",
@@ -246,6 +266,17 @@ async function itemOffGoal(runId: string) {
   return { productId };
 }
 
+async function itemCommonsPicker(runId: string) {
+  await createCommons(`${coopFor(runId)}-neighbors`, `E2E ${runId} Neighbors`, "APPLICATION_REQUIRED");
+  await db.commonsProductProfile.create({
+    data: {
+      id: `e2e-orphan-profile-${runId}`, key: `e2e-orphan-${runId}`, name: `E2E ${runId} Orphan profile`,
+      description: "E2E profile with no Commons", participantLabel: "households", searchPrompt: "E2E", isEnabled: true,
+    },
+  });
+  return { added: true };
+}
+
 async function itemDiscoveryOff(runId: string) {
   await db.commonsProductProfile.update({ where: { id: itemIds(runId).profileId }, data: { isEnabled: false } });
   return { off: true };
@@ -312,14 +343,17 @@ async function itemCleanup(runId: string) {
   await db.vendorProspect.deleteMany({ where: { emailNormalized: sellerEmail } });
   await db.outreachSuppression.deleteMany({ where: { email: sellerEmail } });
   await db.sourcedProduct.deleteMany({ where: { id: { in: [productId, `e2e-offgoal-${runId}`] } } });
-  await db.commonsProductProfile.deleteMany({ where: { id: profileId } });
+  const coopIds = [coopFor(runId), `${coopFor(runId)}-neighbors`];
+  // The picker made a profile for the Neighbors Commons on its own.
+  await db.commonsProductProfile.deleteMany({ where: { OR: [{ id: { in: [profileId, `e2e-orphan-profile-${runId}`] } }, { coopId: { in: coopIds } }] } });
+  await db.coopConfig.deleteMany({ where: { coopId: { in: coopIds } } });
   return { cleaned: true };
 }
 
 const COMMANDS: Record<string, (runId: string) => Promise<unknown>> = {
   setup, sweep, cleanup, "item-setup": itemSetup, "item-search": itemSearch, "item-sweep": itemSweep, "item-search-nowhere": itemSearchNowhere, "item-sweep-empty": itemSweepEmpty,
   "item-off-goal": itemOffGoal, "item-discovery-off": itemDiscoveryOff,
-  "item-discovery-live": itemDiscoveryLive, "item-discovery-finish": itemDiscoveryFinish, "item-discovery-used": itemDiscoveryUsed, "item-cleanup": itemCleanup,
+  "item-discovery-live": itemDiscoveryLive, "item-discovery-finish": itemDiscoveryFinish, "item-discovery-used": itemDiscoveryUsed, "item-cleanup": itemCleanup, "item-commons-picker": itemCommonsPicker,
 };
 
 async function main() {

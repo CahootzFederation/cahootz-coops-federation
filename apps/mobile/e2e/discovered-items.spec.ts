@@ -142,6 +142,7 @@ test("an admin starts an extra product search from Product ideas, outside the mo
   const profile = `E2E ${run} Families`;
   fixture(["item-setup", run]);
   fixture(["item-off-goal", run]);
+  fixture(["item-commons-picker", run]);
   const adminContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const admin = await adminContext.newPage();
   try {
@@ -162,7 +163,15 @@ test("an admin starts an extra product search from Product ideas, outside the mo
     await expect(admin.getByLabel(offGoal).getByTestId("item-status")).toHaveText("Approved");
 
     const finder = admin.getByRole("region", { name: "Find products" });
-    await finder.getByLabel("Profile").selectOption({ label: profile });
+    // The picker lists the real Commons and families, not built-in profiles: a family sits
+    // under Families, a Commons with no profile yet gets one, and a profile with no Commons is left out.
+    const picker = finder.getByRole("combobox", { name: /^Commons/ });
+    await expect(picker.locator('optgroup[label="Families"] option', { hasText: profile })).toHaveCount(1);
+    await expect(picker.locator('optgroup[label="Commons"] option', { hasText: `E2E ${run} Neighbors` })).toHaveCount(1);
+    await expect(picker.locator("option", { hasText: `E2E ${run} Orphan profile` })).toHaveCount(0);
+    await picker.selectOption({ label: `E2E ${run} Neighbors` });
+    await expect(finder.getByText("0 of 5 scheduled searches used this month. Never searched yet.")).toBeVisible();
+    await picker.selectOption({ label: profile });
     await expect(finder.getByText("0 of 5 scheduled searches used this month. Never searched yet.")).toBeVisible();
 
     // Changing what the bot looks for on the profile sticks for later searches.
@@ -178,7 +187,7 @@ test("an admin starts an extra product search from Product ideas, outside the mo
     await expect(admin.getByText(`Saved. Searches for ${profile} will use this from now on.`)).toBeVisible();
     await admin.reload();
     await admin.getByRole("tab", { name: /product ideas/ }).click();
-    await finder.getByLabel("Profile").selectOption({ label: profile });
+    await finder.getByRole("combobox", { name: /^Commons/ }).selectOption({ label: profile });
     await brief.getByText("Edit what it looks for").click();
     await expect(brief.getByLabel("What to find")).toHaveValue("Find bulk dish soap and laundry basics with public case prices.");
     await expect(brief.getByLabel("Themes (separate with commas)")).toHaveValue("laundry, E2E dish soap");
@@ -196,7 +205,7 @@ test("an admin starts an extra product search from Product ideas, outside the mo
     fixture(["item-discovery-used", run]);
     await admin.reload();
     await admin.getByRole("tab", { name: /product ideas/ }).click();
-    await finder.getByLabel("Profile").selectOption({ label: profile });
+    await finder.getByRole("combobox", { name: /^Commons/ }).selectOption({ label: profile });
     await expect(finder.getByText(/1 of 1 scheduled searches used this month, plus 1 extra started here\. Last search .*: 2 new ideas\./)).toBeVisible({ timeout: 60_000 });
     await expect(finder.getByRole("button", { name: "Find products" })).toBeEnabled();
 
@@ -214,7 +223,7 @@ test("an admin starts an extra product search from Product ideas, outside the mo
     fixture(["item-discovery-live", run]);
     await admin.reload();
     await admin.getByRole("tab", { name: /product ideas/ }).click();
-    await finder.getByLabel("Profile").selectOption({ label: profile });
+    await finder.getByRole("combobox", { name: /^Commons/ }).selectOption({ label: profile });
     const live = finder.getByRole("status", { name: "Search progress" });
     await expect(live.getByText("Searching now")).toBeVisible({ timeout: 60_000 });
     await expect(live.getByTestId("search-elapsed")).toHaveText(/^\d+s so far$/);

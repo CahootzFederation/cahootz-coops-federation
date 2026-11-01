@@ -131,6 +131,7 @@ interface DiscoveryProfile {
   key: string;
   name: string;
   coopId: string | null;
+  isFamily: boolean;
   isEnabled: boolean;
   monthlyRunLimit: number;
   description: string;
@@ -911,13 +912,16 @@ function FindProducts({ profiles, busy, post, onFinished }: { profiles: Discover
   const [hint, setHint] = useState('');
   const [now, setNow] = useState(() => Date.now());
   const watchedRun = useRef<string | null>(null);
+  const shownKey = useRef(key);
+  shownKey.current = key;
   const profile = profiles.find((p) => p.key === key);
 
   const refresh = useCallback(() => {
     if (!key) return;
     fetch(`/api/admin/outreach/discovery?profileKey=${encodeURIComponent(key)}`)
       .then((response) => (response.ok ? response.json() : null))
-      .then((body) => body && setHistory(body))
+      // A slow answer for a Commons the admin has since switched away from is dropped.
+      .then((body) => body && shownKey.current === key && setHistory(body))
       .catch(() => undefined);
   }, [key]);
   useEffect(() => {
@@ -967,20 +971,27 @@ function FindProducts({ profiles, busy, post, onFinished }: { profiles: Discover
     <section className="rounded-[10px] border border-white/10 bg-white/[0.03] p-4" aria-label="Find products">
       <p className="font-semibold text-white">Find products now</p>
       <p className="mt-1 text-xs text-slate-400">
-        The bot searches the web for bulk deals that fit this profile and, when it&apos;s linked to a Commons, that Commons&apos; charter and goals.
-        It already runs on its own about once a week. Searches you start here are
+        Pick a Commons or family. The bot searches the web for bulk deals that fit its brief, charter and goals.
+        It already runs on its own about once a week for each one. Searches you start here are
         extra: they don&apos;t count toward the monthly limit or change the schedule. Anything it finds lands here as an idea for you to review.
         Members don&apos;t see it until you approve it and start a Group Buy.
       </p>
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <label className="text-xs text-slate-300">
-          Profile
+          Commons
           <select className={input} value={key} onChange={(e) => setKey(e.target.value)}>
-            {profiles.map((p) => (
-              <option key={p.key} value={p.key}>
-                {p.name}{p.isEnabled ? '' : ' (turned off)'}{p.coopId ? '' : ' (no Commons yet)'}
-              </option>
-            ))}
+            {([['Commons', false], ['Families', true]] as const).map(([label, family]) => {
+              const group = profiles.filter((p) => p.isFamily === family);
+              return group.length === 0 ? null : (
+                <optgroup key={label} label={label}>
+                  {group.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.name}{p.isEnabled ? '' : ' (turned off)'}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
           </select>
         </label>
         <button
@@ -1010,7 +1021,7 @@ function FindProducts({ profiles, busy, post, onFinished }: { profiles: Discover
         />
       </label>
       <p className="mt-1 text-xs text-slate-500">
-        Just for this search. The bot starts here, opens any links you paste, and still follows the profile and the Commons&apos; goals.
+        Just for this search. The bot starts here, opens any links you paste, and still follows its brief and the Commons&apos; goals.
       </p>
       {profile && (
         <p className="mt-2 text-xs text-slate-400">

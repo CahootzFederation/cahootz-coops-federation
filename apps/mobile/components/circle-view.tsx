@@ -1,3 +1,4 @@
+import { CommunityTheme } from '@/constants/theme';
 import type { CommonsDirectoryItem, PrivateGroupSummary } from '@/lib/api';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, TouchableOpacity, View } from 'react-native';
@@ -17,11 +18,11 @@ import { IconAvatar } from '@/components/icon-avatar';
 import { CheckCircle2, ChevronDown, Compass, Menu, MessageCircle, Settings2, LogIn, Star, X } from 'lucide-react-native';
 
 const THEME = {
-  ink: '#111827',
-  muted: '#6B7280',
-  primary: '#FF6B00',
-  primarySoft: '#FFF7ED',
-  border: '#E5E7EB',
+  ink: CommunityTheme.ink,
+  muted: CommunityTheme.muted,
+  primary: CommunityTheme.primary,
+  primarySoft: CommunityTheme.primarySoft,
+  border: CommunityTheme.border,
 };
 
 type CircleCard = PrivateGroupSummary | { general: true };
@@ -221,7 +222,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
           >
             <View className="mb-4 flex-row items-center justify-between">
               <View>
-                <Text className="text-2xl font-black text-gray-950">Switch commons</Text>
+                <Text className="text-2xl font-bold text-gray-950">Switch commons</Text>
                 <Text className="mt-1 text-sm font-semibold text-gray-500">
                   Choose a Commons to see its circles.
                 </Text>
@@ -273,7 +274,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
                           radius={12}
                         />
                         <View className="min-w-0 flex-1">
-                          <Text className="text-base font-black text-gray-950" numberOfLines={1}>
+                          <Text className="text-base font-bold text-gray-950" numberOfLines={1}>
                             {item.name}
                           </Text>
                           <Text className="mt-0.5 text-xs font-semibold text-gray-500">
@@ -323,7 +324,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
               accessibilityLabel="Explore all commons"
             >
               <Compass size={17} color={THEME.primary} />
-              <Text className="text-sm font-black" style={{ color: THEME.primary }}>
+              <Text className="text-sm font-bold" style={{ color: THEME.primary }}>
                 Explore all commons
               </Text>
             </TouchableOpacity>
@@ -348,7 +349,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
           accessibilityLabel={`Switch commons. Currently ${activeCommonsName}`}
         >
           <View className="flex-row items-center gap-1.5">
-            <Text className="min-w-0 flex-shrink text-lg font-black text-gray-950" numberOfLines={1}>
+            <Text className="min-w-0 flex-shrink text-lg font-bold text-gray-950" numberOfLines={1}>
               {activeCommonsName}
             </Text>
             {activeCommons?.isDefault ? <Star size={15} color="#D97706" fill="#FBBF24" /> : null}
@@ -382,7 +383,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
         keyboardShouldPersistTaps="handled"
       >
         <View className="px-5 pt-2">
-          <Text className="text-3xl font-black text-gray-950">Welcome In</Text>
+          <Text className="text-2xl font-bold text-gray-950">Welcome In</Text>
           <Text className="mt-1 text-base font-semibold text-gray-500">
             Choose a circle in {activeCommonsName}
           </Text>
@@ -449,7 +450,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
                   activeOpacity={0.8}
                 >
                   <View
-                    className="h-28 w-28 items-center justify-center rounded-full border-2 border-dashed"
+                    className="h-20 w-20 items-center justify-center rounded-full border-2 border-dashed"
                     style={{ borderColor: THEME.primary, backgroundColor: THEME.primarySoft }}
                   >
                     {isAssigning ? (
@@ -460,7 +461,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
                       <LogIn size={30} color={THEME.primary} />
                     )}
                   </View>
-                  <Text className="mt-3 text-center text-base font-black text-gray-900">
+                  <Text className="mt-3 text-center text-base font-bold text-gray-900">
                     {sessionToken ? 'Join a welcome lounge' : 'Sign in'}
                   </Text>
                   <Text className="mt-0.5 text-center text-xs font-semibold text-gray-500">
@@ -513,14 +514,9 @@ function CircleCardView({
       activeOpacity={0.8}
     >
       <View
-        className="h-28 w-28 items-center justify-center rounded-full"
+        className="h-20 w-20 items-center justify-center rounded-full"
         style={{
           backgroundColor: background,
-          shadowColor: '#0F172A',
-          shadowOpacity: 0.08,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 4 },
-          elevation: 2,
         }}
       >
         {iconEmoji ? (
@@ -529,14 +525,14 @@ function CircleCardView({
           <Text style={{ fontSize: 40, lineHeight: 52, textAlign: 'center' }}>{iconEmoji}</Text>
         ) : (
           <Text
-            className="text-3xl font-black"
+            className="text-3xl font-bold"
             style={{ color: iconColor ? '#FFFFFF' : palette.foreground }}
           >
             {name.slice(0, 1).toUpperCase()}
           </Text>
         )}
       </View>
-      <Text className="mt-3 text-center text-base font-black text-gray-900" numberOfLines={1}>
+      <Text className="mt-3 text-center text-base font-bold text-gray-900" numberOfLines={2}>
         {name}
       </Text>
       {hideStatus ? null : (

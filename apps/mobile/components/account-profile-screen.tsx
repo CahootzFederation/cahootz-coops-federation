@@ -1,15 +1,15 @@
+import { CommunityTheme } from '@/constants/theme';
 import React from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import {
   ArrowLeft,
   Award,
   Bell,
   Check,
   ChevronRight,
-  CircleEllipsis,
   Copy,
   HelpCircle,
   LogOut,
@@ -35,11 +35,11 @@ import { friendlyError } from '@/lib/friendly-error';
 import { canAccessUpdateChannelDebug } from '@/lib/update-channel-debug';
 
 const PROFILE_THEME = {
-  paper: '#F8FAFC',
-  primary: '#FF6B00',
-  primarySoft: '#FFF7ED',
-  border: '#F0F2F5',
-  muted: '#64748B',
+  paper: CommunityTheme.paper,
+  primary: CommunityTheme.primary,
+  primarySoft: CommunityTheme.primarySoft,
+  border: CommunityTheme.border,
+  muted: CommunityTheme.muted,
   success: '#16A34A',
 };
 
@@ -55,6 +55,7 @@ type NavItem = {
 export default function AccountProfileScreen() {
   const { user, login, logout, resetProfileOnboarding } = useAuth();
   const coin = useCoin();
+  const { coopId } = useLocalSearchParams<{ coopId?: string }>();
   const [copiedAddress, setCopiedAddress] = React.useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = React.useState(false);
   const [fundingBadges, setFundingBadges] = React.useState<any[]>([]);
@@ -74,7 +75,6 @@ export default function AccountProfileScreen() {
 
   const displayName = user?.nickname?.trim() || user?.name?.trim() || user?.email?.split('@')[0] || 'Member';
   const handle = user?.handle || user?.email?.split('@')[0]?.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() || 'member';
-  const commonsName = user?.coop?.name?.trim() || 'Your commons';
   const roleLabel = user?.roles?.join(', ') || 'Member';
   const statusLabel = user?.status?.toLowerCase() || 'active';
   const canUseUpdateDebug = canAccessUpdateChannelDebug(user?.email);
@@ -212,7 +212,7 @@ export default function AccountProfileScreen() {
       label: 'Alerts',
       description: 'Updates from your account activity',
       icon: Bell,
-      href: '/(tabs)/notifications',
+      href: coopId ? `/(tabs)/notifications?coopId=${encodeURIComponent(coopId)}` : '/(tabs)/notifications',
     },
     {
       label: 'Notification settings',
@@ -230,13 +230,13 @@ export default function AccountProfileScreen() {
       label: 'Community Board',
       description: 'Board posts and links to real Commons tools',
       icon: Store,
-      href: '/(tabs)/board',
+      href: coopId ? `/(tabs)/board?coopId=${encodeURIComponent(coopId)}` : '/(tabs)/board',
     },
     {
       label: 'Governance Proposals',
       description: 'Votes, drafts, and member decisions',
       icon: Vote,
-      href: '/(tabs)/proposals',
+      href: coopId ? `/(tabs)/proposals?coopId=${encodeURIComponent(coopId)}` : '/(tabs)/proposals',
     },
     {
       label: 'Privacy & Security',
@@ -299,9 +299,9 @@ export default function AccountProfileScreen() {
               <ArrowLeft size={18} color="#1F2937" strokeWidth={2.6} />
             </TouchableOpacity>
             <View className="min-w-0 flex-1">
-              <Text className="text-[10px] font-black uppercase text-gray-500">You</Text>
-              <Text className="text-base font-black text-gray-950" numberOfLines={1}>
-                {commonsName}
+              <Text className="text-[10px] font-bold uppercase text-gray-500">You</Text>
+              <Text className="text-base font-bold text-gray-950" numberOfLines={1}>
+                Your account
               </Text>
             </View>
             <View className="h-9 w-9 items-center justify-center rounded-xl" style={{ backgroundColor: PROFILE_THEME.primary }}>
@@ -314,12 +314,12 @@ export default function AccountProfileScreen() {
           <View className="rounded-2xl border bg-white p-5" style={{ borderColor: PROFILE_THEME.border }}>
             <View className="flex-row items-center gap-4">
               <View className="h-16 w-16 items-center justify-center rounded-2xl" style={{ backgroundColor: PROFILE_THEME.primarySoft }}>
-                <Text className="text-2xl font-black" style={{ color: PROFILE_THEME.primary }}>
+                <Text className="text-2xl font-bold" style={{ color: PROFILE_THEME.primary }}>
                   {displayName.slice(0, 1).toUpperCase()}
                 </Text>
               </View>
               <View className="min-w-0 flex-1">
-                <Text className="text-xl font-black text-gray-950" numberOfLines={1}>
+                <Text className="text-xl font-bold text-gray-950" numberOfLines={1}>
                   {displayName}
                 </Text>
                 {user?.nickname && user?.name ? (
@@ -329,7 +329,7 @@ export default function AccountProfileScreen() {
                   @{handle} · {roleLabel}
                 </Text>
                 <View className="mt-2 self-start rounded-full px-3 py-1" style={{ backgroundColor: '#DCFCE7' }}>
-                  <Text className="text-xs font-black capitalize" style={{ color: PROFILE_THEME.success }}>
+                  <Text className="text-xs font-bold capitalize" style={{ color: PROFILE_THEME.success }}>
                     {statusLabel}
                   </Text>
                 </View>
@@ -337,8 +337,8 @@ export default function AccountProfileScreen() {
             </View>
 
             {user?.email ? (
-              <View className="mt-4 rounded-xl border bg-gray-50 p-3" style={{ borderColor: PROFILE_THEME.border }}>
-                <Text className="text-xs font-black uppercase text-gray-500">Email</Text>
+              <View className="mt-3" style={{ borderColor: PROFILE_THEME.border }}>
+                <Text className="text-xs font-bold uppercase text-gray-500">Email</Text>
                 <Text className="mt-1 text-sm text-gray-800" numberOfLines={1}>{user.email}</Text>
               </View>
             ) : null}
@@ -351,76 +351,12 @@ export default function AccountProfileScreen() {
               accessibilityLabel="Edit name, nickname, and @"
             >
               <Pencil size={15} color={PROFILE_THEME.primary} />
-              <Text className="font-black" style={{ color: PROFILE_THEME.primary }}>Edit name, nickname, and @</Text>
+              <Text className="font-bold" style={{ color: PROFILE_THEME.primary }}>Edit name, nickname, and @</Text>
             </TouchableOpacity>
-
-            {user?.walletAddress ? (
-              <TouchableOpacity
-                onPress={handleCopyAddress}
-                className="mt-4 flex-row items-center justify-between rounded-xl border bg-gray-50 p-3"
-                style={{ borderColor: PROFILE_THEME.border }}
-                activeOpacity={0.75}
-              >
-                <View className="min-w-0 flex-1">
-                  <Text className="text-xs font-black uppercase text-gray-500">Wallet Address</Text>
-                  <Text className="mt-1 font-mono text-sm text-gray-800">{shortenAddress(user.walletAddress)}</Text>
-                </View>
-                {copiedAddress ? <Check size={18} color={PROFILE_THEME.success} /> : <Copy size={18} color={PROFILE_THEME.muted} />}
-              </TouchableOpacity>
-            ) : null}
           </View>
-
-          <View className="mt-4 flex-row gap-3">
-            <View className="flex-1 rounded-2xl border bg-white p-4" style={{ borderColor: PROFILE_THEME.border }}>
-              <View className="mb-3 h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: PROFILE_THEME.primarySoft }}>
-                <CircleEllipsis size={20} color={PROFILE_THEME.primary} />
-              </View>
-              <Text className="text-xs font-black uppercase text-gray-500">Your Commons</Text>
-              <Text className="mt-1 text-base font-black text-gray-950" numberOfLines={1}>
-                {commonsName}
-              </Text>
-            </View>
-            <View className="flex-1 rounded-2xl border bg-white p-4" style={{ borderColor: PROFILE_THEME.border }}>
-              <View className="mb-3 h-10 w-10 items-center justify-center rounded-xl bg-green-50">
-                <Check size={20} color={PROFILE_THEME.success} />
-              </View>
-              <Text className="text-xs font-black uppercase text-gray-500">Membership</Text>
-              <Text className="mt-1 text-base font-black text-gray-950 capitalize">{statusLabel}</Text>
-            </View>
-          </View>
-
-          {fundingBadges.length > 0 ? (
-            <View className="mt-4 rounded-2xl border bg-white p-4" style={{ borderColor: PROFILE_THEME.border }}>
-              <View className="flex-row items-center">
-                <View className="h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: '#FFF7ED' }}>
-                  <Award size={20} color={PROFILE_THEME.primary} />
-                </View>
-                <View className="ml-3 flex-1">
-                  <Text className="font-black text-gray-950">Commons supporter badges</Text>
-                  <Text className="mt-0.5 text-xs font-semibold text-gray-500">Your verified funding history</Text>
-                </View>
-              </View>
-              <View className="mt-3 gap-2">
-                {fundingBadges.map((badge) => (
-                  <View key={badge.id} className="flex-row items-center rounded-xl border p-3" style={{ borderColor: PROFILE_THEME.border }}>
-                    <View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: `${badge.definition.color}18`, borderColor: badge.definition.color, borderWidth: 2 }}>
-                      <Award size={16} color={badge.definition.color} />
-                    </View>
-                    <View className="ml-3 flex-1">
-                      <Text className="text-sm font-black text-gray-950">{badge.definition.name}</Text>
-                      <Text className="mt-0.5 text-xs font-semibold text-gray-500">{badge.commonsName}</Text>
-                    </View>
-                    <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: badge.status === 'ACTIVE' ? '#DCFCE7' : '#F1F5F9' }}>
-                      <Text className="text-[10px] font-black uppercase" style={{ color: badge.status === 'ACTIVE' ? '#166534' : '#64748B' }}>{badge.status}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </View>
-          ) : null}
 
           <View className="mt-4 overflow-hidden rounded-2xl border bg-white" style={{ borderColor: PROFILE_THEME.border }}>
-            <Text className="px-4 pb-2 pt-4 text-xs font-black uppercase text-gray-500">Navigation</Text>
+            <Text className="px-4 pb-2 pt-4 text-xs font-bold uppercase text-gray-500">Navigation</Text>
             {navItems.map((item, index) => {
               const Icon = item.icon;
               const isLast = index === navItems.length - 1;
@@ -429,7 +365,7 @@ export default function AccountProfileScreen() {
               return (
                 <TouchableOpacity
                   key={item.label}
-                  onPress={item.onPress || (() => item.href && router.push(item.href as any))}
+                  onPress={item.onPress || (() => item.href && router.push((coopId && !item.href.includes('coopId=') ? `${item.href}${item.href.includes('?') ? '&' : '?'}coopId=${encodeURIComponent(coopId)}` : item.href) as any))}
                   disabled={isDeletingAccount && item.label.startsWith('Deleting')}
                   accessibilityRole="button"
                   accessibilityLabel={item.label}
@@ -446,7 +382,7 @@ export default function AccountProfileScreen() {
                     )}
                   </View>
                   <View className="min-w-0 flex-1">
-                    <Text className={`font-black ${item.destructive ? 'text-red-700' : 'text-gray-950'}`}>{item.label}</Text>
+                    <Text className={`font-bold ${item.destructive ? 'text-red-700' : 'text-gray-950'}`}>{item.label}</Text>
                     <Text className={`mt-0.5 text-xs font-semibold ${item.destructive ? 'text-red-500' : 'text-gray-500'}`}>
                       {item.description}
                     </Text>
@@ -457,16 +393,63 @@ export default function AccountProfileScreen() {
             })}
           </View>
 
+          {user?.walletAddress ? (
+            <TouchableOpacity
+              onPress={handleCopyAddress}
+              className="mt-4 flex-row items-center justify-between rounded-xl border bg-gray-50 p-3"
+              style={{ borderColor: PROFILE_THEME.border }}
+              activeOpacity={0.75}
+            >
+              <View className="min-w-0 flex-1">
+                <Text className="text-xs font-bold uppercase text-gray-500">Wallet Address</Text>
+                <Text className="mt-1 font-mono text-sm text-gray-800">{shortenAddress(user.walletAddress)}</Text>
+              </View>
+              {copiedAddress ? <Check size={18} color={PROFILE_THEME.success} /> : <Copy size={18} color={PROFILE_THEME.muted} />}
+            </TouchableOpacity>
+          ) : null}
+
+          {fundingBadges.length > 0 ? (
+            <View className="mt-4 rounded-2xl border bg-white p-4" style={{ borderColor: PROFILE_THEME.border }}>
+              <View className="flex-row items-center">
+                <View className="h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: '#FFF7ED' }}>
+                  <Award size={20} color={PROFILE_THEME.primary} />
+                </View>
+                <View className="ml-3 flex-1">
+                  <Text className="font-bold text-gray-950">Commons supporter badges</Text>
+                  <Text className="mt-0.5 text-xs font-semibold text-gray-500">Your verified funding history</Text>
+                </View>
+              </View>
+              <View className="mt-3 gap-2">
+                {fundingBadges.map((badge) => (
+                  <View key={badge.id} className="flex-row items-center rounded-xl border p-3" style={{ borderColor: PROFILE_THEME.border }}>
+                    <View className="h-9 w-9 items-center justify-center rounded-full" style={{ backgroundColor: `${badge.definition.color}18`, borderColor: badge.definition.color, borderWidth: 2 }}>
+                      <Award size={16} color={badge.definition.color} />
+                    </View>
+                    <View className="ml-3 flex-1">
+                      <Text className="text-sm font-bold text-gray-950">{badge.definition.name}</Text>
+                      <Text className="mt-0.5 text-xs font-semibold text-gray-500">{badge.commonsName}</Text>
+                    </View>
+                    <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: badge.status === 'ACTIVE' ? '#DCFCE7' : '#F1F5F9' }}>
+                      <Text className="text-[10px] font-bold uppercase" style={{ color: badge.status === 'ACTIVE' ? '#166534' : '#64748B' }}>{badge.status}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+
+
         </View>
       </ScrollView>
 
       <Modal visible={isEditingIdentity} transparent animationType="slide" onRequestClose={() => setIsEditingIdentity(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} className="flex-1 justify-end bg-black/40">
           <View className="rounded-t-3xl bg-white px-5 pb-8 pt-5">
-            <Text className="text-xl font-black text-gray-950">Edit your identity</Text>
+            <Text className="text-xl font-bold text-gray-950">Edit your identity</Text>
             <Text className="mt-1 text-sm text-gray-500">Your @ is public and must be unique.</Text>
 
-            <Text className="mb-1 mt-5 text-xs font-black uppercase text-gray-500">Name</Text>
+            <Text className="mb-1 mt-5 text-xs font-bold uppercase text-gray-500">Name</Text>
             <TextInput
               value={nameDraft}
               onChangeText={setNameDraft}
@@ -476,7 +459,7 @@ export default function AccountProfileScreen() {
               className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-base text-gray-950"
             />
 
-            <Text className="mb-1 mt-4 text-xs font-black uppercase text-gray-500">Nickname (optional)</Text>
+            <Text className="mb-1 mt-4 text-xs font-bold uppercase text-gray-500">Nickname (optional)</Text>
             <TextInput
               value={nicknameDraft}
               onChangeText={setNicknameDraft}
@@ -485,9 +468,9 @@ export default function AccountProfileScreen() {
               className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-base text-gray-950"
             />
 
-            <Text className="mb-1 mt-4 text-xs font-black uppercase text-gray-500">Your @</Text>
+            <Text className="mb-1 mt-4 text-xs font-bold uppercase text-gray-500">Your @</Text>
             <View className="flex-row items-center rounded-xl border border-gray-200 bg-gray-50 px-3">
-              <Text className="text-base font-black text-gray-500">@</Text>
+              <Text className="text-base font-bold text-gray-500">@</Text>
               <TextInput
                 value={handleDraft}
                 onChangeText={(value) => setHandleDraft(value.toLowerCase())}
@@ -510,7 +493,7 @@ export default function AccountProfileScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Cancel editing identity"
               >
-                <Text className="text-center font-black text-gray-700">Cancel</Text>
+                <Text className="text-center font-bold text-gray-700">Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => void saveIdentity()}
@@ -521,7 +504,7 @@ export default function AccountProfileScreen() {
                 accessibilityLabel="Save identity"
               >
                 {isSavingIdentity ? <ActivityIndicator size="small" color="#FFFFFF" /> : null}
-                <Text className="ml-2 font-black text-white">{isSavingIdentity ? 'Saving…' : 'Save'}</Text>
+                <Text className="ml-2 font-bold text-white">{isSavingIdentity ? 'Saving…' : 'Save'}</Text>
               </TouchableOpacity>
             </View>
           </View>

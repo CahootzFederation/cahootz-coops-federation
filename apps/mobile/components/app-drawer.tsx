@@ -1,3 +1,4 @@
+import { CommunityTheme } from '@/constants/theme';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, ScrollView, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
@@ -31,7 +32,7 @@ import {
 } from 'lucide-react-native';
 
 const THEME = {
-  primary: '#FF6B00',
+  primary: CommunityTheme.primary,
   primarySoft: '#FFF7ED',
 };
 

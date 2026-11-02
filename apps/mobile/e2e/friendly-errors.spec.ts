@@ -134,14 +134,14 @@ test("the proposals list hides a raw validation error and recovers with Try agai
     );
     await page.goto("/proposals?coopId=cahootz");
 
-    await expect(shown(page, "Turn conversations into decisions")).toBeVisible();
+    await expect(shown(page, "Community decisions")).toBeVisible();
     await expect(shown(page, PROPOSALS_FALLBACK)).toBeVisible();
     await expect(tryAgain(page)).toBeVisible();
 
     // The zod dump never reaches the screen, and a failed load isn't
     // presented as an empty list.
     await expect(shown(page, /invalid_type|"expected"|coopId|Required/)).toHaveCount(0);
-    await expect(shown(page, "No proposals yet", { exact: true })).toHaveCount(0);
+    await expect(shown(page, "No current proposals", { exact: true })).toHaveCount(0);
 
     await page.unroute(listProposals);
     const reloaded = page.waitForResponse(
@@ -149,19 +149,19 @@ test("the proposals list hides a raw validation error and recovers with Try agai
     );
     await tryAgain(page).click();
     const body = await (await reloaded).json();
-    const proposals: { title: string }[] = body?.result?.data?.proposals ?? [];
+    const proposals = ((body?.result?.data?.proposals ?? []) as { title: string; status: string }[]).filter((proposal) => !['approved', 'funded', 'rejected', 'withdrawn'].includes(proposal.status));
 
     await expect(shown(page, PROPOSALS_FALLBACK)).toHaveCount(0);
     await expect(tryAgain(page)).toHaveCount(0);
     if (proposals.length === 0) {
-      await expect(shown(page, "No proposals yet", { exact: true })).toBeVisible();
+      await expect(shown(page, "No current proposals", { exact: true })).toBeVisible();
     } else {
       await expect(shown(page, proposals[0].title, { exact: true }).first()).toBeVisible();
     }
 
     // The recovered state survives a reload.
     await page.reload();
-    await expect(shown(page, "Turn conversations into decisions")).toBeVisible();
+    await expect(shown(page, "Community decisions")).toBeVisible();
     await expect(tryAgain(page)).toHaveCount(0);
   } finally {
     await context.close();

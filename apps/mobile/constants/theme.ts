@@ -5,7 +5,21 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#FF6B00';
+// Cahootz: white community spaces, quiet surfaces, clear actions.
+// Shared by native styles; global.css mirrors the semantic colors for NativeWind.
+export const CommunityTheme = {
+  paper: '#FFFFFF',
+  sheet: '#FFFFFF',
+  primary: '#B94614',
+  primarySoft: '#FFFFFF',
+  primaryBorder: '#E5E7EB',
+  ink: '#111827',
+  muted: '#64748B',
+  border: '#E5E7EB',
+  pageMaxWidth: 800,
+} as const;
+
+const tintColorLight = CommunityTheme.primary;
 const tintColorDark = '#FF8A2A';
 
 export const Colors = {

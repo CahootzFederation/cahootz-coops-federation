@@ -382,3 +382,20 @@ The member tab bar requires a loaded, signed-in account with completed onboardin
 Sign-in now has one shared email/code flow for new and existing accounts, without a separate Get started option. Its Back button always returns to the welcome carousel, including from code entry and when opened from commons details. Change Email still returns code entry to the email field. The commons-choice journeys cover each route.
 
 The email verification form uses a compact, unboxed layout: Continue to Cahootz → Continue with email → Check your email → Verify and continue. Code entry shows the destination email and smaller Change email / Resend code actions. Browser sign-in helpers use the new button labels.
+
+### Calm design regression checks
+
+`calm-design.spec.ts` checks that changing tabs and opening the Board from You keeps the selected Commons, including after reload. It uses User A's existing `e2e-private-shared` membership and creates no content. A signed-out journey checks that the welcome cards do not advance automatically, that their controls are at least 44 × 44, and that Continue still opens sign-in.
+
+`public-design.spec.ts` checks the public page's business and community-funding disclosures through the real UI. A second journey aborts only the application-list network request to exercise the visible error, disabled Continue, and working Retry; it does not supply a mocked API response. Start the web app with `pnpm -F @cahootz/web dev --port 3002` and set `E2E_PUBLIC_WEB_URL=http://localhost:3002` to include it. This journey creates no records.
+
+
+### Calm app follow-up regressions
+
+`calm-design.spec.ts` additionally follows Board in `e2e-private-shared` → You → account Alerts → Board → reload, checking that the selected Commons survives the detour. The 375×812 proposal validation journey submits an empty form, requires its alert to be inside the viewport and the first input focused, then checks that incomplete answers survive another attempt without a create request. No content is created.
+
+`direct-messages.spec.ts` covers the vertical inbox, unread state on returning from a conversation, and the New message member picker. Its new two-context journey verifies that an unfinished note for User B does not appear in Sage's composer and is retained when returning to User B. It never sends that note. Existing two-user delivery and pinned-composer tests retain their unique E2E content and cleanup.
+
+`calm-proposals.spec.ts` uses the existing local-only governance fixture to create unique proposals, withdraws one through the UI, then finds it in History after reload. It aborts the action-summary request to verify an unavailable state and recovers with Try again against the real endpoint. A presentation-only test supplies eligible summary responses for populated/empty queues; it never changes roles or casts votes. Each seeded proposal is removed by the existing restricted cleanup fixture. These checks do not certify council authorization, which remains enforced by the unchanged backend.
+
+The receipt History navigation check allows the selected Commons query parameter; it still opens the payment through the account UI and verifies the receipt after reload.

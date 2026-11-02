@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import { useGlobalSearchParams, usePathname, useRouter, useSegments } from 'expo-router';
+import { useNavigationReady } from '@/hooks/use-navigation-ready';
 import { secureStorage } from '@/lib/secure-storage';
 import { setActiveCoopConfig, resetCoopConfig, type CoopConfig } from '@/lib/coop-config';
 import { api, onSessionExpired } from '@/lib/api';
-import { registerForNativePushNotifications } from '@/lib/push-notifications';
 import { canAccessUpdateChannelDebug, clearUpdateChannelOverrideQuietly } from '@/lib/update-channel-debug';
 import { clearAnonymousProfileIntroSeen } from '@/lib/anonymous-id';
 import * as analytics from '@/lib/analytics';
@@ -67,6 +67,8 @@ interface AuthContextType {
   // router navigation to "/" doesn't reliably work here, since the tabs
   // group's own index route can resolve to the same path and no-op the
   // navigation — this bypasses routing entirely.
+  /** Signed in and done with onboarding: time to make sure pushes can reach this phone. */
+  pushReady: boolean;
   forceWelcomeIntro: boolean;
   previewWelcomeScreen: () => Promise<void>;
   dismissForcedWelcomeIntro: () => void;
@@ -81,11 +83,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [forceWelcomeIntro, setForceWelcomeIntro] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const navigationReady = useNavigationReady();
   const segments = useSegments();
   const pathname = usePathname();
   const { coopId: coopIdParam, chooseCommons } = useGlobalSearchParams<{ coopId?: string | string[]; chooseCommons?: string }>();
   const activeCoopId = Array.isArray(coopIdParam) ? coopIdParam[0] : coopIdParam;
-  const pushRegistrationAttempt = useRef<string | null>(null);
   const userRef = useRef(user);
   const wizardOwnsExit = useRef(false);
   userRef.current = user;
@@ -95,6 +97,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const readyForPushRegistration = !!user && (
     returningUser || !!user.profileOnboardingCompletedAt || profileOnboardingDeferredUserId === user.id
   );
+  // Once onboarding is completed or skipped and its screen has closed,
+  // PushPermissionGate asks for notifications on every app open.
+  const pushReady = !!sessionToken && !isLoading && readyForPushRegistration && !inProfileOnboarding;
 
   // Load session on mount
   useEffect(() => {
@@ -102,35 +107,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!sessionToken) {
-      pushRegistrationAttempt.current = null;
-      return;
-    }
-    // Wait until onboarding is completed or skipped and its screen has closed.
-    if (isLoading || !readyForPushRegistration || inProfileOnboarding) return;
-    const registrationKey = sessionToken;
-    if (pushRegistrationAttempt.current === registrationKey) return;
-    pushRegistrationAttempt.current = registrationKey;
-
-    // Silently (re)register a device that already allowed notifications.
-    // Asking for permission waits for a moment that explains why - the
-    // primer shown after a newcomer posts their welcome lounge intro.
-    registerForNativePushNotifications(sessionToken, {
-      neverAsk: true,
-    }).catch((error) => {
-      console.warn('Native push registration skipped:', error);
-    });
-  }, [sessionToken, isLoading, readyForPushRegistration, inProfileOnboarding]);
-
-  useEffect(() => {
     if (isLoading || canAccessUpdateChannelDebug(user?.email)) return;
 
     void clearUpdateChannelOverrideQuietly();
   }, [isLoading, user?.email]);
 
-  // Handle navigation based on auth state
+  // Handle navigation based on auth state. Offline, the session loads before
+  // the navigator is ready, and navigating then crashes the app (see
+  // useNavigationReady).
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || !navigationReady) return;
 
     const inAuthGroup = segments[0] === '(authenticated)';
     const inProfileOnboarding = segments[0] === 'profile-onboarding';
@@ -169,7 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // The wizard owns its exit, including the final commons choice after saving a profile.
-  }, [user, segments, isLoading, router, pathname, profileOnboardingDeferredUserId, activeCoopId, returningUser, chooseCommons]);
+  }, [user, segments, isLoading, navigationReady, router, pathname, profileOnboardingDeferredUserId, activeCoopId, returningUser, chooseCommons]);
 
   const loadSession = async () => {
     try {
@@ -187,12 +173,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const storedSessionToken =
           parsedUser.sessionToken ||
           (await secureStorage.getItem(secureStorage.keys.SESSION_TOKEN));
-        if (storedSessionToken) {
-          const progress = await api.getOnboardingProgress(storedSessionToken);
-          Object.assign(parsedUser, progress);
-          setUser({ ...parsedUser });
-        }
         setSessionToken(storedSessionToken);
+        if (storedSessionToken) {
+          // Refreshing onboarding progress needs the server. Offline, keep the
+          // saved copy so the member stays signed in.
+          try {
+            const progress = await api.getOnboardingProgress(storedSessionToken);
+            Object.assign(parsedUser, progress);
+            setUser({ ...parsedUser });
+          } catch (error) {
+            console.warn('Using saved onboarding progress:', error);
+          }
+        }
 
         // Set coop config if user has coop membership
         if (parsedUser.coop) {
@@ -395,6 +387,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         deferProfileOnboarding,
         resetProfileOnboarding,
+        pushReady,
         forceWelcomeIntro,
         previewWelcomeScreen,
         dismissForcedWelcomeIntro,

@@ -1,3 +1,5 @@
+import { DetailHeader } from '@/components/detail-header';
+import { DESIGN } from '@/constants/design';
 import {
   View,
   Text,
@@ -10,7 +12,6 @@ import { useState, useEffect } from 'react';
 import { router, Stack } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import {
-  ArrowLeft,
   Plus,
   CreditCard,
   Trash2,
@@ -178,18 +179,8 @@ export default function PaymentMethodsScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <View className="flex-1 bg-gray-50">
-        {/* Header */}
-        <View className="pt-14 pb-4 px-4 bg-white border-b border-gray-100">
-          <View className="flex-row items-center">
-            <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-              <ArrowLeft size={24} color="#111827" />
-            </TouchableOpacity>
-            <Text className="flex-1 text-center text-lg font-semibold text-gray-900 -ml-8">
-              Wallet
-            </Text>
-          </View>
-        </View>
+      <View style={{ flex: 1, backgroundColor: DESIGN.paper }}>
+        <DetailHeader title="Wallet" parent="You" onBack={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/wallet')} />
 
         {loading ? (
           <View className="flex-1 items-center justify-center">

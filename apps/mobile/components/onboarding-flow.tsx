@@ -1,3 +1,4 @@
+import { DESIGN } from '@/constants/design';
 import React, { useState, useEffect, useMemo } from 'react';
 import { ScrollView, View, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
@@ -1352,10 +1353,10 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
   // Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V4
   const renderLogin = () => (
     <ScrollView {...keyboardInsetScrollProps} className="flex-1 bg-background" contentContainerStyle={{ flexGrow: 1 }}>
-      <View className="flex-1 px-6 py-8">
+      <View className="flex-1 px-5 py-6">
         {onBack && (
           <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Go back"
-            className="flex-row items-center self-start gap-1 py-2">
+            className="flex-row items-center self-start gap-1" style={{ minHeight: 44, paddingRight: 12 }}>
             <Icon as={ChevronLeft} size={18} className="text-muted-foreground" />
             <Text className="text-muted-foreground">Back</Text>
           </Pressable>
@@ -1378,7 +1379,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                   value={loginData.email}
                   onChangeText={(text) => setLoginData(prev => ({ ...prev, email: text }))}
                   className="mt-2 bg-background border-input"
-                  style={{ height: 52 }}
+                  style={{ height: 52, borderColor: DESIGN.border, borderRadius: 12 }}
                   placeholder="name@email.com" keyboardType="email-address"
                   autoCapitalize="none" autoComplete="email" textContentType="emailAddress" autoCorrect={false}
                   onSubmitEditing={() => { if (loginData.email && !isRequestingCode) void handleRequestCode(); }}
@@ -1401,10 +1402,10 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
             {loginError ? (
               <Text accessibilityRole="alert" className="text-destructive text-sm leading-5">{loginError}</Text>
             ) : null}
-            <Button style={{ height: 52 }} className="w-full bg-primary"
+            <Button style={{ height: 52, borderColor: DESIGN.border, borderRadius: 12 }} className="w-full bg-primary"
               onPress={codeSent ? handleVerifyCode : handleRequestCode}
               disabled={codeSent ? isVerifyingCode || loginData.code.length !== 6 : isRequestingCode || !loginData.email.trim()}>
-              <Text className="text-center text-white font-semibold">
+              <Text className="text-center font-semibold" style={{ color: DESIGN.ink }}>
                 {codeSent ? (isVerifyingCode ? 'Verifying…' : 'Verify and continue') : (isRequestingCode ? 'Sending code…' : 'Continue with email')}
               </Text>
             </Button>
@@ -1413,7 +1414,7 @@ export default function OnboardingFlow({ initialStep = 'intro', onBack }: Onboar
                 We’ll email you a 6-digit code. No password needed.
               </Text>
             ) : (
-              <View className="flex-row items-center justify-between">
+              <View className="flex-row flex-wrap items-center justify-between">
                 <Button variant="ghost" onPress={() => {
                   setCodeSent(false);
                   setLoginData(prev => ({ ...prev, code: '' }));

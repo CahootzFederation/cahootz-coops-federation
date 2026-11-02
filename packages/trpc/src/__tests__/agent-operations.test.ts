@@ -138,107 +138,16 @@ describe("agent operational health", () => {
     );
   });
 
-  it("keeps a failed model-backed outreach run unhealthy until a clean daily run", async () => {
-    mocks.platformConfigFindUnique.mockResolvedValue({
-      value: JSON.stringify({
-        lastRunAt: "2026-10-13T17:59:00Z",
-        lastRunStatus: "error",
-        lastRunMessage: "modelFallbacks=1",
-      }),
-    });
-
-    const snapshot = await getAgentOperationalSnapshot(
-      new Date("2026-10-13T18:00:00Z"),
-    );
-
-    expect(snapshot.issues).toContainEqual({
-      agentId: "sage-weekly-outreach",
-      state: "FAILED",
-      reason: "modelFallbacks=1",
-    });
-  });
-
-  it("reports when an always-on outreach sweep has never recorded health", async () => {
+  it("leaves the weekly-outreach sweep out of the hourly watchdog", async () => {
     mocks.platformConfigFindUnique.mockResolvedValue(null);
 
     const snapshot = await getAgentOperationalSnapshot(
       new Date("2026-10-13T18:00:00Z"),
     );
 
-    expect(snapshot.issues).toContainEqual({
-      agentId: "sage-weekly-outreach",
-      state: "FAILED",
-      reason: expect.stringContaining(
-        "The daily outreach sweep has never started.",
-      ),
-    });
-  });
-
-  it("says when a sweep started but never finished", async () => {
-    mocks.platformConfigFindUnique.mockImplementation(
-      async ({ where }: { where: { key: string } }) =>
-        where.key === "agent.health.sage-weekly-outreach.started"
-          ? { value: "2026-10-21T18:00:05.000Z" }
-          : null,
+    expect(snapshot.issues).not.toContainEqual(
+      expect.objectContaining({ agentId: "sage-weekly-outreach" }),
     );
-
-    const snapshot = await getAgentOperationalSnapshot(
-      new Date("2026-10-21T22:02:00Z"),
-    );
-
-    expect(snapshot.issues).toContainEqual({
-      agentId: "sage-weekly-outreach",
-      state: "FAILED",
-      reason: expect.stringContaining(
-        "started at 2026-10-21T18:00:05.000Z but never finished",
-      ),
-    });
-  });
-
-  it("doesn't call a sweep that is still inside its 30-minute window unfinished", async () => {
-    mocks.platformConfigFindUnique.mockImplementation(
-      async ({ where }: { where: { key: string } }) =>
-        where.key === "agent.health.sage-weekly-outreach.started"
-          ? { value: "2026-10-21T18:00:05.000Z" }
-          : null,
-    );
-
-    const snapshot = await getAgentOperationalSnapshot(
-      new Date("2026-10-21T18:10:00Z"),
-    );
-
-    expect(snapshot.issues).toContainEqual({
-      agentId: "sage-weekly-outreach",
-      state: "FAILED",
-      reason: expect.stringContaining("has never started"),
-    });
-  });
-
-  it("names the unfinished run when the last good sweep is stale", async () => {
-    mocks.platformConfigFindUnique.mockImplementation(
-      async ({ where }: { where: { key: string } }) =>
-        where.key === "agent.health.sage-weekly-outreach.started"
-          ? { value: "2026-10-21T18:00:05.000Z" }
-          : {
-              value: JSON.stringify({
-                lastRunAt: "2026-10-20T18:00:00Z",
-                lastRunStatus: "success",
-                lastRunMessage: null,
-              }),
-            },
-    );
-
-    const snapshot = await getAgentOperationalSnapshot(
-      new Date("2026-10-21T22:02:00Z"),
-    );
-
-    expect(snapshot.issues).toContainEqual({
-      agentId: "sage-weekly-outreach",
-      state: "FAILED",
-      reason: expect.stringContaining(
-        "The last one started at 2026-10-21T18:00:05.000Z and never finished",
-      ),
-    });
   });
 
   it("reports the ID stored in the database it read, creating one only if missing", async () => {

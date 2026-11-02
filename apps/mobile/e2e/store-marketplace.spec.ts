@@ -45,7 +45,7 @@ test('signed-out visitors do not see the Board and are sent to sign in from a ma
   try {
     await enterFeed(page);
     const nav = page.getByRole('tablist', { name: 'Main navigation' });
-    await expect(nav.getByRole('tab', { name: 'Commons' })).toBeVisible();
+    await expect(nav).toHaveCount(0);
     await expect(nav.getByRole('tab', { name: 'Board' })).toHaveCount(0);
 
     await page.getByLabel('Open menu').click();

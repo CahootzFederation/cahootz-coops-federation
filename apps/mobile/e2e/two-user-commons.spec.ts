@@ -16,31 +16,27 @@ test("signing out one user does not sign out the other user", { tag: "@smoke" },
   try {
     await userA.page.getByLabel("Open menu").click();
     await userA.page
-      .getByText(new RegExp(`Sign Out \\(@${USER_A_EMAIL.split("@")[0]}\\)`))
+      .getByText(/^Sign Out \(@.+\)$/)
       .click();
     // Signing out asks first; "Stay signed in" keeps the session.
     await expect(userA.page.getByText(/To sign back in, you'll need a new code/)).toBeVisible();
     await userA.page.getByRole("button", { name: "Stay signed in" }).click();
     await expect(
-      userA.page.getByText(new RegExp(`Sign Out \\(@${USER_A_EMAIL.split("@")[0]}\\)`)),
+      userA.page.getByText(/^Sign Out \(@.+\)$/),
     ).toBeVisible();
     await userA.page
-      .getByText(new RegExp(`Sign Out \\(@${USER_A_EMAIL.split("@")[0]}\\)`))
+      .getByText(/^Sign Out \(@.+\)$/)
       .click();
     await userA.page.getByRole("button", { name: "Yes, sign out" }).click();
-    await expect(userA.page.getByLabel("Open menu")).toBeVisible();
-    await userA.page.getByLabel("Open menu").click();
-    await expect(
-      userA.page.getByText("Sign In", { exact: true }),
-    ).toBeVisible();
+    await expect(userA.page.getByText("Welcome to Cahootz", { exact: true })).toBeVisible();
+    await expect(userA.page.getByRole("tablist", { name: "Main navigation" })).toHaveCount(0);
+    await userA.page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(userA.page.getByPlaceholder("name@email.com")).toBeVisible();
 
-    await userB.page.reload();
-    await userB.page.getByLabel("Open menu").click();
-    await expect(
-      userB.page.getByText(
-        new RegExp(`Sign Out \\(@${USER_B_EMAIL.split("@")[0]}\\)`),
-      ),
-    ).toBeVisible();
+    await userB.page.reload({ waitUntil: "domcontentloaded" });
+    await expect(userB.page.getByLabel("Open menu")).toBeVisible();
+    await userB.page.getByRole("tab", { name: "You", exact: true }).click();
+    await expect(userB.page.getByText(USER_B_EMAIL, { exact: true }).filter({ visible: true })).toBeVisible();
   } finally {
     await userA.context.close();
     await userB.context.close();

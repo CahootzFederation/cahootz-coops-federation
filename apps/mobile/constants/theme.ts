@@ -4,18 +4,19 @@
  */
 
 import { Platform } from 'react-native';
+import { DESIGN } from './design';
 
 // Cahootz: white community spaces, quiet surfaces, clear actions.
 // Shared by native styles; global.css mirrors the semantic colors for NativeWind.
 export const CommunityTheme = {
-  paper: '#FFFFFF',
-  sheet: '#FFFFFF',
-  primary: '#B94614',
-  primarySoft: '#FFFFFF',
-  primaryBorder: '#E5E7EB',
-  ink: '#111827',
-  muted: '#64748B',
-  border: '#E5E7EB',
+  paper: DESIGN.paper,
+  sheet: DESIGN.paper,
+  primary: DESIGN.actionText,
+  primarySoft: DESIGN.primarySoft,
+  primaryBorder: DESIGN.border,
+  ink: DESIGN.ink,
+  muted: DESIGN.muted,
+  border: DESIGN.border,
   pageMaxWidth: 800,
 } as const;
 

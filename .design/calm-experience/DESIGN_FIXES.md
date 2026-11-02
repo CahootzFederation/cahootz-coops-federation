@@ -55,3 +55,16 @@ Native keyboard and device behavior still require the repository's iOS/Android r
 - The preview was restarted from this worktree on port 8081. The full suite's late Sage and other journeys remain unverified because the preview stopped; native iOS/Android release checks remain outstanding.
 
 The changes are ready for review, but the broader test suite needs its environment and onboarding failures resolved before treating this as release-ready.
+
+## Main integration — November 2, 2026
+
+Merged main at `30866b866ae9dc1bbb6e20d8f900b14332bb9b4c`, preserving its shared DESIGN system, fully wrapping circle names, search, parent-tab selection, sign-in restoration, and waitlist/community homepage. CommunityTheme now delegates its colors to DESIGN. The default group-buy homepage is retained; the disclosure test explicitly selects the community variant. No duplicate waitlist or retired homepage application form was restored. The old application-list test is no longer applicable to that homepage and was removed. Account route expectations now allow retained Commons parameters for Wallet, History, and Pay a store. Historical screenshots above predate this integration.
+
+Validation of the merged mobile UI:
+
+- Mobile type-check passed. Static web export passed, and the static preview remained available throughout the suite.
+- Lint of reconciled mobile files: zero errors; two warnings in unchanged main code (array notation on Board and a hook dependency in Circle View).
+- Full UI suite: **122 passed, 44 failed, 5 skipped** in 11.6 minutes. All calm-design, calm-proposals, direct-messages, proposal-form, proposal-navigation, receipts, design-consistency, and design-secondary journeys passed.
+- Three full-run failures were account-route assertions expecting no Commons query parameter. Those were updated; the wallet coin-name rerun passed (1 test), and both store-code/wallet journeys passed (2 tests).
+- Remaining failures include local generated-client/backend incompatibilities for newer admin, vendor, group-buy, unread and Pulse features; web compilation blocked by missing `accounts` in the installed wagmi dependency; and Sage fixture, deduplication, query, or expected-output failures. These are unresolved results, not waived release gates. The local API was the existing service, not a newly rebuilt main backend. The public disclosure and homepage checks were attempted but could not validate rendered UI because of that web dependency failure.
+- No native-device checks, deployment, or authorization changes. Conflict resolution is complete; release validation is not.

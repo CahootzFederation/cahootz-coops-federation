@@ -12,3 +12,7 @@ Read `AGENT.md` for the project's security, governance, and architecture rules. 
 - Update `TESTING.md` when adding a new journey or changing its setup.
 - Before finishing a relevant change, run `pnpm -F @cahootz/mobile type-check` and `pnpm test:e2e:mobile`. If the services are not running locally, follow the startup instructions in `TESTING.md`.
 - Pure refactors, documentation, copy, or styling changes do not require a new journey unless they change behavior or fix a UI regression.
+
+## Mobile design consistency
+
+Before changing mobile UI, read `apps/mobile/DESIGN.md` and reuse `apps/mobile/constants/design.ts`. Preserve every existing feature/control even when a mockup omits it. Commons home must retain its circular grid and top-right Manage circles button. Follow the design contract's control inventory and regression checklist.

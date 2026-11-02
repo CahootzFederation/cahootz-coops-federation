@@ -1,3 +1,6 @@
+import { EmptyState } from '@/components/empty-state';
+import { LoadError } from '@/components/load-error';
+import { DESIGN } from '@/constants/design';
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -35,32 +38,32 @@ import {
 } from "@repo/validators/notification";
 
 export const alertStyles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#F6F7F8" },
+  page: { flex: 1, backgroundColor: DESIGN.paper },
   content: {
     width: "100%",
     maxWidth: 800,
     alignSelf: "center",
-    padding: 16,
+    padding: DESIGN.gutter,
     paddingBottom: 32,
     gap: 14,
   },
   header: { flexDirection: "row", alignItems: "center", gap: 10 },
   grow: { flex: 1, minWidth: 0 },
-  title: { fontSize: 24, fontWeight: "800", color: "#111827" },
-  text: { fontSize: 15, lineHeight: 23, color: "#475569", flexShrink: 1 },
+  title: { fontSize: 28, fontWeight: "800", color: DESIGN.ink },
+  text: { fontSize: 15, lineHeight: 23, color: DESIGN.muted, flexShrink: 1 },
   heading: {
     fontSize: 16,
     lineHeight: 24,
     fontWeight: "700",
-    color: "#111827",
+    color: DESIGN.ink,
     flexShrink: 1,
   },
   card: {
     borderRadius: 14,
     padding: 16,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: DESIGN.paper,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: DESIGN.border,
     gap: 8,
   },
   button: {
@@ -70,28 +73,27 @@ export const alertStyles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderRadius: 10,
-    backgroundColor: "#FFF7ED",
+    backgroundColor: DESIGN.primarySoft,
   },
   buttonText: {
     fontSize: 14,
     lineHeight: 22,
     fontWeight: "700",
-    color: "#9A3412",
+    color: DESIGN.actionText,
     textAlign: "center",
   },
   row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
-  error: { color: "#B91C1C", fontSize: 14, lineHeight: 22 },
+  error: { color: DESIGN.danger, fontSize: 14, lineHeight: 22 },
   sageBanner: {
     flexDirection: "row", alignItems: "center", gap: 12,
-    borderRadius: 16, padding: 18, backgroundColor: "#C2410C",
-    shadowColor: "#C2410C", shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3,
+    borderRadius: 16, padding: 18, backgroundColor: DESIGN.purple,
   },
   sageBannerIcon: {
     width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: DESIGN.paper,
   },
-  sageBannerHeading: { fontSize: 17, fontWeight: "800", color: "#FFFFFF" },
-  sageBannerText: { fontSize: 14, lineHeight: 20, color: "#FFEDD5", marginTop: 2 },
+  sageBannerHeading: { fontSize: 17, fontWeight: "800", color: DESIGN.ink },
+  sageBannerText: { fontSize: 14, lineHeight: 20, color: DESIGN.muted, marginTop: 2 },
 });
 const s = alertStyles;
 
@@ -228,10 +230,10 @@ export default function NotificationScreen({
                 : router.replace("/(tabs)/notifications")
             }
           >
-            <ArrowLeft size={22} color="#9A3412" />
+            <ArrowLeft size={22} color={DESIGN.actionText} />
           </TouchableOpacity>
         ) : (
-          <Bell size={26} color="#C2410C" />
+          <Bell size={26} color={DESIGN.actionText} />
         )}
         <View style={s.grow}>
           <Text style={s.title}>Alerts</Text>
@@ -246,14 +248,14 @@ export default function NotificationScreen({
               router.push("/(authenticated)/notification-settings")
             }
           >
-            <Settings size={22} color="#9A3412" />
+            <Settings size={22} color={DESIGN.actionText} />
           </TouchableOpacity>
         )}
       </View>
       {isLoading ? (
         <ActivityIndicator
           accessibilityLabel="Loading account"
-          color="#C2410C"
+          color={DESIGN.actionText}
         />
       ) : !signedIn ? (
         <View style={s.card}>
@@ -285,7 +287,7 @@ export default function NotificationScreen({
                   {sageNeedsYouCount} suggestion{sageNeedsYouCount === 1 ? "" : "s"} for you
                 </Text>
               </View>
-              <ChevronRight size={22} color="#FFFFFF" />
+              <ChevronRight size={22} color={DESIGN.actionText} />
             </TouchableOpacity>
           ) : null}
           <View style={s.card}>
@@ -301,7 +303,7 @@ export default function NotificationScreen({
                 onPress={() => markRead.mutate(null)}
               />
             </View>
-            <View style={s.row}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} accessibilityLabel="Alert categories">
               {[undefined, ...notificationCategories].map((value) => (
                 <TouchableOpacity
                   key={value || "all"}
@@ -313,9 +315,9 @@ export default function NotificationScreen({
                     s.button,
                     {
                       borderWidth: 1,
-                      borderColor: category === value ? "#C2410C" : "#E5E7EB",
+                      borderColor: category === value ? DESIGN.actionText : DESIGN.border,
                       backgroundColor:
-                        category === value ? "#FFF7ED" : "#FFFFFF",
+                        category === value ? DESIGN.primarySoft : DESIGN.paper,
                       maxWidth: "100%",
                     },
                   ]}
@@ -334,7 +336,7 @@ export default function NotificationScreen({
                   </Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
             <View style={s.row}>
               <TouchableOpacity
                 accessibilityRole="button"
@@ -368,37 +370,18 @@ export default function NotificationScreen({
           {query.isPending && (
             <ActivityIndicator
               accessibilityLabel="Loading alerts"
-              color="#C2410C"
+              color={DESIGN.actionText}
             />
           )}
           {query.isError && (
-            <View style={s.card}>
-              <Text accessibilityRole="alert" style={s.error}>
-                We couldn&apos;t load your alerts. Please try again.
-              </Text>
-              <AlertButton
-                label="Try again"
-                onPress={() =>
-                  void (query.isFetchNextPageError
-                    ? query.fetchNextPage()
-                    : query.refetch())
-                }
-              />
-            </View>
+            <LoadError message="We couldn't load your alerts. Please try again."
+              retrying={query.isFetching}
+              onRetry={() => void (query.isFetchNextPageError ? query.fetchNextPage() : query.refetch())} />
           )}
           {!query.isPending && !query.isError && notifications.length === 0 && (
-            <View style={s.card}>
-              <Text style={s.heading}>
-                {category || unreadOnly
-                  ? "No matching alerts"
-                  : "No alerts yet"}
-              </Text>
-              <Text style={s.text}>
-                {category || unreadOnly
-                  ? "Try another filter or check back later."
-                  : "Updates from your real account activity will appear here."}
-              </Text>
-            </View>
+            <EmptyState title={category || unreadOnly ? "No matching alerts" : "No alerts yet"}
+              message={category || unreadOnly ? "Try all alerts to see the rest of your activity." : "Updates from your commons and account will appear here."}
+              action={category || unreadOnly ? { label: "Clear filters", onPress: () => { setCategory(undefined); setUnreadOnly(false); } } : undefined} />
           )}
           {notifications.map((notification) => (
             <TouchableOpacity
@@ -410,8 +393,8 @@ export default function NotificationScreen({
               style={[
                 s.card,
                 !notification.read && {
-                  borderColor: "#FDBA74",
-                  backgroundColor: "#FFFBF5",
+                  borderColor: DESIGN.border,
+                  backgroundColor: DESIGN.primarySoft,
                 },
               ]}
             >
@@ -420,7 +403,7 @@ export default function NotificationScreen({
                 {!notification.read && <Text style={s.buttonText}>Unread</Text>}
               </View>
               {notification.commonsName ? (
-                <Text style={s.buttonText}>From {notification.commonsName}</Text>
+                <Text style={[s.text, { fontSize: 12 }]}>From {notification.commonsName}</Text>
               ) : null}
               <Text style={s.heading}>{notification.title}</Text>
               <Text style={s.text}>{notification.body}</Text>

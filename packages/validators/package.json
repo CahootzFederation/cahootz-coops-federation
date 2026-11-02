@@ -18,6 +18,11 @@
       "types": "./dist/notification.d.ts",
       "import": "./dist/notification.js",
       "default": "./dist/notification.js"
+    },
+    "./marketplace-offers": {
+      "types": "./dist/marketplace-offers.d.ts",
+      "import": "./dist/marketplace-offers.js",
+      "default": "./dist/marketplace-offers.js"
     }
   },
   "scripts": {

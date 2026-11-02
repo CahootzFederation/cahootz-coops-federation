@@ -83,7 +83,7 @@ test.describe("onboarding usability", () => {
     // Straight to sign-in, with email and one-time-code autofill turned on.
     const email = page.getByPlaceholder("name@email.com");
     await expect(email).toBeVisible();
-    await expect(shown(page, "Sign in", { exact: true })).toBeVisible();
+    await expect(shown(page, "Continue to Cahootz", { exact: true })).toBeVisible();
     await expect(shown(page, /No password needed/)).toBeVisible();
     await expect(shown(page, "Common", { exact: true })).toHaveCount(0);
     await expect(email).toHaveAttribute("autocomplete", "email");
@@ -201,6 +201,9 @@ test.describe("onboarding usability", () => {
       await expect(shown(page, "What always waits for a person", { exact: true })).toBeVisible();
       await expect(shown(page, "What Sage remembers", { exact: true })).toBeVisible();
       await expect(shown(page, /spending or moving money, changing who is a member/)).toBeVisible();
+      // The full card must not push the suggestion tabs under the bottom navigation.
+      await page.getByRole("tab", { name: "Following" }).filter({ visible: true }).click();
+      await page.getByRole("tab", { name: "Needs you" }).filter({ visible: true }).click();
 
       // "Got it" shrinks it to one line, remembered on this device.
       await page.getByRole("button", { name: "Got it" }).click();
@@ -214,11 +217,39 @@ test.describe("onboarding usability", () => {
       await page.getByRole("button", { name: "What is Sage?" }).click();
       await expect(shown(page, "Meet Sage", { exact: true })).toBeVisible();
 
-      // Sage settings always explains it.
+      // Sage settings always explains it, with the details one tap away.
       await page.goto("/sage-settings");
+      await expect(shown(page, "Meet Sage", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "How Sage works", exact: true }).click();
       await expect(shown(page, "What always waits for a person", { exact: true })).toBeVisible();
     } finally {
       await context.close();
     }
   });
+});
+
+
+test("restoring a saved session never exposes the public welcome or sign-in form", async ({ browser }) => {
+  const { page, context } = await newSignedInPage(browser, USER_A_EMAIL);
+  let releaseSession!: () => void;
+  const sessionGate = new Promise<void>((resolve) => { releaseSession = resolve; });
+  try {
+    await page.route("**/trpc/user.getOnboardingProgress", async (route) => {
+      await sessionGate;
+      await route.continue();
+    });
+    const sessionRequest = page.waitForRequest("**/trpc/user.getOnboardingProgress");
+    await page.goto("/");
+    await sessionRequest;
+    await expect(page.getByRole("progressbar").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Continue", exact: true })).toHaveCount(0);
+    await expect(page.getByPlaceholder("name@email.com")).toHaveCount(0);
+    await expect(page.getByRole("tablist", { name: "Main navigation" })).toHaveCount(0);
+    releaseSession();
+    await expect(page.getByLabel("Open menu")).toBeVisible();
+    await expect(page.getByRole("tablist", { name: "Main navigation" })).toBeVisible();
+  } finally {
+    releaseSession();
+    await context.close();
+  }
 });

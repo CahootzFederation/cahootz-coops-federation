@@ -594,7 +594,7 @@ function CoopSelectionStep({
         <p className="mt-2 text-sm leading-6 text-[#111111]/65">
           Tell us which commons you want to create or join. We’ll help you find your next step.
         </p>
-        <a href="/#commons-waitlist" className="mt-4 inline-flex min-h-11 items-center font-semibold underline underline-offset-4">Find or start a commons</a>
+        <a href="/?homepage=community#waitlist" className="mt-4 inline-flex min-h-11 items-center font-semibold underline underline-offset-4">Find or start a commons</a>
       </div>
     );
   }

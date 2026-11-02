@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enterFeed, newSignedInPage, skipOnboardingWizard } from "./support/auth";
+import { enterFeed, newSignedInPage } from "./support/auth";
 
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 const USER_A_EMAIL =
@@ -140,7 +140,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
     expect(startingName).not.toBe(otherName);
     await page.getByLabel(`View circles in ${otherName}`, { exact: true }).filter({ visible: true }).click();
     await expect(currentCommons(otherName)).toBeVisible();
-    await expect(visible(`Choose a circle in ${otherName}`)).toBeVisible();
+    await expect(visible(`Find your circle in ${otherName}`)).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`coopId=${otherCoopId}`));
 
     await page.reload();
@@ -153,7 +153,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
       .filter({ visible: true })
       .click();
     await expect(currentCommons(startingName)).toBeVisible();
-    await expect(visible(`Choose a circle in ${startingName}`)).toBeVisible();
+    await expect(visible(`Find your circle in ${startingName}`)).toBeVisible();
 
     // 3. Commons directory.
     await page.getByLabel("Open menu").filter({ visible: true }).click();
@@ -161,7 +161,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
     await expect(page.getByText("Browse commons", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: `Open ${otherName} circles`, exact: true }).filter({ visible: true }).click();
     await expect(currentCommons(otherName)).toBeVisible();
-    await expect(visible(`Choose a circle in ${otherName}`)).toBeVisible();
+    await expect(visible(`Find your circle in ${otherName}`)).toBeVisible();
   } finally {
     await context.close();
   }
@@ -351,13 +351,21 @@ test("Circle View scrolls to circles below the fold while its header stays put",
 });
 
 test("onboarding hides the app's tab bar until it's finished", async ({ page }) => {
-  // A fresh, signed-out visitor lands in onboarding.
+  // The public carousel and email verification never display app tabs.
   await page.goto("/");
-  await expect(page).toHaveURL(/profile-onboarding/);
+  const nav = page.getByRole("tablist", { name: "Main navigation" });
   await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeVisible();
-  await expect(page.getByRole("tablist", { name: "Main navigation" })).toHaveCount(0);
-
-  await skipOnboardingWizard(page, "always");
+  await expect(nav).toHaveCount(0);
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByPlaceholder("name@email.com")).toBeVisible();
+  await expect(nav).toHaveCount(0);
+  await page.getByPlaceholder("name@email.com").fill(USER_A_EMAIL);
+  await page.getByRole("button", { name: "Continue with email" }).click();
+  await expect(page.getByPlaceholder("Enter 6-digit code")).toBeVisible();
+  await expect(nav).toHaveCount(0);
+  await page.getByPlaceholder("Enter 6-digit code").fill(process.env.E2E_LOGIN_CODE || "000000");
+  await page.getByRole("button", { name: "Verify and continue" }).click();
+  // This established fixture already completed setup.
   await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
-  await expect(page.getByRole("tablist", { name: "Main navigation" })).toBeVisible();
+  await expect(nav).toBeVisible();
 });

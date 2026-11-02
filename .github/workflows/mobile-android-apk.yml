@@ -1,0 +1,109 @@
+name: Mobile Android APK
+
+# Builds an installable Android APK with the production settings (production
+# API, production update channel, EAS-managed signing key) and publishes it as
+# a GitHub release, so it can be handed out without the Play Store. The newest
+# APK is always at:
+#   https://github.com/<owner>/<repo>/releases/latest/download/cahootz.apk
+
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: What changed in this build (shown on the release page)
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    name: Build and publish APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup repo
+        uses: ./tooling/github/setup
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v9
+        with:
+          eas-version: latest
+          packager: pnpm
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build APK on EAS
+        id: build
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL || secrets.EXPO_PUBLIC_API_BASE_URL }}
+        shell: bash
+        run: |
+          eas build --profile production-apk --platform android --non-interactive --wait --json > "$RUNNER_TEMP/build.json"
+          build_url=$(jq -r '.[0].artifacts.buildUrl' "$RUNNER_TEMP/build.json")
+          app_version=$(jq -r '.[0].appVersion' "$RUNNER_TEMP/build.json")
+          build_version=$(jq -r '.[0].appBuildVersion' "$RUNNER_TEMP/build.json")
+          build_id=$(jq -r '.[0].id' "$RUNNER_TEMP/build.json")
+          if [ -z "$build_url" ] || [ "$build_url" = "null" ]; then
+            echo "::error::EAS finished but didn't return an APK link. Check the build on expo.dev."
+            cat "$RUNNER_TEMP/build.json"
+            exit 1
+          fi
+          {
+            echo "build_url=$build_url"
+            echo "app_version=$app_version"
+            echo "build_version=$build_version"
+            echo "build_id=$build_id"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download APK
+        shell: bash
+        run: curl --fail --location --silent --show-error -o "$RUNNER_TEMP/cahootz.apk" "${{ steps.build.outputs.build_url }}"
+
+      - name: Keep APK as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cahootz-android-${{ steps.build.outputs.app_version }}-${{ steps.build.outputs.build_version }}
+          path: ${{ runner.temp }}/cahootz.apk
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ inputs.notes }}
+        shell: bash
+        run: |
+          tag="android-v${{ steps.build.outputs.app_version }}-${{ steps.build.outputs.build_version }}"
+          {
+            echo "Cahootz for Android, version ${{ steps.build.outputs.app_version }} (build ${{ steps.build.outputs.build_version }})."
+            echo
+            if [ -n "$NOTES" ]; then
+              echo "$NOTES"
+              echo
+            fi
+            echo "**To install:** open this page on your Android phone, tap \`cahootz.apk\`, then open the download."
+            echo "If your phone asks, allow your browser to install apps. Installed an earlier APK from here? This one updates it in place."
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "$tag" "$RUNNER_TEMP/cahootz.apk" \
+            --target "$GITHUB_SHA" \
+            --title "Cahootz Android ${{ steps.build.outputs.app_version }} (build ${{ steps.build.outputs.build_version }})" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --latest
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "### Android APK ready"
+            echo
+            echo "- Share this link (always the newest APK): https://github.com/${{ github.repository }}/releases/latest/download/cahootz.apk"
+            echo "- This build's release: https://github.com/${{ github.repository }}/releases/tag/android-v${{ steps.build.outputs.app_version }}-${{ steps.build.outputs.build_version }}"
+            echo "- EAS build: https://expo.dev/accounts/cahootz-coop/projects/cahootz-coop/builds/${{ steps.build.outputs.build_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"

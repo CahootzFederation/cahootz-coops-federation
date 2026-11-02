@@ -19,6 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
+import { CommunityPulse } from '@/components/community-pulse';
 import { GoalSignalsCard, VotedAmendmentsCard } from '@/components/sage-goal-cards';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
@@ -212,7 +213,7 @@ export default function CommonsDetailScreen() {
     invitationToken?: string;
   }>();
   const coopId = params.coopId || 'cahootz';
-  const { sessionToken, user } = useAuth();
+  const { sessionToken, user, isLoading: authLoading } = useAuth();
   const [config, setConfig] = useState<CoopConfigDetail | null>(null);
   const [directoryItem, setDirectoryItem] =
     useState<CommonsDirectoryItem | null>(null);
@@ -244,6 +245,7 @@ export default function CommonsDetailScreen() {
   const [applying, setApplying] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return;
     let mounted = true;
 
     async function load() {
@@ -349,7 +351,7 @@ export default function CommonsDetailScreen() {
     return () => {
       mounted = false;
     };
-  }, [coopId, sessionToken, user?.walletAddress, reloadKey]);
+  }, [authLoading, coopId, sessionToken, user?.walletAddress, reloadKey]);
 
 
   useEffect(() => {
@@ -406,8 +408,13 @@ export default function CommonsDetailScreen() {
   }
 
   useEffect(() => {
-    if (params.apply === '1' && !loading && canOpenApply) setApplyOpen(true);
-  }, [params.apply, loading, canOpenApply]);
+    if (params.apply === '1' && !authLoading && !loading && canOpenApply) {
+      setApplyOpen(true);
+      // Consume the invitation's one-time request to open the form. Keep its
+      // referral fields, but never reopen a submitted application on reload.
+      router.setParams({ apply: undefined });
+    }
+  }, [params.apply, authLoading, loading, canOpenApply]);
 
   async function handleWithdraw() {
     if (!sessionToken || withdrawing) return;
@@ -926,6 +933,7 @@ export default function CommonsDetailScreen() {
 
               {activeTab === 'community' ? (
                 <CommunityTab
+                  coopId={coopId}
                   membersPreview={membersPreview}
                   isSteward={!!directoryItem?.isSteward}
                   circles={circles}
@@ -1419,6 +1427,7 @@ function SageAutonomyRow({
 }
 
 function CommunityTab({
+  coopId,
   membersPreview,
   isSteward,
   circles,
@@ -1426,6 +1435,7 @@ function CommunityTab({
   onOpenCircle,
   onSeeAllCircles,
 }: {
+  coopId: string;
   membersPreview: MembersPreview | null;
   isSteward: boolean;
   circles: PrivateGroupSummary[];
@@ -1542,6 +1552,7 @@ function CommunityTab({
           <Text className="font-black text-gray-700">+ Start a circle</Text>
         </TouchableOpacity>
       </View>
+      <CommunityPulse key={coopId} coopId={coopId} />
     </>
   );
 }

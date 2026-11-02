@@ -228,7 +228,7 @@ test("Before a vote closes, Sage posts one balanced summary of the discussion", 
 
     // 4. One summary per proposal: running the step again adds nothing.
     expect(fixture("pre-vote", proposalId).result).toBe("SKIPPED");
-    await userA.page.reload();
+    await userA.page.goto(url);
     const viewAll = userA.page.getByText(/View all \d+ comments/).locator("visible=true").first();
     if (await viewAll.isVisible().catch(() => false)) await viewAll.click();
     await expect(userA.page.getByTestId("sage-proposal-comment").locator("visible=true")).toHaveCount(1);

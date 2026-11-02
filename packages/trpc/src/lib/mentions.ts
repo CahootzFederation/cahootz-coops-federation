@@ -5,7 +5,7 @@ import { RESERVED_MENTION_HANDLES } from "./commons.js";
 const RAW_MENTION_RE = /(?<![\w[])@([a-zA-Z0-9_-]{1,30})\b/g;
 const ENCODED_MENTION_RE = /\[@([a-zA-Z0-9_-]+)\]/g;
 
-type MentionDb = Pick<Context["db"], "user">;
+type MentionDb = Pick<Context["db"], "userCoopMembership">;
 
 export interface MentionedUser {
   id: string;
@@ -20,10 +20,11 @@ export interface EncodeMentionsResult {
 }
 
 export interface EncodeMentionsOptions {
-  /** When given, a bare "@sage" token resolves to THIS coop's own Sage
+  /** Bare "@sage" resolves to THIS coop's own Sage
    * account (each coop has its own Sage `User` with a distinct handle)
-   * instead of requiring the coop-specific handle to be typed out. */
-  coopId?: string;
+   * instead of requiring the coop-specific handle to be typed out. Every
+   * other handle must also belong to an active member of this Commons. */
+  coopId: string;
 }
 
 /**
@@ -37,7 +38,7 @@ export interface EncodeMentionsOptions {
 export async function encodeMentions(
   db: MentionDb,
   content: string,
-  options: EncodeMentionsOptions = {},
+  options: EncodeMentionsOptions,
 ): Promise<EncodeMentionsResult> {
   const candidates = new Set<string>();
   for (const match of content.matchAll(RAW_MENTION_RE)) {
@@ -52,18 +53,27 @@ export async function encodeMentions(
     return { content, mentionedUsers: [] };
   }
 
-  const sageAlias = options.coopId ? sageHandleForCoop(options.coopId) : undefined;
+  const sageAlias = sageHandleForCoop(options.coopId);
   const hasSageToken = [...candidates].some((c) => c.toLowerCase() === "sage");
   const lookupHandles = new Set(candidates);
-  if (hasSageToken && sageAlias) lookupHandles.add(sageAlias);
+  if (hasSageToken) lookupHandles.add(sageAlias);
 
-  const users = await db.user.findMany({
+  const memberships = await db.userCoopMembership.findMany({
     where: {
-      handle: { in: [...lookupHandles], mode: "insensitive" },
-      deletedAt: null,
+      coopId: options.coopId,
+      status: "ACTIVE",
+      user: {
+        handle: { in: [...lookupHandles], mode: "insensitive" },
+        deletedAt: null,
+      },
     },
-    select: { id: true, handle: true, isBot: true, roles: true },
+    select: {
+      user: {
+        select: { id: true, handle: true, isBot: true, roles: true },
+      },
+    },
   });
+  const users = memberships.map(({ user }) => user);
 
   if (users.length === 0) {
     return { content, mentionedUsers: [] };
@@ -72,7 +82,7 @@ export async function encodeMentions(
   const byLowerHandle = new Map(
     users.filter((u) => u.handle).map((u) => [u.handle!.toLowerCase(), u]),
   );
-  if (hasSageToken && sageAlias) {
+  if (hasSageToken) {
     const sageUser = users.find(
       (u) => u.handle?.toLowerCase() === sageAlias.toLowerCase(),
     );

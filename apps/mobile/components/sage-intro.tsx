@@ -1,3 +1,4 @@
+import { DESIGN } from '@/constants/design';
 import React from 'react';
 import { TouchableOpacity, View } from 'react-native';
 
@@ -33,11 +34,11 @@ const SECTIONS = [
 ] as const;
 
 const THEME = {
-  primary: '#C2410C',
-  primarySoft: '#FFF7ED',
-  border: '#FED7AA',
-  ink: '#1C1917',
-  body: '#44403C',
+  primary: DESIGN.actionText,
+  primarySoft: DESIGN.purple,
+  border: DESIGN.border,
+  ink: DESIGN.ink,
+  body: DESIGN.muted,
 };
 
 /**
@@ -45,7 +46,8 @@ const THEME = {
  * shows until the member taps "Got it" (remembered on this device), then
  * shrinks to one line with a "What is Sage?" link that opens it again.
  */
-export function SageIntro({ dismissible = true }: { dismissible?: boolean }) {
+export function SageIntro({ dismissible = true, collapsible = false }: { dismissible?: boolean; collapsible?: boolean }) {
+  const [detailsOpen, setDetailsOpen] = React.useState(false);
   const [expanded, setExpanded] = React.useState<boolean | null>(dismissible ? null : true);
 
   React.useEffect(() => {
@@ -99,7 +101,7 @@ export function SageIntro({ dismissible = true }: { dismissible?: boolean }) {
         </Text>
       </View>
       <Text style={{ fontSize: 16, color: THEME.ink, lineHeight: 22 }}>{SAGE_ONE_LINER}</Text>
-      {SECTIONS.map((section) => (
+      {(!collapsible || detailsOpen) && SECTIONS.map((section) => (
         <View key={section.title} style={{ gap: 2 }}>
           <Text style={{ fontSize: 15, fontWeight: '700', color: THEME.ink }}>{section.title}</Text>
           <Text style={{ fontSize: 15, color: THEME.body, lineHeight: 21 }}>{section.body}</Text>
@@ -108,6 +110,10 @@ export function SageIntro({ dismissible = true }: { dismissible?: boolean }) {
       <Text style={{ fontSize: 15, color: THEME.body, lineHeight: 21 }}>
         Sage can make mistakes. Check what it says before you act on it.
       </Text>
+      {collapsible ? <TouchableOpacity accessibilityRole="button" accessibilityState={{ expanded: detailsOpen }}
+        onPress={() => setDetailsOpen(!detailsOpen)} style={{ minHeight: 48, justifyContent: 'center' }}>
+        <Text style={{ color: DESIGN.actionText, fontWeight: '700' }}>{detailsOpen ? 'Hide how Sage works' : 'How Sage works'}</Text>
+      </TouchableOpacity> : null}
       {dismissible ? (
         <TouchableOpacity
           accessibilityRole="button"

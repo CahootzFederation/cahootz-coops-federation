@@ -1,4 +1,5 @@
 import { CommunityTheme } from '@/constants/theme';
+import { DESIGN } from '@/constants/design';
 import { useRef, useState } from 'react';
 import { NativeScrollEvent, NativeSyntheticEvent, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { ArrowRight, HandHeart, Lightbulb, MessageCircle, UserCircle, Users } from 'lucide-react-native';
@@ -22,7 +23,7 @@ const appIntroItems = [
     title: 'Ask for help and offer help',
     body: 'People can share needs, skills, time, tools, advice, rides, space, or support.',
     visual: '🛠️',
-    visualBg: '#FFF7ED',
+    visualBg: DESIGN.primarySoft,
     Icon: HandHeart,
   },
   {
@@ -118,7 +119,7 @@ export default function OnboardingWelcome({ onContinue }: { onContinue: () => vo
             style={introStyles.submitButton}
           >
             <Text style={introStyles.submitText}>Continue</Text>
-            <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.6} />
+            <ArrowRight color={DESIGN.ink} size={20} strokeWidth={2.6} />
           </Pressable>
         </View>
       </SafeAreaView>
@@ -128,7 +129,7 @@ export default function OnboardingWelcome({ onContinue }: { onContinue: () => vo
 const introStyles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: DESIGN.paper,
   },
   scroll: {
     flex: 1,
@@ -144,8 +145,8 @@ const introStyles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 12,
     borderTopWidth: 1,
-    borderTopColor: CommunityTheme.border,
-    backgroundColor: '#FFFFFF',
+    borderTopColor: DESIGN.border,
+    backgroundColor: DESIGN.paper,
   },
   header: {
     paddingTop: 8,
@@ -157,7 +158,7 @@ const introStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     borderRadius: 999,
-    backgroundColor: '#FFF7ED',
+    backgroundColor: DESIGN.primarySoft,
     borderWidth: 1,
     borderColor: '#FED7AA',
     paddingHorizontal: 12,
@@ -165,19 +166,19 @@ const introStyles = StyleSheet.create({
     marginBottom: 18,
   },
   badgeText: {
-    color: '#C2410C',
+    color: DESIGN.actionText,
     fontSize: 13,
     fontWeight: '700',
   },
   title: {
-    color: CommunityTheme.ink,
+    color: DESIGN.ink,
     fontSize: 30,
     lineHeight: 36,
     fontWeight: '700',
     letterSpacing: 0,
   },
   subtitle: {
-    color: CommunityTheme.muted,
+    color: DESIGN.muted,
     fontSize: 16,
     lineHeight: 24,
     marginTop: 12,
@@ -192,8 +193,8 @@ const introStyles = StyleSheet.create({
     minHeight: 264,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: CommunityTheme.border,
-    backgroundColor: '#FFFFFF',
+    borderColor: DESIGN.border,
+    backgroundColor: DESIGN.paper,
     padding: 18,
     justifyContent: 'center',
   },
@@ -218,18 +219,18 @@ const introStyles = StyleSheet.create({
     borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: DESIGN.paper,
     borderWidth: 1,
     borderColor: '#FED7AA',
   },
   carouselTitle: {
-    color: CommunityTheme.ink,
+    color: DESIGN.ink,
     fontSize: 21,
     lineHeight: 27,
     fontWeight: '700',
   },
   carouselBody: {
-    color: CommunityTheme.muted,
+    color: DESIGN.muted,
     fontSize: 15,
     lineHeight: 22,
     marginTop: 8,
@@ -255,19 +256,19 @@ const introStyles = StyleSheet.create({
   },
   carouselDotActive: {
     width: 22,
-    backgroundColor: CommunityTheme.primary,
+    backgroundColor: DESIGN.primary,
   },
   submitButton: {
-    minHeight: 58,
+    minHeight: 52,
     borderRadius: 16,
-    backgroundColor: CommunityTheme.primary,
+    backgroundColor: DESIGN.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
   },
   submitText: {
-    color: '#FFFFFF',
+    color: DESIGN.ink,
     fontSize: 17,
     lineHeight: 22,
     fontWeight: '700',

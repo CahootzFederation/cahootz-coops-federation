@@ -30,6 +30,7 @@ import { scMintEventsRouter } from "./sc-mint-events.js";
 import { stripeConnectRouter } from "./stripe-connect.js";
 import { scVerificationRouter } from "./sc-verification.js";
 import { platformConfigRouter } from "./platform-config.js";
+import { productDiscoveryRouter } from "./product-discovery.js";
 import { publicCoopInfoRouter } from "./public-coop-info.js";
 import { walletAuthRouter } from "./wallet-auth.js";
 import { waitlistRouter } from "./waitlist.js";
@@ -42,8 +43,12 @@ import { knowledgeBaseRouter } from "./knowledge-base.js";
 import { commonsActionsRouter } from "./commons-actions.js";
 import { commonsActionsAdminRouter } from "./commons-actions-admin.js";
 import { sageRouter } from "./sage.js";
+import { communityPulseRouter } from "./community-pulse.js";
+import { marketplaceOffersRouter } from "./marketplace-offers.js";
+import { vendorOutreachRouter } from "./vendor-outreach.js";
 
 export const appRouter = router({
+  communityPulse: communityPulseRouter,
   user: userRouter,
   anonymousProfile: anonymousProfileRouter,
   proposal: proposalRouter,
@@ -69,11 +74,14 @@ export const appRouter = router({
   proposalExpert: proposalExpertRouter,
   treasury: treasuryRouter,
   commerce: commerceTransactionsRouter,
+  marketplaceOffers: marketplaceOffersRouter,
+  vendorOutreach: vendorOutreachRouter,
   treasuryLedger: treasuryLedgerRouter,
   scMintEvents: scMintEventsRouter,
   stripeConnect: stripeConnectRouter,
   scVerification: scVerificationRouter,
   platformConfig: platformConfigRouter,
+  productDiscovery: productDiscoveryRouter,
   publicCoopInfo: publicCoopInfoRouter,
   walletAuth: walletAuthRouter,
   waitlist: waitlistRouter,

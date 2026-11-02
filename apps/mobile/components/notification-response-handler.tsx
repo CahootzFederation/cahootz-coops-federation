@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
 import { useAuth } from "@/contexts/auth-context";
+import { useNavigationReady } from "@/hooks/use-navigation-ready";
 import { useQueryClient } from "@tanstack/react-query";
 import { track } from "@/lib/analytics";
 import { alertFromPush } from "@/lib/in-app-alerts";
@@ -13,8 +14,10 @@ export function NotificationResponseHandler() {
   const { sessionToken } = useAuth();
   const client = useQueryClient();
   const handled = useRef<string | null>(null);
+  // A tap that launched the app is read right away; wait until it can navigate.
+  const navigationReady = useNavigationReady();
   useEffect(() => {
-    if (Platform.OS === "web" || !sessionToken) return;
+    if (Platform.OS === "web" || !sessionToken || !navigationReady) return;
     let active = true;
     const refresh = () => {
       void client.invalidateQueries({
@@ -53,6 +56,6 @@ export function NotificationResponseHandler() {
       delivery.remove();
       response.remove();
     };
-  }, [sessionToken, client]);
+  }, [sessionToken, navigationReady, client]);
   return null;
 }

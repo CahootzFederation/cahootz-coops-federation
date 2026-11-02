@@ -74,6 +74,15 @@ export type AnalyticsEvents = {
   proposal_hub_viewed: { signed_in: boolean };
   signed_in: Record<string, never>;
   signed_out: { reason: 'user' | 'session_expired' };
+  /** Member Deals and Group Buys. Offer ids only, never amounts or other members. */
+  offer_list_viewed: { offer_count: number };
+  offer_viewed: { offer_type: 'MEMBER_DEAL' | 'GROUP_BUY'; status: string };
+  group_buy_commit_started: { offer_id: string };
+  group_buy_committed: { offer_id: string; quantity: number; threshold_reached: boolean };
+  group_buy_commitment_cancelled: { offer_id: string };
+  offer_checkout_started: { offer_id: string; offer_type: 'MEMBER_DEAL' | 'GROUP_BUY' };
+  offer_checkout_completed: { offer_id: string; offer_type: 'MEMBER_DEAL' | 'GROUP_BUY' };
+  my_savings_viewed: { offer_count: number };
 };
 
 export type AnalyticsEvent = keyof AnalyticsEvents;

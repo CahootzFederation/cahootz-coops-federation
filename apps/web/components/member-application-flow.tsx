@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { usePostHog } from "posthog-js/react";
 import {
   AlertCircle,
@@ -594,7 +595,7 @@ function CoopSelectionStep({
         <p className="mt-2 text-sm leading-6 text-[#111111]/65">
           Tell us which commons you want to create or join. We’ll help you find your next step.
         </p>
-        <a href="/?homepage=community#waitlist" className="mt-4 inline-flex min-h-11 items-center font-semibold underline underline-offset-4">Find or start a commons</a>
+        <Link href="/?homepage=community#waitlist" className="mt-4 inline-flex min-h-11 items-center font-semibold underline underline-offset-4">Find or start a commons</Link>
       </div>
     );
   }

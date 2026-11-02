@@ -91,26 +91,6 @@ Prioritization is qualitative: no analytics or interview evidence was supplied, 
 
 Run short usability sessions with a returning member and an eligible council member: find a reply, ask for help in the correct community, resume a draft, and identify a decision needing attention. Observe hesitation, wrong destinations, task completion, and recovery from an error. Evaluate whether people receive useful help and reach decisions—not simply whether the redesign generates more posts or clicks. These are proposed validation measures, not observed outcomes.
 
-## Fresh screenshot coverage
-
-All images below are in `screenshots/` beside this report and were visually inspected. React Native's internal scroll containers mean a full-page browser screenshot still captures the visible app viewport rather than every offscreen element.
-
-| Screen/state | 375×812 | 768×1024 | 1280×800 |
-|---|---|---|---|
-| Proposals hub | `r2-proposals-375.jpg` | `r2-proposals-768.jpg` | `r2-proposals-1280.jpg` |
-| Messages | `r2-messages-375.jpg` | `r2-messages-768.jpg` | `r2-messages-1280.jpg` |
-| Blank proposal submission | `r2-proposal-validation-375.jpg` | — | — |
-| Board before account detour | `r2-context-before-375.jpg` | — | — |
-| Board after detour and reload | `r2-context-after-reload-375.jpg` | — | — |
-
 ## Validation limits
 
 No source behavior was changed and no full automated suite was rerun for this review. Previous implementation checks included passing mobile type checking and four focused design checks. The earlier full suite remained unresolved (76 passed, 43 failed, 2 skipped, 3 not run), with fixture access, timing, and local server failures among the causes. This report does not assert release readiness, complete accessibility conformance, native-device validation, or production performance.
-
-## Screenshot previews — before fixes
-
-![Messages on a phone](screenshots/r2-messages-375.jpg)
-
-![Proposals on a phone](screenshots/r2-proposals-375.jpg)
-
-![Proposal validation before fixes](screenshots/r2-proposal-validation-375.jpg)

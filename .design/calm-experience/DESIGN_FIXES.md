@@ -11,32 +11,6 @@ Implemented in the `codex/calm-app-fixes` worktree. The original checkout is pre
 - Proposal summary requests wait for session restoration. Explicit permission denial is distinct from network/server failure; unavailable summaries show a retry instead of a false empty queue. Backend authorization and voting rules are unchanged.
 - The public landing page keeps its approved warm palette. The app uses white surfaces.
 
-## Before and after
-
-### Messages — before
-
-![Messages before](screenshots/r2-messages-375.jpg)
-
-### Messages — after
-
-![Messages after](screenshots/fixed-messages-375.jpg)
-
-### New message and conversation — after
-
-![New-message picker](screenshots/fixed-new-message-375.jpg)
-
-![Conversation with pinned composer](screenshots/fixed-conversation-375.jpg)
-
-### Proposals — after
-
-![Proposals after](screenshots/fixed-proposals-375.jpg)
-
-### Proposal validation — after
-
-![Visible proposal error and Send button](screenshots/fixed-validation-375.jpg)
-
-Additional tablet and desktop captures: `fixed-messages-768.jpg`, `fixed-messages-1280.jpg`, `fixed-proposals-768.jpg`, `fixed-proposals-1280.jpg` in `screenshots/`. All were visually inspected.
-
 ## Validation
 
 The new account-detour and phone-validation tests were first run against the old preview and both failed at the reported bugs. Both pass with the fixes.
@@ -58,7 +32,7 @@ The changes are ready for review, but the broader test suite needs its environme
 
 ## Main integration — November 2, 2026
 
-Merged main at `30866b866ae9dc1bbb6e20d8f900b14332bb9b4c`, preserving its shared DESIGN system, fully wrapping circle names, search, parent-tab selection, sign-in restoration, and waitlist/community homepage. CommunityTheme now delegates its colors to DESIGN. The default group-buy homepage is retained; the disclosure test explicitly selects the community variant. No duplicate waitlist or retired homepage application form was restored. The old application-list test is no longer applicable to that homepage and was removed. Account route expectations now allow retained Commons parameters for Wallet, History, and Pay a store. Historical screenshots above predate this integration.
+Merged main at `30866b866ae9dc1bbb6e20d8f900b14332bb9b4c`, preserving its shared DESIGN system, fully wrapping circle names, search, parent-tab selection, sign-in restoration, and waitlist/community homepage. CommunityTheme now delegates its colors to DESIGN. The default group-buy homepage is retained; the disclosure test explicitly selects the community variant. No duplicate waitlist or retired homepage application form was restored. The old application-list test is no longer applicable to that homepage and was removed. Account route expectations now allow retained Commons parameters for Wallet, History, and Pay a store.
 
 Validation of the merged mobile UI:
 

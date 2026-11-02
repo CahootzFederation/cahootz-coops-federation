@@ -36,7 +36,7 @@ No production analytics or customer interviews were available. Strategic priorit
 
 **Acceptance:** Starting in either of two memberships, Board, marketplace, proposals, and their creation screens retain that membership through navigation and reload. Show the destination before any submission. Add this regression journey to `apps/mobile/e2e/` when implementing.
 
-Evidence: [Cahootz feed](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-feed-mobile-375.jpg), [different Commons on Board](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-board-mobile-375.jpg), [composer](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-board-composer-mobile-375.jpg).
+Evidence: Cahootz feed, different Commons on Board, composer.
 
 ### 2. Remove the impossible application choice
 
@@ -48,7 +48,7 @@ Evidence: [Cahootz feed](/Users/deonrobinson/workspace/soulaancoop/screenshots/r
 
 **Acceptance:** A listed Apply destination can actually be selected; an empty list has no impossible Continue action; a failed request shows Retry. Cover these states in a UI regression test. This finding is reproduced locally; production incidence was not checked.
 
-Evidence: [Mobile application error](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-application-empty-mobile-375.jpg).
+Evidence: Mobile application error.
 
 ### 3. Make action colors readable
 
@@ -56,13 +56,13 @@ The shared-looking orange is frequently hardcoded as `#FF6B00`. Against white, i
 
 **Source:** [Navigation color and 10px labels](/Users/deonrobinson/workspace/soulaancoop/apps/mobile/components/app-bottom-navigation.tsx:67), [profile prompt](/Users/deonrobinson/workspace/soulaancoop/apps/mobile/components/commons-ai-entry.tsx:1520), [profile edit action](/Users/deonrobinson/workspace/soulaancoop/apps/mobile/components/account-profile-screen.tsx:346), [welcome button colors](/Users/deonrobinson/workspace/soulaancoop/apps/mobile/components/onboarding-welcome.tsx:263).
 
-The public site's [“Already invited?” download action](/Users/deonrobinson/workspace/soulaancoop/apps/web/app/page.tsx:418) has an even stronger defect: it uses the [dark-text secondary button style](/Users/deonrobinson/workspace/soulaancoop/apps/web/app/landing.css:162) on a dark section. Browser-computed colors were `#20251F` on the section's `#1F2924`, approximately **1.04:1**, with a transparent button background. The action is effectively invisible in the [desktop application view](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-application-empty-desktop-1280.jpg). Give this action a contrasting fill and text color.
+The public site's [“Already invited?” download action](/Users/deonrobinson/workspace/soulaancoop/apps/web/app/page.tsx:418) has an even stronger defect: it uses the [dark-text secondary button style](/Users/deonrobinson/workspace/soulaancoop/apps/web/app/landing.css:162) on a dark section. Browser-computed colors were `#20251F` on the section's `#1F2924`, approximately **1.04:1**, with a transparent button background. The action is effectively invisible in the desktop application view. Give this action a contrasting fill and text color.
 
 **Refinement:** Keep orange as a brand accent, introduce accessible action/text variants, and use shared semantic tokens. The Board's darker orange on its paper background already measures about 4.69:1 and is a useful starting reference, not a blanket guarantee for other combinations.
 
 **Acceptance:** Measure enabled text in default, selected, hover, focus, and error states. Preserve visible keyboard focus and non-color selection cues. Enlarge navigation labels without reducing their existing 56px-high touch areas.
 
-Evidence: [Feed prompt](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-feed-mobile-375.jpg), [account action](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-account-mobile-375.jpg).
+Evidence: Feed prompt, account action.
 
 ### 4. Stop automatically moving introductory content
 
@@ -120,7 +120,7 @@ Proposal validation is helpful and uses an alert, but the error summary remained
 
 **Refinement:** Add appropriate control roles, hierarchical headings, visible focus treatments, and larger hit areas. Move focus/scroll to the first invalid field and display concise inline errors. Verify the complete keyboard journey; this review inspected semantics and form behavior but did not certify keyboard or screen-reader coverage.
 
-Sources: [Feed controls](/Users/deonrobinson/workspace/soulaancoop/apps/mobile/components/commons-ai-entry.tsx:1761), [Board headings](/Users/deonrobinson/workspace/soulaancoop/apps/mobile/app/(tabs)/board.tsx:407), [proposal validation](/Users/deonrobinson/workspace/soulaancoop/apps/mobile/app/(authenticated)/proposals.tsx:156). Evidence: [validation viewport](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-proposal-validation-mobile-375.jpg).
+Sources: [Feed controls](/Users/deonrobinson/workspace/soulaancoop/apps/mobile/components/commons-ai-entry.tsx:1761), [Board headings](/Users/deonrobinson/workspace/soulaancoop/apps/mobile/app/(tabs)/board.tsx:407), [proposal validation](/Users/deonrobinson/workspace/soulaancoop/apps/mobile/app/(authenticated)/proposals.tsx:156). Evidence: validation viewport.
 
 ## Could improve
 
@@ -199,24 +199,6 @@ Hypothesis: fewer competing entry points and explicit community context will red
 
 Mark superseded plans as historical and publish one dated product/release baseline. This is a documentation and decision-making gap; it does not establish which rules production currently enforces. Do not change governance rules as part of visual cleanup.
 
-## Screenshots captured
-
-All retained images are in the repository's `screenshots/` directory. The browser returned JPEG bytes, so files use `.jpg`. Full-page capture was requested for the six primary views; the member app uses internal scroll containers, so those images show the viewport rather than every offscreen item. Screenshots include local fixture data and development-only controls.
-
-| View | Mobile · 375×812 | Tablet · 768×1024 | Desktop · 1280×800 |
-| --- | --- | --- | --- |
-| Public landing | [Mobile](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-landing-mobile-375.jpg) | [Tablet](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-landing-tablet-768.jpg) | [Desktop](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-landing-desktop-1280.jpg) |
-| Circles | [Mobile](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-circles-mobile-375.jpg) | [Tablet](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-circles-tablet-768.jpg) | [Desktop](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-circles-desktop-1280.jpg) |
-| Feed | [Mobile](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-feed-mobile-375.jpg) | [Tablet](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-feed-tablet-768.jpg) | [Desktop](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-feed-desktop-1280.jpg) |
-| Board | [Mobile](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-board-mobile-375.jpg) | [Tablet](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-board-tablet-768.jpg) | [Desktop](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-board-desktop-1280.jpg) |
-| Account | [Mobile](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-account-mobile-375.jpg) | [Tablet](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-account-tablet-768.jpg) | [Desktop](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-account-desktop-1280.jpg) |
-| Proposals | [Mobile](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-proposals-mobile-375.jpg) | [Tablet](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-proposals-tablet-768.jpg) | [Desktop](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-proposals-desktop-1280.jpg) |
-
-Additional states:
-
-- [Board composer, phone](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-board-composer-mobile-375.jpg).
-- [Public application empty-state validation, phone](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-application-empty-mobile-375.jpg).
-- [Public application empty-state validation, desktop](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-application-empty-desktop-1280.jpg).
-- [Proposal validation viewport, phone](/Users/deonrobinson/workspace/soulaancoop/screenshots/review-proposal-validation-mobile-375.jpg).
+## Observed checks
 
 Observed passes: the landing page had no horizontal overflow at 375px or 1280px; the sampled core mobile views kept their main tab bar visible; the Board composer disabled publishing while empty and enabled it after required draft text; proposal validation listed the missing answers. These checks do not imply that unsampled states or complete transactional journeys pass.

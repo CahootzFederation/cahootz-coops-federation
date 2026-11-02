@@ -24,14 +24,14 @@ Review running screens at 375, 768, and 1280 pixels, with narrow-width spot chec
 
 The final app palette is white; the public landing page retains its warm paper/brown palette. The local Hallmark skill records the app preference and preserves landing-page palettes separately.
 
-Mobile type checking passes. Twelve focused checks passed after the layout changes; all four design regression checks passed again after the final palette correction. Screenshots are in `.design/calm-experience/screenshots/`; `white-board-375.jpg`, `white-feed-375.jpg`, and `restored-landing-375.jpg` show the final direction.
+Mobile type checking passes. Twelve focused checks passed after the layout changes; all four design regression checks passed again after the final palette correction.
 
 The broader mobile run was not clean: 76 passed, 43 failed, 2 skipped, and 3 did not run. It was disrupted by development-server timeouts, memory exhaustion and restarts; other failures include admin-fixture setup and broader workflow checks. Do not treat it as release qualification. The website type check also reports errors outside the edited files. Native iOS/Android device verification remains outstanding.
 
 ## Calm app follow-up
 
-The isolated `codex/calm-app-fixes` worktree continues the approved white-app direction. Messages now uses a vertical conversation list and separate member picker; Proposals prioritizes voting needs and drafts and separates current decisions from history. Validation stays beside Send, with inline field feedback. Account detours retain Commons context. See `.design/calm-experience/DESIGN_FIXES.md` for screenshots and validation. Marketing-site colors remain unchanged.
+The isolated `codex/calm-app-fixes` worktree continues the approved white-app direction. Messages now uses a vertical conversation list and separate member picker; Proposals prioritizes voting needs and drafts and separates current decisions from history. Validation stays beside Send, with inline field feedback. Account detours retain Commons context. See `.design/calm-experience/DESIGN_FIXES.md` for implementation and validation details. Marketing-site colors remain unchanged.
 
 ## Integration with current main
 
-The approved `apps/mobile/DESIGN.md` contract and `constants/design.ts` are the shared source of truth. CommunityTheme delegates its colors to those tokens. Preserve full wrapping circle names, circle search, parent-tab selection, and main’s sign-in restoration fixes. The community homepage keeps its warm palette and single waitlist; group-buy remains the default homepage. Historical screenshots below describe the original review snapshot, not the post-merge state.
+The approved `apps/mobile/DESIGN.md` contract and `constants/design.ts` are the shared source of truth. CommunityTheme delegates its colors to those tokens. Preserve full wrapping circle names, circle search, parent-tab selection, and main’s sign-in restoration fixes. The community homepage keeps its warm palette and single waitlist; group-buy remains the default homepage.

@@ -30,7 +30,7 @@ The broader mobile run was not clean: 76 passed, 43 failed, 2 skipped, and 3 did
 
 ## Calm app follow-up
 
-The isolated `codex/calm-app-fixes` worktree continues the approved white-app direction. Messages now uses a vertical conversation list and separate member picker; Proposals prioritizes voting needs and drafts and separates current decisions from history. Validation stays beside Send, with inline field feedback. Account detours retain Commons context. See `.design/calm-experience/DESIGN_FIXES.md` for implementation and validation details. Marketing-site colors remain unchanged.
+The isolated `codex/calm-app-fixes` worktree continues the approved white-app direction. Messages now uses a vertical conversation list and separate member picker; Proposals prioritizes voting needs and drafts and separates current decisions from history. Validation stays beside Send, with inline field feedback. Account detours retain Commons context. Marketing-site colors remain unchanged.
 
 ## Integration with current main
 

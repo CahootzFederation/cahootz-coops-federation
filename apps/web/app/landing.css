@@ -1029,3 +1029,33 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Calm community direction · editorial / warm paper.
+ * Retain the brand; reveal specialist forms when requested. */
+.join-aside .button-secondary {
+  color: var(--color-light);
+  border-color: var(--color-light);
+}
+.join-aside .button-secondary:hover {
+  color: var(--color-dark);
+  background: var(--color-light);
+}
+.join-disclosure,
+.treasury-disclosure {
+  border-top: var(--rule-thin) solid var(--color-rule);
+}
+.join-disclosure > summary,
+.treasury-disclosure > summary {
+  cursor: pointer;
+  padding-block: var(--space-md);
+  font-size: var(--text-md);
+  font-weight: 700;
+  line-height: 1.5;
+}
+.join-disclosure > summary { color: var(--color-light); }
+.treasury-disclosure { margin-block: var(--space-lg); }
+#commons-waitlist { scroll-margin-top: 100px; }
+@media (max-width: 767px) {
+  .landing { padding-bottom: 0; }
+  .landing-footer { padding-bottom: var(--space-xl); }
+}

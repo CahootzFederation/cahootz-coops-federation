@@ -1,3 +1,4 @@
+import { CommunityTheme } from '@/constants/theme';
 import { router, useGlobalSearchParams, usePathname, useSegments } from 'expo-router';
 import { Bell, LayoutGrid, PanelsTopLeft, UserCircle } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -64,7 +65,7 @@ export function AppBottomNavigation() {
         .filter(({ label }) => isAuthenticated || label !== 'Board')
         .map(({ label, href, icon: Icon }) => {
         const selected = active === label;
-        const color = selected ? '#FF6B00' : '#64748B';
+        const color = selected ? CommunityTheme.primary : CommunityTheme.muted;
         const onPress = () => {
           // Circle feeds are destinations inside the already-selected
           // Commons tab. Re-selecting that tab must not add Circle View to
@@ -72,7 +73,7 @@ export function AppBottomNavigation() {
           if (label === 'Commons' && selected) {
             return;
           }
-          router.navigate(href);
+          router.navigate(coopId ? { pathname: href, params: { coopId } } : href);
         };
         return (
           <TouchableOpacity
@@ -97,9 +98,9 @@ export function AppBottomNavigation() {
 }
 
 const styles = StyleSheet.create({
-  bar: { flexDirection: 'row', flexShrink: 0, backgroundColor: '#FFFFFF', borderTopColor: '#F0F2F5', borderTopWidth: 1, paddingTop: 7 },
+  bar: { flexDirection: 'row', flexShrink: 0, backgroundColor: CommunityTheme.sheet, borderTopColor: CommunityTheme.border, borderTopWidth: 1, paddingTop: 7 },
   item: { flex: 1, minWidth: 0, minHeight: 56, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2, paddingVertical: 4, gap: 3 },
-  label: { fontSize: 10, lineHeight: 14, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
+  label: { fontSize: 12, lineHeight: 16, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
   dot: { position: 'absolute', top: -2, right: -4, width: 8, height: 8, borderRadius: 4, backgroundColor: '#DC2626' },
 });
 

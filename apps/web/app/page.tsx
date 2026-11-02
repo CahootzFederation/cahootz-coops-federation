@@ -426,24 +426,30 @@ export default async function HomePage() {
                 <MemberApplicationFlow />
               </Suspense>
               <div className="join-secondary">
-                <div className="waitlist-panel">
+                <div className="waitlist-panel" id="commons-waitlist">
                   <h3>Don&apos;t see your commons?</h3>
                   <p>Tell us what community you want to join or create.</p>
                   <Suspense fallback={<div className="form-loading" />}>
                     <WaitlistSignupForm coops={coops} />
                   </Suspense>
                 </div>
-                <div id="business-form">
+                <details className="join-disclosure" id="business-form">
+                  <summary>Bring your business to Cahootz</summary>
                   <Suspense fallback={<div className="form-loading" />}>
                     <BusinessSignupForm coops={coops} />
                   </Suspense>
-                </div>
+                </details>
               </div>
             </div>
           </div>
         </section>
 
-        <TreasuryContributionCalculator />
+        <div className="landing-shell">
+          <details className="treasury-disclosure">
+            <summary>How purchases support your community</summary>
+            <TreasuryContributionCalculator />
+          </details>
+        </div>
 
         {featuredPosts.length > 0 && (
           <section className="journal-section">
@@ -500,11 +506,6 @@ export default async function HomePage() {
           </div>
         </section>
       </main>
-
-      <div className="sticky-app-bar">
-        <span>Cahootz Commons for iPhone</span>
-        <AppStoreButton>Get the app</AppStoreButton>
-      </div>
 
       <footer className="landing-footer">
         <div className="landing-shell footer-inner">

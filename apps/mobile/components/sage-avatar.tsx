@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { useReducedMotion } from 'react-native-reanimated';
+import Animated, { useReducedMotion, type CSSAnimationProperties } from 'react-native-reanimated';
 import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Stop } from 'react-native-svg';
 
 /**
@@ -75,7 +75,7 @@ export function SageAvatar({ size = 40, motion = 'still' }: { size?: number; mot
       },
       animationDuration: `${duration}ms`,
       animationIterationCount: 'infinite' as const,
-    };
+    } satisfies CSSAnimationProperties;
   }, []);
 
   const dot = Math.max(3, Math.round(size * 0.08));

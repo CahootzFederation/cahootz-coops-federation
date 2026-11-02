@@ -1,3 +1,4 @@
+import { CommunityTheme } from '@/constants/theme';
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · genre: editorial utility · macrostructure: Ecosystem Index · theme: Cahootz newsprint · contrast: pass · responsive: pass */
 import type { CommonsPost } from '@/lib/api';
 import React from 'react';
@@ -56,15 +57,15 @@ const FALLBACK_COMMONS_ID = 'cahootz';
 const emptyCounts: LaneCounts = { needs: 0, offers: 0, events: 0 };
 
 const tokens = {
-  paper: '#F7F0E3',
-  sheet: '#FFFDF8',
-  sheetWarm: '#F0E3CD',
-  ink: '#211A14',
+  paper: CommunityTheme.paper,
+  sheet: CommunityTheme.sheet,
+  sheetWarm: CommunityTheme.sheet,
+  ink: CommunityTheme.ink,
   inkSoft: '#51473D',
-  muted: '#6E6257',
-  rule: '#CFC0AA',
-  ruleLight: '#E4D8C6',
-  orange: '#B94614',
+  muted: CommunityTheme.muted,
+  rule: CommunityTheme.border,
+  ruleLight: CommunityTheme.border,
+  orange: CommunityTheme.primary,
   orangePale: '#F5DDD0',
   blue: '#315D72',
   bluePale: '#DCE8EB',
@@ -293,7 +294,7 @@ export default function BoardScreen() {
               <Text style={{ color: tokens.orange, fontSize: 11, fontWeight: '800', letterSpacing: 1.1, textTransform: 'uppercase' }}>
                 Community board · {selectedCommons}
               </Text>
-              <Text accessibilityRole="header" style={{ marginTop: 4, color: tokens.ink, fontSize: isIndex ? 32 : 28, lineHeight: isIndex ? 36 : 32, fontWeight: '900', letterSpacing: -0.8 }}>
+              <Text accessibilityRole="header" style={{ marginTop: 4, color: tokens.ink, fontSize: 26, lineHeight: 32, fontWeight: '700', letterSpacing: -0.8 }}>
                 {isIndex ? 'Find your way around' : laneDetails?.title}
               </Text>
               <Text style={{ marginTop: 5, maxWidth: 620, color: tokens.inkSoft, fontSize: 15, lineHeight: 22 }}>
@@ -507,9 +508,9 @@ function MarketplaceProductCard({ product, flexible = false, onOpen }: {
 
 function QuickAction({ label, icon: Icon, onPress }: { label: string; icon: typeof CircleHelp; onPress: () => void }) {
   return (
-    <TouchableOpacity accessibilityRole="button" accessibilityLabel={label === 'Ask' ? 'Ask for help' : `Quick post ${label}`} onPress={onPress} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: tokens.rule, borderRadius: 6, backgroundColor: tokens.sheet, paddingHorizontal: 12 }}>
+    <TouchableOpacity accessibilityRole="button" accessibilityLabel={label === 'Ask' ? 'Ask for help' : `Quick post ${label}`} onPress={onPress} style={{ minHeight: 64, flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4, borderWidth: 1, borderColor: tokens.ruleLight, borderRadius: 8, backgroundColor: tokens.sheet, paddingHorizontal: 4 }}>
       <View style={{ width: 24, alignItems: 'center', justifyContent: 'center' }}><Icon size={19} strokeWidth={2.2} color={tokens.orange} /></View>
-      <Text style={{ marginLeft: 7, color: tokens.ink, fontSize: 13, fontWeight: '800' }}>{label}</Text>
+      <Text style={{ color: tokens.ink, fontSize: 13, fontWeight: '600' }}>{label}</Text>
     </TouchableOpacity>
   );
 }

@@ -1,3 +1,4 @@
+import { CommunityTheme } from '@/constants/theme';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -172,7 +173,7 @@ function RootLayout() {
             <CartProvider>
               <PaymentConfirmationProvider>
                 <ThemeProvider value={DefaultTheme}>
-                  <View style={{ flex: 1 }}>
+                  <View style={{ flex: 1, width: '100%', maxWidth: CommunityTheme.pageMaxWidth, alignSelf: 'center', backgroundColor: CommunityTheme.paper }}>
                     <View style={{ flex: 1, minHeight: 0 }}>
                       <Stack screenOptions={{ headerShown: false }} />
                     </View>

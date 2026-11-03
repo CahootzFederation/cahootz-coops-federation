@@ -800,3 +800,8 @@ Next highest-priority incomplete item for comment quality: learn from leader edi
 ## Settings presentation (2026-10-23)
 
 The personal decision-trail preference now appears before the Sage explanation. The full explanation remains available under “How Sage works”; the AI identity, mistake warning, and trail privacy boundary stay visible. Loading and failed preference requests are distinct from an off preference, with a real retry. This changes presentation only, not autonomy or access.
+
+
+### 2026-11-02 — Calm inbox follow-up
+
+The direct-message inbox identifies Sage as an AI assistant in the member picker and selected conversation. Conversation drafts remain separate by recipient, and the existing optional decision trails remain available in the selected thread. This is a presentation change only: Sage's access, memory, autonomy, and reply behavior are unchanged. The picker and draft-isolation journey is in `direct-messages.spec.ts`.

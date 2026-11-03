@@ -1,9 +1,8 @@
+import { CommunityTheme } from '@/constants/theme';
 import { DESIGN } from '@/constants/design';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { NativeScrollEvent, NativeSyntheticEvent, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { ArrowRight, HandHeart, Lightbulb, MessageCircle, UserCircle, Users } from 'lucide-react-native';
-
-const INTRO_CAROUSEL_INTERVAL_MS = 4500;
 
 const appIntroItems = [
   {
@@ -40,19 +39,7 @@ export default function OnboardingWelcome({ onContinue }: { onContinue: () => vo
   const { width } = useWindowDimensions();
   const introCarouselRef = useRef<ScrollView>(null);
   const [introCarouselIndex, setIntroCarouselIndex] = useState(0);
-  const introCardWidth = Math.max(width - 40, 280);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setIntroCarouselIndex((currentIndex) => {
-        const nextIndex = (currentIndex + 1) % appIntroItems.length;
-        introCarouselRef.current?.scrollTo({ x: nextIndex * introCardWidth, animated: true });
-        return nextIndex;
-      });
-    }, INTRO_CAROUSEL_INTERVAL_MS);
-
-    return () => clearInterval(interval);
-  }, [introCardWidth]);
+  const introCardWidth = Math.max(Math.min(width, CommunityTheme.pageMaxWidth) - 40, 280);
 
   const updateIntroCarouselIndex = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const nextIndex = Math.round(event.nativeEvent.contentOffset.x / introCardWidth);
@@ -69,7 +56,7 @@ export default function OnboardingWelcome({ onContinue }: { onContinue: () => vo
         <ScrollView style={introStyles.scroll} contentContainerStyle={introStyles.content}>
           <View style={introStyles.header}>
             <View style={introStyles.badge}>
-              <UserCircle color="#FF6B00" size={18} strokeWidth={2.4} />
+              <UserCircle color={CommunityTheme.primary} size={18} strokeWidth={2.4} />
               <Text style={introStyles.badgeText}>Welcome to Cahootz</Text>
             </View>
             <Text style={introStyles.title}>A community app for everyday help and action</Text>
@@ -94,7 +81,7 @@ export default function OnboardingWelcome({ onContinue }: { onContinue: () => vo
                   <View style={[introStyles.carouselVisual, { backgroundColor: visualBg }]}>
                     <Text style={introStyles.carouselEmoji}>{visual}</Text>
                     <View style={introStyles.carouselIcon}>
-                      <Icon color="#FF6B00" size={20} strokeWidth={2.5} />
+                      <Icon color={CommunityTheme.primary} size={20} strokeWidth={2.5} />
                     </View>
                   </View>
                   <Text style={introStyles.carouselTitle}>{title}</Text>
@@ -113,8 +100,12 @@ export default function OnboardingWelcome({ onContinue }: { onContinue: () => vo
                     accessibilityRole="button"
                     accessibilityLabel={`Show ${item.title}`}
                     onPress={() => goToIntroSlide(index)}
-                    style={[introStyles.carouselDot, active && introStyles.carouselDotActive]}
-                  />
+                    accessibilityState={{ selected: active }}
+                    aria-pressed={active}
+                    style={introStyles.carouselDotTarget}
+                  >
+                    <View style={[introStyles.carouselDot, active && introStyles.carouselDotActive]} />
+                  </Pressable>
                 );
               })}
             </View>
@@ -199,7 +190,7 @@ const introStyles = StyleSheet.create({
     overflow: 'visible',
   },
   carouselCard: {
-    minHeight: 300,
+    minHeight: 264,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: DESIGN.border,
@@ -208,7 +199,7 @@ const introStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   carouselVisual: {
-    height: 132,
+    height: 96,
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
@@ -216,8 +207,8 @@ const introStyles = StyleSheet.create({
     position: 'relative',
   },
   carouselEmoji: {
-    fontSize: 60,
-    lineHeight: 72,
+    fontSize: 44,
+    lineHeight: 56,
   },
   carouselIcon: {
     position: 'absolute',
@@ -250,6 +241,12 @@ const introStyles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     marginTop: 14,
+  },
+  carouselDotTarget: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   carouselDot: {
     width: 8,

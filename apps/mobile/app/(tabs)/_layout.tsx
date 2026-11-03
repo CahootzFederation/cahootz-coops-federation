@@ -1,3 +1,4 @@
+import { CommunityTheme } from '@/constants/theme';
 import { Platform, useWindowDimensions } from "react-native";
 import { Tabs } from "expo-router";
 import { Bell, LayoutGrid, PanelsTopLeft, UserCircle } from "lucide-react-native";
@@ -11,7 +12,7 @@ export default function TabLayout() {
       // stay hidden unconditionally to avoid showing both.
       tabBar={() => null}
       screenOptions={{
-        tabBarActiveTintColor: "#FF6B00",
+        tabBarActiveTintColor: CommunityTheme.primary,
         tabBarInactiveTintColor: "#64748B",
         tabBarStyle: {
           backgroundColor: "#FFFFFF",

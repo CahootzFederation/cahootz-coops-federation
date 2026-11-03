@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { usePostHog } from "posthog-js/react";
 import {
   AlertCircle,
@@ -462,6 +463,8 @@ export function MemberApplicationFlow({
           <CoopSelectionStep
             coops={coops}
             isLoading={coopsQuery.isLoading}
+            hasError={coopsQuery.isError}
+            onRetry={() => void coopsQuery.refetch()}
             selectedCoopId={selectedCoopId}
             onSelect={(coopId) => {
               setSelectedCoopId(coopId);
@@ -517,7 +520,7 @@ export function MemberApplicationFlow({
             <Button
               type="button"
               onClick={goNext}
-              disabled={coopsQuery.isLoading || questionsQuery.isLoading}
+              disabled={coopsQuery.isLoading || questionsQuery.isLoading || (stepKeys[step] === "choose" && (coopsQuery.isError || coops.length === 0))}
               className="bg-[#111111] text-white hover:bg-[#252525]"
             >
               Continue
@@ -552,11 +555,15 @@ export function MemberApplicationFlow({
 function CoopSelectionStep({
   coops,
   isLoading,
+  hasError,
+  onRetry,
   selectedCoopId,
   onSelect,
 }: {
   coops: CoopOption[];
   isLoading: boolean;
+  hasError: boolean;
+  onRetry: () => void;
   selectedCoopId: string;
   onSelect: (coopId: string) => void;
 }) {
@@ -571,13 +578,24 @@ function CoopSelectionStep({
     );
   }
 
+  if (hasError) {
+    return (
+      <div role="alert" className="rounded-lg border border-[#111111]/10 p-5">
+        <h4 className="text-lg font-semibold">We couldn’t load the commons</h4>
+        <p className="mt-2 text-sm leading-6">Please try again in a moment.</p>
+        <Button type="button" variant="outline" onClick={onRetry} className="mt-4">Try again</Button>
+      </div>
+    );
+  }
+
   if (coops.length === 0) {
     return (
       <div className="rounded-lg border border-[#111111]/10 bg-[#111111]/[0.03] p-5">
         <h4 className="text-lg font-black">No live applications yet</h4>
         <p className="mt-2 text-sm leading-6 text-[#111111]/65">
-          Join the waitlist below and tell us which commons you want to create or join.
+          Tell us which commons you want to create or join. We’ll help you find your next step.
         </p>
+        <Link href="/?homepage=community#waitlist" className="mt-4 inline-flex min-h-11 items-center font-semibold underline underline-offset-4">Find or start a commons</Link>
       </div>
     );
   }

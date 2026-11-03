@@ -126,7 +126,7 @@ test("the wallet names the commons' own coin from platform config", async ({ bro
     await expect(shown(page, /SC balance/)).toHaveCount(0);
 
     await shown(page, 'Wallet', { exact: true }).click();
-    await expect(page).toHaveURL(/\/payment-methods$/);
+    await expect(page).toHaveURL((url) => url.pathname === "/payment-methods");
     await expect(shown(page, new RegExp(`^${coinName} balance$`, 'i'))).toBeVisible();
     await expect(shown(page, /soulaani/i)).toHaveCount(0);
   } finally {

@@ -475,3 +475,22 @@ preview back to group-buy. Start the marketing app with
 `NEXT_PUBLIC_POSTHOG_KEY= pnpm -F @cahootz/web dev`, then run
 `CI=1 E2E_MARKETING_NO_POSTHOG=1 E2E_MARKETING_BASE_URL=http://127.0.0.1:3000 pnpm test:e2e:mobile group-buy-landing --project=mobile-web --no-deps`.
 This journey creates no content and does not need the mobile/API services.
+
+### Calm design regression checks
+
+`calm-design.spec.ts` checks that changing tabs and opening the Board from You keeps the selected Commons, including after reload. It uses User A's existing `e2e-private-shared` membership and creates no content. A signed-out journey checks that the welcome cards do not advance automatically, that their controls are at least 44 × 44, and that Continue still opens sign-in.
+
+`public-design.spec.ts` explicitly opens `/?homepage=community`, since main now defaults to the group-buy variant. It checks a single waitlist and the business/funding disclosures through the real UI. The old application-list-failure journey was removed because main replaced the homepage application form with a waitlist; the dedicated Commons application skips that list. Start the web app on port 3002 and set `E2E_PUBLIC_WEB_URL=http://localhost:3002`. This journey creates no records. Existing `group-buy-landing.spec.ts` retains coverage for the default variant and its preview routing.
+
+
+### Calm app follow-up regressions
+
+`calm-design.spec.ts` additionally follows Board in `e2e-private-shared` → You → account Alerts → Board → reload, checking that the selected Commons survives the detour. The 375×812 proposal validation journey submits an empty form, requires its alert to be inside the viewport and the first input focused, then checks that incomplete answers survive another attempt without a create request. No content is created.
+
+`direct-messages.spec.ts` covers the vertical inbox, unread state on returning from a conversation, and the New message member picker. Its new two-context journey verifies that an unfinished note for User B does not appear in Sage's composer and is retained when returning to User B. It never sends that note. Existing two-user delivery and pinned-composer tests retain their unique E2E content and cleanup.
+
+`calm-proposals.spec.ts` uses the existing local-only governance fixture to create unique proposals, withdraws one through the UI, then finds it in History after reload. It aborts the action-summary request to verify an unavailable state and recovers with Try again against the real endpoint. A presentation-only test supplies eligible summary responses for populated/empty queues; it never changes roles or casts votes. Each seeded proposal is removed by the existing restricted cleanup fixture. These checks do not certify council authorization, which remains enforced by the unchanged backend.
+
+The receipt History, Wallet, and Pay a store navigation checks allow the selected Commons query parameter; it still opens the payment through the account UI and verifies the receipt after reload.
+
+Conflict integration retains main’s shared DESIGN tokens, wrapping circle names, parent-tab selection, sign-in restoration fixes, and waitlist homepage. CommunityTheme delegates its colors to DESIGN. The calm regressions remain alongside main’s design-consistency and design-secondary journeys.

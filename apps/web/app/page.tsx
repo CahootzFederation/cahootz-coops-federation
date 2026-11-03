@@ -416,17 +416,23 @@ export default async function HomePage() {
                 </Suspense>
               </div>
               <div className="join-secondary">
-                <div id="business-form">
+                <details className="join-disclosure" id="business-form">
+                  <summary>Bring your business to Cahootz</summary>
                   <Suspense fallback={<div className="form-loading" />}>
                     <BusinessSignupForm coops={coops} />
                   </Suspense>
-                </div>
+                </details>
               </div>
             </div>
           </div>
         </section>
 
-        <TreasuryContributionCalculator />
+        <div className="landing-shell">
+          <details className="treasury-disclosure">
+            <summary>How purchases support your community</summary>
+            <TreasuryContributionCalculator />
+          </details>
+        </div>
 
         {featuredPosts.length > 0 && (
           <section className="journal-section">

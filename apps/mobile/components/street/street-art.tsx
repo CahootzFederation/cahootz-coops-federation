@@ -5,7 +5,7 @@
  * buildings later; people stay hand-drawn ovals.
  */
 import React from 'react';
-import { Circle, Ellipse, G, Line, Polygon, Rect, Text as SvgText } from 'react-native-svg';
+import { Circle, Ellipse, G, Line, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 
 export const TW = 48;
 export const TH = 24;
@@ -264,12 +264,25 @@ function hairParts(cx: number, cy: number, look: PersonColors): { back: React.Re
   return { back, top };
 }
 
+/** A walker's name stays in the scene's top layer so buildings never cover it. */
+export function WalkerNameTag({ x, y, name, bob }: { x: number; y: number; name: string; bob: number }) {
+  const [sx, sy] = iso(x, y);
+  const width = Math.max(34, name.length * 6 + 14);
+  return (
+    <G>
+      <Rect x={sx - width / 2} y={sy - 50 - bob} width={width} height={16} rx={8} fill="rgba(255,255,255,0.96)" />
+      <SvgText x={sx} y={sy - 38.5 - bob} fontSize={10} fontWeight="700" fill="#1F2937" textAnchor="middle">
+        {name}
+      </SvgText>
+    </G>
+  );
+}
+
 /** The simple oval person: shadow, oval body, round head, hair, in their chosen look. */
-export function PersonArt({ x, y, look, isYou, name, bob }: { x: number; y: number; look: PersonColors; isYou: boolean; name?: string; bob: number }) {
+export function PersonArt({ x, y, look, isYou, bob }: { x: number; y: number; look: PersonColors; isYou: boolean; bob: number }) {
   const [sx, sy] = iso(x, y);
   const headY = sy - 25 - bob;
   const hair = hairParts(sx, headY, look);
-  const nameWidth = name ? name.length * 6 + 14 : 0;
   return (
     <G>
       <Ellipse cx={sx} cy={sy} rx={8} ry={4} fill="rgba(0,0,0,0.2)" />
@@ -278,14 +291,36 @@ export function PersonArt({ x, y, look, isYou, name, bob }: { x: number; y: numb
       <Ellipse cx={sx} cy={sy - 11 - bob} rx={6.5} ry={9} fill={look.shirt} />
       <Circle cx={sx} cy={headY} r={6} fill={look.skin} />
       {hair.top}
-      {name ? (
-        <G>
-          <Rect x={sx - nameWidth / 2} y={sy - 50 - bob} width={nameWidth} height={16} rx={8} fill="rgba(255,255,255,0.94)" />
-          <SvgText x={sx} y={sy - 38.5 - bob} fontSize={10} fontWeight="600" fill="#1F2937" textAnchor="middle">
-            {name}
-          </SvgText>
-        </G>
-      ) : null}
+    </G>
+  );
+}
+
+/** Sage on the street, scaled down from the shared peach blob and round-glasses avatar. */
+export function SageStreetArt({ x, y, bob }: { x: number; y: number; bob: number }) {
+  const [sx, sy] = iso(x, y);
+  const cy = sy - 18 - bob;
+  return (
+    <G>
+      <Ellipse cx={sx} cy={sy} rx={8} ry={4} fill="rgba(0,0,0,0.2)" />
+      <Ellipse cx={sx - 3.5} cy={sy - 5 - bob} rx={3.2} ry={2} fill="#7C2D12" />
+      <Ellipse cx={sx + 3.5} cy={sy - 5 - bob} rx={3.2} ry={2} fill="#7C2D12" />
+      <Path
+        d={`M ${sx - 8.5} ${cy - 6} C ${sx - 6} ${cy - 14}, ${sx + 7} ${cy - 14}, ${sx + 9} ${cy - 4} C ${sx + 11} ${cy + 7}, ${sx + 5} ${cy + 13}, ${sx - 4} ${cy + 12} C ${sx - 12} ${cy + 10}, ${sx - 13} ${cy}, ${sx - 8.5} ${cy - 6} Z`}
+        fill="#FB923C"
+      />
+      <Ellipse cx={sx - 4} cy={cy - 7} rx={3.2} ry={2} fill="#FED7AA" opacity={0.9} transform={`rotate(-25 ${sx - 4} ${cy - 7})`} />
+      <Ellipse cx={sx - 5.5} cy={cy + 5} rx={2} ry={1.4} fill="#F472B6" opacity={0.55} />
+      <Ellipse cx={sx + 5.5} cy={cy + 5} rx={2} ry={1.4} fill="#F472B6" opacity={0.55} />
+      <G fill="rgba(255,255,255,0.58)" stroke="#7C2D12" strokeWidth={1.4}>
+        <Circle cx={sx - 3.8} cy={cy} r={3.8} />
+        <Circle cx={sx + 3.8} cy={cy} r={3.8} />
+      </G>
+      <Line x1={sx} y1={cy - 0.4} x2={sx} y2={cy - 0.4} stroke="#7C2D12" strokeWidth={1.5} strokeLinecap="round" />
+      <Circle cx={sx - 3.8} cy={cy} r={1.5} fill="#1F2937" />
+      <Circle cx={sx + 3.8} cy={cy} r={1.5} fill="#1F2937" />
+      <Circle cx={sx - 3.3} cy={cy - 0.5} r={0.45} fill="#FFFFFF" />
+      <Circle cx={sx + 4.3} cy={cy - 0.5} r={0.45} fill="#FFFFFF" />
+      <Path d={`M ${sx - 3} ${cy + 6} Q ${sx} ${cy + 9} ${sx + 3} ${cy + 6}`} stroke="#1F2937" strokeWidth={1.4} fill="none" strokeLinecap="round" />
     </G>
   );
 }

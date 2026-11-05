@@ -70,6 +70,7 @@ interface Walker {
   name: string;
   look: StreetLookData;
   isYou: boolean;
+  isSage: boolean;
   x: number;
   y: number;
   path: Array<{ i: number; j: number }>;
@@ -79,6 +80,7 @@ interface Walker {
 }
 
 const STROLL_SPEED = 1.5; // tiles per second
+const SAGE_WALKER_ID = '__sage-street-guide__';
 const pauseMs = () => 2000 + Math.random() * 5000;
 
 /** Pick where someone strolls next: home, a building, a neighbor's door, or somewhere nearby. */
@@ -204,6 +206,7 @@ export default function StreetView({ coopId }: { coopId: string }) {
         name: person.name,
         look: person.look,
         isYou: false,
+        isSage: false,
         x: start.i + 0.5,
         y: start.j + 0.5,
         path: [],
@@ -212,7 +215,8 @@ export default function StreetView({ coopId }: { coopId: string }) {
       });
     }
     for (const id of [...map.keys()]) {
-      if (!map.get(id)!.isYou && !seen.has(id)) map.delete(id);
+      const walker = map.get(id)!;
+      if (!walker.isYou && !walker.isSage && !seen.has(id)) map.delete(id);
     }
     // You're out on the street too, strolling like everyone else, starting at your door.
     if (mineLot && !youId.current) {
@@ -224,6 +228,7 @@ export default function StreetView({ coopId }: { coopId: string }) {
         name: 'You',
         look: mineLot.user.look,
         isYou: true,
+        isSage: false,
         x: start.i + 0.5,
         y: start.j + 0.5,
         path: [],
@@ -233,6 +238,29 @@ export default function StreetView({ coopId }: { coopId: string }) {
     } else if (mineLot && youId.current) {
       const me = map.get(youId.current);
       if (me) me.look = mineLot.user.look;
+    }
+    // Sage is a street guide, not a member or presence record. Keeping this
+    // local avoids inventing membership, online status, or a house for Sage.
+    if (!map.has(SAGE_WALKER_ID)) {
+      const board = nextLayout.buildings.find((building) => building.id === 'board');
+      const start = board ? streetDoorTile(nextLayout, board, nextLayout.center) : null;
+      map.set(SAGE_WALKER_ID, {
+        id: SAGE_WALKER_ID,
+        name: 'Sage',
+        look: mineLot?.user.look ?? {
+          skin: 'warm',
+          hairStyle: 'none',
+          hairColor: 'brown',
+          shirt: 'terracotta',
+        },
+        isYou: false,
+        isSage: true,
+        x: (start?.i ?? 8) + 0.5,
+        y: (start?.j ?? 6) + 0.5,
+        path: [],
+        restUntil: Date.now() + 800,
+        home: start,
+      });
     }
     setStreet(data);
   }, []);
@@ -473,18 +501,9 @@ export default function StreetView({ coopId }: { coopId: string }) {
 
   if (notMember) return <CircleView coopId={coopId} />;
 
-  const lotCenterByUser = new Map<string, { x: number; y: number }>();
-  for (const lot of street?.lots ?? []) {
-    const placement = layout.lots.find((p) => p.lotNumber === lot.lotNumber);
-    if (placement) lotCenterByUser.set(lot.user.id, { x: placement.i + 1, y: placement.j + 1 });
-  }
   const people: ScenePerson[] = [...walkers.current.values()].map((w) => {
     const moving = w.path.length > 0;
-    // Someone standing at home already has their name on the house; skip the
-    // second tag so the two don't pile up.
-    const home = lotCenterByUser.get(w.id);
-    const atHome = !moving && home ? Math.hypot(w.x - home.x, w.y - home.y) < 2.6 : false;
-    return { id: w.id, name: atHome ? '' : w.name, look: lookColors(w.look), isYou: w.isYou, x: w.x, y: w.y, moving };
+    return { id: w.id, name: w.name, look: lookColors(w.look), isYou: w.isYou, isSage: w.isSage, x: w.x, y: w.y, moving };
   });
   const onlineIds = new Set((street?.online ?? []).map((p) => p.userId));
   const neighborsOut = (street?.lots ?? []).filter((lot) => !lot.isYou && onlineIds.has(lot.user.id));

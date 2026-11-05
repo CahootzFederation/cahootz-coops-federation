@@ -22,12 +22,14 @@ import {
   iso,
   Label,
   PersonArt,
+  SageStreetArt,
   type PersonColors,
   polygonPoints,
   ShopArt,
   TownHallArt,
   TH,
   TW,
+  WalkerNameTag,
 } from './street-art';
 
 export type StreetPlace = { kind: 'lot'; lotNumber: number } | { kind: 'building'; id: StreetBuildingId };
@@ -37,6 +39,7 @@ export interface ScenePerson {
   name: string;
   look: PersonColors;
   isYou: boolean;
+  isSage: boolean;
   x: number;
   y: number;
   moving: boolean;
@@ -315,15 +318,22 @@ export function StreetScene({
     ...people.map((p) => ({
       depth: p.x + p.y + 0.01,
       node: (
-        <G key={`p${p.id}`}>
-          <PersonArt
-            x={p.x}
-            y={p.y}
-            look={p.look}
-            isYou={p.isYou}
-            name={p.isYou || !p.name ? undefined : p.name}
-            bob={p.moving ? Math.abs(Math.sin(bobPhase * 12)) * 2 : 0}
-          />
+        <G key={`p${p.id}`} testID={`street-walker-${p.isSage ? 'sage' : p.id}`}>
+          {p.isSage ? (
+            <SageStreetArt
+              x={p.x}
+              y={p.y}
+              bob={p.moving ? Math.abs(Math.sin(bobPhase * 12)) * 2 : 0}
+            />
+          ) : (
+            <PersonArt
+              x={p.x}
+              y={p.y}
+              look={p.look}
+              isYou={p.isYou}
+              bob={p.moving ? Math.abs(Math.sin(bobPhase * 12)) * 2 : 0}
+            />
+          )}
         </G>
       ),
     })),
@@ -342,6 +352,16 @@ export function StreetScene({
           {ground}
           {drawn.map((d) => d.node)}
           {labels}
+          {people.map((person) => (
+            <G key={`walker-label-${person.id}`} testID={`street-walker-label-${person.isSage ? 'sage' : person.id}`}>
+              <WalkerNameTag
+                x={person.x}
+                y={person.y}
+                name={person.name}
+                bob={person.moving ? Math.abs(Math.sin(bobPhase * 12)) * 2 : 0}
+              />
+            </G>
+          ))}
         </G>
       </Svg>
     </View>

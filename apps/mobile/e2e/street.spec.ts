@@ -28,6 +28,9 @@ test("a member lands on the street and paints their house, and it stays after a 
     await page.goto("/?coopId=cahootz");
     await expect(page.getByText(/^Welcome to /)).toBeVisible();
     await expect(page.getByLabel(/^Map of the street/)).toBeVisible();
+    await expect(page.getByTestId("street-walker-sage")).toBeVisible();
+    const sageLabel = page.getByTestId("street-walker-label-sage");
+    await expect(sageLabel.getByText("Sage", { exact: true })).toBeVisible();
     // The map has the whole screen until you open something.
     await expect(page.getByLabel("Close", { exact: true })).toHaveCount(0);
 
@@ -132,6 +135,10 @@ test("two neighbors see each other out on the street, and a knock reaches the ot
     // B sees A out now (the street refreshes every few seconds) and knocks.
     await b.page.goto("/?coopId=cahootz");
     await expect(b.page.getByText(/^Welcome to /)).toBeVisible();
+    const aWalker = b.page.getByTestId(`street-walker-${aLot.user.id}`);
+    await expect(aWalker).toBeVisible({ timeout: 20_000 });
+    const aWalkerLabel = b.page.getByTestId(`street-walker-label-${aLot.user.id}`);
+    await expect(aWalkerLabel.getByText(aLot.user.name, { exact: true })).toBeVisible();
     await b.page.getByLabel("Open the list").click();
     const aOut = b.page.getByRole("button", { name: `Visit ${aLot.user.name}, out now`, exact: true });
     await expect(aOut).toBeVisible({ timeout: 20_000 });

@@ -23,6 +23,70 @@ export const STREET_ROOF_COLORS = {
 } as const;
 export const STREET_HOUSE_STYLES = ["a", "b", "c"] as const;
 
+/** How your person on the street looks. Account-wide: the same on every Commons street. */
+export const STREET_SKIN_TONES = {
+  deep: "#4A2E1E",
+  brown: "#6B4128",
+  warm: "#8D5A3B",
+  tan: "#A9714A",
+  golden: "#C99468",
+  light: "#E6BC94",
+} as const;
+export const STREET_HAIR_STYLES = ["short", "curly", "bun", "long", "none"] as const;
+export const STREET_HAIR_COLORS = {
+  black: "#1F1A17",
+  brown: "#4A3020",
+  auburn: "#7A3B1E",
+  blond: "#D2AE5A",
+  gray: "#A1A1AA",
+} as const;
+export const STREET_SHIRT_COLORS = {
+  terracotta: "#B94614",
+  blue: "#3E6A86",
+  green: "#5B7F4E",
+  rose: "#C2557A",
+  purple: "#5B5FAF",
+  gold: "#C98A1B",
+  teal: "#2F8F8A",
+} as const;
+export type StreetSkinTone = keyof typeof STREET_SKIN_TONES;
+export type StreetHairStyle = (typeof STREET_HAIR_STYLES)[number];
+export type StreetHairColor = keyof typeof STREET_HAIR_COLORS;
+export type StreetShirtColor = keyof typeof STREET_SHIRT_COLORS;
+export interface StreetLook {
+  skin: StreetSkinTone;
+  hairStyle: StreetHairStyle;
+  hairColor: StreetHairColor;
+  shirt: StreetShirtColor;
+}
+
+/** A starting look for someone who hasn't picked one, varied by their id so the street isn't uniform. */
+export function defaultStreetLook(userId: string): StreetLook {
+  let h = 0;
+  for (let k = 0; k < userId.length; k++) h = (h * 31 + userId.charCodeAt(k)) | 0;
+  h = Math.abs(h);
+  const pick = <T extends string>(list: readonly T[], salt: number) => list[(h + salt) % list.length]!;
+  return {
+    skin: pick(Object.keys(STREET_SKIN_TONES) as StreetSkinTone[], 0),
+    hairStyle: pick(STREET_HAIR_STYLES.filter((s) => s !== "none"), 3),
+    hairColor: pick(["black", "brown", "black", "auburn"] as StreetHairColor[], 5),
+    shirt: pick(Object.keys(STREET_SHIRT_COLORS) as StreetShirtColor[], 7),
+  };
+}
+
+/** Fill any missing or unknown parts of a saved look with the person's default. */
+export function streetLookFor(userId: string, saved?: Partial<Record<keyof StreetLook, string | null>> | null): StreetLook {
+  const base = defaultStreetLook(userId);
+  const ok = <T extends string>(value: string | null | undefined, allowed: readonly string[]) =>
+    value && allowed.includes(value) ? (value as T) : undefined;
+  return {
+    skin: ok<StreetSkinTone>(saved?.skin, Object.keys(STREET_SKIN_TONES)) ?? base.skin,
+    hairStyle: ok<StreetHairStyle>(saved?.hairStyle, STREET_HAIR_STYLES) ?? base.hairStyle,
+    hairColor: ok<StreetHairColor>(saved?.hairColor, Object.keys(STREET_HAIR_COLORS)) ?? base.hairColor,
+    shirt: ok<StreetShirtColor>(saved?.shirt, Object.keys(STREET_SHIRT_COLORS)) ?? base.shirt,
+  };
+}
+
 export type StreetWallColor = keyof typeof STREET_WALL_COLORS;
 export type StreetRoofColor = keyof typeof STREET_ROOF_COLORS;
 export type StreetHouseStyle = (typeof STREET_HOUSE_STYLES)[number];
@@ -49,8 +113,8 @@ export function defaultHouseLook(lotNumber: number): {
   };
 }
 
-export type StreetTileType = "grass" | "green" | "road" | "walk";
-export type StreetBuildingId = "circle-hall" | "group-buys" | "town-hall" | "corner-store" | "green";
+export type StreetTileType = "grass" | "plaza" | "road" | "walk";
+export type StreetBuildingId = "circle-hall" | "group-buys" | "town-hall" | "corner-store" | "board";
 
 export interface StreetPlacement {
   i: number;
@@ -87,8 +151,10 @@ const BUILDINGS: Array<StreetPlacement & { id: StreetBuildingId }> = [
   { id: "corner-store", i: 14, j: 3, w: 2, d: 2 },
   { id: "group-buys", i: 16, j: 3, w: 2, d: 2 },
   { id: "town-hall", i: 18, j: 3, w: 2, d: 2 },
-  // A flat garden in the middle of the circle, so it never blocks the view.
-  { id: "green", i: 7, j: 7, w: 2, d: 2 },
+  // The community board on a small plaza in the middle of the circle. It's
+  // the one thing standing in front of a road, so the app turns it
+  // see-through whenever anyone is behind it.
+  { id: "board", i: 7, j: 7, w: 2, d: 2 },
 ];
 const ROAD_START = 20; // first column of road lots, after the buildings
 const BLOCK = 3; // each block of road holds 2 lots on the far side: a front and a back row
@@ -99,11 +165,11 @@ const BASE_TREES: Array<[number, number]> = [
 ];
 
 /** Roughly how tall each kind of thing is drawn, in screen points. */
-export const STREET_DRAWN_HEIGHT = { house: 70, building: 76, green: 8, tree: 34, person: 34 } as const;
+export const STREET_DRAWN_HEIGHT = { house: 70, building: 76, board: 30, tree: 34, person: 34 } as const;
 
 /**
  * The road is built from 2x2-tile pieces (KayKit City Builder Bits): a square
- * loop with rounded corners around the Green, a T where the road out leaves
+ * loop with rounded corners around the community board, a T where the road out leaves
  * the loop, then straight road with a crosswalk now and then. Each piece names
  * the directions it connects: i / mi (minus i), j / mj.
  */
@@ -167,11 +233,11 @@ export function buildStreetLayout(maxLotNumber: number): StreetLayout {
   const footprints = [...lots, ...BUILDINGS];
   const covers = (p: StreetPlacement, i: number, j: number) => i >= p.i && i < p.i + p.w && j >= p.j && j < p.j + p.d;
 
-  // The loop covers tiles 5-10 on both axes around the Green (7-8); the road
+  // The loop covers tiles 5-10 on both axes around the community board plaza (7-8); the road
   // out runs along j 7-8 from i 11. Road pieces have their own curbs, so there
   // are no separate sidewalk tiles.
   const tileType = (i: number, j: number): StreetTileType => {
-    if (i >= 7 && i <= 8 && j >= 7 && j <= 8) return "green";
+    if (i >= 7 && i <= 8 && j >= 7 && j <= 8) return "plaza";
     if (i >= 5 && i <= 10 && j >= 5 && j <= 10) return "road";
     if (i >= 11 && (j === 7 || j === 8)) return "road";
     return "grass";

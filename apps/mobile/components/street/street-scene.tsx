@@ -17,11 +17,12 @@ import {
 import type { StreetLotData } from '@/lib/api';
 import {
   CircleHallArt,
-  GreenArt,
+  BoardArt,
   HouseArt,
   iso,
   Label,
   PersonArt,
+  type PersonColors,
   polygonPoints,
   ShopArt,
   TownHallArt,
@@ -34,7 +35,7 @@ export type StreetPlace = { kind: 'lot'; lotNumber: number } | { kind: 'building
 export interface ScenePerson {
   id: string;
   name: string;
-  shirt: string;
+  look: PersonColors;
   isYou: boolean;
   x: number;
   y: number;
@@ -46,7 +47,7 @@ export const BUILDING_NAMES: Record<StreetBuildingId, string> = {
   'group-buys': 'Group Buys',
   'town-hall': 'Town Hall',
   'corner-store': 'Corner Store',
-  green: 'The Green',
+  board: 'Community Board',
 };
 
 const BUILDING_HEIGHT: Record<StreetBuildingId, number> = {
@@ -54,12 +55,12 @@ const BUILDING_HEIGHT: Record<StreetBuildingId, number> = {
   'group-buys': 36,
   'town-hall': 49,
   'corner-store': 36,
-  green: 8,
+  board: 42,
 };
 /** How far a building's sign floats above its roof. */
-const LABEL_LIFT: Partial<Record<StreetBuildingId, number>> = { green: 26 };
+const LABEL_LIFT: Partial<Record<StreetBuildingId, number>> = { board: 14 };
 
-const GROUND = { grass: '#9CCB86', grassAlt: '#95C47F', green: '#86BF74', road: '#717780', walk: '#DCD6CC', lawn: '#A9D592', lawnLine: 'rgba(0,0,0,0.08)' };
+const GROUND = { grass: '#9CCB86', grassAlt: '#95C47F', plaza: '#E3DCCF', road: '#717780', walk: '#DCD6CC', lawn: '#A9D592', lawnLine: 'rgba(0,0,0,0.08)' };
 
 function placeKey(place: StreetPlace) {
   return place.kind === 'lot' ? `lot:${place.lotNumber}` : `b:${place.id}`;
@@ -106,7 +107,7 @@ function Ground({ layout, lots, selected }: { layout: StreetLayout; lots: Map<nu
     for (let j = 0; j < H; j++) {
       const t = layout.tileType(i, j);
       // Roads are KayKit pieces below; only grass and the Green are drawn tile by tile.
-      const fill = t === 'grass' ? ((i + j) % 2 ? GROUND.grassAlt : null) : t === 'green' ? GROUND.green : null;
+      const fill = t === 'grass' ? ((i + j) % 2 ? GROUND.grassAlt : null) : t === 'plaza' ? GROUND.plaza : null;
       if (!fill) continue;
       tiles.push(<Polygon key={`t${i},${j}`} points={polygonPoints([iso(i, j), iso(i + 1, j), iso(i + 1, j + 1), iso(i, j + 1)])} fill={fill} />);
     }
@@ -154,6 +155,7 @@ export function StreetScene({
   layout,
   lots,
   circleCount,
+  boardNotes,
   people,
   camera,
   selected,
@@ -165,6 +167,8 @@ export function StreetScene({
   layout: StreetLayout;
   lots: Map<number, StreetLotData>;
   circleCount: number;
+  /** Recent Board posts, shown as notes pinned to the community board. */
+  boardNotes: number;
   people: ScenePerson[];
   camera: { x: number; y: number };
   selected: StreetPlace | null;
@@ -222,7 +226,7 @@ export function StreetScene({
         : b.id === 'town-hall' ? <TownHallArt i={b.i} j={b.j} />
         : b.id === 'corner-store' ? <ShopArt i={b.i} j={b.j} trim="#B94614" />
         : b.id === 'group-buys' ? <ShopArt i={b.i} j={b.j} trim="#2F7D4F" />
-        : <GreenArt i={b.i} j={b.j} />;
+        : <BoardArt i={b.i} j={b.j} notes={boardNotes} />;
       list.push({ depth: b.i + b.j + 2, node: <G key={`b${b.id}`}>{node}</G>, footprint: b, height: BUILDING_HEIGHT[b.id] });
     }
     for (const lot of layout.lots) {
@@ -265,7 +269,7 @@ export function StreetScene({
       list.push({ depth: i + 7.25, node: <G key={`sl${i}`}><KayKitImage name="streetlight" x={sx} y={sy} /></G> });
     }
     return list;
-  }, [layout, lots, circleCount]);
+  }, [layout, lots, circleCount, boardNotes]);
 
   const labels = useMemo(() => {
     const nodes: React.ReactNode[] = [];
@@ -293,16 +297,21 @@ export function StreetScene({
     return nodes;
   }, [layout, lots, circleCount]);
 
-  // The layout keeps roads and sidewalks in clear view. If you wander behind
-  // something anyway (a back garden), it turns see-through until you come out.
+  // The layout keeps roads in clear view. If you wander behind something
+  // anyway (a back garden), it turns see-through until you come out. The
+  // community board stands in the middle of the circle, so it turns
+  // see-through whenever anyone at all is behind it.
+  const tileOf = (p: ScenePerson) => ({ i: Math.floor(p.x), j: Math.floor(p.y) });
   const you = people.find((p) => p.isYou);
-  const youTile = you ? { i: Math.floor(you.x), j: Math.floor(you.y) } : null;
+  const youTile = you ? tileOf(you) : null;
+  const isBoard = (o: (typeof objects)[number]) => (o.node as React.ReactElement).key === 'bboard';
   const drawn = [
-    ...objects.map((o) =>
-      youTile && o.footprint && o.height && streetHides(o.footprint, o.height, youTile)
-        ? { depth: o.depth, node: <G key={`fade-${(o.node as React.ReactElement).key}`} opacity={0.35}>{o.node}</G> }
-        : o,
-    ),
+    ...objects.map((o) => {
+      if (!o.footprint || !o.height) return o;
+      const watchers = isBoard(o) ? people.map(tileOf) : youTile ? [youTile] : [];
+      const hides = watchers.some((t) => streetHides(o.footprint!, o.height!, t));
+      return hides ? { depth: o.depth, node: <G key={`fade-${(o.node as React.ReactElement).key}`} opacity={0.35}>{o.node}</G> } : o;
+    }),
     ...people.map((p) => ({
       depth: p.x + p.y + 0.01,
       node: (
@@ -310,8 +319,7 @@ export function StreetScene({
           <PersonArt
             x={p.x}
             y={p.y}
-            id={p.id}
-            shirt={p.shirt}
+            look={p.look}
             isYou={p.isYou}
             name={p.isYou || !p.name ? undefined : p.name}
             bob={p.moving ? Math.abs(Math.sin(bobPhase * 12)) * 2 : 0}

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { AccountAuthenticatedContext } from "../context.js";
 import { accountAuthenticatedProcedure } from "../procedures/index.js";
-import { getStreet, knockOnDoor, leaveStreet, moveOnStreet, paintHouse } from "../services/street.js";
+import { getStreet, knockOnDoor, leaveStreet, moveOnStreet, paintHouse, setStreetLook } from "../services/street.js";
 import { router } from "../trpc.js";
 
 const coopInput = z.object({ coopId: z.string().min(1) });
@@ -40,6 +40,20 @@ export const streetRouter = router({
       const context = ctx as AccountAuthenticatedContext;
       const { coopId, ...look } = input;
       return paintHouse(context.db, coopId, context.accountUser.id, look);
+    }),
+
+  setLook: accountAuthenticatedProcedure
+    .input(
+      z.object({
+        skin: z.string().max(16).optional(),
+        hairStyle: z.string().max(16).optional(),
+        hairColor: z.string().max(16).optional(),
+        shirt: z.string().max(16).optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      return setStreetLook(context.db, context.accountUser.id, input);
     }),
 
   knock: accountAuthenticatedProcedure

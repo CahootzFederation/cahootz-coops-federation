@@ -50,6 +50,44 @@ test("a member lands on the street and paints their house, and it stays after a 
   }
 });
 
+test("a member changes how they look on the street, and it stays after a reload", async ({ browser }) => {
+  const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
+  const { token, mine } = await myStreet(page);
+  const original = mine.user.look;
+  const nextShirt = original.shirt === "teal" ? { key: "gold", label: "Gold" } : { key: "teal", label: "Teal" };
+  const nextHair = original.hairStyle === "bun" ? { key: "curly", label: "Curly" } : { key: "bun", label: "Bun" };
+  try {
+    await page.goto("/?coopId=cahootz");
+    await openStreetPlace(page, "Visit your house");
+    await expect(page.getByRole("heading", { name: "Your look" })).toBeVisible();
+    await page.getByLabel(`Shirt ${nextShirt.label}`).click();
+    await expect(page.getByText("Saved. That’s how neighbors see you now.")).toBeVisible();
+    await page.getByLabel(`Hair ${nextHair.label}`).click();
+
+    await page.reload();
+    await openStreetPlace(page, "Visit your house");
+    await expect(page.getByLabel(`Shirt ${nextShirt.label}`)).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByLabel(`Hair ${nextHair.label}`)).toHaveAttribute("aria-selected", "true");
+  } finally {
+    await trpc("POST", "street.setLook", token, original).catch(() => undefined);
+    await context.close();
+  }
+});
+
+test("the community board in the middle of the street shows recent posts and opens the Board", async ({ browser }) => {
+  const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
+  try {
+    await page.goto("/?coopId=cahootz");
+    await openStreetPlace(page, "Visit Community Board");
+    await expect(page.getByRole("heading", { name: "Community Board" })).toBeVisible();
+    await expect(page.getByText(/notes? pinned up this week$/)).toBeVisible();
+    await page.getByLabel("See the whole board").click();
+    await expect(page.getByText(/^Community board · /)).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
 test("Circle Hall on the street lists every circle, opens one, and leads inside", async ({ browser }) => {
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
   try {

@@ -34,7 +34,15 @@ export interface StreetLotData {
   wallColor: string;
   roofColor: string;
   isYou: boolean;
-  user: { id: string; name: string; handle: string; avatarColor: string | null };
+  user: { id: string; name: string; handle: string; avatarColor: string | null; look: StreetLookData };
+}
+
+/** Palette keys from @repo/validators/street (STREET_SKIN_TONES etc.). */
+export interface StreetLookData {
+  skin: string;
+  hairStyle: 'short' | 'curly' | 'bun' | 'long' | 'none';
+  hairColor: string;
+  shirt: string;
 }
 
 export interface StreetPersonData {
@@ -42,6 +50,7 @@ export interface StreetPersonData {
   name: string;
   handle: string;
   avatarColor: string | null;
+  look: StreetLookData;
   x: number;
   y: number;
   isYou: boolean;
@@ -2617,6 +2626,15 @@ export const api = {
       response,
       "We couldn't save your house colors. Try again.",
     );
+  },
+
+  async setStreetLook(look: Partial<StreetLookData>, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/street.setLook`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(look),
+    });
+    return readTrpcResult<StreetLookData>(response, "We couldn't save your look. Try again.");
   },
 
   async knockOnDoor(coopId: string, userId: string, sessionToken: string) {

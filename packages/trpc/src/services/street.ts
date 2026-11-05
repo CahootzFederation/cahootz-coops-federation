@@ -7,7 +7,13 @@ import {
   STREET_ROOF_KEYS,
   STREET_WALL_KEYS,
   STREET_HOUSE_STYLES,
+  STREET_HAIR_COLORS,
+  STREET_HAIR_STYLES,
+  STREET_SHIRT_COLORS,
+  STREET_SKIN_TONES,
+  streetLookFor,
   type StreetHouseStyle,
+  type StreetLook,
   type StreetRoofColor,
   type StreetWallColor,
 } from "@repo/validators/street";
@@ -33,7 +39,7 @@ export interface StreetLotView {
   wallColor: StreetWallColor;
   roofColor: StreetRoofColor;
   isYou: boolean;
-  user: { id: string; name: string; handle: string; avatarColor: string | null };
+  user: { id: string; name: string; handle: string; avatarColor: string | null; look: StreetLook };
 }
 
 export interface StreetPersonView {
@@ -41,6 +47,7 @@ export interface StreetPersonView {
   name: string;
   handle: string;
   avatarColor: string | null;
+  look: StreetLook;
   x: number;
   y: number;
   isYou: boolean;
@@ -55,7 +62,14 @@ export interface StreetView {
   circleCount: number;
 }
 
-const userSelect = { id: true, name: true, email: true, handle: true, avatarColor: true } as const;
+const userSelect = {
+  id: true,
+  name: true,
+  email: true,
+  handle: true,
+  avatarColor: true,
+  streetLook: { select: { skin: true, hairStyle: true, hairColor: true, shirt: true } },
+} as const;
 
 function isUniqueViolation(error: unknown) {
   return typeof error === "object" && error !== null && (error as { code?: string }).code === "P2002";
@@ -132,6 +146,7 @@ export async function getStreet(db: Db, coopId: string, userId: string): Promise
           name: displayName(lot.user),
           handle: personHandle(lot.user),
           avatarColor: lot.user.avatarColor,
+          look: streetLookFor(lot.user.id, lot.user.streetLook),
         },
       })),
     online: presence
@@ -141,6 +156,7 @@ export async function getStreet(db: Db, coopId: string, userId: string): Promise
         name: displayName(row.user),
         handle: personHandle(row.user),
         avatarColor: row.user.avatarColor,
+        look: streetLookFor(row.user.id, row.user.streetLook),
         x: row.x,
         y: row.y,
         isYou: row.userId === userId,
@@ -165,6 +181,28 @@ export async function moveOnStreet(db: Db, coopId: string, userId: string, x: nu
 
 export async function leaveStreet(db: Db, coopId: string, userId: string) {
   await db.streetPresence.updateMany({ where: { coopId, userId }, data: { exitedAt: new Date() } });
+}
+
+/**
+ * Save how your person looks. Account-wide, so any signed-in member can set it
+ * without a Commons; only palette values are accepted (no free text).
+ */
+export async function setStreetLook(db: Db, userId: string, look: Partial<Record<keyof StreetLook, string>>) {
+  const allowed: Record<keyof StreetLook, readonly string[]> = {
+    skin: Object.keys(STREET_SKIN_TONES),
+    hairStyle: STREET_HAIR_STYLES,
+    hairColor: Object.keys(STREET_HAIR_COLORS),
+    shirt: Object.keys(STREET_SHIRT_COLORS),
+  };
+  for (const key of Object.keys(look) as Array<keyof StreetLook>) {
+    if (look[key] !== undefined && !allowed[key]?.includes(look[key]!)) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Pick one of the options shown." });
+    }
+  }
+  const existing = await db.streetLook.findUnique({ where: { userId } });
+  const next = streetLookFor(userId, { ...(existing ?? {}), ...look });
+  await db.streetLook.upsert({ where: { userId }, create: { userId, ...next }, update: next });
+  return next;
 }
 
 export async function paintHouse(

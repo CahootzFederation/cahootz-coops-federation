@@ -5,8 +5,12 @@ import { router, useFocusEffect } from 'expo-router';
 import { List, X } from 'lucide-react-native';
 import {
   buildStreetLayout,
+  STREET_HAIR_COLORS,
+  STREET_HAIR_STYLES,
   STREET_HOUSE_STYLES,
   STREET_ROOF_COLORS,
+  STREET_SHIRT_COLORS,
+  STREET_SKIN_TONES,
   STREET_ROOF_KEYS,
   STREET_WALL_COLORS,
   STREET_WALL_KEYS,
@@ -24,31 +28,47 @@ import { LoadError } from '@/components/load-error';
 import { Text } from '@/components/ui/text';
 import { DESIGN } from '@/constants/design';
 import { useAuth } from '@/contexts/auth-context';
-import { api, type StreetData, type StreetLotData } from '@/lib/api';
+import { api, type CommonsPost, type StreetData, type StreetLookData, type StreetLotData } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
 import { CircleHallSheet } from './circle-hall-sheet';
-import { iso } from './street-art';
+import { iso, type PersonColors } from './street-art';
 import { BUILDING_NAMES, hitTest, StreetScene, type ScenePerson, type StreetPlace } from './street-scene';
 
 const THEME = { ...DESIGN, primary: DESIGN.actionText };
 const POLL_MS = 5_000;
 const HEARTBEAT_MS = 30_000;
-const SHIRTS = ['#B94614', '#3E6A86', '#5B7F4E', '#C2557A', '#5B5FAF', '#C98A1B', '#2F8F8A'];
 const STYLE_NAMES: Record<StreetHouseStyle, string> = { a: 'Cottage', b: 'Two-story', c: 'Bungalow' };
 const COLOR_NAMES: Record<string, string> = {
   cream: 'Cream', sky: 'Sky', sage: 'Sage', rose: 'Rose', white: 'White',
   terracotta: 'Terracotta', slate: 'Slate', blue: 'Blue', green: 'Green',
+  deep: 'Deep', brown: 'Brown', warm: 'Warm', tan: 'Tan', golden: 'Golden', light: 'Light',
+  black: 'Black', auburn: 'Auburn', blond: 'Blond', gray: 'Gray',
+  purple: 'Purple', gold: 'Gold', teal: 'Teal',
 };
+const HAIR_STYLE_NAMES: Record<string, string> = { short: 'Short', curly: 'Curly', bun: 'Bun', long: 'Long', none: 'None' };
+
+/** Turn a saved look (palette keys) into the colors a person is drawn with. */
+function lookColors(look: StreetLookData): PersonColors {
+  return {
+    skin: STREET_SKIN_TONES[look.skin as keyof typeof STREET_SKIN_TONES] ?? STREET_SKIN_TONES.warm,
+    hair: STREET_HAIR_COLORS[look.hairColor as keyof typeof STREET_HAIR_COLORS] ?? STREET_HAIR_COLORS.black,
+    hairStyle: look.hairStyle,
+    shirt: STREET_SHIRT_COLORS[look.shirt as keyof typeof STREET_SHIRT_COLORS] ?? STREET_SHIRT_COLORS.terracotta,
+  };
+}
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const pinnedThisWeek = (post: { createdAt?: string }) =>
+  !!post.createdAt && Date.now() - new Date(post.createdAt).getTime() < WEEK_MS;
 
 /**
  * Someone out on the street. Nobody steers anyone, you included: everyone
- * who's online strolls on their own little errands (home, the Green, the
- * Circle Hall, a shop, a nearby stretch of road), pauses, then heads off again.
+ * who's online strolls on their own little errands (home, the community
+ * board, the Circle Hall, a shop, a nearby stretch of road), pauses, then heads off again.
  */
 interface Walker {
   id: string;
   name: string;
-  shirt: string;
+  look: StreetLookData;
   isYou: boolean;
   x: number;
   y: number;
@@ -83,13 +103,6 @@ function nextErrand(
     if (path && path.length) return path;
   }
   return null;
-}
-
-function shirtFor(id: string, avatarColor: string | null) {
-  if (avatarColor && /^#[0-9a-f]{6}$/i.test(avatarColor)) return avatarColor;
-  let h = 0;
-  for (let k = 0; k < id.length; k++) h = (h * 31 + id.charCodeAt(k)) | 0;
-  return SHIRTS[Math.abs(h) % SHIRTS.length]!;
 }
 
 function isForbidden(error: unknown) {
@@ -180,12 +193,16 @@ export default function StreetView({ coopId }: { coopId: string }) {
     const people = [...data.online.filter((p) => !p.isYou)];
     for (const person of people) {
       seen.add(person.userId);
-      if (map.has(person.userId)) continue;
+      const existing = map.get(person.userId);
+      if (existing) {
+        existing.look = person.look; // they may have changed how they look
+        continue;
+      }
       const start = nextLayout.isBlocked(person.x, person.y) ? homeOf(person.userId) ?? { i: 11, j: 8 } : { i: person.x, j: person.y };
       map.set(person.userId, {
         id: person.userId,
         name: person.name,
-        shirt: shirtFor(person.userId, person.avatarColor),
+        look: person.look,
         isYou: false,
         x: start.i + 0.5,
         y: start.j + 0.5,
@@ -205,7 +222,7 @@ export default function StreetView({ coopId }: { coopId: string }) {
       map.set(mineLot.user.id, {
         id: mineLot.user.id,
         name: 'You',
-        shirt: shirtFor(mineLot.user.id, mineLot.user.avatarColor),
+        look: mineLot.user.look,
         isYou: true,
         x: start.i + 0.5,
         y: start.j + 0.5,
@@ -213,9 +230,53 @@ export default function StreetView({ coopId }: { coopId: string }) {
         restUntil: Date.now() + 1200,
         home,
       });
+    } else if (mineLot && youId.current) {
+      const me = map.get(youId.current);
+      if (me) me.look = mineLot.user.look;
     }
     setStreet(data);
   }, []);
+
+  // Recent Board posts: one note each on the community board, and the latest
+  // few in its card.
+  const [boardPosts, setBoardPosts] = useState<CommonsPost[] | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      if (!sessionToken) return;
+      let active = true;
+      api
+        .listBoardItems({ coopId, lane: 'all', limit: 6 }, sessionToken)
+        .then((result) => active && setBoardPosts(result.items))
+        .catch((err) => {
+          console.warn('Board posts for the street not loaded:', err);
+          if (active) setBoardPosts([]);
+        });
+      return () => {
+        active = false;
+      };
+    }, [coopId, sessionToken]),
+  );
+  const boardNotes = (boardPosts ?? []).filter(pinnedThisWeek).length;
+
+  const setLook = async (change: Partial<StreetLookData>) => {
+    if (!sessionToken || !street) return;
+    const before = street;
+    const mine = street.lots.find((lot) => lot.isYou);
+    if (!mine) return;
+    const look = { ...mine.user.look, ...change } as StreetLookData;
+    setActionError(null);
+    setStreet({ ...street, lots: street.lots.map((lot) => (lot.isYou ? { ...lot, user: { ...lot.user, look } } : lot)) });
+    const me = youId.current ? walkers.current.get(youId.current) : null;
+    if (me) me.look = look;
+    try {
+      await api.setStreetLook(change, sessionToken);
+      showNotice('Saved. That’s how neighbors see you now.');
+    } catch (err) {
+      setStreet(before);
+      if (me) me.look = mine.user.look;
+      setActionError(friendlyError(err, "We couldn't save your look. Try again."));
+    }
+  };
 
   const load = useCallback(async () => {
     if (!sessionToken) return;
@@ -423,7 +484,7 @@ export default function StreetView({ coopId }: { coopId: string }) {
     // second tag so the two don't pile up.
     const home = lotCenterByUser.get(w.id);
     const atHome = !moving && home ? Math.hypot(w.x - home.x, w.y - home.y) < 2.6 : false;
-    return { id: w.id, name: atHome ? '' : w.name, shirt: w.shirt, isYou: w.isYou, x: w.x, y: w.y, moving };
+    return { id: w.id, name: atHome ? '' : w.name, look: lookColors(w.look), isYou: w.isYou, x: w.x, y: w.y, moving };
   });
   const onlineIds = new Set((street?.online ?? []).map((p) => p.userId));
   const neighborsOut = (street?.lots ?? []).filter((lot) => !lot.isYou && onlineIds.has(lot.user.id));
@@ -473,6 +534,7 @@ export default function StreetView({ coopId }: { coopId: string }) {
               layout={layout}
               lots={lots}
               circleCount={street.circleCount}
+              boardNotes={boardNotes}
               people={people}
               camera={camera.current}
               selected={selected}
@@ -546,6 +608,8 @@ export default function StreetView({ coopId }: { coopId: string }) {
                       onlineIds={onlineIds}
                       busy={busy}
                       onPaint={paint}
+                      onSetLook={setLook}
+                      boardPosts={boardPosts}
                       onKnock={knock}
                     />
                   )}
@@ -609,11 +673,10 @@ function Swatch({ color, label, selected, onPress }: { color: string; label: str
   );
 }
 
-const BUILDING_COPY: Record<Exclude<StreetBuildingId, 'circle-hall'>, { body: (name: string) => string; action: string }> = {
+const BUILDING_COPY: Record<Exclude<StreetBuildingId, 'circle-hall' | 'board'>, { body: (name: string) => string; action: string }> = {
   'group-buys': { body: () => 'Team up with neighbors to buy together and pay less.', action: 'See group buys' },
   'corner-store': { body: (name) => `Shops run by members of ${name}.`, action: 'Browse stores' },
   'town-hall': { body: (name) => `Read proposals and vote on how ${name} runs.`, action: 'Read proposals' },
-  green: { body: () => 'Neighbors get together here. See what events are coming up.', action: 'See events' },
 };
 
 function openBuilding(id: StreetBuildingId, coopId: string) {
@@ -623,7 +686,120 @@ function openBuilding(id: StreetBuildingId, coopId: string) {
   else if (id === 'group-buys') router.push('/(authenticated)/group-buys' as any);
   else if (id === 'corner-store') router.push({ pathname: '/(tabs)/board', params: { coopId, lane: 'marketplace' } } as any);
   else if (id === 'town-hall') router.push({ pathname: '/(tabs)/proposals', params: { coopId } } as any);
-  else router.push({ pathname: '/(tabs)/board', params: { coopId, lane: 'events' } } as any);
+  else router.push({ pathname: '/(tabs)/board', params: { coopId } } as any);
+}
+
+function ChipRow<T extends string>({ label, options, names, value, onPick }: { label: string; options: readonly T[]; names: Record<string, string>; value: string; onPick: (v: T) => void }) {
+  return (
+    <View className="flex-row flex-wrap gap-2">
+      {options.map((option) => (
+        <TouchableOpacity
+          key={option}
+          accessibilityRole="button"
+          accessibilityLabel={`${label} ${names[option] ?? option}`}
+          accessibilityState={{ selected: value === option }}
+          aria-selected={value === option}
+          onPress={() => onPick(option)}
+          className="min-h-11 justify-center rounded-xl px-3"
+          style={{ borderWidth: 2, borderColor: value === option ? '#111827' : THEME.border }}
+        >
+          <Text className="text-sm font-semibold text-gray-900">{names[option] ?? option}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+/** How your person looks on every Commons street. */
+function YourLook({ look, onChange }: { look: StreetLookData; onChange: (change: Partial<StreetLookData>) => void }) {
+  const section = (title: string, body: React.ReactNode) => (
+    <View className="gap-2">
+      <Text className="text-xs font-bold uppercase tracking-wider text-gray-500">{title}</Text>
+      {body}
+    </View>
+  );
+  return (
+    <View className="gap-3 border-t pt-3" style={{ borderColor: THEME.border }}>
+      <View>
+        <Text accessibilityRole="header" className="text-lg font-bold text-gray-950">
+          Your look
+        </Text>
+        <Text className="text-sm text-gray-500">How neighbors see you strolling, on every Commons street.</Text>
+      </View>
+      {section(
+        'Skin',
+        <View className="flex-row flex-wrap gap-2">
+          {(Object.keys(STREET_SKIN_TONES) as Array<keyof typeof STREET_SKIN_TONES>).map((key) => (
+            <Swatch key={key} color={STREET_SKIN_TONES[key]} label={`Skin ${COLOR_NAMES[key]}`} selected={look.skin === key} onPress={() => onChange({ skin: key })} />
+          ))}
+        </View>,
+      )}
+      {section(
+        'Hair',
+        <ChipRow label="Hair" options={STREET_HAIR_STYLES} names={HAIR_STYLE_NAMES} value={look.hairStyle} onPick={(hairStyle) => onChange({ hairStyle })} />,
+      )}
+      {look.hairStyle !== 'none'
+        ? section(
+            'Hair color',
+            <View className="flex-row flex-wrap gap-2">
+              {(Object.keys(STREET_HAIR_COLORS) as Array<keyof typeof STREET_HAIR_COLORS>).map((key) => (
+                <Swatch key={key} color={STREET_HAIR_COLORS[key]} label={`Hair color ${COLOR_NAMES[key]}`} selected={look.hairColor === key} onPress={() => onChange({ hairColor: key })} />
+              ))}
+            </View>,
+          )
+        : null}
+      {section(
+        'Shirt',
+        <View className="flex-row flex-wrap gap-2">
+          {(Object.keys(STREET_SHIRT_COLORS) as Array<keyof typeof STREET_SHIRT_COLORS>).map((key) => (
+            <Swatch key={key} color={STREET_SHIRT_COLORS[key]} label={`Shirt ${COLOR_NAMES[key]}`} selected={look.shirt === key} onPress={() => onChange({ shirt: key })} />
+          ))}
+        </View>,
+      )}
+    </View>
+  );
+}
+
+/** The community board in the middle of the circle: the latest posts, and the way to the full Board. */
+function BoardSheet({ coopId, commonsName, posts }: { coopId: string; commonsName: string; posts: CommonsPost[] | null }) {
+  const recent = (posts ?? []).slice(0, 3);
+  const thisWeek = (posts ?? []).filter(pinnedThisWeek).length;
+  const openPost = (post: CommonsPost) => {
+    if (post.tag === 'Event' && post.event?.id) {
+      router.push({ pathname: '/[coopId]/events/[eventId]', params: { coopId, eventId: post.event.id } } as any);
+    } else {
+      router.push({ pathname: '/[coopId]/posts/[postId]', params: { coopId, postId: post.id } } as any);
+    }
+  };
+  return (
+    <>
+      <Heading
+        title="Community Board"
+        sub={posts === null ? `What's pinned up in ${commonsName}` : `${thisWeek} ${thisWeek === 1 ? 'note' : 'notes'} pinned up this week`}
+      />
+      <Text className="text-[15px] text-gray-600">Neighbors pin up asks, offers, updates and events here.</Text>
+      {posts === null ? (
+        <ActivityIndicator color={THEME.primary} />
+      ) : recent.length === 0 ? (
+        <Text className="text-sm text-gray-500">Nothing's pinned up yet. Be the first to post something.</Text>
+      ) : (
+        <View>
+          {recent.map((post) => (
+            <ListRow
+              key={post.id}
+              title={post.title || 'Untitled note'}
+              sub={post.tag ? `${post.tag}` : undefined}
+              a11y={`Open ${post.title || 'note'}`}
+              onPress={() => openPost(post)}
+            />
+          ))}
+        </View>
+      )}
+      <View className="flex-row flex-wrap gap-2">
+        <Button label="See the whole board" onPress={() => openBuilding('board', coopId)} />
+      </View>
+    </>
+  );
 }
 
 function PlaceSheet({
@@ -636,6 +812,8 @@ function PlaceSheet({
   onlineIds,
   busy,
   onPaint,
+  onSetLook,
+  boardPosts,
   onKnock,
 }: {
   coopId: string;
@@ -647,12 +825,15 @@ function PlaceSheet({
   onlineIds: Set<string>;
   busy: boolean;
   onPaint: (look: { houseStyle?: string; wallColor?: string; roofColor?: string }) => void;
+  onSetLook: (look: Partial<StreetLookData>) => void;
+  boardPosts: CommonsPost[] | null;
   onKnock: (lot: StreetLotData) => void;
 }) {
   if (!selected) return null;
 
   if (selected.kind === 'building') {
     if (selected.id === 'circle-hall') return <CircleHallSheet coopId={coopId} commonsName={commonsName} />;
+    if (selected.id === 'board') return <BoardSheet coopId={coopId} commonsName={commonsName} posts={boardPosts} />;
     const copy = BUILDING_COPY[selected.id];
     return (
       <>
@@ -707,6 +888,7 @@ function PlaceSheet({
             ))}
           </View>
         </View>
+        <YourLook look={lot.user.look} onChange={onSetLook} />
       </>
     );
   }
@@ -754,7 +936,7 @@ function StreetList({
   circleCount: number;
   onVisit: (place: StreetPlace) => void;
 }) {
-  const places: StreetBuildingId[] = ['circle-hall', 'corner-store', 'group-buys', 'town-hall', 'green'];
+  const places: StreetBuildingId[] = ['board', 'circle-hall', 'corner-store', 'group-buys', 'town-hall'];
   return (
     <>
       <Heading title="Every place on the street" />

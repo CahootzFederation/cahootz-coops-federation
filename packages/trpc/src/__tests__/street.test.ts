@@ -152,6 +152,37 @@ describe('streetRouter', () => {
     await expect(callerFor(db).paint({ coopId: 'c1', houseStyle: 'z' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
+  describe('setLook', () => {
+    it('saves palette choices and keeps the rest of your look', async () => {
+      const db = makeDb();
+      db.streetLook = {
+        findUnique: vi.fn().mockResolvedValue({ userId: ME.id, skin: 'golden', hairStyle: 'bun', hairColor: 'auburn', shirt: 'teal' }),
+        upsert: vi.fn().mockResolvedValue({}),
+      };
+      const look = await callerFor(db).setLook({ shirt: 'rose', hairStyle: 'curly' });
+      expect(look).toEqual({ skin: 'golden', hairStyle: 'curly', hairColor: 'auburn', shirt: 'rose' });
+      expect(db.streetLook.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        where: { userId: ME.id },
+        update: { skin: 'golden', hairStyle: 'curly', hairColor: 'auburn', shirt: 'rose' },
+      }));
+    });
+
+    it('turns away anything that is not one of the options', async () => {
+      const db = makeDb();
+      db.streetLook = { findUnique: vi.fn(), upsert: vi.fn() };
+      await expect(callerFor(db).setLook({ shirt: '#ff00ff' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      await expect(callerFor(db).setLook({ hairStyle: 'mohawk' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      expect(db.streetLook.upsert).not.toHaveBeenCalled();
+    });
+  });
+
+  it('sends each person a full look, using a default until they pick one', async () => {
+    const db = makeDb();
+    const street = await callerFor(db).get({ coopId: 'c1' });
+    const mine = street.lots.find((l) => l.isYou)!;
+    expect(Object.keys(mine.user.look).sort()).toEqual(['hairColor', 'hairStyle', 'shirt', 'skin']);
+  });
+
   describe('knock', () => {
     it('lets the neighbor know you stopped by', async () => {
       const db = makeDb();

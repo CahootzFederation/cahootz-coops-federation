@@ -171,22 +171,56 @@ export function CircleHallArt({ i, j, circleCount }: { i: number; j: number; cir
   );
 }
 
-/** A flat garden in the middle of the circle: low beds and flowers, nothing tall that would block the view. */
-export function GreenArt({ i, j }: { i: number; j: number }) {
-  const flowers = ['#E86A8A', '#F2C14E', '#B07CD8', '#F28B50'];
-  const beds: Array<[number, number]> = [[i + 0.2, j + 0.2], [i + 1.1, j + 0.2], [i + 0.2, j + 1.1], [i + 1.1, j + 1.1]];
+const NOTE_COLORS = ['#FFF3A3', '#BFE3F2', '#F9C6D0', '#C9F2C7', '#FFFFFF', '#FFD8A8'];
+
+/**
+ * The community board: a cork board on two posts with a little roof, standing
+ * on a paved plaza, with one paper note pinned up for each recent post.
+ */
+export function BoardArt({ i, j, notes }: { i: number; j: number; notes: number }) {
+  const PY = j + 1.05; // the board faces the viewer's lower left (+j)
+  const x0 = i + 0.22;
+  const x1 = i + 1.78;
+  const zLow = 7;
+  const zHigh = 34;
+  const post = (px: number, key: string) => {
+    const [ax, ay] = iso(px, PY, 0);
+    const [bx, by] = iso(px, PY, zHigh + 2);
+    return <Line key={key} x1={ax} y1={ay} x2={bx} y2={by} stroke="#6B4A33" strokeWidth={3} strokeLinecap="round" />;
+  };
+  const slots: Array<[number, number]> = [
+    [0.12, 0.55], [0.42, 0.6], [0.72, 0.52],
+    [0.18, 0.12], [0.5, 0.15], [0.78, 0.1],
+  ];
+  const shown = Math.max(1, Math.min(slots.length, notes));
+  const span = x1 - x0;
   return (
     <G>
-      <Polygon points={pts([iso(i + 0.05, j + 0.05), iso(i + 1.95, j + 0.05), iso(i + 1.95, j + 1.95), iso(i + 0.05, j + 1.95)])} fill="#E9E2D6" />
-      {beds.map(([bx, by], k) => (
-        <G key={`bed${k}`}>
-          <Box x={bx} y={by} w={0.7} d={0.7} h={4} color="#8B5E3C" />
-          {[0, 1, 2].map((n) => {
-            const [fx, fy] = iso(bx + 0.18 + n * 0.17, by + 0.35, 7);
-            return <Circle key={`f${k}${n}`} cx={fx} cy={fy} r={3.2} fill={flowers[(k + n) % 4]} />;
-          })}
-        </G>
-      ))}
+      {/* Paved plaza with two low planters at the front corners. */}
+      <Polygon points={pts([iso(i + 0.05, j + 0.05), iso(i + 1.95, j + 0.05), iso(i + 1.95, j + 1.95), iso(i + 0.05, j + 1.95)])} fill="#E3DCCF" />
+      <Box x={i + 1.55} y={j + 1.55} w={0.35} d={0.35} h={5} color="#8B5E3C" />
+      <Circle cx={iso(i + 1.72, j + 1.72, 9)[0]} cy={iso(i + 1.72, j + 1.72, 9)[1]} r={4} fill="#62A05B" />
+      <Box x={i + 0.1} y={j + 1.55} w={0.35} d={0.35} h={5} color="#8B5E3C" />
+      <Circle cx={iso(i + 0.27, j + 1.72, 9)[0]} cy={iso(i + 0.27, j + 1.72, 9)[1]} r={4} fill="#62A05B" />
+      {post(x0 + 0.05, 'pl')}
+      {post(x1 - 0.05, 'pr')}
+      {/* Wood frame, cork face, and a small roof to keep the notes dry. */}
+      {faceY(PY, x0 - 0.04, x1 + 0.04, zLow - 1.5, zHigh + 1.5, '#7A5636', 'frame')}
+      {faceY(PY + 0.001, x0, x1, zLow, zHigh, '#C9A06B', 'cork')}
+      <Polygon points={pts([iso(x0 - 0.1, PY - 0.12, zHigh + 2), iso(x1 + 0.1, PY - 0.12, zHigh + 2), iso(x1 + 0.1, PY + 0.14, zHigh + 6), iso(x0 - 0.1, PY + 0.14, zHigh + 6)])} fill="#8E3A16" />
+      {slots.slice(0, shown).map(([fx, fz], k) => {
+        const nx0 = x0 + span * fx;
+        const nx1 = nx0 + span * 0.22;
+        const nz0 = zLow + (zHigh - zLow) * fz + 1;
+        const nz1 = nz0 + 7;
+        const [pinX, pinY] = iso((nx0 + nx1) / 2, PY + 0.003, nz1 - 1);
+        return (
+          <G key={`n${k}`}>
+            {faceY(PY + 0.002, nx0, nx1, nz0, nz1, NOTE_COLORS[k % NOTE_COLORS.length]!)}
+            <Circle cx={pinX} cy={pinY} r={1.3} fill="#DC2626" />
+          </G>
+        );
+      })}
     </G>
   );
 }
@@ -203,29 +237,47 @@ export function TreeArt({ i, j }: { i: number; j: number }) {
   );
 }
 
-const SKIN_TONES = ['#8D5A3B', '#5C3A24', '#A06A45', '#C68E64', '#E0B08A', '#7A4B2E'];
-const HAIR = ['#1F1A17', '#3B2A20', '#1F1A17', '#6B4A2E', '#2B2B2B'];
-
-function hashOf(text: string) {
-  let h = 0;
-  for (let k = 0; k < text.length; k++) h = (h * 31 + text.charCodeAt(k)) | 0;
-  return Math.abs(h);
+/** The colors a person is drawn with (hex), from their saved look. */
+export interface PersonColors {
+  skin: string;
+  hair: string;
+  hairStyle: 'short' | 'curly' | 'bun' | 'long' | 'none';
+  shirt: string;
 }
 
-/** The simple oval person: shadow, oval body, round head, hair. */
-export function PersonArt({ x, y, id, shirt, isYou, name, bob }: { x: number; y: number; id: string; shirt: string; isYou: boolean; name?: string; bob: number }) {
+/** Hair is drawn in two parts: behind the head (curly puff, long hair) and on top (short cap, bun). */
+function hairParts(cx: number, cy: number, look: PersonColors): { back: React.ReactNode; top: React.ReactNode } {
+  const back =
+    look.hairStyle === 'curly' ? <Circle cx={cx} cy={cy - 1.5} r={8.6} fill={look.hair} />
+    : look.hairStyle === 'long' ? <Rect x={cx - 7} y={cy - 4} width={14} height={13} rx={5} fill={look.hair} />
+    : null;
+  const top =
+    look.hairStyle === 'short' ? <Ellipse cx={cx} cy={cy - 3.5} rx={6} ry={3.2} fill={look.hair} />
+    : look.hairStyle === 'bun' ? (
+      <G>
+        <Ellipse cx={cx} cy={cy - 3.5} rx={6} ry={3.2} fill={look.hair} />
+        <Circle cx={cx} cy={cy - 8} r={3.2} fill={look.hair} />
+      </G>
+    )
+    : look.hairStyle === 'long' ? <Ellipse cx={cx} cy={cy - 3.5} rx={6.3} ry={3.4} fill={look.hair} />
+    : null;
+  return { back, top };
+}
+
+/** The simple oval person: shadow, oval body, round head, hair, in their chosen look. */
+export function PersonArt({ x, y, look, isYou, name, bob }: { x: number; y: number; look: PersonColors; isYou: boolean; name?: string; bob: number }) {
   const [sx, sy] = iso(x, y);
-  const h = hashOf(id);
-  const skin = SKIN_TONES[h % SKIN_TONES.length]!;
-  const hair = HAIR[h % HAIR.length]!;
+  const headY = sy - 25 - bob;
+  const hair = hairParts(sx, headY, look);
   const nameWidth = name ? name.length * 6 + 14 : 0;
   return (
     <G>
       <Ellipse cx={sx} cy={sy} rx={8} ry={4} fill="rgba(0,0,0,0.2)" />
       {isYou ? <Ellipse cx={sx} cy={sy} rx={11} ry={5.5} fill="none" stroke="#B94614" strokeWidth={2} /> : null}
-      <Ellipse cx={sx} cy={sy - 11 - bob} rx={6.5} ry={9} fill={shirt} />
-      <Circle cx={sx} cy={sy - 25 - bob} r={6} fill={skin} />
-      <Ellipse cx={sx} cy={sy - 28.5 - bob} rx={6} ry={3.2} fill={hair} />
+      {hair.back}
+      <Ellipse cx={sx} cy={sy - 11 - bob} rx={6.5} ry={9} fill={look.shirt} />
+      <Circle cx={sx} cy={headY} r={6} fill={look.skin} />
+      {hair.top}
       {name ? (
         <G>
           <Rect x={sx - nameWidth / 2} y={sy - 50 - bob} width={nameWidth} height={16} rx={8} fill="rgba(255,255,255,0.94)" />

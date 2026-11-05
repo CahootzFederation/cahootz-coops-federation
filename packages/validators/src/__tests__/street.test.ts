@@ -32,7 +32,7 @@ describe("street layout", () => {
 
   it("keeps every lot and building on solid ground, never on the road", () => {
     const layout = buildStreetLayout(60);
-    for (const p of [...layout.lots, ...layout.buildings.filter((b) => b.id !== "green")]) {
+    for (const p of [...layout.lots, ...layout.buildings.filter((b) => b.id !== "board")]) {
       for (let a = 0; a < p.w; a++) {
         for (let b = 0; b < p.d; b++) {
           expect(layout.inBounds(p.i + a, p.j + b)).toBe(true);
@@ -62,9 +62,10 @@ describe("street layout", () => {
     expect(walkways.length).toBeGreaterThan(100);
     const things = [
       ...layout.lots.map((p) => ({ p, h: STREET_DRAWN_HEIGHT.house, what: `lot ${p.lotNumber}` })),
-      // The Green is a flat garden that never reaches a person's waist, so it
-      // never hides anyone; the box check is too coarse for something that low.
-      ...layout.buildings.filter((p) => p.id !== "green").map((p) => ({ p, h: STREET_DRAWN_HEIGHT.building, what: p.id })),
+      // The community board stands in the middle of the circle, in front of the
+      // back of the loop. The app turns it see-through whenever anyone stands
+      // behind it (street-scene.tsx), so it's checked there instead of here.
+      ...layout.buildings.filter((p) => p.id !== "board").map((p) => ({ p, h: STREET_DRAWN_HEIGHT.building, what: p.id })),
       ...layout.trees.map((t) => ({ p: { ...t, w: 1, d: 1 }, h: STREET_DRAWN_HEIGHT.tree, what: `tree ${t.i},${t.j}` })),
     ];
     for (const { p, h, what } of things) {
@@ -97,10 +98,10 @@ describe("street layout", () => {
     expect(streetHides({ i: 5, j: 5, w: 2, d: 2 }, STREET_DRAWN_HEIGHT.house, { i: 7, j: 7 })).toBe(false);
   });
 
-  it("lets you walk from the Green to every front door", () => {
+  it("lets you walk from the community board to every front door", () => {
     const layout = buildStreetLayout(40);
-    const green = layout.buildings.find((b) => b.id === "green")!;
-    const start = streetDoorTile(layout, green, { x: 11.5, y: 8.5 })!;
+    const board = layout.buildings.find((b) => b.id === "board")!;
+    const start = streetDoorTile(layout, board, { x: 11.5, y: 8.5 })!;
     for (const p of [...layout.lots, ...layout.buildings]) {
       const door = streetDoorTile(layout, p, layout.center);
       expect(door, `door for ${JSON.stringify(p)}`).not.toBeNull();

@@ -114,6 +114,7 @@ model User {
   circleChatPresence         CircleChatPresence[]
   streetLots                 StreetLot[]
   streetPresence             StreetPresence[]
+  streetLook                 StreetLook?
   eventsCreated              Event[]                    @relation("EventCreatedBy")
   eventHosting               EventHost[]
   eventRSVPs                 EventRSVP[]
@@ -1902,6 +1903,20 @@ model StreetLot {
 
   @@unique([coopId, userId])
   @@unique([coopId, lotNumber])
+  @@schema("public")
+}
+
+// How a member's person looks on Commons streets (account-wide). Values are
+// palette keys from @repo/validators/street; anything unknown falls back to a default.
+model StreetLook {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skin      String
+  hairStyle String
+  hairColor String
+  shirt     String
+  updatedAt DateTime @updatedAt
+
   @@schema("public")
 }
 

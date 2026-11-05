@@ -121,6 +121,58 @@ test("new messages in your circles show on the Circle Hall", async ({ browser })
   }
 });
 
+const NO_CONNECTION = "We couldn't reach Cahootz. Check your internet connection and try again.";
+
+test("with no internet the street says so and loads once you're back", async ({ browser }) => {
+  const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
+  const streetRequests = "**/trpc/street.get**";
+  try {
+    // The app itself is already loaded; only the street's data can't get through.
+    await page.route(streetRequests, (route) => route.abort("internetdisconnected"));
+    await page.goto("/?coopId=cahootz");
+    await expect(page.getByText(NO_CONNECTION)).toBeVisible();
+    await expect(page.getByLabel(/^Map of the street/)).toHaveCount(0);
+
+    await page.unroute(streetRequests);
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(page.getByLabel(/^Map of the street/)).toBeVisible();
+    await expect(page.getByText(/^Welcome to /)).toBeVisible();
+    await expect(page.getByText(NO_CONNECTION)).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test("losing internet mid-visit undoes a paint change, and it saves once you're back", async ({ browser }) => {
+  const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
+  const { token, mine } = await myStreet(page);
+  const original = { wallColor: mine.wallColor, roofColor: mine.roofColor };
+  const next = original.wallColor === "sage" ? { key: "sky", label: "Sky" } : { key: "sage", label: "Sage" };
+  const current = { cream: "Cream", sky: "Sky", sage: "Sage", rose: "Rose", white: "White" }[original.wallColor as string]!;
+  try {
+    await page.goto("/?coopId=cahootz");
+    await openStreetPlace(page, "Visit your house");
+    await expect(page.getByRole("heading", { name: "Your house" })).toBeVisible();
+
+    await context.setOffline(true);
+    await page.getByLabel(`Wall color ${next.label}`).click();
+    await expect(page.getByText(NO_CONNECTION)).toBeVisible();
+    // The change is undone rather than left looking saved.
+    await expect(page.getByLabel(`Wall color ${current}`)).toHaveAttribute("aria-selected", "true");
+    // The map stays up while offline.
+    await expect(page.getByLabel(/^Map of the street/)).toBeVisible();
+
+    await context.setOffline(false);
+    await page.getByLabel(`Wall color ${next.label}`).click();
+    await expect(page.getByText("Saved. Your neighbors can see it now.")).toBeVisible();
+    await expect(page.getByLabel(`Wall color ${next.label}`)).toHaveAttribute("aria-selected", "true");
+  } finally {
+    await context.setOffline(false).catch(() => undefined);
+    await trpc("POST", "street.paint", token, { coopId: "cahootz", ...original }).catch(() => undefined);
+    await context.close();
+  }
+});
+
 test("Circle Hall on the street lists every circle, opens one, and leads inside", async ({ browser }) => {
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
   try {

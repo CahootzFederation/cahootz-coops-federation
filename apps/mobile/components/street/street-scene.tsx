@@ -1,6 +1,8 @@
 import React, { useMemo, useRef } from 'react';
 import { PanResponder, View, type LayoutChangeEvent } from 'react-native';
-import Svg, { G, Polygon, Line } from 'react-native-svg';
+import Svg, { Ellipse, G, Image as SvgImage, Polygon } from 'react-native-svg';
+
+import { KAYKIT_SPRITES, type KayKitSpriteName } from './kaykit-sprites';
 import {
   STREET_DRAWN_HEIGHT,
   STREET_ROOF_COLORS,
@@ -23,7 +25,6 @@ import {
   polygonPoints,
   ShopArt,
   TownHallArt,
-  TreeArt,
   TH,
   TW,
 } from './street-art';
@@ -92,23 +93,31 @@ export function hitTest(layout: StreetLayout, lots: Map<number, StreetLotData>, 
   return { tile: { i: Math.floor((ax + ay) / 2), j: Math.floor((ay - ax) / 2) } };
 }
 
+/** A KayKit image placed so its ground point lands on screen point (x, y). */
+function KayKitImage({ name, x, y }: { name: KayKitSpriteName; x: number; y: number }) {
+  const s = KAYKIT_SPRITES[name];
+  return <SvgImage href={s.source} x={x - s.ax} y={y - s.ay} width={s.w} height={s.h} />;
+}
+
 function Ground({ layout, lots, selected }: { layout: StreetLayout; lots: Map<number, StreetLotData>; selected: string | null }) {
   const { width: W, height: H } = layout;
   const tiles: React.ReactNode[] = [];
   for (let i = 0; i < W; i++) {
     for (let j = 0; j < H; j++) {
       const t = layout.tileType(i, j);
-      const fill = t === 'grass' ? ((i + j) % 2 ? GROUND.grassAlt : null) : t === 'green' ? GROUND.green : t === 'road' ? GROUND.road : GROUND.walk;
+      // Roads are KayKit pieces below; only grass and the Green are drawn tile by tile.
+      const fill = t === 'grass' ? ((i + j) % 2 ? GROUND.grassAlt : null) : t === 'green' ? GROUND.green : null;
       if (!fill) continue;
       tiles.push(<Polygon key={`t${i},${j}`} points={polygonPoints([iso(i, j), iso(i + 1, j), iso(i + 1, j + 1), iso(i, j + 1)])} fill={fill} />);
     }
   }
-  const dashes: React.ReactNode[] = [];
-  for (let i = 12; i < W; i++) {
-    const a = iso(i + 0.15, 8);
-    const b = iso(i + 0.55, 8);
-    dashes.push(<Line key={`d${i}`} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} stroke="rgba(255,255,255,0.7)" strokeWidth={2} />);
-  }
+  // The road: KayKit City Builder Bits pieces, each covering 2x2 tiles.
+  const roads = [...layout.roadPieces]
+    .sort((a, b) => a.i + a.j - (b.i + b.j))
+    .map((p) => {
+      const [x, y] = iso(p.i + 1, p.j + 1);
+      return <KayKitImage key={`r${p.i},${p.j}`} name={`road-${p.piece}` as KayKitSpriteName} x={x} y={y} />;
+    });
   const lawns = layout.lots
     .filter((lot) => lots.has(lot.lotNumber))
     .map((lot) => {
@@ -134,7 +143,7 @@ function Ground({ layout, lots, selected }: { layout: StreetLayout; lots: Map<nu
       <Polygon points={polygonPoints([iso(0, H), iso(W, H), iso(W, H, -18), iso(0, H, -18)])} fill="#A07D58" />
       <Polygon points={polygonPoints([iso(0, 0), iso(W, 0), iso(W, H), iso(0, H)])} fill={GROUND.grass} />
       {tiles}
-      {dashes}
+      {roads}
       {lawns}
       {outlines}
     </G>
@@ -237,7 +246,23 @@ export function StreetScene({
       });
     }
     for (const t of layout.trees) {
-      list.push({ depth: t.i + t.j + 1, node: <G key={`t${t.i},${t.j}`}><TreeArt i={t.i} j={t.j} /></G>, footprint: { ...t, w: 1, d: 1 }, height: STREET_DRAWN_HEIGHT.tree });
+      const [tx, ty] = iso(t.i + 0.5, t.j + 0.5);
+      list.push({
+        depth: t.i + t.j + 1,
+        node: (
+          <G key={`t${t.i},${t.j}`}>
+            <Ellipse cx={tx} cy={ty} rx={10} ry={5} fill="rgba(20,40,20,0.15)" />
+            <KayKitImage name="tree" x={tx} y={ty} />
+          </G>
+        ),
+        footprint: { ...t, w: 1, d: 1 },
+        height: STREET_DRAWN_HEIGHT.tree,
+      });
+    }
+    // Streetlights along the far curb of the road out, behind the road so they never block anyone.
+    for (let i = 12; i < layout.width - 1; i += 4) {
+      const [sx, sy] = iso(i + 0.5, 6.75);
+      list.push({ depth: i + 7.25, node: <G key={`sl${i}`}><KayKitImage name="streetlight" x={sx} y={sy} /></G> });
     }
     return list;
   }, [layout, lots, circleCount]);

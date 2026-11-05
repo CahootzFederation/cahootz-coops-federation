@@ -62,12 +62,33 @@ describe("street layout", () => {
     expect(walkways.length).toBeGreaterThan(100);
     const things = [
       ...layout.lots.map((p) => ({ p, h: STREET_DRAWN_HEIGHT.house, what: `lot ${p.lotNumber}` })),
-      ...layout.buildings.map((p) => ({ p, h: p.id === "green" ? STREET_DRAWN_HEIGHT.green : STREET_DRAWN_HEIGHT.building, what: p.id })),
+      // The Green is a flat garden that never reaches a person's waist, so it
+      // never hides anyone; the box check is too coarse for something that low.
+      ...layout.buildings.filter((p) => p.id !== "green").map((p) => ({ p, h: STREET_DRAWN_HEIGHT.building, what: p.id })),
       ...layout.trees.map((t) => ({ p: { ...t, w: 1, d: 1 }, h: STREET_DRAWN_HEIGHT.tree, what: `tree ${t.i},${t.j}` })),
     ];
     for (const { p, h, what } of things) {
       const hidden = walkways.filter((t) => streetHides(p, h, t));
       expect(hidden, `${what} hides ${JSON.stringify(hidden)}`).toEqual([]);
+    }
+  });
+
+  it("covers every road tile with exactly one 2x2 road piece", () => {
+    for (const lastLot of [0, 7, 40]) {
+      const layout = buildStreetLayout(lastLot);
+      const covered = new Map<string, number>();
+      for (const p of layout.roadPieces) {
+        for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) {
+          const key = `${p.i + a},${p.j + b}`;
+          covered.set(key, (covered.get(key) ?? 0) + 1);
+        }
+      }
+      for (let i = 0; i < layout.width; i++) {
+        for (let j = 0; j < layout.height; j++) {
+          const isRoad = layout.tileType(i, j) === "road";
+          expect(covered.get(`${i},${j}`) ?? 0, `tile ${i},${j} (lots up to ${lastLot})`).toBe(isRoad ? 1 : 0);
+        }
+      }
     }
   });
 

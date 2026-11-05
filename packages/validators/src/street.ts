@@ -66,6 +66,8 @@ export interface StreetLayout {
   lots: Array<StreetPlacement & { lotNumber: number }>;
   buildings: Array<StreetPlacement & { id: StreetBuildingId }>;
   trees: Array<{ i: number; j: number }>;
+  /** 2x2-tile road pieces by their top-left tile. */
+  roadPieces: Array<{ i: number; j: number; piece: StreetRoadPiece }>;
   tileType(i: number, j: number): StreetTileType;
   isBlocked(i: number, j: number): boolean;
   inBounds(i: number, j: number): boolean;
@@ -97,7 +99,28 @@ const BASE_TREES: Array<[number, number]> = [
 ];
 
 /** Roughly how tall each kind of thing is drawn, in screen points. */
-export const STREET_DRAWN_HEIGHT = { house: 70, building: 76, green: 8, tree: 32, person: 34 } as const;
+export const STREET_DRAWN_HEIGHT = { house: 70, building: 76, green: 8, tree: 34, person: 34 } as const;
+
+/**
+ * The road is built from 2x2-tile pieces (KayKit City Builder Bits): a square
+ * loop with rounded corners around the Green, a T where the road out leaves
+ * the loop, then straight road with a crosswalk now and then. Each piece names
+ * the directions it connects: i / mi (minus i), j / mj.
+ */
+export type StreetRoadPiece =
+  | "straight-i"
+  | "straight-j"
+  | "crossing-i"
+  | "t-east"
+  | "corner-ij"
+  | "corner-mi-j"
+  | "corner-i-mj"
+  | "corner-mi-mj";
+const LOOP_PIECES: Array<{ i: number; j: number; piece: StreetRoadPiece }> = [
+  { i: 5, j: 5, piece: "corner-ij" }, { i: 7, j: 5, piece: "straight-i" }, { i: 9, j: 5, piece: "corner-mi-j" },
+  { i: 5, j: 7, piece: "straight-j" }, { i: 9, j: 7, piece: "t-east" },
+  { i: 5, j: 9, piece: "corner-i-mj" }, { i: 7, j: 9, piece: "straight-i" }, { i: 9, j: 9, piece: "corner-mi-mj" },
+];
 const STREET_TW = 48;
 const STREET_TH = 24;
 
@@ -113,7 +136,9 @@ export function streetLotPlacement(lotNumber: number): StreetPlacement {
 
 export function streetWidthFor(lotCount: number): number {
   const extra = Math.max(0, lotCount - BULB_LOTS.length);
-  return ROAD_START + Math.ceil(extra / 2) * BLOCK + 1;
+  const width = ROAD_START + Math.ceil(extra / 2) * BLOCK + 1;
+  // The road out (from i 11) is laid in 2-tile pieces, so it must end on a whole piece.
+  return (width - 11) % 2 === 0 ? width : width + 1;
 }
 
 /**
@@ -142,15 +167,14 @@ export function buildStreetLayout(maxLotNumber: number): StreetLayout {
   const footprints = [...lots, ...BUILDINGS];
   const covers = (p: StreetPlacement, i: number, j: number) => i >= p.i && i < p.i + p.w && j >= p.j && j < p.j + p.d;
 
+  // The loop covers tiles 5-10 on both axes around the Green (7-8); the road
+  // out runs along j 7-8 from i 11. Road pieces have their own curbs, so there
+  // are no separate sidewalk tiles.
   const tileType = (i: number, j: number): StreetTileType => {
-    const r = Math.hypot(i + 0.5 - CENTER, j + 0.5 - CENTER);
-    let t: StreetTileType = "grass";
-    if (r < 2.2) t = "green";
-    else if (r <= 3.6) t = "road";
-    else if (r <= 4.3) t = "walk";
-    if (i >= 11 && (j === 7 || j === 8)) t = "road";
-    else if (i >= 11 && (j === 6 || j === 9)) t = "walk";
-    return t;
+    if (i >= 7 && i <= 8 && j >= 7 && j <= 8) return "green";
+    if (i >= 5 && i <= 10 && j >= 5 && j <= 10) return "road";
+    if (i >= 11 && (j === 7 || j === 8)) return "road";
+    return "grass";
   };
   const inBounds = (i: number, j: number) => i >= 0 && j >= 0 && i < width && j < HEIGHT;
 
@@ -177,6 +201,12 @@ export function buildStreetLayout(maxLotNumber: number): StreetLayout {
   for (const p of footprints) for (let a = 0; a < p.w; a++) for (let b = 0; b < p.d; b++) blocked.add(`${p.i + a},${p.j + b}`);
   for (const t of trees) blocked.add(`${t.i},${t.j}`);
 
+  const roadPieces = [...LOOP_PIECES];
+  for (let i = 11; i + 1 < width; i += 2) {
+    // A crosswalk in front of the shops, then every fourth piece.
+    roadPieces.push({ i, j: 7, piece: (i - 11) % 8 === 4 ? "crossing-i" : "straight-i" });
+  }
+
   return {
     width,
     height: HEIGHT,
@@ -184,6 +214,7 @@ export function buildStreetLayout(maxLotNumber: number): StreetLayout {
     lots,
     buildings: BUILDINGS,
     trees,
+    roadPieces,
     tileType,
     inBounds,
     isBlocked: (i, j) => !inBounds(i, j) || blocked.has(`${i},${j}`),

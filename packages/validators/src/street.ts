@@ -342,3 +342,42 @@ export function streetPath(layout: StreetLayout, from: { i: number; j: number },
   path.shift();
   return path;
 }
+
+/** How far you can zoom the street out and in. */
+export const STREET_ZOOM_MIN = 0.6;
+export const STREET_ZOOM_MAX = 2;
+
+export function clampStreetZoom(zoom: number) {
+  if (!Number.isFinite(zoom)) return 1;
+  return Math.min(STREET_ZOOM_MAX, Math.max(STREET_ZOOM_MIN, zoom));
+}
+
+/**
+ * Keep a dragged street on screen. The map's drawn box (`lo`..`hi` in world
+ * units on one axis) is placed at `base + pan + zoom * world`. The pan is
+ * limited so at least `margin` pixels of the map stay inside a view of
+ * `size` pixels, at any zoom.
+ */
+export function clampStreetPanAxis(pan: number, base: number, lo: number, hi: number, zoom: number, size: number, margin: number) {
+  const min = margin - zoom * hi - base;
+  const max = size - margin - zoom * lo - base;
+  if (min > max) return (min + max) / 2;
+  return Math.min(max, Math.max(min, pan));
+}
+
+/**
+ * Which name tags to show when people crowd together: walk the list in
+ * order (put the ones that must stay, like yours, first) and skip any tag
+ * whose screen point is within `minDistance` of a tag already shown.
+ */
+export function streetTagsToShow(tags: Array<{ id: string; x: number; y: number; keep?: boolean }>, minDistance = 40) {
+  const ordered = [...tags.filter((t) => t.keep), ...tags.filter((t) => !t.keep)];
+  const placed: Array<{ x: number; y: number }> = [];
+  const shown = new Set<string>();
+  for (const tag of ordered) {
+    if (!tag.keep && placed.some((p) => Math.hypot(p.x - tag.x, p.y - tag.y) < minDistance)) continue;
+    placed.push(tag);
+    shown.add(tag.id);
+  }
+  return shown;
+}

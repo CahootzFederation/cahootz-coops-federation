@@ -8,6 +8,7 @@ import {
   STREET_ROOF_COLORS,
   STREET_WALL_COLORS,
   streetHides,
+  streetTagsToShow,
   type StreetBuildingId,
   type StreetLayout,
   type StreetRoofColor,
@@ -21,6 +22,7 @@ import {
   HouseArt,
   iso,
   Label,
+  labelWidth,
   PersonArt,
   SageStreetArt,
   type PersonColors,
@@ -32,7 +34,11 @@ import {
   WalkerNameTag,
 } from './street-art';
 
-export type StreetPlace = { kind: 'lot'; lotNumber: number } | { kind: 'building'; id: StreetBuildingId };
+export type StreetPlace =
+  | { kind: 'lot'; lotNumber: number }
+  | { kind: 'building'; id: StreetBuildingId }
+  /** Someone out on the street (a neighbor or Sage). */
+  | { kind: 'person'; id: string };
 
 export interface ScenePerson {
   id: string;
@@ -63,10 +69,41 @@ const BUILDING_HEIGHT: Record<StreetBuildingId, number> = {
 /** How far a building's sign floats above its roof. */
 const LABEL_LIFT: Partial<Record<StreetBuildingId, number>> = { board: 14 };
 
+/** A press held longer than this is not a tap. */
+const LONG_PRESS_MS = 600;
+
 const GROUND = { grass: '#9CCB86', grassAlt: '#95C47F', plaza: '#E3DCCF', road: '#717780', walk: '#DCD6CC', lawn: '#A9D592', lawnLine: 'rgba(0,0,0,0.08)' };
 
 function placeKey(place: StreetPlace) {
-  return place.kind === 'lot' ? `lot:${place.lotNumber}` : `b:${place.id}`;
+  return place.kind === 'lot' ? `lot:${place.lotNumber}` : place.kind === 'building' ? `b:${place.id}` : `p:${place.id}`;
+}
+
+/** Extra room (in screen points) around every house and building, so a near miss still counts. */
+const TAP_PAD = 12;
+/** How close (in screen points) to someone's body a tap counts as tapping them. */
+const PERSON_TAP_RADIUS = 16;
+
+/** Where each building's and house's sign floats, and what it says. */
+function labelSpots(layout: StreetLayout, lots: Map<number, StreetLotData>, circleCount: number) {
+  const spots: Array<{ place: StreetPlace; at: [number, number]; text: string; isYou?: boolean }> = [];
+  for (const b of layout.buildings) {
+    const text = b.id === 'circle-hall' ? `Circle Hall · ${circleCount}` : BUILDING_NAMES[b.id];
+    // The shops stand side by side along the road, so every other sign floats higher to keep all of them readable.
+    const lift = LABEL_LIFT[b.id] ?? (b.id === 'corner-store' || b.id === 'town-hall' ? 44 : 18);
+    spots.push({ place: { kind: 'building', id: b.id }, at: iso(b.i + 1, b.j + 1, BUILDING_HEIGHT[b.id] + lift), text });
+  }
+  for (const lot of layout.lots) {
+    const data = lots.get(lot.lotNumber);
+    if (!data) continue;
+    const top = (data.houseStyle === 'b' ? 48 : 24) + 30;
+    spots.push({
+      place: { kind: 'lot', lotNumber: lot.lotNumber },
+      at: iso(lot.i + 1, lot.j + 1, top),
+      text: data.isYou ? 'Your house' : data.user.name,
+      isYou: data.isYou,
+    });
+  }
+  return spots;
 }
 
 /** Screen box (in world units) of a footprint plus its height, for tapping. */
@@ -79,8 +116,33 @@ function hitBox(p: { i: number; j: number; w: number; d: number }, top: number) 
   };
 }
 
-/** What was tapped at a world point: a building or house first (front to back), then a tile. */
-export function hitTest(layout: StreetLayout, lots: Map<number, StreetLotData>, wx: number, wy: number) {
+/**
+ * What was tapped at a world point: a person first (front to back), then a
+ * building or house (its sign counts too), then a tile. `zoom` turns the
+ * screen-point tap padding into world units.
+ */
+export function hitTest(
+  layout: StreetLayout,
+  lots: Map<number, StreetLotData>,
+  wx: number,
+  wy: number,
+  opts: { zoom?: number; people?: Array<{ id: string; x: number; y: number }>; circleCount?: number; fontScale?: number } = {},
+): { person: string } | { place: StreetPlace } | { tile: { i: number; j: number } } {
+  const zoom = opts.zoom ?? 1;
+  const people = [...(opts.people ?? [])].sort((a, b) => b.x + b.y - (a.x + a.y));
+  for (const p of people) {
+    const [sx, sy] = iso(p.x, p.y);
+    // The body runs from the feet (sy) to the top of the head (about sy - 32).
+    const dy = wy < sy - 32 ? sy - 32 - wy : wy > sy ? wy - sy : 0;
+    if (Math.hypot(wx - sx, dy) <= PERSON_TAP_RADIUS / zoom) return { person: p.id };
+  }
+  const fontScale = opts.fontScale ?? 1;
+  for (const spot of labelSpots(layout, lots, opts.circleCount ?? 0)) {
+    const half = (labelWidth(spot.text) * fontScale) / 2 + 4 / zoom;
+    const halfH = 10 * fontScale + 4 / zoom;
+    if (Math.abs(wx - spot.at[0]) <= half && Math.abs(wy - spot.at[1]) <= halfH) return { place: spot.place };
+  }
+  const pad = TAP_PAD / zoom;
   const places: Array<{ place: StreetPlace; depth: number; box: ReturnType<typeof hitBox> }> = [];
   for (const b of layout.buildings) places.push({ place: { kind: 'building', id: b.id }, depth: b.i + b.j, box: hitBox(b, BUILDING_HEIGHT[b.id]) });
   for (const lot of layout.lots) {
@@ -90,7 +152,7 @@ export function hitTest(layout: StreetLayout, lots: Map<number, StreetLotData>, 
   }
   places.sort((a, b) => b.depth - a.depth);
   for (const { place, box } of places) {
-    if (wx >= box.x0 && wx <= box.x1 && wy >= box.y0 && wy <= box.y1) return { place };
+    if (wx >= box.x0 - pad && wx <= box.x1 + pad && wy >= box.y0 - pad && wy <= box.y1 + pad) return { place };
   }
   const ax = wx / (TW / 2);
   const ay = wy / (TH / 2);
@@ -162,10 +224,13 @@ export function StreetScene({
   boardNotes,
   people,
   camera,
+  zoom,
+  fontScale,
   selected,
   bobPhase,
   onTap,
   onPan,
+  onPinch,
   onLayout,
 }: {
   layout: StreetLayout;
@@ -177,47 +242,87 @@ export function StreetScene({
   boardNotes: number;
   people: ScenePerson[];
   camera: { x: number; y: number };
+  /** How far the map is zoomed in (1 is normal). */
+  zoom: number;
+  /** The phone's text size, already capped, for name tags and signs. */
+  fontScale: number;
   selected: StreetPlace | null;
-  bobPhase: number;
+  /** Walking bob clock; null when Reduce Motion is on (nobody bobs). */
+  bobPhase: number | null;
   onTap: (worldX: number, worldY: number) => void;
   onPan: (dx: number, dy: number, done: boolean) => void;
+  /** Two fingers pinching: `scale` is the change since the pinch began. */
+  onPinch: (scale: number, done: boolean) => void;
   onLayout: (width: number, height: number) => void;
 }) {
   const selectedKey = selected ? placeKey(selected) : null;
   const origin = useRef({ x: 0, y: 0 });
   const viewRef = useRef<View>(null);
-  const cameraRef = useRef(camera);
-  cameraRef.current = camera;
+  const cameraRef = useRef({ ...camera, zoom });
+  cameraRef.current = { ...camera, zoom };
 
   const responder = useMemo(
     () => {
+      // A press is a tap only if it stayed put, used one finger, and let go
+      // within LONG_PRESS_MS. Drags pan; two fingers pinch to zoom.
       let moved = false;
+      let pinched = false;
+      let pinchStart = 0;
+      let startedAt = 0;
+      const touchGap = (touches: ReadonlyArray<{ pageX: number; pageY: number }>) =>
+        touches.length >= 2 ? Math.hypot(touches[0]!.pageX - touches[1]!.pageX, touches[0]!.pageY - touches[1]!.pageY) : 0;
       return PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: () => {
           moved = false;
+          pinched = false;
+          pinchStart = 0;
+          startedAt = Date.now();
           viewRef.current?.measureInWindow((x, y) => {
             origin.current = { x, y };
           });
         },
-        onPanResponderMove: (_e, g) => {
+        onPanResponderMove: (e, g) => {
+          const touches = e.nativeEvent.touches ?? [];
+          if (g.numberActiveTouches >= 2 && touches.length >= 2) {
+            const gap = touchGap(touches);
+            if (!pinched) {
+              pinched = true;
+              moved = true;
+              pinchStart = gap;
+            } else if (pinchStart > 0) {
+              onPinch(gap / pinchStart, false);
+            }
+            return;
+          }
+          if (pinched) return; // lifting one finger after a pinch doesn't start a drag
           if (!moved && Math.hypot(g.dx, g.dy) > 8) moved = true;
           if (moved) onPan(g.dx, g.dy, false);
         },
         onPanResponderRelease: (e, g) => {
+          if (pinched) {
+            onPinch(1, true);
+            return;
+          }
           if (moved) {
             onPan(g.dx, g.dy, true);
             return;
           }
+          if (Date.now() - startedAt > LONG_PRESS_MS) return;
           const sx = e.nativeEvent.pageX - origin.current.x;
           const sy = e.nativeEvent.pageY - origin.current.y;
-          onTap(sx - cameraRef.current.x, sy - cameraRef.current.y);
+          const cam = cameraRef.current;
+          onTap((sx - cam.x) / cam.zoom, (sy - cam.y) / cam.zoom);
+        },
+        onPanResponderTerminate: () => {
+          if (pinched) onPinch(1, true);
+          else if (moved) onPan(0, 0, true);
         },
         onPanResponderTerminationRequest: () => false,
       });
     },
-    [onPan, onTap],
+    [onPan, onPinch, onTap],
   );
 
   const ground = useMemo(() => <Ground layout={layout} lots={lots} selected={selectedKey} />, [layout, lots, selectedKey]);
@@ -279,16 +384,29 @@ export function StreetScene({
 
   const labels = useMemo(() => {
     const nodes: React.ReactNode[] = [];
-    for (const b of layout.buildings) {
-      const name = b.id === 'circle-hall' ? `Circle Hall · ${circleCount}` : BUILDING_NAMES[b.id];
-      // The shops stand side by side along the road, so every other sign floats higher to keep all of them readable.
-      const lift = LABEL_LIFT[b.id] ?? (b.id === 'corner-store' || b.id === 'town-hall' ? 44 : 18);
-      const at = iso(b.i + 1, b.j + 1, BUILDING_HEIGHT[b.id] + lift);
-      nodes.push(<G key={`lb${b.id}`}><Label at={at} text={name} fill={b.id === 'circle-hall' ? '#4B4680' : '#1F2937'} /></G>);
+    for (const spot of labelSpots(layout, lots, circleCount)) {
+      const { at, text: name } = spot;
+      if (spot.place.kind === 'lot') {
+        nodes.push(
+          <G key={`ll${spot.place.lotNumber}`}>
+            <Label
+              at={at}
+              text={name}
+              fill={spot.isYou ? '#B94614' : 'rgba(255,255,255,0.94)'}
+              color={spot.isYou ? '#FFFFFF' : '#1F2937'}
+              scale={fontScale}
+            />
+          </G>,
+        );
+        continue;
+      }
+      if (spot.place.kind !== 'building') continue;
+      const id = spot.place.id;
+      nodes.push(<G key={`lb${id}`}><Label at={at} text={name} fill={id === 'circle-hall' ? '#4B4680' : '#1F2937'} scale={fontScale} /></G>);
       // New messages in your circles show as a red bubble on the Circle Hall's sign.
-      if (b.id === 'circle-hall' && circleUnread > 0) {
-        const bx = at[0] + (name.length * 6.4 + 16) / 2;
-        const by = at[1] - 10;
+      if (id === 'circle-hall' && circleUnread > 0) {
+        const bx = at[0] + (labelWidth(name) * fontScale) / 2;
+        const by = at[1] - 10 * fontScale;
         const text = circleUnread > 99 ? '99+' : String(circleUnread);
         const w = Math.max(18, text.length * 7 + 8);
         nodes.push(
@@ -299,23 +417,22 @@ export function StreetScene({
         );
       }
     }
-    for (const lot of layout.lots) {
-      const data = lots.get(lot.lotNumber);
-      if (!data) continue;
-      const top = (data.houseStyle === 'b' ? 48 : 24) + 30;
-      nodes.push(
-        <G key={`ll${lot.lotNumber}`}>
-          <Label
-            at={iso(lot.i + 1, lot.j + 1, top)}
-            text={data.isYou ? 'Your house' : data.user.name}
-            fill={data.isYou ? '#B94614' : 'rgba(255,255,255,0.94)'}
-            color={data.isYou ? '#FFFFFF' : '#1F2937'}
-          />
-        </G>,
-      );
-    }
     return nodes;
-  }, [layout, lots, circleCount, circleUnread]);
+  }, [layout, lots, circleCount, circleUnread, fontScale]);
+
+  const bobOf = (p: ScenePerson) => (p.moving && bobPhase !== null ? Math.abs(Math.sin(bobPhase * 12)) * 2 : 0);
+  // When people bunch up, show one name tag per crowd. Yours always shows,
+  // then Sage's, then everyone else's.
+  const rank = (p: ScenePerson) => (p.isYou ? 0 : p.isSage ? 1 : 2);
+  const shownTags = streetTagsToShow(
+    [...people]
+      .sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id))
+      .map((p) => {
+        const [sx, sy] = iso(p.x, p.y);
+        return { id: p.id, x: sx * zoom, y: sy * zoom, keep: p.isYou };
+      }),
+    40,
+  );
 
   // The layout keeps roads in clear view. If you wander behind something
   // anyway (a back garden), it turns see-through until you come out. The
@@ -340,7 +457,7 @@ export function StreetScene({
             <SageStreetArt
               x={p.x}
               y={p.y}
-              bob={p.moving ? Math.abs(Math.sin(bobPhase * 12)) * 2 : 0}
+              bob={bobOf(p)}
             />
           ) : (
             <PersonArt
@@ -348,7 +465,7 @@ export function StreetScene({
               y={p.y}
               look={p.look}
               isYou={p.isYou}
-              bob={p.moving ? Math.abs(Math.sin(bobPhase * 12)) * 2 : 0}
+              bob={bobOf(p)}
             />
           )}
         </G>
@@ -361,22 +478,20 @@ export function StreetScene({
       ref={viewRef}
       style={{ flex: 1, backgroundColor: '#DDEBF1', overflow: 'hidden' }}
       onLayout={(e: LayoutChangeEvent) => onLayout(e.nativeEvent.layout.width, e.nativeEvent.layout.height)}
-      accessibilityLabel="Map of the street. Tap a house or building to visit. Use the list for every place."
+      accessibilityLabel="Map of the street. Tap a house, building or person to visit. Use the list for every place."
       {...responder.panHandlers}
     >
       <Svg width="100%" height="100%" pointerEvents="none">
-        <G transform={`translate(${camera.x.toFixed(1)}, ${camera.y.toFixed(1)})`}>
+        <G
+          testID="street-map-layer"
+          transform={`translate(${camera.x.toFixed(1)}, ${camera.y.toFixed(1)}) scale(${zoom.toFixed(3)})`}
+        >
           {ground}
           {drawn.map((d) => d.node)}
           {labels}
-          {people.map((person) => (
+          {people.filter((person) => shownTags.has(person.id)).map((person) => (
             <G key={`walker-label-${person.id}`} testID={`street-walker-label-${person.isSage ? 'sage' : person.id}`}>
-              <WalkerNameTag
-                x={person.x}
-                y={person.y}
-                name={person.name}
-                bob={person.moving ? Math.abs(Math.sin(bobPhase * 12)) * 2 : 0}
-              />
+              <WalkerNameTag x={person.x} y={person.y} name={person.name} bob={bobOf(person)} scale={fontScale} />
             </G>
           ))}
         </G>

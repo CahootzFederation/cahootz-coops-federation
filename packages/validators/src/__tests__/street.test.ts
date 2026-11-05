@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildStreetLayout,
+  clampStreetPanAxis,
+  clampStreetZoom,
+  streetTagsToShow,
+  STREET_ZOOM_MAX,
+  STREET_ZOOM_MIN,
   defaultHouseLook,
   STREET_DRAWN_HEIGHT,
   streetDoorTile,
@@ -122,5 +127,39 @@ describe("street layout", () => {
       expect(STREET_WALL_KEYS).toContain(look.wallColor);
       expect(STREET_ROOF_KEYS).toContain(look.roofColor);
     }
+  });
+});
+
+
+describe("street zoom, drag and name tags", () => {
+  it("keeps zoom between the limits", () => {
+    expect(clampStreetZoom(5)).toBe(STREET_ZOOM_MAX);
+    expect(clampStreetZoom(0.1)).toBe(STREET_ZOOM_MIN);
+    expect(clampStreetZoom(1.3)).toBe(1.3);
+    expect(clampStreetZoom(Number.NaN)).toBe(1);
+  });
+
+  it("keeps part of the map on screen however far you drag, at any zoom", () => {
+    for (const zoom of [0.6, 1, 2]) {
+      for (const pan of [-100000, 0, 100000]) {
+        const p = clampStreetPanAxis(pan, 50, -400, 600, zoom, 390, 80);
+        const left = 50 + p + zoom * -400;
+        const right = 50 + p + zoom * 600;
+        expect(right).toBeGreaterThanOrEqual(80 - 1e-9);
+        expect(left).toBeLessThanOrEqual(390 - 80 + 1e-9);
+      }
+    }
+    // A small drag is left alone.
+    expect(clampStreetPanAxis(20, 50, -400, 600, 1, 390, 80)).toBe(20);
+  });
+
+  it("shows one tag per crowd and always keeps yours", () => {
+    const shown = streetTagsToShow([
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 10, y: 5 },
+      { id: "you", x: 20, y: 0, keep: true },
+      { id: "far", x: 200, y: 0 },
+    ]);
+    expect([...shown].sort()).toEqual(["far", "you"]);
   });
 });

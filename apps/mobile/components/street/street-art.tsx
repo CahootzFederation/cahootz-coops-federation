@@ -265,11 +265,12 @@ function hairParts(cx: number, cy: number, look: PersonColors): { back: React.Re
 }
 
 /** A walker's name stays in the scene's top layer so buildings never cover it. */
-export function WalkerNameTag({ x, y, name, bob }: { x: number; y: number; name: string; bob: number }) {
+export function WalkerNameTag({ x, y, name, bob, scale = 1 }: { x: number; y: number; name: string; bob: number; scale?: number }) {
   const [sx, sy] = iso(x, y);
   const width = Math.max(34, name.length * 6 + 14);
   return (
-    <G>
+    // Grows with the phone's text size, from just above the person's head.
+    <G transform={scale === 1 ? undefined : `translate(${sx} ${sy - 34}) scale(${scale}) translate(${-sx} ${-(sy - 34)})`}>
       <Rect x={sx - width / 2} y={sy - 50 - bob} width={width} height={16} rx={8} fill="rgba(255,255,255,0.96)" />
       <SvgText x={sx} y={sy - 38.5 - bob} fontSize={10} fontWeight="700" fill="#1F2937" textAnchor="middle">
         {name}
@@ -325,11 +326,15 @@ export function SageStreetArt({ x, y, bob }: { x: number; y: number; bob: number
   );
 }
 
+/** How wide a building or house label is at normal text size. */
+export const labelWidth = (text: string) => text.length * 6.4 + 16;
+
 /** A rounded name tag floating above a building. */
-export function Label({ at, text, fill, color = '#FFFFFF' }: { at: Pt; text: string; fill: string; color?: string }) {
-  const width = text.length * 6.4 + 16;
+export function Label({ at, text, fill, color = '#FFFFFF', scale = 1 }: { at: Pt; text: string; fill: string; color?: string; scale?: number }) {
+  const width = labelWidth(text);
   return (
-    <G>
+    // Grows with the phone's text size, around the label's middle.
+    <G transform={scale === 1 ? undefined : `translate(${at[0]} ${at[1]}) scale(${scale}) translate(${-at[0]} ${-at[1]})`}>
       <Rect x={at[0] - width / 2} y={at[1] - 10} width={width} height={20} rx={10} fill={fill} />
       <SvgText x={at[0]} y={at[1] + 4} fontSize={11} fontWeight="700" fill={color} textAnchor="middle">
         {text}

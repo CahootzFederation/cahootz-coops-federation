@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, ScrollView, TouchableOpacity, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, AppState, PixelRatio, ScrollView, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
-import { List, X } from 'lucide-react-native';
+import { useIsFocused } from '@react-navigation/native';
+import { List, LocateFixed, Minus, Plus, X } from 'lucide-react-native';
 import {
   buildStreetLayout,
+  clampStreetPanAxis,
+  clampStreetZoom,
   STREET_HAIR_COLORS,
   STREET_HAIR_STYLES,
   STREET_HOUSE_STYLES,
@@ -30,8 +33,9 @@ import { DESIGN } from '@/constants/design';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsPost, type StreetData, type StreetLookData, type StreetLotData } from '@/lib/api';
 import { ApiError, CONNECTION_MESSAGE, friendlyError } from '@/lib/friendly-error';
+import { secureStorage } from '@/lib/secure-storage';
 import { CircleHallSheet } from './circle-hall-sheet';
-import { iso, type PersonColors } from './street-art';
+import { iso, TH, TW, type PersonColors } from './street-art';
 import { BUILDING_NAMES, hitTest, StreetScene, type ScenePerson, type StreetPlace } from './street-scene';
 
 const THEME = { ...DESIGN, primary: DESIGN.actionText };
@@ -83,6 +87,13 @@ interface Walker {
 
 const STROLL_SPEED = 1.5; // tiles per second
 const SAGE_WALKER_ID = '__sage-street-guide__';
+/** Set once you've opened something on the street, so the first-visit hint stays gone. */
+const STREET_HINT_KEY = 'cahootz.streetHintSeen';
+const ZOOM_STEP = 1.25;
+/** At least this much of the map stays on screen however far you drag. */
+const PAN_MARGIN = 80;
+/** Name tags and signs grow with the phone's text size, up to this much. */
+const MAX_FONT_SCALE = 1.6;
 const pauseMs = () => 2000 + Math.random() * 5000;
 
 /** Pick where someone strolls next: home, a building, a neighbor's door, or somewhere nearby. */
@@ -128,11 +139,56 @@ export default function StreetView({ coopId }: { coopId: string }) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [, setFrame] = useState(0);
+  // Reduce Motion: nobody bobs as they walk and the view jumps instead of gliding.
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const reduceMotionRef = useRef(false);
+  reduceMotionRef.current = reduceMotion;
+  useEffect(() => {
+    let active = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((on) => active && setReduceMotion(on))
+      .catch(() => undefined);
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => {
+      active = false;
+      sub?.remove?.();
+    };
+  }, []);
+  const fontScale = Math.min(MAX_FONT_SCALE, Math.max(1, PixelRatio.getFontScale() || 1));
+  // The walking loop only runs while the street is on screen and the app is open.
+  const isFocused = useIsFocused();
+  const [appActive, setAppActive] = useState(AppState.currentState !== 'background' && AppState.currentState !== 'inactive');
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => setAppActive(state === 'active'));
+    return () => sub.remove();
+  }, []);
+  const running = isFocused && appActive;
+  // A first-visit hint on the map, until you open your first place or person.
+  const [hintSeen, setHintSeen] = useState<boolean | null>(null);
+  useEffect(() => {
+    let active = true;
+    secureStorage
+      .getItem(STREET_HINT_KEY)
+      .then((value) => active && setHintSeen(!!value))
+      .catch(() => active && setHintSeen(false));
+    return () => {
+      active = false;
+    };
+  }, []);
+  const markHintSeen = () => {
+    if (hintSeen) return;
+    setHintSeen(true);
+    secureStorage.setItem(STREET_HINT_KEY, '1').catch((err) => console.warn('Street hint not saved:', err));
+  };
 
   const walkers = useRef(new Map<string, Walker>());
   const viewSize = useRef({ w: 0, h: 0 });
   const camera = useRef({ x: 0, y: 0, ready: false });
   const pan = useRef({ x: 0, y: 0, startX: 0, startY: 0, dragging: false });
+  // How far you've zoomed: `target` is where you asked to be, `current` glides there.
+  const zoom = useRef({ current: 1, target: 1, pinchFrom: 1 });
+  // Someone the camera keeps up with (you after "Show me", or whoever's card is open).
+  const follow = useRef<string | null>(null);
   // The point the camera centers on: the circle at first, then whatever you tap.
   const focus = useRef({ x: 8, y: 8 });
   const sheetOpenRef = useRef(false);
@@ -401,6 +457,7 @@ export default function StreetView({ coopId }: { coopId: string }) {
     camera.current.ready = false;
     pan.current = { x: 0, y: 0, startX: 0, startY: 0, dragging: false };
     focus.current = { x: 8, y: 8 };
+    follow.current = null;
     setStreet(null);
     setSelected(null);
     setNotMember(false);
@@ -410,6 +467,8 @@ export default function StreetView({ coopId }: { coopId: string }) {
   // Everyone strolls on their own; the camera glides to whatever you're
   // looking at. Re-render only when something moved.
   useEffect(() => {
+    // Save battery: no walking loop while you're on another screen or the app is in the background.
+    if (!running) return;
     let raf = 0;
     let last = Date.now();
     const tick = () => {
@@ -445,17 +504,39 @@ export default function StreetView({ coopId }: { coopId: string }) {
         changed = true;
       }
       const { w: vw, h: vh } = viewSize.current;
+      const snap = reduceMotionRef.current;
+      const z = zoom.current;
+      if (z.current !== z.target) {
+        const next = snap ? z.target : z.current + (z.target - z.current) * Math.min(1, dt * 10);
+        z.current = Math.abs(next - z.target) < 0.002 ? z.target : next;
+        changed = true;
+      }
+      const followed = follow.current ? walkers.current.get(follow.current) : null;
+      if (followed) focus.current = { x: followed.x, y: followed.y };
       if (vw > 0) {
         const [px, py] = iso(focus.current.x, focus.current.y);
-        const tx = vw / 2 - px + pan.current.x;
+        const baseX = vw / 2 - px * z.current;
         // With a card open over the bottom of the map, keep the place you
         // opened in view above it.
-        const ty = vh * (sheetOpenRef.current ? 0.3 : 0.55) - py + pan.current.y;
+        const baseY = vh * (sheetOpenRef.current ? 0.3 : 0.55) - py * z.current;
+        // Keep part of the street on screen however far it's dragged.
+        // The street is a diamond, so use the box that fits inside it: then
+        // what stays on screen is real street, not an empty corner.
+        const L = currentLayout;
+        if (L) {
+          const [cx, cy] = iso(L.width / 2, L.height / 2);
+          const halfX = ((L.width + L.height) * TW) / 8;
+          const halfY = ((L.width + L.height) * TH) / 8;
+          pan.current.x = clampStreetPanAxis(pan.current.x, baseX, cx - halfX, cx + halfX, z.current, vw, PAN_MARGIN);
+          pan.current.y = clampStreetPanAxis(pan.current.y, baseY, cy - halfY, cy + halfY, z.current, vh, PAN_MARGIN);
+        }
+        const tx = baseX + pan.current.x;
+        const ty = baseY + pan.current.y;
         if (!camera.current.ready) {
           camera.current = { x: tx, y: ty, ready: true };
           changed = true;
         } else {
-          const k = Math.min(1, dt * 6);
+          const k = snap || pan.current.dragging ? 1 : Math.min(1, dt * 6);
           const nx = camera.current.x + (tx - camera.current.x) * k;
           const ny = camera.current.y + (ty - camera.current.y) * k;
           if (Math.abs(nx - camera.current.x) > 0.2 || Math.abs(ny - camera.current.y) > 0.2) changed = true;
@@ -468,7 +549,7 @@ export default function StreetView({ coopId }: { coopId: string }) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [running]);
 
   // Tapping a place opens it and glides the view over to it. Nobody walks
   // there because you tapped: people on the street go where they please.
@@ -476,6 +557,15 @@ export default function StreetView({ coopId }: { coopId: string }) {
     setActionError(null);
     setListOpen(false);
     setSelected(place);
+    markHintSeen();
+    if (place.kind === 'person') {
+      // Keep the person you opened in view while they stroll.
+      follow.current = place.id;
+      pan.current.x = 0;
+      pan.current.y = 0;
+      return;
+    }
+    follow.current = null;
     const footprint =
       place.kind === 'lot' ? layout.lots.find((lot) => lot.lotNumber === place.lotNumber) : layout.buildings.find((b) => b.id === place.id);
     if (!footprint) return;
@@ -486,8 +576,14 @@ export default function StreetView({ coopId }: { coopId: string }) {
 
   const onTap = useCallback(
     (wx: number, wy: number) => {
-      const hit = hitTest(layout, lots, wx, wy);
-      if (hit.place) visit(hit.place);
+      const people = [...walkers.current.values()].map((w) => ({ id: w.id, x: w.x, y: w.y }));
+      const hit = hitTest(layout, lots, wx, wy, { zoom: zoom.current.current, people, circleCount: street?.circleCount ?? 0, fontScale });
+      if ('person' in hit) {
+        const mine = street?.lots.find((lot) => lot.isYou);
+        // Tapping yourself opens your house.
+        if (hit.person === youId.current && mine) visit({ kind: 'lot', lotNumber: mine.lotNumber });
+        else visit({ kind: 'person', id: hit.person });
+      } else if ('place' in hit) visit(hit.place);
       else {
         // Tapping open map puts the card away.
         setSelected(null);
@@ -496,12 +592,16 @@ export default function StreetView({ coopId }: { coopId: string }) {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layout, lots],
+    [layout, lots, street, fontScale],
   );
 
   const onPan = useCallback((dx: number, dy: number, done: boolean) => {
     if (!pan.current.dragging) {
       pan.current.dragging = true;
+      // Dragging means you're looking around: stop keeping up with anyone.
+      const followed = follow.current ? walkers.current.get(follow.current) : null;
+      if (followed) focus.current = { x: followed.x, y: followed.y };
+      follow.current = null;
       pan.current.startX = pan.current.x;
       pan.current.startY = pan.current.y;
     }
@@ -509,6 +609,32 @@ export default function StreetView({ coopId }: { coopId: string }) {
     pan.current.y = pan.current.startY + dy;
     if (done) pan.current.dragging = false;
   }, []);
+
+  const onPinch = useCallback((scale: number, done: boolean) => {
+    const z = zoom.current;
+    if (done) {
+      z.pinchFrom = z.target;
+      return;
+    }
+    z.target = clampStreetZoom(z.pinchFrom * scale);
+    z.current = z.target; // follow the fingers directly
+  }, []);
+
+  const zoomBy = (factor: number) => {
+    const z = zoom.current;
+    z.target = clampStreetZoom(z.target * factor);
+    z.pinchFrom = z.target;
+    setFrame((f) => (f + 1) % 1_000_000);
+  };
+
+  // "Show me on the street": glide back to you and keep up with you.
+  const findMe = () => {
+    if (!youId.current) return;
+    follow.current = youId.current;
+    pan.current.x = 0;
+    pan.current.y = 0;
+    setFrame((f) => (f + 1) % 1_000_000);
+  };
 
   const onLayout = useCallback((w: number, h: number) => {
     viewSize.current = { w, h };
@@ -554,6 +680,11 @@ export default function StreetView({ coopId }: { coopId: string }) {
   const onlineIds = new Set((street?.online ?? []).map((p) => p.userId));
   const neighborsOut = (street?.lots ?? []).filter((lot) => !lot.isYou && onlineIds.has(lot.user.id));
   const neighbors = (street?.lots ?? []).filter((lot) => !lot.isYou);
+  // Everyone else out strolling right now, Sage first, for the list.
+  const peopleOut = people
+    .filter((p) => !p.isYou)
+    .sort((a, b) => Number(b.isSage) - Number(a.isSage) || a.name.localeCompare(b.name))
+    .map((p) => ({ id: p.id, name: p.name }));
 
   const listButton = (
     <TouchableOpacity
@@ -603,13 +734,16 @@ export default function StreetView({ coopId }: { coopId: string }) {
               circleUnread={circleUnread}
               people={people}
               camera={camera.current}
+              zoom={zoom.current.current}
+              fontScale={fontScale}
               selected={selected}
-              bobPhase={Date.now() / 1000}
+              bobPhase={reduceMotion ? null : Date.now() / 1000}
               onTap={onTap}
               onPan={onPan}
+              onPinch={onPinch}
               onLayout={onLayout}
             />
-            <View pointerEvents="none" className="absolute left-3 right-3 top-3 items-start gap-2">
+            <View pointerEvents="none" className="absolute left-3 top-3 items-start gap-2" style={{ right: 64 }}>
               <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: 'rgba(255,255,255,0.92)' }}>
                 <Text className="text-[13px] font-semibold text-gray-800">
                   {`Welcome to ${commonsName}`}
@@ -622,7 +756,25 @@ export default function StreetView({ coopId }: { coopId: string }) {
                   <Text className="text-[13px] font-semibold text-white">You're offline. We'll catch up when you're back.</Text>
                 </View>
               ) : null}
+              {hintSeen === false && !sheetOpen ? (
+                <View testID="street-first-visit-hint" className="rounded-full px-3 py-1.5" style={{ backgroundColor: THEME.primary }}>
+                  <Text className="text-[13px] font-semibold text-white">Tap a house, building or person to visit.</Text>
+                </View>
+              ) : null}
             </View>
+            {!sheetOpen ? (
+              <View className="absolute right-3 gap-2" style={{ top: 12 }}>
+                <MapButton label="Show me on the street" onPress={findMe}>
+                  <LocateFixed size={19} color={THEME.primary} />
+                </MapButton>
+                <MapButton label="Zoom in" onPress={() => zoomBy(ZOOM_STEP)}>
+                  <Plus size={19} color={THEME.primary} />
+                </MapButton>
+                <MapButton label="Zoom out" onPress={() => zoomBy(1 / ZOOM_STEP)}>
+                  <Minus size={19} color={THEME.primary} />
+                </MapButton>
+              </View>
+            ) : null}
             {!sheetOpen ? (
               <View className="absolute bottom-3 left-3 right-3">
                 <CommonsInvitationsCard />
@@ -668,6 +820,7 @@ export default function StreetView({ coopId }: { coopId: string }) {
                       neighbors={neighbors}
                       circleCount={street.circleCount}
                       circleUnread={circleUnread}
+                      peopleOut={peopleOut}
                       onVisit={visit}
                     />
                   ) : (
@@ -684,6 +837,8 @@ export default function StreetView({ coopId }: { coopId: string }) {
                       onSetLook={setLook}
                       boardPosts={boardPosts}
                       onKnock={knock}
+                      walkerName={selected?.kind === 'person' ? walkers.current.get(selected.id)?.name ?? null : null}
+                      sessionToken={sessionToken}
                     />
                   )}
                 </ScrollView>
@@ -693,6 +848,21 @@ export default function StreetView({ coopId }: { coopId: string }) {
         )}
       </View>
     </SafeAreaView>
+  );
+}
+
+/** A round button floating on the map. */
+function MapButton({ label, onPress, children }: { label: string; onPress: () => void; children: React.ReactNode }) {
+  return (
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      className="h-11 w-11 items-center justify-center rounded-full"
+      style={{ backgroundColor: 'rgba(255,255,255,0.95)', boxShadow: '0 2px 8px rgba(17, 24, 39, 0.16)' }}
+    >
+      {children}
+    </TouchableOpacity>
   );
 }
 
@@ -888,6 +1058,8 @@ function PlaceSheet({
   onSetLook,
   boardPosts,
   onKnock,
+  walkerName,
+  sessionToken,
 }: {
   coopId: string;
   commonsName: string;
@@ -901,8 +1073,39 @@ function PlaceSheet({
   onSetLook: (look: Partial<StreetLookData>) => void;
   boardPosts: CommonsPost[] | null;
   onKnock: (lot: StreetLotData) => void;
+  /** The name of the person whose card is open, while they're still out. */
+  walkerName: string | null;
+  sessionToken: string | null;
 }) {
   if (!selected) return null;
+
+  if (selected.kind === 'person') {
+    if (selected.id === SAGE_WALKER_ID) return <SageSheet commonsName={commonsName} sessionToken={sessionToken} />;
+    const person = street.online.find((p) => p.userId === selected.id);
+    const lot = street.lots.find((l) => l.user.id === selected.id) ?? null;
+    const name = person?.name ?? lot?.user.name ?? walkerName ?? 'Neighbor';
+    const handle = person?.handle ?? lot?.user.handle ?? null;
+    return (
+      <>
+        <Heading title={name} sub={person ? 'Out on the street now' : 'Headed home for now'} />
+        <View className="flex-row flex-wrap gap-2">
+          {lot ? <Button label="Knock" a11y={`Knock on ${name}'s door`} disabled={busy} onPress={() => onKnock(lot)} /> : null}
+          <Button
+            label="Send a message"
+            quiet={!!lot}
+            onPress={() => router.push({ pathname: '/(tabs)/messages', params: { userId: selected.id, name } } as any)}
+          />
+          {handle ? (
+            <Button
+              label="View profile"
+              quiet
+              onPress={() => router.push({ pathname: '/people/[handle]', params: { handle, name } } as any)}
+            />
+          ) : null}
+        </View>
+      </>
+    );
+  }
 
   if (selected.kind === 'building') {
     if (selected.id === 'circle-hall') return <CircleHallSheet coopId={coopId} commonsName={commonsName} />;
@@ -987,6 +1190,37 @@ function PlaceSheet({
   );
 }
 
+/** Sage strolling the street: a friendly hello and the way into a chat. */
+function SageSheet({ commonsName, sessionToken }: { commonsName: string; sessionToken: string | null }) {
+  const [opening, setOpening] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const openChat = async () => {
+    if (opening) return;
+    setOpening(true);
+    setError(null);
+    try {
+      // Sage's chat is a private conversation in Messages, opened by Sage's account.
+      const { members } = await api.listDirectMembers(sessionToken);
+      const sage = members.find((m) => m.isSage);
+      router.push({ pathname: '/(tabs)/messages', params: sage ? { userId: sage.id, name: sage.name } : {} } as any);
+    } catch (err) {
+      setError(friendlyError(err, "We couldn't open your chat with Sage. Try again."));
+    } finally {
+      setOpening(false);
+    }
+  };
+  return (
+    <>
+      <Heading title="Sage" sub="Out on the street now" />
+      <Text className="text-[15px] text-gray-600">{`Sage helps folks in ${commonsName} find what they need and pitch in. Ask anything.`}</Text>
+      {error ? <Text className="text-sm font-semibold text-red-600">{error}</Text> : null}
+      <View className="flex-row flex-wrap gap-2">
+        <Button label="Chat with Sage" disabled={opening} onPress={openChat} />
+      </View>
+    </>
+  );
+}
+
 function ListRow({ title, sub, a11y, onPress }: { title: string; sub?: string; a11y: string; onPress: () => void }) {
   return (
     <TouchableOpacity accessibilityRole="button" accessibilityLabel={a11y} onPress={onPress} className="min-h-12 justify-center border-t py-2" style={{ borderColor: THEME.border }}>
@@ -1002,6 +1236,7 @@ function StreetList({
   neighbors,
   circleCount,
   circleUnread,
+  peopleOut,
   onVisit,
 }: {
   yourLot: StreetLotData | null;
@@ -1009,6 +1244,7 @@ function StreetList({
   neighbors: StreetLotData[];
   circleCount: number;
   circleUnread: number;
+  peopleOut: Array<{ id: string; name: string }>;
   onVisit: (place: StreetPlace) => void;
 }) {
   const places: StreetBuildingId[] = ['board', 'circle-hall', 'corner-store', 'group-buys', 'town-hall'];
@@ -1039,6 +1275,12 @@ function StreetList({
             <ListRow key={lot.user.id} title={lot.user.name} sub="Out now" a11y={`Visit ${lot.user.name}, out now`} onPress={() => onVisit({ kind: 'lot', lotNumber: lot.lotNumber })} />
           ))
         )}
+      </View>
+      <View>
+        <Text className="mb-1 text-xs font-bold uppercase tracking-wider text-gray-500">Say hi</Text>
+        {peopleOut.map((person) => (
+          <ListRow key={person.id} title={person.name} sub="Strolling the street" a11y={`Say hi to ${person.name}`} onPress={() => onVisit({ kind: 'person', id: person.id })} />
+        ))}
       </View>
       <View>
         <Text className="mb-1 text-xs font-bold uppercase tracking-wider text-gray-500">Neighbors</Text>

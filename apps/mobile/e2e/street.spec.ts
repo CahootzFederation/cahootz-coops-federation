@@ -247,3 +247,118 @@ test("two neighbors see each other out on the street, and a knock reaches the ot
     await b.context.close().catch(() => undefined);
   }
 });
+
+const HINT = "Tap a house, building or person to visit.";
+
+async function mapScale(page: Page) {
+  const transform = await page.getByTestId("street-map-layer").getAttribute("transform");
+  const match = /scale\(([\d.]+)/.exec(transform ?? "");
+  return match ? Number(match[1]) : NaN;
+}
+
+test("the map zooms in and out with its buttons, stays on screen when dragged, and Show me brings you back", async ({ browser }) => {
+  const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
+  try {
+    await page.goto("/?coopId=cahootz");
+    await expect(page.getByLabel(/^Map of the street/)).toBeVisible();
+    const sign = page.getByText("Town Hall", { exact: true });
+    await expect(sign).toBeVisible();
+    const before = (await sign.boundingBox())!;
+    await expect.poll(() => mapScale(page)).toBe(1);
+
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await expect.poll(() => mapScale(page)).toBeGreaterThan(1.4);
+    await expect.poll(async () => (await sign.boundingBox())!.width).toBeGreaterThan(before.width * 1.3);
+
+    // Zoom stops at its limits.
+    for (let n = 0; n < 8; n++) await page.getByRole("button", { name: "Zoom out", exact: true }).click();
+    await expect.poll(() => mapScale(page)).toBe(0.6);
+
+    // Drag the map far away: part of it stays on screen, and the drag doesn't open anything.
+    const map = page.getByLabel(/^Map of the street/);
+    const box = (await map.boundingBox())!;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx + 3000, cy + 3000, { steps: 12 });
+    await page.mouse.up();
+    await expect(page.getByLabel("Close", { exact: true })).toHaveCount(0);
+    // The middle of the drawn street (not just an empty corner of it) still reaches into the screen.
+    await expect
+      .poll(async () => {
+        const m = await page.getByTestId("street-map-layer").boundingBox();
+        if (!m) return false;
+        const inner = { x0: m.x + m.width / 4, x1: m.x + (3 * m.width) / 4, y0: m.y + m.height / 4, y1: m.y + (3 * m.height) / 4 };
+        return inner.x0 < box.x + box.width - 40 && inner.x1 > box.x + 40 && inner.y0 < box.y + box.height - 40 && inner.y1 > box.y + 40;
+      })
+      .toBe(true);
+
+    const { mine } = await myStreet(page);
+    const you = page.getByTestId(`street-walker-${mine.user.id}`);
+    await page.getByRole("button", { name: "Show me on the street", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const b = await you.boundingBox();
+        return b ? Math.abs(b.x + b.width / 2 - cx) : Infinity;
+      })
+      .toBeLessThan(60);
+  } finally {
+    await context.close();
+  }
+});
+
+test("a first-visit hint shows on the map until you open a place, and stays gone", async ({ browser }) => {
+  const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
+  try {
+    await page.goto("/?coopId=cahootz");
+    // Fixture: start as a first-time visitor on this device.
+    await page.evaluate(() => window.localStorage.removeItem("cahootz.streetHintSeen"));
+    await page.reload();
+    await expect(page.getByText(HINT)).toBeVisible();
+
+    await openStreetPlace(page, "Visit Town Hall");
+    await expect(page.getByRole("heading", { name: "Town Hall" })).toBeVisible();
+    await page.getByLabel("Close", { exact: true }).click();
+    await expect(page.getByLabel(/^Map of the street/)).toBeVisible();
+    await expect(page.getByText(HINT)).toHaveCount(0);
+
+    await page.reload();
+    await expect(page.getByText(/^Welcome to /)).toBeVisible();
+    await expect(page.getByText(HINT)).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test("people out on the street open their own card, Sage too", async ({ browser }) => {
+  const a = await newSignedInPage(browser, USER_A_EMAIL);
+  const b = await newSignedInPage(browser, USER_B_EMAIL);
+  try {
+    const { mine: aLot } = await myStreet(a.page);
+    await a.page.goto("/?coopId=cahootz");
+    await expect(a.page.getByText(/^Welcome to /)).toBeVisible();
+
+    await b.page.goto("/?coopId=cahootz");
+    await b.page.getByLabel("Open the list").click();
+    // Sage strolls the street too, and its card leads to a chat.
+    await b.page.getByRole("button", { name: "Say hi to Sage", exact: true }).click();
+    await expect(b.page.getByRole("heading", { name: "Sage", exact: true })).toBeVisible();
+    await expect(b.page.getByRole("button", { name: "Chat with Sage" })).toBeVisible();
+
+    await b.page.getByLabel("Open the list").click();
+    const sayHi = b.page.getByRole("button", { name: `Say hi to ${aLot.user.name}`, exact: true });
+    await expect(sayHi).toBeVisible({ timeout: 20_000 });
+    await sayHi.click();
+    await expect(b.page.getByRole("heading", { name: aLot.user.name, exact: true })).toBeVisible();
+    await expect(b.page.getByText("Out on the street now", { exact: true })).toBeVisible();
+    await expect(b.page.getByLabel(`Knock on ${aLot.user.name}'s door`)).toBeVisible();
+    await expect(b.page.getByRole("button", { name: "Send a message" })).toBeVisible();
+    await b.page.getByRole("button", { name: "View profile" }).click();
+    await expect(b.page).toHaveURL(new RegExp(`/people/`));
+  } finally {
+    await a.context.close();
+    await b.context.close();
+  }
+});

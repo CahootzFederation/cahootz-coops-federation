@@ -29,7 +29,7 @@ import { Text } from '@/components/ui/text';
 import { DESIGN } from '@/constants/design';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsPost, type StreetData, type StreetLookData, type StreetLotData } from '@/lib/api';
-import { friendlyError } from '@/lib/friendly-error';
+import { ApiError, CONNECTION_MESSAGE, friendlyError } from '@/lib/friendly-error';
 import { CircleHallSheet } from './circle-hall-sheet';
 import { iso, type PersonColors } from './street-art';
 import { BUILDING_NAMES, hitTest, StreetScene, type ScenePerson, type StreetPlace } from './street-scene';
@@ -37,6 +37,7 @@ import { BUILDING_NAMES, hitTest, StreetScene, type ScenePerson, type StreetPlac
 const THEME = { ...DESIGN, primary: DESIGN.actionText };
 const POLL_MS = 5_000;
 const HEARTBEAT_MS = 30_000;
+const OFFLINE_RETRY_MS = 15_000;
 const STYLE_NAMES: Record<StreetHouseStyle, string> = { a: 'Cottage', b: 'Two-story', c: 'Bungalow' };
 const COLOR_NAMES: Record<string, string> = {
   cream: 'Cream', sky: 'Sky', sage: 'Sage', rose: 'Rose', white: 'White',
@@ -331,11 +332,23 @@ export default function StreetView({ coopId }: { coopId: string }) {
     }
   };
 
-  const load = useCallback(async () => {
-    if (!sessionToken) return;
+  // One refresh at a time: on a slow connection, a refresh that's still on
+  // its way isn't joined by another. While we can't reach Cahootz, the
+  // regular refresh only tries every OFFLINE_RETRY_MS.
+  const loading = useRef(false);
+  const lastTry = useRef(0);
+  const offlineRef = useRef(false);
+  const [offline, setOffline] = useState(false);
+  const load = useCallback(async (opts: { scheduled?: boolean } = {}) => {
+    if (!sessionToken || loading.current) return;
+    if (opts.scheduled && offlineRef.current && Date.now() - lastTry.current < OFFLINE_RETRY_MS) return;
+    loading.current = true;
+    lastTry.current = Date.now();
     try {
       const data = await api.getStreet(coopId, sessionToken);
       setLoadError(null);
+      offlineRef.current = false;
+      setOffline(false);
       applyStreet(data);
       sendPosition();
     } catch (err) {
@@ -344,7 +357,15 @@ export default function StreetView({ coopId }: { coopId: string }) {
         return;
       }
       console.error('Failed to load street:', err);
-      setLoadError(friendlyError(err, "We couldn't load the street. Check your connection and try again."));
+      const message = friendlyError(err, "We couldn't load the street. Check your connection and try again.");
+      // A failure the server never answered (no ApiError) means we couldn't reach it.
+      if (message === CONNECTION_MESSAGE || !(err instanceof ApiError)) {
+        offlineRef.current = true;
+        setOffline(true);
+      }
+      setLoadError(message);
+    } finally {
+      loading.current = false;
     }
   }, [applyStreet, coopId, sendPosition, sessionToken]);
 
@@ -355,7 +376,7 @@ export default function StreetView({ coopId }: { coopId: string }) {
       if (!sessionToken) return;
       let active = true;
       load();
-      const poll = setInterval(() => active && load(), POLL_MS);
+      const poll = setInterval(() => active && load({ scheduled: true }), POLL_MS);
       const heartbeat = setInterval(() => active && sendPosition(true), HEARTBEAT_MS);
       const leave = () => api.leaveStreet(coopId, sessionToken).catch(() => undefined);
       const sub = AppState.addEventListener('change', (state) => {
@@ -561,7 +582,7 @@ export default function StreetView({ coopId }: { coopId: string }) {
         {!street ? (
           <View className="flex-1 items-center justify-center px-5">
             {loadError ? (
-              <LoadError message={loadError} onRetry={load} />
+              <LoadError message={loadError} onRetry={() => load()} />
             ) : (
               <>
                 <ActivityIndicator color={THEME.primary} />
@@ -588,13 +609,19 @@ export default function StreetView({ coopId }: { coopId: string }) {
               onPan={onPan}
               onLayout={onLayout}
             />
-            <View pointerEvents="none" className="absolute left-3 right-3 top-3 flex-row">
+            <View pointerEvents="none" className="absolute left-3 right-3 top-3 items-start gap-2">
               <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: 'rgba(255,255,255,0.92)' }}>
                 <Text className="text-[13px] font-semibold text-gray-800">
                   {`Welcome to ${commonsName}`}
                   <Text className="text-[13px] text-gray-500">{` · ${street.online.filter((p) => !p.isYou).length} out now`}</Text>
                 </Text>
               </View>
+              {offline ? (
+                // The street keeps showing what it last knew; say so plainly.
+                <View accessibilityLiveRegion="polite" className="rounded-full px-3 py-1.5" style={{ backgroundColor: '#1F2937' }}>
+                  <Text className="text-[13px] font-semibold text-white">You're offline. We'll catch up when you're back.</Text>
+                </View>
+              ) : null}
             </View>
             {!sheetOpen ? (
               <View className="absolute bottom-3 left-3 right-3">

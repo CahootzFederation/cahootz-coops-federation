@@ -159,10 +159,14 @@ test("losing internet mid-visit undoes a paint change, and it saves once you're 
     await expect(page.getByText(NO_CONNECTION)).toBeVisible();
     // The change is undone rather than left looking saved.
     await expect(page.getByLabel(`Wall color ${current}`)).toHaveAttribute("aria-selected", "true");
-    // The map stays up while offline.
+    // The map stays up while offline, and the next refresh says you're offline.
     await expect(page.getByLabel(/^Map of the street/)).toBeVisible();
+    const offlineNote = page.getByText("You're offline. We'll catch up when you're back.");
+    await expect(offlineNote).toBeVisible({ timeout: 15_000 });
 
     await context.setOffline(false);
+    // While offline the street retries every 15 seconds; the note clears on the next one that works.
+    await expect(offlineNote).toHaveCount(0, { timeout: 25_000 });
     await page.getByLabel(`Wall color ${next.label}`).click();
     await expect(page.getByText("Saved. Your neighbors can see it now.")).toBeVisible();
     await expect(page.getByLabel(`Wall color ${next.label}`)).toHaveAttribute("aria-selected", "true");

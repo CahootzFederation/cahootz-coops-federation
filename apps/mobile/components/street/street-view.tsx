@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type MutableRefObject } from 'react';
 import { AccessibilityInfo, ActivityIndicator, AppState, PixelRatio, ScrollView, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
@@ -39,7 +39,12 @@ import { iso, TH, TW, type PersonColors } from './street-art';
 import { BUILDING_NAMES, hitTest, StreetScene, type ScenePerson, type StreetPlace } from './street-scene';
 
 const THEME = { ...DESIGN, primary: DESIGN.actionText };
-const POLL_MS = 5_000;
+// Who's online changes slowly; checking every 10s keeps the street fresh
+// without keeping the phone's radio busy.
+const POLL_MS = 10_000;
+// People stroll at 1.5 tiles a second, so 20 frames a second looks smooth
+// and is a third of the work of redrawing at 60.
+const FRAME_MS = 50;
 const HEARTBEAT_MS = 30_000;
 const OFFLINE_RETRY_MS = 15_000;
 const STYLE_NAMES: Record<StreetHouseStyle, string> = { a: 'Cottage', b: 'Two-story', c: 'Bungalow' };
@@ -196,6 +201,9 @@ export default function StreetView({ coopId }: { coopId: string }) {
   const doorsRef = useRef<Array<{ i: number; j: number }>>([]);
   const youId = useRef<string | null>(null);
   const lastSentTile = useRef<string | null>(null);
+  const lastStreetKey = useRef('');
+  // Set by LiveScene: redraws only the map when people or the camera move.
+  const redrawMap = useRef<() => void>(() => undefined);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const layout = useMemo(() => buildStreetLayout(street?.maxLotNumber ?? 0), [street?.maxLotNumber]);
@@ -320,6 +328,11 @@ export default function StreetView({ coopId }: { coopId: string }) {
         home: start,
       });
     }
+    // Most refreshes bring back the same street. Keep the old one then, so
+    // the houses and buildings aren't rebuilt for nothing.
+    const key = JSON.stringify(data);
+    if (key === lastStreetKey.current) return;
+    lastStreetKey.current = key;
     setStreet(data);
   }, []);
 
@@ -454,6 +467,7 @@ export default function StreetView({ coopId }: { coopId: string }) {
   useEffect(() => {
     walkers.current.clear();
     youId.current = null;
+    lastStreetKey.current = '';
     camera.current.ready = false;
     pan.current = { x: 0, y: 0, startX: 0, startY: 0, dragging: false };
     focus.current = { x: 8, y: 8 };
@@ -471,9 +485,17 @@ export default function StreetView({ coopId }: { coopId: string }) {
     if (!running) return;
     let raf = 0;
     let last = Date.now();
+    let lastDraw = 0;
     const tick = () => {
       const now = Date.now();
-      const dt = Math.min(0.05, (now - last) / 1000);
+      // At most 20 updates a second (FRAME_MS); in between, just wait for the next frame.
+      if (now - lastDraw < FRAME_MS) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      lastDraw = now;
+      // Cap the step so a slow frame doesn't make anyone jump.
+      const dt = Math.min(0.15, (now - last) / 1000);
       last = now;
       let changed = false;
       const currentLayout = layoutRef.current;
@@ -544,7 +566,8 @@ export default function StreetView({ coopId }: { coopId: string }) {
           camera.current.y = ny;
         }
       }
-      if (changed) setFrame((f) => (f + 1) % 1_000_000);
+      // Redraw just the map, not this whole screen (header, buttons, card).
+      if (changed) redrawMap.current();
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -726,18 +749,19 @@ export default function StreetView({ coopId }: { coopId: string }) {
           // place or the list, sized to what it holds; tapping the map or ✕
           // puts it away.
           <View style={{ flex: 1 }}>
-            <StreetScene
+            <LiveScene
+              redraw={redrawMap}
+              walkers={walkers}
+              camera={camera}
+              zoom={zoom}
+              reduceMotion={reduceMotion}
               layout={layout}
               lots={lots}
               circleCount={street.circleCount}
               boardNotes={boardNotes}
               circleUnread={circleUnread}
-              people={people}
-              camera={camera.current}
-              zoom={zoom.current.current}
               fontScale={fontScale}
               selected={selected}
-              bobPhase={reduceMotion ? null : Date.now() / 1000}
               onTap={onTap}
               onPan={onPan}
               onPinch={onPinch}
@@ -1295,3 +1319,54 @@ function StreetList({
     </>
   );
 }
+
+type SceneProps = ComponentProps<typeof StreetScene>;
+
+/**
+ * The map, redrawn on its own as people stroll and the camera glides. The
+ * walking loop calls `redraw` instead of re-rendering the whole street
+ * screen, so the header, buttons and card don't redraw 20 times a second.
+ */
+const LiveScene = memo(function LiveScene({
+  redraw,
+  walkers,
+  camera,
+  zoom,
+  reduceMotion,
+  ...scene
+}: Omit<SceneProps, 'people' | 'camera' | 'zoom' | 'bobPhase'> & {
+  redraw: MutableRefObject<() => void>;
+  walkers: MutableRefObject<Map<string, Walker>>;
+  camera: MutableRefObject<{ x: number; y: number; ready: boolean }>;
+  zoom: MutableRefObject<{ current: number; target: number; pinchFrom: number }>;
+  reduceMotion: boolean;
+}) {
+  const [, setFrame] = useState(0);
+  useEffect(() => {
+    redraw.current = () => setFrame((f) => (f + 1) % 1_000_000);
+    return () => {
+      redraw.current = () => undefined;
+    };
+  }, [redraw]);
+
+  const people: ScenePerson[] = [...walkers.current.values()].map((w) => ({
+    id: w.id,
+    name: w.name,
+    look: lookColors(w.look),
+    isYou: w.isYou,
+    isSage: w.isSage,
+    x: w.x,
+    y: w.y,
+    moving: w.path.length > 0,
+  }));
+
+  return (
+    <StreetScene
+      {...scene}
+      people={people}
+      camera={camera.current}
+      zoom={zoom.current.current}
+      bobPhase={reduceMotion ? null : Date.now() / 1000}
+    />
+  );
+});

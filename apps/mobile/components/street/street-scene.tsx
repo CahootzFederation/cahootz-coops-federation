@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { PanResponder, View, type LayoutChangeEvent } from 'react-native';
-import Svg, { Ellipse, G, Image as SvgImage, Polygon, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Ellipse, G, Image as SvgImage, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 
 import { KAYKIT_SPRITES, type KayKitSpriteName } from './kaykit-sprites';
 import {
@@ -167,16 +167,20 @@ function KayKitImage({ name, x, y }: { name: KayKitSpriteName; x: number; y: num
 
 function Ground({ layout, lots, selected }: { layout: StreetLayout; lots: Map<number, StreetLotData>; selected: string | null }) {
   const { width: W, height: H } = layout;
-  const tiles: React.ReactNode[] = [];
+  // Roads are KayKit pieces below; only grass and the plaza are drawn here.
+  // One shape per color instead of one per tile: a few hundred separate
+  // shapes become two, which phones draw far more cheaply.
+  const paths: Record<string, string[]> = {};
   for (let i = 0; i < W; i++) {
     for (let j = 0; j < H; j++) {
       const t = layout.tileType(i, j);
-      // Roads are KayKit pieces below; only grass and the Green are drawn tile by tile.
       const fill = t === 'grass' ? ((i + j) % 2 ? GROUND.grassAlt : null) : t === 'plaza' ? GROUND.plaza : null;
       if (!fill) continue;
-      tiles.push(<Polygon key={`t${i},${j}`} points={polygonPoints([iso(i, j), iso(i + 1, j), iso(i + 1, j + 1), iso(i, j + 1)])} fill={fill} />);
+      const [a, b, c, d] = [iso(i, j), iso(i + 1, j), iso(i + 1, j + 1), iso(i, j + 1)];
+      (paths[fill] ??= []).push(`M${a[0]} ${a[1]}L${b[0]} ${b[1]}L${c[0]} ${c[1]}L${d[0]} ${d[1]}Z`);
     }
   }
+  const tiles = Object.entries(paths).map(([fill, parts]) => <Path key={fill} d={parts.join('')} fill={fill} />);
   // The road: KayKit City Builder Bits pieces, each covering 2x2 tiles.
   const roads = [...layout.roadPieces]
     .sort((a, b) => a.i + a.j - (b.i + b.j))

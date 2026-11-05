@@ -14,6 +14,7 @@ import {
   streetPath,
   type StreetBuildingId,
   type StreetHouseStyle,
+  type StreetLayout,
 } from '@repo/validators/street';
 
 import CircleView from '@/components/circle-view';
@@ -39,6 +40,11 @@ const COLOR_NAMES: Record<string, string> = {
   terracotta: 'Terracotta', slate: 'Slate', blue: 'Blue', green: 'Green',
 };
 
+/**
+ * Someone out on the street. Nobody steers anyone, you included: everyone
+ * who's online strolls on their own little errands (home, the Green, the
+ * Circle Hall, a shop, a nearby stretch of road), pauses, then heads off again.
+ */
 interface Walker {
   id: string;
   name: string;
@@ -47,7 +53,36 @@ interface Walker {
   x: number;
   y: number;
   path: Array<{ i: number; j: number }>;
-  target: { i: number; j: number } | null;
+  /** When they're done pausing and pick their next errand. */
+  restUntil: number;
+  home: { i: number; j: number } | null;
+}
+
+const STROLL_SPEED = 1.5; // tiles per second
+const pauseMs = () => 2000 + Math.random() * 5000;
+
+/** Pick where someone strolls next: home, a building, a neighbor's door, or somewhere nearby. */
+function nextErrand(
+  w: Walker,
+  layout: StreetLayout,
+  doors: Array<{ i: number; j: number }>,
+): Array<{ i: number; j: number }> | null {
+  const from = { i: Math.floor(w.x), j: Math.floor(w.y) };
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const roll = Math.random();
+    let to: { i: number; j: number } | null = null;
+    if (roll < 0.2 && w.home) to = w.home;
+    else if (roll < 0.55 && doors.length) to = doors[Math.floor(Math.random() * doors.length)]!;
+    else {
+      const i = from.i + Math.round((Math.random() - 0.5) * 10);
+      const j = from.j + Math.round((Math.random() - 0.5) * 10);
+      if (!layout.isBlocked(i, j)) to = { i, j };
+    }
+    if (!to || (to.i === from.i && to.j === from.j)) continue;
+    const path = streetPath(layout, from, to);
+    if (path && path.length) return path;
+  }
+  return null;
 }
 
 function shirtFor(id: string, avatarColor: string | null) {
@@ -81,6 +116,11 @@ export default function StreetView({ coopId }: { coopId: string }) {
   const viewSize = useRef({ w: 0, h: 0 });
   const camera = useRef({ x: 0, y: 0, ready: false });
   const pan = useRef({ x: 0, y: 0, startX: 0, startY: 0, dragging: false });
+  // The point the camera centers on: the circle at first, then whatever you tap.
+  const focus = useRef({ x: 8, y: 8 });
+  const sheetOpenRef = useRef(false);
+  const layoutRef = useRef<StreetLayout | null>(null);
+  const doorsRef = useRef<Array<{ i: number; j: number }>>([]);
   const youId = useRef<string | null>(null);
   const lastSentTile = useRef<string | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -88,6 +128,22 @@ export default function StreetView({ coopId }: { coopId: string }) {
   const layout = useMemo(() => buildStreetLayout(street?.maxLotNumber ?? 0), [street?.maxLotNumber]);
   const lots = useMemo(() => new Map((street?.lots ?? []).map((lot) => [lot.lotNumber, lot])), [street?.lots]);
   const yourLot = street?.lots.find((lot) => lot.isYou) ?? null;
+
+  // Front doors people stroll between: every building and every occupied house.
+  useEffect(() => {
+    layoutRef.current = layout;
+    const doors: Array<{ i: number; j: number }> = [];
+    for (const b of layout.buildings) {
+      const door = streetDoorTile(layout, b, b.i >= 11 ? { x: b.i + 1, y: 8 } : layout.center);
+      if (door) doors.push(door);
+    }
+    for (const lot of layout.lots) {
+      if (!lots.has(lot.lotNumber)) continue;
+      const door = streetDoorTile(layout, lot, lot.i >= 11 ? { x: lot.i + 1, y: 8 } : layout.center);
+      if (door) doors.push(door);
+    }
+    doorsRef.current = doors;
+  }, [layout, lots]);
 
   const showNotice = (message: string) => {
     setNotice(message);
@@ -111,55 +167,51 @@ export default function StreetView({ coopId }: { coopId: string }) {
 
   const applyStreet = useCallback((data: StreetData) => {
     const nextLayout = buildStreetLayout(data.maxLotNumber);
-    const mineLot = data.lots.find((lot) => lot.isYou);
     const map = walkers.current;
+    const homeOf = (userId: string) => {
+      const lot = data.lots.find((l) => l.user.id === userId);
+      const placement = lot ? nextLayout.lots.find((p) => p.lotNumber === lot.lotNumber) : null;
+      return placement ? streetDoorTile(nextLayout, placement, placement.i >= 11 ? { x: placement.i + 1, y: 8 } : nextLayout.center) : null;
+    };
+    // Who's online comes from the server; where they wander is up to each
+    // phone. People appear where they were last seen and set off from there.
     const seen = new Set<string>();
-    for (const person of data.online) {
+    const mineLot = data.lots.find((lot) => lot.isYou);
+    const people = [...data.online.filter((p) => !p.isYou)];
+    for (const person of people) {
       seen.add(person.userId);
-      if (person.isYou) continue; // you move yourself; the server only echoes it back
-      const existing = map.get(person.userId);
-      if (!existing) {
-        map.set(person.userId, {
-          id: person.userId,
-          name: person.name,
-          shirt: shirtFor(person.userId, person.avatarColor),
-          isYou: false,
-          x: person.x + 0.5,
-          y: person.y + 0.5,
-          path: [],
-          target: { i: person.x, j: person.y },
-        });
-      } else if (!existing.target || existing.target.i !== person.x || existing.target.j !== person.y) {
-        const from = { i: Math.floor(existing.x), j: Math.floor(existing.y) };
-        const path = streetPath(nextLayout, from, { i: person.x, j: person.y });
-        existing.target = { i: person.x, j: person.y };
-        if (path) existing.path = path;
-        else {
-          existing.x = person.x + 0.5;
-          existing.y = person.y + 0.5;
-          existing.path = [];
-        }
-      }
+      if (map.has(person.userId)) continue;
+      const start = nextLayout.isBlocked(person.x, person.y) ? homeOf(person.userId) ?? { i: 11, j: 8 } : { i: person.x, j: person.y };
+      map.set(person.userId, {
+        id: person.userId,
+        name: person.name,
+        shirt: shirtFor(person.userId, person.avatarColor),
+        isYou: false,
+        x: start.i + 0.5,
+        y: start.j + 0.5,
+        path: [],
+        restUntil: Date.now() + Math.random() * 1500,
+        home: homeOf(person.userId),
+      });
     }
     for (const id of [...map.keys()]) {
-      const walker = map.get(id)!;
-      if (!walker.isYou && !seen.has(id)) map.delete(id);
+      if (!map.get(id)!.isYou && !seen.has(id)) map.delete(id);
     }
+    // You're out on the street too, strolling like everyone else, starting at your door.
     if (mineLot && !youId.current) {
       youId.current = mineLot.user.id;
-      const fromServer = data.online.find((p) => p.isYou);
-      const placement = nextLayout.lots.find((lot) => lot.lotNumber === mineLot.lotNumber);
-      const door = placement ? streetDoorTile(nextLayout, placement, nextLayout.center) : null;
-      const startTile = fromServer ? { i: fromServer.x, j: fromServer.y } : door ?? { i: 11, j: 8 };
+      const home = homeOf(mineLot.user.id);
+      const start = home ?? { i: 11, j: 8 };
       map.set(mineLot.user.id, {
         id: mineLot.user.id,
         name: 'You',
         shirt: shirtFor(mineLot.user.id, mineLot.user.avatarColor),
         isYou: true,
-        x: startTile.i + 0.5,
-        y: startTile.j + 0.5,
+        x: start.i + 0.5,
+        y: start.j + 0.5,
         path: [],
-        target: null,
+        restUntil: Date.now() + 1200,
+        home,
       });
     }
     setStreet(data);
@@ -213,13 +265,15 @@ export default function StreetView({ coopId }: { coopId: string }) {
     youId.current = null;
     camera.current.ready = false;
     pan.current = { x: 0, y: 0, startX: 0, startY: 0, dragging: false };
+    focus.current = { x: 8, y: 8 };
     setStreet(null);
     setSelected(null);
     setNotMember(false);
     setLoadError(null);
   }, [coopId]);
 
-  // Walk everyone and glide the camera; re-render only when something moved.
+  // Everyone strolls on their own; the camera glides to whatever you're
+  // looking at. Re-render only when something moved.
   useEffect(() => {
     let raf = 0;
     let last = Date.now();
@@ -228,36 +282,40 @@ export default function StreetView({ coopId }: { coopId: string }) {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       let changed = false;
+      const currentLayout = layoutRef.current;
       for (const w of walkers.current.values()) {
-        if (!w.path.length) continue;
+        if (!w.path.length) {
+          if (!currentLayout || now < w.restUntil) continue;
+          const path = nextErrand(w, currentLayout, doorsRef.current);
+          if (path) w.path = path;
+          else w.restUntil = now + pauseMs();
+          continue;
+        }
         const next = w.path[0]!;
         const tx = next.i + 0.5;
         const ty = next.j + 0.5;
         const dx = tx - w.x;
         const dy = ty - w.y;
         const dist = Math.hypot(dx, dy);
-        const step = (w.isYou ? 3.4 : 2.4) * dt;
+        const step = STROLL_SPEED * dt;
         if (dist <= step) {
           w.x = tx;
           w.y = ty;
           w.path.shift();
-          if (w.isYou && !w.path.length) sendPosition();
+          if (!w.path.length) w.restUntil = now + pauseMs();
         } else {
           w.x += (dx / dist) * step;
           w.y += (dy / dist) * step;
         }
         changed = true;
       }
-      const you = youId.current ? walkers.current.get(youId.current) : null;
       const { w: vw, h: vh } = viewSize.current;
-      if (you && vw > 0) {
-        if (you.path.length && !pan.current.dragging) {
-          pan.current.x *= 0.9;
-          pan.current.y *= 0.9;
-        }
-        const [px, py] = iso(you.x, you.y);
+      if (vw > 0) {
+        const [px, py] = iso(focus.current.x, focus.current.y);
         const tx = vw / 2 - px + pan.current.x;
-        const ty = vh * 0.58 - py + pan.current.y;
+        // With a card open over the bottom of the map, keep the place you
+        // opened in view above it.
+        const ty = vh * (sheetOpenRef.current ? 0.3 : 0.55) - py + pan.current.y;
         if (!camera.current.ready) {
           camera.current = { x: tx, y: ty, ready: true };
           changed = true;
@@ -275,38 +333,32 @@ export default function StreetView({ coopId }: { coopId: string }) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [sendPosition]);
+  }, []);
 
-  const walkYouTo = (tile: { i: number; j: number }) => {
-    const you = youId.current ? walkers.current.get(youId.current) : null;
-    if (!you) return false;
-    const path = streetPath(layout, { i: Math.floor(you.x), j: Math.floor(you.y) }, tile);
-    if (!path) return false;
-    you.path = path;
-    you.target = tile;
-    return true;
-  };
-
+  // Tapping a place opens it and glides the view over to it. Nobody walks
+  // there because you tapped: people on the street go where they please.
   const visit = (place: StreetPlace) => {
     setActionError(null);
     setListOpen(false);
     setSelected(place);
-    pan.current.x = 0;
-    pan.current.y = 0;
     const footprint =
       place.kind === 'lot' ? layout.lots.find((lot) => lot.lotNumber === place.lotNumber) : layout.buildings.find((b) => b.id === place.id);
     if (!footprint) return;
-    // Shops and lots along the road out open toward the road; the rest face the circle.
-    const onRoadOut = footprint.i >= 11;
-    const door = streetDoorTile(layout, footprint, onRoadOut ? { x: footprint.i + 1, y: 8 } : layout.center);
-    if (door) walkYouTo(door);
+    pan.current.x = 0;
+    pan.current.y = 0;
+    focus.current = { x: footprint.i + footprint.w / 2, y: footprint.j + footprint.d / 2 };
   };
 
   const onTap = useCallback(
     (wx: number, wy: number) => {
       const hit = hitTest(layout, lots, wx, wy);
       if (hit.place) visit(hit.place);
-      else if (hit.tile && !layout.isBlocked(hit.tile.i, hit.tile.j)) walkYouTo(hit.tile);
+      else {
+        // Tapping open map puts the card away.
+        setSelected(null);
+        setListOpen(false);
+        setActionError(null);
+      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [layout, lots],
@@ -389,6 +441,14 @@ export default function StreetView({ coopId }: { coopId: string }) {
     </TouchableOpacity>
   );
 
+  const sheetOpen = listOpen || selected !== null;
+  sheetOpenRef.current = selected !== null;
+  const closeSheet = () => {
+    setListOpen(false);
+    setSelected(null);
+    setActionError(null);
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
       <CommonsHeader coopId={coopId} directory={directory} right={listButton} />
@@ -405,62 +465,94 @@ export default function StreetView({ coopId }: { coopId: string }) {
             )}
           </View>
         ) : (
-          <>
-            <View style={{ flex: 1, minHeight: 280 }}>
-              <StreetScene
-                layout={layout}
-                lots={lots}
-                circleCount={street.circleCount}
-                people={people}
-                camera={camera.current}
-                selected={selected}
-                bobPhase={Date.now() / 1000}
-                onTap={onTap}
-                onPan={onPan}
-                onLayout={onLayout}
-              />
-              {notice ? (
-                <View className="absolute bottom-3 left-3 right-3 rounded-xl px-3 py-2.5" style={{ backgroundColor: '#111827' }} accessibilityLiveRegion="polite">
-                  <Text className="text-sm font-semibold text-white">{notice}</Text>
-                </View>
-              ) : null}
+          // The map fills the screen. A card slides up only when you open a
+          // place or the list, sized to what it holds; tapping the map or ✕
+          // puts it away.
+          <View style={{ flex: 1 }}>
+            <StreetScene
+              layout={layout}
+              lots={lots}
+              circleCount={street.circleCount}
+              people={people}
+              camera={camera.current}
+              selected={selected}
+              bobPhase={Date.now() / 1000}
+              onTap={onTap}
+              onPan={onPan}
+              onLayout={onLayout}
+            />
+            <View pointerEvents="none" className="absolute left-3 right-3 top-3 flex-row">
+              <View className="rounded-full px-3 py-1.5" style={{ backgroundColor: 'rgba(255,255,255,0.92)' }}>
+                <Text className="text-[13px] font-semibold text-gray-800">
+                  {`Welcome to ${commonsName}`}
+                  <Text className="text-[13px] text-gray-500">{` · ${street.online.filter((p) => !p.isYou).length} out now`}</Text>
+                </Text>
+              </View>
             </View>
-            <ScrollView
-              style={{
-                maxHeight: listOpen || (selected?.kind === 'building' && selected.id === 'circle-hall') ? '62%' : '44%',
-                borderTopWidth: 1,
-                borderColor: THEME.border,
-              }}
-              contentContainerStyle={{ padding: 16, gap: 12 }}
-              keyboardShouldPersistTaps="handled"
-            >
-              {actionError ? <Text className="text-sm font-semibold text-red-600">{actionError}</Text> : null}
-              {listOpen ? (
-                <StreetList
-                  yourLot={yourLot}
-                  neighborsOut={neighborsOut}
-                  neighbors={neighbors}
-                  circleCount={street.circleCount}
-                  onVisit={visit}
-                />
-              ) : (
-                <PlaceSheet
-                  coopId={coopId}
-                  commonsName={commonsName}
-                  street={street}
-                  selected={selected}
-                  yourLot={yourLot}
-                  lots={lots}
-                  onlineIds={onlineIds}
-                  busy={busy}
-                  onGoHome={() => yourLot && visit({ kind: 'lot', lotNumber: yourLot.lotNumber })}
-                  onOpenList={() => setListOpen(true)}
-                  onPaint={paint}
-                  onKnock={knock}
-                />
-              )}
-            </ScrollView>
-          </>
+            {!sheetOpen ? (
+              <View className="absolute bottom-3 left-3 right-3">
+                <CommonsInvitationsCard />
+              </View>
+            ) : null}
+            {notice ? (
+              <View
+                pointerEvents="none"
+                className="absolute left-3 right-3 rounded-xl px-3 py-2.5"
+                style={{ backgroundColor: '#111827', top: 52 }}
+                accessibilityLiveRegion="polite"
+              >
+                <Text className="text-sm font-semibold text-white">{notice}</Text>
+              </View>
+            ) : null}
+            {sheetOpen ? (
+              <View
+                className="absolute bottom-0 left-0 right-0 rounded-t-3xl bg-white"
+                style={{ maxHeight: '72%', boxShadow: '0 -6px 24px rgba(17, 24, 39, 0.14)' }}
+              >
+                <View className="items-center pt-2">
+                  <View className="h-1 w-10 rounded-full" style={{ backgroundColor: THEME.border }} />
+                </View>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Close"
+                  onPress={closeSheet}
+                  className="absolute right-3 top-3 z-10 h-11 w-11 items-center justify-center rounded-full"
+                  style={{ backgroundColor: '#F3F4F6' }}
+                >
+                  <X size={18} color={THEME.ink} />
+                </TouchableOpacity>
+                <ScrollView
+                  style={{ flexGrow: 0 }}
+                  contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 20, gap: 12 }}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {actionError ? <Text className="pr-12 text-sm font-semibold text-red-600">{actionError}</Text> : null}
+                  {listOpen ? (
+                    <StreetList
+                      yourLot={yourLot}
+                      neighborsOut={neighborsOut}
+                      neighbors={neighbors}
+                      circleCount={street.circleCount}
+                      onVisit={visit}
+                    />
+                  ) : (
+                    <PlaceSheet
+                      coopId={coopId}
+                      commonsName={commonsName}
+                      street={street}
+                      selected={selected}
+                      yourLot={yourLot}
+                      lots={lots}
+                      onlineIds={onlineIds}
+                      busy={busy}
+                      onPaint={paint}
+                      onKnock={knock}
+                    />
+                  )}
+                </ScrollView>
+              </View>
+            ) : null}
+          </View>
         )}
       </View>
     </SafeAreaView>
@@ -491,7 +583,8 @@ function Button({ label, onPress, quiet, disabled, a11y }: { label: string; onPr
 
 function Heading({ title, sub }: { title: string; sub?: string }) {
   return (
-    <View>
+    // Room on the right for the card's close button.
+    <View className="pr-12">
       <Text accessibilityRole="header" className="text-xl font-bold text-gray-950">
         {title}
       </Text>
@@ -542,8 +635,6 @@ function PlaceSheet({
   lots,
   onlineIds,
   busy,
-  onGoHome,
-  onOpenList,
   onPaint,
   onKnock,
 }: {
@@ -555,32 +646,10 @@ function PlaceSheet({
   lots: Map<number, StreetLotData>;
   onlineIds: Set<string>;
   busy: boolean;
-  onGoHome: () => void;
-  onOpenList: () => void;
   onPaint: (look: { houseStyle?: string; wallColor?: string; roofColor?: string }) => void;
   onKnock: (lot: StreetLotData) => void;
 }) {
-  if (!selected) {
-    const neighborCount = street.lots.length - 1;
-    const out = street.online.filter((p) => !p.isYou).length;
-    return (
-      <>
-        <Heading
-          title={`Welcome to ${commonsName}`}
-          sub={`${neighborCount} ${neighborCount === 1 ? 'neighbor lives' : 'neighbors live'} here · ${out} out on the street now`}
-        />
-        <Text className="text-[15px] text-gray-600">
-          This is your Commons as a street. Tap the road to walk, or tap a house or building to visit. Your circles meet in the Circle Hall.
-        </Text>
-        <View className="flex-row flex-wrap gap-2">
-          <Button label="Go home" onPress={onGoHome} />
-          <Button label="See every place" quiet onPress={onOpenList} />
-        </View>
-        {/* Invitations waiting for you used to show on the circles screen when it was the landing page. */}
-        <CommonsInvitationsCard />
-      </>
-    );
-  }
+  if (!selected) return null;
 
   if (selected.kind === 'building') {
     if (selected.id === 'circle-hall') return <CircleHallSheet coopId={coopId} commonsName={commonsName} />;

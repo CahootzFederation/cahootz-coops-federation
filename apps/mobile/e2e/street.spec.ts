@@ -28,11 +28,17 @@ test("a member lands on the street and paints their house, and it stays after a 
     await page.goto("/?coopId=cahootz");
     await expect(page.getByText(/^Welcome to /)).toBeVisible();
     await expect(page.getByLabel(/^Map of the street/)).toBeVisible();
+    // The map has the whole screen until you open something.
+    await expect(page.getByLabel("Close", { exact: true })).toHaveCount(0);
 
     await openStreetPlace(page, "Visit your house");
     await expect(page.getByRole("heading", { name: "Your house" })).toBeVisible();
     await page.getByLabel(`Wall color ${nextWall.label}`).click();
     await expect(page.getByText("Saved. Your neighbors can see it now.")).toBeVisible();
+
+    // The card goes away when you're done with it.
+    await page.getByLabel("Close", { exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Your house" })).toHaveCount(0);
 
     await page.reload();
     await expect(page.getByText(/^Welcome to /)).toBeVisible();

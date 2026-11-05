@@ -148,7 +148,7 @@ export function CircleHallSheet({ coopId, commonsName }: { coopId: string; commo
 
   return (
     <>
-      <View>
+      <View className="pr-12">
         <Text accessibilityRole="header" className="text-xl font-bold text-gray-950">
           Circle Hall
         </Text>

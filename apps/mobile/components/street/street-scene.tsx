@@ -301,7 +301,7 @@ export function StreetScene({
       ref={viewRef}
       style={{ flex: 1, backgroundColor: '#DDEBF1', overflow: 'hidden' }}
       onLayout={(e: LayoutChangeEvent) => onLayout(e.nativeEvent.layout.width, e.nativeEvent.layout.height)}
-      accessibilityLabel="Map of the street. Tap to walk or visit a building. Use the list for every place."
+      accessibilityLabel="Map of the street. Tap a house or building to visit. Use the list for every place."
       {...responder.panHandlers}
     >
       <Svg width="100%" height="100%" pointerEvents="none">

@@ -753,7 +753,7 @@ export default function StreetView({ coopId }: { coopId: string }) {
               {offline ? (
                 // The street keeps showing what it last knew; say so plainly.
                 <View accessibilityLiveRegion="polite" className="rounded-full px-3 py-1.5" style={{ backgroundColor: '#1F2937' }}>
-                  <Text className="text-[13px] font-semibold text-white">You're offline. We'll catch up when you're back.</Text>
+                  <Text className="text-[13px] font-semibold text-white">{"You're offline. We'll catch up when you're back."}</Text>
                 </View>
               ) : null}
               {hintSeen === false && !sheetOpen ? (

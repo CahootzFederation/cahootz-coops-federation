@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { PanResponder, View, type LayoutChangeEvent } from 'react-native';
-import Svg, { Ellipse, G, Image as SvgImage, Polygon } from 'react-native-svg';
+import Svg, { Ellipse, G, Image as SvgImage, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 
 import { KAYKIT_SPRITES, type KayKitSpriteName } from './kaykit-sprites';
 import {
@@ -158,6 +158,7 @@ export function StreetScene({
   layout,
   lots,
   circleCount,
+  circleUnread,
   boardNotes,
   people,
   camera,
@@ -170,6 +171,8 @@ export function StreetScene({
   layout: StreetLayout;
   lots: Map<number, StreetLotData>;
   circleCount: number;
+  /** New messages across your circles, shown on the Circle Hall. */
+  circleUnread: number;
   /** Recent Board posts, shown as notes pinned to the community board. */
   boardNotes: number;
   people: ScenePerson[];
@@ -280,7 +283,21 @@ export function StreetScene({
       const name = b.id === 'circle-hall' ? `Circle Hall · ${circleCount}` : BUILDING_NAMES[b.id];
       // The shops stand side by side along the road, so every other sign floats higher to keep all of them readable.
       const lift = LABEL_LIFT[b.id] ?? (b.id === 'corner-store' || b.id === 'town-hall' ? 44 : 18);
-      nodes.push(<G key={`lb${b.id}`}><Label at={iso(b.i + 1, b.j + 1, BUILDING_HEIGHT[b.id] + lift)} text={name} fill={b.id === 'circle-hall' ? '#4B4680' : '#1F2937'} /></G>);
+      const at = iso(b.i + 1, b.j + 1, BUILDING_HEIGHT[b.id] + lift);
+      nodes.push(<G key={`lb${b.id}`}><Label at={at} text={name} fill={b.id === 'circle-hall' ? '#4B4680' : '#1F2937'} /></G>);
+      // New messages in your circles show as a red bubble on the Circle Hall's sign.
+      if (b.id === 'circle-hall' && circleUnread > 0) {
+        const bx = at[0] + (name.length * 6.4 + 16) / 2;
+        const by = at[1] - 10;
+        const text = circleUnread > 99 ? '99+' : String(circleUnread);
+        const w = Math.max(18, text.length * 7 + 8);
+        nodes.push(
+          <G key="unread-hall">
+            <Rect x={bx - w / 2} y={by - 9} width={w} height={18} rx={9} fill="#DC2626" stroke="#FFFFFF" strokeWidth={2} />
+            <SvgText x={bx} y={by + 4} fontSize={11} fontWeight="800" fill="#FFFFFF" textAnchor="middle">{text}</SvgText>
+          </G>,
+        );
+      }
     }
     for (const lot of layout.lots) {
       const data = lots.get(lot.lotNumber);
@@ -298,7 +315,7 @@ export function StreetScene({
       );
     }
     return nodes;
-  }, [layout, lots, circleCount]);
+  }, [layout, lots, circleCount, circleUnread]);
 
   // The layout keeps roads in clear view. If you wander behind something
   // anyway (a back garden), it turns see-through until you come out. The

@@ -91,6 +91,36 @@ test("the community board in the middle of the street shows recent posts and ope
   }
 });
 
+test("new messages in your circles show on the Circle Hall", async ({ browser }) => {
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const a = await newSignedInPage(browser, USER_A_EMAIL);
+  const b = await newSignedInPage(browser, USER_B_EMAIL);
+  const tokenA = await sessionTokenFor(a.page);
+  const tokenB = await sessionTokenFor(b.page);
+  let groupId: string | undefined;
+  let postId: string | undefined;
+  try {
+    // Fixture: A makes a private circle, B joins, A posts something new in it.
+    const { group } = await trpc("POST", "groups.create", tokenA, { name: `E2E Street Unread ${runId}`, privacy: "private" });
+    groupId = group.id;
+    await trpc("POST", "groups.joinByCode", tokenB, { inviteCode: group.inviteCode });
+    const posted = await trpc("POST", "commons.createPost", tokenA, { coopId: "cahootz", circleId: groupId, content: `E2E street unread ${runId}` });
+    postId = posted.post.id;
+
+    await b.page.goto("/?coopId=cahootz");
+    await b.page.getByLabel("Open the list").click();
+    const hall = b.page.getByRole("button", { name: "Visit Circle Hall", exact: true });
+    await expect(hall).toBeVisible();
+    await expect(b.page.getByText(/circles · \d+ new$/)).toBeVisible({ timeout: 40_000 });
+  } finally {
+    if (postId) await trpc("POST", "commons.deletePost", tokenA, { postId }).catch(() => undefined);
+    if (groupId) await trpc("POST", "groups.leave", tokenB, { groupId }).catch(() => undefined);
+    if (groupId) await trpc("POST", "groups.leave", tokenA, { groupId }).catch(() => undefined);
+    await a.context.close();
+    await b.context.close();
+  }
+});
+
 test("Circle Hall on the street lists every circle, opens one, and leads inside", async ({ browser }) => {
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
   try {

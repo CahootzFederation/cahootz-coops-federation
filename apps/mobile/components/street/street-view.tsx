@@ -42,6 +42,7 @@ const COLOR_NAMES: Record<string, string> = {
   cream: 'Cream', sky: 'Sky', sage: 'Sage', rose: 'Rose', white: 'White',
   terracotta: 'Terracotta', slate: 'Slate', blue: 'Blue', green: 'Green',
   deep: 'Deep', brown: 'Brown', warm: 'Warm', tan: 'Tan', golden: 'Golden', light: 'Light',
+  olive: 'Olive', peach: 'Peach', fair: 'Fair', rosy: 'Rosy', pale: 'Pale',
   black: 'Black', auburn: 'Auburn', blond: 'Blond', gray: 'Gray',
   purple: 'Purple', gold: 'Gold', teal: 'Teal',
 };
@@ -285,6 +286,30 @@ export default function StreetView({ coopId }: { coopId: string }) {
     }, [coopId, sessionToken]),
   );
   const boardNotes = (boardPosts ?? []).filter(pinnedThisWeek).length;
+
+  // New messages across your circles, for the red bubble on the Circle Hall.
+  // Same counts as the circles screen; refreshed while the street is open.
+  const [circleUnread, setCircleUnread] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      if (!sessionToken) return;
+      let active = true;
+      const check = () =>
+        api
+          .listVisibleCircles(sessionToken, coopId)
+          .then((result) => {
+            if (!active) return;
+            setCircleUnread(result.groups.filter((c) => c.isMember).reduce((sum, c) => sum + (c.unreadCount ?? 0), 0));
+          })
+          .catch((err) => console.warn('Circle unread counts not loaded:', err));
+      check();
+      const timer = setInterval(check, 30_000);
+      return () => {
+        active = false;
+        clearInterval(timer);
+      };
+    }, [coopId, sessionToken]),
+  );
 
   const setLook = async (change: Partial<StreetLookData>) => {
     if (!sessionToken || !street) return;
@@ -554,6 +579,7 @@ export default function StreetView({ coopId }: { coopId: string }) {
               lots={lots}
               circleCount={street.circleCount}
               boardNotes={boardNotes}
+              circleUnread={circleUnread}
               people={people}
               camera={camera.current}
               selected={selected}
@@ -614,6 +640,7 @@ export default function StreetView({ coopId }: { coopId: string }) {
                       neighborsOut={neighborsOut}
                       neighbors={neighbors}
                       circleCount={street.circleCount}
+                      circleUnread={circleUnread}
                       onVisit={visit}
                     />
                   ) : (
@@ -947,12 +974,14 @@ function StreetList({
   neighborsOut,
   neighbors,
   circleCount,
+  circleUnread,
   onVisit,
 }: {
   yourLot: StreetLotData | null;
   neighborsOut: StreetLotData[];
   neighbors: StreetLotData[];
   circleCount: number;
+  circleUnread: number;
   onVisit: (place: StreetPlace) => void;
 }) {
   const places: StreetBuildingId[] = ['board', 'circle-hall', 'corner-store', 'group-buys', 'town-hall'];
@@ -965,7 +994,7 @@ function StreetList({
           <ListRow
             key={id}
             title={BUILDING_NAMES[id]}
-            sub={id === 'circle-hall' ? `${circleCount} circles` : undefined}
+            sub={id === 'circle-hall' ? `${circleCount} circles${circleUnread > 0 ? ` · ${circleUnread} new` : ''}` : undefined}
             a11y={`Visit ${BUILDING_NAMES[id]}`}
             onPress={() => onVisit({ kind: 'building', id })}
           />

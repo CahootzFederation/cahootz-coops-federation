@@ -31,6 +31,11 @@ export const STREET_SKIN_TONES = {
   tan: "#A9714A",
   golden: "#C99468",
   light: "#E6BC94",
+  olive: "#D9B48C",
+  peach: "#F0C9A8",
+  fair: "#F5D8C0",
+  rosy: "#F3D2C6",
+  pale: "#FAE7DA",
 } as const;
 export const STREET_HAIR_STYLES = ["short", "curly", "bun", "long", "none"] as const;
 export const STREET_HAIR_COLORS = {
@@ -67,7 +72,8 @@ export function defaultStreetLook(userId: string): StreetLook {
   h = Math.abs(h);
   const pick = <T extends string>(list: readonly T[], salt: number) => list[(h + salt) % list.length]!;
   return {
-    skin: pick(Object.keys(STREET_SKIN_TONES) as StreetSkinTone[], 0),
+    // The first six tones only, so adding tones never changes anyone's starting look.
+    skin: pick((Object.keys(STREET_SKIN_TONES) as StreetSkinTone[]).slice(0, 6), 0),
     hairStyle: pick(STREET_HAIR_STYLES.filter((s) => s !== "none"), 3),
     hairColor: pick(["black", "brown", "black", "auburn"] as StreetHairColor[], 5),
     shirt: pick(Object.keys(STREET_SHIRT_COLORS) as StreetShirtColor[], 7),

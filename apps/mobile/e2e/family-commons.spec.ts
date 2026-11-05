@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
+import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL, openCircleHall } from "./support/auth";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const TEST_CODE = process.env.E2E_LOGIN_CODE || "000000";
@@ -295,7 +295,9 @@ test.describe("family commons", () => {
       await newcomer.page.getByRole("button", { name: "Explore commons" }).click();
       await newcomer.page.getByRole("button", { name: /^View Cahootz(?: Commons| Coop)? details$/ }).click();
       await newcomer.page.getByRole("button", { name: "Join commons", exact: true }).click();
-      await expect(shown(newcomer.page, "Welcome In")).toBeVisible();
+      // A new member lands on their Commons' street; the welcome lounge is in the Circle Hall.
+      await expect(shown(newcomer.page, /^Welcome to /)).toBeVisible();
+      await openCircleHall(newcomer.page);
       await expect(newcomer.page.getByRole("button", { name: "Join a welcome lounge" })).toBeVisible();
       await newcomer.page.reload();
       await expect(shown(newcomer.page, "Welcome In")).toBeVisible();

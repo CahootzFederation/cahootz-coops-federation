@@ -19,7 +19,7 @@ async function openPulse(page: Page, email: string) {
   await page.getByRole('button', { name: 'Continue with email' }).click();
   await page.getByPlaceholder('Enter 6-digit code').fill(process.env.E2E_LOGIN_CODE || '000000');
   await page.getByRole('button', { name: 'Verify and continue' }).click();
-  await expect(page.getByLabel('Manage circles')).toBeVisible();
+  await expect(page.getByLabel('Open menu')).toBeVisible();
   await page.getByLabel('Open menu').click();
   await page.getByLabel(/Open .* page/).first().click();
   await page.getByText('Community', { exact: true }).click();

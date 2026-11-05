@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
+import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL, openCircleHall } from "./support/auth";
 
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 
@@ -107,6 +107,7 @@ test("two members exchange direct messages in a private two-person circle", { ta
 
     // A DM is a circle, but never listed as one.
     await userA.page.goto("/");
+    await openCircleHall(userA.page);
     await expect(userA.page.getByText("General", { exact: true })).toBeVisible();
     await expect(userA.page.getByText("Direct message", { exact: true })).toHaveCount(0);
   } finally {

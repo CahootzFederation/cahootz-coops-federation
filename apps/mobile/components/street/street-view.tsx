@@ -18,6 +18,7 @@ import {
 
 import CircleView from '@/components/circle-view';
 import { CommonsHeader, useCommonsDirectory } from '@/components/commons-header';
+import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
 import { LoadError } from '@/components/load-error';
 import { Text } from '@/components/ui/text';
 import { DESIGN } from '@/constants/design';
@@ -347,7 +348,10 @@ export default function StreetView({ coopId }: { coopId: string }) {
       await api.knockOnDoor(coopId, lot.user.id, sessionToken);
       showNotice(`You knocked. ${lot.user.name} will see that you stopped by.`);
     } catch (err) {
-      setActionError(friendlyError(err, "We couldn't knock just now. Try again."));
+      // The knock limit's own message says what to do instead; the shared
+      // "too many tries" wording is meant for sign-in lockouts.
+      const tooSoon = (err as { code?: string })?.code === 'TOO_MANY_REQUESTS' && (err as Error).message;
+      setActionError(tooSoon || friendlyError(err, "We couldn't knock just now. Try again."));
     } finally {
       setBusy(false);
     }
@@ -515,7 +519,9 @@ const BUILDING_COPY: Record<Exclude<StreetBuildingId, 'circle-hall'>, { body: (n
 };
 
 function openBuilding(id: StreetBuildingId, coopId: string) {
-  if (id === 'circle-hall') router.push({ pathname: '/[coopId]/circles', params: { coopId } } as any);
+  // Replace rather than push, the same way the circles screen opens a circle,
+  // so the street and the circles screen are never both mounted (two headers).
+  if (id === 'circle-hall') router.replace({ pathname: '/[coopId]/circles', params: { coopId } } as any);
   else if (id === 'group-buys') router.push('/(authenticated)/group-buys' as any);
   else if (id === 'corner-store') router.push({ pathname: '/(tabs)/board', params: { coopId, lane: 'marketplace' } } as any);
   else if (id === 'town-hall') router.push({ pathname: '/(tabs)/proposals', params: { coopId } } as any);
@@ -565,6 +571,8 @@ function PlaceSheet({
           <Button label="Go home" onPress={onGoHome} />
           <Button label="See every place" quiet onPress={onOpenList} />
         </View>
+        {/* Invitations waiting for you used to show on the circles screen when it was the landing page. */}
+        <CommonsInvitationsCard />
       </>
     );
   }

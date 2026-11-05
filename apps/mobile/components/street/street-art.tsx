@@ -15,10 +15,11 @@ export const iso = (x: number, y: number, z = 0): Pt => [((x - y) * TW) / 2, ((x
 
 const pts = (list: Pt[]) => list.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
 
+/** Lighten (f > 1) or darken (f < 1) a #rrggbb color. Returns #rrggbb so results can be shaded again. */
 export function shade(hex: string, f: number) {
-  const n = parseInt(hex.slice(1), 16);
-  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * f)));
-  return `rgb(${c((n >> 16) & 255)},${c((n >> 8) & 255)},${c(n & 255)})`;
+  const n = parseInt(hex.slice(1, 7), 16);
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * f))).toString(16).padStart(2, '0');
+  return `#${c((n >> 16) & 255)}${c((n >> 8) & 255)}${c(n & 255)}`;
 }
 
 function Box({ x, y, w, d, z = 0, h, color }: { x: number; y: number; w: number; d: number; z?: number; h: number; color: string }) {
@@ -170,23 +171,22 @@ export function CircleHallArt({ i, j, circleCount }: { i: number; j: number; cir
   );
 }
 
+/** A flat garden in the middle of the circle: low beds and flowers, nothing tall that would block the view. */
 export function GreenArt({ i, j }: { i: number; j: number }) {
-  const posts: Pt[] = [[i + 0.3, j + 0.3], [i + 1.7, j + 0.3], [i + 0.3, j + 1.7], [i + 1.7, j + 1.7]];
   const flowers = ['#E86A8A', '#F2C14E', '#B07CD8', '#F28B50'];
+  const beds: Array<[number, number]> = [[i + 0.2, j + 0.2], [i + 1.1, j + 0.2], [i + 0.2, j + 1.1], [i + 1.1, j + 1.1]];
   return (
     <G>
-      {[0, 1, 2, 3, 4].map((k) => {
-        const a = -Math.PI * 0.85 + k * 0.45;
-        const [fx, fy] = iso(8 + Math.cos(a) * 1.75, 8 + Math.sin(a) * 1.75, 3);
-        return <Circle key={`f${k}`} cx={fx} cy={fy} r={4} fill={flowers[k % 4]} />;
-      })}
-      <Box x={i + 0.15} y={j + 0.15} w={1.7} d={1.7} h={5} color="#E9E2D6" />
-      {posts.map(([px, py], k) => {
-        const [ax, ay] = iso(px, py, 5);
-        const [bx, by] = iso(px, py, 28);
-        return <Line key={`p${k}`} x1={ax} y1={ay} x2={bx} y2={by} stroke="#FFFFFF" strokeWidth={3} />;
-      })}
-      <PyramidRoof x={i + 0.05} y={j + 0.05} w={1.9} d={1.9} base={28} rise={18} roof="#B94614" />
+      <Polygon points={pts([iso(i + 0.05, j + 0.05), iso(i + 1.95, j + 0.05), iso(i + 1.95, j + 1.95), iso(i + 0.05, j + 1.95)])} fill="#E9E2D6" />
+      {beds.map(([bx, by], k) => (
+        <G key={`bed${k}`}>
+          <Box x={bx} y={by} w={0.7} d={0.7} h={4} color="#8B5E3C" />
+          {[0, 1, 2].map((n) => {
+            const [fx, fy] = iso(bx + 0.18 + n * 0.17, by + 0.35, 7);
+            return <Circle key={`f${k}${n}`} cx={fx} cy={fy} r={3.2} fill={flowers[(k + n) % 4]} />;
+          })}
+        </G>
+      ))}
     </G>
   );
 }

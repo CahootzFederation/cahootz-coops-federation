@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildStreetLayout,
   defaultHouseLook,
+  STREET_DRAWN_HEIGHT,
   streetDoorTile,
+  streetHides,
   streetLotPlacement,
   streetPath,
   streetWidthFor,
@@ -41,11 +43,37 @@ describe("street layout", () => {
   });
 
   it("grows the road as the Commons grows", () => {
-    expect(streetWidthFor(0)).toBe(streetWidthFor(7));
-    expect(streetWidthFor(8)).toBeGreaterThan(streetWidthFor(7));
-    expect(streetWidthFor(11)).toBe(streetWidthFor(8));
-    expect(streetWidthFor(12)).toBeGreaterThan(streetWidthFor(11));
-    expect(streetLotPlacement(0)).toEqual({ i: 10, j: 12, w: 2, d: 2 });
+    expect(streetWidthFor(0)).toBe(streetWidthFor(4));
+    expect(streetWidthFor(5)).toBeGreaterThan(streetWidthFor(4));
+    expect(streetWidthFor(6)).toBe(streetWidthFor(5));
+    expect(streetWidthFor(7)).toBeGreaterThan(streetWidthFor(6));
+    expect(streetLotPlacement(0)).toEqual({ i: 2, j: 10, w: 2, d: 2 });
+  });
+
+  it("never lets a house, building or tree hide someone walking on the road or sidewalk", () => {
+    const layout = buildStreetLayout(80);
+    const walkways: Array<{ i: number; j: number }> = [];
+    for (let i = 0; i < layout.width; i++) {
+      for (let j = 0; j < layout.height; j++) {
+        const t = layout.tileType(i, j);
+        if (t === "road" || t === "walk") walkways.push({ i, j });
+      }
+    }
+    expect(walkways.length).toBeGreaterThan(100);
+    const things = [
+      ...layout.lots.map((p) => ({ p, h: STREET_DRAWN_HEIGHT.house, what: `lot ${p.lotNumber}` })),
+      ...layout.buildings.map((p) => ({ p, h: p.id === "green" ? STREET_DRAWN_HEIGHT.green : STREET_DRAWN_HEIGHT.building, what: p.id })),
+      ...layout.trees.map((t) => ({ p: { ...t, w: 1, d: 1 }, h: STREET_DRAWN_HEIGHT.tree, what: `tree ${t.i},${t.j}` })),
+    ];
+    for (const { p, h, what } of things) {
+      const hidden = walkways.filter((t) => streetHides(p, h, t));
+      expect(hidden, `${what} hides ${JSON.stringify(hidden)}`).toEqual([]);
+    }
+  });
+
+  it("knows a tall house hides someone standing right behind it", () => {
+    expect(streetHides({ i: 5, j: 5, w: 2, d: 2 }, STREET_DRAWN_HEIGHT.house, { i: 4, j: 4 })).toBe(true);
+    expect(streetHides({ i: 5, j: 5, w: 2, d: 2 }, STREET_DRAWN_HEIGHT.house, { i: 7, j: 7 })).toBe(false);
   });
 
   it("lets you walk from the Green to every front door", () => {

@@ -294,8 +294,9 @@ export default function StreetView({ coopId }: { coopId: string }) {
     const footprint =
       place.kind === 'lot' ? layout.lots.find((lot) => lot.lotNumber === place.lotNumber) : layout.buildings.find((b) => b.id === place.id);
     if (!footprint) return;
-    const onStem = place.kind === 'building' && place.id !== 'green';
-    const door = streetDoorTile(layout, footprint, onStem ? { x: 13, y: 8 } : layout.center);
+    // Shops and lots along the road out open toward the road; the rest face the circle.
+    const onRoadOut = footprint.i >= 11;
+    const door = streetDoorTile(layout, footprint, onRoadOut ? { x: footprint.i + 1, y: 8 } : layout.center);
     if (door) walkYouTo(door);
   };
 
@@ -354,15 +355,19 @@ export default function StreetView({ coopId }: { coopId: string }) {
 
   if (notMember) return <CircleView coopId={coopId} />;
 
-  const people: ScenePerson[] = [...walkers.current.values()].map((w) => ({
-    id: w.id,
-    name: w.name,
-    shirt: w.shirt,
-    isYou: w.isYou,
-    x: w.x,
-    y: w.y,
-    moving: w.path.length > 0,
-  }));
+  const lotCenterByUser = new Map<string, { x: number; y: number }>();
+  for (const lot of street?.lots ?? []) {
+    const placement = layout.lots.find((p) => p.lotNumber === lot.lotNumber);
+    if (placement) lotCenterByUser.set(lot.user.id, { x: placement.i + 1, y: placement.j + 1 });
+  }
+  const people: ScenePerson[] = [...walkers.current.values()].map((w) => {
+    const moving = w.path.length > 0;
+    // Someone standing at home already has their name on the house; skip the
+    // second tag so the two don't pile up.
+    const home = lotCenterByUser.get(w.id);
+    const atHome = !moving && home ? Math.hypot(w.x - home.x, w.y - home.y) < 2.6 : false;
+    return { id: w.id, name: atHome ? '' : w.name, shirt: w.shirt, isYou: w.isYou, x: w.x, y: w.y, moving };
+  });
   const onlineIds = new Set((street?.online ?? []).map((p) => p.userId));
   const neighborsOut = (street?.lots ?? []).filter((lot) => !lot.isYou && onlineIds.has(lot.user.id));
   const neighbors = (street?.lots ?? []).filter((lot) => !lot.isYou);
@@ -492,6 +497,7 @@ function Swatch({ color, label, selected, onPress }: { color: string; label: str
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected }}
+      aria-selected={selected}
       onPress={onPress}
       className="h-11 w-11 items-center justify-center rounded-full"
       style={{ borderWidth: 2, borderColor: selected ? '#111827' : THEME.border }}
@@ -603,6 +609,7 @@ function PlaceSheet({
                 accessibilityRole="button"
                 accessibilityLabel={`House style ${STYLE_NAMES[style]}`}
                 accessibilityState={{ selected: lot.houseStyle === style }}
+                aria-selected={lot.houseStyle === style}
                 onPress={() => onPaint({ houseStyle: style })}
                 className="min-h-11 justify-center rounded-xl px-3"
                 style={{ borderWidth: 2, borderColor: lot.houseStyle === style ? '#111827' : THEME.border }}

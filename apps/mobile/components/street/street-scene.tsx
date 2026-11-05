@@ -2,8 +2,10 @@ import React, { useMemo, useRef } from 'react';
 import { PanResponder, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { G, Polygon, Line } from 'react-native-svg';
 import {
+  STREET_DRAWN_HEIGHT,
   STREET_ROOF_COLORS,
   STREET_WALL_COLORS,
+  streetHides,
   type StreetBuildingId,
   type StreetLayout,
   type StreetRoofColor,
@@ -51,8 +53,10 @@ const BUILDING_HEIGHT: Record<StreetBuildingId, number> = {
   'group-buys': 36,
   'town-hall': 49,
   'corner-store': 36,
-  green: 46,
+  green: 8,
 };
+/** How far a building's sign floats above its roof. */
+const LABEL_LIFT: Partial<Record<StreetBuildingId, number>> = { green: 26 };
 
 const GROUND = { grass: '#9CCB86', grassAlt: '#95C47F', green: '#86BF74', road: '#717780', walk: '#DCD6CC', lawn: '#A9D592', lawnLine: 'rgba(0,0,0,0.08)' };
 
@@ -202,7 +206,7 @@ export function StreetScene({
   // Each building, house and tree is drawn once and reused every frame; only
   // people change while someone walks, so React skips everything else.
   const objects = useMemo(() => {
-    const list: Array<{ depth: number; node: React.ReactNode }> = [];
+    const list: Array<{ depth: number; node: React.ReactNode; footprint?: { i: number; j: number; w: number; d: number }; height?: number }> = [];
     for (const b of layout.buildings) {
       const node =
         b.id === 'circle-hall' ? <CircleHallArt i={b.i} j={b.j} circleCount={circleCount} />
@@ -210,13 +214,15 @@ export function StreetScene({
         : b.id === 'corner-store' ? <ShopArt i={b.i} j={b.j} trim="#B94614" />
         : b.id === 'group-buys' ? <ShopArt i={b.i} j={b.j} trim="#2F7D4F" />
         : <GreenArt i={b.i} j={b.j} />;
-      list.push({ depth: b.i + b.j + 2, node: <G key={`b${b.id}`}>{node}</G> });
+      list.push({ depth: b.i + b.j + 2, node: <G key={`b${b.id}`}>{node}</G>, footprint: b, height: BUILDING_HEIGHT[b.id] });
     }
     for (const lot of layout.lots) {
       const data = lots.get(lot.lotNumber);
       if (!data) continue;
       list.push({
         depth: lot.i + lot.j + 2,
+        footprint: lot,
+        height: STREET_DRAWN_HEIGHT.house,
         node: (
           <G key={`h${lot.lotNumber}-${data.houseStyle}${data.wallColor}${data.roofColor}`}>
             <HouseArt
@@ -230,7 +236,9 @@ export function StreetScene({
         ),
       });
     }
-    for (const t of layout.trees) list.push({ depth: t.i + t.j + 1, node: <G key={`t${t.i},${t.j}`}><TreeArt i={t.i} j={t.j} /></G> });
+    for (const t of layout.trees) {
+      list.push({ depth: t.i + t.j + 1, node: <G key={`t${t.i},${t.j}`}><TreeArt i={t.i} j={t.j} /></G>, footprint: { ...t, w: 1, d: 1 }, height: STREET_DRAWN_HEIGHT.tree });
+    }
     return list;
   }, [layout, lots, circleCount]);
 
@@ -238,7 +246,9 @@ export function StreetScene({
     const nodes: React.ReactNode[] = [];
     for (const b of layout.buildings) {
       const name = b.id === 'circle-hall' ? `Circle Hall · ${circleCount}` : BUILDING_NAMES[b.id];
-      nodes.push(<G key={`lb${b.id}`}><Label at={iso(b.i + 1, b.j + 1, BUILDING_HEIGHT[b.id] + 18)} text={name} fill={b.id === 'circle-hall' ? '#4B4680' : '#1F2937'} /></G>);
+      // The shops stand side by side along the road, so every other sign floats higher to keep all of them readable.
+      const lift = LABEL_LIFT[b.id] ?? (b.id === 'corner-store' || b.id === 'town-hall' ? 44 : 18);
+      nodes.push(<G key={`lb${b.id}`}><Label at={iso(b.i + 1, b.j + 1, BUILDING_HEIGHT[b.id] + lift)} text={name} fill={b.id === 'circle-hall' ? '#4B4680' : '#1F2937'} /></G>);
     }
     for (const lot of layout.lots) {
       const data = lots.get(lot.lotNumber);
@@ -258,8 +268,16 @@ export function StreetScene({
     return nodes;
   }, [layout, lots, circleCount]);
 
+  // The layout keeps roads and sidewalks in clear view. If you wander behind
+  // something anyway (a back garden), it turns see-through until you come out.
+  const you = people.find((p) => p.isYou);
+  const youTile = you ? { i: Math.floor(you.x), j: Math.floor(you.y) } : null;
   const drawn = [
-    ...objects,
+    ...objects.map((o) =>
+      youTile && o.footprint && o.height && streetHides(o.footprint, o.height, youTile)
+        ? { depth: o.depth, node: <G key={`fade-${(o.node as React.ReactElement).key}`} opacity={0.35}>{o.node}</G> }
+        : o,
+    ),
     ...people.map((p) => ({
       depth: p.x + p.y + 0.01,
       node: (
@@ -270,7 +288,7 @@ export function StreetScene({
             id={p.id}
             shirt={p.shirt}
             isYou={p.isYou}
-            name={p.isYou ? undefined : p.name}
+            name={p.isYou || !p.name ? undefined : p.name}
             bob={p.moving ? Math.abs(Math.sin(bobPhase * 12)) * 2 : 0}
           />
         </G>

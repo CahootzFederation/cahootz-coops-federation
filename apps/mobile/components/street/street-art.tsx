@@ -245,21 +245,46 @@ export interface PersonColors {
   shirt: string;
 }
 
+/**
+ * The right half of an ellipse, as a path: the side that falls into shadow
+ * when light comes from the upper left, like the buildings' right walls.
+ */
+const rightHalf = (cx: number, cy: number, rx: number, ry: number) =>
+  `M${cx} ${cy - ry}A${rx} ${ry} 0 0 1 ${cx} ${cy + ry}Z`;
+
 /** Hair is drawn in two parts: behind the head (curly puff, long hair) and on top (short cap, bun). */
 function hairParts(cx: number, cy: number, look: PersonColors): { back: React.ReactNode; top: React.ReactNode } {
+  const dark = shade(look.hair, 0.72);
   const back =
-    look.hairStyle === 'curly' ? <Circle cx={cx} cy={cy - 1.5} r={8.6} fill={look.hair} />
-    : look.hairStyle === 'long' ? <Rect x={cx - 7} y={cy - 4} width={14} height={13} rx={5} fill={look.hair} />
-    : null;
-  const top =
-    look.hairStyle === 'short' ? <Ellipse cx={cx} cy={cy - 3.5} rx={6} ry={3.2} fill={look.hair} />
-    : look.hairStyle === 'bun' ? (
+    look.hairStyle === 'curly' ? (
       <G>
-        <Ellipse cx={cx} cy={cy - 3.5} rx={6} ry={3.2} fill={look.hair} />
-        <Circle cx={cx} cy={cy - 8} r={3.2} fill={look.hair} />
+        <Circle cx={cx} cy={cy - 1.5} r={8.6} fill={look.hair} />
+        <Path d={rightHalf(cx, cy - 1.5, 8.6, 8.6)} fill={dark} />
       </G>
     )
-    : look.hairStyle === 'long' ? <Ellipse cx={cx} cy={cy - 3.5} rx={6.3} ry={3.4} fill={look.hair} />
+    : look.hairStyle === 'long' ? (
+      <G>
+        <Rect x={cx - 7} y={cy - 4} width={14} height={13} rx={5} fill={look.hair} />
+        <Path d={`M${cx} ${cy - 4}L${cx + 2} ${cy - 4}A5 5 0 0 1 ${cx + 7} ${cy + 1}L${cx + 7} ${cy + 4}A5 5 0 0 1 ${cx + 2} ${cy + 9}L${cx} ${cy + 9}Z`} fill={dark} />
+      </G>
+    )
+    : null;
+  const cap = (rx: number, ry: number) => (
+    <G>
+      <Ellipse cx={cx} cy={cy - 3.5} rx={rx} ry={ry} fill={look.hair} />
+      <Path d={rightHalf(cx, cy - 3.5, rx, ry)} fill={dark} />
+    </G>
+  );
+  const top =
+    look.hairStyle === 'short' ? cap(6, 3.2)
+    : look.hairStyle === 'bun' ? (
+      <G>
+        {cap(6, 3.2)}
+        <Circle cx={cx} cy={cy - 8} r={3.2} fill={look.hair} />
+        <Path d={rightHalf(cx, cy - 8, 3.2, 3.2)} fill={dark} />
+      </G>
+    )
+    : look.hairStyle === 'long' ? cap(6.3, 3.4)
     : null;
   return { back, top };
 }
@@ -279,18 +304,35 @@ export function WalkerNameTag({ x, y, name, bob, scale = 1 }: { x: number; y: nu
   );
 }
 
-/** The simple oval person: shadow, oval body, round head, hair, in their chosen look. */
+/**
+ * A person in their chosen look: soft ground shadow, a rounded-rectangle
+ * body like the Maple Court mockup, round head, hair. Shaded like the
+ * buildings: light comes from the upper left, so the right side of the body,
+ * face and hair falls into shadow.
+ */
 export function PersonArt({ x, y, look, isYou, bob }: { x: number; y: number; look: PersonColors; isYou: boolean; bob: number }) {
   const [sx, sy] = iso(x, y);
   const headY = sy - 25 - bob;
   const hair = hairParts(sx, headY, look);
+  // Body box: 12 wide, 16 tall, corner radius 5.
+  const top = sy - 19 - bob;
+  const bottom = top + 16;
+  const right = sx + 6;
+  const r = 5;
   return (
     <G>
       <Ellipse cx={sx} cy={sy} rx={8} ry={4} fill="rgba(0,0,0,0.2)" />
       {isYou ? <Ellipse cx={sx} cy={sy} rx={11} ry={5.5} fill="none" stroke="#B94614" strokeWidth={2} /> : null}
       {hair.back}
-      <Ellipse cx={sx} cy={sy - 11 - bob} rx={6.5} ry={9} fill={look.shirt} />
-      <Circle cx={sx} cy={headY} r={6} fill={look.skin} />
+      <Rect x={sx - 6} y={top} width={12} height={16} rx={r} fill={look.shirt} />
+      <Path
+        d={`M${sx + 1} ${top}L${right - r} ${top}A${r} ${r} 0 0 1 ${right} ${top + r}L${right} ${bottom - r}A${r} ${r} 0 0 1 ${right - r} ${bottom}L${sx + 1} ${bottom}Z`}
+        fill={shade(look.shirt, 0.8)}
+      />
+      <Rect x={sx - 4} y={top + 2} width={2} height={7} rx={1} fill="rgba(255,255,255,0.22)" />
+      {/* Face: a darker rim on the right, lit from the left. */}
+      <Circle cx={sx} cy={headY} r={6} fill={shade(look.skin, 0.84)} />
+      <Circle cx={sx - 1.1} cy={headY} r={5.1} fill={look.skin} />
       {hair.top}
     </G>
   );

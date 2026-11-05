@@ -4,3 +4,5 @@ export * from "./proposal-engine.js";
 export * from "./notification.js";
 
 export * from "./marketplace-offers.js";
+
+export * from "./street.js";

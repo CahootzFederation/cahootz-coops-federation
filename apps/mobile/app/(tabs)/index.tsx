@@ -4,6 +4,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import CircleView from '@/components/circle-view';
+import StreetView from '@/components/street/street-view';
 import OnboardingFlow from '@/components/onboarding-flow';
 import OnboardingWelcome from '@/components/onboarding-welcome';
 import { useAuth } from '@/contexts/auth-context';
@@ -97,10 +98,11 @@ export default function CommonsScreen() {
     );
   }
 
-  // Circle View is the Commons tab's landing for everyone. Signed-in members
-  // see their circles, chatting counts, and the welcome lounge; a signed-out
-  // visitor sees just the General card (CircleView skips the authenticated
-  // circles fetch when there's no session) - tapping it opens the same
-  // general feed with its own sign-in prompt, exactly as before.
+  // Signed-in members land on their Commons' street; the Circle Hall on it
+  // opens the circles screen (app/[coopId]/circles.tsx). StreetView falls
+  // back to circles for a Commons you aren't a member of. A signed-out
+  // visitor still sees the circles screen with just the General card and its
+  // own sign-in prompt, exactly as before.
+  if (sessionToken) return <StreetView coopId={resolvedCoopId} />;
   return <CircleView coopId={resolvedCoopId} />;
 }

@@ -76,14 +76,14 @@ test("a circle shows how many new posts and comments are waiting until you open 
 
     // B sees two new things on the circle in Circle View.
     const pageB = userB.page;
-    await pageB.goto("/");
+    await pageB.goto(`/${COOP_ID}/circles`);
     const tileB = circleTile(pageB, circleName);
     await expect(tileB).toBeVisible({ timeout: 20_000 });
     await expect(tileB).toHaveAccessibleName(`${circleName}, 2 new`);
     await expect(tileB.getByTestId("circle-unread-badge")).toHaveText("2");
 
     // A wrote both, so A has nothing new there.
-    await userA.page.goto("/");
+    await userA.page.goto(`/${COOP_ID}/circles`);
     const tileA = circleTile(userA.page, circleName);
     await expect(tileA).toBeVisible({ timeout: 20_000 });
     await expect(tileA.getByTestId("circle-unread-badge")).toHaveCount(0);
@@ -93,7 +93,7 @@ test("a circle shows how many new posts and comments are waiting until you open 
     await expect(pageB).toHaveURL(new RegExp(`circleId=${groupId}`));
     await expect(pageB.getByText(firstPost).first()).toBeVisible();
 
-    await pageB.goto("/");
+    await pageB.goto(`/${COOP_ID}/circles`);
     await expect(tileB).toBeVisible({ timeout: 20_000 });
     await expect(tileB.getByTestId("circle-unread-badge")).toHaveCount(0);
     await pageB.reload();

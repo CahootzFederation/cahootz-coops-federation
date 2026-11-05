@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { newSignedInPage, USER_A_EMAIL } from './support/auth';
+import { newSignedInPage, USER_A_EMAIL, openCircleHall } from './support/auth';
 
 test('tabs keep the selected Commons through account navigation and reload', async ({ browser }) => {
   const member = await newSignedInPage(browser, USER_A_EMAIL);
@@ -15,6 +15,7 @@ test('tabs keep the selected Commons through account navigation and reload', asy
     await expect(page.getByText('Community board · E2E Shared Private Commons', { exact: true })).toBeVisible();
     await page.getByRole('tab', { name: 'Commons', exact: true }).click();
     await expect(page).toHaveURL(/coopId=e2e-private-shared/);
+    await openCircleHall(page);
     await expect(page.getByText('General', { exact: true }).first()).toBeVisible();
   } finally {
     await member.context.close();

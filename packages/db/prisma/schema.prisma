@@ -112,6 +112,9 @@ model User {
   shippingAddress            UserShippingAddress?
   vendorReferrals            VendorReferral[]
   circleChatPresence         CircleChatPresence[]
+  streetLots                 StreetLot[]
+  streetPresence             StreetPresence[]
+  streetLook                 StreetLook?
   eventsCreated              Event[]                    @relation("EventCreatedBy")
   eventHosting               EventHost[]
   eventRSVPs                 EventRSVP[]
@@ -1881,6 +1884,56 @@ model CircleChatPresence {
 
   @@unique([groupId, userId])
   @@index([groupId, exitedAt, lastActivityAt])
+  @@schema("public")
+}
+
+// Commons Street: each member's lot on their Commons' walkable street.
+// Lot numbers are placed by the app's layout; the server only stores them.
+model StreetLot {
+  id         String   @id @default(cuid())
+  coopId     String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lotNumber  Int
+  houseStyle String   @default("a") // a | b | c
+  wallColor  String   @default("cream") // palette key, see street service
+  roofColor  String   @default("terracotta") // palette key
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([coopId, userId])
+  @@unique([coopId, lotNumber])
+  @@schema("public")
+}
+
+// How a member's person looks on Commons streets (account-wide). Values are
+// palette keys from @repo/validators/street; anything unknown falls back to a default.
+model StreetLook {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skin      String
+  hairStyle String
+  hairColor String
+  shirt     String
+  updatedAt DateTime @updatedAt
+
+  @@schema("public")
+}
+
+// Who is on a Commons' street right now and which tile they stand on.
+// Online = exitedAt null and lastActivityAt within 90s (read-time window).
+model StreetPresence {
+  id             String    @id @default(cuid())
+  coopId         String
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  x              Int
+  y              Int
+  lastActivityAt DateTime  @default(now())
+  exitedAt       DateTime?
+
+  @@unique([coopId, userId])
+  @@index([coopId, exitedAt, lastActivityAt])
   @@schema("public")
 }
 

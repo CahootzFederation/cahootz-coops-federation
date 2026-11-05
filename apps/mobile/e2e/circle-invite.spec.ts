@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { newSignedInPage } from "./support/auth";
+import { newSignedInPage, openCircleHall } from "./support/auth";
 
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 const USER_A_EMAIL =
@@ -86,6 +86,7 @@ test("a circle leader searches for a commons member and invites them, and the in
 
     // User B sees the invitation on their Circles screen and accepts it.
     await userB.page.goto("/");
+    await openCircleHall(userB.page);
     await userB.page.getByLabel("Manage circles").click();
     await expect(userB.page.getByText(circleName).first()).toBeVisible({
       timeout: 20000,

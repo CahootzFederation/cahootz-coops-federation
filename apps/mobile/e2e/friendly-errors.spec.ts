@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
-import { newSignedInPage, USER_A_EMAIL } from "./support/auth";
+import { newSignedInPage, USER_A_EMAIL, openCircleHall } from "./support/auth";
 
 // When a screen fails to load, members (many of them older or new to
 // smartphones) must see a plain sentence and a "Try again" button - never
@@ -84,6 +84,7 @@ test("Circle View says plainly when circles fail to load and recovers with Try a
       }),
     );
     await page.reload();
+    await openCircleHall(page);
 
     await expect(shown(page, "Welcome In", { exact: true })).toBeVisible();
     await expect(

@@ -27,6 +27,44 @@ export function resolveCoopId(): string {
 // API configuration
 export const API_BASE_URL = getApiUrl();
 
+// ── Commons Street (packages/trpc/src/routers/street.ts) ──
+export interface StreetLotData {
+  lotNumber: number;
+  houseStyle: 'a' | 'b' | 'c';
+  wallColor: string;
+  roofColor: string;
+  isYou: boolean;
+  user: { id: string; name: string; handle: string; avatarColor: string | null; look: StreetLookData };
+}
+
+/** Palette keys from @repo/validators/street (STREET_SKIN_TONES etc.). */
+export interface StreetLookData {
+  skin: string;
+  hairStyle: 'short' | 'curly' | 'bun' | 'long' | 'none';
+  hairColor: string;
+  shirt: string;
+}
+
+export interface StreetPersonData {
+  userId: string;
+  name: string;
+  handle: string;
+  avatarColor: string | null;
+  look: StreetLookData;
+  x: number;
+  y: number;
+  isYou: boolean;
+}
+
+export interface StreetData {
+  coopId: string;
+  maxLotNumber: number;
+  yourLotNumber: number;
+  lots: StreetLotData[];
+  online: StreetPersonData[];
+  circleCount: number;
+}
+
 export type HumanAIFeedbackResponse = 'YES' | 'PARTLY' | 'DIFFERENT_TAKE';
 export interface HumanAIFeedback {
   response: HumanAIFeedbackResponse;
@@ -2542,6 +2580,70 @@ export const api = {
       coopId: string;
       accepted: boolean;
     }>(response, 'Could not respond to invitation');
+  },
+
+  async getStreet(coopId: string, sessionToken: string) {
+    const input = encodeURIComponent(JSON.stringify({ coopId }));
+    const response = await fetch(`${API_BASE_URL}/trpc/street.get?input=${input}`, {
+      method: 'GET',
+      headers: createApiHeaders(null, sessionToken),
+    });
+    return readTrpcResult<StreetData>(response, "We couldn't load the street. Try again.");
+  },
+
+  async moveOnStreet(coopId: string, x: number, y: number, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/street.move`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ coopId, x, y }),
+    });
+    return readTrpcResult<{ success: boolean }>(response, "We couldn't save where you are on the street.");
+  },
+
+  async leaveStreet(coopId: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/street.leave`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ coopId }),
+      // Sent as the screen goes away; keep it alive so you don't look
+      // "on the street" for 90 seconds after leaving.
+      keepalive: true,
+    });
+    return readTrpcResult<{ success: boolean }>(response, 'Could not leave the street');
+  },
+
+  async paintHouse(
+    coopId: string,
+    look: { houseStyle?: string; wallColor?: string; roofColor?: string },
+    sessionToken: string,
+  ) {
+    const response = await fetch(`${API_BASE_URL}/trpc/street.paint`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ coopId, ...look }),
+    });
+    return readTrpcResult<{ lotNumber: number; houseStyle: string; wallColor: string; roofColor: string }>(
+      response,
+      "We couldn't save your house colors. Try again.",
+    );
+  },
+
+  async setStreetLook(look: Partial<StreetLookData>, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/street.setLook`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify(look),
+    });
+    return readTrpcResult<StreetLookData>(response, "We couldn't save your look. Try again.");
+  },
+
+  async knockOnDoor(coopId: string, userId: string, sessionToken: string) {
+    const response = await fetch(`${API_BASE_URL}/trpc/street.knock`, {
+      method: 'POST',
+      headers: createApiHeaders(null, sessionToken),
+      body: JSON.stringify({ coopId, userId }),
+    });
+    return readTrpcResult<{ success: boolean }>(response, "We couldn't knock just now. Try again.");
   },
 
   async joinPublicCircle(groupId: string, sessionToken: string) {

@@ -34,16 +34,15 @@ envFiles.forEach((file, index) => {
 
 console.log("\n🔐 Validating required environment variables...");
 
-const requiredVars = [
-  'EXPO_PUBLIC_API_BASE_URL',
-  'EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY',
-];
+const requiredVars = {
+  EXPO_PUBLIC_API_BASE_URL: process.env.EXPO_PUBLIC_API_BASE_URL,
+  EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY,
+};
 
 const missing: string[] = [];
 const loaded: Record<string, string> = {};
 
-requiredVars.forEach((varName) => {
-  const value = process.env[varName];
+Object.entries(requiredVars).forEach(([varName, value]) => {
   if (!value) {
     missing.push(varName);
   } else {

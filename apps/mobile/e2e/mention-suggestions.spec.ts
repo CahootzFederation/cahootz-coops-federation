@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { newSignedInPage, USER_A_EMAIL } from './support/auth';
+import { newSignedInPage, openCircleHall, USER_A_EMAIL } from './support/auth';
 
 async function openGeneralFeed(page: Page, coopId: string, commonsName: string) {
   await page.goto(`/?coopId=${coopId}`);
@@ -9,6 +9,7 @@ async function openGeneralFeed(page: Page, coopId: string, commonsName: string) 
       .getByLabel(`Switch commons. Currently ${commonsName}`, { exact: true })
       .filter({ visible: true }),
   ).toBeVisible();
+  await openCircleHall(page);
   await page.getByText('General', { exact: true }).filter({ visible: true }).click();
   const composer = page.getByRole('textbox', {
     name: "Share what's happening...",

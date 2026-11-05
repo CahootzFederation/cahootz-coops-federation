@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { USER_A_EMAIL } from './support/auth';
+import { USER_A_EMAIL, openCircleHall } from './support/auth';
 
 async function login(page: Page) {
   await page.goto('/?entry=sign-in');
@@ -22,6 +22,7 @@ test('circle design preserves management, switching, search and wrapping names',
     id = created.result?.data?.group?.id;
     expect(id).toBeTruthy();
     await page.reload();
+    await openCircleHall(page);
     await expect(page.getByText('Your circles', { exact: true })).toBeVisible();
     await page.getByRole('textbox', { name: 'Find a circle' }).fill(name);
     const card = page.getByRole('button').filter({ hasText: name });

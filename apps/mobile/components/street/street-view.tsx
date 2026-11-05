@@ -800,7 +800,7 @@ function BoardSheet({ coopId, commonsName, posts }: { coopId: string; commonsNam
       {posts === null ? (
         <ActivityIndicator color={THEME.primary} />
       ) : recent.length === 0 ? (
-        <Text className="text-sm text-gray-500">Nothing's pinned up yet. Be the first to post something.</Text>
+        <Text className="text-sm text-gray-500">Nothing&apos;s pinned up yet. Be the first to post something.</Text>
       ) : (
         <View>
           {recent.map((post) => (

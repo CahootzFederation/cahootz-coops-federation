@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname */
 /**
  * Renders the Commons Street road pieces, trees and street details from KayKit
  * City Builder Bits (CC0, Kay Lousberg, art-source/kaykit) at the exact angle
@@ -12,6 +13,7 @@
  */
 const fs = require('node:fs');
 const path = require('node:path');
+const { Buffer } = require('node:buffer');
 const { chromium } = require('@playwright/test');
 
 const ROOT = path.join(__dirname, '..');

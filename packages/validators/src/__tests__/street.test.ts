@@ -13,7 +13,12 @@ import {
   STREET_WALL_KEYS,
 } from "../street.js";
 
-type Box = { i: number; j: number; w: number; d: number };
+interface Box {
+  i: number;
+  j: number;
+  w: number;
+  d: number;
+}
 const overlaps = (a: Box, b: Box) => a.i < b.i + b.w && b.i < a.i + a.w && a.j < b.j + b.d && b.j < a.j + a.d;
 
 describe("street layout", () => {

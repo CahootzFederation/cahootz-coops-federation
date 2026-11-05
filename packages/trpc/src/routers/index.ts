@@ -38,6 +38,7 @@ import { commonsRouter } from "./commons.js";
 import { eventsRouter } from "./events.js";
 import { commonsInvitationsRouter } from "./commons-invitations.js";
 import { groupsRouter } from "./groups.js";
+import { streetRouter } from "./street.js";
 import { welcomeTablesRouter } from "./welcome-tables.js";
 import { knowledgeBaseRouter } from "./knowledge-base.js";
 import { commonsActionsRouter } from "./commons-actions.js";
@@ -89,6 +90,7 @@ export const appRouter = router({
   events: eventsRouter,
   commonsInvitations: commonsInvitationsRouter,
   groups: groupsRouter,
+  street: streetRouter,
   welcomeTables: welcomeTablesRouter,
   knowledgeBase: knowledgeBaseRouter,
   commonsActions: commonsActionsRouter,

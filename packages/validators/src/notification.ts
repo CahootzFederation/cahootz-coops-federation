@@ -51,6 +51,7 @@ export const notificationCategoryTypes: Record<
     "COMMONS_MEMBER_JOINED",
     "CIRCLE_MEMBER_JOINED",
     "DIRECT_MESSAGE",
+    "STREET_KNOCK",
   ],
   sage: [
     "SAGE_COMMENT",

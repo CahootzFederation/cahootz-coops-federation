@@ -25,6 +25,7 @@ import { DESIGN } from '@/constants/design';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type StreetData, type StreetLotData } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
+import { CircleHallSheet } from './circle-hall-sheet';
 import { iso } from './street-art';
 import { BUILDING_NAMES, hitTest, StreetScene, type ScenePerson, type StreetPlace } from './street-scene';
 
@@ -425,7 +426,11 @@ export default function StreetView({ coopId }: { coopId: string }) {
               ) : null}
             </View>
             <ScrollView
-              style={{ maxHeight: listOpen ? '62%' : '44%', borderTopWidth: 1, borderColor: THEME.border }}
+              style={{
+                maxHeight: listOpen || (selected?.kind === 'building' && selected.id === 'circle-hall') ? '62%' : '44%',
+                borderTopWidth: 1,
+                borderColor: THEME.border,
+              }}
               contentContainerStyle={{ padding: 16, gap: 12 }}
               keyboardShouldPersistTaps="handled"
             >
@@ -578,17 +583,7 @@ function PlaceSheet({
   }
 
   if (selected.kind === 'building') {
-    if (selected.id === 'circle-hall') {
-      return (
-        <>
-          <Heading title="Circle Hall" sub={`${street.circleCount} ${street.circleCount === 1 ? 'circle meets' : 'circles meet'} here`} />
-          <Text className="text-[15px] text-gray-600">Every circle in {commonsName} meets here. Go in to chat with yours or join a new one.</Text>
-          <View className="flex-row flex-wrap gap-2">
-            <Button label="Go inside" a11y="Go inside Circle Hall" onPress={() => openBuilding('circle-hall', coopId)} />
-          </View>
-        </>
-      );
-    }
+    if (selected.id === 'circle-hall') return <CircleHallSheet coopId={coopId} commonsName={commonsName} />;
     const copy = BUILDING_COPY[selected.id];
     return (
       <>

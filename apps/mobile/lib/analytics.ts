@@ -47,7 +47,7 @@ export type AnalyticsEvents = {
     signed_in: boolean;
   };
   welcome_lounge_joined: {
-    source: 'onboarding' | 'circle_view';
+    source: 'onboarding' | 'circle_view' | 'circle_hall';
     /** True when the join was queued while signed out and completed after signup. */
     auto_joined?: boolean;
   };

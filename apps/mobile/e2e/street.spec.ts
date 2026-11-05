@@ -44,12 +44,25 @@ test("a member lands on the street and paints their house, and it stays after a 
   }
 });
 
-test("Circle Hall on the street opens every circle", async ({ browser }) => {
+test("Circle Hall on the street lists every circle, opens one, and leads inside", async ({ browser }) => {
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
   try {
     await page.goto("/?coopId=cahootz");
     await openStreetPlace(page, "Visit Circle Hall");
     await expect(page.getByRole("heading", { name: "Circle Hall" })).toBeVisible();
+    await expect(page.getByText(/circles? meets? here · You're in \d+/)).toBeVisible();
+    await expect(page.getByText("Your circles", { exact: true }).filter({ visible: true })).toBeVisible();
+
+    // Search narrows the list, and a search with no match says so.
+    await page.getByRole("textbox", { name: "Find a circle" }).fill("no-circle-matches-this");
+    await expect(page.getByText("No circles match your search.")).toBeVisible();
+    await page.getByRole("textbox", { name: "Find a circle" }).fill("Gen");
+    await page.getByLabel("Open General", { exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "Share what's happening..." })).toBeVisible();
+
+    // The full circles screen is still one tap away.
+    await page.goto("/?coopId=cahootz");
+    await openStreetPlace(page, "Visit Circle Hall");
     await page.getByLabel("Go inside Circle Hall").click();
     await expect(page.getByText("Welcome In")).toBeVisible();
     await expect(page.getByText("General", { exact: true })).toBeVisible();

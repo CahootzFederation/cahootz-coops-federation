@@ -70,6 +70,11 @@ const config = {
     return config;
   },
 
+  /** The old group-buy homepage was merged into "/" on 2026-11-06. */
+  async redirects() {
+    return [{ source: "/landing", destination: "/", permanent: true }];
+  },
+
   /** Add rewrites for PostHog ingestion endpoints */
   async rewrites() {
     return [

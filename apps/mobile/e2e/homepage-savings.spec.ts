@@ -11,7 +11,7 @@ async function expectProductVisual(card: Locator) {
   await expect(content).toBeVisible();
 }
 
-test("group-buy homepage variant recalculates the member, Commons, and Cahootz amounts", async ({
+test("homepage savings math recalculates the member, Commons, and Cahootz amounts", async ({
   page,
 }) => {
   test.skip(
@@ -20,65 +20,13 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
   );
   if (!MARKETING_BASE_URL) return;
 
-  await page.goto(
-    new URL("/?homepage=group-buy", MARKETING_BASE_URL).toString(),
-  );
+  await page.goto(new URL("/", MARKETING_BASE_URL).toString());
 
-  expect(new URL(page.url()).pathname).toBe("/");
-
-  await expect(page.locator(".landing.group-buy-homepage")).toBeVisible();
-  await expect(page.locator("header.landing-header")).toBeVisible();
-  await expect(
-    page.locator("header.landing-header").getByRole("link", {
-      name: "Cahootz home",
-    }),
-  ).toBeVisible();
-  const navigation = page.locator("nav.header-nav");
-  await expect(navigation.locator('a[href="#how-it-works"]')).toHaveText(
-    "How it works",
-  );
-  await expect(navigation.locator('a[href="#find-a-commons"]')).toHaveText(
-    "Find a commons",
-  );
-  await expect(navigation.locator('a[href="/blog"]')).toHaveText("Journal");
-  await expect(
-    page.locator("header.landing-header").getByRole("link", {
-      name: "Join the waitlist",
-    }),
-  ).toBeVisible();
-
-  await expect(
-    page.getByRole("heading", {
-      name: /A community is more powerful when it can move together/,
-    }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", {
-      name: "Belong somewhere. Do something together.",
-    }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", {
-      name: "A home for the conversation and the work.",
-    }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", {
-      name: "Make everyday spending useful to your commons.",
-    }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Unlock a better price together." }),
-  ).toBeVisible();
-  await expect(
-    page.locator(".hero").getByRole("link", { name: "Join the waitlist" }),
-  ).toHaveAttribute("href", "#join");
-  await expect(
-    page.locator(".hero").getByRole("link", { name: "Get the app" }),
-  ).toHaveAttribute(
-    "href",
-    "https://apps.apple.com/us/app/cahootz-commons/id6772781102",
-  );
+  // The savings math is folded under the group deals row until someone asks for it.
+  const dealMath = page.locator("#deal-math");
+  await expect(dealMath).not.toHaveAttribute("open", "");
+  await dealMath.getByText("See the savings math on real products").click();
+  await expect(dealMath).toHaveAttribute("open", "");
 
   const calculator = page.getByRole("region", {
     name: "Commons shared-price calculator",
@@ -225,7 +173,7 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
   await expect(sharedPurchaseCalculator).toBeVisible();
   await expect(
     page
-      .locator("#planet-buy")
+      .locator("#deal-math")
       .getByRole("region", { name: "See what everyday spending can build." }),
   ).toBeVisible();
   await expect(sharedPurchaseCalculator.locator("input")).toHaveCount(1);
@@ -304,26 +252,10 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
   }
 
   await page.reload();
+  await page.locator("#deal-math").getByText("See the savings math on real products").click();
   await expect(
     page.getByRole("region", { name: "Commons shared-price calculator" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Choose what your commons supports." }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Find a commons to join." }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Business Partnership Interest" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "Read the journal" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", {
-      name: "Help choose the first real group buy.",
-    }),
-  ).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText(/group buy/i);
 
   for (const width of [320, 375, 414, 768]) {
@@ -345,71 +277,4 @@ test("group-buy homepage variant recalculates the member, Commons, and Cahootz a
         .toBe(true);
     }
   }
-});
-
-test("community homepage variant remains available as the experiment control", async ({
-  page,
-}) => {
-  test.skip(
-    !MARKETING_BASE_URL,
-    "Set E2E_MARKETING_BASE_URL to the running apps/web origin.",
-  );
-  if (!MARKETING_BASE_URL) return;
-
-  await page.goto(
-    new URL("/?homepage=community", MARKETING_BASE_URL).toString(),
-  );
-
-  await expect(
-    page.getByRole("heading", {
-      name: /A community is more powerful when it can move together/,
-    }),
-  ).toBeVisible();
-  await expect(page.locator(".landing:not(.group-buy-homepage)")).toBeVisible();
-  await expect(page.locator("header.landing-header")).toBeVisible();
-  await expect(
-    page.locator("header.landing-header").getByRole("link", {
-      name: "Cahootz home",
-    }),
-  ).toBeVisible();
-  // The community page points people to the waitlist, not the App Store.
-  await expect(
-    page.locator("header.landing-header").getByRole("link", { name: "Join the waitlist" }),
-  ).toHaveAttribute("href", "#join");
-  await expect(page.locator('a[href*="apps.apple.com"]')).toHaveCount(0);
-
-  await page.goto(new URL("/", MARKETING_BASE_URL).toString());
-  await expect(
-    page.getByRole("heading", {
-      name: /A community is more powerful when it can move together/,
-    }),
-  ).toBeVisible();
-
-  await page.goto(new URL("/?homepage=auto", MARKETING_BASE_URL).toString());
-  const cookies = await page.context().cookies();
-  expect(
-    cookies.some(
-      (cookie) => cookie.name === "cahootz_homepage_experiment_preview",
-    ),
-  ).toBe(false);
-});
-
-
-test("homepage defaults to group-buy without PostHog and preserves community preview", async ({ page }) => {
-  test.skip(!MARKETING_BASE_URL || process.env.E2E_MARKETING_NO_POSTHOG !== "1",
-    "Start apps/web with NEXT_PUBLIC_POSTHOG_KEY empty and set E2E_MARKETING_NO_POSTHOG=1.");
-  if (!MARKETING_BASE_URL) return;
-  await page.goto(new URL("/", MARKETING_BASE_URL).toString());
-  await expect(page.locator(".landing.group-buy-homepage")).toBeVisible();
-  await page.reload();
-  await expect(page.locator(".landing.group-buy-homepage")).toBeVisible();
-  await page.goto(new URL("/?homepage=community", MARKETING_BASE_URL).toString());
-  await expect(page.locator(".landing")).toBeVisible();
-  await expect(page.locator(".group-buy-homepage")).toHaveCount(0);
-  await page.getByRole("link", { name: "Cahootz home", exact: true }).click();
-  await expect(page.locator(".group-buy-homepage")).toHaveCount(0);
-  await page.goto(new URL("/?homepage=auto", MARKETING_BASE_URL).toString());
-  await expect(page.locator(".landing.group-buy-homepage")).toBeVisible();
-  await page.reload();
-  await expect(page.locator(".landing.group-buy-homepage")).toBeVisible();
 });

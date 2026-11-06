@@ -46,6 +46,7 @@ test('homepage leads with the app and folds the business and savings details', a
   await savings.locator('summary').click();
   await expect(savings).not.toHaveAttribute('open', '');
   await expect(page.locator('.sticky-app-bar')).toHaveCount(0);
+  await expect(page.locator('footer').getByRole('link', { name: 'Blog' })).toHaveAttribute('href', '/blog');
 });
 
 test('old homepage links land on the one homepage', async ({ page }) => {

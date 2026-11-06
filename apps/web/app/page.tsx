@@ -274,7 +274,7 @@ export default async function HomePage() {
             <a href="#what-you-can-do">What you can do</a>
             <a href="#get-in">How to get in</a>
             <a href="#questions">Questions</a>
-            <Link href="/blog">Journal</Link>
+            <Link href="/blog">Blog</Link>
           </nav>
           <a className="header-action" href="#join">
             Join the waitlist <ArrowRight size={16} />
@@ -555,7 +555,7 @@ export default async function HomePage() {
             <p>A place for communities to move together.</p>
           </div>
           <div className="footer-links">
-            <Link href="/blog">Journal</Link>
+            <Link href="/blog">Blog</Link>
             <Link href="/contact">Contact</Link>
             <Link href="/terms">Terms</Link>
             <Link href="/privacy">Privacy</Link>

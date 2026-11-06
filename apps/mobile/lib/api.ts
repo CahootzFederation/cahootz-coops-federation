@@ -13,7 +13,14 @@ import { getApiUrl, getWebUrl, networkConfig } from './config';
 import { ApiError, apiError, httpError } from './friendly-error';
 import { coopConfig } from './coop-config';
 import { reportReachable, reportUnreachable } from './connectivity';
-import { offlineCacheKey, readOfflineResponse, saveOfflineResponse } from './offline-cache';
+import {
+  forgetOfflineResponse,
+  isSavedRead,
+  offlineCacheGeneration,
+  offlineCacheKey,
+  readOfflineResponse,
+  saveOfflineResponse,
+} from './offline-cache';
 
 /**
  * Resolve the coopId to use for public marketplace queries.
@@ -134,15 +141,20 @@ async function checkForSessionExpiry(response: Response) {
 /**
  * Offline support, in the same wrapper.
  *
- * Reads (GET) from our API are saved on the phone when they succeed. When a
- * read can't reach the API (no connection, or no answer within
- * READ_TIMEOUT_MS), the last saved answer for that account is returned
- * instead, marked with SAVED_RESPONSE_HEADER, and lib/connectivity.ts shows
- * the offline banner. Anything that sends or changes data is never saved or
- * replayed: it fails as before and the screen says it couldn't connect.
+ * Every read (GET) from our API gives up after READ_TIMEOUT_MS. Reads on the
+ * saved list (SAVED_READS in lib/offline-cache.ts: community screens, never
+ * money, messages, Sage or account details) are saved on the phone when they
+ * succeed. When one of those can't reach the API, the last saved answer for
+ * that account and Commons is returned instead, marked with
+ * SAVED_RESPONSE_HEADER, and lib/connectivity.ts shows the offline banner.
+ * When the server says a saved read isn't yours anymore (401, 403 or 404),
+ * the saved copy is forgotten. Anything that sends or changes data is never
+ * saved or replayed: it fails as before and the screen says it couldn't
+ * connect.
  */
 export const READ_TIMEOUT_MS = 15_000;
 export const SAVED_RESPONSE_HEADER = 'x-cahootz-saved';
+const REVOKED_STATUSES = new Set([401, 403, 404]);
 
 function headerValue(headers: HeadersInit | undefined, name: string) {
   if (!headers) return '';
@@ -153,19 +165,12 @@ function headerValue(headers: HeadersInit | undefined, name: string) {
   return key ? record[key] : '';
 }
 
-/**
- * Reads that only make sense live. The street shows who's out right now and
- * says "You're offline" itself when it can't refresh, so an old copy would
- * show neighbors who left long ago and hide that note.
- */
-const LIVE_ONLY_READS = ['street.get'];
-
-function isSavableRead(url: string, init: RequestInit | undefined) {
+/** The tRPC procedure a read is for, or null when it isn't a tRPC read. */
+function readProcedure(url: string, init: RequestInit | undefined) {
   const method = (init?.method ?? 'GET').toUpperCase();
   const prefix = `${API_BASE_URL}/trpc/`;
-  if (method !== 'GET' || !url.startsWith(prefix)) return false;
-  const procedure = url.slice(prefix.length).split(/[?/]/)[0];
-  return !LIVE_ONLY_READS.includes(procedure);
+  if (method !== 'GET' || !url.startsWith(prefix)) return null;
+  return url.slice(prefix.length).split(/[?/]/)[0];
 }
 
 /** Who a read belongs to, so saved answers never cross accounts. */
@@ -192,11 +197,16 @@ function installSessionExpiryInterceptor() {
   globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = typeof input === 'string' ? input : (input as Request).url;
     const ours = url.startsWith(API_BASE_URL);
-    const savable = isSavableRead(url, init);
-    const cacheKey = savable ? offlineCacheKey(url, readIdentity(init)) : '';
+    const procedure = readProcedure(url, init);
+    const savable = procedure !== null && isSavedRead(procedure);
+    const cacheKey = savable
+      ? offlineCacheKey(url, readIdentity(init), headerValue(init?.headers, 'x-coop-id'))
+      : '';
+    // A read that finishes after sign-out must not be saved.
+    const generation = offlineCacheGeneration();
 
     let response: Response;
-    const timed = savable ? withTimeout(init, READ_TIMEOUT_MS) : null;
+    const timed = procedure !== null ? withTimeout(init, READ_TIMEOUT_MS) : null;
     try {
       response = await baseFetch(input, timed ? timed.init : init);
     } catch (error) {
@@ -221,8 +231,10 @@ function installSessionExpiryInterceptor() {
       void response
         .clone()
         .text()
-        .then((body) => saveOfflineResponse(cacheKey, body))
+        .then((body) => saveOfflineResponse(cacheKey, body, generation))
         .catch(() => {});
+    } else if (savable && REVOKED_STATUSES.has(response.status)) {
+      void forgetOfflineResponse(cacheKey);
     }
 
     return response;

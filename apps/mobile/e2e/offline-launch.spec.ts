@@ -67,13 +67,15 @@ test("a member who opens the app offline with nothing saved stays signed in and 
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
 
   try {
-    // Forget the saved reads, but keep the signed-in session.
-    await page.evaluate(() => {
+    // Forget the saved reads, but keep the signed-in session. This runs as the
+    // page starts, before the app loads, so a save that was still finishing
+    // from the online visit can't sneak back in before the reload.
+    await goOffline(page);
+    await page.addInitScript(() => {
       for (const key of Object.keys(localStorage)) {
         if (key.startsWith("cahootz.offline.")) localStorage.removeItem(key);
       }
     });
-    await goOffline(page);
     await page.reload();
 
     await expect(shown(page, OFFLINE_NOTHING_SAVED)).toBeVisible();

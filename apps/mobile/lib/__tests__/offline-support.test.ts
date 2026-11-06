@@ -9,6 +9,8 @@ const network = jest.fn<typeof fetch>();
 globalThis.fetch = network as unknown as typeof fetch;
 
 /* eslint-disable @typescript-eslint/no-require-imports -- load after the fake network is in place */
+const storageModule = require("@react-native-async-storage/async-storage");
+const AsyncStorage = (storageModule.default ?? storageModule) as typeof import("@react-native-async-storage/async-storage").default;
 const { API_BASE_URL, READ_TIMEOUT_MS, SAVED_RESPONSE_HEADER, createApiHeaders } = require("../api") as typeof import("../api");
 const connectivity = require("../connectivity") as typeof import("../connectivity");
 const offlineCache = require("../offline-cache") as typeof import("../offline-cache");
@@ -26,8 +28,9 @@ function offline() {
 }
 
 /** Lets the wrapper's background save finish. */
-function flushSave() {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+async function flushSave() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await offlineCache.offlineCacheIdle();
 }
 
 beforeAll(() => {
@@ -108,14 +111,92 @@ describe("reads while offline", () => {
     await expect(read()).rejects.toThrow("Network request failed");
   });
 
-  it("never saves the live street, so it can say it's offline itself", async () => {
-    const streetUrl = `${API_BASE_URL}/trpc/street.get?input=%7B%7D`;
-    await read("token-a", streetUrl);
+  it("only saves reads on the saved list: never money, messages or the live street", async () => {
+    const neverSaved = ["user.getBalances", "commerce.listTransactions", "groups.listDirectMessages", "sage.list", "user.getMe", "street.get"];
+    for (const procedure of neverSaved) {
+      await read("token-a", `${API_BASE_URL}/trpc/${procedure}?input=%7B%7D`);
+    }
+    await flushSave();
+    expect((await AsyncStorage.getAllKeys()).filter((key) => key.startsWith("cahootz.offline."))).toEqual([]);
+
+    offline();
+    for (const procedure of neverSaved) {
+      await expect(read("token-a", `${API_BASE_URL}/trpc/${procedure}?input=%7B%7D`)).rejects.toThrow("Network request failed");
+    }
+    expect(connectivity.getConnectivity()).toEqual({ online: false, showingSaved: false });
+  });
+
+  it("keeps each Commons' saved answers apart, even for the same address", async () => {
+    const inCommons = (coopId: string) =>
+      fetch(READ_URL, { headers: { ...(createApiHeaders(null, "token-a") as Record<string, string>), "x-coop-id": coopId } });
+    await inCommons("commons-a");
     await flushSave();
 
     offline();
-    await expect(read("token-a", streetUrl)).rejects.toThrow("Network request failed");
-    expect(connectivity.getConnectivity()).toEqual({ online: false, showingSaved: false });
+    expect(await (await inCommons("commons-a")).text()).toBe(BODY);
+    await expect(inCommons("commons-b")).rejects.toThrow("Network request failed");
+  });
+
+  it("names saved entries with a full SHA-256, never the session token", () => {
+    const key = offlineCache.offlineCacheKey(READ_URL, "secret-token|0xabc", "commons-a");
+    expect(key).toMatch(/^cahootz\.offline\.[0-9a-f]{64}$/);
+    expect(key).not.toContain("secret-token");
+    expect(offlineCache.offlineCacheKey(READ_URL, "secret-token|0xabc", "commons-b")).not.toBe(key);
+  });
+
+  it("stops showing saved answers once they're a week old", async () => {
+    await read();
+    await flushSave();
+    const key = offlineCache.offlineCacheKey(READ_URL, "token-a|");
+    expect(await offlineCache.readOfflineResponse(key)).toBe(BODY);
+    expect(await offlineCache.readOfflineResponse(key, Date.now() + offlineCache.MAX_AGE_MS + 1)).toBeNull();
+  });
+
+  it("forgets a saved answer when the server says it isn't yours anymore", async () => {
+    await read();
+    await flushSave();
+
+    network.mockResolvedValueOnce(new Response("{}", { status: 403 }));
+    await read();
+    await flushSave();
+
+    offline();
+    await expect(read()).rejects.toThrow("Network request failed");
+  });
+});
+
+describe("signing out", () => {
+  it("drops a save that was still on its way when sign-out started", async () => {
+    let answer: (response: Response) => void = () => {};
+    network.mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
+    const pending = read();
+
+    // Sign out while the read is still waiting on the server.
+    const cleared = offlineCache.clearOfflineCache();
+    answer(new Response(BODY, { status: 200 }));
+    await pending;
+    await cleared;
+    await flushSave();
+
+    expect((await AsyncStorage.getAllKeys()).filter((key) => key.startsWith("cahootz.offline."))).toEqual([]);
+  });
+
+  it("drops saves already queued when sign-out starts", async () => {
+    const key = offlineCache.offlineCacheKey(READ_URL, "token-a|");
+    const saving = offlineCache.saveOfflineResponse(key, BODY);
+    const cleared = offlineCache.clearOfflineCache();
+    await Promise.all([saving, cleared]);
+
+    expect(await offlineCache.readOfflineResponse(key)).toBeNull();
+  });
+
+  it("removes saved entries even when the index lost track of them", async () => {
+    await AsyncStorage.setItem("cahootz.offline.orphan", "{}");
+    await AsyncStorage.setItem("someone.else", "keep");
+    await offlineCache.clearOfflineCache();
+
+    expect(await AsyncStorage.getItem("cahootz.offline.orphan")).toBeNull();
+    expect(await AsyncStorage.getItem("someone.else")).toBe("keep");
   });
 });
 

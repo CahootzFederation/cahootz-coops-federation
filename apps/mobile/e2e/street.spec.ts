@@ -256,6 +256,78 @@ test("Circle Hall on the street lists every circle, opens one, and leads inside"
   }
 });
 
+test("with the street on, going into a circle and back home always returns to the street, and turning it off returns to circles", async ({ browser }) => {
+  const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
+  const street = page.getByLabel(/^Map of the street/);
+  const composer = page.getByRole("textbox", { name: "Share what's happening..." });
+  const circles = page.getByText("Welcome In", { exact: true }).filter({ visible: true });
+  try {
+    await page.goto("/?coopId=cahootz");
+    await expect(street).toBeVisible();
+    const switcherLabel = await page.getByLabel(/^Switch commons\. Currently /).first().getAttribute("aria-label");
+    const commonsName = switcherLabel!.replace("Switch commons. Currently ", "");
+
+    // Street -> Circle Hall -> General. Tapping the selected Commons tab keeps
+    // the circle open, and so does a reload.
+    await openStreetPlace(page, "Visit Circle Hall");
+    await page.getByLabel("Open General", { exact: true }).click();
+    await expect(composer).toBeVisible();
+    const circleUrl = page.url();
+    await page.getByLabel("Commons", { exact: true }).click();
+    await expect(page).toHaveURL(circleUrl);
+    await expect(composer).toBeVisible();
+    await page.reload();
+    await expect(composer).toBeVisible();
+
+    // The circle's drawer Home goes back to the street, not the circles screen.
+    await page.getByLabel("Open menu").filter({ visible: true }).click();
+    await page.getByLabel(`Go home to ${commonsName} circles`).filter({ visible: true }).click();
+    await expect(street).toBeVisible();
+    await expect(composer).toHaveCount(0);
+
+    // Board and back to Commons lands on the street.
+    await page.getByRole("tab", { name: "Board" }).click();
+    await expect(page.getByRole("tab", { name: "Board" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText("Find your way around", { exact: true })).toBeVisible();
+    await page.getByRole("tab", { name: "Commons" }).click();
+    await expect(street).toBeVisible();
+
+    // Inside the Circle Hall, open a circle, then the drawer's Commons row
+    // goes to the street too. Only one tab bar is ever on screen.
+    await openStreetPlace(page, "Visit Circle Hall");
+    await page.getByLabel("Go inside Circle Hall").click();
+    await expect(circles).toBeVisible();
+    await page.getByText("General", { exact: true }).filter({ visible: true }).click();
+    await expect(composer).toBeVisible();
+    await page.getByLabel("Open menu").filter({ visible: true }).click();
+    await page.getByLabel(`View ${commonsName} circles`).click();
+    await expect(street).toBeVisible();
+    await expect(page.getByLabel("Commons", { exact: true })).toHaveCount(1);
+
+    // Turning the street off from inside a circle: the next trip home shows circles.
+    await openStreetPlace(page, "Visit Circle Hall");
+    await page.getByLabel("Open General", { exact: true }).click();
+    await expect(composer).toBeVisible();
+    await page.getByRole("tab", { name: "You" }).click();
+    const streetSwitch = page.getByRole("switch", { name: "Commons street" });
+    await expect(streetSwitch).toHaveAttribute("aria-checked", "true");
+    await streetSwitch.click();
+    await expect(streetSwitch).toHaveAttribute("aria-checked", "false");
+    await page.getByRole("tab", { name: "Commons" }).click();
+    await expect(street).toHaveCount(0);
+    if (await composer.isVisible().catch(() => false)) {
+      await page.getByLabel("Open menu").filter({ visible: true }).click();
+      await page.getByLabel(`Go home to ${commonsName} circles`).filter({ visible: true }).click();
+    }
+    await expect(circles).toBeVisible();
+    await expect(street).toHaveCount(0);
+    await expect(page.getByLabel("Back to the street")).toHaveCount(0);
+  } finally {
+    await page.evaluate((key) => window.localStorage.removeItem(key), STREET_VIEW_KEY).catch(() => undefined);
+    await context.close();
+  }
+});
+
 test("two neighbors see each other out on the street, and a knock reaches the other", async ({ browser }) => {
   const a = await newSignedInPage(browser, USER_A_EMAIL);
   const b = await newSignedInPage(browser, USER_B_EMAIL);

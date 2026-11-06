@@ -41,8 +41,12 @@ test("two members exchange direct messages in a private two-person circle", { ta
   const firstMessage = `E2E DM hello ${runId}`;
   const reply = `E2E DM reply ${runId}`;
 
-  const userA = await newSignedInPage(browser, USER_A_EMAIL);
-  const userB = await newSignedInPage(browser, USER_B_EMAIL);
+  // Both people open the app at once: each fresh page load is slow on CI, and
+  // doing them one after the other used most of the test's time budget.
+  const [userA, userB] = await Promise.all([
+    newSignedInPage(browser, USER_A_EMAIL),
+    newSignedInPage(browser, USER_B_EMAIL),
+  ]);
   let groupId: string | undefined;
 
   try {
@@ -105,8 +109,11 @@ test("two members exchange direct messages in a private two-person circle", { ta
     )?.groupId;
     expect(groupId).toBeTruthy();
 
-    // A DM is a circle, but never listed as one.
-    await userA.page.goto("/");
+    // A DM is a circle, but never listed as one. A goes back through the tab
+    // bar rather than reloading the whole app. The conversation counts as part
+    // of the Commons tab, which ignores a second tap, so A hops via Board.
+    await userA.page.getByRole("tab", { name: "Board" }).click();
+    await userA.page.getByRole("tab", { name: "Commons" }).click();
     await openCircleHall(userA.page);
     await expect(userA.page.getByText("General", { exact: true })).toBeVisible();
     await expect(userA.page.getByText("Direct message", { exact: true })).toHaveCount(0);

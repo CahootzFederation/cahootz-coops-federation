@@ -38,8 +38,12 @@ test("a circle leader searches for a commons member and invites them, and the in
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const circleName = `E2E Invite Circle ${runId}`;
 
-  const userA = await newSignedInPage(browser, USER_A_EMAIL);
-  const userB = await newSignedInPage(browser, USER_B_EMAIL);
+  // Both people open the app at once: each fresh page load is slow on CI, and
+  // doing them one after the other used most of the test's time budget.
+  const [userA, userB] = await Promise.all([
+    newSignedInPage(browser, USER_A_EMAIL),
+    newSignedInPage(browser, USER_B_EMAIL),
+  ]);
   let groupId: string | undefined;
 
   try {
@@ -84,8 +88,8 @@ test("a circle leader searches for a commons member and invites them, and the in
       userA.page.getByText("Pending invitations (1)"),
     ).toBeVisible({ timeout: 20000 });
 
-    // User B sees the invitation on their Circles screen and accepts it.
-    await userB.page.goto("/");
+    // User B, still on the home screen from signing in, sees the invitation
+    // on their Circles screen and accepts it.
     await openCircleHall(userB.page);
     await userB.page.getByLabel("Manage circles").click();
     await expect(userB.page.getByText(circleName).first()).toBeVisible({

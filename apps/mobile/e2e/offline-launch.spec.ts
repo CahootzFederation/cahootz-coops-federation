@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { newSignedInPage, USER_A_EMAIL } from "./support/auth";
+import { newSignedInPage, openCircleHall, USER_A_EMAIL } from "./support/auth";
 
 // Opening the app with no connection used to drop the saved session (the
 // onboarding refresh failed before the session was restored), so a signed-in
@@ -10,8 +10,9 @@ import { newSignedInPage, USER_A_EMAIL } from "./support/auth";
 // Now reads are saved on the phone (lib/offline-cache.ts), so an offline
 // launch shows the member's last-loaded screens under an offline banner, and
 // the app catches up on its own once the connection is back. These journeys
-// cut the API off, reopen the app, and check both cases: with saved data,
-// and with nothing saved yet.
+// cut the API off, reopen the app, and check both cases: with saved data
+// (the Circle Hall), and with nothing saved yet (the street, which is never
+// saved because it shows who's out right now).
 
 function shown(page: Page, text: string | RegExp, options?: { exact?: boolean }) {
   return page.getByText(text, options).filter({ visible: true });
@@ -37,7 +38,8 @@ test("a member who opens the app offline sees their saved circles, then catches 
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
 
   try {
-    // newSignedInPage loaded Circle View online, which saved it on the phone.
+    // Opening the Circle Hall online saves its circles on the phone.
+    await openCircleHall(page);
     await expect(shown(page, "General", { exact: true })).toBeVisible();
 
     await goOffline(page);
@@ -84,6 +86,8 @@ test("a member who opens the app offline with nothing saved stays signed in and 
     await page.unroute(apiCall);
     await page.goto("/");
     await expect(page.getByLabel("Open menu")).toBeVisible();
+    await expect(shown(page, /^Welcome to /)).toBeVisible();
+    await openCircleHall(page);
     await expect(shown(page, "General", { exact: true })).toBeVisible();
     await expect(shown(page, "Log in to join your commons")).toHaveCount(0);
     await expect(shown(page, OFFLINE_NOTHING_SAVED)).toHaveCount(0);

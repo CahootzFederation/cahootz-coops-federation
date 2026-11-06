@@ -111,7 +111,7 @@ async function getHomepagePricing(): Promise<OfferPricingSettings> {
 }
 
 const DESCRIPTION =
-  "Cahootz Commons is the iPhone app for the people you belong to. Walk your commons street, buy together for better prices, and let Sage introduce you to the neighbor who can help.";
+  "Cahootz turns your neighborhood, family, church, or club into a street you can walk. Help each other out, buy together for better prices, keep your money close to home, and decide together what comes next.";
 
 export const metadata: Metadata = {
   title: "Cahootz | Your people, on one street",
@@ -139,10 +139,10 @@ const features = [
     id: "group-deals",
     label: "Group deals",
     title: "Buy together. Pay less.",
-    body: "Your commons picks something lots of people already buy, like coffee or diapers. When enough neighbors join, everyone gets the lower price.",
+    body: "Sage notices what lots of your neighbors already buy, like coffee or diapers, and finds a seller who'll give you a better price. When enough people join, everyone saves, and a share goes back to your commons.",
     points: [
-      "You see the price, what you save, and what goes to your commons before you join.",
-      "Your card is saved when you join and only charged if the deal hits its goal.",
+      "You see the price, what you save, and what your commons gets before you join.",
+      "You're only charged if the deal hits its goal.",
     ],
     screen: {
       src: "/app-screens/group-deal.webp",
@@ -153,10 +153,10 @@ const features = [
     id: "sage",
     label: "Sage, your community guide",
     title: "Ask once. Sage finds who can help.",
-    body: "Text Sage like you'd text a friend. Need a tutor, a ride, or a hand moving? Sage knows who in your commons can help, and makes the intro.",
+    body: "Need a ride, a tutor, or a hand moving? Good at something your neighbors need? Tell Sage. It matches people who can help each other, makes the intro, and thanks the helpers by name.",
     points: [
-      "Good at something? Tell Sage, and the people who need it will find you.",
-      "Sage connects people. Your commons still makes the big calls.",
+      "Sage turns your commons' goals into ideas and puts them up for a vote.",
+      "Sage connects people. Your commons makes the calls.",
     ],
     screen: {
       src: "/app-screens/sage-chat.webp",
@@ -168,11 +168,23 @@ const features = [
 const extras = [
   {
     title: "Your street",
-    body: "Pick your look, see who's out, and step into Circle Hall to find your circles.",
+    body: "Every member gets a house. Make it yours, see who's out, and step into Circle Hall to find your circles.",
+  },
+  {
+    title: "Keep your money close to home",
+    body: "Link your bank if you want to and see where your money leaves your community. Only you and Sage see your spending. Your commons only sees totals with no names.",
+  },
+  {
+    title: "Earn your commons' coin",
+    body: "Every commons has its own coin, with a name it picks. Earn it when you shop at member businesses, and spend it inside your commons.",
+  },
+  {
+    title: "Decide together",
+    body: "Anyone can put an idea up for a vote. When it passes, it takes effect on its own. No one person holds the keys.",
   },
   {
     title: "Families",
-    body: "Start a commons just for your family. Share news and plan get-togethers without the group chat chaos.",
+    body: "A private commons just for your family. Share news, plan get-togethers, and look out for each other without the group chat chaos.",
   },
   {
     title: "Community Board",
@@ -192,6 +204,10 @@ const faqs = [
   {
     q: "Is there an Android app?",
     a: "Not yet. Cahootz Commons is on iPhone today, and we're getting the Android app ready now. Join the waitlist and we'll tell you when it's out.",
+  },
+  {
+    q: "Is all of this in the app today?",
+    a: "Most of it. The street, circles, families, Sage, and group deals are in the iPhone app now. We're still building the rest, like linking your bank. Join the waitlist and we'll tell you as new pieces arrive.",
   },
   {
     q: "How do group deals work?",
@@ -275,9 +291,9 @@ export default async function HomePage() {
                 Your people, all on <span>one street.</span>
               </h1>
               <p className="hero-description">
-                Your neighborhood, family, church, or club gets a street you
-                can walk. See who&apos;s out, buy together for better prices,
-                and get help from the people around you.
+                Cahootz turns your neighborhood, family, church, or club into a
+                street you can walk. Help each other out, buy together for
+                better prices, and decide together what comes next.
               </p>
               <div className="hero-actions">
                 <a className="button button-primary" href="#join">
@@ -319,11 +335,11 @@ export default async function HomePage() {
             <div className="section-heading">
               <div>
                 <p className="eyebrow">What you can do</p>
-                <h2 id="features-title">Live in the app today.</h2>
+                <h2 id="features-title">Everything your people need, together.</h2>
               </div>
               <p>
-                Not a someday list. This is what members are doing in their
-                commons right now.
+                Look out for each other, save money together, and build
+                something that belongs to all of you.
               </p>
             </div>
 

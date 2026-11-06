@@ -14,13 +14,19 @@ On 2026-11-06 the two were merged into one page and the test was removed:
 
 ## What the page does
 
+The copy describes the product we're building, not only what's shipped today.
+The FAQ answer "Is all of this in the app today?" says plainly which parts are
+live (street, circles, families, Sage, group deals) and that the rest, like
+bank linking, is still being built. Keep that answer current as pieces ship.
+
 Its one job: show what being in a commons is like, then get the visitor into the
 app (if they have an invite) or onto the waitlist (if they don't). In order:
 
 1. **Hero:** the street screen in a large phone, with **Join the waitlist** and
    **Have an invite? Get the iPhone app** (App Store).
 2. **What you can do:** one screen and one claim per row (group deals, Sage),
-   three short extras (street, families, Community Board), and a folded
+   six short notes (street, keeping money close to home, the commons coin,
+   deciding together, families, Community Board), and a folded
    **See the savings math on real products** panel with the product calculator.
 3. **How to get in:** three steps and the list of commons to join.
 4. **Questions.**

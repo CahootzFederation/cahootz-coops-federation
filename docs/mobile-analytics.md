@@ -1,6 +1,8 @@
-# Mobile product analytics
+# Mobile product analytics and error tracking
 
 The mobile app (native and web) sends product analytics to PostHog through `apps/mobile/lib/analytics.ts`. We use it to measure first-time engagement: do new people finish onboarding, join a welcome lounge, allow notifications, and come back?
+
+The same client sends crashes to PostHog error tracking, and the API sends server errors there too. See [Error tracking](#error-tracking).
 
 ## Configuration
 
@@ -21,6 +23,7 @@ Leave the key unset in local development, CI and the Playwright suite. With no k
 - Every event and person gets `coop_id`, the id of the person's commons.
 - `sanitizeProperties` is a backstop. It drops any property whose key looks like PII (`email`, `phone`, `wallet`, `address`, `name`, `handle`, `message`, `body`, `text`, `title`, `token`, ...), any string value that looks like an email, phone number or wallet address, and any value that isn't a primitive. In development it logs a warning when it drops something.
 - Screens are recorded by route pattern (`/people/[handle]`), not by URL, so ids and handles never appear in screen names.
+- Exception messages are scrubbed before they leave the device or server (see [Error tracking](#error-tracking)).
 - Session replay, surveys, touch autocapture, SDK lifecycle events and GeoIP enrichment are all off. Person profiles are only created for signed-in people (`personProfiles: 'identified_only'`).
 - There's no analytics consent or opt-out setting in the app yet (see Decisions).
 
@@ -55,6 +58,58 @@ Push payloads now include `notificationType` in their `data` (see `packages/trpc
 
 To track a new push-permission entry point, such as a pre-permission primer, pass `source` to `registerForNativePushNotifications(..., { source: 'your_source' })`. The prompted and result events will carry it.
 
+## Error tracking
+
+Errors go to the same PostHog project as analytics, as `$exception` events. They show up under Error tracking.
+
+### What gets captured
+
+| Where | What | Code |
+| --- | --- | --- |
+| Mobile app | Uncaught JS errors (fatal and not) and unhandled promise rejections | `errorTracking.autocapture` in `apps/mobile/lib/analytics.ts` |
+| Mobile app | Render errors caught by the root error boundary. It reports the error, then shows a "Something broke on our end" screen with a Try again button | `ErrorBoundary` in `apps/mobile/app/_layout.tsx`, which calls `captureError` |
+| API | tRPC errors that map to HTTP 5xx (`INTERNAL_SERVER_ERROR`, `BAD_GATEWAY`, `SERVICE_UNAVAILABLE`, ...). Expected 4xx errors (`UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `BAD_REQUEST`, `CONFLICT`, `TOO_MANY_REQUESTS`, ...) are skipped | `onError` in `packages/trpc/src/server/index.ts` → `reportTrpcError` in `packages/trpc/src/lib/error-tracking.ts` |
+| API | Errors that reach the Express error handler, uncaught exceptions and unhandled rejections | `apps/api/src/index.ts` |
+| Trigger.dev | Runs that failed for good (after their last retry) | `tasks.onFailure` in `apps/api/src/trigger/init.ts` |
+
+Console errors aren't captured. They're noisy, and some log request details. When tRPC wraps a thrown error, we report the original error so the stack trace points at the real fault.
+
+Sentry keeps running alongside PostHog. The error boundary reports to both.
+
+### Privacy
+
+- Every `$exception` event goes through `scrubExceptionEvent` (`packages/validators/src/error-tracking.ts`) in `before_send`. The mobile app and the server share it. It:
+  - redacts the values of sensitive keys in messages (`password`, `token`, `loginCode`, `privateKey`, `body`, `text`, `message`, `email`, `phone`, `wallet`, ...),
+  - redacts one-time codes ("code 482913"), emails, phone numbers, wallet addresses, private keys, JWTs, bearer tokens, known secret-key prefixes and long opaque tokens,
+  - cuts Prisma "Invalid `prisma.x.y()` invocation" messages down to the call and the reason, dropping the argument dump,
+  - drops local variables captured on stack frames and `$exception_steps` breadcrumbs,
+  - drops custom properties whose names look personal, and caps messages at 1,000 characters.
+- The server never sends request input, bodies or headers. tRPC errors carry only `trpc_path`, `trpc_type` and `trpc_code`. Trigger.dev failures carry only the task id, run id, attempt number and environment, never the payload.
+- Errors are tied to a person only by internal user id, the same distinct id `identify()` uses. On the server, the auth middlewares put the signed-in user's id on `ctx.errorTracking`. Errors without a signed-in user are sent without creating a person (`$process_person_profile: false`).
+
+### Configuration
+
+| Where | Variable | Notes |
+| --- | --- | --- |
+| Mobile | `EXPO_PUBLIC_POSTHOG_KEY` | Same key as analytics. No key, no capture. |
+| API (Railway) and Trigger.dev | `POSTHOG_KEY` | The Cahootz project's API key (`phc_...`). No key, no capture. |
+| API (Railway) and Trigger.dev | `POSTHOG_HOST` | Optional. Defaults to `https://us.i.posthog.com`. |
+
+PostHog can turn exception autocapture off remotely. If the project's **Exception autocapture** setting is off, the mobile SDK stops autocapturing crashes, though the error boundary and the server still send errors. Make sure it's on in the project's Error tracking settings.
+
+### Readable stack traces (not set up yet)
+
+Mobile stack traces point into the minified Hermes bundle until source maps are uploaded to PostHog. Sentry already gets source maps through `@sentry/react-native/expo` and `SENTRY_AUTH_TOKEN`. Doing the same for PostHog needs secrets and a store build to verify, so it isn't wired in yet. The steps:
+
+1. Create a PostHog personal API key with error tracking write access. Add `POSTHOG_CLI_API_KEY`, `POSTHOG_CLI_PROJECT_ID` (and `POSTHOG_CLI_HOST` if not US cloud) to the EAS `production` environment as secrets.
+2. Add `"posthog-react-native/expo"` to `plugins` in `apps/mobile/app.json`. It adds the Hermes source map upload to the iOS and Android build steps.
+3. Make Metro inject chunk ids with `getPostHogExpoConfig` from `posthog-react-native/metro`. `metro.config.js` already uses `getSentryExpoConfig`, and both replace Metro's serializer, so check that Sentry still gets its debug ids before shipping. If they clash, keep Sentry's and upload to PostHog with `posthog-cli hermes upload` after the build instead.
+4. Ship a new native build, trigger a test error, and check that the frames are readable in PostHog.
+
+Native (Swift/Kotlin) crash capture needs `@posthog/react-native-plugin` and dSYM uploads. It isn't installed. Sentry covers native crashes today.
+
+The API's stack traces are already readable: `tsup` builds with source maps, and Trigger.dev bundles from source.
+
 ## Suggested insights
 
 **First-time engagement funnel** (Funnel insight, conversion window 7 days, aggregated by unique users):
@@ -79,6 +134,7 @@ Break it down by `coop_id` to compare commons, or by `$os_name` to compare iOS, 
 - **Consent.** None for now. A consent setting will be added later, via PostHog's `optOut()` / `optIn()` through a new wrapper function.
 - **IP addresses.** Sending the request IP is fine. `disableGeoip` still turns off location enrichment.
 - **Sentry** stays on `sendDefaultPii: true` (`apps/mobile/app/_layout.tsx`).
+- **Error tracking** has no on/off switch beyond the key. It's on wherever analytics is on.
 
 ## Open questions
 

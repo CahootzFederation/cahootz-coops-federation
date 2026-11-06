@@ -26,6 +26,7 @@ import {
   Label,
   labelWidth,
   PersonArt,
+  PersonGradients,
   SageStreetArt,
   type PersonColors,
   polygonPoints,
@@ -601,6 +602,7 @@ export function StreetScene({
             <Stop offset="1" stopColor={night ? '#6C6F8E' : '#EEF4F1'} />
           </LinearGradient>
         </Defs>
+        <PersonGradients />
         <Rect x="0" y="0" width="100%" height="100%" fill="url(#street-sky)" />
         <G
           testID="street-map-layer"

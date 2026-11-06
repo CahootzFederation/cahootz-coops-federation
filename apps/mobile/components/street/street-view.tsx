@@ -35,7 +35,7 @@ import { api, type CommonsPost, type StreetData, type StreetLookData, type Stree
 import { ApiError, CONNECTION_MESSAGE, friendlyError } from '@/lib/friendly-error';
 import { secureStorage } from '@/lib/secure-storage';
 import { CircleHallSheet } from './circle-hall-sheet';
-import { iso, TH, TW, type PersonColors } from './street-art';
+import { iso, PersonPreview, TH, TW, type PersonColors } from './street-art';
 import { BUILDING_NAMES, hitTest, StreetScene, type ScenePerson, type StreetPlace } from './street-scene';
 
 const THEME = { ...DESIGN, primary: DESIGN.actionText };
@@ -956,27 +956,6 @@ function openBuilding(id: StreetBuildingId, coopId: string) {
   else router.push({ pathname: '/(tabs)/board', params: { coopId } } as any);
 }
 
-function ChipRow<T extends string>({ label, options, names, value, onPick }: { label: string; options: readonly T[]; names: Record<string, string>; value: string; onPick: (v: T) => void }) {
-  return (
-    <View className="flex-row flex-wrap gap-2">
-      {options.map((option) => (
-        <TouchableOpacity
-          key={option}
-          accessibilityRole="button"
-          accessibilityLabel={`${label} ${names[option] ?? option}`}
-          accessibilityState={{ selected: value === option }}
-          aria-selected={value === option}
-          onPress={() => onPick(option)}
-          className="min-h-11 justify-center rounded-xl px-3"
-          style={{ borderWidth: 2, borderColor: value === option ? '#111827' : THEME.border }}
-        >
-          <Text className="text-sm font-semibold text-gray-900">{names[option] ?? option}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-}
-
 /** How your person looks on every Commons street. */
 function YourLook({ look, onChange }: { look: StreetLookData; onChange: (change: Partial<StreetLookData>) => void }) {
   const section = (title: string, body: React.ReactNode) => (
@@ -987,11 +966,17 @@ function YourLook({ look, onChange }: { look: StreetLookData; onChange: (change:
   );
   return (
     <View className="gap-3 border-t pt-3" style={{ borderColor: THEME.border }}>
-      <View>
-        <Text accessibilityRole="header" className="text-lg font-bold text-gray-950">
-          Your look
-        </Text>
-        <Text className="text-sm text-gray-500">How neighbors see you strolling, on every Commons street.</Text>
+      <View className="flex-row items-center gap-3">
+        {/* A live close-up of you, so each pick shows right away. */}
+        <View accessibilityLabel="Preview of your look" className="items-center justify-center rounded-2xl" style={{ backgroundColor: '#EEF4F1', width: 64, height: 76 }}>
+          <PersonPreview look={lookColors(look)} height={68} />
+        </View>
+        <View className="min-w-0 flex-1">
+          <Text accessibilityRole="header" className="text-lg font-bold text-gray-950">
+            Your look
+          </Text>
+          <Text className="text-sm text-gray-500">How neighbors see you strolling, on every Commons street.</Text>
+        </View>
       </View>
       {section(
         'Skin',
@@ -1003,7 +988,27 @@ function YourLook({ look, onChange }: { look: StreetLookData; onChange: (change:
       )}
       {section(
         'Hair',
-        <ChipRow label="Hair" options={STREET_HAIR_STYLES} names={HAIR_STYLE_NAMES} value={look.hairStyle} onPick={(hairStyle) => onChange({ hairStyle })} />,
+        // Each hair button shows that style on you, not just its name.
+        <View className="flex-row flex-wrap gap-2">
+          {STREET_HAIR_STYLES.map((style) => {
+            const selected = look.hairStyle === style;
+            return (
+              <TouchableOpacity
+                key={style}
+                accessibilityRole="button"
+                accessibilityLabel={`Hair ${HAIR_STYLE_NAMES[style] ?? style}`}
+                accessibilityState={{ selected }}
+                aria-selected={selected}
+                onPress={() => onChange({ hairStyle: style })}
+                className="items-center rounded-xl px-1.5 pb-1 pt-1.5"
+                style={{ borderWidth: 2, borderColor: selected ? '#111827' : THEME.border, minWidth: 56 }}
+              >
+                <PersonPreview look={lookColors({ ...look, hairStyle: style })} height={44} />
+                <Text className="text-xs font-semibold text-gray-900">{HAIR_STYLE_NAMES[style] ?? style}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>,
       )}
       {look.hairStyle !== 'none'
         ? section(

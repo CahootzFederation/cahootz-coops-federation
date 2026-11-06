@@ -5,7 +5,8 @@
  * buildings later; people stay hand-drawn ovals.
  */
 import React from 'react';
-import { Circle, Ellipse, G, Line, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, G, Line, LinearGradient, Path, Polygon, Rect, Stop, Text as SvgText } from 'react-native-svg';
+import { STREET_HAIR_COLORS, STREET_SHIRT_COLORS, STREET_SKIN_TONES } from '@repo/validators/street';
 
 export const TW = 48;
 export const TH = 24;
@@ -334,45 +335,69 @@ export interface PersonColors {
 }
 
 /**
- * The right half of an ellipse, as a path: the side that falls into shadow
- * when light comes from the upper left, like the buildings' right walls.
+ * People are shaded with soft gradients rather than hard light/dark splits:
+ * lit on the left, gently darker on the right, so a body, face or hairdo
+ * reads as round. One gradient per palette color, defined once for the
+ * whole street (see PersonGradients) and shared by everyone.
  */
-const rightHalf = (cx: number, cy: number, rx: number, ry: number) =>
-  `M${cx} ${cy - ry}A${rx} ${ry} 0 0 1 ${cx} ${cy + ry}Z`;
+const personFill = (hex: string) => `url(#pg${hex.slice(1).toLowerCase()})`;
 
-/** Hair is drawn in two parts: behind the head (curly puff, long hair) and on top (short cap, bun). */
-function hairParts(cx: number, cy: number, look: PersonColors): { back: React.ReactNode; top: React.ReactNode } {
-  const dark = shade(look.hair, 0.72);
-  const back =
-    look.hairStyle === 'curly' ? (
-      <G>
-        <Circle cx={cx} cy={cy - 1.5} r={8.6} fill={look.hair} />
-        <Path d={rightHalf(cx, cy - 1.5, 8.6, 8.6)} fill={dark} />
-      </G>
-    )
-    : look.hairStyle === 'long' ? (
-      <G>
-        <Rect x={cx - 7} y={cy - 4} width={14} height={13} rx={5} fill={look.hair} />
-        <Path d={`M${cx} ${cy - 4}L${cx + 2} ${cy - 4}A5 5 0 0 1 ${cx + 7} ${cy + 1}L${cx + 7} ${cy + 4}A5 5 0 0 1 ${cx + 2} ${cy + 9}L${cx} ${cy + 9}Z`} fill={dark} />
-      </G>
-    )
-    : null;
-  const cap = (rx: number, ry: number) => (
-    <G>
-      <Ellipse cx={cx} cy={cy - 3.5} rx={rx} ry={ry} fill={look.hair} />
-      <Path d={rightHalf(cx, cy - 3.5, rx, ry)} fill={dark} />
-    </G>
+/** The shared gradients for every skin, hair and shirt color. Render once inside each Svg that draws people. */
+export function PersonGradients() {
+  const colors = new Set(
+    [...Object.values(STREET_SKIN_TONES), ...Object.values(STREET_HAIR_COLORS), ...Object.values(STREET_SHIRT_COLORS)].map((c) => c.toLowerCase()),
   );
+  return (
+    <Defs>
+      {[...colors].map((c) => (
+        <LinearGradient key={c} id={`pg${c.slice(1)}`} x1="0" y1="0" x2="1" y2="0.35">
+          <Stop offset="0" stopColor={shade(c, 1.1)} />
+          <Stop offset="0.45" stopColor={c} />
+          <Stop offset="1" stopColor={shade(c, 0.8)} />
+        </LinearGradient>
+      ))}
+    </Defs>
+  );
+}
+
+/** A cap of hair over the top of the head, with a soft hairline arching over the forehead. */
+const sleekCap = (cx: number, cy: number) =>
+  // Large arc (the 1 after the rotation) so it goes up over the top of the head, not under the chin.
+  `M${cx - 6.5} ${cy + 0.8}A6.6 6.9 0 1 1 ${cx + 6.5} ${cy + 0.8}L${cx + 5.5} ${cy + 0.8}C${cx + 4.4} ${cy - 3} ${cx - 4.4} ${cy - 3} ${cx - 5.5} ${cy + 0.8}Z`;
+
+/** Short hair: the cap with a fringe swept across the forehead. */
+const shortHair = (cx: number, cy: number) =>
+  `M${cx - 6.4} ${cy + 0.6}C${cx - 6.9} ${cy - 5} ${cx - 3.6} ${cy - 7.7} ${cx} ${cy - 7.5}C${cx + 3.8} ${cy - 7.7} ${cx + 6.9} ${cy - 5} ${cx + 6.4} ${cy + 0.6}L${cx + 5.4} ${cy + 0.6}C${cx + 4.8} ${cy - 2.4} ${cx + 1.4} ${cy - 3.4} ${cx - 0.8} ${cy - 2.3}C${cx - 2.8} ${cy - 1.4} ${cx - 4.6} ${cy - 1.8} ${cx - 5.3} ${cy + 0.6}Z`;
+
+/** Long hair: falls past the ears to the shoulders, behind the face. */
+const longHairBack = (cx: number, cy: number) =>
+  `M${cx - 6.6} ${cy - 1}C${cx - 7.6} ${cy + 4} ${cx - 7.2} ${cy + 8} ${cx - 5.2} ${cy + 9.8}L${cx + 5.2} ${cy + 9.8}C${cx + 7.2} ${cy + 8} ${cx + 7.6} ${cy + 4} ${cx + 6.6} ${cy - 1}Z`;
+
+/** Curls: small rounds ringing the top and sides of the head. Angles in degrees, 270 is straight up. */
+const CURL_ANGLES = [160, 192, 224, 256, 288, 320, 352, 20];
+
+/** Hair is drawn in two parts: behind the head (long hair) and over it (caps, fringe, curls, bun). */
+function hairParts(cx: number, cy: number, look: PersonColors): { back: React.ReactNode; top: React.ReactNode } {
+  const fill = personFill(look.hair);
+  const back = look.hairStyle === 'long' ? <Path d={longHairBack(cx, cy)} fill={fill} /> : null;
   const top =
-    look.hairStyle === 'short' ? cap(6, 3.2)
+    look.hairStyle === 'short' ? <Path d={shortHair(cx, cy)} fill={fill} />
+    : look.hairStyle === 'long' ? <Path d={sleekCap(cx, cy)} fill={fill} />
     : look.hairStyle === 'bun' ? (
       <G>
-        {cap(6, 3.2)}
-        <Circle cx={cx} cy={cy - 8} r={3.2} fill={look.hair} />
-        <Path d={rightHalf(cx, cy - 8, 3.2, 3.2)} fill={dark} />
+        <Circle cx={cx + 0.4} cy={cy - 8.6} r={3} fill={fill} />
+        <Path d={sleekCap(cx, cy)} fill={fill} />
       </G>
     )
-    : look.hairStyle === 'long' ? cap(6.3, 3.4)
+    : look.hairStyle === 'curly' ? (
+      <G>
+        <Path d={sleekCap(cx, cy)} fill={fill} />
+        {CURL_ANGLES.map((deg) => {
+          const a = (deg * Math.PI) / 180;
+          return <Circle key={deg} cx={cx + Math.cos(a) * 6.1} cy={cy - 0.6 + Math.sin(a) * 6.1} r={2.5} fill={fill} />;
+        })}
+      </G>
+    )
     : null;
   return { back, top };
 }
@@ -393,39 +418,43 @@ export function WalkerNameTag({ x, y, name, bob, scale = 1 }: { x: number; y: nu
 }
 
 /**
- * A person in their chosen look: soft ground shadow, a rounded-rectangle
- * body like the Maple Court mockup, round head, hair. Shaded like the
- * buildings: light comes from the upper left, so the right side of the body,
- * face and hair falls into shadow.
+ * A person in their chosen look: a rounded body like the Maple Court mockup,
+ * a round head with two small eyes, and hair. Lit softly from the left like
+ * the buildings (see PersonGradients). `shadow` is off in the look preview.
  */
-export function PersonArt({ x, y, look, isYou, bob }: { x: number; y: number; look: PersonColors; isYou: boolean; bob: number }) {
+export function PersonArt({ x, y, look, isYou, bob, shadow = true }: { x: number; y: number; look: PersonColors; isYou: boolean; bob: number; shadow?: boolean }) {
   const [sx, sy] = iso(x, y);
   const headY = sy - 25 - bob;
   const hair = hairParts(sx, headY, look);
-  // Body box: 12 wide, 16 tall, corner radius 5.
   const top = sy - 19 - bob;
-  const bottom = top + 16;
-  const right = sx + 6;
-  const r = 5;
   return (
     <G>
-      {/* A long faint shadow to the right (matching the buildings) and a tight dark one right under the feet. */}
-      <Ellipse cx={sx + 9} cy={sy + 0.5} rx={11} ry={3.2} fill="rgba(24,46,34,0.16)" />
-      <Ellipse cx={sx} cy={sy} rx={5.5} ry={2.6} fill="rgba(0,0,0,0.3)" />
+      {shadow ? (
+        <G>
+          {/* A long faint shadow to the right (matching the buildings) and a tight one under the feet. */}
+          <Ellipse cx={sx + 8} cy={sy + 0.5} rx={10} ry={3} fill="rgba(24,46,34,0.14)" />
+          <Ellipse cx={sx} cy={sy} rx={5.5} ry={2.4} fill="rgba(0,0,0,0.26)" />
+        </G>
+      ) : null}
       {isYou ? <Ellipse cx={sx} cy={sy} rx={11} ry={5.5} fill="none" stroke="#B94614" strokeWidth={2} /> : null}
       {hair.back}
-      {/* A faint outline keeps people readable on gray road. */}
-      <Rect x={sx - 6} y={top} width={12} height={16} rx={r} fill={look.shirt} stroke={shade(look.shirt, 0.55)} strokeWidth={0.8} />
-      <Path
-        d={`M${sx + 1} ${top}L${right - r} ${top}A${r} ${r} 0 0 1 ${right} ${top + r}L${right} ${bottom - r}A${r} ${r} 0 0 1 ${right - r} ${bottom}L${sx + 1} ${bottom}Z`}
-        fill={shade(look.shirt, 0.8)}
-      />
-      <Rect x={sx - 4} y={top + 2} width={2} height={7} rx={1} fill="rgba(255,255,255,0.22)" />
-      {/* Face: a darker rim on the right, lit from the left. */}
-      <Circle cx={sx} cy={headY} r={6} fill={shade(look.skin, 0.84)} stroke={shade(look.skin, 0.6)} strokeWidth={0.6} />
-      <Circle cx={sx - 1.1} cy={headY} r={5.1} fill={look.skin} />
+      <Rect x={sx - 6} y={top} width={12} height={16} rx={5} fill={personFill(look.shirt)} />
+      <Circle cx={sx} cy={headY} r={6} fill={personFill(look.skin)} />
+      {/* Eyes, looking out at you. */}
+      <Circle cx={sx - 2.1} cy={headY + 1.2} r={0.85} fill="#2A211C" />
+      <Circle cx={sx + 2.1} cy={headY + 1.2} r={0.85} fill="#2A211C" />
       {hair.top}
     </G>
+  );
+}
+
+/** A close-up of a person, for the look picker: big enough to see the hair and colors. */
+export function PersonPreview({ look, height = 72 }: { look: PersonColors; height?: number }) {
+  return (
+    <Svg width={(height * 26) / 42} height={height} viewBox="-13 -38 26 42">
+      <PersonGradients />
+      <PersonArt x={0} y={0} look={look} isYou={false} bob={0} shadow={false} />
+    </Svg>
   );
 }
 

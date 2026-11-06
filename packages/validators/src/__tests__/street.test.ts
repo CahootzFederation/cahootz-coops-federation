@@ -8,7 +8,9 @@ import {
   STREET_ZOOM_MAX,
   STREET_ZOOM_MIN,
   defaultHouseLook,
+  defaultStreetLook,
   STREET_DRAWN_HEIGHT,
+  STREET_SKIN_TONES,
   streetDoorTile,
   streetHides,
   streetLotPlacement,
@@ -25,6 +27,24 @@ interface Box {
   d: number;
 }
 const overlaps = (a: Box, b: Box) => a.i < b.i + b.w && b.i < a.i + a.w && a.j < b.j + b.d && b.j < a.j + a.d;
+
+describe("street looks", () => {
+  it("lists skin tones lightest to darkest", () => {
+    const lightness = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16);
+      return 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+    };
+    const values = Object.values(STREET_SKIN_TONES).map(lightness);
+    expect(values).toEqual([...values].sort((a, b) => b - a));
+  });
+
+  it("keeps everyone's starting skin tone when the list is reordered", () => {
+    // Starting tones come from the same six tones as before the list was reordered.
+    const starting = new Set(Array.from({ length: 200 }, (_, k) => defaultStreetLook(`user-${k}`).skin));
+    expect([...starting].sort()).toEqual(["brown", "deep", "golden", "light", "tan", "warm"]);
+    expect(defaultStreetLook("user_1").skin).toBe(["deep", "brown", "warm", "tan", "golden", "light"][Math.abs([..."user_1"].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0)) % 6]);
+  });
+});
 
 describe("street layout", () => {
   it("never overlaps lots, buildings or trees, even for a big Commons", () => {

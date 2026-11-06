@@ -24,19 +24,25 @@ export const STREET_ROOF_COLORS = {
 export const STREET_HOUSE_STYLES = ["a", "b", "c"] as const;
 
 /** How your person on the street looks. Account-wide: the same on every Commons street. */
+// Listed lightest to darkest; the look picker shows them in this order.
 export const STREET_SKIN_TONES = {
-  deep: "#4A2E1E",
-  brown: "#6B4128",
-  warm: "#8D5A3B",
-  tan: "#A9714A",
-  golden: "#C99468",
-  light: "#E6BC94",
-  olive: "#D9B48C",
-  peach: "#F0C9A8",
+  pale: "#FAE7DA",
   fair: "#F5D8C0",
   rosy: "#F3D2C6",
-  pale: "#FAE7DA",
+  peach: "#F0C9A8",
+  light: "#E6BC94",
+  olive: "#D9B48C",
+  golden: "#C99468",
+  tan: "#A9714A",
+  warm: "#8D5A3B",
+  brown: "#6B4128",
+  deep: "#4A2E1E",
 } as const;
+/**
+ * The tones a starting look is picked from. Fixed by name (not by list
+ * position) so reordering or adding tones never changes anyone's starting look.
+ */
+const DEFAULT_SKIN_TONES = ["deep", "brown", "warm", "tan", "golden", "light"] as const;
 export const STREET_HAIR_STYLES = ["short", "curly", "bun", "long", "none"] as const;
 export const STREET_HAIR_COLORS = {
   black: "#1F1A17",
@@ -72,8 +78,7 @@ export function defaultStreetLook(userId: string): StreetLook {
   h = Math.abs(h);
   const pick = <T extends string>(list: readonly T[], salt: number) => list[(h + salt) % list.length]!;
   return {
-    // The first six tones only, so adding tones never changes anyone's starting look.
-    skin: pick((Object.keys(STREET_SKIN_TONES) as StreetSkinTone[]).slice(0, 6), 0),
+    skin: pick(DEFAULT_SKIN_TONES, 0),
     hairStyle: pick(STREET_HAIR_STYLES.filter((s) => s !== "none"), 3),
     hairColor: pick(["black", "brown", "black", "auburn"] as StreetHairColor[], 5),
     shirt: pick(Object.keys(STREET_SHIRT_COLORS) as StreetShirtColor[], 7),

@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { PanResponder, View, type LayoutChangeEvent } from 'react-native';
-import Svg, { Ellipse, G, Image as SvgImage, Polygon, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Defs, Ellipse, G, Image as SvgImage, LinearGradient, Path, Polygon, Rect, Stop, Text as SvgText } from 'react-native-svg';
 
 import { KAYKIT_SPRITES, type KayKitSpriteName } from './kaykit-sprites';
 import {
@@ -17,6 +17,8 @@ import {
 
 import type { StreetLotData } from '@/lib/api';
 import {
+  castShadow,
+  SHADOW_FILL,
   CircleHallArt,
   BoardArt,
   HouseArt,
@@ -24,6 +26,7 @@ import {
   Label,
   labelWidth,
   PersonArt,
+  PersonGradients,
   SageStreetArt,
   type PersonColors,
   polygonPoints,
@@ -165,16 +168,35 @@ function KayKitImage({ name, x, y }: { name: KayKitSpriteName; x: number; y: num
   return <SvgImage href={s.source} x={x - s.ax} y={y - s.ay} width={s.w} height={s.h} />;
 }
 
+/** Same scatter every time for the same tile, so the grass doesn't shimmer between redraws. */
+function tileNoise(i: number, j: number, salt: number) {
+  let h = (i * 73856093) ^ (j * 19349663) ^ (salt * 83492791);
+  h = (h ^ (h >>> 13)) * 1274126177;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+
 function Ground({ layout, lots, selected }: { layout: StreetLayout; lots: Map<number, StreetLotData>; selected: string | null }) {
   const { width: W, height: H } = layout;
-  const tiles: React.ReactNode[] = [];
+  const covered = (i: number, j: number) =>
+    [...layout.lots, ...layout.buildings].some((p) => i >= p.i && i < p.i + p.w && j >= p.j && j < p.j + p.d);
+  // Roads are KayKit pieces below; only grass and the plaza are drawn here.
+  // One shape per kind instead of one per tile, which phones draw far more
+  // cheaply. The checker is a faint darkening over the grass gradient.
+  const checker: string[] = [];
+  const plaza: string[] = [];
+  const tufts: string[] = [];
   for (let i = 0; i < W; i++) {
     for (let j = 0; j < H; j++) {
       const t = layout.tileType(i, j);
-      // Roads are KayKit pieces below; only grass and the Green are drawn tile by tile.
-      const fill = t === 'grass' ? ((i + j) % 2 ? GROUND.grassAlt : null) : t === 'plaza' ? GROUND.plaza : null;
-      if (!fill) continue;
-      tiles.push(<Polygon key={`t${i},${j}`} points={polygonPoints([iso(i, j), iso(i + 1, j), iso(i + 1, j + 1), iso(i, j + 1)])} fill={fill} />);
+      const [a, b, c, d] = [iso(i, j), iso(i + 1, j), iso(i + 1, j + 1), iso(i, j + 1)];
+      const diamond = `M${a[0]} ${a[1]}L${b[0]} ${b[1]}L${c[0]} ${c[1]}L${d[0]} ${d[1]}Z`;
+      if (t === 'plaza') plaza.push(diamond);
+      if (t !== 'grass') continue;
+      if ((i + j) % 2) checker.push(diamond);
+      // A grass tuft on about one open tile in five: three short blades.
+      if (covered(i, j) || tileNoise(i, j, 1) > 0.2) continue;
+      const [tx, ty] = iso(i + 0.2 + tileNoise(i, j, 7) * 0.6, j + 0.2 + tileNoise(i, j, 13) * 0.6);
+      tufts.push(`M${tx - 1.6} ${ty}L${tx - 2.2} ${ty - 2.6}M${tx} ${ty}L${tx} ${ty - 3.2}M${tx + 1.6} ${ty}L${tx + 2.2} ${ty - 2.6}`);
     }
   }
   // The road: KayKit City Builder Bits pieces, each covering 2x2 tiles.
@@ -184,6 +206,17 @@ function Ground({ layout, lots, selected }: { layout: StreetLayout; lots: Map<nu
       const [x, y] = iso(p.i + 1, p.j + 1);
       return <KayKitImage key={`r${p.i},${p.j}`} name={`road-${p.piece}` as KayKitSpriteName} x={x} y={y} />;
     });
+  // KayKit's road paint is brighter than our softer houses; a light gray
+  // wash over the road ties it into the same world.
+  const roadWash = layout.roadPieces
+    .map((p) => {
+      const [a, b, c, d] = [iso(p.i, p.j), iso(p.i + 2, p.j), iso(p.i + 2, p.j + 2), iso(p.i, p.j + 2)];
+      return `M${a[0]} ${a[1]}L${b[0]} ${b[1]}L${c[0]} ${c[1]}L${d[0]} ${d[1]}Z`;
+    })
+    .join('');
+  const [top] = iso(0, 0);
+  const groundTopY = iso(0, 0)[1];
+  const groundBottomY = iso(W, H)[1];
   const lawns = layout.lots
     .filter((lot) => lots.has(lot.lotNumber))
     .map((lot) => {
@@ -203,17 +236,92 @@ function Ground({ layout, lots, selected }: { layout: StreetLayout; lots: Map<nu
     .map((b) => (
       <Polygon key={`s${b.id}`} points={polygonPoints([iso(b.i, b.j), iso(b.i + 2, b.j), iso(b.i + 2, b.j + 2), iso(b.i, b.j + 2)])} fill="none" stroke="#B94614" strokeWidth={2.5} />
     ));
+  // The map's edge reads as a slab of earth: a strip of turf on top, then
+  // soil, then darker subsoil; the right side is in shade.
+  const side = (z0: number, z1: number, rightFill: string, frontFill: string, key: string) => (
+    <G key={key}>
+      <Polygon points={polygonPoints([iso(W, 0, z0), iso(W, H, z0), iso(W, H, z1), iso(W, 0, z1)])} fill={rightFill} />
+      <Polygon points={polygonPoints([iso(0, H, z0), iso(W, H, z0), iso(W, H, z1), iso(0, H, z1)])} fill={frontFill} />
+    </G>
+  );
   return (
     <G>
-      <Polygon points={polygonPoints([iso(W, 0), iso(W, H), iso(W, H, -18), iso(W, 0, -18)])} fill="#8B6B4A" />
-      <Polygon points={polygonPoints([iso(0, H), iso(W, H), iso(W, H, -18), iso(0, H, -18)])} fill="#A07D58" />
-      <Polygon points={polygonPoints([iso(0, 0), iso(W, 0), iso(W, H), iso(0, H)])} fill={GROUND.grass} />
-      {tiles}
+      <Defs>
+        <LinearGradient id="street-grass" x1={top} y1={groundTopY} x2={top} y2={groundBottomY} gradientUnits="userSpaceOnUse">
+          {/* Lighter and softer toward the back, richer near the front. */}
+          <Stop offset="0" stopColor="#ADD497" />
+          <Stop offset="1" stopColor="#8DC178" />
+        </LinearGradient>
+      </Defs>
+      {side(0, -4, '#6E9A5B', '#7FAE69', 'turf')}
+      {side(-4, -12, '#86664A', '#9E7B56', 'soil')}
+      {side(-12, -22, '#6A4F38', '#7E5F44', 'subsoil')}
+      <Polygon points={polygonPoints([iso(0, 0), iso(W, 0), iso(W, H), iso(0, H)])} fill="url(#street-grass)" />
+      <Path d={checker.join('')} fill="rgba(40,70,30,0.05)" />
+      <Path d={plaza.join('')} fill={GROUND.plaza} />
+      <Path d={tufts.join('')} stroke="#7BAE66" strokeWidth={0.9} strokeLinecap="round" fill="none" />
       {roads}
+      <Path d={roadWash} fill="rgba(120,128,138,0.16)" />
       {lawns}
       {outlines}
     </G>
   );
+}
+
+/**
+ * Every shadow on the street, drawn once on the ground under everything: the
+ * outline of each house, building, tree and streetlight swept to the right,
+ * the way the light falls. At night it adds warm pools under the streetlights.
+ */
+function Shadows({ layout, lots }: { layout: StreetLayout; lots: Map<number, StreetLotData> }) {
+  const shapes: string[] = [];
+  for (const b of layout.buildings) {
+    if (b.id === 'board') {
+      shapes.push(castShadow(b.i + 0.2, b.j + 0.95, 1.6, 0.25, BUILDING_HEIGHT.board * 0.8));
+      continue;
+    }
+    shapes.push(castShadow(b.i + 0.15, b.j + 0.15, 1.7, 1.7, BUILDING_HEIGHT[b.id] * 0.9));
+  }
+  for (const lot of layout.lots) {
+    const data = lots.get(lot.lotNumber);
+    if (!data) continue;
+    const h = (data.houseStyle === 'b' ? 48 : 24) + (data.houseStyle === 'c' ? 20 : 14);
+    shapes.push(castShadow(lot.i + 0.3, lot.j + 0.3, 1.4, 1.4, h));
+  }
+  for (const t of layout.trees) shapes.push(castShadow(t.i + 0.3, t.j + 0.3, 0.4, 0.4, 26));
+  for (let i = 12; i < layout.width - 1; i += 4) shapes.push(castShadow(i + 0.45, 6.7, 0.1, 0.1, 30));
+  // One shape: overlapping shadows don't stack into darker patches.
+  return <Path d={shapes.map((p) => `M${p.split(' ').join('L')}Z`).join('')} fill={SHADOW_FILL} fillRule="nonzero" />;
+}
+
+/** Light at night: house windows and streetlights glow over the dusk tint. */
+function NightLights({ layout, lots }: { layout: StreetLayout; lots: Map<number, StreetLotData> }) {
+  const glows: React.ReactNode[] = [];
+  // A warm porch light spilling onto the ground at each front door; the lit
+  // windows themselves (drawn bright in the houses) carry the rest.
+  for (const lot of layout.lots) {
+    if (!lots.has(lot.lotNumber)) continue;
+    const [px, py] = iso(lot.i + 1.15, lot.j + 1.95);
+    glows.push(<Ellipse key={`porch${lot.lotNumber}`} cx={px} cy={py} rx={14} ry={6} fill="rgba(255,206,110,0.28)" />);
+  }
+  for (const b of layout.buildings) {
+    if (b.id === 'board') continue;
+    const [px, py] = iso(b.i + 1.25, b.j + 2);
+    glows.push(<Ellipse key={`door${b.id}`} cx={px} cy={py} rx={16} ry={7} fill="rgba(255,206,110,0.24)" />);
+  }
+  for (let i = 12; i < layout.width - 1; i += 4) {
+    const [px, py] = iso(i + 0.5, 6.75);
+    const [lx, ly] = iso(i + 0.5, 6.75, 29);
+    glows.push(<Ellipse key={`sp${i}`} cx={px + 2} cy={py + 2} rx={22} ry={10} fill="rgba(255,214,140,0.32)" />);
+    glows.push(<Ellipse key={`sl${i}`} cx={lx} cy={ly} rx={6} ry={6} fill="rgba(255,236,170,0.75)" />);
+  }
+  return <G>{glows}</G>;
+}
+
+/** Evening on the street: from 7pm to 6am the light turns to dusk and the windows come on. */
+export function isStreetEvening(now: Date) {
+  const hour = now.getHours();
+  return hour >= 19 || hour < 6;
 }
 
 export function StreetScene({
@@ -326,6 +434,10 @@ export function StreetScene({
   );
 
   const ground = useMemo(() => <Ground layout={layout} lots={lots} selected={selectedKey} />, [layout, lots, selectedKey]);
+  const shadows = useMemo(() => <Shadows layout={layout} lots={lots} />, [layout, lots]);
+  // Checked on each redraw (cheap); the art below only rebuilds when it flips.
+  const night = isStreetEvening(new Date());
+  const nightLights = useMemo(() => (night ? <NightLights layout={layout} lots={lots} /> : null), [night, layout, lots]);
 
   // Each building, house and tree is drawn once and reused every frame; only
   // people change while someone walks, so React skips everything else.
@@ -335,8 +447,8 @@ export function StreetScene({
       const node =
         b.id === 'circle-hall' ? <CircleHallArt i={b.i} j={b.j} circleCount={circleCount} />
         : b.id === 'town-hall' ? <TownHallArt i={b.i} j={b.j} />
-        : b.id === 'corner-store' ? <ShopArt i={b.i} j={b.j} trim="#B94614" />
-        : b.id === 'group-buys' ? <ShopArt i={b.i} j={b.j} trim="#2F7D4F" />
+        : b.id === 'corner-store' ? <ShopArt i={b.i} j={b.j} trim="#B94614" night={night} />
+        : b.id === 'group-buys' ? <ShopArt i={b.i} j={b.j} trim="#2F7D4F" night={night} />
         : <BoardArt i={b.i} j={b.j} notes={boardNotes} />;
       list.push({ depth: b.i + b.j + 2, node: <G key={`b${b.id}`}>{node}</G>, footprint: b, height: BUILDING_HEIGHT[b.id] });
     }
@@ -355,6 +467,7 @@ export function StreetScene({
               style={data.houseStyle}
               wall={STREET_WALL_COLORS[data.wallColor as StreetWallColor] ?? STREET_WALL_COLORS.cream}
               roof={STREET_ROOF_COLORS[data.roofColor as StreetRoofColor] ?? STREET_ROOF_COLORS.terracotta}
+              night={night}
             />
           </G>
         ),
@@ -366,7 +479,8 @@ export function StreetScene({
         depth: t.i + t.j + 1,
         node: (
           <G key={`t${t.i},${t.j}`}>
-            <Ellipse cx={tx} cy={ty} rx={10} ry={5} fill="rgba(20,40,20,0.15)" />
+            {/* A small dark patch where the trunk meets the ground; the long shadow is in the shadow layer. */}
+            <Ellipse cx={tx} cy={ty} rx={5} ry={2.5} fill="rgba(20,40,20,0.22)" />
             <KayKitImage name="tree" x={tx} y={ty} />
           </G>
         ),
@@ -380,7 +494,7 @@ export function StreetScene({
       list.push({ depth: i + 7.25, node: <G key={`sl${i}`}><KayKitImage name="streetlight" x={sx} y={sy} /></G> });
     }
     return list;
-  }, [layout, lots, circleCount, boardNotes]);
+  }, [layout, lots, circleCount, boardNotes, night]);
 
   const labels = useMemo(() => {
     const nodes: React.ReactNode[] = [];
@@ -482,12 +596,26 @@ export function StreetScene({
       {...responder.panHandlers}
     >
       <Svg width="100%" height="100%" pointerEvents="none">
+        <Defs>
+          <LinearGradient id="street-sky" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={night ? '#3B4A6B' : '#CFE3EE'} />
+            <Stop offset="1" stopColor={night ? '#6C6F8E' : '#EEF4F1'} />
+          </LinearGradient>
+        </Defs>
+        <PersonGradients />
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#street-sky)" />
         <G
           testID="street-map-layer"
           transform={`translate(${camera.x.toFixed(1)}, ${camera.y.toFixed(1)}) scale(${zoom.toFixed(3)})`}
         >
           {ground}
+          {shadows}
           {drawn.map((d) => d.node)}
+        </G>
+        {/* Evening: a dusk tint over the whole map, then lights glowing through it. */}
+        {night ? <Rect x="0" y="0" width="100%" height="100%" fill="rgba(30,38,86,0.3)" /> : null}
+        <G transform={`translate(${camera.x.toFixed(1)}, ${camera.y.toFixed(1)}) scale(${zoom.toFixed(3)})`}>
+          {nightLights}
           {labels}
           {people.filter((person) => shownTags.has(person.id)).map((person) => (
             <G key={`walker-label-${person.id}`} testID={`street-walker-label-${person.isSage ? 'sage' : person.id}`}>

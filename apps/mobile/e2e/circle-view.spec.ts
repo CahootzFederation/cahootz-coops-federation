@@ -123,6 +123,9 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
   const otherName = "E2E Market Commons";
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
   const visible = (text: string) => page.getByText(text, { exact: true }).filter({ visible: true });
+  // The street's label reads "Welcome to <name> · <n> out now".
+  const streetOf = (name: string) =>
+    page.getByText(new RegExp(`^Welcome to ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( ·|$)`)).filter({ visible: true }).first();
   const currentCommons = (name: string) =>
     page.getByLabel(`Switch commons. Currently ${name}`, { exact: true }).filter({ visible: true });
 
@@ -143,7 +146,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
     expect(startingName).not.toBe(otherName);
     await page.getByLabel(`View circles in ${otherName}`, { exact: true }).filter({ visible: true }).click();
     await expect(currentCommons(otherName)).toBeVisible();
-    await expect(visible(`Welcome to ${otherName}`)).toBeVisible();
+    await expect(streetOf(otherName)).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`coopId=${otherCoopId}`));
 
     await page.reload();
@@ -156,7 +159,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
       .filter({ visible: true })
       .click();
     await expect(currentCommons(startingName)).toBeVisible();
-    await expect(visible(`Welcome to ${startingName}`)).toBeVisible();
+    await expect(streetOf(startingName)).toBeVisible();
 
     // 3. Commons directory.
     await page.getByLabel("Open menu").filter({ visible: true }).click();
@@ -164,7 +167,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
     await expect(page.getByText("Browse commons", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: `Open ${otherName} circles`, exact: true }).filter({ visible: true }).click();
     await expect(currentCommons(otherName)).toBeVisible();
-    await expect(visible(`Welcome to ${otherName}`)).toBeVisible();
+    await expect(streetOf(otherName)).toBeVisible();
   } finally {
     await context.close();
   }

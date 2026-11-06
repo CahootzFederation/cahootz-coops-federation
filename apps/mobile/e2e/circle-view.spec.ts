@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enterFeed, newSignedInPage, openCircleHall } from "./support/auth";
+import { enterFeed, newSignedInPage } from "./support/auth";
 
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 const USER_A_EMAIL =
@@ -7,19 +7,18 @@ const USER_A_EMAIL =
 const USER_B_EMAIL =
   process.env.E2E_USER_B_EMAIL || "releaseclick2@test.cahootz.local";
 
-// Circle View is the circles screen inside each Commons' Circle Hall. Signed-in
-// members land on the street (see street.spec.ts) and walk in; signed-out
-// visitors still land on Circle View directly. These journeys cover the
-// circles screen and the welcome-lounge workflow.
+// Circle View is the Commons tab's landing screen (and "/" for a signed-in
+// session) - it replaced the old direct-to-feed landing. These journeys
+// cover that navigation change plus the new welcome-lounge workflow, both
+// added in this change; see AGENTS.md's e2e-coverage requirement.
 
-test("the street's Circle Hall opens Circle View, and a post board stays inside the tab", { tag: "@smoke" }, async ({
+test("Commons tab lands on Circle View, and a post board stays inside the tab", { tag: "@smoke" }, async ({
   browser,
 }) => {
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
 
   try {
-    await expect(page.getByText(/^Welcome to /)).toBeVisible();
-    await openCircleHall(page);
+    await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
     await expect(page.getByText("General", { exact: true })).toBeVisible();
 
     const commonsSwitcher = page.getByLabel(/^Switch commons\. Currently /);
@@ -40,7 +39,6 @@ test("the street's Circle Hall opens Circle View, and a post board stays inside 
     await expect(
       page.getByLabel(`Switch commons. Currently ${activeCommonsName}`).filter({ visible: true }),
     ).toBeVisible();
-    await openCircleHall(page);
     const visibleGeneral = page.getByText("General", { exact: true }).filter({ visible: true });
     await expect(visibleGeneral).toBeVisible();
 
@@ -79,12 +77,11 @@ test("the street's Circle Hall opens Circle View, and a post board stays inside 
     ).toBeVisible();
 
     // The post board has its own header drawer. Its Commons rows must open
-    // that Commons' street rather than swapping one post board for another.
+    // Circle View rather than swapping one post board for another.
     await page.getByLabel("Open menu").click();
     await page.getByLabel(`View ${activeCommonsName} circles`).click();
-    await expect(page.getByText(/^Welcome to /)).toBeVisible();
+    await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Share what's happening..." })).toHaveCount(0);
-    await openCircleHall(page);
 
     // The sidebar's single Home button replaces the old Conversation and
     // Circles rows, and returns to Circle View from the post board.
@@ -98,10 +95,10 @@ test("the street's Circle Hall opens Circle View, and a post board stays inside 
     await expect(page.getByText("Default conversation", { exact: true })).toHaveCount(0);
     await expect(page.getByLabel("Open General", { exact: true })).toHaveCount(0);
     await page.getByLabel(`Go home to ${activeCommonsName} circles`).filter({ visible: true }).click();
-    await expect(page.getByText(/^Welcome to /)).toBeVisible();
+    await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Share what's happening..." })).toHaveCount(0);
 
-    // Tapping Commons from the street is also a no-op and must not
+    // Tapping Commons from Circle View is also a no-op and must not
     // duplicate the bottom tab bar.
     await page.getByLabel("Commons", { exact: true }).click();
     await expect(page.getByLabel("Commons", { exact: true })).toHaveCount(1);
@@ -123,9 +120,6 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
   const otherName = "E2E Market Commons";
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
   const visible = (text: string) => page.getByText(text, { exact: true }).filter({ visible: true });
-  // The street's label reads "Welcome to <name> · <n> out now".
-  const streetOf = (name: string) =>
-    page.getByText(new RegExp(`^Welcome to ${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( ·|$)`)).filter({ visible: true }).first();
   const currentCommons = (name: string) =>
     page.getByLabel(`Switch commons. Currently ${name}`, { exact: true }).filter({ visible: true });
 
@@ -146,7 +140,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
     expect(startingName).not.toBe(otherName);
     await page.getByLabel(`View circles in ${otherName}`, { exact: true }).filter({ visible: true }).click();
     await expect(currentCommons(otherName)).toBeVisible();
-    await expect(streetOf(otherName)).toBeVisible();
+    await expect(visible(`Find your circle in ${otherName}`)).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`coopId=${otherCoopId}`));
 
     await page.reload();
@@ -159,7 +153,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
       .filter({ visible: true })
       .click();
     await expect(currentCommons(startingName)).toBeVisible();
-    await expect(streetOf(startingName)).toBeVisible();
+    await expect(visible(`Find your circle in ${startingName}`)).toBeVisible();
 
     // 3. Commons directory.
     await page.getByLabel("Open menu").filter({ visible: true }).click();
@@ -167,7 +161,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
     await expect(page.getByText("Browse commons", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: `Open ${otherName} circles`, exact: true }).filter({ visible: true }).click();
     await expect(currentCommons(otherName)).toBeVisible();
-    await expect(streetOf(otherName)).toBeVisible();
+    await expect(visible(`Find your circle in ${otherName}`)).toBeVisible();
   } finally {
     await context.close();
   }
@@ -201,7 +195,6 @@ test("a circle's emoji icon on Circle View is not clipped by its line box", asyn
     expect(groupId).toBeTruthy();
 
     await page.reload();
-    await openCircleHall(page);
     await expect(page.getByText(circleName, { exact: true })).toBeVisible();
 
     // The emoji renders at 40px; its box must be at least that tall or the
@@ -239,7 +232,7 @@ test("two signed-in members see Sage's introduction thread in their welcome loun
 
   try {
     for (const page of [pageA, pageB]) {
-      await openCircleHall(page);
+      await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
       // The heading renders before the circle list loads - wait for the grid
       // (General is always its first card) or the lounge count below can
       // read 0 for an account that already has one and wait for a join card
@@ -328,7 +321,7 @@ test("Circle View scrolls to circles below the fold while its header stays put",
 
     await page.setViewportSize({ width: 390, height: 700 });
     await page.reload();
-    await openCircleHall(page);
+    await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
     // Newest circles come first, so the first one created is at the bottom of the grid.
     const lastCircle = page.getByText(`E2E Scroll 1 ${runId}`, { exact: true });
     await expect(lastCircle).toBeVisible();
@@ -372,7 +365,7 @@ test("onboarding hides the app's tab bar until it's finished", async ({ page }) 
   await expect(nav).toHaveCount(0);
   await page.getByPlaceholder("Enter 6-digit code").fill(process.env.E2E_LOGIN_CODE || "000000");
   await page.getByRole("button", { name: "Verify and continue" }).click();
-  // This established fixture already completed setup, so it lands on the street.
-  await expect(page.getByText(/^Welcome to /)).toBeVisible();
+  // This established fixture already completed setup.
+  await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
   await expect(nav).toBeVisible();
 });

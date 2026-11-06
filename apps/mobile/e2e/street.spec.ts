@@ -1,11 +1,23 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
+import { newSignedInPage as signInOnly, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
 import { sessionTokenFor, trpc } from "./support/welcome-lounge";
 
-// Commons Street: the Commons tab is a walkable street for signed-in members.
-// The map itself is a drawing, so these journeys use the street's list (the
-// same one screen-reader users get) to reach places, then the real sheets.
+// Commons Street: members can turn on a walkable street for the Commons tab in
+// their account settings (it's off by default, so Commons opens on Circle
+// View). The first journey flips that switch through the real settings UI.
+// The rest turn the street on for their own browser as fixture setup, then
+// use the street's list (the same one screen-reader users get) to reach
+// places, since the map itself is a drawing.
+
+const STREET_VIEW_KEY = "cahootz.streetView";
+
+async function newSignedInPage(...args: Parameters<typeof signInOnly>) {
+  const signedIn = await signInOnly(...args);
+  await signedIn.context.addInitScript((key) => window.localStorage.setItem(key, "on"), STREET_VIEW_KEY);
+  await signedIn.page.reload();
+  return signedIn;
+}
 
 async function openStreetPlace(page: Page, label: string) {
   await page.getByLabel("Open the list").click();
@@ -18,6 +30,43 @@ async function myStreet(page: Page) {
   const mine = street.lots.find((lot: any) => lot.isYou);
   return { token, street, mine };
 }
+
+test("Commons opens on circles until a member turns on the street in settings, and it stays after a reload", async ({ browser }) => {
+  const { context, page } = await signInOnly(browser, USER_A_EMAIL);
+  const streetSwitch = page.getByRole("switch", { name: "Commons street" });
+  const circles = page.getByText("Welcome In", { exact: true }).filter({ visible: true });
+  const street = page.getByLabel(/^Map of the street/);
+  try {
+    await page.evaluate((key) => window.localStorage.removeItem(key), STREET_VIEW_KEY);
+    await page.goto("/?coopId=cahootz");
+    await expect(circles).toBeVisible();
+    await expect(street).toHaveCount(0);
+
+    await page.getByRole("tab", { name: "You" }).click();
+    await expect(streetSwitch).toHaveAttribute("aria-checked", "false");
+    await expect(page.getByText(/Right now Commons opens on your circles\./)).toBeVisible();
+    await streetSwitch.click();
+    await expect(streetSwitch).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByText(/Commons opens on a street you can walk around\./)).toBeVisible();
+
+    await page.getByRole("tab", { name: "Commons" }).click();
+    await expect(street).toBeVisible();
+    await page.reload();
+    await expect(street).toBeVisible();
+
+    // Turning it back off brings the circles back.
+    await page.getByRole("tab", { name: "You" }).click();
+    await expect(streetSwitch).toHaveAttribute("aria-checked", "true");
+    await streetSwitch.click();
+    await expect(streetSwitch).toHaveAttribute("aria-checked", "false");
+    await page.getByRole("tab", { name: "Commons" }).click();
+    await expect(circles).toBeVisible();
+    await expect(street).toHaveCount(0);
+  } finally {
+    await page.evaluate((key) => window.localStorage.removeItem(key), STREET_VIEW_KEY).catch(() => undefined);
+    await context.close();
+  }
+});
 
 test("a member lands on the street and paints their house, and it stays after a reload", { tag: "@smoke" }, async ({ browser }) => {
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);

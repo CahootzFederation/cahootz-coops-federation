@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Upload, Loader2, Check, X } from "lucide-react";
 
 interface CompactImageUploadProps {
-  uploadType?: "product" | "store" | "profile";
+  uploadType?: "product" | "store" | "profile" | "offer";
   coopId?: string;
   resourceId?: string;
   label: string;
@@ -41,12 +41,12 @@ export function CompactImageUpload({
     if (!file) return;
 
     if (!uploadType || !coopId || !resourceId) {
-      setError("Upload configuration is missing");
+      setError("This upload isn't set up right. Reload the page and try again.");
       return;
     }
 
     if (!file.type.startsWith("image/")) {
-      setError("Please select an image file");
+      setError("That isn't a photo. Pick a JPG, PNG or WebP image.");
       return;
     }
 
@@ -70,13 +70,13 @@ export function CompactImageUpload({
       });
 
       if (!tokenResponse.ok) {
-        throw new Error("Failed to get upload token");
+        throw new Error("We couldn't start the upload. Try again.");
       }
 
       const tokenData = await tokenResponse.json();
 
       if (!tokenData.success) {
-        throw new Error(tokenData.error || "Failed to get upload token");
+        throw new Error(tokenData.error || "We couldn't start the upload. Try again.");
       }
 
       const blob = await put(tokenData.pathname, file, {
@@ -89,7 +89,7 @@ export function CompactImageUpload({
       setUploadSuccess(true);
       setTimeout(() => setUploadSuccess(false), 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(err instanceof Error ? err.message : "The photo didn't upload. Try again.");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {

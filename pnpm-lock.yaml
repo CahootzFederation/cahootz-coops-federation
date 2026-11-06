@@ -550,6 +550,9 @@ importers:
       '@repo/trpc':
         specifier: workspace:^
         version: link:../../packages/trpc
+      '@repo/validators':
+        specifier: workspace:*
+        version: link:../../packages/validators
       '@repo/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/typescript

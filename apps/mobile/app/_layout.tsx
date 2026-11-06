@@ -1,3 +1,4 @@
+import { CommunityTheme } from '@/constants/theme';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, router, type ErrorBoundaryProps } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -15,6 +16,7 @@ import Toast from 'react-native-toast-message';
 
 import { NotificationResponseHandler } from '@/components/notification-response-handler';
 import { InAppAlertPopup } from '@/components/in-app-alert-popup';
+import { PushPermissionGate } from '@/components/push-permission-gate';
 import { PendingInvitationResume } from '@/components/pending-invitation-resume';
 import { AnalyticsTracker } from '@/components/analytics-tracker';
 import { LoadError } from '@/components/load-error';
@@ -206,12 +208,13 @@ function RootLayout() {
             <CartProvider>
               <PaymentConfirmationProvider>
                 <ThemeProvider value={DefaultTheme}>
-                  <View style={{ flex: 1 }}>
+                  <View style={{ flex: 1, width: '100%', maxWidth: CommunityTheme.pageMaxWidth, alignSelf: 'center', backgroundColor: CommunityTheme.paper }}>
                     <View style={{ flex: 1, minHeight: 0 }}>
                       <Stack screenOptions={{ headerShown: false }} />
                     </View>
                     <AppBottomNavigation />
                     <InAppAlertPopup />
+                    <PushPermissionGate />
                   </View>
                   <StatusBar style="dark" />
                   <PortalHost />

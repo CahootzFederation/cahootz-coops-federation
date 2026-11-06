@@ -1,3 +1,4 @@
+import { CommunityTheme } from '@/constants/theme';
 import type {
   CommonsDirectoryItem,
   CommonsPost,
@@ -146,13 +147,13 @@ type CommonsAiEntryProps = {
 };
 
 const SOCIAL_THEME = {
-  paper: '#F6F7F8',
-  primary: '#FF6B00',
-  primarySoft: '#FFF7ED',
-  primaryBorder: '#FED7AA',
-  ink: '#111827',
-  muted: '#6B7280',
-  border: '#E5E7EB',
+  paper: CommunityTheme.paper,
+  primary: CommunityTheme.primary,
+  primarySoft: CommunityTheme.primarySoft,
+  primaryBorder: CommunityTheme.primaryBorder,
+  ink: CommunityTheme.ink,
+  muted: CommunityTheme.muted,
+  border: CommunityTheme.border,
 };
 
 const DEFAULT_COMMONS_PROFILE: CommonsProfile = {
@@ -1520,23 +1521,20 @@ export default function CommonsAiEntry({
       <TouchableOpacity
         accessibilityRole="button"
         onPress={() => void resetProfileOnboarding().catch(() => Alert.alert('Could not open profile setup', 'Please try again.'))}
-        className="mb-5 overflow-hidden rounded-[28px]"
-        style={{ backgroundColor: SOCIAL_THEME.primary }}
+        className="mb-4 overflow-hidden rounded-2xl border"
+        style={{ backgroundColor: SOCIAL_THEME.primarySoft, borderColor: SOCIAL_THEME.border }}
         activeOpacity={0.86}
       >
-        <View className="flex-row items-center gap-3 px-4 py-4">
-          <View className="h-10 w-10 items-center justify-center rounded-2xl bg-white/20">
-            <Sparkles color="#FFFFFF" size={18} strokeWidth={2.8} />
-          </View>
+        <View className="flex-row items-center gap-3 px-4 py-3">
           <View className="min-w-0 flex-1">
-            <Text className="text-sm font-black leading-5 text-white">
+            <Text className="text-sm font-semibold leading-5" style={{ color: SOCIAL_THEME.ink }}>
               Finish your profile setup
             </Text>
-            <Text className="mt-0.5 text-xs leading-4 text-white">
-              Help people know who you are and what you care about
+            <Text className="mt-0.5 text-xs leading-4" style={{ color: SOCIAL_THEME.muted }}>
+              Help neighbors get to know you.
             </Text>
           </View>
-          <View className="rounded-full bg-white px-3.5 py-2">
+          <View className="px-1 py-2">
             <Text
               className="text-xs font-black"
               style={{ color: SOCIAL_THEME.primary }}
@@ -1768,7 +1766,7 @@ export default function CommonsAiEntry({
                 },
               } as any)
             }
-            className="h-8 w-8 items-center justify-center rounded-full"
+            className="h-11 w-11 items-center justify-center rounded-full"
             style={{ backgroundColor: SOCIAL_THEME.primarySoft }}
             accessibilityLabel="Create event"
           >
@@ -1793,7 +1791,7 @@ export default function CommonsAiEntry({
             />
             <TouchableOpacity
               onPress={() => void pickPostMedia()}
-              className="h-8 w-8 items-center justify-center rounded-full bg-gray-100"
+              className="h-11 w-11 items-center justify-center rounded-full bg-gray-100"
               activeOpacity={0.75}
               accessibilityLabel="Attach photo or video"
             >
@@ -1801,7 +1799,7 @@ export default function CommonsAiEntry({
             </TouchableOpacity>
             <TouchableOpacity
               onPress={postDraft}
-              className="h-8 w-8 items-center justify-center rounded-full"
+              className="h-11 w-11 items-center justify-center rounded-full"
               style={{ backgroundColor: SOCIAL_THEME.primary }}
               activeOpacity={0.82}
               accessibilityLabel="Post"
@@ -2178,7 +2176,7 @@ export default function CommonsAiEntry({
                                 else pinPost(post);
                               }}
                               disabled={pinningPostId === post.id}
-                              className="h-8 w-8 items-center justify-center rounded-full"
+                              className="h-11 w-11 items-center justify-center rounded-full"
                               accessibilityLabel={pinned ? 'Unpin post' : 'Pin post'}
                             >
                               {pinningPostId === post.id ? (
@@ -2198,7 +2196,7 @@ export default function CommonsAiEntry({
                               deletePost(post);
                             }}
                             disabled={deletingPostId === post.id}
-                            className="h-8 w-8 items-center justify-center rounded-full"
+                            className="h-11 w-11 items-center justify-center rounded-full"
                             accessibilityLabel="Delete post"
                           >
                             {deletingPostId === post.id ? (
@@ -2216,7 +2214,7 @@ export default function CommonsAiEntry({
                             else pinPost(post);
                           }}
                           disabled={pinningPostId === post.id}
-                          className="h-8 w-8 items-center justify-center rounded-full"
+                          className="h-11 w-11 items-center justify-center rounded-full"
                           accessibilityLabel={pinned ? 'Unpin post' : 'Pin post'}
                         >
                           {pinningPostId === post.id ? (
@@ -2803,7 +2801,7 @@ export default function CommonsAiEntry({
                             accessibilityLabel={`Open ${circle.label}`}
                           >
                             <View
-                              className="h-8 w-8 items-center justify-center rounded-full"
+                              className="h-11 w-11 items-center justify-center rounded-full"
                               style={{ backgroundColor: '#F5F5F4' }}
                             >
                               {circle.kind === 'public' ? (
@@ -2849,7 +2847,7 @@ export default function CommonsAiEntry({
                             accessibilityLabel={`Create a circle in ${activeDrawerCommons.label}`}
                           >
                             <View
-                              className="h-8 w-8 items-center justify-center rounded-full"
+                              className="h-11 w-11 items-center justify-center rounded-full"
                               style={{
                                 backgroundColor: SOCIAL_THEME.primarySoft,
                               }}

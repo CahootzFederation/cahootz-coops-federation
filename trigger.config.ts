@@ -11,6 +11,7 @@ const workspaceEntries: Record<string, string> = {
   "@repo/validators": "packages/validators/src/index.ts",
   "@repo/validators/notification": "packages/validators/src/notification.ts",
   "@repo/validators/error-tracking": "packages/validators/src/error-tracking.ts",
+  "@repo/validators/marketplace-offers": "packages/validators/src/marketplace-offers.ts",
 };
 
 //@ts-ignore
@@ -33,7 +34,7 @@ export default defineConfig({
       esbuildPlugin({
         name: "workspace-package-sources",
         setup(build) {
-          build.onResolve({ filter: /^@repo\/(?:db|validators)(?:\/(?:notification|error-tracking))?$/ }, ({ path }) => {
+          build.onResolve({ filter: /^@repo\/(?:db|validators)(?:\/(?:notification|error-tracking|marketplace-offers))?$/ }, ({ path }) => {
             const entry = workspaceEntries[path];
             return entry ? { path: resolve(process.cwd(), entry) } : undefined;
           });

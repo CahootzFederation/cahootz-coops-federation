@@ -12,6 +12,7 @@ import { chargePaymentMethod, refundPayment } from './stripe-customer.js';
 import { sendClaimSMS } from './sms.js';
 import { coopConfig } from '../config/coop.js';
 import { convertUCToUSD, convertUSDToUC, createParityAmounts } from '../utils/currency-converter.js';
+import { createNotificationAndPush } from './push-notification-service.js';
 
 /**
  * Get user's balance in USD-equivalent value from SC.
@@ -307,35 +308,31 @@ export async function sendToSoulaanUser(params: {
         console.log('   ✅ Refund initiated successfully');
 
         // Notify user about the refund
-        await db.notification.create({
+        await createNotificationAndPush(db, {
+          userId: senderId,
+          coopId,
+          type: 'PAYMENT_REFUNDED',
+          title: 'Payment Refunded',
+          body: `Your $${amountUSD.toFixed(2)} payment failed and has been refunded to your card.`,
           data: {
-            userId: senderId,
-            coopId,
-            type: 'PAYMENT_REFUNDED',
-            title: 'Payment Refunded',
-            body: `Your $${amountUSD.toFixed(2)} payment failed and has been refunded to your card.`,
-            data: {
-              transferId: transfer.id,
-              amountUSD,
-              reason: error instanceof Error ? error.message : 'Transfer failed',
-            },
+            transferId: transfer.id,
+            amountUSD,
+            reason: error instanceof Error ? error.message : 'Transfer failed',
           },
         });
       } catch (refundError) {
         console.error('   ❌ Refund failed:', refundError);
         // Log for manual intervention
-        await db.notification.create({
+        await createNotificationAndPush(db, {
+          userId: senderId,
+          coopId,
+          type: 'PAYMENT_REFUND_FAILED',
+          title: 'Payment Issue',
+          body: `Your $${amountUSD.toFixed(2)} payment failed. Please contact support for a refund.`,
           data: {
-            userId: senderId,
-            coopId,
-            type: 'PAYMENT_REFUND_FAILED',
-            title: 'Payment Issue',
-            body: `Your $${amountUSD.toFixed(2)} payment failed. Please contact support for a refund.`,
-            data: {
-              transferId: transfer.id,
-              amountUSD,
-              stripePaymentIntentId,
-            },
+            transferId: transfer.id,
+            amountUSD,
+            stripePaymentIntentId,
           },
         });
       }
@@ -457,18 +454,16 @@ export async function sendToNonUser(params: {
 
   // Create notification for sender
   const config = coopConfig();
-  await db.notification.create({
+  await createNotificationAndPush(db, {
+    userId: senderId,
+    coopId,
+    type: 'PAYMENT_SENT',
+    title: 'Payment Sent',
+    body: `You sent $${amountUSD.toFixed(2)} to ${recipientPhone}. They have ${config.claimExpirationDays} days to claim it.`,
     data: {
-      userId: senderId,
-      coopId,
-      type: 'PAYMENT_SENT',
-      title: 'Payment Sent',
-      body: `You sent $${amountUSD.toFixed(2)} to ${recipientPhone}. They have ${config.claimExpirationDays} days to claim it.`,
-      data: {
-        pendingTransferId: pendingTransfer.id,
-        recipientPhone,
-        amountUSD,
-      },
+      pendingTransferId: pendingTransfer.id,
+      recipientPhone,
+      amountUSD,
     },
   });
 
@@ -535,17 +530,15 @@ export async function processExpiredTransfers(): Promise<number> {
       });
 
       // Notify sender
-      await db.notification.create({
+      await createNotificationAndPush(db, {
+        userId: transfer.senderId,
+        coopId: transfer.coopId,
+        type: 'PAYMENT_EXPIRED',
+        title: 'Payment Returned',
+        body: `Your $${transfer.amountUSD.toFixed(2)} payment to ${transfer.recipientPhone} was not claimed and has been returned.`,
         data: {
-          userId: transfer.senderId,
-          coopId: transfer.coopId,
-          type: 'PAYMENT_EXPIRED',
-          title: 'Payment Returned',
-          body: `Your $${transfer.amountUSD.toFixed(2)} payment to ${transfer.recipientPhone} was not claimed and has been returned.`,
-          data: {
-            pendingTransferId: transfer.id,
-            amountUSD: transfer.amountUSD,
-          },
+          pendingTransferId: transfer.id,
+          amountUSD: transfer.amountUSD,
         },
       });
 
@@ -591,27 +584,23 @@ async function createPaymentNotifications(
   const typeLabel = getTransferTypeLabel(transferType);
 
   // Notification for sender
-  await db.notification.create({
-    data: {
-      userId: senderId,
-      coopId,
-      type: 'PAYMENT_SENT',
-      title: 'Payment Sent',
-      body: `You sent $${amountUSD.toFixed(2)} to ${recipient?.name || 'a user'} — ${typeLabel}`,
-      data: { transferId, amountUSD, transferType },
-    },
+  await createNotificationAndPush(db, {
+    userId: senderId,
+    coopId,
+    type: 'PAYMENT_SENT',
+    title: 'Payment Sent',
+    body: `You sent $${amountUSD.toFixed(2)} to ${recipient?.name || 'a user'} — ${typeLabel}`,
+    data: { transferId, amountUSD, transferType },
   });
 
   // Notification for recipient
-  await db.notification.create({
-    data: {
-      userId: recipientId,
-      coopId,
-      type: 'PAYMENT_RECEIVED',
-      title: 'Payment Received',
-      body: `${sender?.name || 'Someone'} sent you $${amountUSD.toFixed(2)} — ${typeLabel}`,
-      data: { transferId, amountUSD, transferType },
-    },
+  await createNotificationAndPush(db, {
+    userId: recipientId,
+    coopId,
+    type: 'PAYMENT_RECEIVED',
+    title: 'Payment Received',
+    body: `${sender?.name || 'Someone'} sent you $${amountUSD.toFixed(2)} — ${typeLabel}`,
+    data: { transferId, amountUSD, transferType },
   });
 }
 

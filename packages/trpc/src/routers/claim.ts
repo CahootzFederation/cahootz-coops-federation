@@ -7,6 +7,7 @@ import { router } from "../trpc.js";
 import { createWalletForUser } from "../services/wallet-service.js";
 import { coopConfig } from "../config/coop.js";
 import { toE164 } from "../lib/phone.js";
+import { createNotificationAndPush } from "../services/push-notification-service.js";
 
 export const claimRouter = router({
   /**
@@ -143,17 +144,15 @@ export const claimRouter = router({
         });
 
         // Notify sender
-        await context.db.notification.create({
+        await createNotificationAndPush(context.db, {
+          userId: transfer.senderId,
+          coopId: transfer.coopId,
+          type: 'PAYMENT_CLAIMED',
+          title: 'Payment Claimed',
+          body: `Your $${transfer.amountUSD.toFixed(2)} payment to ${transfer.recipientPhone} was claimed.`,
           data: {
-            userId: transfer.senderId,
-            coopId: transfer.coopId,
-            type: 'PAYMENT_CLAIMED',
-            title: 'Payment Claimed',
-            body: `Your $${transfer.amountUSD.toFixed(2)} payment to ${transfer.recipientPhone} was claimed.`,
-            data: {
-              pendingTransferId: transfer.id,
-              claimMethod: 'bank',
-            },
+            pendingTransferId: transfer.id,
+            claimMethod: 'bank',
           },
         });
 
@@ -283,32 +282,28 @@ export const claimRouter = router({
         const config = coopConfig();
         await Promise.all([
           // Welcome notification for new user
-          context.db.notification.create({
+          createNotificationAndPush(context.db, {
+            userId: newUser.id,
+            coopId: transfer.coopId,
+            type: 'WELCOME',
+            title: `Welcome to ${config.shortName}!`,
+            body: `${transfer.sender.name || 'Someone'} sent you $${transfer.amountUSD.toFixed(2)}. Your balance is ready to use.`,
             data: {
-              userId: newUser.id,
-              coopId: transfer.coopId,
-              type: 'WELCOME',
-              title: `Welcome to ${config.shortName}!`,
-              body: `${transfer.sender.name || 'Someone'} sent you $${transfer.amountUSD.toFixed(2)}. Your balance is ready to use.`,
-              data: {
-                pendingTransferId: transfer.id,
-                amountUSD: transfer.amountUSD,
-              },
+              pendingTransferId: transfer.id,
+              amountUSD: transfer.amountUSD,
             },
           }),
           // Notify sender
-          context.db.notification.create({
+          createNotificationAndPush(context.db, {
+            userId: transfer.senderId,
+            coopId: transfer.coopId,
+            type: 'PAYMENT_CLAIMED',
+            title: 'Payment Claimed',
+            body: `${input.name} claimed your $${transfer.amountUSD.toFixed(2)} payment and joined ${config.shortName}!`,
             data: {
-              userId: transfer.senderId,
-              coopId: transfer.coopId,
-              type: 'PAYMENT_CLAIMED',
-              title: 'Payment Claimed',
-              body: `${input.name} claimed your $${transfer.amountUSD.toFixed(2)} payment and joined ${config.shortName}!`,
-              data: {
-                pendingTransferId: transfer.id,
-                claimMethod: '???',
-                newUserId: newUser.id,
-              },
+              pendingTransferId: transfer.id,
+              claimMethod: '???',
+              newUserId: newUser.id,
             },
           }),
         ]);

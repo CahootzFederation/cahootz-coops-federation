@@ -132,9 +132,26 @@ export async function newSignedInPage(browser: Browser, email: string) {
   return { context, page };
 }
 
-// The Commons tab (and "/") land on Circle View, not the feed directly -
-// open the General card to reach the actual post feed and composer.
+/**
+ * Signed-in members land on their Commons' street; every circle lives inside
+ * its Circle Hall. Walks in through the street's list (signed-out visitors
+ * and non-members already see the circles screen, so it does nothing then).
+ */
+export async function openCircleHall(page: Page) {
+  const street = page.getByLabel("Open the list");
+  const circles = page.getByText("Welcome In", { exact: true }).filter({ visible: true });
+  await expect(street.or(circles).first()).toBeVisible();
+  if (await circles.isVisible().catch(() => false)) return;
+  await street.click();
+  await page.getByRole("button", { name: "Visit Circle Hall", exact: true }).click();
+  await page.getByLabel("Go inside Circle Hall").click();
+  await expect(circles).toBeVisible();
+}
+
+// The Commons tab lands on the street - go into the Circle Hall and open the
+// General card to reach the actual post feed and composer.
 export async function openGeneralFeed(page: Page) {
+  await openCircleHall(page);
   await page.getByText("General", { exact: true }).click();
   await expect(
     page.getByRole("textbox", { name: "Share what's happening..." }),

@@ -37,13 +37,13 @@ test("a member sends a proposal by answering three plain questions", { tag: "@sm
     // Send stays tappable and lists what's missing.
     const send = page.getByRole("button", { name: "Send proposal" });
     await send.click();
-    await expect(shown(page, /Almost there\. To send it:/)).toBeVisible();
-    await expect(shown(page, /Say what you want to do/)).toBeVisible();
+    await expect(shown(page, /To send:/)).toBeVisible();
+    await expect(page.getByRole("alert")).toContainText("Say what you want to do");
     expect(sentText).toBe("");
 
     const idea = `E2E ${RUN_ID} weekly tutoring for kids`;
     await page.getByLabel("What do you want to do?").fill(idea);
-    await expect(shown(page, /Almost there/)).toHaveCount(0);
+    await expect(page.getByRole("alert")).not.toContainText("Say what you want to do");
     const firstCategory = page.getByRole("radio").filter({ visible: true }).first();
     const categoryCount = await page.getByRole("radio").filter({ visible: true }).count();
     // Timeline chips are radios too; categories (when the commons has them) come first.

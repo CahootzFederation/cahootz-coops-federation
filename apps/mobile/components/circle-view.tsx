@@ -1,6 +1,6 @@
-import type { CommonsDirectoryItem, PrivateGroupSummary } from '@/lib/api';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, TouchableOpacity, View } from 'react-native';
+import type { PrivateGroupSummary } from '@/lib/api';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Text } from '@/components/ui/text';
@@ -11,12 +11,11 @@ import { Input } from '@/components/ui/input';
 import { circleColorFromKey } from '@/lib/circle-color';
 import { secureStorage } from '@/lib/secure-storage';
 import { track } from '@/lib/analytics';
-import AppDrawer from '@/components/app-drawer';
+import { CommonsHeader, useCommonsDirectory } from '@/components/commons-header';
 import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
 import { LoadError } from '@/components/load-error';
 import { friendlyError } from '@/lib/friendly-error';
-import { IconAvatar } from '@/components/icon-avatar';
-import { CheckCircle2, ChevronDown, Compass, Menu, MessageCircle, Settings2, LogIn, Star, X } from 'lucide-react-native';
+import { MessageCircle, Settings2, LogIn } from 'lucide-react-native';
 
 const THEME = { ...DESIGN, primary: DESIGN.actionText };
 
@@ -26,8 +25,10 @@ function isGeneral(card: CircleCard): card is { general: true } {
   return 'general' in card;
 }
 
-export default function CircleView({ coopId }: { coopId: string }) {
-  const { sessionToken, isLoading: authLoading } = useAuth();
+export default function CircleView({ coopId, onBackToStreet }: { coopId: string; onBackToStreet?: () => void }) {
+  const { sessionToken } = useAuth();
+  const directory = useCommonsDirectory(coopId);
+  const { activeCommonsName } = directory;
   const [search, setSearch] = useState('');
   const [circles, setCircles] = useState<PrivateGroupSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -36,14 +37,6 @@ export default function CircleView({ coopId }: { coopId: string }) {
   const [reloadKey, setReloadKey] = useState(0);
   // Shown under the grid when joining a circle or a welcome lounge fails.
   const [actionError, setActionError] = useState<string | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [commons, setCommons] = useState<CommonsDirectoryItem[]>([]);
-  const [commonsLoading, setCommonsLoading] = useState(true);
-  const [commonsError, setCommonsError] = useState('');
-  const [commonsReloadKey, setCommonsReloadKey] = useState(0);
-  const [switcherOpen, setSwitcherOpen] = useState(false);
-  const [defaultSavingId, setDefaultSavingId] = useState<string | null>(null);
-  const [defaultError, setDefaultError] = useState('');
 
   // Single fetch per focus - no polling. Live updates are planned via
   // websockets later; until then "chatting" counts can go stale while you
@@ -82,32 +75,6 @@ export default function CircleView({ coopId }: { coopId: string }) {
       };
     }, [coopId, sessionToken, reloadKey]),
   );
-
-  useEffect(() => {
-    // Wait for the saved session to load. Asking before then gets the
-    // signed-out list, so the default star shows up late.
-    if (authLoading) return;
-    let mounted = true;
-    setCommonsLoading(true);
-    setCommonsError('');
-
-    api
-      .listCommonsDirectory(sessionToken)
-      .then((result) => {
-        if (mounted) setCommons(result.coops);
-      })
-      .catch((err) => {
-        console.error('Failed to load commons directory:', err);
-        if (mounted) setCommonsError(friendlyError(err, "We couldn't load your commons."));
-      })
-      .finally(() => {
-        if (mounted) setCommonsLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [authLoading, commonsReloadKey, sessionToken]);
 
   const retryLoad = () => {
     setActionError(null);
@@ -164,37 +131,6 @@ export default function CircleView({ coopId }: { coopId: string }) {
     router.push({ pathname: '/(authenticated)/spaces', params: { coopId } } as any);
   };
 
-  const switchCommons = (nextCoopId: string) => {
-    setSwitcherOpen(false);
-    if (nextCoopId === coopId) return;
-    router.replace({ pathname: '/(tabs)', params: { coopId: nextCoopId } } as any);
-  };
-
-  const makeDefaultCommons = async (nextCoopId: string) => {
-    if (!sessionToken || defaultSavingId) return;
-    setDefaultSavingId(nextCoopId);
-    setDefaultError('');
-    try {
-      await api.setDefaultCommons(nextCoopId, sessionToken);
-      setCommons((items) =>
-        items
-          .map((item) => ({ ...item, isDefault: item.id === nextCoopId }))
-          .sort((a, b) => Number(b.isDefault) - Number(a.isDefault)),
-      );
-    } catch (err) {
-      console.error('Failed to save default commons:', err);
-      setDefaultError(friendlyError(err, "We couldn't save your default Commons."));
-    } finally {
-      setDefaultSavingId(null);
-    }
-  };
-
-  const activeCommons = commons.find((item) => item.id === coopId);
-  const activeCommonsName = activeCommons?.name || (coopId === 'cahootz' ? 'Cahootz' : 'Commons');
-  const switchableCommons = commons.filter(
-    (item) => item.id === coopId || item.isMember || !item.isLocked,
-  );
-
   const myWelcomeTable = circles.find((c) => c.kind === 'WELCOME_TABLE' && c.isMember);
   const memberCircles = circles.filter((c) => c.isMember && c.kind !== 'WELCOME_TABLE');
   const publicCircles = circles.filter((c) => !c.isMember && c.privacy === 'public');
@@ -207,165 +143,11 @@ export default function CircleView({ coopId }: { coopId: string }) {
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
-      <AppDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} activeCommonsId={coopId} />
-      <Modal
-        visible={switcherOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSwitcherOpen(false)}
-      >
-        <View className="flex-1 justify-end bg-black/35">
-          <TouchableOpacity
-            className="absolute inset-0"
-            onPress={() => setSwitcherOpen(false)}
-            accessibilityLabel="Close commons switcher"
-          />
-          <View
-            className="max-h-[78%] rounded-t-3xl bg-white px-5 pb-8 pt-5"
-            accessibilityLabel="Commons switcher"
-          >
-            <View className="mb-4 flex-row items-center justify-between">
-              <View>
-                <Text className="text-2xl font-black text-gray-950">Switch commons</Text>
-                <Text className="mt-1 text-sm font-semibold text-gray-500">
-                  Choose a Commons to see its circles.
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => setSwitcherOpen(false)}
-                className="h-11 w-11 items-center justify-center rounded-full bg-gray-100"
-                accessibilityLabel="Close commons switcher"
-              >
-                <X size={18} color={THEME.ink} />
-              </TouchableOpacity>
-            </View>
-
-            {commonsLoading ? (
-              <View className="items-center py-8">
-                <ActivityIndicator color={THEME.primary} />
-              </View>
-            ) : commonsError ? (
-              <LoadError
-                message={commonsError}
-                onRetry={() => setCommonsReloadKey((key) => key + 1)}
-              />
-            ) : (
-              <ScrollView className="flex-shrink" contentContainerStyle={{ gap: 8 }}>
-                {defaultError ? (
-                  <Text className="mb-1 text-sm font-semibold text-red-600">{defaultError}</Text>
-                ) : null}
-                {switchableCommons.map((item) => {
-                  const selected = item.id === coopId;
-                  return (
-                    <View
-                      key={item.id}
-                      className="min-h-16 flex-row items-center rounded-2xl border pr-3"
-                      style={{
-                        borderColor: selected ? THEME.primary : THEME.border,
-                        backgroundColor: selected ? THEME.primarySoft : '#FFFFFF',
-                      }}
-                    >
-                      <TouchableOpacity
-                        onPress={() => switchCommons(item.id)}
-                        className="min-w-0 flex-1 flex-row items-center gap-3 px-3 py-3"
-                        accessibilityLabel={`${selected ? 'Current commons' : 'View circles in'} ${item.name}`}
-                      >
-                        <IconAvatar
-                          emoji={item.iconEmoji}
-                          color={item.iconColor || THEME.primary}
-                          fallbackText={item.name}
-                          size={40}
-                          radius={12}
-                        />
-                        <View className="min-w-0 flex-1">
-                          <Text className="text-base font-black text-gray-950" numberOfLines={1}>
-                            {item.name}
-                          </Text>
-                          <Text className="mt-0.5 text-xs font-semibold text-gray-500">
-                            {item.isMember ? 'Member' : 'Public commons'}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                      {item.isMember ? (
-                        <TouchableOpacity
-                          onPress={(event) => {
-                            makeDefaultCommons(item.id);
-                          }}
-                          disabled={item.isDefault || defaultSavingId !== null}
-                          className="h-11 w-11 items-center justify-center rounded-full"
-                          style={{ backgroundColor: item.isDefault ? '#FEF3C7' : '#F5F5F4' }}
-                          accessibilityRole="button"
-                          accessibilityLabel={
-                            item.isDefault
-                              ? `${item.name} is your default commons`
-                              : `Make ${item.name} your default commons`
-                          }
-                        >
-                          {defaultSavingId === item.id ? (
-                            <ActivityIndicator size="small" color={THEME.primary} />
-                          ) : (
-                            <Star
-                              size={19}
-                              color={item.isDefault ? '#D97706' : '#78716C'}
-                              fill={item.isDefault ? '#FBBF24' : 'transparent'}
-                            />
-                          )}
-                        </TouchableOpacity>
-                      ) : null}
-                      {selected ? <CheckCircle2 size={20} color={THEME.primary} /> : null}
-                    </View>
-                  );
-                })}
-              </ScrollView>
-            )}
-
-            <TouchableOpacity
-              onPress={() => {
-                setSwitcherOpen(false);
-                router.push('/commons' as any);
-              }}
-              className="mt-4 min-h-11 flex-row items-center justify-center gap-2"
-              accessibilityLabel="Explore all commons"
-            >
-              <Compass size={17} color={THEME.primary} />
-              <Text className="text-sm font-black" style={{ color: THEME.primary }}>
-                Explore all commons
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-      {/* The header stays put; everything below it scrolls. */}
-      <View className="flex-row items-center justify-between bg-white px-5 pb-2 pt-4">
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="Open menu"
-          onPress={() => setDrawerOpen(true)}
-          className="h-11 w-11 items-center justify-center rounded-full"
-          style={{ backgroundColor: THEME.primarySoft }}
-        >
-          <Menu size={20} color={THEME.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setSwitcherOpen(true)}
-          className="min-w-0 flex-1 px-3"
-          activeOpacity={0.72}
-          accessibilityLabel={`Switch commons. Currently ${activeCommonsName}`}
-        >
-          <View className="flex-row items-center gap-1.5">
-            <Text className="min-w-0 flex-shrink text-lg font-black text-gray-950" numberOfLines={1}>
-              {activeCommonsName}
-            </Text>
-            {activeCommons?.isDefault ? <Star size={15} color="#D97706" fill="#FBBF24" /> : null}
-          </View>
-          <View className="mt-0.5 flex-row items-center">
-            <Text className="text-xs font-bold" style={{ color: THEME.primary }}>
-              Switch commons
-            </Text>
-            <ChevronDown size={14} color={THEME.primary} />
-          </View>
-        </TouchableOpacity>
-        {sessionToken ? (
+      <CommonsHeader
+        coopId={coopId}
+        directory={directory}
+        switcherSubtitle="Choose a Commons to see its circles."
+        right={sessionToken ? (
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="Manage circles"
@@ -375,10 +157,8 @@ export default function CircleView({ coopId }: { coopId: string }) {
           >
             <Settings2 size={18} color={THEME.primary} />
           </TouchableOpacity>
-        ) : (
-          <View className="h-11 w-11" />
-        )}
-      </View>
+        ) : undefined}
+      />
 
       <ScrollView
         testID="circle-view-scroll"
@@ -387,7 +167,17 @@ export default function CircleView({ coopId }: { coopId: string }) {
         keyboardShouldPersistTaps="handled"
       >
         <View className="px-5 pt-2">
-          <Text className="text-3xl font-black text-gray-950">Welcome In</Text>
+          {onBackToStreet ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Back to the street"
+              onPress={onBackToStreet}
+              className="mb-2 min-h-11 flex-row items-center self-start"
+            >
+              <Text className="text-sm font-bold" style={{ color: THEME.primary }}>‹ Back to the street</Text>
+            </TouchableOpacity>
+          ) : null}
+          <Text className="text-2xl font-bold text-gray-950">Welcome In</Text>
           <Text className="mt-1 text-base font-semibold text-gray-500">
             Find your circle in {activeCommonsName}
           </Text>
@@ -470,7 +260,7 @@ export default function CircleView({ coopId }: { coopId: string }) {
                       <LogIn size={30} color={THEME.primary} />
                     )}
                   </View>
-                  <Text className="mt-3 text-center text-base font-black text-gray-900">
+                  <Text className="mt-3 text-center text-base font-bold text-gray-900">
                     {sessionToken ? 'Join a welcome lounge' : 'Sign in'}
                   </Text>
                   <Text className="mt-0.5 text-center text-xs font-semibold text-gray-500">
@@ -539,7 +329,7 @@ function CircleCardView({
           <Text style={{ fontSize: 40, lineHeight: 52, textAlign: 'center' }}>{iconEmoji}</Text>
         ) : (
           <Text
-            className="text-3xl font-black"
+            className="text-3xl font-bold"
             style={{ color: iconColor ? '#FFFFFF' : palette.foreground }}
           >
             {name.slice(0, 1).toUpperCase()}

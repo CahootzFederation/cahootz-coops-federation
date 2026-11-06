@@ -1,11 +1,23 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
+import { newSignedInPage as signInOnly, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
 import { sessionTokenFor, trpc } from "./support/welcome-lounge";
 
-// Commons Street: the Commons tab is a walkable street for signed-in members.
-// The map itself is a drawing, so these journeys use the street's list (the
-// same one screen-reader users get) to reach places, then the real sheets.
+// Commons Street: members can turn on a walkable street for the Commons tab in
+// their account settings (it's off by default, so Commons opens on Circle
+// View). The first journey flips that switch through the real settings UI.
+// The rest turn the street on for their own browser as fixture setup, then
+// use the street's list (the same one screen-reader users get) to reach
+// places, since the map itself is a drawing.
+
+const STREET_VIEW_KEY = "cahootz.streetView";
+
+async function newSignedInPage(...args: Parameters<typeof signInOnly>) {
+  const signedIn = await signInOnly(...args);
+  await signedIn.context.addInitScript((key) => window.localStorage.setItem(key, "on"), STREET_VIEW_KEY);
+  await signedIn.page.reload();
+  return signedIn;
+}
 
 async function openStreetPlace(page: Page, label: string) {
   await page.getByLabel("Open the list").click();
@@ -18,6 +30,43 @@ async function myStreet(page: Page) {
   const mine = street.lots.find((lot: any) => lot.isYou);
   return { token, street, mine };
 }
+
+test("Commons opens on circles until a member turns on the street in settings, and it stays after a reload", async ({ browser }) => {
+  const { context, page } = await signInOnly(browser, USER_A_EMAIL);
+  const streetSwitch = page.getByRole("switch", { name: "Commons street" });
+  const circles = page.getByText("Welcome In", { exact: true }).filter({ visible: true });
+  const street = page.getByLabel(/^Map of the street/);
+  try {
+    await page.evaluate((key) => window.localStorage.removeItem(key), STREET_VIEW_KEY);
+    await page.goto("/?coopId=cahootz");
+    await expect(circles).toBeVisible();
+    await expect(street).toHaveCount(0);
+
+    await page.getByRole("tab", { name: "You" }).click();
+    await expect(streetSwitch).toHaveAttribute("aria-checked", "false");
+    await expect(page.getByText(/Right now Commons opens on your circles\./)).toBeVisible();
+    await streetSwitch.click();
+    await expect(streetSwitch).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByText(/Commons opens on a street you can walk around\./)).toBeVisible();
+
+    await page.getByRole("tab", { name: "Commons" }).click();
+    await expect(street).toBeVisible();
+    await page.reload();
+    await expect(street).toBeVisible();
+
+    // Turning it back off brings the circles back.
+    await page.getByRole("tab", { name: "You" }).click();
+    await expect(streetSwitch).toHaveAttribute("aria-checked", "true");
+    await streetSwitch.click();
+    await expect(streetSwitch).toHaveAttribute("aria-checked", "false");
+    await page.getByRole("tab", { name: "Commons" }).click();
+    await expect(circles).toBeVisible();
+    await expect(street).toHaveCount(0);
+  } finally {
+    await page.evaluate((key) => window.localStorage.removeItem(key), STREET_VIEW_KEY).catch(() => undefined);
+    await context.close();
+  }
+});
 
 test("a member lands on the street and paints their house, and it stays after a reload", { tag: "@smoke" }, async ({ browser }) => {
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
@@ -203,6 +252,78 @@ test("Circle Hall on the street lists every circle, opens one, and leads inside"
     await page.getByLabel("Back to the street").click();
     await expect(page.getByText(/^Welcome to /)).toBeVisible();
   } finally {
+    await context.close();
+  }
+});
+
+test("with the street on, going into a circle and back home always returns to the street, and turning it off returns to circles", async ({ browser }) => {
+  const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
+  const street = page.getByLabel(/^Map of the street/);
+  const composer = page.getByRole("textbox", { name: "Share what's happening..." });
+  const circles = page.getByText("Welcome In", { exact: true }).filter({ visible: true });
+  try {
+    await page.goto("/?coopId=cahootz");
+    await expect(street).toBeVisible();
+    const switcherLabel = await page.getByLabel(/^Switch commons\. Currently /).first().getAttribute("aria-label");
+    const commonsName = switcherLabel!.replace("Switch commons. Currently ", "");
+
+    // Street -> Circle Hall -> General. Tapping the selected Commons tab keeps
+    // the circle open, and so does a reload.
+    await openStreetPlace(page, "Visit Circle Hall");
+    await page.getByLabel("Open General", { exact: true }).click();
+    await expect(composer).toBeVisible();
+    const circleUrl = page.url();
+    await page.getByLabel("Commons", { exact: true }).click();
+    await expect(page).toHaveURL(circleUrl);
+    await expect(composer).toBeVisible();
+    await page.reload();
+    await expect(composer).toBeVisible();
+
+    // The circle's drawer Home goes back to the street, not the circles screen.
+    await page.getByLabel("Open menu").filter({ visible: true }).click();
+    await page.getByLabel(`Go home to ${commonsName} circles`).filter({ visible: true }).click();
+    await expect(street).toBeVisible();
+    await expect(composer).toHaveCount(0);
+
+    // Board and back to Commons lands on the street.
+    await page.getByRole("tab", { name: "Board" }).click();
+    await expect(page.getByRole("tab", { name: "Board" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByText("Find your way around", { exact: true })).toBeVisible();
+    await page.getByRole("tab", { name: "Commons" }).click();
+    await expect(street).toBeVisible();
+
+    // Inside the Circle Hall, open a circle, then the drawer's Commons row
+    // goes to the street too. Only one tab bar is ever on screen.
+    await openStreetPlace(page, "Visit Circle Hall");
+    await page.getByLabel("Go inside Circle Hall").click();
+    await expect(circles).toBeVisible();
+    await page.getByText("General", { exact: true }).filter({ visible: true }).click();
+    await expect(composer).toBeVisible();
+    await page.getByLabel("Open menu").filter({ visible: true }).click();
+    await page.getByLabel(`View ${commonsName} circles`).click();
+    await expect(street).toBeVisible();
+    await expect(page.getByLabel("Commons", { exact: true })).toHaveCount(1);
+
+    // Turning the street off from inside a circle: the next trip home shows circles.
+    await openStreetPlace(page, "Visit Circle Hall");
+    await page.getByLabel("Open General", { exact: true }).click();
+    await expect(composer).toBeVisible();
+    await page.getByRole("tab", { name: "You" }).click();
+    const streetSwitch = page.getByRole("switch", { name: "Commons street" });
+    await expect(streetSwitch).toHaveAttribute("aria-checked", "true");
+    await streetSwitch.click();
+    await expect(streetSwitch).toHaveAttribute("aria-checked", "false");
+    await page.getByRole("tab", { name: "Commons" }).click();
+    await expect(street).toHaveCount(0);
+    if (await composer.isVisible().catch(() => false)) {
+      await page.getByLabel("Open menu").filter({ visible: true }).click();
+      await page.getByLabel(`Go home to ${commonsName} circles`).filter({ visible: true }).click();
+    }
+    await expect(circles).toBeVisible();
+    await expect(street).toHaveCount(0);
+    await expect(page.getByLabel("Back to the street")).toHaveCount(0);
+  } finally {
+    await page.evaluate((key) => window.localStorage.removeItem(key), STREET_VIEW_KEY).catch(() => undefined);
     await context.close();
   }
 });

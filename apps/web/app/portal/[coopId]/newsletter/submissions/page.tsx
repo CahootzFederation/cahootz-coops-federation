@@ -60,7 +60,7 @@ interface NewsletterSubmission {
   submittedAt?: string;
   status?: "pending" | "published" | "dismissed";
   source?: "member" | "public-contributor" | "agent";
-  agentId?: "article-writer";
+  agentId?: string;
   agentName?: string;
   recommendedBecause?: string;
   agentPrompt?: string;

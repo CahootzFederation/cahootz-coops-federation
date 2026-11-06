@@ -110,7 +110,7 @@ The hourly `vendor-outreach-sweep` handles ACTIVE campaigns that still need pros
 1. **Cahootz shops:** approved stores in the category, nearest area first. Contact uses the existing in-app owner notification plus email to the store's contact email.
 2. **Member referrals:** businesses members recommended in that category.
 3. **Web search:** a short-lived research worker using `webSearchTool` from `@openai/agents`.
-   - It is already a dependency (the proposal engine and newsletter agent use it), so no new API key is needed.
+   - It is already a dependency (the proposal engine uses it), so no new API key is needed.
    - It runs at most `maxSearches` queries per campaign, and enabled directory sites are added as `site:` hints.
    - Output is structured: business name, website, public business email, phone, address, the URL where each contact was found, and why it's relevant.
    - Rule: only contact details the business publishes itself (its own site or a business listing). Nothing behind a login, and no personal social profiles.

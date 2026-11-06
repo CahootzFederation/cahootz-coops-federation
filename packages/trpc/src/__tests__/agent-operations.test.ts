@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   platformConfigUpsert: vi.fn(),
   coopConfigFindMany: vi.fn(),
   commonsAgentSettingFindMany: vi.fn(),
-  publicCoopInfoFindMany: vi.fn(),
   sageWakeCycleFindMany: vi.fn(),
   getSageAutonomyUsage: vi.fn(),
 }));
@@ -20,7 +19,6 @@ vi.mock("@repo/db", () => ({
     },
     coopConfig: { findMany: mocks.coopConfigFindMany },
     commonsAgentSetting: { findMany: mocks.commonsAgentSettingFindMany },
-    publicCoopInfo: { findMany: mocks.publicCoopInfoFindMany },
     sageWakeCycle: { findMany: mocks.sageWakeCycleFindMany },
   },
 }));
@@ -45,7 +43,6 @@ beforeEach(() => {
   mocks.commonsAgentSettingFindMany.mockResolvedValue([
     { coopId: "cahootz", autoReply: true },
   ]);
-  mocks.publicCoopInfoFindMany.mockResolvedValue([]);
   mocks.sageWakeCycleFindMany.mockResolvedValue([
     {
       coopId: "cahootz",
@@ -79,7 +76,7 @@ describe("agent operational health", () => {
     expect(snapshot).toMatchObject({ healthy: true, issues: [] });
   });
 
-  it("reports pauses, failed cycles, and disabled newsletter agents together", async () => {
+  it("reports pauses and failed cycles together", async () => {
     mocks.commonsAgentSettingFindMany.mockResolvedValue([
       { coopId: "cahootz", autoReply: false },
     ]);
@@ -94,16 +91,6 @@ describe("agent operational health", () => {
         status: "FAILED",
         startedAt: new Date("2026-10-13T17:50:00Z"),
         error: "model rejected the request",
-      },
-    ]);
-    mocks.publicCoopInfoFindMany.mockResolvedValue([
-      {
-        coopId: "cahootz",
-        previewOverrides: {
-          newsletterAgentSchedules: {
-            "article-writer": { enabled: false, intervalHours: 168 },
-          },
-        },
       },
     ]);
 
@@ -127,11 +114,6 @@ describe("agent operational health", () => {
         expect.objectContaining({
           agentId: "sage-wake",
           state: "FAILED",
-          coopId: "cahootz",
-        }),
-        expect.objectContaining({
-          agentId: "newsletter-article-writer",
-          state: "OFF",
           coopId: "cahootz",
         }),
       ]),

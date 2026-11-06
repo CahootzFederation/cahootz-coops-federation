@@ -17,8 +17,6 @@ export const env = createEnv({
     WALLET_ENCRYPTION_KEY: z.string().regex(/^[a-fA-F0-9]{64}$/),
     BACKEND_WALLET_PRIVATE_KEY: z.string().regex(/^0x[a-fA-F0-9]{64}$/).optional(),
     GOVERNANCE_BOT_PRIVATE_KEY: z.string().regex(/^0x[a-fA-F0-9]{64}$/).optional(),
-    DEV_AGENT_TOKEN: z.string().min(1).optional(),
-    DEV_AGENT_WALLET_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
     STRIPE_SECRET_KEY: z.string().startsWith("sk_"),
     STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_"),
     STRIPE_PUBLISHABLE_KEY: z.string().startsWith("pk_").optional(),

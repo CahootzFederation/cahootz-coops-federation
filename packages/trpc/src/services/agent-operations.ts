@@ -9,49 +9,6 @@ const DATABASE_ID_KEY = "platform.database-id";
 const WAKE_STALE_MS = 45 * 60 * 1000;
 const RUNNING_STALE_MS = 20 * 60 * 1000;
 
-interface NewsletterSchedule {
-  enabled: boolean;
-  intervalHours: number;
-  lastRunAt?: string;
-  lastRunStatus?: string;
-  lastRunMessage?: string;
-}
-
-function newsletterSchedule(
-  value: unknown,
-  agentId: "article-writer",
-): NewsletterSchedule {
-  const root =
-    typeof value === "object" && value !== null && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : {};
-  const schedules =
-    typeof root.newsletterAgentSchedules === "object" &&
-    root.newsletterAgentSchedules !== null &&
-    !Array.isArray(root.newsletterAgentSchedules)
-      ? (root.newsletterAgentSchedules as Record<string, unknown>)
-      : {};
-  const raw =
-    typeof schedules[agentId] === "object" &&
-    schedules[agentId] !== null &&
-    !Array.isArray(schedules[agentId])
-      ? (schedules[agentId] as Record<string, unknown>)
-      : {};
-  return {
-    enabled: typeof raw.enabled === "boolean" ? raw.enabled : true,
-    intervalHours:
-      typeof raw.intervalHours === "number" &&
-      Number.isFinite(raw.intervalHours)
-        ? Math.min(Math.max(Math.round(raw.intervalHours), 1), 24 * 60)
-        : 168,
-    lastRunAt: typeof raw.lastRunAt === "string" ? raw.lastRunAt : undefined,
-    lastRunStatus:
-      typeof raw.lastRunStatus === "string" ? raw.lastRunStatus : undefined,
-    lastRunMessage:
-      typeof raw.lastRunMessage === "string" ? raw.lastRunMessage : undefined,
-  };
-}
-
 /**
  * True only for the real production API. Railway copies production settings into
  * every PR and dev environment, each with its own database, so NODE_ENV alone would
@@ -99,7 +56,7 @@ export async function getAgentOperationalSnapshot(
   now = new Date(),
 ): Promise<AgentOperationalSnapshot> {
   const issues: AgentOperationalIssue[] = [];
-  const [configs, settings, publicInfos, databaseId] = await Promise.all([
+  const [configs, settings, databaseId] = await Promise.all([
     db.coopConfig.findMany({
       where: { isActive: true, isDemo: false },
       select: { coopId: true },
@@ -107,9 +64,6 @@ export async function getAgentOperationalSnapshot(
     }),
     db.commonsAgentSetting.findMany({
       select: { coopId: true, autoReply: true },
-    }),
-    db.publicCoopInfo.findMany({
-      select: { coopId: true, previewOverrides: true },
     }),
     getDatabaseId(),
   ]);
@@ -222,48 +176,6 @@ export async function getAgentOperationalSnapshot(
         state: "FAILED",
         reason: "No wake cycle has started in the last 45 minutes.",
       });
-    }
-  }
-
-  for (const publicInfo of publicInfos) {
-    if (!activeCoopIds.has(publicInfo.coopId)) continue;
-    for (const agentId of ["article-writer"] as const) {
-      const schedule = newsletterSchedule(publicInfo.previewOverrides, agentId);
-      if (!schedule.enabled) {
-        issues.push({
-          agentId: `newsletter-${agentId}`,
-          coopId: publicInfo.coopId,
-          state: "OFF",
-          reason: "The saved agent schedule is disabled.",
-        });
-        continue;
-      }
-      if (schedule.lastRunStatus === "error") {
-        issues.push({
-          agentId: `newsletter-${agentId}`,
-          coopId: publicInfo.coopId,
-          state: "FAILED",
-          reason:
-            schedule.lastRunMessage?.slice(0, 500) ||
-            "The most recent run failed.",
-        });
-        continue;
-      }
-      if (schedule.lastRunAt) {
-        const lastRunAt = new Date(schedule.lastRunAt);
-        const staleAfter = (schedule.intervalHours + 2) * 60 * 60 * 1000;
-        if (
-          !Number.isNaN(lastRunAt.getTime()) &&
-          now.getTime() - lastRunAt.getTime() > staleAfter
-        ) {
-          issues.push({
-            agentId: `newsletter-${agentId}`,
-            coopId: publicInfo.coopId,
-            state: "FAILED",
-            reason: `No completed run within the configured ${schedule.intervalHours}-hour interval plus a 2-hour grace period.`,
-          });
-        }
-      }
     }
   }
 

@@ -9,6 +9,7 @@ import { TreasuryContributionCalculator } from "@/components/treasury-contributi
 import { WaitlistSignupForm } from "@/components/waitlist-signup-form";
 import { env } from "@/env";
 import { getFeaturedBlogPosts } from "@/lib/blog";
+import { MEMBER_APP_STORE_URL } from "@/lib/member-app";
 import {
   ArrowDownRight,
   ArrowRight,
@@ -61,7 +62,7 @@ async function getActiveCoops(): Promise<CoopOption[]> {
 export const metadata: Metadata = {
   title: "Cahootz | A place for communities to move together",
   description:
-    "Cahootz Commons is the iPhone app for the communities you belong to. Post and react in your commons, talk in circles, organize your family, and let Sage introduce you to the members who can help.",
+    "Cahootz Commons is the iPhone app for the communities you belong to. Walk your commons street, talk in circles, organize your family, buy together for better prices, and let Sage introduce you to the members who can help.",
   alternates: { canonical: "https://cahootzcommons.com" },
 };
 
@@ -92,6 +93,29 @@ const pathways = [
   },
 ];
 
+const insideApp = [
+  {
+    label: "Group deals",
+    title: "Buy together, pay less.",
+    body: "Join a deal with your commons and everyone gets a better price. You won't be charged unless the deal reaches its goal.",
+  },
+  {
+    label: "Your street",
+    title: "Your commons is a street you can walk.",
+    body: "Pick your look, see who's out, and step into Circle Hall to find the circles you're part of.",
+  },
+  {
+    label: "Families",
+    title: "A commons just for your family.",
+    body: "Share news, plan get-togethers, and keep everyone in the loop, without the group chat chaos.",
+  },
+  {
+    label: "Sage",
+    title: "Text Sage like you'd text a friend.",
+    body: "Ask for help or offer what you're good at. Sage finds the people who fit and makes the intro.",
+  },
+];
+
 const faqs = [
   {
     q: "What is a commons?",
@@ -103,7 +127,11 @@ const faqs = [
   },
   {
     q: "Is there an Android app?",
-    a: "Not yet. Cahootz Commons is on iPhone today and Android is coming. Join the waitlist below and we'll tell you when it's ready.",
+    a: "Not yet. Cahootz Commons is on iPhone today, and we're getting the Android app ready now. Join the waitlist below and we'll tell you when it's out.",
+  },
+  {
+    q: "How do group deals work?",
+    a: "Your commons picks something lots of people already buy. When enough people join, everyone gets the lower price. You save your card when you join, and you're only charged if the deal reaches its goal.",
   },
   {
     q: "Who is Sage?",
@@ -136,6 +164,7 @@ export default async function HomePage() {
           </Link>
           <nav aria-label="Main navigation" className="header-nav">
             <a href="#how-it-works">How it works</a>
+            <a href="#inside">What&apos;s inside</a>
             <a href="#sage">Meet Sage</a>
             <a href="#get-in">How to get in</a>
             <a href="#find-a-commons">Find a commons</a>
@@ -175,7 +204,7 @@ export default async function HomePage() {
             </div>
             <div
               className="commons-map"
-              aria-label="Your feed, circles, families, Sage, and local stores connect through a commons"
+              aria-label="Your people, help, group deals, and Sage connect through a commons"
             >
               <div className="map-caption">
                 ONE COMMONS, MANY WAYS TO PARTICIPATE
@@ -201,9 +230,9 @@ export default async function HomePage() {
                 <small>Ask once, the right people see it</small>
               </div>
               <div className="map-node map-business">
-                <span className="node-kicker">ECONOMY</span>
-                <strong>Local businesses</strong>
-                <small>Buy and build nearby</small>
+                <span className="node-kicker">GROUP DEALS</span>
+                <strong>Buy together</strong>
+                <small>Better prices when you team up</small>
               </div>
               <div className="map-node map-decisions">
                 <span className="node-kicker">AI COMMUNITY GUIDE</span>
@@ -270,6 +299,30 @@ export default async function HomePage() {
           </div>
         </section>
 
+        <section className="inside-section" id="inside">
+          <div className="landing-shell">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">WHAT&apos;S INSIDE</p>
+                <h2>What you can do today.</h2>
+              </div>
+              <p>
+                These are live in the Cahootz Commons app right now, not
+                someday.
+              </p>
+            </div>
+            <ul className="inside-grid">
+              {insideApp.map((item) => (
+                <li key={item.label}>
+                  <span>{item.label}</span>
+                  <strong>{item.title}</strong>
+                  <p>{item.body}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
         <section className="decision-section" id="sage">
           <div className="landing-shell decision-inner">
             <div>
@@ -331,6 +384,15 @@ export default async function HomePage() {
                   When your commons opens up, get the free Cahootz Commons
                   app and sign in.
                 </p>
+                <a
+                  className="text-link"
+                  href={MEMBER_APP_STORE_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Have an invite? Get the iPhone app{" "}
+                  <ArrowRight size={16} />
+                </a>
               </li>
               <li>
                 <span>03</span>

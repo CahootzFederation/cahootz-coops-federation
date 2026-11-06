@@ -11,8 +11,7 @@ import { newSignedInPage, openCircleHall, USER_A_EMAIL } from "./support/auth";
 // launch shows the member's last-loaded screens under an offline banner, and
 // the app catches up on its own once the connection is back. These journeys
 // cut the API off, reopen the app, and check both cases: with saved data
-// (the Circle Hall), and with nothing saved yet (the street, which is never
-// saved because it shows who's out right now).
+// (Circle View), and with nothing saved yet.
 
 function shown(page: Page, text: string | RegExp, options?: { exact?: boolean }) {
   return page.getByText(text, options).filter({ visible: true });
@@ -38,7 +37,7 @@ test("a member who opens the app offline sees their saved circles, then catches 
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
 
   try {
-    // Opening the Circle Hall online saves its circles on the phone.
+    // Opening Circle View online saves its circles on the phone.
     await openCircleHall(page);
     await expect(shown(page, "General", { exact: true })).toBeVisible();
 
@@ -88,7 +87,6 @@ test("a member who opens the app offline with nothing saved stays signed in and 
     await page.unroute(apiCall);
     await page.goto("/");
     await expect(page.getByLabel("Open menu")).toBeVisible();
-    await expect(shown(page, /^Welcome to /)).toBeVisible();
     await openCircleHall(page);
     await expect(shown(page, "General", { exact: true })).toBeVisible();
     await expect(shown(page, "Log in to join your commons")).toHaveCount(0);

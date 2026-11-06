@@ -22,12 +22,94 @@ export function shade(hex: string, f: number) {
   return `#${c((n >> 16) & 255)}${c((n >> 8) & 255)}${c(n & 255)}`;
 }
 
+/*
+ * Light: the sun comes from the viewer's left and from above (the same light
+ * the KayKit images were rendered with), so the left (+j) walls are lit, the
+ * right (+i) walls are in shade, and shadows fall to the right on screen.
+ */
+
+/** How far a shadow reaches to the right per point of height, and how much it drops. */
+const SHADOW_RUN = 0.72;
+const SHADOW_DROP = 0.1;
+export const SHADOW_FILL = 'rgba(24,46,34,0.22)';
+
+/** Smallest convex shape around a set of points (monotone chain). */
+function hull(points: Pt[]): Pt[] {
+  const p = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o: Pt, a: Pt, b: Pt) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower: Pt[] = [];
+  for (const q of p) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2]!, lower[lower.length - 1]!, q) <= 0) lower.pop();
+    lower.push(q);
+  }
+  const upper: Pt[] = [];
+  for (const q of [...p].reverse()) {
+    while (upper.length >= 2 && cross(upper[upper.length - 2]!, upper[upper.length - 1]!, q) <= 0) upper.pop();
+    upper.push(q);
+  }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
+}
+
+/**
+ * The shadow a block standing on a footprint casts on the ground: the
+ * footprint swept to the right by its height, in the block's own outline
+ * (not a round blob), so things look planted instead of floating.
+ */
+export function castShadow(i: number, j: number, w: number, d: number, height: number) {
+  const base: Pt[] = [iso(i, j), iso(i + w, j), iso(i + w, j + d), iso(i, j + d)];
+  const tip = (p: Pt): Pt => [p[0] + height * SHADOW_RUN, p[1] + height * SHADOW_DROP];
+  return pts(hull([...base, ...base.map(tip)]));
+}
+
+/** A darker line where walls meet the ground, plus a soft band of shade on the ground in front of them. */
+function GroundContact({ x, y, w, d }: { x: number; y: number; w: number; d: number }) {
+  const a = iso(x, y + d);
+  const b = iso(x + w, y + d);
+  const c = iso(x + w, y);
+  const out = 0.07;
+  return (
+    <G>
+      <Polygon points={pts([a, b, c, iso(x + w + out, y), iso(x + w + out, y + d + out), iso(x, y + d + out)])} fill="rgba(20,30,25,0.14)" />
+      <Path d={`M${a[0]} ${a[1]}L${b[0]} ${b[1]}L${c[0]} ${c[1]}`} stroke="rgba(20,25,20,0.32)" strokeWidth={1.4} fill="none" />
+    </G>
+  );
+}
+
 function Box({ x, y, w, d, z = 0, h, color }: { x: number; y: number; w: number; d: number; z?: number; h: number; color: string }) {
   return (
     <G>
       <Polygon points={pts([iso(x, y + d, z), iso(x + w, y + d, z), iso(x + w, y + d, z + h), iso(x, y + d, z + h)])} fill={shade(color, 0.9)} />
       <Polygon points={pts([iso(x + w, y, z), iso(x + w, y + d, z), iso(x + w, y + d, z + h), iso(x + w, y, z + h)])} fill={shade(color, 0.76)} />
       <Polygon points={pts([iso(x, y, z + h), iso(x + w, y, z + h), iso(x + w, y + d, z + h), iso(x, y + d, z + h)])} fill={shade(color, 1.03)} />
+      {/* The lit top edge of the front corner catches the light. */}
+      <Path
+        d={`M${iso(x, y + d, z + h)[0]} ${iso(x, y + d, z + h)[1]}L${iso(x + w, y + d, z + h)[0]} ${iso(x + w, y + d, z + h)[1]}`}
+        stroke={shade(color, 1.12)}
+        strokeWidth={0.8}
+        fill="none"
+      />
+      {z === 0 ? <GroundContact x={x} y={y} w={w} d={d} /> : null}
+    </G>
+  );
+}
+
+/** A window on the lit (+j) wall: a darker frame, the glass, and a light streak across its top. */
+function windowY(Y: number, xa: number, xb: number, za: number, zb: number, glass: string, frame: string, key: string) {
+  return (
+    <G key={key}>
+      {faceY(Y, xa - 0.035, xb + 0.035, za - 1.2, zb + 1.2, frame)}
+      {faceY(Y + 0.001, xa, xb, za, zb, glass)}
+      {faceY(Y + 0.002, xa, xb, zb - (zb - za) * 0.35, zb, shade(glass, 1.08))}
+    </G>
+  );
+}
+/** A window on the shaded (+i) wall. */
+function windowX(X: number, ya: number, yb: number, za: number, zb: number, glass: string, frame: string, key: string) {
+  return (
+    <G key={key}>
+      {faceX(X, ya - 0.035, yb + 0.035, za - 1.2, zb + 1.2, frame)}
+      {faceX(X + 0.001, ya, yb, za, zb, glass)}
+      {faceX(X + 0.002, ya, yb, zb - (zb - za) * 0.35, zb, shade(glass, 1.06))}
     </G>
   );
 }
@@ -45,12 +127,20 @@ function GableRoof({ x, y, w, d, base, rise, roof, wall }: { x: number; y: numbe
   const xa = x - 0.06;
   const xb = x + w + 0.06;
   const ym = y + d / 2;
+  const yb = y + d + 0.06;
   return (
     <G>
       <Polygon points={pts([iso(xa, y - 0.06, base), iso(xb, y - 0.06, base), iso(xb, ym, base + rise), iso(xa, ym, base + rise)])} fill={shade(roof, 0.72)} />
       <Polygon points={pts([iso(x + w, y, base), iso(x + w, y + d, base), iso(x + w, ym, base + rise)])} fill={shade(wall, 0.76)} />
-      <Polygon points={pts([iso(xa, y + d + 0.06, base), iso(xb, y + d + 0.06, base), iso(xb, ym, base + rise), iso(xa, ym, base + rise)])} fill={roof} />
-      <Line x1={iso(xa, ym, base + rise)[0]} y1={iso(xa, ym, base + rise)[1]} x2={iso(xb, ym, base + rise)[0]} y2={iso(xb, ym, base + rise)[1]} stroke={shade(roof, 1.25)} strokeWidth={1} />
+      {/* The front slope faces the light: a touch lighter toward the ridge. */}
+      <Polygon points={pts([iso(xa, yb, base), iso(xb, yb, base), iso(xb, ym, base + rise), iso(xa, ym, base + rise)])} fill={roof} />
+      <Polygon
+        points={pts([iso(xa, (yb + ym) / 2, base + rise / 2), iso(xb, (yb + ym) / 2, base + rise / 2), iso(xb, ym, base + rise), iso(xa, ym, base + rise)])}
+        fill={shade(roof, 1.08)}
+      />
+      {/* Eave: the roof's front edge, a thin darker strip that gives it thickness. */}
+      <Polygon points={pts([iso(xa, yb, base), iso(xb, yb, base), iso(xb, yb, base - 2.5), iso(xa, yb, base - 2.5)])} fill={shade(roof, 0.58)} />
+      <Line x1={iso(xa, ym, base + rise)[0]} y1={iso(xa, ym, base + rise)[1]} x2={iso(xb, ym, base + rise)[0]} y2={iso(xb, ym, base + rise)[1]} stroke={shade(roof, 1.3)} strokeWidth={1.2} />
     </G>
   );
 }
@@ -62,38 +152,39 @@ function PyramidRoof({ x, y, w, d, base, rise, roof }: { x: number; y: number; w
     <G>
       <Polygon points={pts([e(x, y), e(x + w, y), top])} fill={shade(roof, 0.7)} />
       <Polygon points={pts([e(x, y), e(x, y + d), top])} fill={shade(roof, 0.8)} />
-      <Polygon points={pts([e(x + w, y), e(x + w, y + d), top])} fill={shade(roof, 0.88)} />
-      <Polygon points={pts([e(x, y + d), e(x + w, y + d), top])} fill={roof} />
+      <Polygon points={pts([e(x + w, y), e(x + w, y + d), top])} fill={shade(roof, 0.82)} />
+      <Polygon points={pts([e(x, y + d), e(x + w, y + d), top])} fill={shade(roof, 1.06)} />
+      {/* Eaves along the two front edges, darker on the shaded right. */}
+      <Polygon points={pts([e(x, y + d), e(x + w, y + d), iso(x + w, y + d, base - 2.5), iso(x, y + d, base - 2.5)])} fill={shade(roof, 0.6)} />
+      <Polygon points={pts([e(x + w, y), e(x + w, y + d), iso(x + w, y + d, base - 2.5), iso(x + w, y, base - 2.5)])} fill={shade(roof, 0.5)} />
+      <Line x1={e(x, y + d)[0]} y1={e(x, y + d)[1]} x2={top[0]} y2={top[1]} stroke={shade(roof, 1.25)} strokeWidth={0.9} />
     </G>
   );
-}
-
-/** Soft ground shadow under a footprint. */
-function Shadow({ i, j, w, d }: { i: number; j: number; w: number; d: number }) {
-  const [cx, cy] = iso(i + w / 2 + 0.15, j + d / 2 + 0.15);
-  return <Ellipse cx={cx} cy={cy} rx={(w + d) * 12} ry={(w + d) * 6} fill="rgba(20,40,20,0.16)" />;
 }
 
 const WINDOW = '#FFF1C4';
 const WINDOW_SIDE = '#FFE7A6';
 const DOOR = '#6B4A33';
 
-export function HouseArt({ i, j, style, wall, roof }: { i: number; j: number; style: 'a' | 'b' | 'c'; wall: string; roof: string }) {
+/** Window glass: soft by day, warm and bright in the evening when lights are on inside. */
+const glassFor = (night: boolean, side: boolean) => (night ? (side ? '#F6C24E' : '#FFD36E') : side ? WINDOW_SIDE : WINDOW);
+
+export function HouseArt({ i, j, style, wall, roof, night = false }: { i: number; j: number; style: 'a' | 'b' | 'c'; wall: string; roof: string; night?: boolean }) {
   const x = i + 0.3;
   const y = j + 0.3;
   const floors = style === 'b' ? 2 : 1;
   const h = 24 * floors;
+  const frame = shade(wall, 0.66);
   const windows: React.ReactNode[] = [];
   for (let f = 0; f < floors; f++) {
     const z = f * 24;
-    windows.push(faceY(y + 1.401, x + 0.12, x + 0.34, z + 9, z + 17, WINDOW, `wy${f}`));
-    windows.push(faceX(x + 1.401, y + 0.22, y + 0.46, z + 9, z + 17, WINDOW_SIDE, `wx1${f}`));
-    windows.push(faceX(x + 1.401, y + 0.94, y + 1.18, z + 9, z + 17, WINDOW_SIDE, `wx2${f}`));
-    if (f > 0) windows.push(faceY(y + 1.401, x + 0.6, x + 0.82, z + 9, z + 17, WINDOW, `wy2${f}`));
+    windows.push(windowY(y + 1.401, x + 0.12, x + 0.34, z + 9, z + 17, glassFor(night, false), frame, `wy${f}`));
+    windows.push(windowX(x + 1.401, y + 0.22, y + 0.46, z + 9, z + 17, glassFor(night, true), shade(frame, 0.85), `wx1${f}`));
+    windows.push(windowX(x + 1.401, y + 0.94, y + 1.18, z + 9, z + 17, glassFor(night, true), shade(frame, 0.85), `wx2${f}`));
+    if (f > 0) windows.push(windowY(y + 1.401, x + 0.6, x + 0.82, z + 9, z + 17, glassFor(night, false), frame, `wy2${f}`));
   }
   return (
     <G>
-      <Shadow i={i} j={j} w={2} d={2} />
       <Box x={x} y={y} w={1.4} d={1.4} h={h} color={wall} />
       {windows}
       {faceY(y + 1.401, x + 0.74, x + 1.0, 0, 15, DOOR, 'door')}
@@ -106,7 +197,7 @@ export function HouseArt({ i, j, style, wall, roof }: { i: number; j: number; st
   );
 }
 
-export function ShopArt({ i, j, trim }: { i: number; j: number; trim: string }) {
+export function ShopArt({ i, j, trim, night = false }: { i: number; j: number; trim: string; night?: boolean }) {
   const x = i + 0.15;
   const y = j + 0.15;
   const stripes: React.ReactNode[] = [];
@@ -117,11 +208,10 @@ export function ShopArt({ i, j, trim }: { i: number; j: number; trim: string }) 
   }
   return (
     <G>
-      <Shadow i={i} j={j} w={2} d={2} />
       <Box x={x} y={y} w={1.7} d={1.7} h={32} color="#FAF5EE" />
-      {faceY(y + 1.701, x + 0.2, x + 0.85, 4, 18, '#BFE3F2', 'win')}
+      {windowY(y + 1.701, x + 0.2, x + 0.85, 4, 18, night ? '#FFD36E' : '#BFE3F2', '#8A7F72', 'win')}
       {faceY(y + 1.701, x + 1.05, x + 1.4, 0, 18, '#5B4636', 'door')}
-      {faceX(x + 1.701, y + 0.25, y + 1.45, 8, 20, '#BFE3F2', 'side')}
+      {windowX(x + 1.701, y + 0.25, y + 1.45, 8, 20, night ? '#F6C24E' : '#AFD3E2', '#766C60', 'side')}
       {stripes}
       <Box x={x - 0.05} y={y - 0.05} w={1.8} d={1.8} z={32} h={4} color={shade(trim, 0.85)} />
     </G>
@@ -134,7 +224,6 @@ export function TownHallArt({ i, j }: { i: number; j: number }) {
   const columns = [0, 1, 2, 3].map((k) => faceY(y + 1.45, x + 0.08 + k * 0.38, x + 0.18 + k * 0.38, 5, 35, '#FFFFFF', `c${k}`));
   return (
     <G>
-      <Shadow i={i} j={j} w={2} d={2} />
       <Box x={i + 0.1} y={j + 0.1} w={1.8} d={1.8} h={5} color="#D7DBE0" />
       <Box x={x} y={y} w={1.4} d={1.4} z={5} h={30} color="#EEF0F3" />
       {columns}
@@ -161,7 +250,6 @@ export function CircleHallArt({ i, j, circleCount }: { i: number; j: number; cir
   }
   return (
     <G>
-      <Shadow i={i} j={j} w={2} d={2} />
       <Box x={i + 0.1} y={j + 0.1} w={1.8} d={1.8} h={4} color="#D7DBE0" />
       <Box x={x} y={y} w={1.6} d={1.6} z={4} h={44} color="#FFFFFF" />
       {windows}
@@ -321,17 +409,20 @@ export function PersonArt({ x, y, look, isYou, bob }: { x: number; y: number; lo
   const r = 5;
   return (
     <G>
-      <Ellipse cx={sx} cy={sy} rx={8} ry={4} fill="rgba(0,0,0,0.2)" />
+      {/* A long faint shadow to the right (matching the buildings) and a tight dark one right under the feet. */}
+      <Ellipse cx={sx + 9} cy={sy + 0.5} rx={11} ry={3.2} fill="rgba(24,46,34,0.16)" />
+      <Ellipse cx={sx} cy={sy} rx={5.5} ry={2.6} fill="rgba(0,0,0,0.3)" />
       {isYou ? <Ellipse cx={sx} cy={sy} rx={11} ry={5.5} fill="none" stroke="#B94614" strokeWidth={2} /> : null}
       {hair.back}
-      <Rect x={sx - 6} y={top} width={12} height={16} rx={r} fill={look.shirt} />
+      {/* A faint outline keeps people readable on gray road. */}
+      <Rect x={sx - 6} y={top} width={12} height={16} rx={r} fill={look.shirt} stroke={shade(look.shirt, 0.55)} strokeWidth={0.8} />
       <Path
         d={`M${sx + 1} ${top}L${right - r} ${top}A${r} ${r} 0 0 1 ${right} ${top + r}L${right} ${bottom - r}A${r} ${r} 0 0 1 ${right - r} ${bottom}L${sx + 1} ${bottom}Z`}
         fill={shade(look.shirt, 0.8)}
       />
       <Rect x={sx - 4} y={top + 2} width={2} height={7} rx={1} fill="rgba(255,255,255,0.22)" />
       {/* Face: a darker rim on the right, lit from the left. */}
-      <Circle cx={sx} cy={headY} r={6} fill={shade(look.skin, 0.84)} />
+      <Circle cx={sx} cy={headY} r={6} fill={shade(look.skin, 0.84)} stroke={shade(look.skin, 0.6)} strokeWidth={0.6} />
       <Circle cx={sx - 1.1} cy={headY} r={5.1} fill={look.skin} />
       {hair.top}
     </G>
@@ -377,6 +468,9 @@ export function Label({ at, text, fill, color = '#FFFFFF', scale = 1 }: { at: Pt
   return (
     // Grows with the phone's text size, around the label's middle.
     <G transform={scale === 1 ? undefined : `translate(${at[0]} ${at[1]}) scale(${scale}) translate(${-at[0]} ${-at[1]})`}>
+      {/* A soft shadow and a small pointer tie the sign to what it names. */}
+      <Rect x={at[0] - width / 2} y={at[1] - 8} width={width} height={20} rx={10} fill="rgba(15,23,42,0.14)" />
+      <Polygon points={pts([[at[0] - 5, at[1] + 9], [at[0] + 5, at[1] + 9], [at[0], at[1] + 15]])} fill={fill} />
       <Rect x={at[0] - width / 2} y={at[1] - 10} width={width} height={20} rx={10} fill={fill} />
       <SvgText x={at[0]} y={at[1] + 4} fontSize={11} fontWeight="700" fill={color} textAnchor="middle">
         {text}

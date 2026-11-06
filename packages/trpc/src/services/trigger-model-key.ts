@@ -5,8 +5,6 @@
 export const MODEL_TASK_IDS: ReadonlySet<string> = new Set([
   "commons-action-content",
   "commons-action-recovery",
-  "newsletter-agent-sweep",
-  "run-newsletter-agent",
   "sage-action-execute",
   "sage-trend-detect",
   "sage-wake-sweep",

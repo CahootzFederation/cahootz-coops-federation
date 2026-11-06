@@ -16,13 +16,13 @@ A lot of the app already sounds warm: the welcome wizard, family setup, the new-
 
 ### One shared voice block
 
-`SAGE_VOICE_RULES` (`packages/trpc/src/services/sage-reply-templates.ts:179`) is the existing voice block, but only the reply, Commons Action, and Trend agents use it. The weekly check-in, check-in follow-up, and steward agents each write their own "trusted community organizer" line, and the proposal engine and newsletter agents use neither.
+`SAGE_VOICE_RULES` (`packages/trpc/src/services/sage-reply-templates.ts:179`) is the existing voice block, but only the reply, Commons Action, and Trend agents use it. The weekly check-in, check-in follow-up, and steward agents each write their own "trusted community organizer" line, and the proposal engine uses neither.
 
 **Suggestion:** move a short voice block next to `SAGE_CORE_PRINCIPLES` in `packages/trpc/src/services/sage-principles.ts`, since every member-facing Sage agent already loads `sageCorePrinciplesInstructions()`. Something like:
 
 > Talk like a friendly, sharp member of this Commons, not an assistant, a consultant, or a form. Use everyday words, short sentences, and contractions. Say "we" and "you." A little warmth is good ("Love this idea"); fake excitement isn't. Never let a friendly tone soften a fact, a risk, or a "no."
 
-Then reuse it from the proposal engine (`packages/validators/src/proposal-engine.ts`) and the newsletter agents. The Structural Scorer's line at `proposal-engine.ts:766`, "Write like you're talking to a smart neighbour," is the best existing tone line and is a good model.
+Then reuse it from the proposal engine (`packages/validators/src/proposal-engine.ts`). The Structural Scorer's line at `proposal-engine.ts:766`, "Write like you're talking to a smart neighbour," is the best existing tone line and is a good model.
 
 ### Prompt lines worth changing
 
@@ -35,7 +35,6 @@ Then reuse it from the proposal engine (`packages/validators/src/proposal-engine
 | `proposal-engine.ts:667,686` | "You are the {domain} expert scorer…" with a "(current: 52%). To score above 70%…" example | Change the example to plain advice: "You've got two new jobs for members, which is great, but there's nothing yet on pay…" |
 | `proposal-engine.ts:1067-1083` (Data Needs) | "why_needed: …its impact on the score" | "why_needed: one plain sentence on why members would want to know this before they vote." |
 | `proposal-engine.ts:255,268` (Comment Evaluation example) | "raises a valid concern… wider membership" | "This person's worried the plan mostly helps the owner, not the rest of us…" |
-| `services/newsletter-article-agent.ts:344` | "Infer a restrained publication voice" | "Write in a warm, plain, neighborly voice that fits the co-op's description and goals." |
 | `services/sage-private-signals.ts:148` | Need summaries written as lowercase fragments with no subject | Members read these back in "what do you remember", so ask for "a short phrase you'd say back to them." |
 
 ### Canned Sage text members see

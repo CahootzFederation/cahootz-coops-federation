@@ -139,7 +139,7 @@ Known limitations:
 - The live trend model, not code, picks which capability to use; `sage-stewardship.spec.ts` seeds suggestions through the real `createTrendSuggestion` path to test approval deterministically.
 - Decision trails have no retention limit yet; add a purge (for example after 180 days) before high volume. A trail stores the model's stated reason, not its hidden reasoning.
 - A trail showed a reply grounded on an exact but irrelevant charter quote (a ladder request answered with a line about proposals). Exact-quote grounding doesn't check relevance; an independent relevance check belongs with P2 oversight.
-- Not yet traced: community observer, Commons assistant and recommender, proposal-engine playground and test runs, newsletter agents, knowledge base.
+- Not yet traced: community observer, Commons assistant and recommender, proposal-engine playground and test runs, knowledge base.
 - Found while tracing proposals (not changed here): the proposal engine computes KPIs and then discards them; `proposal.testEngine` is a public procedure that runs the paid engine; proposal and comment-evaluation reads are public; `authenticatedProcedure` trusts the `x-wallet-address` header without a signature.
 - Memory: see the P1 memory status below for what consolidation does and doesn't cover.
 

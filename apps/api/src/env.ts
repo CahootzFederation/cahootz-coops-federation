@@ -40,6 +40,9 @@ export const env = createEnv({
     PAYPAL_CLIENT_SECRET: z.string().optional(),
     SQUARE_WEBHOOK_SIGNATURE_KEY: z.string().optional(),
     SLACK_WEBHOOK_URL: z.string().url(),
+    // A fine-grained token with Issues: write on the repo. Without it, Sage still drafts but nothing posts.
+    GITHUB_ISSUES_TOKEN: z.string().min(1).optional(),
+    GITHUB_ISSUES_REPO: z.string().regex(/^[\w.-]+\/[\w.-]+$/).optional(),
     RESEND_API_KEY: z.string().startsWith("re_"),
     RESEND_FROM_EMAIL: z.string().email().default("support@mail.cahootzcoops.com"),
     SENTRY_DSN: z.string().url().optional(),

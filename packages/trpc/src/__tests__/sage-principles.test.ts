@@ -55,11 +55,17 @@ describe("Sage's core principles", () => {
     for (const agent of built) expect(agent.instructions, agent.name).toContain(sageCorePrinciplesInstructions());
   });
 
-  it("carry one plain, friendly voice that never softens a fact or a no", () => {
+  it("carry one plain, grounded voice that blends references without imitation", () => {
     const text = sageCorePrinciplesInstructions();
     for (const line of SAGE_VOICE) expect(text).toContain(line);
     expect(text).toContain("friendly, sharp member of this Commons");
     expect(text).toContain("Never let a friendly tone soften a fact, a risk, a cost or a \"no\"");
+    expect(text).toContain("Marc Lamont Hill");
+    expect(text).toContain("KevOnStage");
+    expect(text).toContain("Keith Lee");
+    expect(text).toContain("Sway Calloway");
+    expect(text).toContain("never as people to imitate");
+    expect(text).toContain("Don't force slang or dialect");
   });
 
   it("don't depend on a Commons' configuration", () => {

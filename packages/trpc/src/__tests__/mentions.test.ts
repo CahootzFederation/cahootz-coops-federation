@@ -6,17 +6,72 @@ import { encodeMentions } from '../lib/mentions.js';
 describe('reserved group-ping handles', () => {
   it('never resolves a member-typed @everyone to a user account', async () => {
     const db: any = {
-      user: {
-        findMany: vi.fn().mockResolvedValue([{ id: 'u_bob', handle: 'bob', isBot: false, roles: [] }]),
+      userCoopMembership: {
+        findMany: vi.fn().mockResolvedValue([
+          { user: { id: 'u_bob', handle: 'bob', isBot: false, roles: [] } },
+        ]),
       },
     };
 
-    const result = await encodeMentions(db, 'hey @everyone and @bob');
+    const result = await encodeMentions(db, 'hey @everyone and @bob', {
+      coopId: 'garden',
+    });
 
-    expect(db.user.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ handle: { in: ['bob'], mode: 'insensitive' } }) }),
+    expect(db.userCoopMembership.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          coopId: 'garden',
+          status: 'ACTIVE',
+          user: expect.objectContaining({
+            handle: { in: ['bob'], mode: 'insensitive' },
+          }),
+        }),
+      }),
     );
     expect(result.content).toBe('hey @everyone and [@bob]');
+  });
+
+  it('leaves handles from outside the Commons as plain text', async () => {
+    const db: any = {
+      userCoopMembership: {
+        findMany: vi.fn().mockResolvedValue([
+          { user: { id: 'u_bob', handle: 'bob', isBot: false, roles: [] } },
+        ]),
+      },
+    };
+
+    const result = await encodeMentions(db, 'Thanks @bob and @eve', {
+      coopId: 'garden',
+    });
+
+    expect(result.content).toBe('Thanks [@bob] and @eve');
+    expect(result.mentionedUsers.map((user) => user.handle)).toEqual(['bob']);
+  });
+
+  it("resolves bare @sage only to this Commons' Sage membership", async () => {
+    const db: any = {
+      userCoopMembership: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            user: {
+              id: 'sage_garden',
+              handle: 'sage-garden',
+              isBot: true,
+              roles: ['member', 'sage'],
+            },
+          },
+        ]),
+      },
+    };
+
+    const result = await encodeMentions(db, 'Could you help, @sage?', {
+      coopId: 'garden',
+    });
+
+    expect(result.content).toBe('Could you help, [@sage-garden]?');
+    expect(result.mentionedUsers.map((user) => user.handle)).toEqual([
+      'sage-garden',
+    ]);
   });
 
   it('does not hand out a reserved handle to a user named "Everyone"', async () => {

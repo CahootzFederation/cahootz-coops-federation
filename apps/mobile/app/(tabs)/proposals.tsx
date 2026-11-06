@@ -1,3 +1,4 @@
+import { CommunityTheme } from '@/constants/theme';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, RefreshControl, ScrollView, TouchableOpacity, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -29,8 +30,8 @@ import { proposalDetailHref, proposalDraftsHref } from '@/lib/proposal-navigatio
 import { votingDeadlineShort } from '@/lib/voting-deadline';
 import { SubmitModal } from '../(authenticated)/proposals';
 
-const PRIMARY = '#FF6B00';
-const BORDER = '#E5E7EB';
+const PRIMARY = CommunityTheme.primary;
+const BORDER = CommunityTheme.border;
 
 const DEFAULT_COMMONS: CommonsDirectoryItem = {
   id: 'cahootz',
@@ -97,7 +98,7 @@ export default function ProposalsScreen() {
 function ProposalsHub() {
   const params = useLocalSearchParams<{ coopId?: string; submit?: string }>();
   const insets = useSafeAreaInsets();
-  const { isAuthenticated, sessionToken, user } = useAuth();
+  const { isAuthenticated, sessionToken, user, isLoading: authLoading } = useAuth();
   const [commons, setCommons] = useState<CommonsDirectoryItem[]>([DEFAULT_COMMONS]);
   const [selectedCommonsId, setSelectedCommonsId] = useState(params.coopId || DEFAULT_COMMONS.id);
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -107,6 +108,8 @@ function ProposalsHub() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [showActionableOnly, setShowActionableOnly] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const isHistory = (proposal: ProposalSummary) => ['approved', 'funded', 'rejected', 'withdrawn'].includes(proposal.status);
   const shouldOpenSubmit = params.submit === '1' || params.submit === 'true';
 
   const selectedCommons = useMemo(
@@ -114,7 +117,7 @@ function ProposalsHub() {
     [commons, selectedCommonsId]
   );
   const proposalActions = useCommonsProposalActions({
-    enabled: true,
+    enabled: !authLoading,
     coopId: selectedCommons?.id,
     sessionToken,
     walletAddress: user?.walletAddress,
@@ -122,9 +125,11 @@ function ProposalsHub() {
   const visibleProposals = useMemo(
     () => showActionableOnly
       ? proposals.filter((proposal) => proposalActions.actionableProposalIds.includes(proposal.id))
-      : proposals,
-    [proposalActions.actionableProposalIds, proposals, showActionableOnly],
+      : proposals.filter((proposal) => isHistory(proposal) === showHistory),
+    [proposalActions.actionableProposalIds, proposals, showActionableOnly, showHistory],
   );
+
+  useEffect(() => { setShowActionableOnly(false); setShowHistory(false); }, [selectedCommonsId]);
 
   useEffect(() => {
     track('proposal_hub_viewed', { signed_in: isAuthenticated });
@@ -214,7 +219,7 @@ function ProposalsHub() {
   }, [loadProposals]);
 
   return (
-    <View className="flex-1 bg-stone-50">
+    <View className="flex-1 bg-white">
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 32 }}
@@ -223,7 +228,7 @@ function ProposalsHub() {
         <View className="border-b border-gray-200 bg-white px-3 pb-2" style={{ paddingTop: insets.top + 12 }}>
           <View className="flex-row items-center gap-2">
             <TouchableOpacity
-              onPress={() => router.push('/(tabs)' as any)}
+              onPress={() => router.push({ pathname: '/(tabs)', params: { coopId: selectedCommons.id } })}
               className="h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
               accessibilityLabel="Back to commons"
             >
@@ -258,7 +263,7 @@ function ProposalsHub() {
               </TouchableOpacity>
             </View>
             <TouchableOpacity
-              onPress={() => router.push('/(tabs)/messages' as any)}
+              onPress={() => router.push({ pathname: '/(tabs)/messages', params: { coopId: selectedCommons.id } })}
               className="relative h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
               accessibilityLabel="Open direct messages"
             >
@@ -266,7 +271,7 @@ function ProposalsHub() {
               <View className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white" style={{ backgroundColor: PRIMARY }} />
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => router.push('/(tabs)/notifications' as any)}
+              onPress={() => router.push({ pathname: '/(tabs)/notifications', params: { coopId: selectedCommons.id } })}
               className="relative h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50"
               accessibilityLabel="Open alerts"
             >
@@ -277,40 +282,39 @@ function ProposalsHub() {
         </View>
 
         <View className="px-5 pt-4 pb-2">
-          <Text className="text-2xl font-black text-gray-950">Turn conversations into decisions</Text>
+          <Text className="text-2xl font-black text-gray-950">Community decisions</Text>
           <Text className="mt-2 text-base leading-6 text-gray-600">
-            Showing proposals submitted inside {selectedCommons.name}.
+            Review what’s happening in {selectedCommons.name}.
           </Text>
         </View>
 
         <View className="px-5 py-3">
-          <TouchableOpacity
-            onPress={handleOpenSubmit}
-            className="rounded-2xl p-4"
-            style={{ backgroundColor: PRIMARY }}
-            activeOpacity={0.8}
-          >
-            <View className="flex-row items-center gap-3">
-              <View className="h-10 w-10 items-center justify-center rounded-xl bg-white/20">
-                <PencilLine size={20} color="white" />
-              </View>
-              <View className="flex-1">
-                <Text className="font-black text-white">
-                  {!isAuthenticated
-                    ? 'Sign in to propose'
-                    : !selectedCommons.isMember
-                      ? 'Join this commons to propose'
-                      : !user?.walletAddress
-                        ? 'Connect wallet to propose'
-                        : 'Start a proposal'}
-                </Text>
-                <Text className="mt-1 text-sm leading-5 text-white/80">
-                  Commons AI can draft the need, options, people, budget, and vote language.
-                </Text>
-              </View>
-              <Plus size={20} color="white" />
+
+
+          {proposalActions.loading && isAuthenticated ? <Text accessibilityLiveRegion="polite" className="py-3 text-sm text-gray-500">Checking drafts and votes…</Text> : null}
+          {proposalActions.failed ? (
+            <View className="py-3">
+              <LoadError message="We couldn't check your drafts and votes." onRetry={proposalActions.retry} />
             </View>
-          </TouchableOpacity>
+          ) : null}
+          {proposalActions.canVote && !proposalActions.loading && !proposalActions.failed ? (
+            <TouchableOpacity
+              onPress={() => { setShowActionableOnly((current) => !current); setShowHistory(false); }}
+              className="mt-3 flex-row items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3"
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityState={{ selected: showActionableOnly }}
+              accessibilityLabel={`${proposalActions.actionableVoteCount} proposals need your vote`}
+            >
+              <View className="flex-row items-center gap-2">
+                <Vote size={18} color={PRIMARY} />
+                <Text className="font-semibold text-gray-900">
+                  {proposalActions.actionableVoteCount} need your vote
+                </Text>
+              </View>
+              <Text className="text-xs font-black text-orange-700">{showActionableOnly ? 'Show all' : 'Review'}</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {isAuthenticated ? (
             <TouchableOpacity
@@ -330,7 +334,9 @@ function ProposalsHub() {
               <View className="min-w-0 flex-1">
                 <Text className="font-black text-gray-950">Continue drafts</Text>
                 <Text className="mt-0.5 text-sm text-gray-500">
-                  {proposalActions.draftCount > 0
+                  {proposalActions.loading
+                    ? 'Checking saved drafts…'
+                    : proposalActions.draftCount > 0
                     ? `${proposalActions.draftCount} ${proposalActions.draftCount === 1 ? 'draft' : 'drafts'} in this commons`
                     : proposalActions.failed
                       ? 'Open to see your drafts'
@@ -341,26 +347,49 @@ function ProposalsHub() {
             </TouchableOpacity>
           ) : null}
 
-          {proposalActions.canVote ? (
-            <TouchableOpacity
-              onPress={() => setShowActionableOnly((current) => !current)}
-              className="mt-3 flex-row items-center justify-between rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3"
-              activeOpacity={0.75}
-              accessibilityRole="button"
-              accessibilityState={{ selected: showActionableOnly }}
-              accessibilityLabel={`${proposalActions.actionableVoteCount} proposals need your vote`}
-            >
-              <View className="flex-row items-center gap-2">
-                <Vote size={18} color={PRIMARY} />
-                <Text className="font-black text-orange-900">
-                  {proposalActions.actionableVoteCount} need your vote
-                </Text>
-              </View>
-              <Text className="text-xs font-black text-orange-700">{showActionableOnly ? 'Show all' : 'Review'}</Text>
-            </TouchableOpacity>
-          ) : null}
 
-          {loading ? (
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            onPress={handleOpenSubmit}
+            className="mt-3 min-h-11 flex-row rounded-xl border px-4 py-2"
+            style={{ backgroundColor: CommunityTheme.sheet, borderColor: BORDER }}
+            activeOpacity={0.8}
+          >
+            <View className="flex-row items-center gap-3">
+              <View className="h-8 w-8 items-center justify-center">
+                <PencilLine size={20} color={PRIMARY} />
+              </View>
+              <View className="flex-1">
+                <Text className="font-semibold" style={{ color: CommunityTheme.ink }}>
+                  {!isAuthenticated
+                    ? 'Sign in to propose'
+                    : !selectedCommons.isMember
+                      ? 'Join this commons to propose'
+                      : !user?.walletAddress
+                        ? 'Connect wallet to propose'
+                        : 'Start a proposal'}
+                </Text>
+
+              </View>
+              <Plus size={20} color={PRIMARY} />
+            </View>
+          </TouchableOpacity>
+
+          <View accessibilityRole="tablist" className="mt-5 flex-row gap-2">
+            {['Current', 'History'].map((label) => (
+              <TouchableOpacity key={label} accessibilityRole="tab"
+                accessibilityState={{ selected: !showActionableOnly && showHistory === (label === 'History') }}
+                aria-selected={!showActionableOnly && showHistory === (label === 'History')}
+                onPress={() => { setShowActionableOnly(false); setShowHistory(label === 'History'); }}
+                className="min-h-11 flex-1 items-center justify-center rounded-xl border bg-white px-3"
+                style={{ borderColor: !showActionableOnly && showHistory === (label === 'History') ? PRIMARY : BORDER }}>
+                <Text style={{ color: CommunityTheme.ink, fontWeight: '600' }}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {loading || (showActionableOnly && proposalActions.loading) ? (
             <View className="items-center py-16">
               <ActivityIndicator size="large" color={PRIMARY} />
               <Text className="mt-3 text-sm font-semibold text-gray-500">Loading proposals...</Text>
@@ -369,18 +398,20 @@ function ProposalsHub() {
             <View className="mt-5">
               <LoadError message={error} onRetry={() => void loadProposals(false)} />
             </View>
+          ) : showActionableOnly && proposalActions.failed ? (
+            <Text className="py-6 text-base text-gray-600">Your voting status is unavailable. Try again above or browse current proposals.</Text>
           ) : visibleProposals.length === 0 ? (
             <View className="mt-5 rounded-[28px] border border-dashed border-stone-300 bg-white p-6">
               <View className="mb-4 h-14 w-14 items-center justify-center rounded-2xl bg-orange-50">
                 <Vote size={26} color={PRIMARY} />
               </View>
               <Text className="text-xl font-black text-gray-950">
-                {showActionableOnly ? 'You are caught up' : 'No proposals yet'}
+                {showActionableOnly ? 'You are caught up' : showHistory ? 'No past proposals yet' : 'No current proposals'}
               </Text>
               <Text className="mt-2 text-base leading-6 text-gray-600">
                 {showActionableOnly
                   ? `There are no proposals waiting for your vote in ${selectedCommons.name}.`
-                  : `Proposals created inside ${selectedCommons.name} will show here once they are ready for review.`}
+                  : showHistory ? 'Decided and withdrawn proposals will stay here for reference.' : `New proposals in ${selectedCommons.name} will appear here. You can find past decisions in History.`}
               </Text>
             </View>
           ) : (
@@ -399,8 +430,8 @@ function ProposalsHub() {
                     style={{ borderColor: BORDER }}
                     activeOpacity={0.75}
                   >
-                    <View className="flex-row items-start justify-between gap-3">
-                      <View className="min-w-0 flex-1">
+                    <View className="items-start gap-3">
+                      <View className="w-full">
                         <Text className="text-lg font-black text-gray-950" numberOfLines={2}>
                           {proposal.title}
                         </Text>

@@ -107,6 +107,16 @@ describe("reads while offline", () => {
     offline();
     await expect(read()).rejects.toThrow("Network request failed");
   });
+
+  it("never saves the live street, so it can say it's offline itself", async () => {
+    const streetUrl = `${API_BASE_URL}/trpc/street.get?input=%7B%7D`;
+    await read("token-a", streetUrl);
+    await flushSave();
+
+    offline();
+    await expect(read("token-a", streetUrl)).rejects.toThrow("Network request failed");
+    expect(connectivity.getConnectivity()).toEqual({ online: false, showingSaved: false });
+  });
 });
 
 describe("changes and cancellations", () => {

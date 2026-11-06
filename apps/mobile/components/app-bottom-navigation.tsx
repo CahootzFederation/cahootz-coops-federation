@@ -1,6 +1,7 @@
+import { CommunityTheme } from '@/constants/theme';
 import { DESIGN } from '@/constants/design';
 import { router, useGlobalSearchParams, usePathname, useSegments } from 'expo-router';
-import { Bell, LayoutGrid, PanelsTopLeft, UserCircle } from 'lucide-react-native';
+import { Bell, CircleUserRound, House, Signpost } from 'lucide-react-native';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -8,12 +9,16 @@ import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { OfflineBanner } from '@/components/offline-banner';
 
+// Icons match the Commons street: Commons is home (your street), the Board is
+// the street's signpost, Alerts is the doorbell, and You is you.
 const destinations = [
-  { label: 'Commons', href: '/(tabs)' as const, icon: LayoutGrid },
-  { label: 'Board', href: '/(tabs)/board' as const, icon: PanelsTopLeft },
+  { label: 'Commons', href: '/(tabs)' as const, icon: House },
+  { label: 'Board', href: '/(tabs)/board' as const, icon: Signpost },
   { label: 'Alerts', href: '/(tabs)/notifications' as const, icon: Bell },
-  { label: 'You', href: '/(tabs)/wallet' as const, icon: UserCircle },
+  { label: 'You', href: '/(tabs)/wallet' as const, icon: CircleUserRound },
 ];
+
+const SELECTED_PILL = '#FBEDE6';
 
 export function AppBottomNavigation() {
   const segments = useSegments();
@@ -81,7 +86,7 @@ export function AppBottomNavigation() {
             if (label === 'Commons' && selected) {
               return;
             }
-            router.navigate(href);
+            router.navigate(coopId ? { pathname: href, params: { coopId } } : href);
           };
           return (
             <TouchableOpacity
@@ -93,11 +98,11 @@ export function AppBottomNavigation() {
               onPress={onPress}
               style={styles.item}
             >
-              <View>
-                <Icon size={24} color={color} />
+              <View style={[styles.pill, selected && styles.pillSelected]}>
+                <Icon size={22} color={color} strokeWidth={selected ? 2.4 : 2} />
                 {label === 'Alerts' && hasUnread ? <View accessibilityLabel="Unread alerts" style={styles.dot} /> : null}
               </View>
-              <Text style={[styles.label, { color }]}>{label}</Text>
+              <Text style={[styles.label, { color }, selected && styles.labelSelected]}>{label}</Text>
             </TouchableOpacity>
           );
         })}
@@ -107,10 +112,26 @@ export function AppBottomNavigation() {
 }
 
 const styles = StyleSheet.create({
-  bar: { flexDirection: 'row', flexShrink: 0, backgroundColor: '#FFFFFF', borderTopColor: '#F0F2F5', borderTopWidth: 1, paddingTop: 7 },
-  item: { flex: 1, minWidth: 0, minHeight: 56, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2, paddingVertical: 4, gap: 3 },
-  label: { fontSize: 10, lineHeight: 14, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
-  dot: { position: 'absolute', top: -2, right: -4, width: 8, height: 8, borderRadius: 4, backgroundColor: '#DC2626' },
+  // A soft, rounded bar that sits on the page like the street's bottom panel:
+  // no hard divider line, just a gentle shadow and rounded top corners.
+  bar: {
+    flexDirection: 'row',
+    flexShrink: 0,
+    backgroundColor: CommunityTheme.sheet,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderTopColor: CommunityTheme.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 8,
+    paddingHorizontal: 8,
+    boxShadow: '0 -4px 16px rgba(17, 24, 39, 0.07)',
+  },
+  item: { flex: 1, minWidth: 0, minHeight: 56, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2, paddingVertical: 2, gap: 3 },
+  pill: { width: 56, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  pillSelected: { backgroundColor: SELECTED_PILL },
+  label: { fontSize: 12, lineHeight: 16, fontWeight: '600', textAlign: 'center', flexShrink: 1 },
+  labelSelected: { fontWeight: '800' },
+  dot: { position: 'absolute', top: 3, right: 13, width: 8, height: 8, borderRadius: 4, backgroundColor: '#DC2626', borderWidth: 1.5, borderColor: CommunityTheme.sheet },
 });
 
 function isSignInEntry(entry: string | string[] | undefined) {

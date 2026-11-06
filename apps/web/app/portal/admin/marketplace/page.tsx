@@ -125,6 +125,9 @@ export default function MarketplaceSettingsPage() {
             <p className="mt-1 max-w-2xl text-sm text-slate-400">
               Manage where official badge-store payments settle. Member-owned stores continue using their own Stripe accounts.
             </p>
+            <Link href="/portal/admin/marketplace/offers-report" className="mt-2 inline-flex text-sm font-semibold text-emerald-200 hover:underline">
+              Group buys report →
+            </Link>
           </div>
         </div>
       </div>

@@ -6,7 +6,8 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { useCart } from '@/contexts/cart-context';
-import { api, resolveCoopId } from '@/lib/api';
+import { api, resolveCoopId, type MarketplaceOffer } from '@/lib/api';
+import { OfferCard } from '@/components/offer-card';
 import { friendlyError } from '@/lib/friendly-error';
 import { keyboardInsetScrollProps } from '@/lib/keyboard';
 import { ArrowLeft, BadgeCheck, Check, ChevronRight, Minus, Plus, Search, ShoppingBag, ShoppingCart, Store } from 'lucide-react-native';
@@ -66,7 +67,7 @@ const money = (value: number) => `$${value.toLocaleString('en-US', { maximumFrac
 
 export default function MarketplaceLane({ initialCoopId }: { initialCoopId?: string }) {
   const params = useLocalSearchParams<{ coopId?: string }>();
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, sessionToken, isLoading: authLoading } = useAuth();
   const { addItem, items: cartItems, updateQuantity, totalItems } = useCart();
   // Marketplace inherits the Commons chosen in the main app. It stays scoped
   // to that route instead of offering a second, competing Commons switcher.
@@ -76,6 +77,7 @@ export default function MarketplaceLane({ initialCoopId }: { initialCoopId?: str
   const [products, setProducts] = React.useState<ProductItem[]>([]);
   const [myStore, setMyStore] = React.useState<any>(null);
   const [ownedTiers, setOwnedTiers] = React.useState<Set<string>>(new Set());
+  const [offers, setOffers] = React.useState<MarketplaceOffer[]>([]);
   const [mode, setMode] = React.useState<'products' | 'stores'>('products');
   const [query, setQuery] = React.useState('');
   const [loading, setLoading] = React.useState(true);
@@ -85,7 +87,7 @@ export default function MarketplaceLane({ initialCoopId }: { initialCoopId?: str
 
   const load = React.useCallback(async () => {
     let failure: unknown = null;
-    const [storeResult, productResult, ownerResult, badgeResult] = await Promise.all([
+    const [storeResult, productResult, ownerResult, badgeResult, offerResult] = await Promise.all([
       api.getStores({ coopId, limit: 100 }).catch((error) => {
         console.error('Failed to load shops:', error);
         failure = failure ?? error;
@@ -98,13 +100,16 @@ export default function MarketplaceLane({ initialCoopId }: { initialCoopId?: str
       }),
       user?.walletAddress ? api.getMyStore(user.walletAddress).catch(() => null) : Promise.resolve(null),
       user?.walletAddress ? api.getMyFundingBadges(user.walletAddress, coopId).catch(() => null) : Promise.resolve(null),
+      // Deals are for members of this Commons; anyone else just sees regular listings.
+      sessionToken ? api.listOffers(coopId, sessionToken).catch(() => []) : Promise.resolve([]),
     ]);
+    setOffers(offerResult ?? []);
     setStores(storeResult?.stores ?? []);
     setProducts(productResult?.products ?? []);
     setMyStore(ownerResult);
     setOwnedTiers(new Set((badgeResult?.badges ?? []).filter((badge: any) => badge.status === 'ACTIVE').map((badge: any) => badge.tier)));
     setLoadError(failure ? friendlyError(failure, "We couldn't load the shop.") : null);
-  }, [coopId, user?.walletAddress]);
+  }, [coopId, user?.walletAddress, sessionToken]);
 
   React.useEffect(() => {
     setLoading(true);
@@ -208,6 +213,49 @@ export default function MarketplaceLane({ initialCoopId }: { initialCoopId?: str
           <Search size={19} color={colors.muted} />
           <TextInput accessibilityLabel="Search marketplace" value={query} onChangeText={setQuery} placeholder="Search products and commons shops" placeholderTextColor="#A6998A" className="h-12 flex-1 px-3 text-sm" style={{ color: colors.ink }} />
         </View>
+        {offers.length > 0 && !normalizedQuery ? (
+          <View className="mt-5 px-4" accessibilityLabel="Group deals">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-lg font-black" style={{ color: colors.ink }}>
+                Group deals
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="link"
+                accessibilityLabel="See all group deals"
+                onPress={() => router.push('/(authenticated)/group-buys' as any)}
+                hitSlop={8}
+                className="flex-row items-center"
+              >
+                <Text className="text-sm font-black" style={{ color: colors.orange }}>
+                  See all
+                </Text>
+                <ChevronRight size={16} color={colors.orange} />
+              </TouchableOpacity>
+            </View>
+            <Text className="mb-3 mt-0.5 text-xs font-semibold" style={{ color: colors.muted }}>
+              Buy together for a lower price. Nobody pays unless enough people join.
+            </Text>
+            {offers.map((offer) => (
+              <OfferCard key={offer.id} offer={offer} />
+            ))}
+          </View>
+        ) : null}
+        {!normalizedQuery ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Recommend a business"
+            onPress={() => router.push({ pathname: '/(authenticated)/recommend-business', params: { coopId } } as any)}
+            className="mx-4 mt-3 flex-row items-center rounded-2xl border border-dashed bg-white p-3"
+            style={{ borderColor: colors.line }}
+          >
+            <Store size={18} color={colors.orange} />
+            <View className="ml-3 flex-1">
+              <Text className="text-sm font-black" style={{ color: colors.ink }}>Know a business that&apos;d give us a deal?</Text>
+              <Text className="text-xs font-semibold" style={{ color: colors.muted }}>Recommend them and we&apos;ll reach out.</Text>
+            </View>
+            <ChevronRight size={18} color={colors.muted} />
+          </TouchableOpacity>
+        ) : null}
         <View className="mx-4 mt-3 flex-row rounded-2xl p-1" style={{ backgroundColor: '#EEE3D3' }}>
           {(['products', 'stores'] as const).map((item) => (
             <TouchableOpacity

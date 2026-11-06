@@ -7,9 +7,11 @@ import validator from '@rjsf/validator-ajv8';
 import { Loader2, AlertCircle, ArrowLeft, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SageOutreachPanel } from '@/components/portal/sage-outreach-panel';
+import { SageDevIssuesPanel } from '@/components/portal/sage-dev-issues-panel';
 
 // Not a registered agent: a Sage flow with its own admin-only routes, listed here so admins find it with the agents.
 const SAGE_OUTREACH_KEY = 'sage-weekly-checkin';
+const SAGE_DEV_ISSUES_KEY = 'sage-dev-issues';
 
 interface AgentMetadata {
   key: string;
@@ -116,10 +118,21 @@ export default function AgentPlaygroundPage() {
             >
               Sage Weekly Check-in
             </button>
+            <button
+              onClick={() => { setSelectedKey(SAGE_DEV_ISSUES_KEY); setOutput(null); setRunError(null); }}
+              className={`w-full rounded-[8px] border px-3 py-2 text-left text-sm transition-colors ${
+                selectedKey === SAGE_DEV_ISSUES_KEY
+                  ? 'border-blue-500/50 bg-blue-500/10 text-white'
+                  : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+              }`}
+            >
+              Sage issue ideas
+            </button>
           </div>
 
           <div className="min-w-0 space-y-4">
             {selectedKey === SAGE_OUTREACH_KEY && <SageOutreachPanel />}
+            {selectedKey === SAGE_DEV_ISSUES_KEY && <SageDevIssuesPanel />}
             {selectedAgent && (
               <>
                 <div>

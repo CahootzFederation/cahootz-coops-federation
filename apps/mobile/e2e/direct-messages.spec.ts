@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
+import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL, openCircleHall } from "./support/auth";
 
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 
@@ -73,7 +73,9 @@ test("two members exchange direct messages in a private two-person circle", { ta
     await threadWithA.click();
     await expect(userB.page.getByText(firstMessage).last()).toBeVisible();
     // Opening it marks it read for B only.
+    await userB.page.getByRole("button", { name: "Back to conversations" }).click();
     await expect(threadWithA.getByLabel(/\d+ unread/)).toHaveCount(0);
+    await threadWithA.click();
 
     await userB.page
       .getByRole("textbox", { name: `Message ${displayName(personA)}` })
@@ -105,6 +107,7 @@ test("two members exchange direct messages in a private two-person circle", { ta
 
     // A DM is a circle, but never listed as one.
     await userA.page.goto("/");
+    await openCircleHall(userA.page);
     await expect(userA.page.getByText("General", { exact: true })).toBeVisible();
     await expect(userA.page.getByText("Direct message", { exact: true })).toHaveCount(0);
   } finally {
@@ -163,4 +166,32 @@ test("the message box and Send stay on screen in a long conversation", async ({ 
     }
     await Promise.all([userA.context.close(), userB.context.close()]);
   }
+});
+
+
+test('new-message picker keeps separate unfinished drafts for each person', async ({ browser }) => {
+  const userA = await newSignedInPage(browser, USER_A_EMAIL);
+  const userB = await newSignedInPage(browser, USER_B_EMAIL);
+  try {
+    const personB = await storedUser(userB.page);
+    const page = userA.page;
+    await page.goto('/messages');
+    await page.getByRole('button', { name: 'New message', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Search people', exact: true }).fill(personB.handle);
+    await page.getByLabel(`Conversation with ${displayName(personB)}`).click();
+    const composer = page.getByRole('textbox', { name: `Message ${displayName(personB)}` });
+    await composer.fill('E2E unfinished private note');
+    await page.getByRole('button', { name: 'Back to conversations' }).click();
+    await page.getByRole('button', { name: 'New message', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Search people', exact: true }).fill('sage');
+    await page.getByLabel('Conversation with Sage', { exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Message Sage', exact: true })).toHaveValue('');
+    await expect(page.getByText('Private conversation · AI assistant', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Back to conversations' }).click();
+    await page.getByRole('button', { name: 'New message', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Search people', exact: true }).fill(personB.handle);
+    await page.getByLabel(`Conversation with ${displayName(personB)}`).click();
+    await expect(composer).toHaveValue('E2E unfinished private note');
+    await composer.fill('');
+  } finally { await Promise.all([userA.context.close(), userB.context.close()]); }
 });

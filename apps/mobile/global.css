@@ -146,3 +146,17 @@
       --cream-900: 45 100% 73%;
     }
   }
+
+/* Cahootz white community theme: native equivalents live in constants/theme.ts. */
+@layer base {
+  :root:not(.dark) {
+    --background: 0 0% 100%;
+    --secondary: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --primary: 18 80% 40%;
+    --accent: 18 80% 40%;
+    --ring: 18 80% 40%;
+    --muted-foreground: 215 16% 47%;
+    --border: 220 13% 91%;
+  }
+}

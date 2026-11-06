@@ -10,6 +10,11 @@
  *     Puts the Commons' Sage autonomy limits back to the defaults.
  *   tsx --import ./dotenv.config.js scripts/e2e-admin.ts outreach-cleanup <memberEmail>
  *     Deletes the Sage check-ins an admin sent this test member by hand, and their message alerts.
+ *   tsx --import ./dotenv.config.js scripts/e2e-admin.ts dev-issue-seed <tag>
+ *     Saves two Sage issue-idea drafts (one clean, one blocked by the privacy check) and prints the
+ *     current cadence setting so cleanup can put it back.
+ *   tsx --import ./dotenv.config.js scripts/e2e-admin.ts dev-issue-cleanup <tag> <WEEKLY|MONTHLY|none>
+ *     Deletes the tagged drafts and restores the cadence setting ("none" removes it).
  *
  * Prints one JSON line prefixed with "E2E_RESULT ". Refuses production and non-local databases.
  */
@@ -64,14 +69,42 @@ async function outreachCleanup(email: string) {
   return { deleted: comments.length };
 }
 
+const DEV_ISSUE_CADENCE_KEY = "sage.devIssueCadence";
+
+async function devIssueSeed(tag: string) {
+  if (!/^[a-z0-9-]+$/i.test(tag)) throw new Error("Use a plain tag");
+  const cadence = await db.platformConfig.findUnique({ where: { key: DEV_ISSUE_CADENCE_KEY } });
+  const window = { windowStart: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), windowEnd: new Date() };
+  const body = "## What members are running into\nE2E: the ride board looks empty.\n\n## What we're seeing\n- 2 in-app reports from 2 members (2 bug reports)";
+  await db.sageDevIssueDraft.create({
+    data: { periodKey: `E2E-${tag}-flagged`, cadence: "WEEKLY", title: `E2E ${tag} flagged idea`, body, evidence: {}, privacyFlags: ["Names a member or a Commons"], ...window },
+  });
+  await db.sageDevIssueDraft.create({
+    data: { periodKey: `E2E-${tag}-clean`, cadence: "WEEKLY", title: `E2E ${tag} ride board looks empty`, body, evidence: {}, ...window },
+  });
+  return { cadence: cadence?.value ?? "none" };
+}
+
+async function devIssueCleanup(tag: string, cadence: string) {
+  const { count } = await db.sageDevIssueDraft.deleteMany({ where: { periodKey: { startsWith: `E2E-${tag}-` } } });
+  if (cadence === "WEEKLY" || cadence === "MONTHLY") {
+    await db.platformConfig.update({ where: { key: DEV_ISSUE_CADENCE_KEY }, data: { value: cadence } });
+  } else {
+    await db.platformConfig.deleteMany({ where: { key: DEV_ISSUE_CADENCE_KEY } });
+  }
+  return { deleted: count };
+}
+
 async function main() {
   assertSafeEnvironment();
-  const [command, first] = process.argv.slice(2);
+  const [command, first, second] = process.argv.slice(2);
   const result =
     command === "login-code" && first ? await loginCode(first)
       : command === "reset-limits" && first ? await resetLimits(first)
         : command === "outreach-cleanup" && first ? await outreachCleanup(first)
-          : (() => { throw new Error("Usage: e2e-admin.ts login-code <email> | reset-limits <coopId> | outreach-cleanup <memberEmail>"); })();
+          : command === "dev-issue-seed" && first ? await devIssueSeed(first)
+            : command === "dev-issue-cleanup" && first && second ? await devIssueCleanup(first, second)
+              : (() => { throw new Error("Usage: e2e-admin.ts login-code <email> | reset-limits <coopId> | outreach-cleanup <memberEmail> | dev-issue-seed <tag> | dev-issue-cleanup <tag> <cadence>"); })();
   console.log(`E2E_RESULT ${JSON.stringify(result)}`);
 }
 

@@ -126,3 +126,11 @@ describe('proposal.updateStatus', () => {
     expect(endsAt.getTime()).toBeLessThanOrEqual(Date.now() + 5 * DAY);
   });
 });
+
+describe('proposal output with an unfinished AI review', () => {
+  it('reads a proposal stored as "pending" (the AI-failure fallback) as needs_info instead of failing', async () => {
+    const db = { proposal: { findUnique: vi.fn().mockResolvedValue(record({ status: 'SUBMITTED', decision: 'pending' })) } };
+    const proposal = await caller(db).getById({ id: 'prop_1' });
+    expect(proposal?.decision).toBe('needs_info');
+  });
+});

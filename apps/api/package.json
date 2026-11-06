@@ -8,6 +8,7 @@
     "build": "pnpm run validate-env && rm -rf ./dist && tsup",
     "dev": "nodemon --watch src --ext ts --exec tsx --import ./dotenv.config.js src/index.ts",
     "dev:full": "concurrently --names \"api,stripe\" --prefix-colors \"cyan,yellow\" \"pnpm dev\" \"pnpm stripe:listen\"",
+    "product-discovery:run": "tsx --import ./dotenv.config.js scripts/run-product-discovery.ts",
     "lint": "eslint src",
     "stripe:listen": "stripe listen --forward-to localhost:3001/webhooks/stripe",
     "tsc": "tsc --noEmit",

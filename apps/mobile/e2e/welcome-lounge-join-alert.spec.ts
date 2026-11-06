@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { newSignedInPage } from "./support/auth";
+import { newSignedInPage, openCircleHall } from "./support/auth";
 import { withExclusiveAccountSetting } from "./support/exclusive";
 import { markWelcomeNotificationsAsRead } from "./support/welcome-lounge";
 
@@ -91,6 +91,7 @@ test("a newcomer joining a welcome lounge triggers Sage's @everyone alert for th
 
     // User B joins through the real UI.
     await newcomer.page.reload();
+    await openCircleHall(newcomer.page);
     await newcomer.page
       .getByText("Join a welcome lounge", { exact: true })
       .click();

@@ -1,11 +1,15 @@
 # Cahootz Technical Roadmap
 
+---
+
 ## Phase 1: Foundation
 
 - Keep the web, API, mobile, database, and contract workspaces running from the monorepo.
 - Standardize environment setup and local development docs.
 - Replace legacy product language in public documentation.
 - Keep the Cahootz charter as an empty placeholder until governance language is ready.
+
+---
 
 ## Phase 2: Member and Co-op Basics
 
@@ -14,12 +18,30 @@
 - Keep co-op-specific settings configurable from admin screens.
 - Expand public co-op pages with accurate business and product data.
 
+  <!-- 🤖 AI-generated sub-items based on completed work -->
+  - [ ] Define metrics for monitoring the performance of the new authentication and session flows. � �
+  - [ ] Implement logging for user interactions on dashboards to track usage patterns. � �
+  - [ ] Create tests for dashboard components that rely on authentication states. � �
+  - [ ] Document dashboard metrics and their significance for operational health. � �
+  <!-- 🤖 AI-generated sub-items based on completed work -->
+  - [ ] Ensure that proposal tracking integrates with the new authentication system for secure access. � �
+  - [ ] Create tests for proposal tracking functionalities, ensuring they respect user permissions. � �
+  - [ ] Document the proposal tracking process, including any changes due to the new authentication flows. � �
+  <!-- 🤖 AI-generated sub-items based on completed work -->
+  - [ ] Implement error handling for treasury transactions and member management actions. � �
+  <!-- 🤖 AI-generated sub-items based on completed work -->
+  - [ ] Add validation for co-op application submissions. � �
+
+---
+
 ## Phase 3: Commerce
 
 - Stabilize storefront, product, cart, checkout, and order flows.
 - Improve merchant onboarding and payout setup.
 - Add better payment status visibility and failure recovery.
 - Strengthen transaction reconciliation and audit trails.
+
+---
 
 ## Phase 4: Governance
 
@@ -28,6 +50,8 @@
 - Add clearer admin controls for proposal categories, thresholds, and review windows.
 - Track proposal decisions and funded milestones.
 
+---
+
 ## Phase 5: Operations
 
 - Improve treasury, rewards, member management, and store admin workflows.
@@ -35,9 +59,14 @@
 - Document production deployment and incident response.
 - Expand tests around high-risk financial and governance flows.
 
+---
+
 ## Phase 6: Scale
 
 - Prepare multi-co-op configuration, theming, and operational isolation.
 - Harden event indexing and background jobs.
 - Improve analytics, reporting, and export tools.
 - Continue reducing legacy names in code after documentation migration is complete.
+
+---
+*🤖 Roadmap updated 2026-11-06 - AI-generated sub-items added based on completed work analysis*

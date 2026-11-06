@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
+import { useRefreshOnReconnect } from '@/hooks/use-connectivity';
 import { api } from '@/lib/api';
 import { DESIGN } from '@/constants/design';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,10 @@ export default function CircleView({ coopId, onBackToStreet }: { coopId: string;
   const [reloadKey, setReloadKey] = useState(0);
   // Shown under the grid when joining a circle or a welcome lounge fails.
   const [actionError, setActionError] = useState<string | null>(null);
+  useRefreshOnReconnect(() => {
+    setReloadKey((key) => key + 1);
+    directory.reload();
+  });
 
   // Single fetch per focus - no polling. Live updates are planned via
   // websockets later; until then "chatting" counts can go stale while you

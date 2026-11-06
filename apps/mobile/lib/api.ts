@@ -12,6 +12,15 @@ import type { CommonsPostTag } from './post-types';
 import { getApiUrl, getWebUrl, networkConfig } from './config';
 import { ApiError, apiError, httpError } from './friendly-error';
 import { coopConfig } from './coop-config';
+import { reportReachable, reportUnreachable } from './connectivity';
+import {
+  forgetOfflineResponse,
+  isSavedRead,
+  offlineCacheGeneration,
+  offlineCacheKey,
+  readOfflineResponse,
+  saveOfflineResponse,
+} from './offline-cache';
 
 /**
  * Resolve the coopId to use for public marketplace queries.
@@ -129,17 +138,103 @@ async function checkForSessionExpiry(response: Response) {
   }
 }
 
+/**
+ * Offline support, in the same wrapper.
+ *
+ * Every read (GET) from our API gives up after READ_TIMEOUT_MS. Reads on the
+ * saved list (SAVED_READS in lib/offline-cache.ts: community screens, never
+ * money, messages, Sage or account details) are saved on the phone when they
+ * succeed. When one of those can't reach the API, the last saved answer for
+ * that account and Commons is returned instead, marked with
+ * SAVED_RESPONSE_HEADER, and lib/connectivity.ts shows the offline banner.
+ * When the server says a saved read isn't yours anymore (401, 403 or 404),
+ * the saved copy is forgotten. Anything that sends or changes data is never
+ * saved or replayed: it fails as before and the screen says it couldn't
+ * connect.
+ */
+export const READ_TIMEOUT_MS = 15_000;
+export const SAVED_RESPONSE_HEADER = 'x-cahootz-saved';
+const REVOKED_STATUSES = new Set([401, 403, 404]);
+
+function headerValue(headers: HeadersInit | undefined, name: string) {
+  if (!headers) return '';
+  if (typeof Headers !== 'undefined' && headers instanceof Headers) return headers.get(name) ?? '';
+  if (Array.isArray(headers)) return headers.find(([key]) => key.toLowerCase() === name)?.[1] ?? '';
+  const record = headers as Record<string, string>;
+  const key = Object.keys(record).find((candidate) => candidate.toLowerCase() === name);
+  return key ? record[key] : '';
+}
+
+/** The tRPC procedure a read is for, or null when it isn't a tRPC read. */
+function readProcedure(url: string, init: RequestInit | undefined) {
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const prefix = `${API_BASE_URL}/trpc/`;
+  if (method !== 'GET' || !url.startsWith(prefix)) return null;
+  return url.slice(prefix.length).split(/[?/]/)[0];
+}
+
+/** Who a read belongs to, so saved answers never cross accounts. */
+function readIdentity(init: RequestInit | undefined) {
+  return `${headerValue(init?.headers, 'x-session-token')}|${headerValue(init?.headers, 'x-wallet-address')}`;
+}
+
+/** Aborts after `ms`, or when the caller's own signal aborts. */
+function withTimeout(init: RequestInit | undefined, ms: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  const callerSignal = init?.signal;
+  if (callerSignal) {
+    if (callerSignal.aborted) controller.abort();
+    else callerSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+  return { init: { ...init, signal: controller.signal }, done: () => clearTimeout(timer) };
+}
+
 function installSessionExpiryInterceptor() {
   const baseFetch = globalThis.__soulaanOriginalFetch ?? globalThis.fetch;
   globalThis.__soulaanOriginalFetch = baseFetch;
 
-  globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
-    const response = await baseFetch(...args);
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : (input as Request).url;
+    const ours = url.startsWith(API_BASE_URL);
+    const procedure = readProcedure(url, init);
+    const savable = procedure !== null && isSavedRead(procedure);
+    const cacheKey = savable
+      ? offlineCacheKey(url, readIdentity(init), headerValue(init?.headers, 'x-coop-id'))
+      : '';
+    // A read that finishes after sign-out must not be saved.
+    const generation = offlineCacheGeneration();
 
-    const url =
-      typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
-    if (response.status === 401 && url.startsWith(API_BASE_URL)) {
+    let response: Response;
+    const timed = procedure !== null ? withTimeout(init, READ_TIMEOUT_MS) : null;
+    try {
+      response = await baseFetch(input, timed ? timed.init : init);
+    } catch (error) {
+      // The caller cancelled it (e.g. left the screen): not a connection problem.
+      if (init?.signal?.aborted || !ours) throw error;
+      const saved = savable ? await readOfflineResponse(cacheKey) : null;
+      reportUnreachable(saved !== null);
+      if (saved === null) throw error;
+      return new Response(saved, {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', [SAVED_RESPONSE_HEADER]: '1' },
+      });
+    } finally {
+      timed?.done();
+    }
+
+    if (ours) reportReachable();
+    if (response.status === 401 && ours) {
       void checkForSessionExpiry(response);
+    }
+    if (savable && response.ok) {
+      void response
+        .clone()
+        .text()
+        .then((body) => saveOfflineResponse(cacheKey, body, generation))
+        .catch(() => {});
+    } else if (savable && REVOKED_STATUSES.has(response.status)) {
+      void forgetOfflineResponse(cacheKey);
     }
 
     return response;

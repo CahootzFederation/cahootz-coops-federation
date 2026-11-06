@@ -35,6 +35,7 @@ import MarketplaceLane from '@/components/marketplace-lane';
 import { MentionText } from '@/components/mention-text';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
+import { useRefreshOnReconnect } from '@/hooks/use-connectivity';
 import { api, resolveCoopId } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
 import { GroupBuysStrip } from '@/components/group-buys-strip';
@@ -215,6 +216,8 @@ export default function BoardScreen() {
     await Promise.all([load(), ...(lane === 'index' ? [loadMarketplacePreview()] : [])]);
     setRefreshing(false);
   };
+
+  useRefreshOnReconnect(refresh);
 
   const selectLane = (next: BoardLane) => {
     setQuery('');

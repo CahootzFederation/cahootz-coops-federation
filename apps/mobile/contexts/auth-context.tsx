@@ -7,6 +7,7 @@ import { setActiveCoopConfig, resetCoopConfig, type CoopConfig } from '@/lib/coo
 import { api, onSessionExpired } from '@/lib/api';
 import { canAccessUpdateChannelDebug, clearUpdateChannelOverrideQuietly } from '@/lib/update-channel-debug';
 import { clearAnonymousProfileIntroSeen } from '@/lib/anonymous-id';
+import { clearOfflineCache } from '@/lib/offline-cache';
 import * as analytics from '@/lib/analytics';
 
 interface User {
@@ -305,6 +306,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (userRef.current) analytics.track('signed_out', { reason });
       analytics.reset();
       await secureStorage.clear();
+      // Data saved for offline use belongs to this account.
+      await clearOfflineCache();
       console.log('Secure storage cleared');
       resetCoopConfig();
       console.log('Coop config reset');

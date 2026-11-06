@@ -13,6 +13,7 @@ import { startLocalSageWakeLoop } from "@repo/trpc/services/sage-wake";
 import { sendAgentOperationalAlert } from "@repo/trpc/services/slack-notification-service";
 import { startAgentOperationsMonitor, stopAgentOperationsMonitor } from "./agent-operations-monitor.js";
 import { isPrimaryProductionDeployment } from "@repo/trpc/services/agent-operations";
+import { captureServerException, flushErrorTracking } from "@repo/trpc/error-tracking";
 
 const app: Application = express();
 
@@ -344,7 +345,10 @@ app.use((err: any, req: any, res: any, next: any) => {
   console.error(`💥 Error:`, err);
   console.error(`📚 Stack:`, err.stack);
   console.error('🚨 '.repeat(40) + '\n');
-  
+
+  // Only the route, never the body: webhook and upload payloads carry personal data.
+  captureServerException(err, { properties: { source: "express", route: req.path } });
+
   res.status(500).json({ error: 'Internal Server Error', message: err.message });
 });
 
@@ -442,6 +446,7 @@ const gracefulShutdown = async (signal: string) => {
   shutdownStarted = true;
   console.log(`\n⚠️  Received ${signal}, starting graceful shutdown...`);
   stopAgentOperationsMonitor();
+  await flushErrorTracking();
 
   // PR and dev copies shut down on every redeploy; only real production should alert.
   if (isPrimaryProductionDeployment()) {
@@ -489,7 +494,9 @@ process.on('uncaughtException', async (error) => {
   console.error('\n💥 UNCAUGHT EXCEPTION:');
   console.error(error);
   console.error('\n');
-  
+
+  captureServerException(error, { properties: { source: "uncaught_exception" } });
+
   // Send Slack notification
   try {
     const { sendApiErrorNotification } = await import("@repo/trpc/services/slack-notification-service");
@@ -510,7 +517,9 @@ process.on('unhandledRejection', async (reason, promise) => {
   console.error('Promise:', promise);
   console.error('Reason:', reason);
   console.error('\n');
-  
+
+  captureServerException(reason, { properties: { source: "unhandled_rejection" } });
+
   // Send Slack notification
   try {
     const { sendApiErrorNotification } = await import("@repo/trpc/services/slack-notification-service");

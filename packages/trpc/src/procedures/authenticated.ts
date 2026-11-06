@@ -40,7 +40,7 @@ const isAuthenticated = t.middleware(async ({ ctx, next }) => {
         },
       ],
     },
-    select: { deletedAt: true },
+    select: { id: true, deletedAt: true },
   });
 
   if (user?.deletedAt) {
@@ -49,6 +49,8 @@ const isAuthenticated = t.middleware(async ({ ctx, next }) => {
       message: "This account has been deleted. Contact support if you need help.",
     });
   }
+
+  if (user && context.errorTracking) context.errorTracking.userId = user.id;
 
   return next({
     ctx: {

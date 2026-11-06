@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Copy,
   HelpCircle,
+  House,
   LogOut,
   Pencil,
   QrCode,
@@ -27,11 +28,13 @@ import {
   Wallet,
 } from 'lucide-react-native';
 
+import { PreferenceSwitch } from '@/components/preference-switch';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { useCoin } from '@/contexts/platform-config-context';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
+import { getStreetViewEnabled, setStreetViewEnabled } from '@/lib/street-preference';
 import { canAccessUpdateChannelDebug } from '@/lib/update-channel-debug';
 
 const PROFILE_THEME = {
@@ -58,6 +61,30 @@ export default function AccountProfileScreen() {
   const { coopId } = useLocalSearchParams<{ coopId?: string }>();
   const [copiedAddress, setCopiedAddress] = React.useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = React.useState(false);
+  const [streetOn, setStreetOn] = React.useState<boolean | null>(null);
+  const [streetError, setStreetError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let mounted = true;
+    getStreetViewEnabled()
+      .then((enabled) => { if (mounted) setStreetOn(enabled); })
+      .catch(() => { if (mounted) setStreetOn(false); });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleStreetChange = async (enabled: boolean) => {
+    const previous = streetOn;
+    setStreetOn(enabled);
+    setStreetError(null);
+    try {
+      await setStreetViewEnabled(enabled);
+    } catch {
+      setStreetOn(previous);
+      setStreetError("We couldn't save that on this device. Try again.");
+    }
+  };
   const [fundingBadges, setFundingBadges] = React.useState<any[]>([]);
   const [isEditingIdentity, setIsEditingIdentity] = React.useState(false);
   const [isSavingIdentity, setIsSavingIdentity] = React.useState(false);
@@ -353,6 +380,32 @@ export default function AccountProfileScreen() {
               <Pencil size={15} color={PROFILE_THEME.primary} />
               <Text className="font-bold" style={{ color: PROFILE_THEME.primary }}>Edit name, nickname, and @</Text>
             </TouchableOpacity>
+          </View>
+
+          <View className="mt-4 rounded-2xl border bg-white" style={{ borderColor: PROFILE_THEME.border }}>
+            <Text className="px-4 pb-2 pt-4 text-xs font-bold uppercase text-gray-500">How the app looks</Text>
+            <View className="flex-row items-center gap-3 px-4 pb-4 pt-2" style={{ minHeight: 56 }}>
+              <View className="h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: PROFILE_THEME.primarySoft }}>
+                <House size={20} color={PROFILE_THEME.primary} />
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text className="font-bold text-gray-950">Commons street</Text>
+                <Text className="mt-0.5 text-xs font-semibold text-gray-500">
+                  {streetOn
+                    ? 'Commons opens on a street you can walk around. Your circles are in the Circle Hall.'
+                    : 'Turn this on to walk around your Commons as a street. Right now Commons opens on your circles.'}
+                </Text>
+                {streetError ? (
+                  <Text className="mt-1 text-xs font-semibold text-red-600">{streetError}</Text>
+                ) : null}
+              </View>
+              <PreferenceSwitch
+                label="Commons street"
+                value={!!streetOn}
+                disabled={streetOn === null}
+                onChange={(enabled) => void handleStreetChange(enabled)}
+              />
+            </View>
           </View>
 
           <View className="mt-4 overflow-hidden rounded-2xl border bg-white" style={{ borderColor: PROFILE_THEME.border }}>

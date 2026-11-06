@@ -10,6 +10,7 @@ import OnboardingWelcome from '@/components/onboarding-welcome';
 import { useAuth } from '@/contexts/auth-context';
 import { secureStorage } from '@/lib/secure-storage';
 import { api } from '@/lib/api';
+import { getStreetViewEnabled } from '@/lib/street-preference';
 
 export default function CommonsScreen() {
   const params = useLocalSearchParams<{ coopId?: string; entry?: string }>();
@@ -19,6 +20,21 @@ export default function CommonsScreen() {
   const [resolvedCoopId, setResolvedCoopId] = useState<string | null>(
     requestedCoopId || (!isLoading && !sessionToken ? 'cahootz' : null),
   );
+  // Circle View is the Commons tab's landing. Members can switch on the
+  // walkable street in their account settings; re-read it each time the tab
+  // comes back into focus so the switch takes effect right away.
+  const [streetOn, setStreetOn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!isFocused) return;
+    let mounted = true;
+    getStreetViewEnabled()
+      .then((enabled) => { if (mounted) setStreetOn(enabled); })
+      .catch(() => { if (mounted) setStreetOn(false); });
+    return () => {
+      mounted = false;
+    };
+  }, [isFocused]);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -90,7 +106,7 @@ export default function CommonsScreen() {
     return <OnboardingFlow initialStep="login" onBack={() => router.dismissTo('/' as any)} />;
   }
 
-  if (!resolvedCoopId) {
+  if (!resolvedCoopId || (sessionToken && streetOn === null)) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
         <ActivityIndicator color="#FF6B00" />
@@ -98,11 +114,11 @@ export default function CommonsScreen() {
     );
   }
 
-  // Signed-in members land on their Commons' street; the Circle Hall on it
-  // opens the circles screen (app/[coopId]/circles.tsx). StreetView falls
-  // back to circles for a Commons you aren't a member of. A signed-out
-  // visitor still sees the circles screen with just the General card and its
-  // own sign-in prompt, exactly as before.
-  if (sessionToken) return <StreetView coopId={resolvedCoopId} />;
+  // Circle View is the landing for everyone: signed-in members see their
+  // circles, chatting counts, and the welcome lounge; a signed-out visitor
+  // sees just the General card with its own sign-in prompt. Members who turn
+  // on the street in settings land on it instead, and its Circle Hall opens
+  // the circles screen (app/[coopId]/circles.tsx).
+  if (sessionToken && streetOn) return <StreetView coopId={resolvedCoopId} />;
   return <CircleView coopId={resolvedCoopId} />;
 }

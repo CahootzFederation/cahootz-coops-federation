@@ -4,15 +4,18 @@ import type { ErrorBoundaryProps } from 'expo-router';
 import * as Sentry from '@sentry/react-native';
 
 import { DESIGN } from '@/constants/design';
+import { captureError } from '@/lib/analytics';
 
 /**
  * Shown in place of the app when a screen throws while rendering. Without a
  * boundary, React Native treats that error as fatal and the app quits; at
  * launch with no network, expo-updates can't recover and iOS closes it.
- * These errors skip Sentry's global handler, so report them here.
+ * These errors skip Sentry's global handler, so report them here (Sentry and
+ * PostHog error tracking).
  */
 export function AppErrorScreen({ error, retry }: ErrorBoundaryProps) {
   useEffect(() => {
+    captureError(error, { source: 'root_error_boundary' });
     Sentry.captureException(error, { tags: { boundary: 'root' } });
   }, [error]);
 

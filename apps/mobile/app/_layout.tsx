@@ -1,6 +1,6 @@
 import { CommunityTheme } from '@/constants/theme';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, router, type ErrorBoundaryProps } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Linking from 'expo-linking';
@@ -19,15 +19,12 @@ import { InAppAlertPopup } from '@/components/in-app-alert-popup';
 import { PushPermissionGate } from '@/components/push-permission-gate';
 import { PendingInvitationResume } from '@/components/pending-invitation-resume';
 import { AnalyticsTracker } from '@/components/analytics-tracker';
-import { LoadError } from '@/components/load-error';
-import { DESIGN } from '@/constants/design';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { CartProvider } from '@/contexts/cart-context';
 import { PlatformConfigProvider } from '@/contexts/platform-config-context';
 import { PaymentConfirmationProvider } from '@/components/payment-confirmation-provider';
 import StripeWrapper from '@/components/providers/StripeWrapper';
 import { toastConfig } from '@/lib/toast-config';
-import { captureError } from '@/lib/analytics';
 import { useNavigationReady } from '@/hooks/use-navigation-ready';
 import * as Sentry from '@sentry/react-native';
 import { colorScheme as nativeWindColorScheme } from 'nativewind';
@@ -138,33 +135,6 @@ function ObserveInteractiveMarker() {
   }, [isLoading]);
 
   return null;
-}
-
-/**
- * Expo Router shows this instead of the app when rendering throws. It reports
- * the error (PostHog error tracking and Sentry), then shows a friendly screen
- * with a way back in.
- */
-export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
-  useEffect(() => {
-    captureError(error, { source: 'root_error_boundary' });
-    Sentry.captureException(error);
-  }, [error]);
-
-  return (
-    <View
-      testID="root-error-boundary"
-      style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: DESIGN.paper }}
-    >
-      <LoadError
-        title="Something broke on our end"
-        message="Sorry about that. We've let the team know. Tap below to try again."
-        onRetry={() => {
-          void retry();
-        }}
-      />
-    </View>
-  );
 }
 
 function RootLayout() {

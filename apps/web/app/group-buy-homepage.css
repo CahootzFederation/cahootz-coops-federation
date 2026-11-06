@@ -1,10 +1,5 @@
 /* Hallmark · genre: editorial · macrostructure: Cahootz homepage rhythm · tone: existing Cahootz editorial · anchor hue: ember · pre-emit critique: P5 H5 E5 S5 R5 V3 · contrast: pass (40–41) · nav/footer: existing Cahootz system · honest/chrome/tokens/responsive/icons/mobile: pass · slop: pass (1–58) */
 
-.group-buy-homepage #planet-buy,
-.group-buy-homepage #questions {
-  scroll-margin-top: 76px;
-}
-
 .pathway-links {
   display: flex;
   flex-wrap: wrap;
@@ -1225,11 +1220,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .group-buy-homepage .planet-product-card,
-  .group-buy-homepage .planet-product-card__check,
-  .group-buy-homepage .commons-catalog-switch__tab,
-  .group-buy-homepage .shared-purchase-calculator__input,
-  .group-buy-homepage .pilot-submit {
+  .landing .planet-product-card,
+  .landing .planet-product-card__check,
+  .landing .commons-catalog-switch__tab,
+  .landing .shared-purchase-calculator__input,
+  .landing .pilot-submit {
     transition-duration: 0.01ms;
   }
 }
@@ -1634,7 +1629,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .group-buy-homepage .shared-purchase-calculator__input {
+  .landing .shared-purchase-calculator__input {
     transition-duration: 0.01ms;
   }
 }

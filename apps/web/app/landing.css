@@ -462,7 +462,8 @@ body {
   font-size: 2rem;
   color: var(--color-accent-deep);
 }
-.commons-row h3 {
+.commons-row h3,
+.commons-row h4 {
   font-family: var(--font-display);
   font-size: 2rem;
   letter-spacing: -0.04em;
@@ -995,9 +996,215 @@ body {
   max-width: 100%;
   white-space: normal;
 }
+/* Street hero: the app itself is the first thing people see. */
+#what-you-can-do,
+#get-in,
+#questions,
+#deal-math {
+  scroll-margin-top: 76px;
+}
+.street-hero {
+  background:
+    radial-gradient(
+      ellipse 60% 70% at 78% 55%,
+      color-mix(in srgb, var(--color-accent) 22%, transparent),
+      transparent 70%
+    ),
+    var(--color-paper);
+}
+.street-hero-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  align-items: center;
+  gap: var(--space-2xl);
+  padding-block: var(--space-2xl);
+}
+.street-hero .hero-actions {
+  gap: var(--space-sm);
+}
+.street-hero .hero-note {
+  margin-top: var(--space-md);
+}
+.street-hero-phone {
+  justify-self: center;
+  margin: 0;
+  /* Fit the whole phone on the first screen: 0.462 is the screen's width/height. */
+  width: min(100%, 360px, calc((100svh - 190px) * 0.462));
+  min-width: 260px;
+}
+.street-hero-phone figcaption {
+  color: var(--color-ink-2);
+  font-size: 0.8rem;
+  margin-top: var(--space-sm);
+  text-align: center;
+}
+.phone-frame {
+  aspect-ratio: 780 / 1688;
+  background: var(--color-dark);
+  border-radius: 2.8rem;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-light) 18%, transparent),
+    0 40px 80px -40px color-mix(in srgb, var(--color-dark) 70%, transparent),
+    0 18px 32px -18px color-mix(in srgb, var(--color-dark) 45%, transparent);
+  overflow: hidden;
+  padding: 0.6rem;
+}
+.phone-frame img {
+  border-radius: 2.2rem;
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+/* What you can do: one screen, one claim per row. */
+.features-section {
+  border-top: var(--rule-thin) solid var(--color-rule);
+  padding-block: var(--space-3xl);
+}
+.feature-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  align-items: center;
+  gap: var(--space-2xl);
+  border-top: var(--rule-thin) solid var(--color-rule);
+  padding-block: var(--space-2xl);
+}
+.feature-row-flip .feature-copy {
+  order: 2;
+}
+.feature-copy h3 {
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 4vw, 3.6rem);
+  font-weight: 400;
+  letter-spacing: -0.045em;
+  line-height: 1.02;
+  margin: var(--space-sm) 0 var(--space-md);
+  max-width: 14ch;
+}
+.feature-copy > p {
+  color: var(--color-ink-2);
+  font-size: var(--text-md);
+  line-height: 1.65;
+  max-width: 48ch;
+}
+.feature-copy ul {
+  list-style: none;
+  margin: var(--space-lg) 0 0;
+  max-width: 48ch;
+  padding: 0;
+}
+.feature-copy li {
+  border-top: var(--rule-thin) solid var(--color-rule);
+  line-height: 1.55;
+  padding: var(--space-sm) 0 var(--space-sm) 1.6rem;
+  position: relative;
+}
+.feature-copy li::before {
+  color: var(--color-accent-deep);
+  content: "✳";
+  left: 0;
+  position: absolute;
+}
+.feature-phone {
+  justify-self: center;
+  max-width: 300px;
+  width: 100%;
+}
+.feature-extras {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-lg);
+  border-top: var(--rule-thin) solid var(--color-ink);
+  list-style: none;
+  margin: 0;
+  padding: var(--space-lg) 0 0;
+}
+.feature-extras strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 400;
+}
+.feature-extras p {
+  color: var(--color-ink-2);
+  line-height: 1.6;
+}
+.deal-math {
+  margin-top: var(--space-2xl);
+}
+.deal-math > summary {
+  color: var(--color-accent-deep);
+}
+.deal-math-intro {
+  color: var(--color-ink-2);
+  line-height: 1.6;
+  margin: 0 0 var(--space-lg);
+  max-width: 60ch;
+}
+.deal-math .planet-deal-tool {
+  margin-bottom: var(--space-xl);
+}
+
+/* Find a commons now lives under "How to get in". */
+.find-commons {
+  border-top: var(--rule-thin) solid var(--color-ink);
+  margin-top: var(--space-2xl);
+  padding-top: var(--space-lg);
+}
+.find-commons > h3 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 3.4vw, 2.8rem);
+  font-weight: 400;
+  letter-spacing: -0.045em;
+  margin: 0;
+}
+.find-commons > p {
+  color: var(--color-ink-2);
+  line-height: 1.6;
+  max-width: 55ch;
+}
+
+@media (max-width: 900px) {
+  .street-hero-inner,
+  .feature-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-xl);
+  }
+  .feature-row-flip .feature-copy {
+    order: 0;
+  }
+  .feature-extras {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-md);
+  }
+}
 @media (max-width: 700px) {
   .get-in-steps {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .street-hero-inner {
+    padding-block: var(--space-lg) var(--space-xl);
+  }
+  .street-hero h1 {
+    margin-block: var(--space-sm) var(--space-md);
+  }
+  .street-hero .hero-actions .button {
+    white-space: normal;
+    width: 100%;
+  }
+  .street-hero-phone {
+    width: min(78vw, 320px);
+    min-width: 0;
+  }
+  .feature-phone {
+    max-width: min(70vw, 280px);
+  }
+  .features-section {
+    padding-block: var(--space-2xl);
+  }
+  .feature-row {
+    padding-block: var(--space-xl);
   }
 }
 

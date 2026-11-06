@@ -999,6 +999,46 @@ body {
   border-top: var(--rule-thin) solid var(--color-rule);
   padding-block: var(--space-3xl);
 }
+.app-screens {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-xl);
+  justify-items: center;
+  margin: 0;
+}
+.app-screen {
+  margin: 0;
+  max-width: 280px;
+  width: 100%;
+}
+.phone-frame {
+  aspect-ratio: 780 / 1688;
+  background: #141414;
+  border-radius: 2.6rem;
+  box-shadow: 0 24px 48px -24px rgb(0 0 0 / 0.45);
+  overflow: hidden;
+  padding: 0.55rem;
+}
+.phone-frame img {
+  border-radius: 2.1rem;
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+.app-screen figcaption {
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  margin-top: var(--space-sm);
+  text-align: center;
+}
+.app-screens-note {
+  color: var(--color-ink-2);
+  font-size: 0.8rem;
+  margin: var(--space-md) 0 var(--space-xl);
+  text-align: center;
+}
 .inside-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1040,6 +1080,19 @@ body {
   .get-in-steps,
   .inside-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+  /* Swipe through the phones instead of stacking three tall screens. */
+  .app-screens {
+    display: flex;
+    gap: var(--space-md);
+    margin-inline: -16px;
+    overflow-x: auto;
+    padding: 0 16px var(--space-sm);
+    scroll-snap-type: x mandatory;
+  }
+  .app-screen {
+    flex: 0 0 70%;
+    scroll-snap-align: center;
   }
 }
 

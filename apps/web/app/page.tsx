@@ -116,6 +116,24 @@ const insideApp = [
   },
 ];
 
+const appScreens = [
+  {
+    src: "/app-screens/street.webp",
+    alt: "The Commons tab: a walkable street with each member's house, neighbors strolling, and the Community Board in the middle",
+    caption: "Walk your street and see who's out.",
+  },
+  {
+    src: "/app-screens/group-deal.webp",
+    alt: "A group deal for a 2 lb bag of coffee: $24 instead of $34, with 5 of 10 neighbors committed",
+    caption: "Join a group deal and save.",
+  },
+  {
+    src: "/app-screens/sage-chat.webp",
+    alt: "A chat where Sage introduces a parent to a neighbor who tutors algebra",
+    caption: "Ask Sage, and meet the neighbor who can help.",
+  },
+];
+
 const faqs = [
   {
     q: "What is a commons?",
@@ -311,6 +329,25 @@ export default async function HomePage() {
                 someday.
               </p>
             </div>
+            <div className="app-screens" aria-label="Screens from the Cahootz Commons app">
+              {appScreens.map((screen) => (
+                <figure className="app-screen" key={screen.src}>
+                  <div className="phone-frame">
+                    <Image
+                      src={screen.src}
+                      alt={screen.alt}
+                      width={780}
+                      height={1688}
+                      sizes="(max-width: 700px) 70vw, 280px"
+                    />
+                  </div>
+                  <figcaption>{screen.caption}</figcaption>
+                </figure>
+              ))}
+            </div>
+            <p className="app-screens-note">
+              Screens show a sample commons with made-up neighbors.
+            </p>
             <ul className="inside-grid">
               {insideApp.map((item) => (
                 <li key={item.label}>

@@ -10,9 +10,17 @@ test('public page reveals business and funding details on request', async ({ pag
   // The page says what's live in the app today, and invited people can get the app.
   // The header links are hidden at phone width, so scroll to the section.
   const inside = page.locator('#inside');
-  await inside.scrollIntoViewIfNeeded();
-  await expect(inside.getByRole('heading', { name: 'What you can do today.' })).toBeInViewport();
+  const insideHeading = inside.getByRole('heading', { name: 'What you can do today.' });
+  await insideHeading.scrollIntoViewIfNeeded();
+  await expect(insideHeading).toBeInViewport();
   await expect(inside.getByText('Buy together, pay less.')).toBeVisible();
+  // Real screens from the app, swiped through sideways on phones.
+  const screens = inside.getByRole('img');
+  await expect(screens).toHaveCount(3);
+  await expect(inside.getByRole('img', { name: /walkable street/ })).toBeVisible();
+  await inside.getByRole('img', { name: /Sage introduces/ }).scrollIntoViewIfNeeded();
+  await expect(inside.getByRole('img', { name: /Sage introduces/ })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await expect(page.getByRole('link', { name: 'Have an invite? Get the iPhone app' })).toHaveAttribute(
     'href',
     'https://apps.apple.com/us/app/cahootz-commons/id6772781102',

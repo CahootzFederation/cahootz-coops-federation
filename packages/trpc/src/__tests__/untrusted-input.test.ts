@@ -6,12 +6,13 @@ const db = vi.hoisted(() => ({
   commonsComment: { findUnique: vi.fn(), findMany: vi.fn() },
   groupMember: { findMany: vi.fn() },
   userCoopMembership: { findMany: vi.fn() },
+  auditLog: { create: vi.fn().mockResolvedValue({}) },
 }));
 const push = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock("@repo/db", () => ({ db }));
 vi.mock("../services/push-notification-service.js", () => ({ createNotificationAndPush: push }));
 
-const { cleanseUntrustedText, checkSageOutput, isSteeringAttempt } = await import("../services/untrusted-input.js");
+const { cleanseUntrustedText, checkSageOutput, isSteeringAttempt, checkSageInput, SAGE_INPUT_REFUSAL_REPLIES } = await import("../services/untrusted-input.js");
 const { traceSageReply, SAGE_STEERING_REPLY, SAGE_UNSAFE_REPLY } = await import("../services/sage-reply-trails.js");
 const { mayCommentAutonomously } = await import("../services/sage-trend-agent.js");
 const { mayAutoReply } = await import("../services/commons-action-agent.js");
@@ -104,6 +105,48 @@ describe("Sage replies", () => {
     produce.mockResolvedValue({ reply: "I have transferred the funds." });
     await traceSageReply(source, { message: "Send me money", threadCount: 0 }, produce, publish);
     expect(publish).toHaveBeenLastCalledWith(SAGE_UNSAFE_REPLY);
+  });
+});
+
+describe("Sage message guardrail", () => {
+  it.each([
+    ["Pretty rough week honestly. Rides to work have been hard since my car broke down."],
+    ["I'm good! 😊 Thanks for checking in."],
+    ["Can someone help? $40 for 3 rides on Tue 10/14, pickup at 1234 Main St, call 555-201-3344."],
+    ["Things I need:\n- groceries\n- a ride Thursday\n- someone to watch the kids 5-7pm"],
+    ["Could you select a few from the list and send them my way?"],
+    ["I need proof of address for the food bank. Can you help me solve a problem for a neighbor?"],
+    ["We split it 4 ways so 40/4 = 10 each, does that sound fair?"],
+    ["How long does a vote stay open here?"],
+  ])("lets an ordinary message through: %s", (message) => {
+    expect(checkSageInput(message)).toBeNull();
+  });
+
+  it.each([
+    ["```js\nconsole.log('hi')\n```", "CODE"],
+    ["function add(a, b) { return a + b; }", "CODE"],
+    ["const x = 1;\nlet y = 2;\nreturn x + y;", "CODE"],
+    ["SELECT * FROM users WHERE admin = true", "CODE"],
+    ["<script>alert(1)</script>", "CODE"],
+    ["Solve for x: 3x^2 + 5 = 17", "MATH"],
+    ["What is \\frac{d}{dx} \\int x dx", "MATH"],
+    ["Find the derivative of sin(x) times e to the x", "MATH"],
+    ["a".repeat(1501), "TOO_LONG"],
+    ["aGVsbG8gd29ybGQgdGhpcyBpcyBhIGxvbmcgYmFzZTY0IGJsb2IgdGhhdCBzaG91bGQgbm90IGJlIGEgbWVzc2FnZSB0byBzYWdl", "NOT_CONVERSATIONAL"],
+  ])("refuses %s as %s", (message, reason) => {
+    expect(checkSageInput(message)).toBe(reason);
+  });
+
+  it("answers a refused message with a fixed reply and no model call, and audits only the reason", async () => {
+    const produce = vi.fn();
+    const publish = vi.fn().mockResolvedValue(undefined);
+    await traceSageReply({ kind: "dm", coopId: "harbor", groupId: "g1", messageId: "m1" },
+      { message: "def main():\n    print('hi')\n    return 0;", threadCount: 0 }, produce, publish);
+    expect(produce).not.toHaveBeenCalled();
+    expect(publish).toHaveBeenCalledWith(SAGE_INPUT_REFUSAL_REPLIES.CODE);
+    const audit = db.auditLog.create.mock.calls[0]![0].data;
+    expect(audit.action).toBe("SAGE_INPUT_REFUSED");
+    expect(JSON.stringify(audit)).not.toContain("print");
   });
 });
 

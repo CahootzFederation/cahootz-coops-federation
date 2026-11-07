@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { api, type CommonsInvitationDetail } from '@/lib/api';
 
 export type OnboardingFamily =
-  | { kind: 'member'; coopId: string; name: string; iconEmoji?: string | null; iconColor?: string | null }
+  | { kind: 'member'; coopId: string; name: string; iconEmoji?: string | null; iconColor?: string | null; isFamily: boolean }
   | { kind: 'invited'; invitation: CommonsInvitationDetail };
 
 /** A family (invite-only commons) invitation that admits someone, not one that asks them to apply. */
@@ -17,9 +17,9 @@ export function isFamilyInvitation(invitation: CommonsInvitationDetail) {
 }
 
 /**
- * The newcomer's own families, shown first on onboarding's last step so
- * someone invited by family lands with them instead of in the wider
- * Cahootz Commons. Families they already belong to go straight in; a
+ * The newcomer's existing commons, shown on their first sign-in so
+ * someone admitted before signing in lands with their community.
+ * Memberships open directly; a
  * pending invitation opens it, where they still agree to the family's
  * rules before joining. Renders nothing when there are none, and stays
  * quiet on a failed load (the other ways in still work, and the regular
@@ -49,9 +49,10 @@ export function OnboardingFamilyChoices({
       const next: OnboardingFamily[] = [];
       if (directory.status === 'fulfilled') {
         for (const coop of directory.value.coops) {
-          if (coop.accessStatus === 'ACTIVE' && coop.joinPolicy === 'INVITE_ONLY') {
+          if (coop.accessStatus === 'ACTIVE') {
             next.push({
               kind: 'member',
+              isFamily: coop.joinPolicy === 'INVITE_ONLY',
               coopId: coop.id,
               name: coop.name,
               iconEmoji: coop.iconEmoji,
@@ -79,13 +80,13 @@ export function OnboardingFamilyChoices({
 
   return (
     <View style={styles.section}>
-      <Text style={styles.heading}>{families.length === 1 ? 'Your family' : 'Your families'}</Text>
+      <Text style={styles.heading}>Your commons</Text>
       {families.map((family) => {
         const isMember = family.kind === 'member';
         const name = isMember ? family.name : family.invitation.commons.name;
         const label = isMember ? `Go to ${name}` : `Join ${name}`;
         const detail = isMember
-          ? "You're already in. Head to your family's private space."
+          ? family.isFamily ? 'Private family · You’re a member' : 'Commons · You’re a member'
           : `${family.invitation.inviterName} invited you. You'll see the family's rules before you join.`;
 
         return (
@@ -97,19 +98,20 @@ export function OnboardingFamilyChoices({
             onPress={() =>
               isMember ? onGoToFamily(family.coopId) : onOpenInvitation(family.invitation.invitationId!)
             }
-            style={[styles.card, disabled && styles.cardDisabled]}
+            style={({ pressed }) => [styles.card, pressed && styles.cardPressed, disabled && styles.cardDisabled]}
           >
             <IconAvatar
               emoji={isMember ? family.iconEmoji : family.invitation.commons.iconEmoji}
-              color={(isMember ? family.iconColor : family.invitation.commons.iconColor) || '#FF6B00'}
+              color={(isMember ? family.iconColor : family.invitation.commons.iconColor) || palette.avatar}
+              foregroundColor={(isMember ? family.iconColor : family.invitation.commons.iconColor) ? undefined : palette.ink}
               fallbackText={name}
               size={48}
             />
             <View style={styles.cardBody}>
-              <Text style={styles.cardTitle}>{label}</Text>
+              <Text style={styles.cardTitle}>{name}</Text>
               <Text style={styles.cardText}>{detail}</Text>
             </View>
-            <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.6} />
+            <View style={styles.action}><Text style={styles.actionText}>{isMember ? "Open" : "View invite"}</Text><ArrowRight color={palette.accent} size={18} strokeWidth={2.2} /></View>
           </Pressable>
         );
       })}
@@ -117,13 +119,16 @@ export function OnboardingFamilyChoices({
   );
 }
 
+// Hallmark · component: commons row · playful · Cahootz palette
+// Pre-emit critique: philosophy 4, hierarchy 5, execution 4, specificity 5, restraint 5, variety 4.
+const palette = { ink: '#17251B', muted: '#57645A', surface: '#F0F5ED', border: '#DCE6D7', pressed: '#E1ECDB', accent: '#A43B12', avatar: '#E4ECD9' };
 const styles = StyleSheet.create({
   section: {
     gap: 8,
     marginBottom: 8,
   },
   heading: {
-    color: '#0F172A',
+    color: palette.ink,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '900',
@@ -133,10 +138,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    borderRadius: 20,
-    backgroundColor: '#FF6B00',
-    padding: 14,
+    borderRadius: 18,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: 18,
+    minHeight: 96,
   },
+  cardPressed: { backgroundColor: palette.pressed },
+  action: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  actionText: { color: palette.accent, fontSize: 13, fontWeight: '800' },
   cardDisabled: {
     opacity: 0.55,
   },
@@ -144,13 +155,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardTitle: {
-    color: '#FFFFFF',
+    color: palette.ink,
     fontSize: 17,
     lineHeight: 22,
-    fontWeight: '900',
+    fontWeight: '800',
   },
   cardText: {
-    color: '#FFF7ED',
+    color: palette.muted,
     fontSize: 13,
     lineHeight: 18,
     marginTop: 2,

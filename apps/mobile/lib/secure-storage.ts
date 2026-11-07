@@ -8,6 +8,7 @@ import { Platform } from 'react-native';
  */
 
 const STORAGE_KEYS = {
+  COMMONS_DESTINATION: 'cahootz.commonsDestination',
   USER: 'cahootz.user',
   LOGIN_TIME: 'cahootz.loginTime',
   SESSION_TOKEN: 'cahootz.sessionToken',
@@ -35,7 +36,7 @@ function legacyKeyFor(key: string): string | null {
   const keyEntry = Object.entries(STORAGE_KEYS).find(([, currentKey]) => currentKey === key);
   if (keyEntry) {
     const [name] = keyEntry as [keyof typeof STORAGE_KEYS, string];
-    return LEGACY_STORAGE_KEYS[name];
+    return name in LEGACY_STORAGE_KEYS ? LEGACY_STORAGE_KEYS[name as keyof typeof LEGACY_STORAGE_KEYS] : null;
   }
 
   if (key.startsWith(`${WALLET_KEY_PREFIX}.`)) {

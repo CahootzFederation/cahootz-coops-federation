@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
-import { newSignedInPage, USER_A_EMAIL } from "./support/auth";
+import { newSignedInPage, USER_A_EMAIL, openCircleHall } from "./support/auth";
 
 // When a screen fails to load, members (many of them older or new to
 // smartphones) must see a plain sentence and a "Try again" button - never
@@ -84,6 +84,7 @@ test("Circle View says plainly when circles fail to load and recovers with Try a
       }),
     );
     await page.reload();
+    await openCircleHall(page);
 
     await expect(shown(page, "Welcome In", { exact: true })).toBeVisible();
     await expect(
@@ -134,14 +135,14 @@ test("the proposals list hides a raw validation error and recovers with Try agai
     );
     await page.goto("/proposals?coopId=cahootz");
 
-    await expect(shown(page, "Turn conversations into decisions")).toBeVisible();
+    await expect(shown(page, "Community decisions")).toBeVisible();
     await expect(shown(page, PROPOSALS_FALLBACK)).toBeVisible();
     await expect(tryAgain(page)).toBeVisible();
 
     // The zod dump never reaches the screen, and a failed load isn't
     // presented as an empty list.
     await expect(shown(page, /invalid_type|"expected"|coopId|Required/)).toHaveCount(0);
-    await expect(shown(page, "No proposals yet", { exact: true })).toHaveCount(0);
+    await expect(shown(page, "No current proposals", { exact: true })).toHaveCount(0);
 
     await page.unroute(listProposals);
     const reloaded = page.waitForResponse(
@@ -149,19 +150,53 @@ test("the proposals list hides a raw validation error and recovers with Try agai
     );
     await tryAgain(page).click();
     const body = await (await reloaded).json();
-    const proposals: { title: string }[] = body?.result?.data?.proposals ?? [];
+    const proposals = ((body?.result?.data?.proposals ?? []) as { title: string; status: string }[]).filter((proposal) => !['approved', 'funded', 'rejected', 'withdrawn'].includes(proposal.status));
 
     await expect(shown(page, PROPOSALS_FALLBACK)).toHaveCount(0);
     await expect(tryAgain(page)).toHaveCount(0);
     if (proposals.length === 0) {
-      await expect(shown(page, "No proposals yet", { exact: true })).toBeVisible();
+      await expect(shown(page, "No current proposals", { exact: true })).toBeVisible();
     } else {
       await expect(shown(page, proposals[0].title, { exact: true }).first()).toBeVisible();
     }
 
     // The recovered state survives a reload.
     await page.reload();
-    await expect(shown(page, "Turn conversations into decisions")).toBeVisible();
+    await expect(shown(page, "Community decisions")).toBeVisible();
+    await expect(tryAgain(page)).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
+// Stiff server wording ("Failed to…", "X not found", "Unauthorized") used to
+// reach members word for word. The screen's own sentence wins now.
+test("the proposals list shows its own sentence instead of a stiff server message", async ({
+  browser,
+}) => {
+  const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
+  const listProposals = procedure("proposal.list");
+
+  try {
+    await page.route(listProposals, (route) =>
+      fulfillTrpcError(route, {
+        message: "Failed to list proposals",
+        code: "INTERNAL_SERVER_ERROR",
+        httpStatus: 500,
+      }),
+    );
+    await page.goto("/proposals?coopId=cahootz");
+
+    await expect(shown(page, PROPOSALS_FALLBACK)).toBeVisible();
+    await expect(shown(page, /Failed to list proposals/)).toHaveCount(0);
+
+    await page.unroute(listProposals);
+    const reloaded = page.waitForResponse(
+      (response) => listProposals(new URL(response.url())) && response.ok(),
+    );
+    await tryAgain(page).click();
+    await reloaded;
+    await expect(shown(page, PROPOSALS_FALLBACK)).toHaveCount(0);
     await expect(tryAgain(page)).toHaveCount(0);
   } finally {
     await context.close();

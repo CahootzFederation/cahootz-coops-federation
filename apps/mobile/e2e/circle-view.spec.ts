@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enterFeed, newSignedInPage, skipOnboardingWizard } from "./support/auth";
+import { enterFeed, newSignedInPage } from "./support/auth";
 
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 const USER_A_EMAIL =
@@ -12,7 +12,7 @@ const USER_B_EMAIL =
 // cover that navigation change plus the new welcome-lounge workflow, both
 // added in this change; see AGENTS.md's e2e-coverage requirement.
 
-test("Commons tab lands on Circle View, and a post board stays inside the tab", async ({
+test("Commons tab lands on Circle View, and a post board stays inside the tab", { tag: "@smoke" }, async ({
   browser,
 }) => {
   const { context, page } = await newSignedInPage(browser, USER_A_EMAIL);
@@ -65,6 +65,17 @@ test("Commons tab lands on Circle View, and a post board stays inside the tab", 
     await page.reload();
     await expect(page.getByLabel("Back to Circle View")).toHaveCount(0);
 
+    // Commons is already selected while a circle is open. Tapping the
+    // selected tab is a no-op: it must not leave the circle or put Circle
+    // View onto the root navigation stack.
+    const circleUrl = page.url();
+    await page.getByLabel("Commons", { exact: true }).click();
+    await expect(page).toHaveURL(circleUrl);
+    await expect(page.getByText("Post board", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "Share what's happening..." }),
+    ).toBeVisible();
+
     // The post board has its own header drawer. Its Commons rows must open
     // Circle View rather than swapping one post board for another.
     await page.getByLabel("Open menu").click();
@@ -79,12 +90,16 @@ test("Commons tab lands on Circle View, and a post board stays inside the tab", 
     await page.getByLabel("Open menu").filter({ visible: true }).click();
     await expect(page.getByText("Conversation", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Circles", { exact: true })).toHaveCount(0);
+    // The circle list starts with real circles: no General / "Default
+    // conversation" row (Circle View already shows General first).
+    await expect(page.getByText("Default conversation", { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("Open General", { exact: true })).toHaveCount(0);
     await page.getByLabel(`Go home to ${activeCommonsName} circles`).filter({ visible: true }).click();
     await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Share what's happening..." })).toHaveCount(0);
 
-    // Tapping Commons again from Circle View should not push a second copy
-    // of the screen or duplicate the bottom tab bar.
+    // Tapping Commons from Circle View is also a no-op and must not
+    // duplicate the bottom tab bar.
     await page.getByLabel("Commons", { exact: true }).click();
     await expect(page.getByLabel("Commons", { exact: true })).toHaveCount(1);
   } finally {
@@ -125,7 +140,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
     expect(startingName).not.toBe(otherName);
     await page.getByLabel(`View circles in ${otherName}`, { exact: true }).filter({ visible: true }).click();
     await expect(currentCommons(otherName)).toBeVisible();
-    await expect(visible(`Choose a circle in ${otherName}`)).toBeVisible();
+    await expect(visible(`Find your circle in ${otherName}`)).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`coopId=${otherCoopId}`));
 
     await page.reload();
@@ -138,7 +153,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
       .filter({ visible: true })
       .click();
     await expect(currentCommons(startingName)).toBeVisible();
-    await expect(visible(`Choose a circle in ${startingName}`)).toBeVisible();
+    await expect(visible(`Find your circle in ${startingName}`)).toBeVisible();
 
     // 3. Commons directory.
     await page.getByLabel("Open menu").filter({ visible: true }).click();
@@ -146,7 +161,7 @@ test("switching to another Commons shows its circles from the switcher, drawer, 
     await expect(page.getByText("Browse commons", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: `Open ${otherName} circles`, exact: true }).filter({ visible: true }).click();
     await expect(currentCommons(otherName)).toBeVisible();
-    await expect(visible(`Choose a circle in ${otherName}`)).toBeVisible();
+    await expect(visible(`Find your circle in ${otherName}`)).toBeVisible();
   } finally {
     await context.close();
   }
@@ -257,14 +272,18 @@ test("two signed-in members see Sage's introduction thread in their welcome loun
       }
     }
 
+    const loungeUrl = pageA.url();
     await pageA.getByLabel("Commons", { exact: true }).click();
-    await expect(pageA.getByText(/^Welcome Lounge \d+$/)).toBeVisible();
+    await expect(pageA).toHaveURL(loungeUrl);
+    await expect(
+      pageA.getByRole("textbox", { name: "Share what's happening..." }),
+    ).toBeVisible();
   } finally {
     await Promise.all([contextA.close(), contextB.close()]);
   }
 });
 
-test("signed-out visitors see a sign-in card in place of the welcome lounge", async ({ browser }) => {
+test("signed-out visitors see a sign-in card in place of the welcome lounge", { tag: "@smoke" }, async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 430, height: 932 } });
   const page = await context.newPage();
   try {
@@ -332,13 +351,21 @@ test("Circle View scrolls to circles below the fold while its header stays put",
 });
 
 test("onboarding hides the app's tab bar until it's finished", async ({ page }) => {
-  // A fresh, signed-out visitor lands in onboarding.
+  // The public carousel and email verification never display app tabs.
   await page.goto("/");
-  await expect(page).toHaveURL(/profile-onboarding/);
+  const nav = page.getByRole("tablist", { name: "Main navigation" });
   await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeVisible();
-  await expect(page.getByRole("tablist", { name: "Main navigation" })).toHaveCount(0);
-
-  await skipOnboardingWizard(page, "always");
+  await expect(nav).toHaveCount(0);
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByPlaceholder("name@email.com")).toBeVisible();
+  await expect(nav).toHaveCount(0);
+  await page.getByPlaceholder("name@email.com").fill(USER_A_EMAIL);
+  await page.getByRole("button", { name: "Continue with email" }).click();
+  await expect(page.getByPlaceholder("Enter 6-digit code")).toBeVisible();
+  await expect(nav).toHaveCount(0);
+  await page.getByPlaceholder("Enter 6-digit code").fill(process.env.E2E_LOGIN_CODE || "000000");
+  await page.getByRole("button", { name: "Verify and continue" }).click();
+  // This established fixture already completed setup.
   await expect(page.getByText("Welcome In", { exact: true })).toBeVisible();
-  await expect(page.getByRole("tablist", { name: "Main navigation" })).toBeVisible();
+  await expect(nav).toBeVisible();
 });

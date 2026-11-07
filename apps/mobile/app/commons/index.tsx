@@ -1,7 +1,9 @@
+import { EmptyState } from '@/components/empty-state';
+import { DESIGN } from '@/constants/design';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, ChevronRight, Home, Lock, Search, Users } from 'lucide-react-native';
 
 import { Text } from '@/components/ui/text';
@@ -11,13 +13,14 @@ import { LoadError } from '@/components/load-error';
 import { useAuth } from '@/contexts/auth-context';
 import { IconAvatar } from '@/components/icon-avatar';
 import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const THEME = {
-  paper: '#F6F7F8',
-  ink: '#111827',
-  muted: '#6B7280',
-  primary: '#FF6B00',
-  primarySoft: '#FFF7ED',
+  paper: DESIGN.paper,
+  ink: DESIGN.ink,
+  muted: DESIGN.muted,
+  primary: DESIGN.actionText,
+  primarySoft: DESIGN.primarySoft,
   primaryBorder: '#FED7AA',
   greenSoft: '#ECFDF5',
   green: '#047857',
@@ -25,13 +28,14 @@ const THEME = {
   blue: '#1D4ED8',
   redSoft: '#FEF2F2',
   red: '#B91C1C',
-  border: '#E5E7EB',
+  border: DESIGN.border,
 };
 
 function statusTone(status: CommonsDirectoryItem['accessStatus'], commons?: CommonsDirectoryItem) {
   if (status === 'ACTIVE') {
     return { label: commons?.isSteward ? 'Steward' : 'Member', bg: THEME.greenSoft, fg: THEME.green };
   }
+  if (status === 'LOCKED' && commons?.joinPolicy === 'AUTOMATIC') return { label: 'Open to join', bg: THEME.greenSoft, fg: THEME.green };
   if (status === 'PENDING') return { label: 'Pending', bg: THEME.blueSoft, fg: THEME.blue };
   if (status === 'REJECTED') return { label: 'Closed', bg: THEME.redSoft, fg: THEME.red };
   return { label: 'Locked', bg: THEME.primarySoft, fg: THEME.primary };
@@ -53,7 +57,7 @@ function CommonsCard({ commons }: { commons: CommonsDirectoryItem }) {
     <TouchableOpacity
       onPress={openCommons}
       className="rounded-2xl border bg-white p-4"
-      style={{ borderColor: commons.isMember ? THEME.primary : THEME.border }}
+      style={{ borderColor: THEME.border }}
       activeOpacity={0.76}
       accessibilityRole="button"
       accessibilityLabel={canBrowseCircles ? `Open ${commons.name} circles` : `View ${commons.name} details`}
@@ -62,9 +66,9 @@ function CommonsCard({ commons }: { commons: CommonsDirectoryItem }) {
         {commons.isLocked ? (
           <View
             className="h-12 w-12 items-center justify-center rounded-2xl"
-            style={{ backgroundColor: '#111827' }}
+            style={{ backgroundColor: DESIGN.purple }}
           >
-            <Lock size={20} color="#FFFFFF" />
+            <Lock size={20} color={DESIGN.muted} />
           </View>
         ) : (
           <IconAvatar
@@ -75,13 +79,13 @@ function CommonsCard({ commons }: { commons: CommonsDirectoryItem }) {
           />
         )}
         <View className="min-w-0 flex-1">
-          <View className="mb-1 flex-row items-start justify-between gap-2">
-            <Text className="min-w-0 flex-1 text-lg font-black text-gray-950">{commons.name}</Text>
+          <View className="mb-1 flex-row items-start flex-wrap gap-2">
+            <Text className="min-w-0 w-full text-lg font-bold text-gray-950">{commons.name}</Text>
             <View className="rounded-full px-2 py-1" style={{ backgroundColor: tone.bg }}>
               <Text className="text-xs font-black" style={{ color: tone.fg }}>{tone.label}</Text>
             </View>
           </View>
-          {commons.tagline ? <Text className="text-sm font-bold" style={{ color: THEME.primary }}>{commons.tagline}</Text> : null}
+          {commons.tagline ? <Text className="text-sm" style={{ color: THEME.muted }}>{commons.tagline}</Text> : null}
           <Text className="mt-2 text-sm leading-5 text-gray-600" numberOfLines={3}>
             {commons.description}
           </Text>
@@ -95,6 +99,8 @@ function CommonsCard({ commons }: { commons: CommonsDirectoryItem }) {
               ? commons.isMember
                 ? 'View circles'
                 : 'Browse circles'
+              : commons.joinPolicy === 'AUTOMATIC' && commons.accessStatus === 'LOCKED'
+                ? 'View and join'
               : commons.canApply
                 ? 'View and apply'
                 : 'View status'}
@@ -116,6 +122,7 @@ function CommonsCard({ commons }: { commons: CommonsDirectoryItem }) {
 
 export default function CommonsDirectoryScreen() {
   const { sessionToken, user } = useAuth();
+  const { fromOnboarding } = useLocalSearchParams<{ fromOnboarding?: string }>();
   const [commons, setCommons] = useState<CommonsDirectoryItem[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -158,35 +165,40 @@ export default function CommonsDirectoryScreen() {
     );
   }, [commons, query]);
 
+  const canReturnToChoice = fromOnboarding === '1';
   const yourCommons = filteredCommons.filter((item) => item.isMember);
   const availableCommons = filteredCommons.filter((item) => !item.isMember);
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
-        <View className="px-4 pb-4 pt-2">
+      <ScrollView {...keyboardInsetScrollProps} className="flex-1" contentContainerStyle={{ paddingBottom: 32, width: '100%', maxWidth: 720, alignSelf: 'center' }}>
+        <View className="px-5 pb-4 pt-2">
           <View className="mb-4 flex-row items-center justify-between">
             <TouchableOpacity
-              onPress={() => router.back()}
+              onPress={() => canReturnToChoice
+                ? router.replace({ pathname: '/profile-onboarding', params: { step: 'commons', chooseCommons: '1' } } as any)
+                : router.canGoBack() ? router.back() : router.replace('/(tabs)' as any)}
               className="h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white"
+              accessibilityRole="button"
               accessibilityLabel="Go back"
             >
               <ArrowLeft size={20} color={THEME.ink} />
             </TouchableOpacity>
             <View className="min-w-0 flex-1 px-3">
-              <Text className="text-xs font-black uppercase text-gray-500">Commons</Text>
-              <Text className="text-2xl font-black text-gray-950">Browse commons</Text>
+              <Text className="text-xs font-semibold text-gray-500">Commons</Text>
+              <Text className="text-2xl font-bold text-gray-950">Browse commons</Text>
             </View>
-            <View className="h-11 w-11 items-center justify-center rounded-xl" style={{ backgroundColor: THEME.primary }}>
-              <Users size={21} color="#FFFFFF" />
+            <View className="h-11 w-11 items-center justify-center rounded-xl" style={{ backgroundColor: DESIGN.primarySoft }}>
+              <Users size={21} color={DESIGN.actionText} />
             </View>
           </View>
 
-          <View className="flex-row items-center gap-2 rounded-xl bg-white px-3 py-2">
+          <View className="flex-row items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
             <Search size={18} color={THEME.muted} />
             <TextInput
               value={query}
               onChangeText={setQuery}
+              accessibilityLabel="Search commons"
               placeholder="Search commons"
               placeholderTextColor={THEME.muted}
               className="h-10 flex-1 text-base text-gray-900"
@@ -195,7 +207,7 @@ export default function CommonsDirectoryScreen() {
           </View>
         </View>
 
-        <View className="px-4">
+        <View className="px-5">
           {user ? (
             <View className="mb-5 gap-3">
               <CommonsInvitationsCard />
@@ -235,21 +247,20 @@ export default function CommonsDirectoryScreen() {
 
           {yourCommons.length > 0 ? (
             <>
-              <Text className="mb-2 text-xs font-black uppercase tracking-wide text-gray-500">Your commons</Text>
+              <Text className="mb-2 text-base font-bold text-gray-900">Your commons</Text>
               <View className="mb-5 gap-3">
                 {yourCommons.map((item) => <CommonsCard key={item.id} commons={item} />)}
               </View>
             </>
           ) : null}
 
-          <Text className="mb-2 text-xs font-black uppercase tracking-wide text-gray-500">Other commons</Text>
+          <Text className="mb-2 text-base font-bold text-gray-900">Discover commons</Text>
           <View className="gap-3">
             {availableCommons.map((item) => <CommonsCard key={item.id} commons={item} />)}
             {!loading && !error && filteredCommons.length === 0 ? (
-              <View className="rounded-2xl border border-dashed border-gray-300 bg-white p-5">
-                <Text className="text-base font-black text-gray-900">No commons found</Text>
-                <Text className="mt-1 text-sm leading-5 text-gray-600">Try a different search.</Text>
-              </View>
+              <EmptyState title={query.trim() ? "No commons found" : "No public commons yet"}
+                message={query.trim() ? "Try another name or topic." : "Public commons will appear here when they are available."}
+                action={query.trim() ? { label: 'Clear search', onPress: () => setQuery('') } : undefined} />
             ) : null}
           </View>
         </View>

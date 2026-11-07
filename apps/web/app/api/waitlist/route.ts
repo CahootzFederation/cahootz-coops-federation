@@ -21,13 +21,16 @@ interface WaitlistData {
   name?: string;
   source: "hero" | "contact";
   suggestedCoop?: string;
+  coopId?: string;
 }
 
 const waitlistSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   name: z.string().optional(),
   source: z.enum(["hero", "contact"]),
-  suggestedCoop: z.string().optional(),
+  suggestedCoop: z.string().max(200).optional(),
+  // Set when the person picked a commons from the homepage list.
+  coopId: z.string().max(100).optional(),
 });
 
 async function sendWaitlistToSlack(data: WaitlistData, origin: string) {
@@ -73,7 +76,10 @@ export async function POST(request: NextRequest) {
       name: body.name || undefined,
       source: body.source,
       suggestedCoop: body.suggestedCoop?.trim() || undefined,
+      coopId: body.coopId?.trim() || undefined,
     };
+    // Older forms send only a name or idea, which is all we have to go on.
+    const coopId = waitlistData.coopId || waitlistData.suggestedCoop || undefined;
 
     // Save to database first so notification failures do not lose signups.
     await db.waitlistEntry.upsert({
@@ -81,7 +87,7 @@ export async function POST(request: NextRequest) {
       update: {
         name: waitlistData.name,
         source: waitlistData.source,
-        coopId: waitlistData.suggestedCoop || undefined,
+        coopId,
         notes: waitlistData.suggestedCoop
           ? `Interested coop: ${waitlistData.suggestedCoop}`
           : undefined,
@@ -91,7 +97,7 @@ export async function POST(request: NextRequest) {
         name: waitlistData.name,
         type: "user",
         source: waitlistData.source,
-        coopId: waitlistData.suggestedCoop || undefined,
+        coopId,
         notes: waitlistData.suggestedCoop
           ? `Interested coop: ${waitlistData.suggestedCoop}`
           : undefined,
@@ -109,7 +115,7 @@ export async function POST(request: NextRequest) {
       await fetch(`${apiUrl}/trpc/waitlist.sendWelcomeEmail`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: waitlistData.email, coopId: waitlistData.suggestedCoop }),
+        body: JSON.stringify({ email: waitlistData.email, coopId }),
       });
     } catch (error) {
       console.error("Waitlist welcome email error:", error);

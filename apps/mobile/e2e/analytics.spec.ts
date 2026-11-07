@@ -25,7 +25,7 @@ type CapturedEvent = {
 
 test.skip(!analyticsHost, "Set E2E_ANALYTICS_HOST (and start the app with a fake EXPO_PUBLIC_POSTHOG_KEY) to run.");
 
-test("first-time onboarding and sign-in send analytics events without personal data", async ({ browser }) => {
+test("first-time onboarding and sign-in attach email only to the PostHog person", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 430, height: 932 } });
   const events: CapturedEvent[] = [];
   const rawBodies: string[] = [];
@@ -70,14 +70,17 @@ test("first-time onboarding and sign-in send analytics events without personal d
   const identifyEvent = events.find((event) => event.event === "$identify");
   expect(identifyEvent?.distinct_id).toBeTruthy();
   expect(identifyEvent?.distinct_id).not.toContain("@");
+  expect(identifyEvent?.properties?.$set).toMatchObject({ email: USER_A_EMAIL });
   const signedIn = events.find((event) => event.event === "signed_in");
   expect(signedIn?.properties?.coop_id).toBe("cahootz");
 
   const handle = USER_A_EMAIL.split("@")[0];
   const everything = rawBodies.join("\n");
-  expect(everything).not.toContain(USER_A_EMAIL);
   expect(everything).not.toContain(handle);
   expect(everything).not.toMatch(/0x[a-fA-F0-9]{40}/);
+  for (const event of events.filter((candidate) => candidate.event !== "$identify")) {
+    expect(JSON.stringify(event)).not.toContain(USER_A_EMAIL);
+  }
 
   await context.close();
 });

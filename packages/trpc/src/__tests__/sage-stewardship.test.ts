@@ -127,7 +127,7 @@ describe("Trend suggestion gate", () => {
 
   it("drops low-confidence or empty suggestions", () => {
     expect(isActionableTrend(base, [])).toBe(true);
-    expect(isActionableTrend({ ...base, confidence: 0.59 }, [])).toBe(false);
+    expect(isActionableTrend({ ...base, confidence: 0.49 }, [])).toBe(false);
     expect(isActionableTrend({ ...base, reason: " " }, [])).toBe(false);
   });
 
@@ -207,7 +207,7 @@ describe("Autonomous Sage comments", () => {
 
   it("comments without approval only when confident and Auto-reply is on", () => {
     expect(mayCommentAutonomously(comment, true)).toBe(true);
-    expect(mayCommentAutonomously({ ...comment, confidence: 0.74 }, true)).toBe(false);
+    expect(mayCommentAutonomously({ ...comment, confidence: 0.64 }, true)).toBe(false);
     expect(mayCommentAutonomously(comment, false)).toBe(false);
     expect(mayCommentAutonomously({ ...comment, capability: "draft_proposal" }, true)).toBe(false);
   });

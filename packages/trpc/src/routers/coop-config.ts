@@ -9,43 +9,7 @@ import { isPlaceholderCharter, starterCharter } from "../services/starter-charte
 import { ensureCommonsFundingStore } from "../services/funding-badge-service.js";
 import { assertCommonsNameAvailable, cleanCommonsName } from "../lib/commons-name.js";
 import { enqueueCommunityMemoryReconsideration } from "../services/sage-dispatch.js";
-
-type MissionGoalConfig = {
-  key: string;
-  label: string;
-  priorityWeight: number;
-  description?: string;
-  domain?: string;
-  expertRequired?: boolean;
-  scoringRubric?: string;
-};
-
-function missionGoalKeyFromLabel(label: string): string {
-  const key = label
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-
-  return key || "goal";
-}
-
-function withGeneratedMissionGoalKeys(goals: MissionGoalConfig[]): MissionGoalConfig[] {
-  const seen = new Map<string, number>();
-
-  return goals.map((goal) => {
-    const label = goal.label.trim() || goal.key || "Goal";
-    const baseKey = missionGoalKeyFromLabel(label);
-    const count = seen.get(baseKey) ?? 0;
-    seen.set(baseKey, count + 1);
-
-    return {
-      ...goal,
-      label,
-      key: count === 0 ? baseKey : `${baseKey}_${count + 1}`,
-    };
-  });
-}
+import { nextSequence, withGeneratedMissionGoalKeys, type MissionGoalConfig } from "../lib/mission-goals.js";
 
 function normalizeConfigChanges(changes: Record<string, unknown>): Record<string, unknown> {
   if (!Array.isArray(changes.missionGoals)) return changes;
@@ -127,15 +91,6 @@ function computeDiff(oldConfig: CoopConfig, newFields: Record<string, unknown>):
     }
   }
   return diff;
-}
-
-async function nextSequence(db: any, coopConfigId: string): Promise<number> {
-  const last = await db.coopConfigAudit.findFirst({
-    where: { coopConfigId, status: "APPLIED" },
-    orderBy: { sequence: "desc" },
-    select: { sequence: true },
-  });
-  return (last?.sequence ?? 0) + 1;
 }
 
 function toJsonValue(value: unknown): Prisma.InputJsonValue {

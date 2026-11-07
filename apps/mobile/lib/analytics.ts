@@ -4,19 +4,27 @@
  * - Completely inert unless EXPO_PUBLIC_POSTHOG_KEY is set: the SDK is never
  *   loaded, nothing is stored, and no request leaves the device. Dev, CI and
  *   E2E runs leave the key unset.
- * - Identifies people by their internal user id only. Never pass email,
- *   phone, wallet address, names, handles, or message/post content. As a
- *   backstop, `sanitizeProperties` drops keys and values that look like PII.
+ * - Identifies people by their internal user id and attaches their email only
+ *   to the PostHog person profile. Events never contain email, phone, wallet
+ *   address, names, handles, or message/post content. As a backstop,
+ *   `sanitizeProperties` drops keys and values that look like PII.
  * - Event names and their properties are a typed map. To add an event, add
  *   an entry to `AnalyticsEvents` and call `track('your_event', {...})`.
+ *
+ * - Error tracking: uncaught JS errors and unhandled promise rejections are
+ *   sent as `$exception` events, and `captureError` reports caught ones (the
+ *   root ErrorBoundary uses it). Exception messages pass through the shared
+ *   `scrubExceptionEvent` (@repo/validators/error-tracking), which redacts
+ *   codes, tokens, keys, emails, phone numbers and message bodies.
  *
  * Retention ("came back within 24h / 7d") is intentionally not computed on
  * the device. Build it in PostHog as a retention insight on `app_opened`;
  * see docs/mobile-analytics.md.
  */
 import type { PostHog } from 'posthog-react-native';
+import { scrubExceptionEvent } from '@repo/validators/error-tracking';
 
-export type OnboardingStep = 'intro' | 'profile' | 'circles';
+export type OnboardingStep = 'intro' | 'profile' | 'invite' | 'circles';
 
 export type AnalyticsEvents = {
   app_opened: {
@@ -29,18 +37,24 @@ export type AnalyticsEvents = {
     days_since_signup?: number;
   };
   onboarding_step_viewed: { step: OnboardingStep; signed_in: boolean };
-  /** The person skipped a step ("Skip" on the profile form, "Skip for now" on circles). */
+  /** The person deferred the optional profile form. */
   onboarding_deferred: { step: OnboardingStep; signed_in: boolean };
+  /** Tapped an invite-from-contacts card. `picker` is false where it falls back to sharing a message. */
+  contact_invite_started: { source: string; picker: boolean };
+  /** Started texting the contacts chosen in the invite checklist. Counts only, never names or numbers. */
+  contact_invite_batch_started: { source: string; count: number };
+  /** Finished (or stopped) texting chosen contacts. */
+  contact_invite_batch_finished: { source: string; sent: number; total: number };
   /** A signed-out person tapped "I already have an account" in the welcome wizard. */
   onboarding_sign_in_chosen: { step: OnboardingStep };
   /** The wizard was finished. `profile_completed` is false if the profile form was skipped. */
   onboarding_completed: {
-    exit: 'welcome_lounge' | 'general' | 'skip' | 'invitation' | 'family';
+    exit: 'commons' | 'invitation' | 'family';
     profile_completed: boolean;
     signed_in: boolean;
   };
   welcome_lounge_joined: {
-    source: 'onboarding' | 'circle_view';
+    source: 'onboarding' | 'circle_view' | 'circle_hall';
     /** True when the join was queued while signed out and completed after signup. */
     auto_joined?: boolean;
   };
@@ -67,6 +81,15 @@ export type AnalyticsEvents = {
   proposal_hub_viewed: { signed_in: boolean };
   signed_in: Record<string, never>;
   signed_out: { reason: 'user' | 'session_expired' };
+  /** Member Deals and Group Buys. Offer ids only, never amounts or other members. */
+  offer_list_viewed: { offer_count: number };
+  offer_viewed: { offer_type: 'MEMBER_DEAL' | 'GROUP_BUY'; status: string };
+  group_buy_commit_started: { offer_id: string };
+  group_buy_committed: { offer_id: string; quantity: number; threshold_reached: boolean };
+  group_buy_commitment_cancelled: { offer_id: string };
+  offer_checkout_started: { offer_id: string; offer_type: 'MEMBER_DEAL' | 'GROUP_BUY' };
+  offer_checkout_completed: { offer_id: string; offer_type: 'MEMBER_DEAL' | 'GROUP_BUY' };
+  my_savings_viewed: { offer_count: number };
 };
 
 export type AnalyticsEvent = keyof AnalyticsEvents;
@@ -159,6 +182,7 @@ const FIRST_OPEN_KEY = 'cahootz.analytics.firstOpenedAt';
 let client: PostHog | null = null;
 let initialized = false;
 let identifiedUserId: string | null = null;
+let identifiedEmail: string | null = null;
 let lastScreen: string | null = null;
 
 export type AnalyticsConfig = { apiKey?: string; host?: string };
@@ -202,6 +226,13 @@ export function initAnalytics(config: AnalyticsConfig = configFromEnv()): void {
       disableGeoip: true,
       disableSurveys: true,
       enableSessionReplay: false,
+      // Send crashes to PostHog error tracking. Console errors stay out: they
+      // are noisy and often log request details.
+      errorTracking: {
+        autocapture: { uncaughtExceptions: true, unhandledRejections: true, console: false },
+      },
+      // Redact secrets and personal data from exception messages before they leave the device.
+      before_send: scrubExceptionEvent,
     });
   } catch (error) {
     client = null;
@@ -222,17 +253,35 @@ export function track<E extends AnalyticsEvent>(
 }
 
 /**
+ * Reports a caught error to PostHog error tracking, e.g. from an error
+ * boundary. Properties go through the same PII filter as events, and the
+ * message itself is scrubbed in `before_send`.
+ */
+export function captureError(error: unknown, properties?: Record<string, unknown>): void {
+  if (!client) return;
+  try {
+    client.captureException(error, sanitizeProperties(properties));
+  } catch (captureFailure) {
+    console.warn('[analytics] captureException failed', captureFailure);
+  }
+}
+
+/**
  * Links this device to an account by internal user id, and records the
  * person's commons as `coop_id` on the person and on every later event.
- * Repeat calls with the same id are ignored.
+ * Repeat calls with the same id and email are ignored.
  */
-export function identify(userId: string, options: { coopId?: string | null } = {}): void {
+export function identify(userId: string, options: { coopId?: string | null; email?: string | null } = {}): void {
   if (!client || !userId) return;
   const coopId = options.coopId || null;
+  const email = options.email?.trim().toLowerCase() || null;
   try {
-    if (identifiedUserId !== userId) {
-      client.identify(userId, sanitizeProperties({ coop_id: coopId }));
+    if (identifiedUserId !== userId || identifiedEmail !== email) {
+      // Email is deliberately allowed only here so PostHog's People list is
+      // usable for support. Event properties still go through the PII filter.
+      client.identify(userId, { coop_id: coopId, ...(email ? { email } : {}) });
       identifiedUserId = userId;
+      identifiedEmail = email;
     }
     void client.register(sanitizeProperties({ coop_id: coopId }));
   } catch (error) {
@@ -243,6 +292,7 @@ export function identify(userId: string, options: { coopId?: string | null } = {
 /** Call on sign-out: forgets the identified user and starts a new anonymous id. */
 export function reset(): void {
   identifiedUserId = null;
+  identifiedEmail = null;
   if (!client) return;
   try {
     client.reset();
@@ -293,5 +343,6 @@ export function __resetAnalyticsForTests(): void {
   client = null;
   initialized = false;
   identifiedUserId = null;
+  identifiedEmail = null;
   lastScreen = null;
 }

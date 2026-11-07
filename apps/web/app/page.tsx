@@ -1,17 +1,23 @@
+import type { CommonsCatalog } from "@/components/group-buy-product-calculator";
 import type { Metadata } from "next";
+import type { OfferPricingSettings } from "@repo/validators/marketplace-offers";
 import { Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { BlogCard } from "@/components/blog/blog-card";
 import { BusinessSignupForm } from "@/components/business-signup-form";
-import { MemberApplicationFlow } from "@/components/member-application-flow";
-import { TreasuryContributionCalculator } from "@/components/treasury-contribution-calculator";
+import { GroupBuyProductCalculator } from "@/components/group-buy-product-calculator";
+import { SharedPurchaseCalculator } from "@/components/shared-purchase-calculator";
 import { WaitlistSignupForm } from "@/components/waitlist-signup-form";
 import { env } from "@/env";
-import { getFeaturedBlogPosts } from "@/lib/blog";
+import { MEMBER_APP_STORE_URL } from "@/lib/member-app";
+import {
+  DEFAULT_OFFER_PRICING,
+  OFFER_PRICING_LIMITS,
+} from "@repo/validators/marketplace-offers";
 import { ArrowDownRight, ArrowRight, Github, MoveUpRight } from "lucide-react";
 
 import "./landing.css";
+import "./group-buy-homepage.css";
 
 interface CoopOption {
   coopId: string;
@@ -22,6 +28,8 @@ interface CoopOption {
   hasPublishedPublicPage: boolean;
 }
 
+// Every API call on this page gives up after 3 seconds, so a slow or missing API
+// shows an empty list or the sample products instead of holding up the page.
 async function getActiveCoops(): Promise<CoopOption[]> {
   try {
     const response = await fetch(
@@ -30,6 +38,7 @@ async function getActiveCoops(): Promise<CoopOption[]> {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
+        signal: AbortSignal.timeout(3000),
       },
     );
     if (!response.ok) return [];
@@ -40,77 +49,212 @@ async function getActiveCoops(): Promise<CoopOption[]> {
   }
 }
 
+async function getHomepageProductCatalogs(): Promise<CommonsCatalog[]> {
+  try {
+    const response = await fetch(
+      `${env.NEXT_PUBLIC_API_URL}/trpc/productDiscovery.homepageCatalogs`,
+      {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        next: { revalidate: 900 },
+        signal: AbortSignal.timeout(3000),
+      },
+    );
+    if (!response.ok) return [];
+    const data = (await response.json()) as { result?: { data?: unknown } };
+    return Array.isArray(data.result?.data)
+      ? (data.result.data as CommonsCatalog[])
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The Group Buy pricing rules a platform admin set, so the homepage matches
+ * real offers. Falls back to the defaults when there's no API (as in CI builds)
+ * or it doesn't answer within 3 seconds, so it can never hold up the page.
+ */
+async function getHomepagePricing(): Promise<OfferPricingSettings> {
+  if (!env.NEXT_PUBLIC_API_URL) return DEFAULT_OFFER_PRICING;
+  try {
+    const response = await fetch(
+      `${env.NEXT_PUBLIC_API_URL}/trpc/productDiscovery.homepagePricing`,
+      {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        next: { revalidate: 900 },
+        signal: AbortSignal.timeout(3000),
+      },
+    );
+    if (!response.ok) return DEFAULT_OFFER_PRICING;
+    const data = (await response.json()) as {
+      result?: { data?: Partial<Record<keyof OfferPricingSettings, unknown>> };
+    };
+    const received = data.result?.data ?? {};
+    // Keep only whole numbers inside the allowed range; anything else uses the default.
+    return Object.fromEntries(
+      (Object.keys(DEFAULT_OFFER_PRICING) as (keyof OfferPricingSettings)[]).map((key) => {
+        const value = received[key];
+        const { min, max } = OFFER_PRICING_LIMITS[key];
+        return [
+          key,
+          typeof value === "number" && Number.isInteger(value) && value >= min && value <= max
+            ? value
+            : DEFAULT_OFFER_PRICING[key],
+        ];
+      }),
+    ) as unknown as OfferPricingSettings;
+  } catch {
+    return DEFAULT_OFFER_PRICING;
+  }
+}
+
+const DESCRIPTION =
+  "Cahootz turns your neighborhood, family, church, or club into a street you can walk. Help each other out, buy together for better prices, keep your money close to home, and decide together what comes next.";
+
 export const metadata: Metadata = {
-  title: "Cahootz | A place for your commons to move together",
-  description:
-    "Cahootz connects members, local businesses, and shared decisions, with a Commons AI Agent that helps coordinate the commons and evaluates proposals against community-set rules.",
+  title: "Cahootz | Your people, on one street",
+  description: DESCRIPTION,
   alternates: { canonical: "https://cahootzcommons.com" },
+  openGraph: {
+    title: "Cahootz | Your people, on one street",
+    description: DESCRIPTION,
+    url: "https://cahootzcommons.com",
+    siteName: "Cahootz",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Cahootz | Your people, on one street",
+    description: DESCRIPTION,
+  },
 };
 
 const GITHUB_REPOSITORY_URL =
   "https://github.com/CahootzFederation/cahootz-coops-federation";
 
-const pathways = [
+const features = [
   {
-    index: "01",
-    label: "Find your people",
-    title: "A home for the conversation and the work.",
-    body: "Join a commons, find member spaces and circles, and follow the activity that matters to you. The Commons AI Agent can summarize conversations and surface needs or resources so useful signals do not get lost.",
-    details: ["Member spaces", "Group activity", "Community updates"],
-    className: "pathway-community",
+    id: "group-deals",
+    label: "Group deals",
+    title: "Buy together. Pay less.",
+    body: "Sage notices what lots of your neighbors already buy, like coffee or diapers, and finds a seller who'll give you a better price. When enough people join, everyone saves, and a share goes back to your commons.",
+    points: [
+      "You see the price, what you save, and what your commons gets before you join.",
+      "You're only charged if the deal hits its goal.",
+    ],
+    screen: {
+      src: "/app-screens/group-deal.webp",
+      alt: "A group deal for a 2 lb bag of coffee: $24 instead of $34, with 5 of 10 neighbors committed",
+    },
   },
   {
-    index: "02",
-    label: "Keep it local",
-    title: "Make the local economy visible.",
-    body: "Discover businesses in your network, explore what they offer, and make purchases through the member app. Participation connects the people doing business to the people building the commons.",
-    details: ["Stores and products", "Payments", "Member rewards"],
-    className: "pathway-commerce",
+    id: "sage",
+    label: "Sage, your community guide",
+    title: "Ask once. Sage finds who can help.",
+    body: "Need a ride, a tutor, or a hand moving? Good at something your neighbors need? Tell Sage. It matches people who can help each other, makes the intro, and thanks the helpers by name.",
+    points: [
+      "Sage turns your commons' goals into ideas and puts them up for a vote.",
+      "Sage connects people. Your commons makes the calls.",
+    ],
+    screen: {
+      src: "/app-screens/sage-chat.webp",
+      alt: "A chat where Sage introduces a parent to a neighbor who tutors algebra",
+    },
+  },
+];
+
+const extras = [
+  {
+    title: "Your street",
+    body: "Every member gets a house. Make it yours, see who's out, and step into Circle Hall to find your circles.",
   },
   {
-    index: "03",
-    label: "Decide together",
-    title: "Turn a shared need into a shared decision.",
-    body: "Members propose ideas and discuss tradeoffs. The Commons AI Agent checks each proposal against the commons' goals and rules: does it fit the mission, seem workable, and account for risks? It shows its scores and reasons so members can understand the decision. Within limits the commons sets, the agent can approve a small request, ask for changes, or stop it from advancing. Larger requests go to a council vote.",
-    details: ["Proposals", "Discussion", "Voting"],
-    className: "pathway-governance",
+    title: "Keep your money close to home",
+    body: "Link your bank if you want to and see where your money leaves your community. Only you and Sage see your spending. Your commons only sees totals with no names.",
+  },
+  {
+    title: "Earn your commons' coin",
+    body: "Every commons has its own coin, with a name it picks. Earn it when you shop at member businesses, and spend it inside your commons.",
+  },
+  {
+    title: "Decide together",
+    body: "Anyone can put an idea up for a vote. When it passes, it takes effect on its own. No one person holds the keys.",
+  },
+  {
+    title: "Families",
+    body: "A private commons just for your family. Share news, plan get-togethers, and look out for each other without the group chat chaos.",
+  },
+  {
+    title: "Community Board",
+    body: "Post an ask, an offer, or good news where everyone in your commons will see it.",
   },
 ];
 
 const faqs = [
   {
     q: "What is a commons?",
-    a: "A commons is a community that organizes people, businesses, and shared resources around a common purpose. Each commons sets its own membership and decision rules.",
+    a: "A commons is your community on Cahootz: a neighborhood, a family, a congregation, a club, or a co-op. Each one sets its own rules.",
+  },
+  {
+    q: "How do I join?",
+    a: "Get an invite from someone who's already in, then download the app and sign in. No invite yet? Join the waitlist below and we'll email you when your commons opens up.",
+  },
+  {
+    q: "Is there an Android app?",
+    a: "Not yet. Cahootz Commons is on iPhone today, and we're getting the Android app ready now. Join the waitlist and we'll tell you when it's out.",
+  },
+  {
+    q: "Is all of this in the app today?",
+    a: "Most of it. The street, circles, families, Sage, and group deals are in the iPhone app now. We're still building the rest, like linking your bank. Join the waitlist and we'll tell you as new pieces arrive.",
+  },
+  {
+    q: "How do group deals work?",
+    a: "Your commons picks something lots of people already buy. When enough people join, everyone gets the lower price. You save your card when you join, and you're only charged if the deal reaches its goal. Each deal shows the price, what you save, and the share that goes to your commons before you join.",
+  },
+  {
+    q: "Who is Sage, and does it make decisions for us?",
+    a: "Sage is the AI community guide built into every commons. It connects people who can help each other and keeps good ideas moving. It can handle small things inside limits your commons sets, but bigger decisions go to a member vote.",
   },
   {
     q: "Do I need to own a business to join?",
-    a: "No. Members can take part in community spaces, support local businesses, and participate in decisions. Businesses have a separate interest form below.",
-  },
-  {
-    q: "Does the Commons AI Agent make decisions for members?",
-    a: "Yes, within limits the commons sets. The agent evaluates proposals against the commons' mission and rules. It can approve qualifying proposals below that commons' small-spending limit, ask for revisions, or keep a proposal from advancing. Proposals above the automatic approval limit go to a council vote.",
-  },
-  {
-    q: "How else does the Commons AI Agent help?",
-    a: "The agent can help summarize circle activity, identify needs and resources in posts, recommend relevant commons, and answer questions using a commons' charter and mission. These uses are designed to serve the commons and its members. Each commons sets the rules for its decisions; Cahootz currently operates the agent as a shared service across commons.",
-  },
-  {
-    q: "Will each commons own its own agent?",
-    a: "That is the direction we are building toward: a Commons AI Agent owned by each commons, isolated for that commons, and used only to serve it. Today, each commons controls the charter, goals, and limits that guide the agent's decisions, while Cahootz runs a shared service. Separate ownership and isolation are not in place yet.",
-  },
-  {
-    q: "How do you work toward fair decisions?",
-    a: "Each commons sets the goals, scoring weights, and spending limits that guide proposal reviews. Cahootz records scores and reasons so people can see how a proposal was judged. That is a way to make decisions more consistent and open to scrutiny, but the agent can still make mistakes or reflect bias.",
-  },
-  {
-    q: "What if my commons is not listed?",
-    a: "Join the interest list and tell us which commons you want to join or start. We will use that to understand where a new network could grow.",
+    a: "No. Most members just want to stay close to their people. If you do run a business, or you'd like to offer a group deal, use the business form below.",
   },
 ];
 
+function PhoneScreen({
+  src,
+  alt,
+  priority = false,
+  sizes,
+}: {
+  src: string;
+  alt: string;
+  priority?: boolean;
+  sizes: string;
+}) {
+  return (
+    <div className="phone-frame">
+      <Image
+        src={src}
+        alt={alt}
+        width={780}
+        height={1688}
+        sizes={sizes}
+        priority={priority}
+      />
+    </div>
+  );
+}
+
 export default async function HomePage() {
-  const coops = await getActiveCoops();
-  const featuredPosts = getFeaturedBlogPosts(3);
+  const [coops, productCatalogs, pricing] = await Promise.all([
+    getActiveCoops(),
+    getHomepageProductCatalogs(),
+    getHomepagePricing(),
+  ]);
+  const shownCatalogs = productCatalogs.length > 0 ? productCatalogs : undefined;
 
   return (
     <div className="landing">
@@ -127,293 +271,226 @@ export default async function HomePage() {
             <span>Cahootz</span>
           </Link>
           <nav aria-label="Main navigation" className="header-nav">
-            <a href="#how-it-works">How it works</a>
-            <a href="#find-a-commons">Find a commons</a>
-            <Link href="/blog">Journal</Link>
+            <a href="#what-you-can-do">What you can do</a>
+            <a href="#get-in">How to get in</a>
+            <a href="#questions">Questions</a>
+            <Link href="/blog">Blog</Link>
           </nav>
           <a className="header-action" href="#join">
-            Join a commons <ArrowRight size={16} />
+            Join the waitlist <ArrowRight size={16} />
           </a>
         </div>
       </header>
 
       <main>
-        <section className="hero" aria-labelledby="hero-title">
-          <div className="landing-shell hero-inner">
+        <section className="hero street-hero" aria-labelledby="hero-title">
+          <div className="landing-shell street-hero-inner">
             <div className="hero-copy">
-              <p className="eyebrow">
-                A place for the people building what comes next
-              </p>
+              <p className="eyebrow">Cahootz Commons · free on iPhone</p>
               <h1 id="hero-title">
-                A community is more powerful when it can{" "}
-                <span>move together.</span>
+                Your people, all on <span>one street.</span>
               </h1>
               <p className="hero-description">
-                Cahootz brings the people, places, businesses, and decisions in
-                a commons together. Find your people, support local businesses,
-                and help decide what your community does next.
+                Cahootz turns your neighborhood, family, church, or club into a
+                street you can walk. Help each other out, buy together for
+                better prices, and decide together what comes next.
               </p>
               <div className="hero-actions">
                 <a className="button button-primary" href="#join">
-                  Find your commons <ArrowRight size={18} />
+                  Join the waitlist <ArrowDownRight size={18} />
                 </a>
-                <a className="text-link" href="#how-it-works">
-                  See how it works <ArrowDownRight size={18} />
+                <a
+                  className="button button-secondary"
+                  href={MEMBER_APP_STORE_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Have an invite? Get the iPhone app <MoveUpRight size={18} />
                 </a>
               </div>
+              <p className="hero-note">
+                Commons open by invite. The waitlist is how you get one.
+              </p>
             </div>
-            <div
-              className="commons-map"
-              aria-label="Members, spaces, local businesses, and decisions connect through a commons"
-            >
-              <div className="map-caption">
-                ONE COMMONS, MANY WAYS TO PARTICIPATE
-              </div>
-              <div className="map-center">
-                <Image
-                  src="/cahootz-coops-mark.svg"
-                  alt=""
-                  width={54}
-                  height={48}
-                />
-                <strong>Your commons</strong>
-                <span>People working together</span>
-              </div>
-              <div className="map-node map-members">
-                <span className="node-kicker">PEOPLE</span>
-                <strong>Members</strong>
-                <small>Meet, share, organize</small>
-              </div>
-              <div className="map-node map-spaces">
-                <span className="node-kicker">PLACE</span>
-                <strong>Spaces & circles</strong>
-                <small>Find where you belong</small>
-              </div>
-              <div className="map-node map-business">
-                <span className="node-kicker">ECONOMY</span>
-                <strong>Local businesses</strong>
-                <small>Buy and build nearby</small>
-              </div>
-              <div className="map-node map-decisions">
-                <span className="node-kicker">DIRECTION</span>
-                <strong>Decisions</strong>
-                <small>Ideas, reviews, votes</small>
-              </div>
-            </div>
-          </div>
-          <div className="hero-footer landing-shell">
-            <span>Built for the work communities already do.</span>
-            <span>Scroll to explore ↓</span>
-          </div>
-        </section>
-
-        <section className="intro-band" id="how-it-works">
-          <div className="landing-shell intro-inner">
-            <p className="eyebrow">THE IDEA</p>
-            <h2>
-              Belong somewhere.
-              <br />
-              Do something together.
-            </h2>
-            <p>
-              A commons becomes real through everyday participation. Cahootz
-              connects the conversations, commerce, and decisions that usually
-              happen in separate places.
-            </p>
+            <figure className="street-hero-phone">
+              <PhoneScreen
+                src="/app-screens/street.webp"
+                alt="The Commons tab: a walkable street with each member's house, neighbors strolling, and the Community Board in the middle"
+                sizes="(max-width: 700px) 78vw, 360px"
+                priority
+              />
+              <figcaption>
+                A sample commons with made-up neighbors.
+              </figcaption>
+            </figure>
           </div>
         </section>
 
         <section
-          className="pathways landing-shell"
-          aria-label="Ways to participate"
+          className="features-section"
+          id="what-you-can-do"
+          aria-labelledby="features-title"
         >
-          {pathways.map((pathway) => (
-            <article
-              className={`pathway ${pathway.className}`}
-              key={pathway.index}
-            >
-              <div className="pathway-index">
-                <span>{pathway.index}</span>
-                <span>{pathway.label}</span>
-              </div>
-              <div className="pathway-main">
-                <h3>{pathway.title}</h3>
-                <p>{pathway.body}</p>
-                <div className="pathway-tags">
-                  {pathway.details.map((detail) => (
-                    <span key={detail}>{detail}</span>
-                  ))}
-                </div>
-                {pathway.index === "02" && (
-                  <a className="text-link pathway-link" href="#business-form">
-                    Bring your business into the commons{" "}
-                    <ArrowRight size={17} />
-                  </a>
-                )}
-              </div>
-              <div className="pathway-symbol" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </div>
-            </article>
-          ))}
-        </section>
-
-        <section className="decision-section" id="ai-role">
-          <div className="landing-shell decision-inner">
-            <div>
-              <p className="eyebrow">SHARED DECISIONS</p>
-              <h2>From an idea to a decision.</h2>
-            </div>
-            <div>
-              <p>
-                Members bring forward ideas, discuss tradeoffs, and decide
-                together what their commons should do. Each commons sets the
-                charter, goals, and spending limits that guide those decisions.
-                As the number of proposals grows, it gets harder to review
-                every idea carefully, apply the rules consistently, and explain
-                why a decision was made.
-              </p>
-              <p>
-                The Commons AI Agent helps with that work. It checks proposals
-                for mission fit, feasibility, risk, and accountability using
-                the commons&apos; rules, then shows its scores and reasons. It can
-                approve a qualifying request below the commons&apos; automatic
-                approval limit, ask for revisions, or keep an idea from
-                advancing. Larger requests go to a council vote.
-              </p>
-              <p>
-                Shared rules and visible reasons can support fairer decisions,
-                though the agent can still be wrong or biased. The commons
-                controls the rules and can see how each proposal was judged.
-              </p>
-              <a className="text-link" href="#join">
-                Get involved <MoveUpRight size={18} />
-              </a>
-            </div>
-          </div>
-        </section>
-
-        <section className="commons-section" id="find-a-commons">
           <div className="landing-shell">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">OPEN DOORS</p>
-                <h2>Find a commons to join.</h2>
+                <p className="eyebrow">What you can do</p>
+                <h2 id="features-title">Everything your people need, together.</h2>
               </div>
               <p>
-                Each commons has its own purpose and application. Start with the
-                one that feels like yours.
+                Look out for each other, save money together, and build
+                something that belongs to all of you.
               </p>
             </div>
-            {coops.length > 0 ? (
-              <div className="commons-list">
-                {coops.map((coop) => (
-                  <article className="commons-row" key={coop.coopId}>
-                    <div className="commons-row-mark" aria-hidden="true">
-                      ✳
-                    </div>
-                    <div>
-                      <h3>{coop.name}</h3>
-                      <p>
-                        {coop.tagline ||
-                          coop.description ||
-                          "Explore this commons and its community."}
-                      </p>
-                    </div>
-                    <div className="commons-row-actions">
-                      <Link href={`/${coop.coopId}/application`}>
-                        Apply <ArrowRight size={17} />
-                      </Link>
-                      {coop.hasPublishedPublicPage && (
-                        <Link href={`/c/${coop.coopId}`}>
-                          Explore page <MoveUpRight size={17} />
-                        </Link>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="commons-empty">
-                Looking for a commons in your area?{" "}
-                <a href="#join">
-                  Tell us where you want to build <ArrowRight size={16} />
-                </a>
-              </div>
-            )}
-          </div>
-        </section>
 
-        <section className="join-section" id="join">
-          <div className="landing-shell join-inner">
-            <div className="join-intro">
-              <p className="eyebrow">YOUR NEXT STEP</p>
-              <h2>There is a place for you in this.</h2>
-              <p>
-                Choose a live commons and apply with the questions that
-                community has set. If yours is still taking shape, tell us where
-                you want to build.
-              </p>
-              <div className="join-aside">
-                <span>FOR MEMBERS</span>
-                <strong>Find your people and start participating.</strong>
-              </div>
-            </div>
-            <div className="join-forms">
-              <Suspense fallback={<div className="form-loading" />}>
-                <MemberApplicationFlow />
-              </Suspense>
-              <div className="join-secondary">
-                <div className="waitlist-panel">
-                  <h3>Don&apos;t see your commons?</h3>
-                  <p>Tell us what community you want to join or create.</p>
-                  <Suspense fallback={<div className="form-loading" />}>
-                    <WaitlistSignupForm coops={coops} />
-                  </Suspense>
+            {features.map((feature, index) => (
+              <article
+                className={`feature-row${index % 2 === 1 ? " feature-row-flip" : ""}`}
+                id={feature.id}
+                key={feature.id}
+              >
+                <div className="feature-copy">
+                  <p className="eyebrow">{feature.label}</p>
+                  <h3>{feature.title}</h3>
+                  <p>{feature.body}</p>
+                  <ul>
+                    {feature.points.map((point) => (
+                      <li key={point}>{point}</li>
+                    ))}
+                  </ul>
                 </div>
-                <div id="business-form">
-                  <Suspense fallback={<div className="form-loading" />}>
-                    <BusinessSignupForm coops={coops} />
-                  </Suspense>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <TreasuryContributionCalculator />
-
-        {featuredPosts.length > 0 && (
-          <section className="journal-section">
-            <div className="landing-shell">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">FROM THE JOURNAL</p>
-                  <h2>Notes from building Cahootz.</h2>
-                </div>
-                <Link className="text-link" href="/blog">
-                  Read the journal <ArrowRight size={18} />
-                </Link>
-              </div>
-              <div className="journal-grid">
-                {featuredPosts.map((post, index) => (
-                  <BlogCard
-                    key={post.slug}
-                    post={post}
-                    priority={index === 0}
+                <div className="feature-phone">
+                  <PhoneScreen
+                    src={feature.screen.src}
+                    alt={feature.screen.alt}
+                    sizes="(max-width: 700px) 70vw, 300px"
                   />
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
+                </div>
+              </article>
+            ))}
 
-        <section className="faq-section">
+            <ul className="feature-extras" aria-label="More in your commons">
+              {extras.map((extra) => (
+                <li key={extra.title}>
+                  <strong>{extra.title}</strong>
+                  <p>{extra.body}</p>
+                </li>
+              ))}
+            </ul>
+
+            <details className="treasury-disclosure deal-math" id="deal-math">
+              <summary>See the savings math on real products</summary>
+              <p className="deal-math-intro">
+                Pick a commons and a product to see what you&apos;d pay, what
+                you&apos;d save, how many people it takes, and what goes back to
+                the commons.
+              </p>
+              <GroupBuyProductCalculator
+                catalogs={shownCatalogs}
+                pricing={pricing}
+              />
+              <SharedPurchaseCalculator
+                catalogs={shownCatalogs}
+                pricing={pricing}
+              />
+            </details>
+          </div>
+        </section>
+
+        <section className="get-in-section" id="get-in">
+          <div className="landing-shell">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">How to get in</p>
+                <h2>Three steps to your people.</h2>
+              </div>
+              <p>
+                Commons grow through people who already know each other.
+                Members and guides can invite you directly.
+              </p>
+            </div>
+            <ol className="get-in-steps">
+              <li>
+                <span>01</span>
+                <strong>Get an invite.</strong>
+                <p>
+                  A member or guide invites you. No invite yet? Join the
+                  waitlist for a commons below.
+                </p>
+              </li>
+              <li>
+                <span>02</span>
+                <strong>Download the app.</strong>
+                <p>
+                  Get the free Cahootz Commons app on your iPhone and sign
+                  in.
+                </p>
+                <a
+                  className="text-link"
+                  href={MEMBER_APP_STORE_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Get it on the App Store <MoveUpRight size={16} />
+                </a>
+              </li>
+              <li>
+                <span>03</span>
+                <strong>Walk your street.</strong>
+                <p>
+                  Your commons, its circles, and Sage are waiting. Say hello.
+                </p>
+              </li>
+            </ol>
+
+            <div className="find-commons" id="find-a-commons">
+              <h3>Find a commons to join.</h3>
+              <p>
+                Pick the one that feels like yours and join its waitlist.
+                We&apos;ll let you know when it opens up.
+              </p>
+              {coops.length > 0 ? (
+                <div className="commons-list">
+                  {coops.map((coop) => (
+                    <article className="commons-row" key={coop.coopId}>
+                      <div className="commons-row-mark" aria-hidden="true">
+                        ✳
+                      </div>
+                      <div>
+                        <h4>{coop.name}</h4>
+                        <p>
+                          {coop.tagline ||
+                            coop.description ||
+                            "Explore this commons and its community."}
+                        </p>
+                      </div>
+                      <div className="commons-row-actions">
+                        <Link
+                          href={`/?commons=${encodeURIComponent(coop.coopId)}#join`}
+                          aria-label={`Join the waitlist for ${coop.name}`}
+                        >
+                          Join the waitlist <ArrowRight size={17} />
+                        </Link>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="commons-empty">
+                  Don&apos;t see your community?{" "}
+                  <a href="#join">
+                    Tell us where you want to start one <ArrowRight size={16} />
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="faq-section" id="questions">
           <div className="landing-shell faq-inner">
             <div>
-              <p className="eyebrow">A FEW QUESTIONS</p>
+              <p className="eyebrow">A few questions</p>
               <h2>Good to know before you join.</h2>
             </div>
             <div className="faq-list">
@@ -426,6 +503,38 @@ export default async function HomePage() {
                   <p>{a}</p>
                 </details>
               ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="join-section" id="join">
+          <div className="landing-shell join-inner">
+            <div className="join-intro">
+              <p className="eyebrow">Your next step</p>
+              <h2>There&apos;s a place for you in this.</h2>
+              <p>
+                We&apos;re letting people in a few at a time. Join the
+                waitlist and tell us which commons you&apos;re interested in.
+                If yours isn&apos;t listed yet, tell us where you want to start
+                one.
+              </p>
+            </div>
+            <div className="join-forms">
+              <div className="waitlist-panel" id="waitlist">
+                <h3>Join the waitlist</h3>
+                <p>It takes a minute.</p>
+                <Suspense fallback={<div className="form-loading" />}>
+                  <WaitlistSignupForm coops={coops} />
+                </Suspense>
+              </div>
+              <div className="join-secondary">
+                <details className="join-disclosure" id="business-form">
+                  <summary>Bring your business to Cahootz</summary>
+                  <Suspense fallback={<div className="form-loading" />}>
+                    <BusinessSignupForm coops={coops} />
+                  </Suspense>
+                </details>
+              </div>
             </div>
           </div>
         </section>
@@ -446,12 +555,12 @@ export default async function HomePage() {
             <p>A place for communities to move together.</p>
           </div>
           <div className="footer-links">
-            <Link href="/blog">Journal</Link>
+            <Link href="/blog">Blog</Link>
             <Link href="/contact">Contact</Link>
             <Link href="/terms">Terms</Link>
             <Link href="/privacy">Privacy</Link>
             <a href={GITHUB_REPOSITORY_URL} target="_blank" rel="noreferrer">
-              GitHub <Github size={15} />
+              GitHub <Github aria-hidden="true" size={15} />
             </a>
           </div>
         </div>

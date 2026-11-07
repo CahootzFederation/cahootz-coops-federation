@@ -103,6 +103,17 @@ describe.skipIf(!databaseUrl)(
           .filter((s) => s.trim()))
           await db.$executeRawUnsafe(statement);
       }
+      const sageNotificationMigration = readFileSync(
+        new URL(
+          "../../../../db/prisma/migrations/20261016040000_simplify_sage_notifications/migration.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      );
+      for (const statement of sageNotificationMigration
+        .split(";")
+        .filter((s) => s.trim()))
+        await db.$executeRawUnsafe(statement);
       ready = true;
     });
     beforeEach(async () => {

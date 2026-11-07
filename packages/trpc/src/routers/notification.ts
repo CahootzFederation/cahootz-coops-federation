@@ -20,7 +20,8 @@ export const notificationRouter = router({
       z.object({
         expoPushToken: z.string().min(10).max(300),
         platform: z.string().min(1).max(40),
-        coopId: z.string().min(1).default("cahootz"),
+        /** Ignored. Older app builds still send it; a phone isn't tied to one Commons. */
+        coopId: z.string().optional(),
         deviceName: z.string().max(120).nullable().optional(),
         appVersion: z.string().max(40).nullable().optional(),
       }),
@@ -34,7 +35,6 @@ export const notificationRouter = router({
         where: { expoPushToken: input.expoPushToken },
         create: {
           userId: context.accountUser.id,
-          coopId: input.coopId,
           expoPushToken: input.expoPushToken,
           platform: input.platform,
           deviceName: input.deviceName || null,
@@ -42,7 +42,6 @@ export const notificationRouter = router({
         },
         update: {
           userId: context.accountUser.id,
-          coopId: input.coopId,
           platform: input.platform,
           deviceName: input.deviceName || null,
           appVersion: input.appVersion || null,
@@ -121,10 +120,22 @@ export const notificationRouter = router({
       const hasMore = rows.length > input.limit;
       const notifications = rows.slice(0, input.limit);
       const last = notifications.at(-1);
+      const configs = await ctx.db.coopConfig.findMany({
+        where: { coopId: { in: [...new Set(notifications.map((n) => n.coopId))] }, isActive: true },
+        orderBy: { version: "desc" },
+        select: { coopId: true, name: true },
+      });
+      const commonsNames = new Map<string, string>();
+      for (const config of configs) {
+        if (!commonsNames.has(config.coopId) && config.name?.trim()) {
+          commonsNames.set(config.coopId, config.name.trim());
+        }
+      }
       return {
         notifications: notifications.map((n) => ({
           id: n.id,
           coopId: n.coopId,
+          commonsName: commonsNames.get(n.coopId) || null,
           type: n.type,
           title: n.title,
           body: n.body,

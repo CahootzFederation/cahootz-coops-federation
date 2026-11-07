@@ -14,6 +14,7 @@ import { ArrowLeft, Plus, Landmark, Trash2, Check, X } from 'lucide-react-native
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { friendlyError } from '@/lib/friendly-error';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 interface BankAccount {
   id: string;
@@ -181,7 +182,7 @@ export default function BankAccountsScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          <ScrollView className="flex-1 p-4">
+          <ScrollView {...keyboardInsetScrollProps} className="flex-1 p-4">
             {/* Account List */}
             {accounts.length === 0 ? (
               <View className="bg-white rounded-xl p-8 items-center">
@@ -268,7 +269,7 @@ export default function BankAccountsScreen() {
               </View>
             </View>
 
-            <ScrollView className="flex-1 p-4">
+            <ScrollView {...keyboardInsetScrollProps} className="flex-1 p-4">
               {/* Account Holder Name */}
               <View className="mb-4">
                 <Text className="text-gray-700 font-medium mb-2">Account Holder Name</Text>

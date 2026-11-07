@@ -7,6 +7,7 @@ import { Context, CoopScopedContext } from "../context.js";
 import { privateProcedure, publicProcedure } from "../procedures/index.js";
 import { router } from "../trpc.js";
 import { sendTransaction } from "../services/wallet-service.js";
+import { coinNameFrom, formatCoinAmount } from "../services/coop-chain-config-service.js";
 import {
   getUCBalance,
   isActiveMember,
@@ -338,7 +339,7 @@ export const ucTransferRouter = router({
         if (!isActive) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "Recipient is not an active SoulaaniCoin member. Only active members can receive UC.",
+            message: `That person isn't an active member yet, so they can't get ${coinNameFrom(coopConfig.scTokenName) ?? 'the coin'} yet.`,
           });
         }
 
@@ -362,7 +363,7 @@ export const ucTransferRouter = router({
         if (balance < amountInWei) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: `Insufficient balance. You have ${formatUCAmount(balance)} UC`,
+            message: `You only have ${formatCoinAmount(formatUCAmount(balance), coinNameFrom(coopConfig.scTokenName))}, so you can't send that much.`,
           });
         }
 
@@ -387,7 +388,7 @@ export const ucTransferRouter = router({
         return {
           success: true,
           transactionHash: txHash,
-          message: `Successfully transferred ${input.amount} UC to ${input.recipientAddress}`,
+          message: `Sent ${formatCoinAmount(input.amount, coinNameFrom(coopConfig.scTokenName))} to ${input.recipientAddress}.`,
         };
       } catch (error) {
         console.error('💥 ERROR in executeTransfer:', error);

@@ -4,7 +4,7 @@ import { newSignedInPage } from "./support/auth";
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 const USER_A_EMAIL = process.env.E2E_USER_A_EMAIL || "releaseclick1@test.cahootz.local"; // circle leader
 const USER_B_EMAIL = process.env.E2E_USER_B_EMAIL || "releaseclick2@test.cahootz.local";
-const CIRCLE_WINDOW_MESSAGE_LIMIT = 40;
+const CIRCLE_WINDOW_MESSAGE_LIMIT = 15; // matches packages/trpc/src/services/circle-window.ts
 // Check often so the test moves on as soon as the result lands, instead of
 // sleeping a fixed 3-5s between checks.
 const SAGE_POLL = { timeout: 90_000, intervals: [1_000, 2_000, 3_000] }; // live model call
@@ -39,7 +39,7 @@ async function trpcGet(path: string, sessionToken: string, input: unknown) {
 // whole Commons - whichever the model judges fits) after a window of conversation about a recurring
 // topic closes, and approving it through the real UI actually publishes something.
 test("a circle leader receives and approves a Sage trend suggestion", { tag: "@sage" }, async ({ browser }) => {
-  test.setTimeout(240_000); // seeds 40 messages sequentially and polls a live model call, not a fixed UI wait
+  test.setTimeout(240_000); // seeds 15 messages sequentially and polls a live model call, not a fixed UI wait
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   const leader = await newSignedInPage(browser, USER_A_EMAIL);
@@ -75,13 +75,12 @@ test("a circle leader receives and approves a Sage trend suggestion", { tag: "@s
       const content = i < themedLines.length ? themedLines[i] : `E2E ${runId}: chatting, message ${i}.`;
       await trpcPost("commons.createComment", token, { postId: post.id, content });
     }
-    // Item #40 closes the window and kicks off both detection passes (ride-match and trend).
+    // Item #15 closes the window and kicks off trend detection.
     await trpcPost("commons.createComment", leaderToken, { postId: post.id, content: `E2E ${runId}: ok last thought - a cleanup day, who's with me?` });
 
     let suggestionId: string | undefined;
     await expect.poll(async () => {
       const { suggestions } = await trpcGet("sage.list", leaderToken, { tab: "NEEDS_YOU" });
-      // Ride-match detection runs on the same closed window; pick the trend suggestion.
       suggestionId = suggestions.find((s: { circleId: string | null; type: string }) =>
         s.circleId === circleId && s.type === "SUGGEST_ACTION")?.id;
       return suggestionId;

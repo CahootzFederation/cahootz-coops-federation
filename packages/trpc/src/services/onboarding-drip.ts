@@ -341,7 +341,7 @@ export async function deliverDripStep(
   try {
     const pushable =
       preferences.pushEnabled &&
-      (await db.pushDevice.count({ where: { userId: member.id, coopId, enabled: true } })) > 0;
+      (await db.pushDevice.count({ where: { userId: member.id, enabled: true } })) > 0;
     const notification = await createNotificationAndPush(db, {
       userId: member.id,
       coopId,

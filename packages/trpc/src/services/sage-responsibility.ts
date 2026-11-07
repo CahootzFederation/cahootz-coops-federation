@@ -49,6 +49,13 @@ async function activeMembers(coopId: string, userIds: string[]): Promise<Set<str
   return new Set(rows.map((row) => row.userId));
 }
 
+/** Whether a person still holds a role that makes them responsible for this category in this Commons. */
+export async function stillResponsible(coopId: string, category: ResponsibilityCategory, userId: string): Promise<boolean> {
+  if (category === "CIRCLE_LEADER") return false;
+  const role = await db.adminRole.findFirst({ where: { coopId, userId, role: { in: ROLE_FOR[category] }, revokedAt: null }, select: { id: true } });
+  return !!role;
+}
+
 /** People who recently said alerts of this category aren't for them. */
 async function declinedRecently(coopId: string, category: RoutedCategory, now: Date): Promise<Set<string>> {
   const rows = await db.sageAlert.findMany({

@@ -14,11 +14,9 @@ const PRIMARY = '#FF6B00';
  */
 export function PushPermissionPrimer({
   sessionToken,
-  coopId,
   onDone,
 }: {
   sessionToken: string;
-  coopId: string;
   onDone: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -27,7 +25,7 @@ export function PushPermissionPrimer({
   const accept = async () => {
     if (busy) return;
     setBusy(true);
-    const registered = await acceptPushPrimer(sessionToken, coopId);
+    const registered = await acceptPushPrimer(sessionToken);
     setBusy(false);
     if (registered) {
       onDone();

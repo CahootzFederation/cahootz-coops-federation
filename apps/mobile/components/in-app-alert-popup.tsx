@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Notifications from "expo-notifications";
 import { router, usePathname } from "expo-router";
+import { SageAvatar } from "@/components/sage-avatar";
 import { useAuth } from "@/contexts/auth-context";
 import { track } from "@/lib/analytics";
 import { api } from "@/lib/api";
@@ -231,9 +232,13 @@ export function InAppAlertPopup() {
             onPress={open}
             style={styles.main}
           >
-            <View style={[styles.icon, { backgroundColor: kind.background }]}>
-              <Icon size={18} color={kind.color} />
-            </View>
+            {current.kind === "sage" ? (
+              <SageAvatar size={36} motion="blink" />
+            ) : (
+              <View style={[styles.icon, { backgroundColor: kind.background }]}>
+                <Icon size={18} color={kind.color} />
+              </View>
+            )}
             <View style={styles.copy}>
               <Text style={styles.title} numberOfLines={1}>
                 {text.title}

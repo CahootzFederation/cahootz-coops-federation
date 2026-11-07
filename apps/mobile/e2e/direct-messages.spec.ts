@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL } from "./support/auth";
+import { newSignedInPage, USER_A_EMAIL, USER_B_EMAIL, openCircleHall } from "./support/auth";
 
 const API_BASE_URL = process.env.E2E_API_BASE_URL || "http://localhost:3001";
 
@@ -34,15 +34,19 @@ async function trpc(page: Page, path: string, input: Record<string, unknown>) {
 // B's profile, B sees it as unread, opens it, and replies; A sees the reply
 // without reloading, and the conversation survives a reload. The DM circle
 // never shows up in Circle View's list of circles.
-test("two members exchange direct messages in a private two-person circle", async ({
+test("two members exchange direct messages in a private two-person circle", { tag: "@smoke" }, async ({
   browser,
 }) => {
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const firstMessage = `E2E DM hello ${runId}`;
   const reply = `E2E DM reply ${runId}`;
 
-  const userA = await newSignedInPage(browser, USER_A_EMAIL);
-  const userB = await newSignedInPage(browser, USER_B_EMAIL);
+  // Both people open the app at once: each fresh page load is slow on CI, and
+  // doing them one after the other used most of the test's time budget.
+  const [userA, userB] = await Promise.all([
+    newSignedInPage(browser, USER_A_EMAIL),
+    newSignedInPage(browser, USER_B_EMAIL),
+  ]);
   let groupId: string | undefined;
 
   try {
@@ -73,7 +77,9 @@ test("two members exchange direct messages in a private two-person circle", asyn
     await threadWithA.click();
     await expect(userB.page.getByText(firstMessage).last()).toBeVisible();
     // Opening it marks it read for B only.
+    await userB.page.getByRole("button", { name: "Back to conversations" }).click();
     await expect(threadWithA.getByLabel(/\d+ unread/)).toHaveCount(0);
+    await threadWithA.click();
 
     await userB.page
       .getByRole("textbox", { name: `Message ${displayName(personA)}` })
@@ -103,8 +109,12 @@ test("two members exchange direct messages in a private two-person circle", asyn
     )?.groupId;
     expect(groupId).toBeTruthy();
 
-    // A DM is a circle, but never listed as one.
-    await userA.page.goto("/");
+    // A DM is a circle, but never listed as one. A goes back through the tab
+    // bar rather than reloading the whole app. The conversation counts as part
+    // of the Commons tab, which ignores a second tap, so A hops via Board.
+    await userA.page.getByRole("tab", { name: "Board" }).click();
+    await userA.page.getByRole("tab", { name: "Commons" }).click();
+    await openCircleHall(userA.page);
     await expect(userA.page.getByText("General", { exact: true })).toBeVisible();
     await expect(userA.page.getByText("Direct message", { exact: true })).toHaveCount(0);
   } finally {
@@ -115,4 +125,80 @@ test("two members exchange direct messages in a private two-person circle", asyn
     }
     await Promise.all([userA.context.close(), userB.context.close()]);
   }
+});
+
+// Regression: the message box used to sit at the end of the scrolling
+// conversation, so in a long thread (or with the keyboard up) Send was out of
+// reach. It is now pinned below the conversation and stays on screen.
+test("the message box and Send stay on screen in a long conversation", async ({ browser }) => {
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const userA = await newSignedInPage(browser, USER_A_EMAIL);
+  const userB = await newSignedInPage(browser, USER_B_EMAIL);
+  let groupId: string | undefined;
+
+  try {
+    const personB = await storedUser(userB.page);
+
+    // Fixture: a conversation long enough to fill the screen.
+    const opened = await trpc(userA.page, "groups.openDirect", { userId: personB.id });
+    groupId = opened?.result?.data?.groupId;
+    expect(groupId).toBeTruthy();
+    for (let index = 1; index <= 12; index += 1) {
+      await trpc(userA.page, "groups.sendDirect", {
+        groupId,
+        content: `E2E DM filler ${index} ${runId}`,
+      });
+    }
+
+    await userA.page.goto(`/people/${personB.handle}`);
+    await userA.page.getByLabel(`Message ${displayName(personB)}`).click();
+    await expect(userA.page.getByText(`E2E DM filler 12 ${runId}`).last()).toBeAttached();
+
+    const composer = userA.page.getByRole("textbox", { name: `Message ${displayName(personB)}` });
+    const send = userA.page.getByLabel("Send message");
+    await expect(composer).toBeInViewport();
+    await expect(send).toBeInViewport();
+
+    // Typing and sending works without scrolling to find the button.
+    const message = `E2E DM pinned send ${runId}`;
+    await composer.fill(message);
+    await send.click();
+    await expect(userA.page.getByText(message).last()).toBeAttached();
+    await expect(composer).toHaveValue("");
+    await expect(send).toBeInViewport();
+  } finally {
+    if (groupId) {
+      await trpc(userA.page, "groups.leave", { groupId });
+      await trpc(userB.page, "groups.leave", { groupId });
+    }
+    await Promise.all([userA.context.close(), userB.context.close()]);
+  }
+});
+
+
+test('new-message picker keeps separate unfinished drafts for each person', async ({ browser }) => {
+  const userA = await newSignedInPage(browser, USER_A_EMAIL);
+  const userB = await newSignedInPage(browser, USER_B_EMAIL);
+  try {
+    const personB = await storedUser(userB.page);
+    const page = userA.page;
+    await page.goto('/messages');
+    await page.getByRole('button', { name: 'New message', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Search people', exact: true }).fill(personB.handle);
+    await page.getByLabel(`Conversation with ${displayName(personB)}`).click();
+    const composer = page.getByRole('textbox', { name: `Message ${displayName(personB)}` });
+    await composer.fill('E2E unfinished private note');
+    await page.getByRole('button', { name: 'Back to conversations' }).click();
+    await page.getByRole('button', { name: 'New message', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Search people', exact: true }).fill('sage');
+    await page.getByLabel('Conversation with Sage', { exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Message Sage', exact: true })).toHaveValue('');
+    await expect(page.getByText('Private conversation · AI assistant', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Back to conversations' }).click();
+    await page.getByRole('button', { name: 'New message', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Search people', exact: true }).fill(personB.handle);
+    await page.getByLabel(`Conversation with ${displayName(personB)}`).click();
+    await expect(composer).toHaveValue('E2E unfinished private note');
+    await composer.fill('');
+  } finally { await Promise.all([userA.context.close(), userB.context.close()]); }
 });

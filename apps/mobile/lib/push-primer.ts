@@ -54,14 +54,16 @@ export async function dismissPushPrimer(now = Date.now()) {
 }
 
 /**
- * The primer's "Yes": the only place the OS permission prompt is shown.
+ * The primer's "Yes": shows the OS permission prompt when this phone hasn't
+ * been asked yet (the app also asks on every open, see
+ * components/push-permission-gate.tsx).
  * Resolves to whether this device is now registered for pushes.
  */
-export async function acceptPushPrimer(sessionToken: string, coopId: string) {
+export async function acceptPushPrimer(sessionToken: string) {
   // Stamp first so a crash mid-prompt doesn't bring the primer straight back.
   await dismissPushPrimer();
   try {
-    const result = await registerForNativePushNotifications(sessionToken, coopId, {
+    const result = await registerForNativePushNotifications(sessionToken, {
       source: 'welcome_intro_primer',
     });
     return result.registered;

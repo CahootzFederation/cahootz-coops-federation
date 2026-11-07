@@ -8,6 +8,7 @@ import { BlogCard } from "@/components/blog/blog-card";
 import { BlogComments } from "@/components/blog/comments";
 import { SiteShell } from "@/components/blog/site-shell";
 import { formatPostDate, getBlogPost, getPublishedBlogPosts } from "@/lib/blog";
+import { blogFeedAlternates } from "@/lib/blog-feed";
 import { ArrowLeft, Clock } from "lucide-react";
 
 interface BlogPostPageProps {
@@ -35,6 +36,7 @@ export async function generateMetadata({
     description: post.description,
     alternates: {
       canonical: `https://cahootzcommons.com/blog/${post.slug}`,
+      types: blogFeedAlternates,
     },
     openGraph: {
       type: "article",

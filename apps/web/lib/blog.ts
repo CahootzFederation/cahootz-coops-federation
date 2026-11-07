@@ -1,4 +1,5 @@
-import { blogPosts } from "./blog.generated";
+import { blogPosts as notionBlogPosts } from "./blog.generated";
+import { manualBlogPosts } from "./blog.manual";
 
 export interface BlogListItem {
   text: string;
@@ -193,6 +194,15 @@ export function blocksFromNotionPaste(markdown: string): BlogPostBlock[] {
 
   return blocks;
 }
+
+// If a hand-written post later moves to Notion under the same slug, the
+// Notion copy wins.
+const blogPosts: BlogPost[] = [
+  ...notionBlogPosts,
+  ...manualBlogPosts.filter(
+    (post) => !notionBlogPosts.some((synced) => synced.slug === post.slug),
+  ),
+];
 
 export function getPublishedBlogPosts() {
   return [...blogPosts].sort(

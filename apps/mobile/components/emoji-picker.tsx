@@ -19,6 +19,7 @@ import {
   rememberEmoji,
   searchEmoji,
 } from '@/lib/emoji-catalog';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const PRIMARY = '#FF6B00';
 const CELL = 44;
@@ -237,11 +238,11 @@ export function EmojiPickerSheet({
               <Text className="mt-6 text-center text-sm text-gray-500">No emoji match “{query.trim()}”.</Text>
             ) : (
               <FlatList
+                {...keyboardInsetScrollProps}
                 ref={listRef}
                 testID="emoji-picker-grid"
                 data={rows}
                 keyExtractor={(row) => row.key}
-                keyboardShouldPersistTaps="handled"
                 initialNumToRender={14}
                 maxToRenderPerBatch={12}
                 windowSize={7}

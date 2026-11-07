@@ -35,8 +35,8 @@ describe("agent registry", () => {
     agentConstructorCalls.length = 0;
   });
 
-  it("keeps all 7 registry entries with unique keys", () => {
-    expect(agentRegistry).toHaveLength(7);
+  it("keeps all 5 registry entries with unique keys", () => {
+    expect(agentRegistry).toHaveLength(5);
     const keys = agentRegistry.map((a) => a.key);
     expect(new Set(keys).size).toBe(keys.length);
   });
@@ -52,21 +52,19 @@ describe("agent registry", () => {
 
   it("exposes valid JSON-schema-convertible metadata for every registered agent", () => {
     const metadata = listAgentMetadata();
-    expect(metadata).toHaveLength(7);
+    expect(metadata).toHaveLength(5);
     for (const m of metadata) {
       expect(m.inputSchema).toBeTruthy();
       expect(m.outputSchema).toBeTruthy();
     }
   });
 
-  it("requires every structured output field for the observer and recommender", () => {
-    for (const key of ["community-observer", "commons-recommender"]) {
-      const outputSchema = getAgent(key)!.outputSchema;
-      const schema = zodResponseFormat(outputSchema, key).json_schema.schema as {
-        properties: Record<string, unknown>; required: string[];
-      };
-      expect(schema.required).toEqual(Object.keys(schema.properties));
-    }
+  it("requires every structured output field for the observer", () => {
+    const outputSchema = getAgent("community-observer")!.outputSchema;
+    const schema = zodResponseFormat(outputSchema, "community-observer").json_schema.schema as {
+      properties: Record<string, unknown>; required: string[];
+    };
+    expect(schema.required).toEqual(Object.keys(schema.properties));
   });
 
   describe("community-observer run()", () => {

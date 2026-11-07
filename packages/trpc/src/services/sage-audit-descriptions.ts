@@ -15,6 +15,11 @@ export function describeSageAuditEvent(eventType: string, metadata: unknown): st
     case "ACTION_FAILED": return "Sage couldn't complete this";
     case "MISSING_TOOL": return "Sage couldn't complete this";
     case "AUTO_PUBLISHED": return "Sage commented on its own";
+    case "QUESTION_POSTED": return "Sage asked the Commons an open question";
+    case "QUESTION_REMOVED": return "An admin removed Sage's question";
+    case "RHYTHM_POSTED": return "Sage posted its regular community update";
+    case "RHYTHM_SKIPPED": return "Sage had nothing to post for this period";
+    case "RHYTHM_POST_REMOVED": return "An admin removed Sage's post";
     case "DUPLICATE_SKIPPED": return "Sage noticed this again and didn't suggest it twice";
     case "ACTION_REFUSED": return "Sage stopped because this was outside what it may do here";
     case "AUTO_CLOSED": {

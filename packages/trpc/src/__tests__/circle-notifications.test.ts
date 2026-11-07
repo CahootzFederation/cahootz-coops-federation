@@ -1,15 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  notifyCircleActivity,
+  notifyCircleHighlight,
+} from "../services/circle-notifications.js";
+
 const createNotificationAndPush = vi.fn().mockResolvedValue(undefined);
 vi.mock("../services/push-notification-service.js", () => ({
   createNotificationAndPush: (...args: unknown[]) =>
     createNotificationAndPush(...args),
 }));
 
-import { notifyCircleActivity } from "../services/circle-notifications.js";
-
 function makeDb(
-  members: Array<{ userId: string; notificationLevel: string; isBot?: boolean }>,
+  members: Array<{
+    userId: string;
+    notificationLevel: string;
+    isBot?: boolean;
+  }>,
   chattingUserIds: string[] = [],
 ) {
   return {
@@ -28,6 +35,7 @@ function makeDb(
         .fn()
         .mockResolvedValue(chattingUserIds.map((userId) => ({ userId }))),
     },
+    notification: { findFirst: vi.fn().mockResolvedValue(null) },
   };
 }
 
@@ -110,5 +118,52 @@ describe("notifyCircleActivity", () => {
       { userId: "author-of-post", type: "MENTION", push: true },
       { userId: "all", type: "CIRCLE_COMMENT", push: true },
     ]);
+  });
+
+  it("sends pinned-post highlights only to HIGHLIGHTS members", async () => {
+    const db = makeDb(
+      [
+        { userId: "leader", notificationLevel: "HIGHLIGHTS" },
+        { userId: "highlights", notificationLevel: "HIGHLIGHTS" },
+        { userId: "all", notificationLevel: "ALL" },
+        { userId: "mentions", notificationLevel: "MENTIONS" },
+        { userId: "watching", notificationLevel: "HIGHLIGHTS" },
+        { userId: "sage", notificationLevel: "HIGHLIGHTS", isBot: true },
+      ],
+      ["watching"],
+    );
+
+    await notifyCircleHighlight(db, {
+      coopId: "coop",
+      circleId: "circle-1",
+      postId: "post-1",
+      actorId: "leader",
+    });
+
+    expect(sent()).toEqual([
+      { userId: "highlights", type: "CIRCLE_HIGHLIGHT", push: undefined },
+      { userId: "watching", type: "CIRCLE_HIGHLIGHT", push: undefined },
+    ]);
+    expect(createNotificationAndPush.mock.calls[0][1]).toMatchObject({
+      title: "Circle highlight",
+      body: "A circle leader pinned a post in Garden Club.",
+      data: { postId: "post-1", circleId: "circle-1" },
+    });
+  });
+
+  it("does not send the same post highlight twice", async () => {
+    const db = makeDb([
+      { userId: "highlights", notificationLevel: "HIGHLIGHTS" },
+    ]);
+    db.notification.findFirst.mockResolvedValue({ id: "existing" });
+
+    await notifyCircleHighlight(db, {
+      coopId: "coop",
+      circleId: "circle-1",
+      postId: "post-1",
+      actorId: "leader",
+    });
+
+    expect(sent()).toEqual([]);
   });
 });

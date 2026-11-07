@@ -27,6 +27,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { friendlyError } from '@/lib/friendly-error';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 interface PaymentRequest {
   requestId: string;
@@ -267,7 +268,7 @@ export default function AcceptPaymentScreen() {
           </View>
         </View>
 
-        <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        <ScrollView {...keyboardInsetScrollProps} className="flex-1" showsVerticalScrollIndicator={false}>
           {/* Store QR Code */}
           <View className="bg-white mx-4 mt-4 rounded-2xl p-6 items-center">
             <Text className="text-gray-500 text-sm mb-2">Your Store Code</Text>

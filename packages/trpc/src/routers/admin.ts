@@ -113,10 +113,11 @@ export const adminRouter = router({
             status: "PENDING",
           },
         }),
-        context.db.pushDevice.count({
+        // Members of this Commons with at least one phone that can get pushes.
+        context.db.user.count({
           where: {
-            coopId: input.coopId,
-            enabled: true,
+            memberships: { some: { coopId: input.coopId, status: "ACTIVE" } },
+            pushDevices: { some: { enabled: true } },
           },
         }),
         context.db.user.findMany({

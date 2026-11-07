@@ -31,6 +31,7 @@ Sage should be able to:
 7. Recommend review of documented harmful conduct without punishing or publicly accusing members.
 8. Learn from edits, dismissals, approvals, expert corrections, and real outcomes.
 9. Remain quiet when intervention would add noise, duplicate work, or exceed its authority.
+10. Build sustained, healthy, voluntary participation around member-approved goals by making useful contribution paths visible, connecting members who can help one another, and recognizing verified work.
 
 Sage optimizes a balanced scorecard:
 
@@ -46,6 +47,15 @@ Sage optimizes a balanced scorecard:
 
 Never optimize raw comments, alerts, proposals, clicks, or engagement. Those targets reward
 noise and manipulation rather than member benefit.
+
+### Community rhythm
+
+Sage may facilitate predictable Monday, midweek, pre-decision, Friday, and monthly rituals.
+Each ritual must give members a useful, voluntary next step: choose or share a priority, answer
+an open request, invite a partner, thank a specific contribution, or say what to keep, change,
+or stop. Members control each category independently: the default is visible without an alert,
+they may subscribe to alerts, or they may mute it. Muting a pre-decision summary hides Sage's
+summary for that member; it never hides member discussion or change the vote.
 
 ## Runtime design
 
@@ -137,6 +147,15 @@ their answer is not silently attributed to every community. Delivery uses the ex
 DM, inbox alert, push notification, and mobile deep link. The key
 `sage-weekly:<userId>:<isoWeek>` makes retries idempotent.
 
+The production sweep posts a daily operational receipt through the existing configured Slack
+webhook. It names each due member by handle or display name (never by private-message contents) and
+records whether delivery was sent, skipped for a recent conversation, deduplicated, or failed. A
+separate hourly watchdog repeats a prominent alert while any configurable agent is disabled,
+paused by a Commons autonomy limit, stale, or broken. The always-on outreach sweep stores its latest
+health result in platform configuration so model fallbacks remain alerting until a clean run clears
+them. The watchdog reports the exact failure or shutdown reason. Governance, money, membership, and
+disciplinary decisions remain human-authorized.
+
 Private replies are classified for safety before any memory extraction. Sensitive medical,
 legal, financial, relationship, identity, abuse, or crisis details are aggregation-ineligible.
 Urgent disclosures stay in the private safety path, which is disabled until policy and legal
@@ -158,12 +177,18 @@ immediate reconsideration: the older observation remains historical and is super
 candidate, retained only as a general-wellbeing theme, or made `UNSUPPORTED`. Insufficient
 support is not contradiction: only affirmative contrary evidence produces `DISMISSED`.
 
-An `ACTIVE` hypothesis may motivate a reviewable `CommonsAction` through
-`originObservationId`; publication, proposals, money, introductions, and governance still use
+No steward, admin, or other single person checks or views a hypothesis, and the steward agent
+does not receive them. When a hypothesis is `ACTIVE`, Sage asks the whole Commons one open
+question in the feed (`ASK_COMMONS`, linked through `originObservationId`). The question comes
+from a fixed template per theme about what the group could do together. It carries no counts,
+quotes, or hint of private check-ins, and is limited to one per Commons every 14 days and one
+per theme every 90 days. Publication, proposals, money, introductions, and governance still use
 their existing human gates. Thirty- and ninety-day reviews distinguish action completion,
-feedback, and signal movement and label the result `HELPFUL`, `NOT_HELPFUL`, `INCONCLUSIVE`, or
-`NO_ACTION`. They record association, never causation. Source IDs remain available for audit but
-are excluded from member- and Commons-facing retrieval.
+feedback, and signal movement. They count a question's public answers (distinct members who
+replied, reacted, or supported) and label the result `HELPFUL`, `NOT_HELPFUL`, `INCONCLUSIVE`, or
+`NO_ACTION`. They record association, never causation. Only `NOT_HELPFUL` reviews count against a
+hypothesis. Source IDs remain available for audit but are excluded from member- and
+Commons-facing retrieval.
 
 ## Financial intelligence
 

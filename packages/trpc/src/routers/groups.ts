@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
   circleNotificationLevelSchema,
+  defaultCircleNotificationLevel,
   parseCircleNotificationLevel,
 } from '@repo/validators/notification';
 
@@ -26,8 +27,10 @@ import {
 import { createNotificationAndPush } from '../services/push-notification-service.js';
 import { notifyCircleMemberJoined } from '../services/member-join-notifications.js';
 import { touchCircleWindow } from '../services/circle-window.js';
+import { coinNameFrom, formatCoinAmount } from '../services/coop-chain-config-service.js';
 import { validateSCBalance } from '../services/sc-validation-service.js';
 import { enterChat, getChattingCounts, leaveChat, refreshChatPresence } from '../services/circle-presence.js';
+import { getCircleUnreadCounts, markCircleRead } from '../services/circle-unread.js';
 import { assignWelcomeTable, getNewcomerCounts } from '../services/welcome-tables.js';
 import { getWelcomeIntroStatus } from '../services/welcome-intros.js';
 import { router } from '../trpc.js';
@@ -61,15 +64,12 @@ export async function requireMembership(
   return group;
 }
 
-// The platform-wide "cahootz" commons is open to every account (see
-// listVisible), so any active person is a commons member there. Every other
-// commons requires an ACTIVE membership.
+// Commons actions require explicit membership, including in Cahootz.
 async function isCommonsMember(
   db: AccountAuthenticatedContext['db'],
   userId: string,
   coopId: string,
 ) {
-  if (coopId === 'cahootz') return true;
   const membership = await db.userCoopMembership.findUnique({
     where: { userId_coopId: { userId, coopId } },
     select: { status: true },
@@ -117,6 +117,7 @@ function mapCircleSummary(
   isMember: boolean,
   chattingCounts: Map<string, number>,
   newcomerCounts: Map<string, number>,
+  unreadCounts: Map<string, number> = new Map(),
 ) {
   return {
     id: group.id,
@@ -132,6 +133,7 @@ function mapCircleSummary(
     iconEmoji: group.iconEmoji,
     iconColor: group.iconColor,
     chattingCount: chattingCounts.get(group.id) ?? 0,
+    unreadCount: isMember ? unreadCounts.get(group.id) ?? 0 : 0,
     welcomeTableNumber: group.welcomeTableNumber,
     welcomeTableStatus: group.welcomeTableStatus,
     capacity: group.capacity,
@@ -151,7 +153,7 @@ export const groupsRouter = router({
           select: { status: true },
         });
         if (membership?.status !== 'ACTIVE') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this common to see its circles.' });
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this commons to see its circles.' });
         }
       }
 
@@ -177,14 +179,15 @@ export const groupsRouter = router({
       }
 
       const groupIds = [...visible.keys()];
-      const [chattingCounts, newcomerCounts] = await Promise.all([
+      const [chattingCounts, newcomerCounts, unreadCounts] = await Promise.all([
         getChattingCounts(context.db, groupIds),
         getNewcomerCounts(context.db, groupIds),
+        getCircleUnreadCounts(context.db, userId, memberships),
       ]);
 
       return {
         groups: [...visible.values()].map(({ group, isMember }) =>
-          mapCircleSummary(group, userId, isMember, chattingCounts, newcomerCounts),
+          mapCircleSummary(group, userId, isMember, chattingCounts, newcomerCounts, unreadCounts),
         ),
       };
     }),
@@ -209,14 +212,15 @@ export const groupsRouter = router({
       });
 
       const groupIds = memberships.map((m) => m.group.id);
-      const [chattingCounts, newcomerCounts] = await Promise.all([
+      const [chattingCounts, newcomerCounts, unreadCounts] = await Promise.all([
         getChattingCounts(context.db, groupIds),
         getNewcomerCounts(context.db, groupIds),
+        getCircleUnreadCounts(context.db, userId, memberships),
       ]);
 
       return {
         groups: memberships.map(({ group }) =>
-          mapCircleSummary(group, userId, true, chattingCounts, newcomerCounts),
+          mapCircleSummary(group, userId, true, chattingCounts, newcomerCounts, unreadCounts),
         ),
       };
     }),
@@ -240,7 +244,7 @@ export const groupsRouter = router({
       const config = await context.db.coopConfig.findFirst({
         where: { coopId, isActive: true },
         orderBy: { version: 'desc' },
-        select: { minScBalanceToCreateGroup: true },
+        select: { minScBalanceToCreateGroup: true, scTokenName: true },
       });
       const minScBalance = config?.minScBalanceToCreateGroup ?? 0;
 
@@ -249,7 +253,7 @@ export const groupsRouter = router({
         if (currentBalance < minScBalance) {
           throw new TRPCError({
             code: 'FORBIDDEN',
-            message: `You need at least ${minScBalance} SC to create a space (current balance: ${currentBalance.toFixed(2)} SC).`,
+            message: `You need at least ${formatCoinAmount(minScBalance, coinNameFrom(config?.scTokenName))} to start a space. You have ${formatCoinAmount(currentBalance, coinNameFrom(config?.scTokenName))}.`,
           });
         }
       }
@@ -278,7 +282,11 @@ export const groupsRouter = router({
         });
 
         await tx.groupMember.create({
-          data: { groupId: created.id, userId },
+          data: {
+            groupId: created.id,
+            userId,
+            notificationLevel: defaultCircleNotificationLevel,
+          },
         });
 
         await tx.auditLog.create({
@@ -352,7 +360,7 @@ export const groupsRouter = router({
       const config = await context.db.coopConfig.findFirst({
         where: { coopId, isActive: true },
         orderBy: { version: 'desc' },
-        select: { minScBalanceToCreateGroup: true },
+        select: { minScBalanceToCreateGroup: true, scTokenName: true },
       });
       const minScBalance = config?.minScBalanceToCreateGroup ?? 0;
 
@@ -449,9 +457,7 @@ export const groupsRouter = router({
           deletedAt: null,
           isBot: false,
           groupMemberships: { none: { groupId: group.id } },
-          ...(group.coopId === 'cahootz'
-            ? {}
-            : { memberships: { some: { coopId: group.coopId, status: 'ACTIVE' } } }),
+          memberships: { some: { coopId: group.coopId, status: 'ACTIVE' } },
           OR: [
             { name: { contains: input.query, mode: 'insensitive' } },
             { handle: { contains: input.query, mode: 'insensitive' } },
@@ -662,7 +668,7 @@ export const groupsRouter = router({
       }
 
       if (!(await isCommonsMember(context.db, userId, invite.group.coopId))) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this common first.' });
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this commons first.' });
       }
 
       await context.db.$transaction([
@@ -672,7 +678,11 @@ export const groupsRouter = router({
         }),
         context.db.groupMember.upsert({
           where: { groupId_userId: { groupId: invite.groupId, userId } },
-          create: { groupId: invite.groupId, userId },
+          create: {
+            groupId: invite.groupId,
+            userId,
+            notificationLevel: defaultCircleNotificationLevel,
+          },
           update: {},
         }),
         context.db.auditLog.create({
@@ -754,7 +764,11 @@ export const groupsRouter = router({
       await context.db.$transaction([
         context.db.groupMember.upsert({
           where: { groupId_userId: { groupId: group.id, userId } },
-          create: { groupId: group.id, userId },
+          create: {
+            groupId: group.id,
+            userId,
+            notificationLevel: defaultCircleNotificationLevel,
+          },
           update: {},
         }),
         context.db.auditLog.create({
@@ -783,14 +797,8 @@ export const groupsRouter = router({
       if (!group || group.privacy !== 'public') {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Public circle not found.' });
       }
-      if (group.coopId !== 'cahootz') {
-        const commonMembership = await context.db.userCoopMembership.findUnique({
-          where: { userId_coopId: { userId, coopId: group.coopId } },
-          select: { status: true },
-        });
-        if (commonMembership?.status !== 'ACTIVE') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this common first.' });
-        }
+      if (!(await isCommonsMember(context.db, userId, group.coopId))) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Join this commons first.' });
       }
       const existing = await context.db.groupMember.findUnique({
         where: { groupId_userId: { groupId: group.id, userId } },
@@ -799,7 +807,11 @@ export const groupsRouter = router({
         await context.db.$transaction([
           context.db.groupMember.upsert({
             where: { groupId_userId: { groupId: group.id, userId } },
-            create: { groupId: group.id, userId },
+            create: {
+              groupId: group.id,
+              userId,
+              notificationLevel: defaultCircleNotificationLevel,
+            },
             update: {},
           }),
           context.db.auditLog.create({
@@ -1165,7 +1177,7 @@ export const groupsRouter = router({
       const context = ctx as AccountAuthenticatedContext;
       const userId = context.accountUser.id;
 
-      if (input.coopId !== 'cahootz' && !(await isCommonsMember(context.db, userId, input.coopId))) {
+      if (!(await isCommonsMember(context.db, userId, input.coopId))) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'Join this commons before joining its welcome lounge.',
@@ -1201,6 +1213,7 @@ export const groupsRouter = router({
 
       await requireMembership(context.db, input.groupId, userId);
       await enterChat(context.db, input.groupId, userId);
+      await markCircleRead(context.db, input.groupId, userId);
 
       return { success: true };
     }),

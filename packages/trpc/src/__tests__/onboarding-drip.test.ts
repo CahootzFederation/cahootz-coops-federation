@@ -150,6 +150,7 @@ function makeDb(state: FakeState) {
           ? {
               pushEnabled: true,
               community: true,
+              sage: true,
               governance: true,
               payments: true,
               orders: true,

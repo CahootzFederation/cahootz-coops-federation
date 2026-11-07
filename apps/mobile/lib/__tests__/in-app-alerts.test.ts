@@ -118,6 +118,7 @@ describe("in-app alert popups", () => {
     expect(inAppAlertKind("SAGE_SUGGESTION_NEEDS_YOU")).toBe("sage");
     expect(inAppAlertKind("MENTION")).toBe("mention");
     expect(inAppAlertKind("CIRCLE_POST")).toBe("message");
+    expect(inAppAlertKind("CIRCLE_HIGHLIGHT")).toBe("message");
     expect(inAppAlertKind("PAYMENT_RECEIVED")).toBe("other");
   });
 

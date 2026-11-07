@@ -21,6 +21,7 @@ import { api, formatPaymentReference, formatReceiptDateTime } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
 import { authenticateForPayment } from '@/lib/biometric';
 import { friendlyError } from '@/lib/friendly-error';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 interface StoreInfo {
   id: string;
@@ -357,7 +358,7 @@ export default function QuickPayScreen() {
           </View>
         </View>
 
-        <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
+        <ScrollView {...keyboardInsetScrollProps} className="flex-1">
           {/* Store Info */}
           <View className="bg-white mx-4 mt-4 rounded-2xl p-6">
             <View className="items-center">

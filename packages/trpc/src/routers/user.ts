@@ -9,7 +9,6 @@ import { publicProcedure, authenticatedProcedure, accountAuthenticatedProcedure 
 import { router } from "../trpc.js";
 import { getUserWallet, createWalletForUser, getUserWalletInfo } from "../services/wallet-service.js";
 import type { AccountAuthenticatedContext, AuthenticatedContext } from "../context.js";
-import { ensureCommonsMembership } from "../lib/commons.js";
 
 const DEMO_LOGIN_EMAIL = "demo@cahootz.coop";
 const DEMO_COOP_ID = "demo";
@@ -31,6 +30,7 @@ const mobileProfileUserOutput = z.object({
   id: z.string(),
   email: z.string(),
   name: z.string().nullable(),
+  nickname: z.string().nullable(),
   roles: z.array(z.string()),
   status: z.string(),
   walletAddress: z.string().nullable(),
@@ -53,6 +53,7 @@ const mobileProfileUserSelect = {
   id: true,
   email: true,
   name: true,
+  nickname: true,
   roles: true,
   status: true,
   walletAddress: true,
@@ -89,6 +90,55 @@ const BALANCE_ABI = [
 ] as const;
 
 export const userRouter = router({
+  restartOnboarding: accountAuthenticatedProcedure.mutation(async ({ ctx }) => {
+    return ctx.db.user.update({
+      where: { id: ctx.accountUser.id },
+      data: { onboardingStep: 'profile', onboardingCompletedAt: null },
+      select: { onboardingStep: true, onboardingCompletedAt: true, onboardingDraft: true },
+    });
+  }),
+
+  getOnboardingProgress: accountAuthenticatedProcedure.query(async ({ ctx }) => {
+    return ctx.db.user.findUniqueOrThrow({
+      where: { id: ctx.accountUser.id },
+      select: { onboardingStep: true, onboardingCompletedAt: true, onboardingDraft: true },
+    });
+  }),
+
+  saveOnboardingProgress: accountAuthenticatedProcedure
+    .input(z.object({
+      step: z.enum(['welcome', 'profile', 'invite', 'commons', 'complete']),
+      draft: z.object({
+        selfDescription: z.string().max(5000),
+        interests: z.string().max(5000),
+        resourcesOffered: z.string().max(5000),
+        resourcesNeeded: z.string().max(5000),
+        goals: z.string().max(3000),
+        businessSummary: z.string().max(2000),
+        locationSummary: z.string().max(500),
+      }).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const steps = ['welcome', 'profile', 'invite', 'commons', 'complete'];
+      // A delayed save from another tab must never move progress backwards.
+      await ctx.db.user.updateMany({
+        where: {
+          id: ctx.accountUser.id,
+          onboardingCompletedAt: null,
+          onboardingStep: { in: steps.slice(0, steps.indexOf(input.step) + 1) },
+        },
+        data: {
+          onboardingStep: input.step,
+          ...(input.draft ? { onboardingDraft: input.draft } : {}),
+          ...(input.step === 'complete' ? { onboardingCompletedAt: new Date(), onboardingDraft: {} } : {}),
+        },
+      });
+      return ctx.db.user.findUniqueOrThrow({
+        where: { id: ctx.accountUser.id },
+        select: { onboardingStep: true, onboardingCompletedAt: true, onboardingDraft: true },
+      });
+    }),
+
   // Public procedures
   getAllUsers: publicProcedure.query(({ ctx }) => {
     const context = ctx as Context;
@@ -292,6 +342,8 @@ export const userRouter = router({
       id: z.string(),
       email: z.string(),
       name: z.string().nullable(),
+      nickname: z.string().nullable(),
+      handle: z.string().nullable(),
       roles: z.array(z.string()),
       status: z.string(),
       walletAddress: z.string().nullable(),
@@ -311,6 +363,8 @@ export const userRouter = router({
           id: true,
           email: true,
           name: true,
+          nickname: true,
+          handle: true,
           roles: true,
           status: true,
           walletAddress: true,
@@ -341,6 +395,53 @@ export const userRouter = router({
       return user;
     }),
 
+  /** Update the signed-in member's public identity. Handles are normalized
+   * to lowercase so the database uniqueness constraint is case-insensitive. */
+  updateIdentity: accountAuthenticatedProcedure
+    .input(z.object({
+      name: z.string().trim().min(1, "Enter your name.").max(100),
+      nickname: z.string().trim().max(60).nullable(),
+      handle: z.string().trim().toLowerCase()
+        .min(3, "Your @ must be at least 3 characters.")
+        .max(30, "Your @ must be 30 characters or fewer.")
+        .regex(/^[a-z0-9][a-z0-9_-]*$/, "Use lowercase letters, numbers, underscores, or hyphens."),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const context = ctx as AccountAuthenticatedContext;
+      if (input.handle === "everyone" || input.handle === "here") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "That @ is reserved. Choose another one." });
+      }
+
+      const existing = await context.db.user.findFirst({
+        where: {
+          handle: { equals: input.handle, mode: "insensitive" },
+          id: { not: context.accountUser.id },
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new TRPCError({ code: "CONFLICT", message: "That @ is already taken." });
+      }
+
+      try {
+        return await context.db.user.update({
+          where: { id: context.accountUser.id },
+          data: {
+            name: input.name,
+            nickname: input.nickname || null,
+            handle: input.handle,
+          },
+          select: { name: true, nickname: true, handle: true },
+        });
+      } catch (error) {
+        if ((error as { code?: string })?.code === "P2002") {
+          throw new TRPCError({ code: "CONFLICT", message: "That @ is already taken." });
+        }
+        throw error;
+      }
+    }),
+
   /**
    * Store the first-run mobile profile answers used for AI-assisted organization.
    */
@@ -355,7 +456,6 @@ export const userRouter = router({
       const combinedGoals = input.goals ?? input.shortTermGoals ?? "";
       const longTermGoals = input.goals !== undefined ? null : input.longTermGoals || null;
 
-      await ensureCommonsMembership(context.db, context.accountUser.id);
 
       const user = await context.db.user.update({
         where: { id: context.accountUser.id },

@@ -1,9 +1,8 @@
+import { DESIGN } from '@/constants/design';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
   Platform,
   Pressable,
   SafeAreaView,
@@ -11,62 +10,29 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
 } from 'react-native';
-import { router } from 'expo-router';
-import { ArrowRight, HandHeart, Lightbulb, MessageCircle, MessagesSquare, UserCircle, Users } from 'lucide-react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { ArrowRight } from 'lucide-react-native';
 
 import { CommonsInvitationsCard } from '@/components/commons-invitations-card';
+import { InviteContactsCard } from '@/components/invite-contacts-card';
 import { OnboardingFamilyChoices, isFamilyInvitation } from '@/components/onboarding-family-choices';
 
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import {
   getOrCreateAnonymousId,
-  hasSeenAnonymousProfileIntro,
   markAnonymousProfileIntroSeen,
 } from '@/lib/anonymous-id';
 import { track } from '@/lib/analytics';
 import { friendlyError } from '@/lib/friendly-error';
 import { secureStorage } from '@/lib/secure-storage';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 const MIN_SELF_DESCRIPTION = 40;
 const MIN_SIGNAL_ITEMS = 1;
-const INTRO_CAROUSEL_INTERVAL_MS = 4500;
-
-const appIntroItems = [
-  {
-    title: 'Post on your community feeds',
-    body: 'Introduce yourself, ask a question, share an idea, or tell people what you are working on.',
-    visual: '💬',
-    visualBg: '#EFF6FF',
-    Icon: MessageCircle,
-  },
-  {
-    title: 'Join commons',
-    body: 'Commons are shared spaces where people with a real connection can post, ask for help, offer support, plan things, and build trust over time.',
-    visual: '🤝',
-    visualBg: '#F0FDF4',
-    Icon: Users,
-  },
-  {
-    title: 'Ask for help and offer help',
-    body: 'People can share needs, skills, time, tools, advice, rides, space, or support.',
-    visual: '🛠️',
-    visualBg: '#FFF7ED',
-    Icon: HandHeart,
-  },
-  {
-    title: 'Turn good conversations into action',
-    body: 'Start simple. A useful post can become a meetup, project, event, service, or local connection.',
-    visual: '💡',
-    visualBg: '#FEFCE8',
-    Icon: Lightbulb,
-  },
-] as const;
-
-type WizardStep = 'intro' | 'profile' | 'circles';
+type WizardStep = 'profile' | 'invite' | 'circles';
 type ListFieldName = 'interests' | 'resourcesOffered' | 'resourcesNeeded';
 type OptionalFieldName = 'goals' | 'businessSummary' | 'locationSummary';
 
@@ -132,69 +98,38 @@ function parseSignalList(value: string, maxItemLength = 120) {
   ).slice(0, 30);
 }
 
-// The Welcome Wizard: an app-intro carousel followed by a "build your
-// profile" form, always shown in that order. This single page handles both
-// entry points — a fresh anonymous visitor (routed here from app/index.tsx
-// before they've signed in at all) and an existing account finishing
-// onboarding after login (routed here by AuthContext's navigation effect).
-// Anonymous visitors save against a device-generated id instead of a user
-// record; that data gets migrated onto their account automatically once
-// they do sign in (see verifyLoginCode in packages/trpc/src/routers/auth.ts).
+// Email-verified newcomers start with questions until they finish onboarding.
 export default function ProfileOnboardingScreen() {
   const { user, sessionToken, isLoading, login, deferProfileOnboarding } = useAuth();
-  const [wizardStep, setWizardStep] = useState<WizardStep>('intro');
-  // A signed-in person who already saw the intro on this device (for
-  // example a returning member who tapped "I already have an account")
-  // starts at the profile form instead of seeing the intro again. Decided
-  // once, before the first step renders, so the intro never flashes.
+  const { chooseCommons } = useLocalSearchParams<{ chooseCommons?: string }>();
+  const [wizardStep, setWizardStep] = useState<WizardStep>('profile');
   const [firstStepChosen, setFirstStepChosen] = useState(false);
   const firstStepCheckStarted = useRef(false);
+  const [hasCommonsMembership, setHasCommonsMembership] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setHasCommonsMembership(null);
+    if (!sessionToken) { setHasCommonsMembership(false); return; }
+    let cancelled = false;
+    void api.listCommonsDirectory(sessionToken).then(({ coops }) => {
+      if (!cancelled) setHasCommonsMembership(coops.some((commons) => commons.isMember));
+    }).catch(() => { if (!cancelled) setHasCommonsMembership(false); });
+    return () => { cancelled = true; };
+  }, [sessionToken]);
+
 
   useEffect(() => {
     if (isLoading || firstStepCheckStarted.current) return;
     firstStepCheckStarted.current = true;
 
     if (!user || !sessionToken) {
-      setFirstStepChosen(true);
+      router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
       return;
     }
 
-    hasSeenAnonymousProfileIntro()
-      .then((seen) => {
-        if (seen) setWizardStep('profile');
-      })
-      .catch(() => {})
-      .finally(() => setFirstStepChosen(true));
-  }, [isLoading, user, sessionToken]);
-
-  const { width } = useWindowDimensions();
-  const introCarouselRef = useRef<ScrollView>(null);
-  const [introCarouselIndex, setIntroCarouselIndex] = useState(0);
-  const introCardWidth = Math.max(width - 40, 280);
-
-  useEffect(() => {
-    if (wizardStep !== 'intro') return;
-
-    const interval = setInterval(() => {
-      setIntroCarouselIndex((currentIndex) => {
-        const nextIndex = (currentIndex + 1) % appIntroItems.length;
-        introCarouselRef.current?.scrollTo({ x: nextIndex * introCardWidth, animated: true });
-        return nextIndex;
-      });
-    }, INTRO_CAROUSEL_INTERVAL_MS);
-
-    return () => clearInterval(interval);
-  }, [introCardWidth, wizardStep]);
-
-  const updateIntroCarouselIndex = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const nextIndex = Math.round(event.nativeEvent.contentOffset.x / introCardWidth);
-    setIntroCarouselIndex(Math.min(Math.max(nextIndex, 0), appIntroItems.length - 1));
-  };
-
-  const goToIntroSlide = (index: number) => {
-    introCarouselRef.current?.scrollTo({ x: index * introCardWidth, animated: true });
-    setIntroCarouselIndex(index);
-  };
+    setWizardStep(chooseCommons === '1' && user.onboardingCompletedAt ? 'circles' : 'profile');
+    setFirstStepChosen(true);
+  }, [isLoading, user, sessionToken, chooseCommons]);
 
   const scrollRef = useRef<ScrollView>(null);
   const [selfDescription, setSelfDescription] = useState(user?.selfDescription || '');
@@ -213,7 +148,31 @@ export default function ProfileOnboardingScreen() {
   const [profileResult, setProfileResult] = useState<Awaited<
     ReturnType<typeof api.completeProfileOnboarding>
   > | null>(null);
-  const [isJoiningWelcomeTable, setIsJoiningWelcomeTable] = useState(false);
+
+  const progressQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const profileHydrated = useRef<string | null>(null);
+  useEffect(() => {
+    if (isLoading || !user || profileHydrated.current === user.id) return;
+    profileHydrated.current = user.id;
+    setSelfDescription(user.selfDescription ?? '');
+    setSignalValues({
+      interests: user.interests?.join(', ') ?? '',
+      resourcesOffered: user.resourcesOffered?.join(', ') ?? '',
+      resourcesNeeded: user.resourcesNeeded?.join(', ') ?? '',
+    });
+    setOptionalValues({
+      goals: user.shortTermGoals ?? '',
+      businessSummary: user.businessSummary ?? '',
+      locationSummary: user.locationSummary ?? '',
+    });
+  }, [isLoading, user]);
+
+  const saveProgress = (next: 'profile' | 'invite' | 'commons' | 'complete') => {
+    if (!sessionToken) return Promise.resolve(null);
+    const request = progressQueue.current.catch(() => {}).then(() => api.saveOnboardingProgress(next, sessionToken));
+    progressQueue.current = request;
+    return request;
+  };
 
   const introComplete = selfDescription.trim().length >= introField.minChars;
   const signedIn = !!user && !!sessionToken;
@@ -268,11 +227,13 @@ export default function ProfileOnboardingScreen() {
     setError('');
   };
 
-  const handleSignInInstead = async () => {
-    track('onboarding_sign_in_chosen', { step: wizardStep });
-    // Remember the intro was seen first, or "/" sends them straight back here.
-    await markAnonymousProfileIntroSeen().catch(() => {});
-    router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
+  // Leaving the profile form: drop its "Almost there" error so it doesn't
+  // follow the newcomer onto the next step.
+  const goToInviteStep = async () => {
+    const progress = await saveProgress('invite');
+    if (progress && user && sessionToken) await login({ ...user, ...progress, sessionToken });
+    setError('');
+    setWizardStep('invite');
   };
 
   const handleSkip = async () => {
@@ -282,124 +243,76 @@ export default function ProfileOnboardingScreen() {
 
     if (!user) {
       // Anonymous visitors still see the newcomer-home step - only the
-      // account-only actions on it (join a welcome table) require signing
+      // account-only actions on it (starting a family) require signing
       // in, same as any other authenticated action in the app.
       void markAnonymousProfileIntroSeen();
-      setWizardStep('circles');
+      await goToInviteStep();
       return;
     }
 
     try {
       await deferProfileOnboarding();
       // Skipping the profile form only skips the form - still show the
-      // newcomer-home step so people get a real first action, matching
-      // "Skip" on the circles step itself for opting out of that too.
-      setWizardStep('circles');
+      // final commons choice so people can choose where they belong.
+      await goToInviteStep();
     } catch (err) {
       console.error('Profile onboarding skip failed:', err);
       setError('Could not skip right now. Try again.');
     }
   };
 
-  // Finishes the wizard and navigates on. If the profile form was actually
-  // submitted (profileResult set), this also marks profileOnboardingCompletedAt
-  // via login() - which is what lets AuthContext's own redirect-out effect
-  // send us to /(tabs); see the note on the 'circles' step below for why
-  // that only happens now, not right after the profile form saves. If the
-  // profile form was skipped instead, deferProfileOnboarding() (called in
-  // handleSkip) already lets us navigate freely, so there's nothing more to persist here.
+  // Save the completed profile in the session before opening the chosen
+  // destination. The wizard, rather than the auth guard, owns this exit.
   const completeOnboarding = async (
     destination: { pathname: string; params?: Record<string, string> },
-    exit: 'welcome_lounge' | 'general' | 'skip' | 'invitation' | 'family',
+    exit: 'commons' | 'invitation' | 'family',
   ) => {
-    track('onboarding_completed', { exit, profile_completed: !!profileResult, signed_in: signedIn });
 
     if (!user || !sessionToken) {
+      track('onboarding_completed', { exit, profile_completed: !!profileResult, signed_in: false });
       void markAnonymousProfileIntroSeen();
-      router.replace('/' as any);
+      if (exit === 'family') {
+        await secureStorage.setItem(secureStorage.keys.COMMONS_DESTINATION, 'family');
+        router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
+      } else {
+        router.replace(destination as any);
+      }
       return;
     }
 
-    if (profileResult) {
+    try {
+      const progress = await saveProgress('complete');
       await login({
         ...user,
-        ...profileResult.user,
-        createdAt: new Date(profileResult.user.createdAt),
-        profileOnboardingCompletedAt: profileResult.user.profileOnboardingCompletedAt
-          ? new Date(profileResult.user.profileOnboardingCompletedAt)
-          : new Date(),
+        ...(profileResult?.user || {}),
+        ...progress,
+        createdAt: profileResult ? new Date(profileResult.user.createdAt) : user.createdAt,
+        profileOnboardingCompletedAt: profileResult?.user.profileOnboardingCompletedAt
+          ? new Date(profileResult.user.profileOnboardingCompletedAt) : user.profileOnboardingCompletedAt,
         sessionToken,
         coop: user.coop,
       });
-    }
-
-    router.replace(destination as any);
-  };
-
-  const handleJoinWelcomeTable = async (options: { autoJoined?: boolean } = {}) => {
-    if (isJoiningWelcomeTable) return;
-
-    if (!user || !sessionToken) {
-      // Joining a table is an account action - send anonymous visitors to
-      // sign in rather than silently failing the API call.
-      void markAnonymousProfileIntroSeen();
-      router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
+    } catch {
+      setError("We couldn’t save your progress. Please try again.");
       return;
     }
 
-    setIsJoiningWelcomeTable(true);
-    try {
-      const result = await api.assignWelcomeTable(sessionToken);
-      track('welcome_lounge_joined', { source: 'onboarding', auto_joined: !!options.autoJoined });
-      await completeOnboarding(
-        {
-          pathname: '/[coopId]/posts',
-          params: { coopId: 'cahootz', circleId: result.groupId },
-        },
-        'welcome_lounge',
-      );
-    } catch (err) {
-      console.error('Could not join a welcome lounge:', err);
-      setError('Could not join a welcome lounge right now. Try General instead.');
-    } finally {
-      setIsJoiningWelcomeTable(false);
-    }
+    track('onboarding_completed', { exit, profile_completed: !!profileResult, signed_in: true });
+    router.replace(destination as any);
   };
 
-  // Auto-join a welcome lounge once a brand-new account reaches this step, if
-  // they expressed that intent before creating the account (tapping "Join a
-  // welcome lounge" on Circle View while signed out - see circle-view.tsx).
-  // Consumed once and cleared immediately so it never fires again for this
-  // device (e.g. on a later, unrelated signup).
   useEffect(() => {
     if (wizardStep !== 'circles' || !user || !sessionToken) return;
-
     let cancelled = false;
-    secureStorage.getItem(secureStorage.keys.WELCOME_TABLE_INTENT).then((intent) => {
-      if (!intent || cancelled) return;
-      void secureStorage.removeItem(secureStorage.keys.WELCOME_TABLE_INTENT);
-      void handleJoinWelcomeTable({ autoJoined: true });
+    void secureStorage.getItem(secureStorage.keys.COMMONS_DESTINATION).then(async (destination) => {
+      if (cancelled || !destination) return;
+      if (destination !== 'family' && !destination.startsWith('commons:')) return;
+      await secureStorage.removeItem(secureStorage.keys.COMMONS_DESTINATION);
+      await completeOnboarding({ pathname: destination === 'family' ? '/(authenticated)/create-family' : `/commons/${destination.slice(8)}` }, destination === 'family' ? 'family' : 'commons');
     });
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wizardStep, user, sessionToken]);
-
-  // Every way out of this step except "Skip for now" also seats the newcomer
-  // in a Cahootz welcome lounge, so someone heading to General or to their
-  // family still has a small group to meet. Best effort: a failure here
-  // never blocks where they chose to go.
-  const seatInWelcomeLounge = async () => {
-    if (!sessionToken) return;
-    try {
-      await api.assignWelcomeTable(sessionToken);
-      track('welcome_lounge_joined', { source: 'onboarding', auto_joined: true });
-    } catch (err) {
-      console.error('Could not seat newcomer in a welcome lounge:', err);
-    }
-  };
 
   // A commons invitation link opened while signed out (see
   // components/commons-invitation-view.tsx) resumes here, once the new
@@ -411,7 +324,6 @@ export default function ProfileOnboardingScreen() {
     secureStorage.getItem(secureStorage.keys.PENDING_INVITATION).then(async (token) => {
       if (!token || cancelled) return;
       void secureStorage.removeItem(secureStorage.keys.PENDING_INVITATION);
-      await seatInWelcomeLounge();
       void completeOnboarding({ pathname: '/invite/[token]', params: { token } }, 'invitation');
     });
 
@@ -421,8 +333,15 @@ export default function ProfileOnboardingScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wizardStep, user, sessionToken]);
 
+  const continueAfterInvites = async () => {
+    try {
+      const progress = await saveProgress('commons');
+      if (progress && user && sessionToken) await login({ ...user, ...progress, sessionToken });
+      setWizardStep('circles');
+    } catch { setError("We couldn’t save your progress. Please try again."); }
+  };
+
   const handleOpenInvitation = async (invitationId: string) => {
-    await seatInWelcomeLounge();
     void completeOnboarding(
       { pathname: '/invitations/[invitationId]', params: { invitationId } },
       'invitation',
@@ -432,21 +351,7 @@ export default function ProfileOnboardingScreen() {
   // A family they already belong to (say, joined from a link before
   // finishing onboarding): straight to its feed, not the Cahootz Commons.
   const handleGoToFamily = async (coopId: string) => {
-    await seatInWelcomeLounge();
     void completeOnboarding({ pathname: '/[coopId]/posts', params: { coopId } }, 'family');
-  };
-
-  const handleGoToGeneral = async () => {
-    await seatInWelcomeLounge();
-    void completeOnboarding(
-      { pathname: '/[coopId]/posts', params: { coopId: 'cahootz' } },
-      'general',
-    );
-  };
-
-  const handleSkipCircles = () => {
-    track('onboarding_deferred', { step: 'circles', signed_in: signedIn });
-    void completeOnboarding({ pathname: '/(tabs)', params: { welcome: '1' } }, 'skip');
   };
 
   const handleSubmit = async () => {
@@ -477,7 +382,7 @@ export default function ProfileOnboardingScreen() {
         });
 
         void markAnonymousProfileIntroSeen();
-        setWizardStep('circles');
+        await goToInviteStep();
         return;
       }
 
@@ -494,13 +399,9 @@ export default function ProfileOnboardingScreen() {
         sessionToken
       );
 
-      // Hold the result and move to the newcomer-home step instead of
-      // logging in immediately - login() sets profileOnboardingCompletedAt,
-      // which AuthContext watches to redirect out of /profile-onboarding
-      // (contexts/auth-context.tsx). Calling it now would blow past this
-      // step the instant it renders.
+      // Keep the current wizard open through invitations and commons choice.
       setProfileResult(result);
-      setWizardStep('circles');
+      await goToInviteStep();
     } catch (err) {
       console.error('Profile onboarding save failed:', err);
       setError(friendlyError(err, "We couldn't save your profile."));
@@ -509,7 +410,7 @@ export default function ProfileOnboardingScreen() {
     }
   };
 
-  if (isLoading || !firstStepChosen) {
+  if (isLoading || !firstStepChosen || !user || !sessionToken) {
     return (
       <SafeAreaView style={styles.loadingScreen}>
         <ActivityIndicator color="#FF6B00" size="large" />
@@ -517,85 +418,37 @@ export default function ProfileOnboardingScreen() {
     );
   }
 
-  if (wizardStep === 'intro') {
+  if (wizardStep === 'invite') {
     return (
-      <SafeAreaView style={introStyles.screen}>
-        <ScrollView style={introStyles.scroll} contentContainerStyle={introStyles.content}>
-          <View style={introStyles.header}>
-            <View style={introStyles.badge}>
-              <UserCircle color="#FF6B00" size={18} strokeWidth={2.4} />
-              <Text style={introStyles.badgeText}>Welcome to Cahootz</Text>
-            </View>
-            <Text style={introStyles.title}>A community app for everyday help and action</Text>
-            <Text style={introStyles.subtitle}>
-              Cahootz is a place to meet people, share what you need, offer what you can, and start real conversations.
-            </Text>
-          </View>
-
-          <View style={introStyles.appIntro}>
-            <ScrollView
-              ref={introCarouselRef}
-              horizontal
-              pagingEnabled
-              snapToInterval={introCardWidth}
-              decelerationRate="fast"
-              showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={updateIntroCarouselIndex}
-              style={introStyles.carousel}
-            >
-              {appIntroItems.map(({ title, body, visual, visualBg, Icon }) => (
-                <View key={title} style={[introStyles.carouselCard, { width: introCardWidth }]}>
-                  <View style={[introStyles.carouselVisual, { backgroundColor: visualBg }]}>
-                    <Text style={introStyles.carouselEmoji}>{visual}</Text>
-                    <View style={introStyles.carouselIcon}>
-                      <Icon color="#FF6B00" size={20} strokeWidth={2.5} />
-                    </View>
-                  </View>
-                  <Text style={introStyles.carouselTitle}>{title}</Text>
-                  <Text style={introStyles.carouselBody}>{body}</Text>
-                </View>
-              ))}
-            </ScrollView>
-
-            <View style={introStyles.carouselDots}>
-              {appIntroItems.map((item, index) => {
-                const active = introCarouselIndex === index;
-
-                return (
-                  <Pressable
-                    key={item.title}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Show ${item.title}`}
-                    onPress={() => goToIntroSlide(index)}
-                    style={[introStyles.carouselDot, active && introStyles.carouselDotActive]}
-                  />
-                );
-              })}
-            </View>
-          </View>
+      <SafeAreaView style={circlesStyles.screen}>
+        <ScrollView contentContainerStyle={circlesStyles.content}>
+          <Text style={circlesStyles.eyebrow}>Bring people with you</Text>
+          <Text style={circlesStyles.title}>Invite people you know</Text>
+          <Text style={circlesStyles.subtitle}>
+            Cahootz works best with the people you already count on. Invite a friend or relative to
+            join you. You can always do this later.
+          </Text>
+          {error ? <Text style={circlesStyles.error}>{error}</Text> : null}
+          <InviteContactsCard source="onboarding" />
         </ScrollView>
 
         <View style={introStyles.footer}>
+          {error ? <Text accessibilityRole="alert">{error}</Text> : null}
           <Pressable
             accessibilityRole="button"
-            onPress={() => setWizardStep('profile')}
+            onPress={() => void continueAfterInvites()}
             style={introStyles.submitButton}
           >
-            <Text style={introStyles.submitText}>Continue</Text>
-            <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.6} />
+            <Text style={introStyles.submitText}>Next</Text>
+            <ArrowRight color={DESIGN.ink} size={20} strokeWidth={2.6} />
           </Pressable>
-          {!signedIn ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => void handleSignInInstead()}
-              style={styles.secondaryButton}
-            >
-              <Text style={styles.secondaryButtonText}>I already have an account</Text>
-            </Pressable>
-          ) : null}
         </View>
       </SafeAreaView>
     );
+  }
+
+  if (wizardStep === 'circles' && hasCommonsMembership === null) {
+    return <SafeAreaView style={circlesStyles.screen}><ActivityIndicator accessibilityLabel="Loading your commons" color="#FF6B00" /></SafeAreaView>;
   }
 
   if (wizardStep === 'circles') {
@@ -603,75 +456,53 @@ export default function ProfileOnboardingScreen() {
       <SafeAreaView style={circlesStyles.screen}>
         <ScrollView contentContainerStyle={circlesStyles.content}>
           <Text style={circlesStyles.eyebrow}>Almost there</Text>
-          <Text style={circlesStyles.title}>Find your way in</Text>
+          <Text style={circlesStyles.title}>{hasCommonsMembership ? "You’re already in" : "Find your people"}</Text>
           <Text style={circlesStyles.subtitle}>
-            Meet other newcomers, jump into General, or head to your family if someone invited you.
-            Either way, you&apos;ll have a welcome lounge to come back to.
+            {hasCommonsMembership ? "Your people are here. Open a commons to get started." : "Choose a commons to join, or start a private space for your family."}
           </Text>
 
           {error ? <Text style={circlesStyles.error}>{error}</Text> : null}
 
           {user && sessionToken ? (
             <>
-              <OnboardingFamilyChoices
-                disabled={isJoiningWelcomeTable}
+              {hasCommonsMembership ? <OnboardingFamilyChoices
                 onGoToFamily={(coopId) => void handleGoToFamily(coopId)}
                 onOpenInvitation={(invitationId) => void handleOpenInvitation(invitationId)}
-              />
+              /> : null}
               <View style={{ marginBottom: 12 }}>
                 <CommonsInvitationsCard
-                  exclude={isFamilyInvitation}
+                  exclude={hasCommonsMembership ? isFamilyInvitation : undefined}
                   onOpen={(invitation) => void handleOpenInvitation(invitation.invitationId!)}
                 />
               </View>
             </>
           ) : null}
 
-          <Pressable
-            accessibilityRole="button"
-            disabled={isJoiningWelcomeTable}
-            onPress={() => void handleJoinWelcomeTable()}
-            style={[circlesStyles.card, isJoiningWelcomeTable && circlesStyles.cardDisabled]}
-          >
-            <View style={[circlesStyles.cardIcon, { backgroundColor: '#FFF7ED' }]}>
-              <MessageCircle color="#FF6B00" size={22} strokeWidth={2.4} />
-            </View>
-            <View style={circlesStyles.cardBody}>
-              <Text style={circlesStyles.cardTitle}>Join a welcome lounge</Text>
-              <Text style={circlesStyles.cardText}>
-                Meet a small group of newcomers with a guide.
-              </Text>
-            </View>
-            {isJoiningWelcomeTable ? (
-              <ActivityIndicator color="#FF6B00" />
-            ) : (
-              <ArrowRight color="#FF6B00" size={20} strokeWidth={2.6} />
-            )}
+          {!hasCommonsMembership ? <>
+          <Pressable accessibilityRole="button" accessibilityLabel="Explore commons"
+            onPress={() => void completeOnboarding({ pathname: '/commons', params: { fromOnboarding: '1' } }, 'commons')}
+            style={[choiceStyles.card, { backgroundColor: DESIGN.green }]}>
+            <Text style={choiceStyles.title}>{'Meet. Share.\nBelong.'}</Text>
+            <Text style={choiceStyles.body}>Find a public commons around the things you care about.</Text>
+            <View style={choiceStyles.action}><Text style={choiceStyles.actionText}>Explore commons</Text><ArrowRight color="#C2410C" size={24} /></View>
           </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => void handleGoToGeneral()}
-            style={circlesStyles.card}
-          >
-            <View style={[circlesStyles.cardIcon, { backgroundColor: '#EFF6FF' }]}>
-              <MessagesSquare color="#1D4ED8" size={22} strokeWidth={2.4} />
-            </View>
-            <View style={circlesStyles.cardBody}>
-              <Text style={circlesStyles.cardTitle}>Go to General</Text>
-              <Text style={circlesStyles.cardText}>
-                The Cahootz Commons conversation everyone can see.
-              </Text>
-            </View>
-            <ArrowRight color="#1D4ED8" size={20} strokeWidth={2.6} />
+          <Pressable accessibilityRole="button" accessibilityLabel="Start a family"
+            onPress={() => void completeOnboarding({ pathname: '/(authenticated)/create-family', params: { fromOnboarding: '1' } }, 'family')}
+            style={[choiceStyles.card, { backgroundColor: DESIGN.purple }]}>
+            <Text style={choiceStyles.title}>{'Your people.\nYour own space.'}</Text>
+            <Text style={choiceStyles.body}>Start a private, invite-only commons for your family.</Text>
+            <View style={choiceStyles.action}><Text style={choiceStyles.actionText}>Start a family</Text><ArrowRight color="#C2410C" size={24} /></View>
           </Pressable>
+          </> : null}
+          {hasCommonsMembership ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Skip for now"
+              onPress={() => void completeOnboarding({ pathname: '/(tabs)' }, 'commons')}
+              style={styles.secondaryButton}>
+              <Text style={choiceStyles.actionText}>Skip for now</Text>
+            </Pressable>
+          ) : null}
+          {!hasCommonsMembership ? <Text style={choiceStyles.footer}>{'Choose where you belong.\nYou can join more than one commons.'}</Text> : null}
         </ScrollView>
-
-        <View style={introStyles.footer}>
-          <Pressable accessibilityRole="button" onPress={handleSkipCircles} style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Skip for now</Text>
-          </Pressable>
-        </View>
       </SafeAreaView>
     );
   }
@@ -683,8 +514,8 @@ export default function ProfileOnboardingScreen() {
         style={styles.keyboardView}
       >
         <ScrollView
+          {...keyboardScrollProps}
           ref={scrollRef}
-          keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.content}
         >
           <View style={styles.profileIntro}>
@@ -707,6 +538,7 @@ export default function ProfileOnboardingScreen() {
               </View>
               <Text style={styles.helper}>{introField.helper}</Text>
               <TextInput
+                accessibilityLabel={introField.label}
                 value={selfDescription}
                 onChangeText={updateIntro}
                 placeholder={introField.placeholder}
@@ -733,6 +565,7 @@ export default function ProfileOnboardingScreen() {
                     </View>
                     <Text style={styles.helper}>{field.helper}</Text>
                     <TextInput
+                      accessibilityLabel={field.label}
                       value={signalValues[field.name]}
                       onChangeText={(value) => updateSignalField(field.name, value)}
                       placeholder={field.placeholder}
@@ -811,7 +644,7 @@ export default function ProfileOnboardingScreen() {
             ) : (
               <>
                 <Text style={styles.submitText}>Start using Cahootz</Text>
-                <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.6} />
+                <ArrowRight color={DESIGN.ink} size={20} strokeWidth={2.6} />
               </>
             )}
           </Pressable>
@@ -824,17 +657,29 @@ export default function ProfileOnboardingScreen() {
   );
 }
 
+const choiceStyles = StyleSheet.create({
+  card: { borderRadius: 24, padding: 24, minHeight: 240, marginTop: 8 },
+  title: { color: DESIGN.ink, fontSize: 28, lineHeight: 34, fontWeight: '700' },
+  body: { color: DESIGN.muted, fontSize: 16, lineHeight: 24, marginTop: 14 },
+  action: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 32 },
+  actionText: { color: DESIGN.actionText, fontSize: 16, fontWeight: '800' },
+  footer: { color: DESIGN.muted, fontSize: 14, lineHeight: 22, textAlign: 'center', marginTop: 32, marginBottom: 16 },
+});
+
 const introStyles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: DESIGN.paper,
   },
   scroll: {
     flex: 1,
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 20,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+    paddingHorizontal: DESIGN.gutter,
     paddingTop: 18,
     paddingBottom: 12,
   },
@@ -843,8 +688,8 @@ const introStyles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F0F2F5',
-    backgroundColor: '#FFFFFF',
+    borderTopColor: DESIGN.border,
+    backgroundColor: DESIGN.paper,
   },
   header: {
     paddingTop: 8,
@@ -856,7 +701,7 @@ const introStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     borderRadius: 999,
-    backgroundColor: '#FFF7ED',
+    backgroundColor: DESIGN.primarySoft,
     borderWidth: 1,
     borderColor: '#FED7AA',
     paddingHorizontal: 12,
@@ -864,19 +709,19 @@ const introStyles = StyleSheet.create({
     marginBottom: 18,
   },
   badgeText: {
-    color: '#C2410C',
+    color: DESIGN.actionText,
     fontSize: 13,
     fontWeight: '700',
   },
   title: {
-    color: '#0F172A',
+    color: DESIGN.ink,
     fontSize: 30,
     lineHeight: 36,
-    fontWeight: '900',
+    fontWeight: '700',
     letterSpacing: 0,
   },
   subtitle: {
-    color: '#64748B',
+    color: DESIGN.muted,
     fontSize: 16,
     lineHeight: 24,
     marginTop: 12,
@@ -891,8 +736,8 @@ const introStyles = StyleSheet.create({
     minHeight: 300,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#F0F2F5',
-    backgroundColor: '#FFFFFF',
+    borderColor: DESIGN.border,
+    backgroundColor: DESIGN.paper,
     padding: 18,
     justifyContent: 'center',
   },
@@ -917,18 +762,18 @@ const introStyles = StyleSheet.create({
     borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: DESIGN.paper,
     borderWidth: 1,
     borderColor: '#FED7AA',
   },
   carouselTitle: {
-    color: '#0F172A',
+    color: DESIGN.ink,
     fontSize: 21,
     lineHeight: 27,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   carouselBody: {
-    color: '#64748B',
+    color: DESIGN.muted,
     fontSize: 15,
     lineHeight: 22,
     marginTop: 8,
@@ -948,60 +793,63 @@ const introStyles = StyleSheet.create({
   },
   carouselDotActive: {
     width: 22,
-    backgroundColor: '#FF6B00',
+    backgroundColor: DESIGN.primary,
   },
   submitButton: {
-    minHeight: 58,
+    minHeight: 52,
     borderRadius: 16,
-    backgroundColor: '#FF6B00',
+    backgroundColor: DESIGN.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
   },
   submitText: {
-    color: '#FFFFFF',
+    color: DESIGN.ink,
     fontSize: 17,
     lineHeight: 22,
-    fontWeight: '900',
+    fontWeight: '700',
   },
 });
 
 const circlesStyles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: DESIGN.paper,
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 20,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+    paddingHorizontal: DESIGN.gutter,
     paddingTop: 18,
     paddingBottom: 12,
     gap: 12,
   },
   eyebrow: {
-    color: '#FF6B00',
+    color: DESIGN.actionText,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    fontWeight: '700',
+
   },
   title: {
-    color: '#0F172A',
+    color: DESIGN.ink,
     fontSize: 28,
     lineHeight: 34,
-    fontWeight: '900',
+    fontWeight: '700',
     marginTop: 6,
   },
   subtitle: {
-    color: '#64748B',
+    color: DESIGN.muted,
     fontSize: 15,
     lineHeight: 21,
     marginTop: 4,
     marginBottom: 8,
   },
   error: {
-    color: '#DC2626',
+    color: DESIGN.danger,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -1011,8 +859,8 @@ const circlesStyles = StyleSheet.create({
     gap: 12,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#F0F2F5',
-    backgroundColor: '#FFFFFF',
+    borderColor: DESIGN.border,
+    backgroundColor: DESIGN.paper,
     padding: 14,
   },
   cardDisabled: {
@@ -1029,13 +877,13 @@ const circlesStyles = StyleSheet.create({
     flex: 1,
   },
   cardTitle: {
-    color: '#0F172A',
+    color: DESIGN.ink,
     fontSize: 16,
     lineHeight: 21,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   cardText: {
-    color: '#64748B',
+    color: DESIGN.muted,
     fontSize: 13,
     lineHeight: 18,
     marginTop: 2,
@@ -1045,7 +893,7 @@ const circlesStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: DESIGN.paper,
   },
   keyboardView: {
     flex: 1,
@@ -1054,50 +902,47 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: DESIGN.paper,
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 20,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+    paddingHorizontal: DESIGN.gutter,
     paddingTop: 18,
     paddingBottom: 28,
   },
   profileIntro: {
     borderTopWidth: 1,
-    borderTopColor: '#F0F2F5',
+    borderTopColor: DESIGN.border,
     paddingTop: 18,
     marginBottom: 14,
   },
   sectionEyebrow: {
-    color: '#FF6B00',
+    color: DESIGN.actionText,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+    fontWeight: '700',
+
   },
   sectionTitle: {
-    color: '#0F172A',
+    color: DESIGN.ink,
     fontSize: 24,
     lineHeight: 30,
-    fontWeight: '900',
+    fontWeight: '700',
     marginTop: 6,
   },
   sectionBody: {
-    color: '#64748B',
+    color: DESIGN.muted,
     fontSize: 14,
     lineHeight: 21,
     marginTop: 6,
   },
   form: {
-    gap: 18,
+    gap: 24,
   },
-  fieldBlock: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#F0F2F5',
-    backgroundColor: '#FFFFFF',
-    padding: 14,
-  },
+  fieldBlock: { gap: 2 },
   fieldHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1106,38 +951,39 @@ const styles = StyleSheet.create({
   },
   label: {
     flex: 1,
-    color: '#0F172A',
-    fontSize: 18,
-    lineHeight: 24,
+    color: DESIGN.ink,
+    fontSize: 16,
+    lineHeight: 22,
     fontWeight: '800',
   },
   requiredTag: {
-    color: '#475569',
+    color: DESIGN.muted,
     fontSize: 14,
     fontWeight: '600',
   },
   counter: {
-    color: '#FF6B00',
+    color: DESIGN.actionText,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '800',
   },
   counterComplete: {
-    color: '#16A34A',
+    color: DESIGN.success,
   },
   helper: {
-    color: '#64748B',
+    color: DESIGN.muted,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 8,
     marginBottom: 12,
   },
   input: {
-    borderRadius: 16,
+    minHeight: DESIGN.controlHeight,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#F8FAFC',
-    color: '#0F172A',
+    borderColor: DESIGN.border,
+    backgroundColor: DESIGN.paper,
+    color: DESIGN.ink,
     fontSize: 16,
     lineHeight: 22,
     paddingHorizontal: 14,
@@ -1153,15 +999,15 @@ const styles = StyleSheet.create({
     minHeight: 104,
   },
   error: {
-    color: '#DC2626',
+    color: DESIGN.danger,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 16,
   },
   submitButton: {
-    minHeight: 58,
+    minHeight: 52,
     borderRadius: 16,
-    backgroundColor: '#FF6B00',
+    backgroundColor: DESIGN.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1173,10 +1019,10 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   submitText: {
-    color: '#FFFFFF',
+    color: DESIGN.ink,
     fontSize: 17,
     lineHeight: 22,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   secondaryButton: {
     minHeight: 46,
@@ -1185,7 +1031,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   secondaryButtonText: {
-    color: '#64748B',
+    color: DESIGN.muted,
     fontSize: 15,
     lineHeight: 20,
     fontWeight: '800',

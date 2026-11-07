@@ -1,3 +1,6 @@
+import { LoadError } from '@/components/load-error';
+import { DetailHeader } from '@/components/detail-header';
+import { DESIGN } from '@/constants/design';
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -32,7 +35,7 @@ import {
 } from "@repo/validators/notification";
 
 export default function NotificationSettings() {
-  const { sessionToken, user } = useAuth();
+  const { sessionToken } = useAuth();
   const insets = useSafeAreaInsets();
   const client = useQueryClient();
   const [permission, setPermission] = useState("Checking device permission…");
@@ -70,11 +73,9 @@ export default function NotificationSettings() {
     setDeviceBusy(true);
     setDeviceError("");
     try {
-      await registerForNativePushNotifications(
-        sessionToken,
-        user?.coop?.id || "cahootz",
-        { source: "notification_settings" },
-      );
+      await registerForNativePushNotifications(sessionToken, {
+        source: "notification_settings",
+      });
       await refreshPermission();
     } catch (error) {
       console.error(
@@ -99,20 +100,15 @@ export default function NotificationSettings() {
   });
   const preferences = query.data;
   return (
+    <View style={{ flex: 1, backgroundColor: DESIGN.paper }}>
+    <DetailHeader title="Notification settings" parent="Alerts" onBack={() => router.replace('/(tabs)/notifications')} />
     <ScrollView
-      style={s.page}
+      style={{ flex: 1 }}
       contentContainerStyle={[
         s.content,
-        { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 32 },
+        { paddingTop: 20, paddingBottom: insets.bottom + 32 },
       ]}
     >
-      <View style={{ alignItems: "flex-start" }}>
-        <AlertButton
-          label="Back to alerts"
-          onPress={() => router.replace("/(tabs)/notifications")}
-        />
-      </View>
-      <Text style={s.title}>Notification settings</Text>
       <Text style={s.text}>
         Choose which push notifications you receive across your devices. All
         activity stays in your Alerts inbox.
@@ -127,11 +123,9 @@ export default function NotificationSettings() {
       ) : (
         <>
           {query.isError && (
-            <View style={s.card}>
-              <Text accessibilityRole="alert" style={s.error}>
-                We couldn&apos;t load your notification settings. Please try again.
-              </Text>
-              <AlertButton label="Try again" onPress={() => void query.refetch()} />
+            <View style={{ gap: 8 }}>
+              <LoadError title="Settings couldn’t load" message="We couldn't load your notification settings. Please try again." onRetry={() => void query.refetch()} retrying={query.isFetching} />
+              <AlertButton label="Return to Alerts" onPress={() => router.replace('/(tabs)/notifications')} />
             </View>
           )}
           {preferences && (
@@ -173,6 +167,12 @@ export default function NotificationSettings() {
                         <Text style={s.text}>
                           A few pointers in your first week, by push or email.
                           Turning this off stops them everywhere.
+                        </Text>
+                      )}
+                      {category === "sage" && (
+                        <Text style={s.text}>
+                          All Sage notifications outside General. Sage posts in
+                          General follow Community instead.
                         </Text>
                       )}
                     </View>
@@ -252,5 +252,6 @@ export default function NotificationSettings() {
         )}
       </View>
     </ScrollView>
+    </View>
   );
 }

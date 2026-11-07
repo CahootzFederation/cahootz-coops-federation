@@ -176,6 +176,12 @@ describe("notification destinations", () => {
       }),
     ).toBe("/(authenticated)/personal-page");
   });
+  it("opens a passed charter change on the Commons page, not the proposal, so a steward can apply it", () => {
+    expect(notificationDestination({ ...notification, type: "SAGE_AMENDMENT_READY", data: { coopId: "harbor", proposalId: "prop-9" } })).toEqual({
+      pathname: "/commons/[coopId]",
+      params: { coopId: "harbor" },
+    });
+  });
   it("keeps proposal drafts scoped to their commons", () => {
     expect(notificationDestination({ ...notification, type: "PROPOSAL_DRAFT_READY", data: null })).toEqual({
       pathname: "/(authenticated)/commons-proposal-drafts",

@@ -12,13 +12,26 @@ import {
 
 describe("friendlyError", () => {
   it("shows a server message that was written for members", () => {
-    const err = apiError(
-      { message: "Store not found or not accepting quick payments", data: { code: "NOT_FOUND" } },
-      "Failed to get store",
-    );
-    expect(friendlyError(err, "We couldn't find that store.")).toBe(
-      "Store not found or not accepting quick payments.",
-    );
+    const err = apiError({ message: "That @ is already taken", data: { code: "CONFLICT" } }, "x");
+    expect(friendlyError(err, "We couldn't save your @.")).toBe("That @ is already taken.");
+  });
+
+  it.each([
+    "Failed to process withdrawal",
+    "Store not found or not accepting quick payments",
+    "Proposal not found",
+    "Unauthorized",
+    "Forbidden",
+    "Invalid wallet address format",
+    "Insufficient balance. You have 3 UC, trying to send 5 UC",
+    "Cannot withdraw a proposal with status votable",
+    "Unable to load the charter",
+    "coopId is required",
+    "Missing walletAddress for member",
+    "Unknown action type MUTUAL_MATCH",
+  ])("uses the screen's fallback instead of the stiff server message %p", (message) => {
+    const err = apiError({ message, data: { code: "BAD_REQUEST", httpStatus: 400 } }, "x");
+    expect(friendlyError(err, "We couldn't send that.")).toBe("We couldn't send that. Please try again.");
   });
 
   it("replaces a raw validation dump with the screen's fallback", () => {

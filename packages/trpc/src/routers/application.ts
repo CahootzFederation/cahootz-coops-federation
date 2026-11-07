@@ -12,7 +12,7 @@ import { syncMembershipToContract } from "../services/blockchain.js";
 import { toE164 } from "../lib/phone.js";
 import { sendApplicationAcceptedEmail, isEmailConfigured } from "../services/email-service.js";
 import { sendApplicationSubmittedNotification } from "../services/slack-notification-service.js";
-import { COMMONS_COOP_ID, ensureCommonsMembership } from "../lib/commons.js";
+import { COMMONS_COOP_ID } from "../lib/commons.js";
 import { createUniqueApplicationReference } from "../lib/application-reference.js";
 import { notifyCommonsMemberJoined } from "../services/member-join-notifications.js";
 
@@ -190,8 +190,6 @@ export const applicationRouter = router({
             },
           });
           console.log('✅ Application created:', application.id);
-
-          await ensureCommonsMembership(tx, user.id);
 
           // Create membership record for the target coop only.
           const targetMembershipStatus =

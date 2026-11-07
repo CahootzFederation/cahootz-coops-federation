@@ -205,6 +205,13 @@ export default function OrdersListHybrid() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#f97316" />
         }
       >
+        <TouchableOpacity
+          accessibilityRole="button"
+          onPress={() => router.push('/(authenticated)/my-savings' as any)}
+          className="mb-4 rounded-xl border border-emerald-700/50 bg-emerald-900/30 px-4 py-3"
+        >
+          <Text className="text-emerald-200 font-semibold">My savings from group deals →</Text>
+        </TouchableOpacity>
         {loadError && transactions.length === 0 ? (
           <View className="flex-1 items-center justify-center py-20">
             <Text className="text-gray-200 text-lg text-center px-6">{loadError}</Text>

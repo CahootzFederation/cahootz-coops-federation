@@ -1,0 +1,97 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>KayKit sprite renderer</title>
+<!-- Dev-only page driven by scripts/render-kaykit-sprites.cjs. Not part of the app. -->
+<script type="importmap">{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+// The app draws 2:1 isometric: one tile (one KayKit unit) is 24pt across and
+// 12pt down, so the camera looks from 45 degrees around and 30 degrees up, and
+// one unit of height is 33.94 * cos(30) = 29.4pt. We render at 2x points.
+const PX_PER_UNIT = 33.941 * 2;
+const CANVAS_W = 340, CANVAS_H = 580, ORIGIN_X = 170, ORIGIN_Y = 420;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setSize(CANVAS_W, CANVAS_H, false);
+renderer.setPixelRatio(1);
+renderer.setClearColor(0x000000, 0);
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.OrthographicCamera(
+  -ORIGIN_X / PX_PER_UNIT, (CANVAS_W - ORIGIN_X) / PX_PER_UNIT,
+  ORIGIN_Y / PX_PER_UNIT, -(CANVAS_H - ORIGIN_Y) / PX_PER_UNIT, -50, 50,
+);
+const dir = new THREE.Vector3(Math.cos(Math.PI / 6) * Math.SQRT1_2, Math.sin(Math.PI / 6), Math.cos(Math.PI / 6) * Math.SQRT1_2);
+camera.position.copy(dir.multiplyScalar(20));
+camera.lookAt(0, 0, 0);
+
+const loader = new GLTFLoader().setPath('models/');
+const cache = new Map();
+const model = (name) => {
+  if (!cache.has(name)) cache.set(name, loader.loadAsync(`${name}.gltf`).then((g) => g.scene));
+  return cache.get(name);
+};
+
+function tinted(material, wall, roof) {
+  const m = material.clone();
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.wallTint = { value: new THREE.Color(wall) };
+    shader.uniforms.roofTint = { value: new THREE.Color(roof) };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vObjN;\nvarying float vObjY;')
+      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvObjN = objectNormal;\nvObjY = position.y;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 wallTint;\nuniform vec3 roofTint;\nvarying vec3 vObjN;\nvarying float vObjY;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+        if (vObjN.y > 0.7 && vObjY > 0.45) {
+          diffuseColor.rgb = mix(diffuseColor.rgb, roofTint * (0.9 + lum * 0.25), 0.9);
+        } else if (vObjN.y < 0.7 && vObjY > 0.12 && lum < 0.8) {
+          diffuseColor.rgb = mix(diffuseColor.rgb, wallTint * (0.85 + lum * 0.35), 0.82);
+        }`);
+  };
+  m.customProgramCacheKey = () => `tint-${wall}-${roof}`;
+  return m;
+}
+
+// spec: { parts: [{ model, rot?, x?, z?, scale? }], wall?, roof? }
+window.renderSprite = async (spec) => {
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xb7c9a8, 2.3));
+  const sun = new THREE.DirectionalLight(0xfff3df, 2.4);
+  sun.position.set(-6, 14, 9);
+  scene.add(sun);
+  for (const part of spec.parts) {
+    const obj = (await model(part.model)).clone(true);
+    obj.rotation.y = part.rot || 0;
+    obj.position.set(part.x || 0, 0, part.z || 0);
+    if (part.scale) obj.scale.setScalar(part.scale);
+    if (spec.wall) obj.traverse((o) => { if (o.isMesh) o.material = tinted(o.material, spec.wall, spec.roof); });
+    scene.add(obj);
+  }
+  renderer.render(scene, camera);
+  // Crop to what was drawn and report where the ground point (0,0,0) sits.
+  const gl = renderer.getContext();
+  const pixels = new Uint8Array(CANVAS_W * CANVAS_H * 4);
+  gl.readPixels(0, 0, CANVAS_W, CANVAS_H, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  let x0 = CANVAS_W, y0 = CANVAS_H, x1 = -1, y1 = -1;
+  for (let y = 0; y < CANVAS_H; y++) for (let x = 0; x < CANVAS_W; x++) {
+    if (pixels[((CANVAS_H - 1 - y) * CANVAS_W + x) * 4 + 3] > 8) {
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+  }
+  if (x1 < 0) throw new Error('nothing drawn');
+  if (x0 === 0 || y0 === 0 || x1 === CANVAS_W - 1 || y1 === CANVAS_H - 1) throw new Error('sprite touches the canvas edge; make the canvas bigger');
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  out.getContext('2d').drawImage(renderer.domElement, x0, y0, w, h, 0, 0, w, h);
+  return { dataUrl: out.toDataURL('image/png'), w, h, ax: ORIGIN_X - x0, ay: ORIGIN_Y - y0 };
+};
+window.__ready = true;
+</script>

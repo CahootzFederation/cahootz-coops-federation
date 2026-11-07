@@ -96,6 +96,7 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
       upsert: vi.fn().mockResolvedValue({}),
       create: vi.fn().mockResolvedValue({}),
       delete: vi.fn().mockResolvedValue({}),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       count: vi.fn().mockResolvedValue(3),
       groupBy: vi.fn().mockResolvedValue([]),
       ...overrides.groupMember,
@@ -137,10 +138,12 @@ function makeDb(overrides: Record<string, Partial<Record<string, any>>> = {}) {
     commonsPost: {
       create: vi.fn().mockResolvedValue({}),
       findFirst: vi.fn().mockResolvedValue(null),
+      count: vi.fn().mockResolvedValue(0),
       ...overrides.commonsPost,
     },
     commonsComment: {
       create: vi.fn().mockResolvedValue({ id: 'comment_sage_1' }),
+      count: vi.fn().mockResolvedValue(0),
       ...overrides.commonsComment,
     },
     auditLog: {
@@ -275,6 +278,44 @@ describe('groupsRouter', () => {
       expect(db.group.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { coopId: 'artists', privacy: 'public' } }));
     });
 
+    it('counts new posts and comments from others since the member last opened each circle', async () => {
+      const date = new Date('2026-09-08T00:00:00.000Z');
+      const lastReadAt = new Date('2026-10-01T00:00:00.000Z');
+      const joined = { id: 'joined', name: 'Joined', purpose: null, privacy: 'invite-only', leaderId: ACTIVE_USER.id, createdAt: date, _count: { members: 2 } };
+      const neverOpened = { id: 'never', name: 'Never opened', purpose: null, privacy: 'invite-only', leaderId: 'another-user', createdAt: date, _count: { members: 3 } };
+      const publicCircle = { id: 'public', name: 'Open Circle', purpose: null, privacy: 'public', leaderId: 'another-user', createdAt: date, _count: { members: 4 } };
+      const db = makeDb({
+        groupMember: {
+          findMany: vi.fn().mockResolvedValue([
+            { groupId: 'joined', joinedAt: date, lastReadAt, group: joined },
+            { groupId: 'never', joinedAt: date, lastReadAt: null, group: neverOpened },
+          ]),
+        },
+        group: { findMany: vi.fn().mockResolvedValue([publicCircle]) },
+        commonsPost: { count: vi.fn(async ({ where }: any) => (where.circleId === 'joined' ? 2 : 0)) },
+        commonsComment: { count: vi.fn(async ({ where }: any) => (where.post.circleId === 'joined' ? 3 : 1)) },
+      });
+
+      const result = await callerFor(db).listVisible({ coopId: 'artists' });
+
+      expect(result.groups).toEqual([
+        expect.objectContaining({ id: 'joined', unreadCount: 5 }),
+        expect.objectContaining({ id: 'never', unreadCount: 1 }),
+        expect.objectContaining({ id: 'public', isMember: false, unreadCount: 0 }),
+      ]);
+      expect(db.commonsPost.count).toHaveBeenCalledWith({
+        where: { circleId: 'joined', authorId: { not: ACTIVE_USER.id }, createdAt: { gt: lastReadAt } },
+      });
+      // Never opened: count from when they joined, not from the beginning.
+      expect(db.commonsComment.count).toHaveBeenCalledWith({
+        where: { post: { circleId: 'never' }, authorId: { not: ACTIVE_USER.id }, createdAt: { gt: date } },
+      });
+      // Circles the caller hasn't joined are never counted.
+      expect(db.commonsPost.count).not.toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ circleId: 'public' }) }),
+      );
+    });
+
     it('does not reveal circles in a common the caller has not joined', async () => {
       const db = makeDb({
         userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null) },
@@ -344,7 +385,7 @@ describe('groupsRouter', () => {
         coopConfig: {
           findFirst: vi
             .fn()
-            .mockResolvedValue({ minScBalanceToCreateGroup: 10 }),
+            .mockResolvedValue({ minScBalanceToCreateGroup: 10, scTokenName: 'SoulCoin' }),
         },
       });
       vi.mocked(validateSCBalance).mockResolvedValueOnce(5);
@@ -353,6 +394,7 @@ describe('groupsRouter', () => {
         callerFor(db).create({ name: 'Block Club' }),
       ).rejects.toMatchObject({
         code: 'FORBIDDEN',
+        message: 'You need at least 10.00 SoulCoin to start a space. You have 5.00 SoulCoin.',
       });
       expect(db.group.create).not.toHaveBeenCalled();
     });
@@ -650,7 +692,13 @@ describe('groupsRouter', () => {
         data: { status: 'ACCEPTED', respondedAt: expect.any(Date) },
       });
       expect(db.groupMember.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ create: { groupId: 'group_1', userId: ACTIVE_USER.id } }),
+        expect.objectContaining({
+          create: {
+            groupId: 'group_1',
+            userId: ACTIVE_USER.id,
+            notificationLevel: 'HIGHLIGHTS',
+          },
+        }),
       );
     });
 
@@ -808,7 +856,7 @@ describe('groupsRouter', () => {
     it('creates one private circle with both people as members the first time', async () => {
       const db = makeDb({
         user: { findUnique: usersById() },
-        userCoopMembership: { upsert: vi.fn().mockResolvedValue({}) },
+        userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}) },
         group: {
           findUnique: vi.fn().mockResolvedValue(null),
           create: vi.fn().mockResolvedValue(directGroup),
@@ -818,6 +866,7 @@ describe('groupsRouter', () => {
       const result = await callerFor(db).openDirect({ userId: OTHER_USER.id });
 
       expect(result.groupId).toBe('dm_1');
+      expect(db.userCoopMembership.upsert).not.toHaveBeenCalled();
       expect(db.group.findUnique).toHaveBeenCalledWith({ where: { directKey: DIRECT_KEY } });
       const created = db.group.create.mock.calls[0][0].data;
       expect(created).toMatchObject({
@@ -966,7 +1015,7 @@ describe('groupsRouter', () => {
       expect(threads).toEqual([
         expect.objectContaining({
           groupId: 'dm_1',
-          person: { id: OTHER_USER.id, name: 'Bob', handle: 'bob' },
+          person: { id: OTHER_USER.id, name: 'Bob', handle: 'bob', isSage: false },
           preview: 'see you there',
           lastMessageFromMe: false,
           unreadCount: 2,
@@ -1035,7 +1084,11 @@ describe('groupsRouter', () => {
 
       expect(result.joined).toBe(true);
       expect(db.groupMember.upsert).toHaveBeenCalledWith(expect.objectContaining({
-        create: { groupId: 'group_1', userId: ACTIVE_USER.id },
+        create: {
+          groupId: 'group_1',
+          userId: ACTIVE_USER.id,
+          notificationLevel: 'HIGHLIGHTS',
+        },
       }));
     });
 
@@ -1048,13 +1101,13 @@ describe('groupsRouter', () => {
       expect(db.groupMember.upsert).not.toHaveBeenCalled();
     });
 
-    it('requires membership in the parent common before joining', async () => {
+    it.each(['artists', 'cahootz'])('requires membership in %s before joining its circle', async (coopId) => {
       const db = makeDb({
-        group: { findUnique: vi.fn().mockResolvedValue({ id: 'group_1', coopId: 'artists', privacy: 'public' }) },
+        group: { findUnique: vi.fn().mockResolvedValue({ id: 'group_1', coopId, privacy: 'public' }) },
         userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null) },
       });
 
-      await expect(callerFor(db).joinPublic({ groupId: 'group_1' })).rejects.toThrow('Join this common first');
+      await expect(callerFor(db).joinPublic({ groupId: 'group_1' })).rejects.toThrow('Join this commons first');
       expect(db.groupMember.upsert).not.toHaveBeenCalled();
     });
   });
@@ -1493,6 +1546,12 @@ describe('groupsRouter', () => {
   });
 
   describe('assignWelcomeTable', () => {
+    it('does not seat an account that has not chosen to join Cahootz', async () => {
+      const db = makeDb({ userCoopMembership: { findUnique: vi.fn().mockResolvedValue(null) } });
+      await expect(callerFor(db).assignWelcomeTable({})).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      expect(db.$transaction).not.toHaveBeenCalled();
+    });
+
     const baseConfig = {
       id: 'cfg_1',
       coopId: 'cahootz',
@@ -1540,10 +1599,14 @@ describe('groupsRouter', () => {
         }),
       );
       expect(db.groupMember.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { groupId: 'wt_1', userId: 'guide_1', role: 'GUIDE' } }),
+        expect.objectContaining({
+          data: { groupId: 'wt_1', userId: 'guide_1', role: 'GUIDE', notificationLevel: 'HIGHLIGHTS' },
+        }),
       );
       expect(db.groupMember.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' } }),
+        expect.objectContaining({
+          data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER', notificationLevel: 'HIGHLIGHTS' },
+        }),
       );
       expect(db.commonsPost.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -1576,7 +1639,9 @@ describe('groupsRouter', () => {
 
       expect(db.groupMember.create).toHaveBeenCalledTimes(1);
       expect(db.groupMember.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' } }),
+        expect.objectContaining({
+          data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER', notificationLevel: 'HIGHLIGHTS' },
+        }),
       );
       expect(db.group.create).not.toHaveBeenCalled();
       expect(db.commonsPost.create).not.toHaveBeenCalled();
@@ -1755,7 +1820,9 @@ describe('groupsRouter', () => {
       // Only the NEWCOMER row is created - no GUIDE membership when unguided.
       expect(db.groupMember.create).toHaveBeenCalledTimes(1);
       expect(db.groupMember.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER' } }),
+        expect.objectContaining({
+          data: { groupId: 'wt_1', userId: ACTIVE_USER.id, role: 'NEWCOMER', notificationLevel: 'HIGHLIGHTS' },
+        }),
       );
       expect(result.welcomeTableNumber).toBe(1);
     });
@@ -1779,6 +1846,17 @@ describe('groupsRouter', () => {
       );
     });
 
+    it('enterChat marks the circle read for the caller', async () => {
+      const db = makeDb(memberOfGroup1);
+
+      await callerFor(db).enterChat({ groupId: 'group_1' });
+
+      expect(db.groupMember.updateMany).toHaveBeenCalledWith({
+        where: { groupId: 'group_1', userId: ACTIVE_USER.id },
+        data: { lastReadAt: expect.any(Date) },
+      });
+    });
+
     it('enterChat rejects a non-member', async () => {
       const db = makeDb({
         ...memberOfGroup1,
@@ -1789,6 +1867,7 @@ describe('groupsRouter', () => {
         code: 'FORBIDDEN',
       });
       expect(db.circleChatPresence.upsert).not.toHaveBeenCalled();
+      expect(db.groupMember.updateMany).not.toHaveBeenCalled();
     });
 
     it('refreshChatPresence bumps lastActivityAt', async () => {

@@ -49,25 +49,33 @@ function shown(page: Page, text: string | RegExp, options?: { exact?: boolean })
   return page.getByText(text, options).filter({ visible: true });
 }
 
-/** Signs in from the sign-in screen and skips the wizard's intro (if shown) and profile steps. */
-async function signInFromSignInScreen(page: Page, email: string) {
+/** Verify an email through the shared sign-in/create-account form. */
+async function verifyEmail(page: Page, email: string) {
   await page.getByPlaceholder("name@email.com").fill(email);
-  await page.getByRole("button", { name: "Log in with code" }).click();
+  await page.getByRole("button", { name: "Continue with email" }).click();
   await page.getByPlaceholder("Enter 6-digit code").fill(TEST_CODE);
-  await page.getByRole("button", { name: "Verify & Sign In" }).click();
+  await page.getByRole("button", { name: "Verify and continue" }).click();
 
+}
+
+/** A new account begins with profile questions after verification. */
+async function signInFromSignInScreen(page: Page, email: string) {
+  await verifyEmail(page, email);
   await expect(page).toHaveURL(/profile-onboarding/);
-  // Someone who already saw the intro on this device starts at the profile form.
-  const introContinue = page.getByRole("button", { name: "Continue", exact: true });
   const deferProfile = page.getByRole("button", { name: "Do this later" });
-  await expect(introContinue.or(deferProfile).first()).toBeVisible();
-  if (await introContinue.isVisible()) await introContinue.click();
+  await expect(deferProfile).toBeVisible();
+  // Trying to finish an empty profile shows what's missing; skipping it
+  // must not carry that error onto the next step (checked by the caller).
+  await page.getByRole("button", { name: "Start using Cahootz" }).click();
+  await expect(shown(page, /Almost there\. To continue/)).toBeVisible();
   await deferProfile.click();
+  // The invite step comes next; the onboarding journey checks it, so stop here.
+  await expect(shown(page, "Bring people with you")).toBeVisible();
 }
 
 /**
  * A fresh browser signed in through the UI and left on the onboarding
- * wizard's last step ("Find your way in"), like a newcomer. The onboarding
+ * wizard's "Invite people you know" step, like a newcomer. The onboarding
  * journeys sign up throwaway accounts (see `newcomerEmail`) rather than the
  * shared releaseclick fixtures, so seating someone in a welcome lounge never
  * disturbs the lounge specs running alongside this file.
@@ -81,15 +89,7 @@ async function newcomerAtOnboardingChoices(browser: Browser, email: string) {
   const page = await context.newPage();
   await page.goto("/?entry=sign-in");
   await signInFromSignInScreen(page, email);
-  await expect(shown(page, "Find your way in")).toBeVisible();
   return { context, page };
-}
-
-/** Circle View shows the member's own lounge in place of the "join" card. */
-async function expectSeatedInWelcomeLounge(page: Page) {
-  await page.goto("/");
-  await expect(shown(page, /^Welcome Lounge \d+$/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Join a welcome lounge" })).toHaveCount(0);
 }
 
 test.describe.configure({ mode: "serial" });
@@ -196,6 +196,8 @@ test.describe("family commons", () => {
       await expect(steward.page.getByLabel("Family mission")).toHaveValue(`E2E mission ${runId}`);
       await shown(steward.page, "Create family", { exact: true }).click();
       await expect(steward.page).toHaveURL(/commons-invites\?coopId=family-/);
+      // A new family opens on a prompt to bring people in.
+      await expect(shown(steward.page, "Your family is ready")).toBeVisible();
       const familyPath = new URL(steward.page.url()).searchParams.get("coopId")!;
       await expect(shown(steward.page, "Steward tools")).toBeVisible();
 
@@ -221,6 +223,8 @@ test.describe("family commons", () => {
       await expect(shown(steward.page, new RegExp(`${customGoal} \\(60%\\): \\$5,000 within 6 months`))).toBeVisible();
       await steward.page.goto(`/commons-invites?coopId=${familyPath}`);
       await expect(shown(steward.page, "Steward tools")).toBeVisible();
+      // Only a just-created family shows the welcome prompt.
+      await expect(shown(steward.page, "Your family is ready")).toHaveCount(0);
 
       // A steward's named invitation, bound to the newcomer's email.
       await steward.page.getByLabel("Their name").fill("Cousin E2E");
@@ -241,11 +245,13 @@ test.describe("family commons", () => {
 
       // The family's page shows its goals, weighted as A set them.
       await steward.page.goto(`/commons/${familyPath}`);
-      await expect(shown(steward.page, "What we're building toward")).toBeVisible();
-      await expect(shown(steward.page, customGoal, { exact: true })).toBeVisible();
-      await expect(shown(steward.page, "Keep the family home in the family", { exact: true })).toBeVisible();
-      await expect(shown(steward.page, "60%", { exact: true })).toBeVisible();
-      await expect(shown(steward.page, "40%", { exact: true })).toBeVisible();
+      // Sage's "What Sage counts" card lists the same goals, so look inside the goals card.
+      const goals = steward.page.getByLabel("What we're building toward").filter({ visible: true });
+      await expect(goals).toBeVisible();
+      await expect(goals.getByText(customGoal, { exact: true })).toBeVisible();
+      await expect(goals.getByText("Keep the family home in the family", { exact: true })).toBeVisible();
+      await expect(goals.getByText("60%", { exact: true })).toBeVisible();
+      await expect(goals.getByText("40%", { exact: true })).toBeVisible();
 
       // Now that someone here isn't a steward, stewards can't change the
       // setup on their own anymore.
@@ -262,19 +268,37 @@ test.describe("family commons", () => {
     }
   });
 
-  test("a newcomer who goes to General from onboarding is still seated in a welcome lounge", async ({
+  test("a newcomer chooses Cahootz Commons explicitly and is not seated in a welcome lounge", async ({
     browser,
   }) => {
     test.setTimeout(180_000);
     const newcomer = await newcomerAtOnboardingChoices(browser, generalNewcomer);
 
     try {
-      await shown(newcomer.page, "Go to General").click();
-      await expect(newcomer.page).toHaveURL(/\/cahootz\/posts/);
-      await expect(
-        newcomer.page.getByRole("textbox", { name: "Share what's happening..." }),
-      ).toBeVisible();
-      await expectSeatedInWelcomeLounge(newcomer.page);
+      // Web has no contact picker, so inviting someone copies a message with
+      // the app link instead.
+      await newcomer.context.grantPermissions(["clipboard-read", "clipboard-write"]);
+      await newcomer.page.evaluate(() => {
+        (navigator as { share?: unknown }).share = undefined;
+      });
+      await newcomer.page.getByRole("button", { name: "Share an invitation" }).click();
+      await expect(shown(newcomer.page, "Invitation copied. Paste it into a text or email.")).toBeVisible();
+      expect(await newcomer.page.evaluate(() => navigator.clipboard.readText())).toContain(
+        "https://cahootzcommons.com",
+      );
+
+      // The profile step's "Almost there" error doesn't follow onto later steps.
+      await expect(shown(newcomer.page, /Almost there\. To continue/)).toHaveCount(0);
+      await newcomer.page.getByRole("button", { name: "Next", exact: true }).click();
+      await expect(shown(newcomer.page, "Find your people")).toBeVisible();
+      await expect(newcomer.page.getByRole("button", { name: "Skip for now", exact: true })).toHaveCount(0);
+      await newcomer.page.getByRole("button", { name: "Explore commons" }).click();
+      await newcomer.page.getByRole("button", { name: /^View Cahootz(?: Commons| Coop)? details$/ }).click();
+      await newcomer.page.getByRole("button", { name: "Join commons", exact: true }).click();
+      await expect(shown(newcomer.page, "Welcome In")).toBeVisible();
+      await expect(newcomer.page.getByRole("button", { name: "Join a welcome lounge" })).toBeVisible();
+      await newcomer.page.reload();
+      await expect(shown(newcomer.page, "Welcome In")).toBeVisible();
     } finally {
       await newcomer.context.close();
     }
@@ -308,16 +332,18 @@ test.describe("family commons", () => {
       await expect(shown(visitor, /This is a private family space/)).toBeVisible();
       await shown(visitor, "Sign in or create an account", { exact: true }).click();
 
-      // After signing in (and the onboarding wizard), the link resumes, and it
-      // only lets User B ask to join.
-      await signInFromSignInScreen(visitor, USER_B_EMAIL);
+      // This established account skips onboarding and resumes the forwarded link.
+      // Signing in still only lets User B request access; it never enrolls them.
+      await verifyEmail(visitor, USER_B_EMAIL);
       await expect(visitor).toHaveURL(/\/invite\//);
+      await expect(shown(visitor, "Build your profile", { exact: true })).toHaveCount(0);
       await expect(shown(visitor, "Request access", { exact: true })).toBeVisible();
 
       // The link never grants membership: it only sends a request.
       await visitor.getByRole("checkbox", { name: `I agree to ${familyName}'s rules` }).click();
       await visitor
         .getByPlaceholder("Add a note so they know it's you (optional)")
+        .filter({ visible: true })
         .fill(`E2E ${runId}: it's your cousin`);
       await shown(visitor, "Request access", { exact: true }).click();
       await expect(shown(visitor, "Request sent")).toBeVisible();
@@ -365,6 +391,7 @@ test.describe("family commons", () => {
 
       // The application opens; submitting it leaves them pending, not a member.
       await expect(shown(invitee.page, "Send application", { exact: true })).toBeVisible();
+      await expect(invitee.page).not.toHaveURL(/[?&]apply=1/);
       const phone = invitee.page.getByPlaceholder("Phone");
       if (await phone.isVisible().catch(() => false)) await phone.fill("(555) 010-4242");
       await shown(invitee.page, "Send application", { exact: true }).click();
@@ -372,6 +399,7 @@ test.describe("family commons", () => {
       await shown(invitee.page, "Done", { exact: true }).click();
       await invitee.page.reload();
       await expect(shown(invitee.page, "Application pending").first()).toBeVisible();
+      await expect(shown(invitee.page, "Send application", { exact: true })).toHaveCount(0);
 
       // User A sees their invitation was used for an application.
       await member.page.reload();
@@ -385,4 +413,40 @@ test.describe("family commons", () => {
       await invitee.context.close();
     }
   });
+});
+
+
+test("a new account resumes a forwarded family link after profile setup", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const familyName = `E2E Family Invite Setup ${runId}`;
+  const email = `e2e-invite-setup-${runId}@test.cahootz.local`;
+  const steward = await newSignedInPage(browser, USER_A_EMAIL);
+  const visitorContext = await browser.newContext({ viewport: { width: 430, height: 932 } });
+  const visitor = await visitorContext.newPage();
+  try {
+    await steward.page.goto("/commons");
+    await steward.page.getByRole("button", { name: "Start a family" }).click();
+    await steward.page.getByLabel("Family name").filter({ visible: true }).fill(familyName);
+    await shown(steward.page, "Skip for now and create the family", { exact: true }).click();
+    await expect(steward.page).toHaveURL(/commons-invites\?coopId=family-/);
+    await shown(steward.page, "Create a shareable link").click();
+    const link = (await steward.page.getByLabel("Shareable link").textContent())!.trim();
+    await visitor.goto(new URL(link).pathname);
+    await shown(visitor, "Sign in or create an account", { exact: true }).click();
+    await signInFromSignInScreen(visitor, email);
+    await visitor.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(visitor).toHaveURL(/\/invite\//);
+    await expect(shown(visitor, "Request access", { exact: true })).toBeVisible();
+    await expect(shown(visitor, "Build your profile", { exact: true })).toHaveCount(0);
+    await expect(visitor.getByRole("tablist", { name: "Main navigation" })).toHaveCount(0);
+    await visitor.reload({ waitUntil: "domcontentloaded" });
+    await expect(shown(visitor, "Request access", { exact: true })).toBeVisible();
+    await expect(shown(visitor, `You're already in ${familyName}`)).toHaveCount(0);
+  } finally {
+    await visitorContext.close();
+    await steward.context.close();
+    familyFixture("cleanup", familyName);
+    familyFixture("cleanup-newcomers", email);
+  }
 });

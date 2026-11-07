@@ -1,3 +1,4 @@
+import { DESIGN } from '@/constants/design';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -19,6 +20,8 @@ import {
   Plus,
   ShoppingCart,
   AlertCircle,
+  CheckCircle2,
+  Truck,
 } from 'lucide-react-native';
 import { api } from '@/lib/api';
 import { useCart } from '@/contexts/cart-context';
@@ -126,7 +129,7 @@ export default function ProductDetailScreen() {
     return (
       <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
         <View className="flex-row items-center px-5 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-          <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
+          <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back" className="h-11 w-11 items-center justify-center">
             <ArrowLeft size={24} color="#374151" />
           </TouchableOpacity>
           <Text className="text-lg font-semibold text-gray-900 dark:text-white ml-4">Product</Text>
@@ -163,18 +166,31 @@ export default function ProductDetailScreen() {
   }
 
   const allImages = [product.imageUrl, ...(product.images || [])].filter(Boolean);
+  const isAvailable = !product.trackInventory || product.quantity > 0 || product.allowBackorder;
+  const availabilityNote = !product.trackInventory
+    ? 'Available'
+    : product.quantity > 10
+      ? 'Available'
+      : product.quantity > 0
+        ? `Available · ${product.quantity} left`
+        : product.allowBackorder
+          ? 'Available by backorder'
+          : 'Unavailable';
+  const deliveryNote = product.kind === 'FUNDING_BADGE'
+    ? 'Added to your account after purchase'
+    : 'Delivered to the address provided at checkout';
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-white dark:bg-gray-900" edges={['top']}>
       {/* Header */}
       <View className="flex-row items-center justify-between px-5 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Go back">
+        <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back" className="h-11 w-11 items-center justify-center">
           <ArrowLeft size={24} color="#374151" />
         </TouchableOpacity>
         <Text className="text-lg font-semibold text-gray-900 dark:text-white flex-1 ml-4" numberOfLines={1}>
           {product.name}
         </Text>
-        <TouchableOpacity onPress={() => router.push('/cart')} className="relative">
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Shopping cart" onPress={() => router.push('/cart')} className="relative h-11 w-11 items-center justify-center">
           <ShoppingCart size={24} color="#374151" />
           {totalItems > 0 && (
             <View className="absolute -top-2 -right-2 bg-primary w-5 h-5 rounded-full items-center justify-center">
@@ -187,7 +203,7 @@ export default function ProductDetailScreen() {
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         {/* Product Images */}
         <View className="bg-white dark:bg-gray-800">
-          <View className="h-80 bg-gray-200 dark:bg-gray-700">
+          <View testID="product-media" className={allImages.length > 0 ? "h-80 bg-gray-100 dark:bg-gray-700" : "px-5 pt-5"}>
             {allImages.length > 0 ? (
               <Image
                 source={{ uri: allImages[selectedImage] }}
@@ -195,8 +211,8 @@ export default function ProductDetailScreen() {
                 resizeMode="contain"
               />
             ) : (
-              <View className="w-full h-full items-center justify-center">
-                <ShoppingBag size={80} color="#9CA3AF" />
+              <View testID="product-icon-fallback" className="h-16 w-16 items-center justify-center rounded-2xl" style={{ backgroundColor: DESIGN.green }}>
+                <ShoppingBag size={30} color={DESIGN.ink} />
               </View>
             )}
             {/* Sale Badge */}
@@ -242,7 +258,8 @@ export default function ProductDetailScreen() {
           {/* Store Info */}
           <TouchableOpacity
             onPress={() => router.push(`/store-detail?id=${product.store.id}`)}
-            className="flex-row items-center mb-4"
+            accessibilityLabel={`Open ${product.store.name}`}
+            className="flex-row flex-wrap items-center gap-y-2 mb-4"
           >
             <Store size={16} color="#6B7280" />
             <Text className="text-gray-600 dark:text-gray-400 ml-2">
@@ -276,31 +293,36 @@ export default function ProductDetailScreen() {
 
           </View>
 
-          {/* Stock Status */}
-          {product.trackInventory && (
-            <View className="mt-4 flex-row items-center">
-              {product.quantity > 0 ? (
-                <>
-                  <View className="w-2 h-2 rounded-full bg-green-500 mr-2" />
-                  <Text className="text-green-600 dark:text-green-400">
-                    {product.quantity > 10 ? 'In Stock' : `Only ${product.quantity} left`}
-                  </Text>
-                </>
-              ) : product.allowBackorder ? (
-                <>
-                  <View className="w-2 h-2 rounded-full bg-primary mr-2" />
-                  <Text className="text-primary dark:text-amber-400">
-                    Available for backorder
-                  </Text>
-                </>
+          {/* Availability and fulfillment */}
+          <View className="mt-5 border-y border-gray-200 dark:border-gray-700">
+            <View className="min-h-16 flex-row items-center py-3 border-b border-gray-200 dark:border-gray-700">
+              {isAvailable ? (
+                <CheckCircle2 size={21} color="#15803D" />
               ) : (
-                <>
-                  <View className="w-2 h-2 rounded-full bg-red-500 mr-2" />
-                  <Text className="text-red-600 dark:text-red-400">Out of Stock</Text>
-                </>
+                <AlertCircle size={21} color="#DC2626" />
               )}
+              <View className="ml-3 flex-1">
+                <Text className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  Availability
+                </Text>
+                <Text className={`mt-1 font-semibold ${isAvailable ? 'text-green-700 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {availabilityNote}
+                </Text>
+              </View>
             </View>
-          )}
+            <View className="min-h-16 flex-row items-center py-3">
+              <Truck size={21} color="#374151" />
+              <View className="ml-3 flex-1">
+                <Text className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  Fulfillment
+                </Text>
+                <Text className="mt-1 font-semibold text-gray-900 dark:text-white">Delivery</Text>
+                <Text className="mt-0.5 text-sm text-gray-600 dark:text-gray-300">
+                  {deliveryNote}
+                </Text>
+              </View>
+            </View>
+          </View>
 
           {/* Description */}
           {product.description && (
@@ -335,11 +357,11 @@ export default function ProductDetailScreen() {
       {/* Bottom Action Bar */}
       <View className="bg-white dark:bg-gray-800 px-5 py-4 border-t border-gray-200 dark:border-gray-700">
         {/* Quantity Selector */}
-        <View className="flex-row items-center justify-between mb-4">
+        <View className="flex-row items-center justify-between mb-2">
           <Text className="text-gray-700 dark:text-gray-300 font-medium">Quantity</Text>
           <View className="flex-row items-center bg-gray-100 dark:bg-gray-700 rounded-full">
             <TouchableOpacity
-              onPress={() => setQuantity(Math.max(1, quantity - 1))}
+              accessibilityRole="button" accessibilityLabel="Decrease quantity" onPress={() => setQuantity(Math.max(1, quantity - 1))}
               className="p-3"
             >
               <Minus size={18} color="#6B7280" />
@@ -348,6 +370,7 @@ export default function ProductDetailScreen() {
               {quantity}
             </Text>
             <TouchableOpacity
+              accessibilityRole="button" accessibilityLabel="Increase quantity"
               onPress={() => {
                 if (!product.trackInventory || product.quantity === null || quantity < product.quantity || product.allowBackorder) {
                   setQuantity(quantity + 1);
@@ -363,8 +386,10 @@ export default function ProductDetailScreen() {
         {/* Action Buttons */}
         <View className="flex-row gap-3">
           <TouchableOpacity
-            onPress={handleAddToCart}
-            className="flex-1 bg-gray-100 dark:bg-gray-700 py-4 rounded-xl flex-row items-center justify-center"
+            accessibilityRole="button" onPress={handleAddToCart}
+            disabled={!isAvailable}
+            accessibilityState={{ disabled: !isAvailable }}
+            className={`flex-1 bg-gray-100 dark:bg-gray-700 py-3 rounded-xl flex-row items-center justify-center ${!isAvailable ? 'opacity-50' : ''}`}
           >
             <ShoppingCart size={20} color="#374151" />
             <Text className="text-gray-700 dark:text-gray-300 font-semibold ml-2">
@@ -372,16 +397,17 @@ export default function ProductDetailScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={handleBuyNow}
-            className="flex-1 bg-primary py-4 rounded-xl flex-row items-center justify-center"
-            disabled={product.trackInventory && product.quantity === 0 && !product.allowBackorder}
+            accessibilityRole="button" onPress={handleBuyNow}
+            className={`flex-1 bg-primary py-3 rounded-xl flex-row items-center justify-center ${!isAvailable ? 'opacity-50' : ''}`}
+            disabled={!isAvailable}
+            accessibilityState={{ disabled: !isAvailable }}
           >
-            <Text className="text-white font-bold">Buy Now</Text>
+            <Text className="font-bold" style={{ color: DESIGN.ink }}>Buy Now</Text>
           </TouchableOpacity>
         </View>
 
         {/* Total */}
-        <View className="flex-row items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <View className="flex-row items-center justify-between mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
           <Text className="text-gray-600 dark:text-gray-400">Total</Text>
           <Text className="text-xl font-bold text-gray-900 dark:text-white">
             {formatPrice(product.priceUSD * quantity)}

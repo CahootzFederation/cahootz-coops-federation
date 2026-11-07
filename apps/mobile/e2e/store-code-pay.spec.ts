@@ -43,7 +43,7 @@ async function activeCoopId(page: Page): Promise<string> {
   return coopId;
 }
 
-test("member pays a store by typing its code, up to the confirm step", async ({ browser }) => {
+test("member pays a store by typing its code, up to the confirm step", { tag: "@smoke" }, async ({ browser }) => {
   const member = await newSignedInPage(browser, USER_A_EMAIL);
   const { page } = member;
   const code = `E2EQP${Date.now().toString(36).slice(-6).toUpperCase()}`;
@@ -62,7 +62,7 @@ test("member pays a store by typing its code, up to the confirm step", async ({ 
     // You -> Pay a store -> Enter Code Manually.
     await page.getByRole("tab", { name: "You" }).click();
     await shown(page, "Pay a store", { exact: true }).click();
-    await expect(page).toHaveURL(/\/scan-pay$/);
+    await expect(page).toHaveURL((url) => url.pathname === "/scan-pay");
     await visibleButton(page, "Enter Code Manually").click();
 
     // A code that doesn't exist says so on screen.
@@ -131,7 +131,7 @@ test("there is no Add Money anywhere in the wallet, and the old screen is gone",
     await expect(shown(page, addMoney)).toHaveCount(0);
 
     await shown(page, "Wallet", { exact: true }).click();
-    await expect(page).toHaveURL(/\/payment-methods$/);
+    await expect(page).toHaveURL((url) => url.pathname === "/payment-methods");
     await expect(shown(page, "Wallet Address", { exact: true })).toBeVisible();
     await expect(shown(page, addMoney)).toHaveCount(0);
 

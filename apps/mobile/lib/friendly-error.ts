@@ -2,10 +2,12 @@
  * Turns anything a screen catches into a sentence a member can act on.
  *
  * API calls in lib/api.ts throw `ApiError`s that carry the server's tRPC
- * error code and HTTP status. Servers often write good messages on purpose
- * ("Store not found or not accepting quick payments"), so those are shown
- * as-is. Raw validation dumps, database errors, stack traces, bare HTTP
- * statuses, and network failures are replaced with plain wording instead.
+ * error code and HTTP status. Some server messages are written for members
+ * ("That @ is already taken."), so those are shown as-is. Stiff system
+ * wording ("Failed to…", "X not found", "Unauthorized", "Invalid…",
+ * "Insufficient…", "Cannot…", "coopId is required"), raw validation dumps,
+ * database errors, stack traces, bare HTTP statuses, and network failures
+ * are replaced with the screen's plain wording instead.
  * A raw validation dump means the app sent something the server rejected,
  * which the member can't fix by retyping, so it gets the screen's fallback
  * too (forms check what people typed before sending).
@@ -89,9 +91,24 @@ const TECHNICAL_PATTERN = new RegExp(
     'expected (string|number|boolean|object|array)',
     'received (string|number|boolean|object|array|undefined)',
     'zod',
+    // Stiff server wording. The screen's "We couldn't…" fallback reads better.
+    '^failed to\\b',
+    '\\bnot found\\b',
+    '\\bunauthori[sz]ed\\b',
+    '\\bforbidden\\b',
+    '^invalid\\b',
+    '^insufficient\\b',
+    '^cannot\\b',
+    '^unable to\\b',
+    '\\bis required\\b',
+    'with status \\w+',
   ].join('|'),
   'i',
 );
+
+// Internal names like `coopId` or `MUTUAL_MATCH`. Case matters here, so this
+// can't live in TECHNICAL_PATTERN.
+const IDENTIFIER_PATTERN = /\b[a-z]{2,}[A-Z]\w*\b|\b[A-Z]{2,}_[A-Z_]+\b/;
 
 function endSentence(text: string) {
   const trimmed = text.trim();
@@ -129,7 +146,7 @@ export function isReadableMessage(message: string): boolean {
   if (!trimmed || trimmed.length > MAX_SHOWN_LENGTH) return false;
   if (trimmed.includes('\n')) return false;
   if (looksLikeValidationDump(trimmed)) return false;
-  return !TECHNICAL_PATTERN.test(trimmed);
+  return !TECHNICAL_PATTERN.test(trimmed) && !IDENTIFIER_PATTERN.test(trimmed);
 }
 
 export function friendlyError(err: unknown, fallback: string = DEFAULT_FALLBACK): string {

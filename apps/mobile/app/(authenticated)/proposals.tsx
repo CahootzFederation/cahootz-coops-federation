@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { CommunityTheme } from '@/constants/theme';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ScrollView,
   View,
@@ -15,7 +16,6 @@ import {
   CheckCircle,
   Sparkles,
   X,
-  AlertCircle,
   Lightbulb,
   DollarSign,
 } from 'lucide-react-native';
@@ -24,6 +24,7 @@ import { Text } from '@/components/ui/text';
 import { api } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
 import { withAlpha } from '@/lib/brand-colors';
+import { keyboardScrollProps } from '@/lib/keyboard';
 
 // ── Colors ───────────────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ const C = {
   gold100: '#FEF3C7',
   gold200: '#FDE68A',
   gold600: '#FF8A2A',
-  gold700: '#FF6B00',
+  gold700: CommunityTheme.primary,
   gold800: '#92400E',
   green50: '#F0FDF4',
   green100: '#DCFCE7',
@@ -46,14 +47,14 @@ const C = {
   blue600: '#2563EB',
   blue700: '#1D4ED8',
   amber50: '#FFFBEB',
-  amber700: '#FF6B00',
+  amber700: CommunityTheme.primary,
   red50: '#FEF2F2',
   red200: '#FECACA',
   redText: '#DC2626',
-  cream50: '#FAF8F5',
-  cream100: '#F5F0EB',
-  cream200: '#E9E0D0',
-  cream300: '#DDD2BF',
+  cream50: CommunityTheme.sheet,
+  cream100: CommunityTheme.sheet,
+  cream200: CommunityTheme.border,
+  cream300: CommunityTheme.border,
   charcoal400: '#9CA3AF',
   charcoal500: '#6B7280',
   charcoal600: '#4B5563',
@@ -100,13 +101,13 @@ const MIN_IDEA = 5;
 const MIN_WHY = 20;
 
 /** Plain list of what's still missing, so Send can say why it can't go yet. */
-function missingProposalParts(form: FormData, hasCategories: boolean): string[] {
-  const missing: string[] = [];
-  if (form.idea.trim().length < MIN_IDEA) missing.push('Say what you want to do');
-  if (hasCategories && !form.category) missing.push('Pick the kind of proposal');
-  if (form.why.trim().length < MIN_WHY) missing.push('Say why it matters and who it helps (a sentence or two)');
-  if (!form.costUnsure && form.cost.trim() === '') missing.push('Give a rough cost, or tap "Not sure yet"');
-  if (!form.timeline) missing.push('Pick when it would happen');
+function missingProposalParts(form: FormData, hasCategories: boolean): { field: keyof FormData; message: string }[] {
+  const missing: { field: keyof FormData; message: string }[] = [];
+  if (form.idea.trim().length < MIN_IDEA) missing.push({ field: 'idea', message: 'Say what you want to do' });
+  if (hasCategories && !form.category) missing.push({ field: 'category', message: 'Pick the kind of proposal' });
+  if (form.why.trim().length < MIN_WHY) missing.push({ field: 'why', message: 'Say why it matters and who it helps (a sentence or two)' });
+  if (!form.costUnsure && form.cost.trim() === '') missing.push({ field: 'cost', message: 'Give a rough cost, or tap "Not sure yet"' });
+  if (!form.timeline) missing.push({ field: 'timeline', message: 'Pick when it would happen' });
   return missing;
 }
 
@@ -119,6 +120,10 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
   primaryColor: string;
   accentColor: string;
 }) {
+  const scrollRef = useRef<ScrollView>(null);
+  const inputRefs = useRef<Partial<Record<keyof FormData, TextInput | null>>>({});
+  const fieldY = useRef<Partial<Record<keyof FormData, number>>>({});
+  const [attempted, setAttempted] = useState(false);
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [showMore, setShowMore] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -144,6 +149,9 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
     setError(null);
   }
 
+  const missing = attempted ? missingProposalParts(form, categories.length > 0) : [];
+  const fieldError = (field: keyof FormData) => missing.find((item) => item.field === field)?.message;
+
   const categoryLabel = categories.find(c => c.id === form.category)?.label ?? form.category;
   const costText = form.costUnsure || form.cost.trim() === ''
     ? 'Not sure yet'
@@ -152,7 +160,11 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
   async function handleSubmit() {
     const missing = missingProposalParts(form, categories.length > 0);
     if (missing.length > 0) {
-      setError(`Almost there. To send it:\n• ${missing.join('\n• ')}`);
+      setAttempted(true);
+      setError(null);
+      const first = missing[0]!;
+      scrollRef.current?.scrollTo({ y: Math.max(0, (fieldY.current[first.field] ?? 0) - 16), animated: false });
+      inputRefs.current[first.field]?.focus();
       return;
     }
     setSubmitting(true);
@@ -183,6 +195,7 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
 
   function handleClose() {
     setForm(EMPTY_FORM);
+    setAttempted(false);
     setShowMore(false);
     setSubmitted(false);
     setSubmitting(false);
@@ -202,7 +215,7 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: C.white }}>
+      <SafeAreaView style={{ flex: 1, width: '100%', maxWidth: CommunityTheme.pageMaxWidth, alignSelf: 'center', backgroundColor: C.white }}>
         {/* Header */}
         <View style={styles.modalHeader}>
           <Text style={{ fontWeight: '700', color: C.charcoal800, fontSize: 17 }}>
@@ -219,7 +232,7 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
         </View>
 
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+          <ScrollView ref={scrollRef} {...keyboardScrollProps} style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
 
             {/* ── Sending ── */}
             {submitting && (
@@ -263,9 +276,10 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
                 </View>
 
                 {/* 1. What */}
-                <View style={{ gap: 8 }}>
+                <View onLayout={(event) => { fieldY.current.idea = event.nativeEvent.layout.y; fieldY.current.category = event.nativeEvent.layout.y; }} style={{ gap: 8 }}>
                   <Text style={styles.label}>1. What do you want to do?</Text>
                   <TextInput
+                    ref={(node) => { inputRefs.current.idea = node; }}
                     value={form.idea}
                     onChangeText={v => set('idea', v)}
                     placeholder="e.g., Start a weekly tutoring program for kids"
@@ -273,9 +287,11 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
                     accessibilityLabel="What do you want to do?"
                     style={styles.input}
                   />
+                  {fieldError('idea') ? <Text style={{ color: C.red700 }}>{fieldError('idea')}</Text> : null}
                   {categories.length > 0 && (
                     <>
                       <Text style={{ color: C.charcoal600, fontSize: 15, marginTop: 4 }}>What kind of proposal is it?</Text>
+                      {fieldError('category') ? <Text style={{ color: C.red700 }}>{fieldError('category')}</Text> : null}
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                         {categories.map(cat => (
                           <TouchableOpacity
@@ -294,9 +310,10 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
                 </View>
 
                 {/* 2. Why */}
-                <View style={{ gap: 8 }}>
+                <View onLayout={(event) => { fieldY.current.why = event.nativeEvent.layout.y; }} style={{ gap: 8 }}>
                   <Text style={styles.label}>2. Why does it matter, and who does it help?</Text>
                   <TextInput
+                    ref={(node) => { inputRefs.current.why = node; }}
                     value={form.why}
                     onChangeText={v => set('why', v)}
                     placeholder="e.g., Many kids on our block fall behind in reading. This gives them a safe place to get help after school."
@@ -309,15 +326,17 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
                   />
                 </View>
 
+                {fieldError('why') ? <Text style={{ color: C.red700 }}>{fieldError('why')}</Text> : null}
                 {/* 3. What it takes */}
-                <View style={{ gap: 8 }}>
+                <View onLayout={(event) => { fieldY.current.cost = event.nativeEvent.layout.y; fieldY.current.timeline = event.nativeEvent.layout.y; }} style={{ gap: 8 }}>
                   <Text style={styles.label}>3. What will it take?</Text>
                   <Text style={{ color: C.charcoal600, fontSize: 15 }}>About how much money? A rough guess is fine.</Text>
                   <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                     <View style={[styles.input, { flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: 0, opacity: form.costUnsure ? 0.5 : 1 }]}>
                       <DollarSign size={16} color={C.charcoal600} />
                       <TextInput
-                        value={form.cost}
+                        ref={(node) => { inputRefs.current.cost = node; }}
+                    value={form.cost}
                         onChangeText={v => setForm(prev => ({ ...prev, cost: v, costUnsure: v ? false : prev.costUnsure }))}
                         editable={!form.costUnsure}
                         keyboardType="numeric"
@@ -336,7 +355,9 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
                       <Text style={{ color: C.charcoal800, fontSize: 15, fontWeight: '600' }}>Not sure yet</Text>
                     </TouchableOpacity>
                   </View>
+                  {fieldError('cost') ? <Text style={{ color: C.red700 }}>{fieldError('cost')}</Text> : null}
                   <Text style={{ color: C.charcoal600, fontSize: 15, marginTop: 8 }}>When would it happen?</Text>
+                  {fieldError('timeline') ? <Text style={{ color: C.red700 }}>{fieldError('timeline')}</Text> : null}
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                     {TIMELINES.map(t => (
                       <TouchableOpacity
@@ -390,12 +411,7 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
                   )}
                 </View>
 
-                {error && (
-                  <View accessibilityRole="alert" style={{ backgroundColor: C.red50, borderWidth: 1, borderColor: C.red200, borderRadius: 12, padding: 12, flexDirection: 'row', gap: 8 }}>
-                    <AlertCircle size={16} color={C.redText} />
-                    <Text style={{ color: C.redText, fontSize: 15, flex: 1, lineHeight: 21 }}>{error}</Text>
-                  </View>
-                )}
+
               </View>
             )}
           </ScrollView>
@@ -403,11 +419,18 @@ export function SubmitModal({ visible, onClose, walletAddress, coopId, coopName,
 
         {/* Footer */}
         {!submitting && !submitted && (
-          <View style={styles.modalFooter}>
+          <View style={[styles.modalFooter, { flexDirection: 'column' }]}>
+            {error || missing.length > 0 ? (
+              <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={{ marginBottom: 12 }}>
+                <Text style={{ color: C.red700, fontSize: 14, lineHeight: 20 }}>
+                  {error || `To send: ${missing[0]?.message}${missing.length > 1 ? ` (${missing.length - 1} more to finish)` : ''}`}
+                </Text>
+              </View>
+            ) : null}
             <TouchableOpacity
               onPress={handleSubmit}
               accessibilityRole="button"
-              style={[styles.primaryBtn, { minHeight: 48, backgroundColor: accentColor }]}
+              style={[styles.primaryBtn, { flex: 0, minHeight: 48, backgroundColor: accentColor }]}
             >
               <Sparkles size={16} color={C.white} />
               <Text style={{ color: C.white, fontWeight: '700', fontSize: 16 }}>Send proposal</Text>

@@ -9,7 +9,6 @@ import { sendLoginCode, generateLoginCode, isEmailConfigured } from "../lib/emai
 import {
   COMMONS_COOP_ID,
   createAccountSession,
-  ensureCommonsMembership,
   ensureUserHandle,
   getCoopSessionData,
 } from "../lib/commons.js";
@@ -63,6 +62,7 @@ export const authRouter = router({
         email: z.string(),
         handle: z.string(),
         name: z.string().nullable(),
+        nickname: z.string().nullable(),
         roles: z.array(z.string()),
         status: z.string(),
         walletAddress: z.string().nullable(),
@@ -79,6 +79,10 @@ export const authRouter = router({
         locationSummary: z.string().nullable(),
         profileSignals: z.any(),
         profileOnboardingCompletedAt: z.date().nullable(),
+        onboardingStep: z.string().default('welcome'),
+        onboardingCompletedAt: z.date().nullable().default(null),
+        onboardingDraft: z.any().default({}),
+        isFirstLogin: z.boolean(),
         sessionToken: z.string().optional(),
         coop: z.object({
           id: z.string(),
@@ -157,13 +161,16 @@ export const authRouter = router({
               })
             : user;
 
-        await ensureCommonsMembership(context.db, activeUser.id);
         const handle = await ensureUserHandle(context.db, activeUser);
         const sessionToken = await createAccountSession(
           context.db,
           context,
           activeUser.id,
         );
+        const firstLogin = await context.db.user.updateMany({
+          where: { id: activeUser.id, firstLoginAt: null },
+          data: { firstLoginAt: new Date() },
+        });
         const coopData = await getCoopSessionData(context.db, COMMONS_COOP_ID);
 
         // User is active, allow login
@@ -175,6 +182,7 @@ export const authRouter = router({
             email: activeUser.email,
             handle,
             name: activeUser.name,
+            nickname: activeUser.nickname ?? null,
             roles: activeUser.roles,
             status: activeUser.status,
             walletAddress: activeUser.walletAddress,
@@ -191,6 +199,10 @@ export const authRouter = router({
             locationSummary: activeUser.locationSummary,
             profileSignals: activeUser.profileSignals,
             profileOnboardingCompletedAt: activeUser.profileOnboardingCompletedAt,
+            onboardingStep: user.onboardingStep,
+            onboardingCompletedAt: user.onboardingCompletedAt,
+            onboardingDraft: user.onboardingDraft,
+            isFirstLogin: firstLogin.count === 1,
             sessionToken,
             coop: coopData,
           },
@@ -296,7 +308,7 @@ export const authRouter = router({
         const email = normalizeEmail(input.email);
         const isCommonsLogin = !input.coopId || input.coopId === COMMONS_COOP_ID;
 
-        let user = await context.db.user.findUnique({
+        const findUser = () => context.db.user.findUnique({
           where: { email },
           select: {
             id: true,
@@ -315,31 +327,23 @@ export const authRouter = router({
             },
           },
         });
+        let user = await findUser();
 
         if (!user && isCommonsLogin) {
-          user = await context.db.user.create({
-            data: {
-              email,
-              roles: ["member"],
-              status: "ACTIVE",
-            },
-            select: {
-              id: true,
-              status: true,
-              deletedAt: true,
-              walletAddress: true,
-              wallets: {
-                where: { isPrimary: true },
-                select: { address: true },
-                take: 1,
+          try {
+            await context.db.user.create({
+              data: {
+                email,
+                roles: ["member"],
+                status: "ACTIVE",
               },
-              memberships: {
-                where: { coopId: COMMONS_COOP_ID },
-                select: { status: true },
-                take: 1,
-              },
-            },
-          });
+            });
+          } catch (error) {
+            // A second code request for the same new email (a double tap) can
+            // create the account first. Use theirs instead of failing.
+            if ((error as { code?: string })?.code !== "P2002") throw error;
+          }
+          user = await findUser();
         }
 
         if (!user) {
@@ -375,7 +379,6 @@ export const authRouter = router({
             where: { id: user.id, status: "PENDING" },
             data: { status: "ACTIVE" },
           });
-          await ensureCommonsMembership(context.db, user.id);
         }
 
         if (input.coopId && input.coopId !== COMMONS_COOP_ID) {
@@ -463,6 +466,7 @@ export const authRouter = router({
         email: z.string(),
         handle: z.string(),
         name: z.string().nullable(),
+        nickname: z.string().nullable(),
         roles: z.array(z.string()),
         status: z.string(),
         walletAddress: z.string().nullable(),
@@ -479,6 +483,10 @@ export const authRouter = router({
         locationSummary: z.string().nullable(),
         profileSignals: z.any(),
         profileOnboardingCompletedAt: z.date().nullable(),
+        onboardingStep: z.string().default('welcome'),
+        onboardingCompletedAt: z.date().nullable().default(null),
+        onboardingDraft: z.any().default({}),
+        isFirstLogin: z.boolean(),
         sessionToken: z.string(),
         coop: z.object({
           id: z.string(),
@@ -540,7 +548,7 @@ export const authRouter = router({
                 status: "ACTIVE",
                 ...(input.coopId
                   ? { coopId: input.coopId }
-                  : { coopId: COMMONS_COOP_ID }),
+                  : {}),
               },
               orderBy: {
                 joinedAt: 'desc',
@@ -579,7 +587,6 @@ export const authRouter = router({
             where: { id: user.id, status: "PENDING" },
             data: { status: "ACTIVE" },
           });
-          await ensureCommonsMembership(context.db, user.id);
 
           user = await context.db.user.findUniqueOrThrow({
             where: { id: user.id },
@@ -587,7 +594,6 @@ export const authRouter = router({
               memberships: {
                 where: {
                   status: "ACTIVE",
-                  coopId: COMMONS_COOP_ID,
                 },
                 orderBy: {
                   joinedAt: "desc",
@@ -639,16 +645,18 @@ export const authRouter = router({
           }
         }
 
-        const activeCoopId =
-          user.memberships[0]?.coopId ||
-          (isDemoCode ? DEMO_COOP_ID : COMMONS_COOP_ID);
-        const coopData = await getCoopSessionData(context.db, activeCoopId);
+        const activeCoopId = user.memberships[0]?.coopId || (isDemoCode ? DEMO_COOP_ID : undefined);
+        const coopData = activeCoopId ? await getCoopSessionData(context.db, activeCoopId) : undefined;
         const handle = await ensureUserHandle(context.db, user);
         const sessionToken = await createAccountSession(
           context.db,
           context,
           user.id,
         );
+        const firstLogin = await context.db.user.updateMany({
+          where: { id: user.id, firstLoginAt: null },
+          data: { firstLoginAt: new Date() },
+        });
 
         return {
           success: true,
@@ -658,6 +666,7 @@ export const authRouter = router({
             email: user.email,
             handle,
             name: user.name,
+            nickname: user.nickname ?? null,
             roles: user.roles,
             status: user.status,
             walletAddress: user.walletAddress,
@@ -674,6 +683,10 @@ export const authRouter = router({
             locationSummary: user.locationSummary,
             profileSignals: user.profileSignals,
             profileOnboardingCompletedAt: user.profileOnboardingCompletedAt,
+            onboardingStep: user.onboardingStep,
+            onboardingCompletedAt: user.onboardingCompletedAt,
+            onboardingDraft: user.onboardingDraft,
+            isFirstLogin: firstLogin.count === 1,
             sessionToken,
             coop: coopData,
           },

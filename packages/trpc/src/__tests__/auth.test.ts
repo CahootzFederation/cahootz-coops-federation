@@ -159,6 +159,28 @@ describe('auth.requestLoginCode', () => {
     expect(sendLoginCode).toHaveBeenCalledWith('alice@example.com', '123456', undefined);
   });
 
+  it('uses the account a simultaneous request just created instead of failing', async () => {
+    const createdElsewhere = {
+      id: 'new_user_2',
+      status: 'ACTIVE',
+      deletedAt: null,
+      walletAddress: null,
+      wallets: [],
+      memberships: [],
+    };
+    const db = makeDb({
+      user: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(createdElsewhere) },
+    });
+    db.user.create.mockRejectedValue(Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }));
+
+    const result = await callerFor(db).requestLoginCode({ email: 'twice@example.com' });
+
+    expect(result.success).toBe(true);
+    expect(db.loginCode.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ email: 'twice@example.com', code: '123456' }),
+    });
+  });
+
   it('creates a Commons account when email does not exist', async () => {
     const createdUser = {
       id: 'new_user_1',
@@ -169,9 +191,9 @@ describe('auth.requestLoginCode', () => {
       memberships: [],
     };
     const db = makeDb({
-      user: { findUnique: vi.fn().mockResolvedValue(null) },
+      user: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(createdUser) },
     });
-    db.user.create.mockResolvedValue(createdUser);
+    db.user.create.mockResolvedValue({ id: createdUser.id });
 
     const result = await callerFor(db).requestLoginCode({ email: 'nobody@example.com' });
 
@@ -185,14 +207,7 @@ describe('auth.requestLoginCode', () => {
         }),
       }),
     );
-    expect(db.userCoopMembership.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({
-          coopId: 'cahootz',
-          status: 'ACTIVE',
-        }),
-      }),
-    );
+    expect(db.userCoopMembership.upsert).not.toHaveBeenCalled();
   });
 
   it('promotes PENDING users into Commons access', async () => {
@@ -209,7 +224,7 @@ describe('auth.requestLoginCode', () => {
       where: { id: ACTIVE_USER.id, status: 'PENDING' },
       data: { status: 'ACTIVE' },
     });
-    expect(db.userCoopMembership.upsert).toHaveBeenCalled();
+    expect(db.userCoopMembership.upsert).not.toHaveBeenCalled();
   });
 
   it('blocks REJECTED users', async () => {
@@ -312,7 +327,7 @@ describe('auth.verifyLoginCode', () => {
     vi.clearAllMocks();
   });
 
-  it('defaults verified login to the configured Commons coop', async () => {
+  it('signs in without creating or claiming a commons membership', async () => {
     const db = makeDb({
       loginCode: {
         findFirst: vi.fn().mockResolvedValue(VALID_LOGIN_CODE),
@@ -320,6 +335,7 @@ describe('auth.verifyLoginCode', () => {
       },
       user: {
         findUnique: vi.fn().mockResolvedValue({ ...ACTIVE_USER, memberships: [] }),
+        findUniqueOrThrow: vi.fn().mockResolvedValue({ ...ACTIVE_USER, memberships: [] }),
       },
       coopConfig: {
         findFirst: vi.fn().mockResolvedValue(COOP_CONFIG),
@@ -335,14 +351,29 @@ describe('auth.verifyLoginCode', () => {
     expect(result.user?.id).toBe(ACTIVE_USER.id);
     expect(result.user?.email).toBe(ACTIVE_USER.email);
     expect(result.user?.sessionToken).toEqual(expect.any(String));
-    expect(result.user?.coop?.id).toBe('cahootz');
-    expect(result.user?.coop?.name).toBe('Unity Coop');
+    expect(result.user?.coop).toBeUndefined();
     expect(db.loginCode.update).toHaveBeenCalledWith({
       where: { id: 'code_1' },
       data: { used: true },
     });
-    expect(db.userCoopMembership.upsert).toHaveBeenCalled();
+    expect(db.userCoopMembership.upsert).not.toHaveBeenCalled();
     expect(db.session.create).toHaveBeenCalled();
+  });
+
+  it.each([1, 0])('reports first sign-in from the durable account claim (count %s)', async (count) => {
+    const db = makeDb({
+      loginCode: { findFirst: vi.fn().mockResolvedValue(VALID_LOGIN_CODE) },
+      user: {
+        findUnique: vi.fn().mockResolvedValue({ ...ACTIVE_USER, memberships: [ACTIVE_MEMBERSHIP] }),
+        updateMany: vi.fn().mockImplementation(({ data }) => Promise.resolve({ count: data.firstLoginAt ? count : 0 })),
+      },
+    });
+    const result = await callerFor(db).verifyLoginCode({ email: ACTIVE_USER.email, code: '123456' });
+    expect(result.user?.isFirstLogin).toBe(count === 1);
+    expect(db.user.updateMany).toHaveBeenCalledWith({
+      where: { id: ACTIVE_USER.id, firstLoginAt: null },
+      data: { firstLoginAt: expect.any(Date) },
+    });
   });
 
   it('blocks deleted users from verifying a login code', async () => {

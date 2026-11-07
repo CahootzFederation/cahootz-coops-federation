@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { ArrowLeft, Check, Clock, Lock, Mail } from 'lucide-react-native';
 
 import { IconAvatar } from '@/components/icon-avatar';
@@ -19,6 +20,7 @@ import { markAnonymousProfileIntroSeen } from '@/lib/anonymous-id';
 import { api, type CommonsInvitationDetail } from '@/lib/api';
 import { ApiError, friendlyError } from '@/lib/friendly-error';
 import { secureStorage } from '@/lib/secure-storage';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -111,12 +113,14 @@ export function CommonsInvitationView({
     void load();
   }, [authLoading, load]);
 
-  // Opened while signed in: nothing left to resume after sign-in.
+  const isFocused = useIsFocused();
+
+  // A background invitation must retain its link while sign-in completes.
   useEffect(() => {
-    if (user && token) {
+    if (isFocused && user && token) {
       void secureStorage.removeItem(secureStorage.keys.PENDING_INVITATION);
     }
-  }, [user, token]);
+  }, [isFocused, user, token]);
 
   const signInToContinue = async () => {
     if (token) {
@@ -125,7 +129,7 @@ export function CommonsInvitationView({
     // They came for this invitation, so skip the app-intro carousel before
     // signing in; the profile step still runs afterwards.
     await markAnonymousProfileIntroSeen();
-    router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
+    router.push({ pathname: '/', params: { entry: 'sign-in' } } as any);
   };
 
   const accept = async () => {
@@ -259,7 +263,7 @@ export function CommonsInvitationView({
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 }}>
+      <ScrollView {...keyboardInsetScrollProps} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 }}>
         {header}
 
         <View className="rounded-2xl border border-gray-200 bg-white p-5">

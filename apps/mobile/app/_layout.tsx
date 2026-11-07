@@ -1,4 +1,5 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { CommunityTheme } from '@/constants/theme';
+import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -13,9 +14,9 @@ import "../global.css"
 import { PortalHost } from '@rn-primitives/portal';
 import Toast from 'react-native-toast-message';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { NotificationResponseHandler } from '@/components/notification-response-handler';
 import { InAppAlertPopup } from '@/components/in-app-alert-popup';
+import { PushPermissionGate } from '@/components/push-permission-gate';
 import { PendingInvitationResume } from '@/components/pending-invitation-resume';
 import { AnalyticsTracker } from '@/components/analytics-tracker';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
@@ -24,7 +25,10 @@ import { PlatformConfigProvider } from '@/contexts/platform-config-context';
 import { PaymentConfirmationProvider } from '@/components/payment-confirmation-provider';
 import StripeWrapper from '@/components/providers/StripeWrapper';
 import { toastConfig } from '@/lib/toast-config';
+import { useNavigationReady } from '@/hooks/use-navigation-ready';
+import { onReconnect } from '@/lib/connectivity';
 import * as Sentry from '@sentry/react-native';
+import { colorScheme as nativeWindColorScheme } from 'nativewind';
 
 Sentry.init({
   dsn: 'https://659be33460f9e6586e39aeb0f5b8b012@o4511715053797376.ingest.us.sentry.io/4512028976283648',
@@ -135,10 +139,20 @@ function ObserveInteractiveMarker() {
 }
 
 function RootLayout() {
-  const colorScheme = useColorScheme();
-
-  // Handle deep links
+  // Native configuration starts iOS and Android in light mode. This keeps
+  // NativeWind aligned on web and after app-state changes as well.
   useEffect(() => {
+    nativeWindColorScheme.set('light');
+  }, []);
+
+  // Screens built on React Query catch up on their own once back online.
+  useEffect(() => onReconnect(() => void queryClient.refetchQueries({ type: 'active' })), []);
+
+  // Handle deep links once the navigator can take them (see useNavigationReady).
+  const navigationReady = useNavigationReady();
+  useEffect(() => {
+    if (!navigationReady) return;
+
     // Handle deep links when app is already open
     const subscription = Linking.addEventListener('url', ({ url }) => {
       handleDeepLink(url);
@@ -153,7 +167,7 @@ function RootLayout() {
     });
 
     return () => subscription.remove();
-  }, []);
+  }, [navigationReady]);
 
   return (
     <SafeAreaProvider>
@@ -167,15 +181,16 @@ function RootLayout() {
             <PendingInvitationResume />
             <CartProvider>
               <PaymentConfirmationProvider>
-                <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-                  <View style={{ flex: 1 }}>
+                <ThemeProvider value={DefaultTheme}>
+                  <View style={{ flex: 1, width: '100%', maxWidth: CommunityTheme.pageMaxWidth, alignSelf: 'center', backgroundColor: CommunityTheme.paper }}>
                     <View style={{ flex: 1, minHeight: 0 }}>
                       <Stack screenOptions={{ headerShown: false }} />
                     </View>
                     <AppBottomNavigation />
                     <InAppAlertPopup />
+                    <PushPermissionGate />
                   </View>
-                  <StatusBar style="auto" />
+                  <StatusBar style="dark" />
                   <PortalHost />
                   <Toast config={toastConfig} />
                 </ThemeProvider>
@@ -188,5 +203,9 @@ function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+// A screen that throws while rendering shows a retry screen instead of
+// closing the app.
+export { AppErrorScreen as ErrorBoundary } from '@/components/app-error-screen';
 
 export default AppMetricsRoot.wrap(Sentry.wrap(RootLayout));

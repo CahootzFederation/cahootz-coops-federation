@@ -58,6 +58,8 @@ export const ProposalInputZ = z.object({
   }).optional().nullable(),
   region: RegionZ.optional().nullable(),
   coopId: z.string().optional(),
+  /** The member's Sage draft this proposal is sent from, if any. Sage ideas and charter or goals changes always go to a member vote. */
+  commonsDraftId: z.string().min(1).optional(),
 });
 
 // ── EVALUATION SCHEMAS (new scoring model) ────────────────────────────────────
@@ -425,6 +427,8 @@ export const CommentOutputZ = z.object({
   content: z.string(),
   createdAt: z.string(),
   aiEvaluation: CommentAIEvaluationZ.optional().nullable(),
+  /** True for Sage's comments (the pre-vote summary), so apps can mark them as an AI helper. */
+  authorIsAi: z.boolean().optional(),
 });
 
 // ── tiny helper: build output from input + computed values ────────────────────

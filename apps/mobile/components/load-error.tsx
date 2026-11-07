@@ -1,3 +1,4 @@
+import { DESIGN } from '@/constants/design';
 import { ActivityIndicator, TouchableOpacity, View } from 'react-native';
 import { Text } from '@/components/ui/text';
 
@@ -22,7 +23,8 @@ export function LoadError({
   return (
     <View
       accessibilityRole="alert"
-      className="items-center rounded-2xl border border-red-200 bg-red-50 px-5 py-6"
+      className="items-center rounded-2xl border px-5 py-6"
+      style={{ backgroundColor: DESIGN.paper, borderColor: DESIGN.border }}
     >
       {title ? (
         <Text className="mb-1 text-center text-lg font-bold text-gray-900">{title}</Text>
@@ -36,12 +38,12 @@ export function LoadError({
         onPress={onRetry}
         activeOpacity={0.8}
         className="mt-4 flex-row items-center justify-center rounded-xl px-6"
-        style={{ minHeight: 48, minWidth: 160, backgroundColor: '#FF6B00' }}
+        style={{ minHeight: 48, minWidth: 160, backgroundColor: DESIGN.primary }}
       >
         {retrying ? (
           <ActivityIndicator size="small" color="#FFFFFF" />
         ) : (
-          <Text className="text-base font-bold text-white">Try again</Text>
+          <Text className="text-base font-bold" style={{ color: DESIGN.ink }}>Try again</Text>
         )}
       </TouchableOpacity>
     </View>

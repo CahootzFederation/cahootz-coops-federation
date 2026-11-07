@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { storeLocalWalletPrivateKey } from '@/lib/mobile-wallet';
 import QRCode from 'react-native-qrcode-svg';
 import * as Clipboard from 'expo-clipboard';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 export default function ExportWalletScreen() {
   const [step, setStep] = useState<'warning' | 'password' | 'display'>('warning');
@@ -147,7 +148,7 @@ export default function ExportWalletScreen() {
 
   if (step === 'password') {
     return (
-      <ScrollView className="flex-1 bg-gray-50">
+      <ScrollView {...keyboardInsetScrollProps} className="flex-1 bg-gray-50">
         <View className="p-6">
           <Text className="text-2xl font-bold text-gray-900 mb-2">
             Verify Your Identity

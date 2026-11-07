@@ -126,7 +126,7 @@ describe("commons join policy rules", () => {
     expect(getInvitationPurpose("APPLICATION_REQUIRED", false)).toBe("APPLY");
     expect(getInvitationPurpose("INVITE_ONLY", true)).toBe("DIRECT_JOIN");
     expect(getInvitationPurpose("INVITE_ONLY", false)).toBe("REQUEST_ACCESS");
-    expect(() => getInvitationPurpose("AUTOMATIC", true)).toThrow(/automatically/);
+    expect(() => getInvitationPurpose("AUTOMATIC", true)).toThrow(/join Cahootz Commons directly/);
   });
 
   it("never lets a referral admit anyone after a policy change", () => {
@@ -337,7 +337,7 @@ describe("createCommonsInvitation", () => {
         inviter,
         email: "x@example.com",
       }),
-    ).rejects.toThrow(/automatically/);
+    ).rejects.toThrow(/join Cahootz Commons directly/);
   });
 
   it("rate-limits invitations per inviter", async () => {

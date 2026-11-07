@@ -9,6 +9,8 @@
  *     engine output (the full engine is several web-searching model calls, too
  *     slow and costly for every run; its trail builder is unit-tested). Prints
  *     the proposal id, the proposer's wallet, and the Commons' Sage user id.
+ *   tsx --import ./dotenv.config.js scripts/e2e-agent-trails.ts sage-user
+ *     Prints the Commons' Sage user id, so a spec can open a direct message with Sage.
  *   tsx --import ./dotenv.config.js scripts/e2e-agent-trails.ts cleanup-post <postId>
  *     Deletes Sage's actions on an E2E post, with their proposal drafts, follow-up tasks, alerts, trails
  *     and the Sage memory written from them (so one run's memory can't steer the next run's reply).
@@ -167,12 +169,14 @@ async function main() {
   const result =
     command === "seed-proposal" && first && second
       ? await seedProposal(first, second)
+      : command === "sage-user"
+        ? { sageUserId: (await ensureSageBotUser(db, COOP_ID)).id }
       : command === "cleanup-post" && first
         ? await cleanupPost(first)
       : command === "cleanup" && first
         ? await cleanup(first, second, third)
         : (() => {
-            throw new Error("Usage: e2e-agent-trails.ts seed-proposal <runId> <proposerEmail> | cleanup <proposalId|-> [dmGroupId] [postId]");
+            throw new Error("Usage: e2e-agent-trails.ts seed-proposal <runId> <proposerEmail> | sage-user | cleanup-post <postId> | cleanup <proposalId|-> [dmGroupId] [postId]");
           })();
   console.log(`E2E_RESULT ${JSON.stringify(result)}`);
 }

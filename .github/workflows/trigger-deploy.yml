@@ -42,6 +42,9 @@ jobs:
             exit 1
           fi
 
+      - name: Check Trigger.dev production env vars
+        run: node scripts/check-trigger-prod-env.mjs
+
       - name: Generate Prisma client
         run: pnpm -F @repo/db db:generate
 
@@ -50,3 +53,22 @@ jobs:
 
       - name: Deploy Trigger.dev tasks
         run: pnpm deploy:trigger
+
+      - name: Tell Slack the deploy failed
+        if: failure()
+        shell: bash
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_TITLE: ${{ github.event.head_commit.message }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "::warning::SLACK_WEBHOOK_URL secret isn't set, so no Slack alert was sent."
+            exit 0
+          fi
+          title="$(printf '%s' "${COMMIT_TITLE:-manual run}" | head -n1)"
+          text=":rotating_light: Trigger.dev deploy failed, so production is still running the last good version. New task code isn't live until this is fixed.
+          Commit: ${title} (${GITHUB_SHA::7})
+          Logs: ${RUN_URL}"
+          jq -n --arg text "$text" '{text: $text}' \
+            | curl -sS -f -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK_URL"

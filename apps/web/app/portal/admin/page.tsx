@@ -48,6 +48,11 @@ export default function AdminCommonsListPage() {
               Marketplace Settings
             </Button>
           </Link>
+          <Link href="/portal/admin/outreach">
+            <Button variant="outline" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white">
+              Vendor Outreach
+            </Button>
+          </Link>
           <Link href="/portal/admin/agents">
             <Button variant="outline" className="border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white">
               Agent Playground

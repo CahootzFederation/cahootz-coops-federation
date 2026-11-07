@@ -12,6 +12,10 @@ interface CommercePaymentConfirmationProps {
   amountLabel: string;
   accentColor: string;
   cardholderName?: string;
+  /** 'setup' saves a card without charging it. */
+  mode?: 'payment' | 'setup';
+  /** The button text. Defaults to "Pay {amountLabel}". */
+  actionLabel?: string;
   onSuccess: () => void;
   onError: (message: string) => void;
 }
@@ -21,10 +25,13 @@ export default function CommercePaymentConfirmation({
   merchantName,
   amountLabel,
   accentColor,
+  mode = 'payment',
+  actionLabel,
   onSuccess,
   onError,
 }: CommercePaymentConfirmationProps) {
   const [opening, setOpening] = useState(false);
+  const label = actionLabel ?? `Pay ${amountLabel}`;
   const [localError, setLocalError] = useState('');
 
   const handleOpenCheckout = async () => {
@@ -44,13 +51,13 @@ export default function CommercePaymentConfirmation({
         }
 
         if (result.url.includes('/checkout/cancel')) {
-          setLocalError("You canceled the payment, so you weren't charged. Tap Pay to try again.");
+          setLocalError(mode === 'setup' ? `You didn't save a card. Tap ${label} to try again.` : "You canceled the payment, so you weren't charged. Tap Pay to try again.");
           return;
         }
       }
 
       if (result.type === 'cancel' || result.type === 'dismiss') {
-        setLocalError('You closed the payment page before paying. Tap Pay to try again.');
+        setLocalError(mode === 'setup' ? `You closed the card page before saving. Tap ${label} to try again.` : 'You closed the payment page before paying. Tap Pay to try again.');
       }
     } catch (error) {
       console.error('Could not open Stripe Checkout:', error);
@@ -69,9 +76,11 @@ export default function CommercePaymentConfirmation({
           <ShieldCheck size={20} color={accentColor} />
         </View>
         <View className="flex-1">
-          <Text className="text-gray-900 font-semibold">Secure Stripe Checkout</Text>
+          <Text className="text-gray-900 font-semibold">{mode === 'setup' ? 'Save a card with Stripe' : 'Secure Stripe Checkout'}</Text>
           <Text className="text-gray-500 text-sm mt-1">
-            Complete payment for {merchantName || 'this order'} on Stripe-hosted checkout.
+            {mode === 'setup'
+              ? "Stripe keeps your card safe. We won't charge it now."
+              : `Complete payment for ${merchantName || 'this order'} on Stripe-hosted checkout.`}
           </Text>
         </View>
       </View>
@@ -94,7 +103,7 @@ export default function CommercePaymentConfirmation({
           <ExternalLink size={20} color="#fff" />
         )}
         <Text className="ml-2 text-white text-base font-bold">
-          {opening ? 'Opening checkout...' : `Pay ${amountLabel}`}
+          {opening ? 'Opening Stripe...' : label}
         </Text>
       </TouchableOpacity>
     </View>

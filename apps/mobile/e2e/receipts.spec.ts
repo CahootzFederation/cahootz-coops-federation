@@ -64,7 +64,7 @@ function receiptRow(page: Page, label: string, value: string | RegExp) {
   return page.getByLabel(pattern).filter({ visible: true }).first();
 }
 
-test("a past payment opens a receipt from History, and the receipt survives a reload", async ({ browser }) => {
+test("a past payment opens a receipt from History, and the receipt survives a reload", { tag: "@smoke" }, async ({ browser }) => {
   const member = await newSignedInPage(browser, USER_A_EMAIL);
   const { page } = member;
   const runId = `r${Date.now().toString(36)}`;
@@ -84,7 +84,7 @@ test("a past payment opens a receipt from History, and the receipt survives a re
     await expect(paymentsEntry).toBeVisible();
     expect((await paymentsEntry.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
     await paymentsEntry.click();
-    await expect(page).toHaveURL(/\/history$/);
+    await expect(page).toHaveURL((url) => url.pathname === "/history");
     await expect(shown(page, "Tap a payment to see its receipt.", { exact: true })).toBeVisible();
 
     // The row is a labelled button at least 44pt tall.

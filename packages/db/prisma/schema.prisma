@@ -18,10 +18,14 @@ model User {
   email                        String                  @unique
   handle                       String?                 @unique
   name                         String?
+  nickname                     String?
   roles                        String[]                @default(["member"]) // member, business, admin, governor, sage (platform bot)
   status                       UserStatus              @default(PENDING)
   isBot                        Boolean                 @default(false) // true for platform bot accounts (e.g. Sage)
   showSageDecisionTrails       Boolean                 @default(false) // personal app setting: show Sage's decision trails on content this user can see
+  nameInSageAppreciation       Boolean                 @default(false) // legacy, retained for migration compatibility; no longer used by the product
+  sageRhythmPreferences        SageRhythmPreference[] // legacy rows retained but no longer read or written
+  defaultCoopId                String? // member-selected Commons shown first after sign-in
   password                     String?
   phone                        String?                 @unique // E.164 format: +1XXXXXXXXXX
   walletAddress                String?                 @unique // DEPRECATED: Use Wallet model instead
@@ -38,6 +42,10 @@ model User {
   businessSummary              String?
   locationSummary              String?
   profileSignals               Json                    @default("{}")
+  onboardingStep               String                  @default("welcome")
+  onboardingCompletedAt        DateTime?
+  onboardingDraft              Json                    @default("{}")
+  firstLoginAt                 DateTime? // Set once after successful authentication, independent of invitations/membership
   profileOnboardingCompletedAt DateTime?
   // Personal page avatar: a photo wins over an emoji, which wins over initials.
   avatarUrl                    String? // Uploaded profile photo URL (blob storage)
@@ -64,9 +72,9 @@ model User {
   businesses                 Business[]
   onrampTransactions         OnrampTransaction[] // UC-era: preserved for future reactivation
   paymentMethods             PaymentMethod[]
-  sentTransfers              P2PTransfer[]             @relation("sender") // UC-era: preserved
-  receivedTransfers          P2PTransfer[]             @relation("recipient") // UC-era: preserved
-  pendingTransfersSent       PendingTransfer[]         @relation("sender") // UC-era: preserved
+  sentTransfers              P2PTransfer[]              @relation("sender") // UC-era: preserved
+  receivedTransfers          P2PTransfer[]              @relation("recipient") // UC-era: preserved
+  pendingTransfersSent       PendingTransfer[]          @relation("sender") // UC-era: preserved
   bankAccounts               BankAccount[]
   withdrawals                Withdrawal[] // UC-era: preserved
   notifications              Notification[]
@@ -82,31 +90,40 @@ model User {
   commonsComments            CommonsComment[]
   commonsPostSupports        CommonsPostSupport[]
   commonsSuggestions         CommonsSuggestion[]
-  sentDirectMessages         DirectMessage[]           @relation("DirectMessageSender")
-  receivedDirectMessages     DirectMessage[]           @relation("DirectMessageReceiver")
-  following                  Follow[]                  @relation("Follower")
-  followers                  Follow[]                  @relation("Following")
+  sentDirectMessages         DirectMessage[]            @relation("DirectMessageSender")
+  receivedDirectMessages     DirectMessage[]            @relation("DirectMessageReceiver")
+  following                  Follow[]                   @relation("Follower")
+  followers                  Follow[]                   @relation("Following")
   personalPagePostComments   PersonalPagePostComment[]
   personalPagePostSupports   PersonalPagePostSupport[]
-  groupsLed                  Group[]                   @relation("GroupLeader")
+  groupsLed                  Group[]                    @relation("GroupLeader")
   groupMemberships           GroupMember[]
-  groupInvitesReceived       GroupInvite[]             @relation("GroupInvitee")
-  groupInvitesSent           GroupInvite[]             @relation("GroupInviter")
+  groupInvitesReceived       GroupInvite[]              @relation("GroupInvitee")
+  groupInvitesSent           GroupInvite[]              @relation("GroupInviter")
   groupComments              GroupComment[]
   uploadedKnowledgeDocuments KnowledgeDocument[]
-  verifiedAIObservations     AIObservation[]           @relation("AIObservationVerifier")
-  welcomeTableConfigsGuiding WelcomeTableConfig[]      @relation("WelcomeTableGuide")
+  verifiedAIObservations     AIObservation[]            @relation("AIObservationVerifier")
+  humanAIFeedback            HumanAIFeedback[]
+  welcomeTableConfigsGuiding WelcomeTableConfig[]       @relation("WelcomeTableGuide")
   welcomeIntros              WelcomeIntro[]
   commonsCommentReactions    CommonsCommentReaction[]
   commonsPostReactions       CommonsPostReaction[]
+  offerCommitments           OfferCommitment[]
+  shippingAddress            UserShippingAddress?
+  vendorReferrals            VendorReferral[]
   circleChatPresence         CircleChatPresence[]
-  eventsCreated              Event[]                   @relation("EventCreatedBy")
+  streetLots                 StreetLot[]
+  streetPresence             StreetPresence[]
+  streetLook                 StreetLook?
+  eventsCreated              Event[]                    @relation("EventCreatedBy")
   eventHosting               EventHost[]
   eventRSVPs                 EventRSVP[]
   eventReminders             EventReminder[]
-  pinnedPosts                CommonsPost[]             @relation("CommonsPostPinnedBy")
+  pinnedPosts                CommonsPost[]              @relation("CommonsPostPinnedBy")
   onboardingDripSends        OnboardingDripSend[]
-  commonsInvitationsSent     CommonsInvitation[]       @relation("CommonsInvitationInviter")
+  commonsInvitationsSent     CommonsInvitation[]        @relation("CommonsInvitationInviter")
+  appFeedback                AppFeedback[]
+  personalPagePostReactions  PersonalPagePostReaction[]
 
   @@index([deletedAt])
   @@schema("public")
@@ -319,7 +336,7 @@ enum MembershipStatus {
 }
 
 enum CommonsJoinPolicy {
-  AUTOMATIC // Every account joins (Cahootz Commons only)
+  AUTOMATIC // Explicit self-join without an application (legacy name; Cahootz Commons only)
   APPLICATION_REQUIRED // Everyone applies and a steward reviews, even when invited
   INVITE_ONLY // Private family commons: a verified named invitation grants membership
 
@@ -952,6 +969,7 @@ model AIObservation {
   summary             String                  @db.Text
   details             Json?
   sources             AIObservationSource[]
+  humanFeedback       HumanAIFeedback[]
   originatedActions   CommonsAction[]
   visibility          AIObservationVisibility @default(COMMONS_ADMINS)
   status              AIObservationStatus     @default(ACTIVE)
@@ -969,6 +987,32 @@ model AIObservation {
   @@index([status, expiresAt])
   @@index([generatedByAgentKey, createdAt])
   @@index([scopeType, scopeId, generatedByAgentKey, createdAt])
+  @@schema("public")
+}
+
+enum HumanAIFeedbackResponse {
+  YES
+  PARTLY
+  DIFFERENT_TAKE
+
+  @@schema("public")
+}
+
+model HumanAIFeedback {
+  id            String                  @id @default(cuid())
+  observationId String
+  observation   AIObservation           @relation(fields: [observationId], references: [id], onDelete: Cascade)
+  coopId        String
+  userId        String
+  user          User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  response      HumanAIFeedbackResponse
+  comment       String?                 @db.Text
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@unique([observationId, userId])
+  @@index([coopId, createdAt])
+  @@index([userId])
   @@schema("public")
 }
 
@@ -1034,8 +1078,9 @@ model PersonalPagePost {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  comments PersonalPagePostComment[]
-  supports PersonalPagePostSupport[]
+  comments  PersonalPagePostComment[]
+  supports  PersonalPagePostSupport[]
+  reactions PersonalPagePostReaction[]
 
   @@index([authorId, createdAt])
   @@schema("public")
@@ -1066,6 +1111,23 @@ model PersonalPagePostSupport {
   createdAt DateTime         @default(now())
 
   @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId, createdAt])
+  @@schema("public")
+}
+
+/// Emoji reactions on a personal page post other than ❤️, which is the
+/// post's like (PersonalPagePostSupport). Mirrors CommonsPostReaction.
+model PersonalPagePostReaction {
+  id        String           @id @default(cuid())
+  postId    String
+  post      PersonalPagePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime         @default(now())
+
+  @@unique([postId, userId, emoji])
   @@index([postId])
   @@index([userId, createdAt])
   @@schema("public")
@@ -1124,8 +1186,12 @@ enum CommonsActionType {
   CONNECT_MEMBERS
   ESCALATE_TO_ADMIN
   NO_ACTION
-  RIDE_MATCH_PROPOSAL
+  RIDE_MATCH_PROPOSAL // retired 2026-10-14; kept so existing rows stay readable
   SUGGEST_ACTION
+  ASK_COMMONS // Sage's open question to the whole Commons about a community pattern
+  COMMUNITY_RHYTHM // Sage's weekly/monthly rhythm post (priorities, open work, appreciation, monthly review)
+  SUMMARIZE_DISCUSSION // Sage's balanced summary of a proposal's discussion before voting closes
+  PROPOSE_IDEA // Sage's proposal idea for a charter goal, posted for any member to take on
 
   @@schema("public")
 }
@@ -1340,23 +1406,35 @@ model CommonsResource {
   @@schema("public")
 }
 
+// A proposal draft Sage wrote. Drafts from a thread belong to the member Sage drafted it for. Ideas Sage
+// starts on its own from a charter goal (kind PROGRAM, SPENDING, CHARTER_AMENDMENT, GOALS_AMENDMENT) are
+// posted to the whole Commons with no author; the first member who takes it on becomes the author.
+// Nothing reaches a vote until that member submits it, and a Sage idea never skips the member vote.
 model CommonsProposalDraft {
   id                  String    @id @default(cuid())
   actionId            String    @unique
   coopId              String
-  authorId            String
+  authorId            String? // null while a Sage idea is open for anyone to take on
   title               String
   body                String    @db.Text
+  kind                String    @default("GENERAL") // GENERAL | PROGRAM | SPENDING | CHARTER_AMENDMENT | GOALS_AMENDMENT
+  goalKey             String? // the mission goal a Sage idea addresses
+  budgetAmount        Float? // only a figure members gave; null means whoever takes it on fills it in
+  proposedChanges     Json? // amendments: { find, replace } for the charter, or { missionGoals } for goals
+  originObservationId String? // the goal_gap observation that led to the idea
+  ideaPostId          String?   @unique // Sage's post offering the idea to the Commons
+  claimedAt           DateTime?
   submittedAt         DateTime?
-  submittedProposalId String?
+  submittedProposalId String?   @unique
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
   @@index([authorId, coopId])
+  @@index([coopId, kind, createdAt])
   @@schema("public")
 }
 
-// One record per Sage analysis (a Commons post or comment, a circle window, a ride-match window),
+// One record per Sage analysis (a Commons post or comment, a circle window),
 // including analyses where Sage decided to do nothing. Steps up to "action taken" are written when
 // Sage decides; result and follow-up are read live from the linked CommonsActions.
 // Something Sage is waiting on or will check back about: a promise it made, an answer it asked
@@ -1456,11 +1534,11 @@ model SageAlert {
 
 model SageDecisionTrail {
   id             String   @id @default(cuid())
-  agent          String // commons-action-agent | sage-trend | sage-ride-match | proposal-engine | comment-evaluation | sage-reply
+  agent          String // commons-action-agent | sage-trend | proposal-engine | comment-evaluation | sage-reply (old rows: sage-ride-match)
   coopId         String
   circleId       String?
   proposalId     String?
-  sourceType     String // commons_post | commons_comment | circle_window | circle_ride_match | proposal | proposal_comment | sage_mention | sage_dm
+  sourceType     String // commons_post | commons_comment | circle_window | proposal | proposal_comment | sage_mention | sage_dm (old rows: circle_ride_match)
   sourceId       String
   trigger        String // NEW_CONTENT | SCHEDULED_SCAN | ADMIN_SCAN | CIRCLE_WINDOW_FULL | ADMIN_ANALYZE | PROPOSAL_SUBMITTED | PROPOSAL_RESUBMITTED | PROPOSAL_ALTERNATIVE_APPLIED | PROPOSAL_COMMENT | SAGE_MENTION | SAGE_DM
   visibility     String // COMMONS_MEMBERS | CIRCLE | ADMINS
@@ -1635,9 +1713,9 @@ model GroupMember {
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   joinedAt          DateTime  @default(now())
   role              String    @default("MEMBER") // "MEMBER" | "GUIDE" | "NEWCOMER"
-  // Last time this member read the circle's messages; drives DM unread counts.
+  // Last time this member opened the circle; drives circle and DM unread counts.
   lastReadAt        DateTime?
-  notificationLevel String    @default("MENTIONS") // "ALL" | "MENTIONS" | "NONE"
+  notificationLevel String    @default("HIGHLIGHTS") // "ALL" | "HIGHLIGHTS" | "MENTIONS" | "NONE"
 
   @@unique([groupId, userId])
   @@index([userId])
@@ -1806,6 +1884,56 @@ model CircleChatPresence {
 
   @@unique([groupId, userId])
   @@index([groupId, exitedAt, lastActivityAt])
+  @@schema("public")
+}
+
+// Commons Street: each member's lot on their Commons' walkable street.
+// Lot numbers are placed by the app's layout; the server only stores them.
+model StreetLot {
+  id         String   @id @default(cuid())
+  coopId     String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lotNumber  Int
+  houseStyle String   @default("a") // a | b | c
+  wallColor  String   @default("cream") // palette key, see street service
+  roofColor  String   @default("terracotta") // palette key
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([coopId, userId])
+  @@unique([coopId, lotNumber])
+  @@schema("public")
+}
+
+// How a member's person looks on Commons streets (account-wide). Values are
+// palette keys from @repo/validators/street; anything unknown falls back to a default.
+model StreetLook {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skin      String
+  hairStyle String
+  hairColor String
+  shirt     String
+  updatedAt DateTime @updatedAt
+
+  @@schema("public")
+}
+
+// Who is on a Commons' street right now and which tile they stand on.
+// Online = exitedAt null and lastActivityAt within 90s (read-time window).
+model StreetPresence {
+  id             String    @id @default(cuid())
+  coopId         String
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  x              Int
+  y              Int
+  lastActivityAt DateTime  @default(now())
+  exitedAt       DateTime?
+
+  @@unique([coopId, userId])
+  @@index([coopId, exitedAt, lastActivityAt])
   @@schema("public")
 }
 
@@ -2289,11 +2417,65 @@ model Notification {
   @@schema("public")
 }
 
+/// A member's in-app complaint, bug report or idea, with optional screenshots.
+/// Saved first, then posted to the team's Slack channel.
+model AppFeedback {
+  id             String    @id @default(cuid())
+  userId         String?
+  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  category       String // BUG, COMPLAINT, IDEA, OTHER
+  message        String
+  screenshotUrls String[]
+  /// Where the member was when they opened the form (route path).
+  screen         String?
+  coopId         String?
+  platform       String?
+  appVersion     String?
+  slackSentAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+  @@schema("public")
+}
+
+/// Sage's private suggestion for a GitHub issue, one per week (or month), built
+/// from in-app feedback, Community Pulse, proposals and open issues. Only
+/// platform admins see it. It reaches GitHub only when an admin posts it.
+model SageDevIssueDraft {
+  id                String    @id @default(cuid())
+  /// "2026-W44" when weekly, "2026-10" when monthly. One draft per period.
+  periodKey         String    @unique
+  cadence           String // WEEKLY | MONTHLY
+  status            String    @default("DRAFT") // DRAFT | POSTING | POSTED | DISMISSED
+  title             String
+  /// The issue text exactly as it would be posted.
+  body              String    @db.Text
+  /// Counts computed by code, never by the model.
+  evidence          Json
+  /// Why the privacy check blocked posting. Empty when it's safe to post.
+  privacyFlags      String[]  @default([])
+  windowStart       DateTime
+  windowEnd         DateTime
+  githubIssueNumber Int?
+  githubIssueUrl    String?
+  postedAt          DateTime?
+  postedBy          String?
+  dismissedAt       DateTime?
+  dismissedBy       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@schema("public")
+}
+
 model NotificationPreference {
   userId      String   @id
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   pushEnabled Boolean  @default(true)
   community   Boolean  @default(true)
+  sage        Boolean  @default(true)
   governance  Boolean  @default(true)
   payments    Boolean  @default(true)
   orders      Boolean  @default(true)
@@ -2301,6 +2483,21 @@ model NotificationPreference {
   onboarding  Boolean  @default(true) // New-member "getting started" drip; off skips the drip entirely
   updatedAt   DateTime @updatedAt
 
+  @@schema("public")
+}
+
+// Legacy per-rhythm preferences. The product now uses NotificationPreference.sage for all Sage
+// notifications outside General and NotificationPreference.community for Sage posts in General.
+// Rows are retained so the simplification does not destroy member data.
+model SageRhythmPreference {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  String
+  mode      String
+  updatedAt DateTime @updatedAt
+
+  @@id([userId, category])
+  @@index([category, mode])
   @@schema("public")
 }
 
@@ -2330,8 +2527,8 @@ model PushDevice {
   id     String @id @default(cuid())
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  coopId String @default("cahootz")
 
+  /// A phone belongs to a member, not a Commons: pushes from every Commons they're in go here.
   expoPushToken String  @unique
   platform      String
   deviceName    String?
@@ -2343,7 +2540,30 @@ model PushDevice {
   updatedAt        DateTime @updatedAt
 
   @@index([userId, enabled])
-  @@index([coopId, enabled])
+  @@schema("public")
+}
+
+/// One Expo push attempt for one device. Expo accepts a push first ("ticket") and reports
+/// whether Apple/Google delivered it ~15 minutes later ("receipt"); a monitor reads receipts,
+/// turns off dead devices, and posts failures to Slack. No token or message text is stored.
+model PushTicket {
+  id             String    @id @default(cuid())
+  notificationId String
+  deviceId       String
+  coopId         String
+  type           String
+  /// "PENDING" (accepted, waiting on receipt) | "DELIVERED" | "ERROR" | "EXPIRED"
+  status         String
+  /// Expo ticket id used to look up the receipt.
+  expoTicketId   String?
+  /// Known Expo error code only, e.g. DeviceNotRegistered, InvalidCredentials, HttpError.
+  errorCode      String?
+  checkedAt      DateTime?
+  alertedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([status, createdAt])
+  @@index([alertedAt, status])
   @@schema("public")
 }
 
@@ -2397,6 +2617,187 @@ enum WithdrawalStatus {
   COMPLETED // Funds sent to bank
   FAILED // Payout failed
 
+  @@schema("public")
+}
+
+// ── Shared-price product discovery ──────────────────────
+
+enum SourcedProductStatus {
+  CANDIDATE
+  VERIFIED
+  REJECTED
+  STALE
+
+  @@schema("public")
+}
+
+enum CommonsProductMatchStatus {
+  CANDIDATE
+  APPROVED
+  REJECTED
+  PAUSED
+
+  @@schema("public")
+}
+
+enum ProductDiscoveryRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SKIPPED
+
+  @@schema("public")
+}
+
+// A discovery profile may represent a live Commons (coopId is set) or a
+// public example Commons. Products are global and connect through the join
+// model below, so one verified item can serve several Commons without copies.
+model CommonsProductProfile {
+  id                     String    @id @default(cuid())
+  key                    String    @unique
+  coopId                 String?
+  name                   String
+  description            String    @db.Text
+  participantLabel       String
+  searchPrompt           String    @db.Text
+  searchTerms            String[]  @default([])
+  excludedTerms          String[]  @default([])
+  isEnabled              Boolean   @default(true)
+  isHomepageVisible      Boolean   @default(false)
+  displayOrder           Int       @default(0)
+  discoveryIntervalHours Int       @default(168)
+  monthlyRunLimit        Int       @default(5)
+  maxCandidatesPerRun    Int       @default(4)
+  lastDiscoveredAt       DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  productMatches CommonsProductMatch[]
+  discoveryRuns  ProductDiscoveryRun[]
+
+  @@index([coopId])
+  @@index([isEnabled, displayOrder])
+  @@index([isHomepageVisible, displayOrder])
+  @@schema("public")
+}
+
+// External supplier products stay separate from purchasable Store/Product
+// inventory until a real supplier offer is approved and fulfilled.
+model SourcedProduct {
+  id             String               @id @default(cuid())
+  sourceKey      String               @unique
+  sourceUrl      String
+  name           String
+  description    String               @db.Text
+  category       String
+  brand          String
+  supplierName   String
+  imageUrl       String?
+  imageAlt       String?
+  status         SourcedProductStatus @default(CANDIDATE)
+  lastVerifiedAt DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  commonsMatches    CommonsProductMatch[]
+  priceObservations ProductPriceObservation[]
+  vendorCampaigns   VendorCampaign[]
+  marketplaceOffers MarketplaceOffer[]
+
+  @@index([status, updatedAt])
+  @@index([category])
+  @@schema("public")
+}
+
+// The relation owns Commons-specific fit, ordering, and approval. Discovery
+// never promotes a candidate to APPROVED; that remains a reviewable decision.
+model CommonsProductMatch {
+  profileId          String
+  productId          String
+  profile            CommonsProductProfile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  product            SourcedProduct            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  status             CommonsProductMatchStatus @default(CANDIDATE)
+  fitScore           Int
+  fitReason          String                    @db.Text
+  purpose            String                    @db.Text
+  tone               String                    @default("mint")
+  // Checked against the linked Commons' charter and goals: FITS or DOES_NOT_FIT,
+  // with the reason. Null when the profile has no Commons (nothing to check).
+  goalFit            String?
+  goalFitReason      String?                   @db.Text
+  isHomepageFeatured Boolean                   @default(false)
+  displayOrder       Int                       @default(0)
+  discoveredByRunId  String?
+  discoveredByRun    ProductDiscoveryRun?      @relation(fields: [discoveredByRunId], references: [id], onDelete: SetNull)
+  approvedBy         String?
+  approvedAt         DateTime?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  @@id([profileId, productId])
+  @@index([profileId, status, displayOrder])
+  @@index([productId, status])
+  @@index([discoveredByRunId])
+  @@schema("public")
+}
+
+// Price evidence is append-only. The public catalog reads the newest valid
+// observation, preserving old supplier claims for audit instead of overwriting.
+model ProductPriceObservation {
+  id                      String               @id @default(cuid())
+  productId               String
+  product                 SourcedProduct       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  discoveryRunId          String?
+  discoveryRun            ProductDiscoveryRun? @relation(fields: [discoveryRunId], references: [id], onDelete: SetNull)
+  sourceUrl               String
+  comparisonUrl           String?
+  currency                String               @default("USD")
+  memberShare             String
+  peopleNeeded            Int
+  regularPriceCents       Int
+  bulkShareCents          Int
+  verifiedFacts           String[]             @default([])
+  risksOrUnverifiedClaims String[]             @default([])
+  evidenceHash            String
+  observedAt              DateTime             @default(now())
+  expiresAt               DateTime?
+
+  @@unique([productId, evidenceHash])
+  @@index([productId, observedAt])
+  @@index([discoveryRunId])
+  @@index([expiresAt])
+  @@schema("public")
+}
+
+// Each scheduled/manual attempt is durable and idempotent. The run record is
+// also the audit boundary for model input/output and persistence counts.
+model ProductDiscoveryRun {
+  id                String                    @id @default(cuid())
+  profileId         String
+  profile           CommonsProductProfile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  idempotencyKey    String                    @unique
+  status            ProductDiscoveryRunStatus @default(RUNNING)
+  trigger           String
+  model             String?
+  query             String                    @db.Text
+  // What an admin asked this one search to look for (text and/or links), if anything.
+  hint              String?                   @db.Text
+  candidateCount    Int                       @default(0)
+  savedProductCount Int                       @default(0)
+  savedMatchCount   Int                       @default(0)
+  error             String?                   @db.Text
+  // What the run did as it went, for admins to watch: [{ at, kind: step|search|page|find, text, url? }], capped.
+  progress          Json                      @default("[]")
+  startedAt         DateTime                  @default(now())
+  finishedAt        DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  productMatches    CommonsProductMatch[]
+  priceObservations ProductPriceObservation[]
+
+  @@index([profileId, startedAt])
+  @@index([status, startedAt])
   @@schema("public")
 }
 
@@ -2461,6 +2862,7 @@ model Store {
   orders                    StoreOrder[]
   paymentRequests           StorePaymentRequest[]
   scRewards                 SCRewardTransaction[]
+  marketplaceOffers         MarketplaceOffer[]
 
   @@unique([coopId, shortCode])
   @@index([ownerId])
@@ -2510,6 +2912,7 @@ model Product {
   // Relations
   orderItems               StoreOrderItem[]
   fundingBadgeEntitlements FundingBadgeEntitlement[]
+  marketplaceOffers        MarketplaceOffer[]
 
   @@index([storeId])
   @@index([category])
@@ -3144,9 +3547,9 @@ model CommerceTransaction {
 
   // Parties
   customerId String
-  customer   User     @relation(fields: [customerId], references: [id])
-  businessId String
-  business   Business @relation(fields: [businessId], references: [id])
+  customer   User      @relation(fields: [customerId], references: [id])
+  businessId String? // Null for Member Deals and Group Buys, which Cahootz collects itself
+  business   Business? @relation(fields: [businessId], references: [id])
   coopId     String
 
   // Pricing breakdown
@@ -3173,6 +3576,12 @@ model CommerceTransaction {
   // Metadata
   metadata Json? // Order details, line items, etc.
 
+  // Member Deal / Group Buy purchases. Null for regular listings.
+  offerId             String?
+  offer               MarketplaceOffer? @relation(fields: [offerId], references: [id])
+  federationFeeAmount Float             @default(0) // Cahootz federation share, taken from vendor proceeds
+  processingFeeAmount Float? // Stripe's fee, read from the balance transaction once paid
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   completedAt   DateTime?
@@ -3185,8 +3594,10 @@ model CommerceTransaction {
   treasuryLedgerEntries    TreasuryLedgerEntry[]
   scMintEvents             SCMintEvent[]
   fundingBadgeEntitlements FundingBadgeEntitlement[]
+  offerCommitment          OfferCommitment?
 
   @@index([customerId, createdAt(sort: Desc)])
+  @@index([offerId])
   @@index([businessId, createdAt(sort: Desc)])
   @@index([coopId])
   @@index([status])
@@ -3235,6 +3646,7 @@ model TreasuryLedgerEntry {
   sourceTransactionId   String? // CommerceTransaction.id, ProposalId, etc.
   sourceTransactionType String // 'COMMERCE_FEE', 'REFUND', 'ALLOCATION', 'ADJUSTMENT'
   sourceTransaction     CommerceTransaction? @relation(fields: [sourceTransactionId], references: [id])
+  coopId                String? // Commons the entry belongs to; null on entries written before 2026-10
 
   // Accounting
   accountType TreasuryAccountType
@@ -3252,6 +3664,7 @@ model TreasuryLedgerEntry {
   @@index([accountType, occurredAt(sort: Desc)])
   @@index([sourceTransactionId])
   @@index([entryType])
+  @@index([coopId, accountType])
   @@schema("public")
 }
 
@@ -3410,20 +3823,6 @@ model SCBalanceCache {
   @@schema("public")
 }
 
-// ── Feature Flags ──────────────────────────────────────────
-
-model FeatureFlag {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  enabled     Boolean  @default(false)
-  description String?
-  metadata    Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@schema("public")
-}
-
 // ── Admin Security (RBAC, MFA, Audit) ──────────────────────
 
 model AdminRole {
@@ -3530,6 +3929,525 @@ model AnonymousProfile {
   updatedAt        DateTime  @updatedAt
   migratedToUserId String?
   migratedAt       DateTime?
+
+  @@schema("public")
+}
+
+// ── Member Deals and Group Buys ───────────────────────────
+//
+// An offer gives members of one Commons a lower price on an existing product.
+// A Member Deal is live as soon as a steward approves it. A Group Buy only
+// unlocks once enough members commit; nobody pays until the vendor confirms.
+// Regular listings never touch these tables.
+
+model MarketplaceOffer {
+  id         String    @id @default(cuid())
+  offerType  OfferType
+  // Empty means the deal is open to members of every Commons. Each member's
+  // payment credits the Commons they joined through (OfferCommitment.coopId).
+  coopId     String?
+  // Older offers were sold through a marketplace shop. New ones aren't: Cahootz
+  // collects every payment and works with the vendor by hand.
+  storeId    String?
+  store      Store?    @relation(fields: [storeId], references: [id])
+  productId  String?
+  product    Product?  @relation(fields: [productId], references: [id])
+  businessId String?
+
+  // Who fills the order. They never sign up; an admin sends them the order list.
+  vendorName       String
+  vendorEmail      String?
+  vendorPhone      String?
+  vendorProspectId String? // The outreach business that said yes, if it came from outreach
+  imageUrl         String?
+  // The discovered item this offer came from, if any (product-discovery bot).
+  sourcedProductId String?
+  sourcedProduct   SourcedProduct? @relation(fields: [sourcedProductId], references: [id], onDelete: SetNull)
+
+  title       String
+  description String?
+
+  // Prices are whole cents. Savings are derived from these two, never stored.
+  regularPriceCents  Int
+  regularPriceSource String // Where the comparison price comes from, e.g. "Posted shelf price"
+  memberPriceCents   Int
+
+  // What the vendor gets per unit. Members pay memberPriceCents with no markup;
+  // Stripe's fee comes off first, then what's left after the vendor is split
+  // between the Commons (commonsSplitBps) and Cahootz (the rest).
+  vendorPayoutCents Int
+  commonsSplitBps   Int @default(5000)
+
+  // Quantities are units, not people.
+  minimumCommitments Int? // Group Buy: units needed by the commitment deadline
+  minimumPaidOrders  Int? // Group Buy: units that must be paid when the payment window closes
+  maximumQuantity    Int?
+  quantityPerMember  Int  @default(1)
+  committedQuantity  Int  @default(0) // Cache; only written while holding the offer lock
+
+  commitmentDeadline DateTime?
+  paymentWindowHours Int       @default(72)
+  paymentOpensAt     DateTime?
+  paymentDeadline    DateTime?
+  fulfillmentDate    DateTime?
+
+  fulfillmentMethod  OfferFulfillmentMethod @default(DELIVERY)
+  pickupLocation     String?
+  serviceArea        String?
+  redemptionRules    String?
+  refundPolicy       String?
+  substitutionPolicy String?
+  terms              String?
+
+  status              OfferStatus @default(DRAFT)
+  stewardNote         String? // Why a steward sent the offer back
+  createdById         String
+  stewardApprovedById String?
+  stewardApprovedAt   DateTime?
+  publishedAt         DateTime?
+  expiresAt           DateTime? // Member Deal end
+  cancelledAt         DateTime?
+  cancelReason        String?
+
+  // A repeating deal goes up again on its own: a fresh copy is posted as soon
+  // as this one hits its goal, or when it ends short of it. Each copy runs for
+  // roundDays. Cancelling a copy stops the repeat.
+  repeats        Boolean @default(false)
+  roundDays      Int?
+  repeatedFromId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  commitments          OfferCommitment[]
+  commerceTransactions CommerceTransaction[]
+  notificationSends    OfferNotificationSend[]
+  vendorPayouts        OfferVendorPayout[]
+
+  @@index([coopId, status])
+  @@index([status, commitmentDeadline])
+  @@index([status, paymentDeadline])
+  @@index([status, expiresAt])
+  @@index([storeId])
+  @@index([sourcedProductId])
+  @@index([repeats, status])
+  @@schema("public")
+}
+
+// One row per member per offer. For a Group Buy it is created when the member
+// commits; for a Member Deal when they start checkout. Savings are only set once
+// the payment completes, and are reduced when it is refunded.
+model OfferCommitment {
+  id      String           @id @default(cuid())
+  offerId String
+  offer   MarketplaceOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // The Commons whose share this member's payment goes to. Same as the offer's
+  // Commons, or for an every-Commons deal, the one the member belongs to.
+  coopId  String?
+
+  quantity Int
+  status   CommitmentStatus @default(COMMITTED)
+
+  // Sent to the vendor so they can ship it. The member agrees when they order.
+  contactName     String?
+  contactPhone    String?
+  shippingAddress Json? // { name, line1, line2, city, state, postalCode } at the time of the order
+
+  // Group Buy: the card saved when the member committed, charged once the goal is met.
+  stripePaymentMethodId String?
+  chargeError           String? // Why the automatic charge didn't go through
+
+  regularUnitCents Int
+  memberUnitCents  Int
+  savingsCents     Int @default(0)
+
+  commerceTransactionId String?              @unique
+  commerceTransaction   CommerceTransaction? @relation(fields: [commerceTransactionId], references: [id])
+  refundError           String?
+
+  committedAt       DateTime  @default(now())
+  cancelledAt       DateTime?
+  paymentNotifiedAt DateTime?
+  paidAt            DateTime?
+  refundedAt        DateTime?
+  fulfilledAt       DateTime?
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([offerId, userId])
+  @@index([userId, status])
+  @@index([offerId, status])
+  @@schema("public")
+}
+
+// Claimed before an offer notification is sent, so a retried sweep never
+// sends the same notice twice.
+/**
+ * A payment Cahootz made to a vendor, by hand, for one offer.
+ */
+model OfferVendorPayout {
+  id           String           @id @default(cuid())
+  offerId      String
+  offer        MarketplaceOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  amountCents  Int
+  paidAt       DateTime
+  method       String // Check, Zelle, ACH...
+  note         String?
+  recordedById String
+  createdAt    DateTime         @default(now())
+
+  @@index([offerId])
+  @@schema("public")
+}
+
+/**
+ * Where a member wants deal orders shipped. Filled in for them next time.
+ */
+model UserShippingAddress {
+  userId     String   @id
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  postalCode String
+  updatedAt  DateTime @updatedAt
+
+  @@schema("public")
+}
+
+model OfferNotificationSend {
+  id        String           @id @default(cuid())
+  offerId   String
+  offer     MarketplaceOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  userId    String
+  kind      String
+  createdAt DateTime         @default(now())
+
+  @@unique([offerId, userId, kind])
+  @@schema("public")
+}
+
+// One weekly "member deals" notification per member per Commons. Claimed before
+// sending, so a rerun of the weekly job never sends it twice.
+model OfferDigestSend {
+  id        String   @id @default(cuid())
+  coopId    String
+  userId    String
+  weekKey   String
+  createdAt DateTime @default(now())
+
+  @@unique([coopId, userId, weekKey])
+  @@schema("public")
+}
+
+enum OfferType {
+  MEMBER_DEAL
+  GROUP_BUY
+
+  @@schema("public")
+}
+
+enum OfferFulfillmentMethod {
+  PICKUP
+  DELIVERY
+  SERVICE // Work done for the member (tech help, a website). Nothing ships, so no address.
+
+  @@schema("public")
+}
+
+enum OfferStatus {
+  DRAFT
+  PENDING_STEWARD
+  LIVE
+  PAUSED
+  AWAITING_VENDOR
+  PAYMENT_OPEN
+  CONFIRMED
+  ORDERED
+  READY
+  FULFILLED
+  EXPIRED
+  CANCELLED
+  FAILED
+
+  @@schema("public")
+}
+
+enum CommitmentStatus {
+  COMMITTED
+  CANCELLED
+  PAYMENT_PENDING
+  PAID
+  LAPSED
+  REFUNDED
+  FULFILLED
+
+  @@schema("public")
+}
+
+// ── Vendor finding and outreach (docs/vendor-outreach-plan.md) ──
+//
+// A business we might ask for a Member Deal or Group Buy. One row per business:
+// a second member recommending the same business adds a referral, not a prospect.
+// Phase 1 fills this from member referrals; later phases add shops already on
+// Cahootz and web search, and the outreach statuses.
+
+model VendorProspect {
+  id               String             @id @default(cuid())
+  businessName     String
+  category         String? // Deal category key from vendor-outreach/categories.ts
+  description      String? // What they sell, in the recommender's words
+  website          String?
+  domain           String? // Lowercased host of the website or email, for dedupe
+  email            String?
+  emailNormalized  String?            @unique
+  phone            String?
+  city             String?
+  state            String?
+  sourceType       ProspectSourceType
+  sourceUrl        String? // Where a contact was found (web search, directory)
+  storeId          String? // Set when the business already has a Cahootz shop
+  status           ProspectStatus     @default(FOUND)
+  statusNote       String?
+  lastContactedAt  DateTime?
+  declinedUntil    DateTime? // "Not right now": not contacted again before this
+  convertedOfferId String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  referrals         VendorReferral[]
+  campaignProspects CampaignProspect[]
+  responses         VendorResponse[]
+
+  @@index([status])
+  @@index([category])
+  @@index([domain])
+  @@schema("public")
+}
+
+// A member's recommendation of a business. The referrer is only ever named to
+// the business if they said so (mayNameReferrer).
+model VendorReferral {
+  id                     String         @id @default(cuid())
+  prospectId             String
+  prospect               VendorProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  referredByUserId       String
+  referredBy             User           @relation(fields: [referredByUserId], references: [id], onDelete: Cascade)
+  coopId                 String
+  howKnown               String?
+  mayNameReferrer        Boolean        @default(false)
+  confirmedPublicContact Boolean
+  createdAt              DateTime       @default(now())
+
+  @@unique([prospectId, referredByUserId])
+  @@index([referredByUserId, createdAt])
+  @@index([coopId, createdAt])
+  @@schema("public")
+}
+
+enum ProspectSourceType {
+  MEMBER_REFERRAL
+  CAHOOTZ_SHOP
+  WEB_SEARCH
+  DIRECTORY_SITE
+  ADMIN
+
+  @@schema("public")
+}
+
+enum ProspectStatus {
+  FOUND
+  VERIFIED
+  QUEUED
+  CONTACTED
+  FOLLOWED_UP
+  INTERESTED
+  IN_TALKS
+  CONVERTED
+  DECLINED
+  UNSUBSCRIBED
+  BOUNCED
+  SKIPPED
+
+  @@schema("public")
+}
+
+// A platform-admin-approved outreach campaign: Sage may find and email businesses
+// for one deal category near one Commons, within these limits. Proposed by Sage
+// from public answers to a deal question; nothing is sent until it's ACTIVE.
+model VendorCampaign {
+  id               String               @id @default(cuid())
+  coopId           String
+  category         String // Deal category key (vendor-outreach/categories.ts)
+  offerType        OfferType            @default(GROUP_BUY)
+  searchTerms      String[]
+  area             String? // City or neighborhood to search near; required before approval
+  demandActionId   String?              @unique // The deal-interest question this came from
+  demandEvidence   Json // Public counts only: answers, Need posts
+  // A discovered item the campaign looks for a seller of (product-discovery bot).
+  sourcedProductId String?
+  sourcedProduct   SourcedProduct?      @relation(fields: [sourcedProductId], references: [id], onDelete: SetNull)
+  pitchPoints      String? // Admin-approved extra line for the email
+  maxEmails        Int                  @default(10)
+  maxSearches      Int                  @default(5)
+  searchesUsed     Int                  @default(0)
+  status           VendorCampaignStatus @default(PROPOSED)
+  rejectReason     String?
+  // Why a seller search ended without reaching anyone: NO_SOURCES, NOTHING_FOUND, NOTHING_FOUND_NO_WEB_SEARCH, NONE_REACHABLE.
+  endReason        String?
+  approvedById     String?
+  approvedAt       DateTime?
+  discoveredAt     DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  prospects CampaignProspect[]
+
+  @@index([status])
+  @@index([coopId, createdAt])
+  @@index([sourcedProductId])
+  @@schema("public")
+}
+
+// Where Sage may look for businesses. Built-in sources plus ones Sage suggests,
+// which only count once a platform admin enables them.
+model ProspectSource {
+  id          String               @id @default(cuid())
+  type        ProspectSourceType
+  name        String               @unique
+  config      Json                 @default("{}") // e.g. { domain, queryHint }
+  suggestedBy String // "system", "sage" or an admin id
+  reason      String?
+  status      ProspectSourceStatus @default(SUGGESTED)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([status])
+  @@schema("public")
+}
+
+model CampaignProspect {
+  id             String                 @id @default(cuid())
+  campaignId     String
+  campaign       VendorCampaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  prospectId     String
+  prospect       VendorProspect         @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  status         CampaignProspectStatus @default(QUEUED)
+  skipReason     String?
+  replyTokenHash String?                @unique
+  personalLine   String? // Sage's checked paragraph for this business, if any
+  firstSentAt    DateTime?
+  followUpSentAt DateTime?
+  respondedAt    DateTime?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  messages  OutreachMessage[]
+  responses VendorResponse[]
+
+  @@unique([campaignId, prospectId])
+  @@index([status])
+  @@schema("public")
+}
+
+// One row per email step; the unique key means a step is never sent twice.
+model OutreachMessage {
+  id                 String                @id @default(cuid())
+  campaignProspectId String
+  campaignProspect   CampaignProspect      @relation(fields: [campaignProspectId], references: [id], onDelete: Cascade)
+  step               OutreachStep
+  toEmail            String
+  subject            String
+  body               String                @db.Text
+  status             OutreachMessageStatus
+  resendId           String?
+  error              String?
+  sentAt             DateTime              @default(now())
+
+  @@unique([campaignProspectId, step])
+  @@index([status, sentAt])
+  @@schema("public")
+}
+
+// Never email these again: unsubscribes, bounces, and admin blocks.
+model OutreachSuppression {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  domain    String?  @unique
+  reason    String // UNSUBSCRIBED, BOUNCED, ASKED_NOT_TO, ADMIN
+  createdAt DateTime @default(now())
+
+  @@schema("public")
+}
+
+model VendorResponse {
+  id                 String            @id @default(cuid())
+  prospectId         String
+  prospect           VendorProspect    @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  campaignProspectId String?
+  campaignProspect   CampaignProspect? @relation(fields: [campaignProspectId], references: [id], onDelete: SetNull)
+  interest           VendorInterest
+  contactName        String?
+  bestContact        String?
+  offerIdea          String?
+  respondedAt        DateTime          @default(now())
+
+  @@index([prospectId])
+  @@schema("public")
+}
+
+enum VendorCampaignStatus {
+  PROPOSED
+  ACTIVE
+  PAUSED
+  COMPLETED
+  EXPIRED
+  REJECTED
+
+  @@schema("public")
+}
+
+enum ProspectSourceStatus {
+  SUGGESTED
+  ENABLED
+  DISABLED
+
+  @@schema("public")
+}
+
+enum CampaignProspectStatus {
+  QUEUED
+  SENT
+  FOLLOWED_UP
+  RESPONDED
+  SKIPPED
+
+  @@schema("public")
+}
+
+enum OutreachStep {
+  FIRST
+  FOLLOW_UP
+
+  @@schema("public")
+}
+
+enum OutreachMessageStatus {
+  SENT
+  DRY_RUN
+  FAILED
+
+  @@schema("public")
+}
+
+enum VendorInterest {
+  YES
+  NOT_NOW
+  UNSUBSCRIBE
 
   @@schema("public")
 }

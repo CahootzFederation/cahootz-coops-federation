@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:run": "vitest run",
-    "test:ci": "vitest run --reporter=verbose"
+    "test:ci": "vitest run --reporter=verbose",
+    "test:db": "vitest run -c vitest.db.config.ts"
   },
   "exports": {
     ".": {
@@ -32,6 +33,11 @@
       "types": "./dist/server/index.d.ts",
       "import": "./dist/server/index.js",
       "require": "./dist/server/index.js"
+    },
+    "./error-tracking": {
+      "types": "./dist/lib/error-tracking.d.ts",
+      "import": "./dist/lib/error-tracking.js",
+      "require": "./dist/lib/error-tracking.js"
     },
     "./services/wallet-service": {
       "types": "./dist/services/wallet-service.d.ts",
@@ -57,11 +63,6 @@
       "types": "./dist/services/reward-retry-service.d.ts",
       "import": "./dist/services/reward-retry-service.js",
       "require": "./dist/services/reward-retry-service.js"
-    },
-    "./services/feature-flag-service": {
-      "types": "./dist/services/feature-flag-service.d.ts",
-      "import": "./dist/services/feature-flag-service.js",
-      "require": "./dist/services/feature-flag-service.js"
     },
     "./services/payment-webhook-service": {
       "types": "./dist/services/payment-webhook-service.d.ts",
@@ -98,6 +99,16 @@
       "import": "./dist/services/funding-settlement-service.js",
       "require": "./dist/services/funding-settlement-service.js"
     },
+    "./services/marketplace-offers": {
+      "types": "./dist/services/marketplace-offers/index.d.ts",
+      "import": "./dist/services/marketplace-offers/index.js",
+      "require": "./dist/services/marketplace-offers/index.js"
+    },
+    "./services/vendor-outreach": {
+      "types": "./dist/services/vendor-outreach/index.d.ts",
+      "import": "./dist/services/vendor-outreach/index.js",
+      "require": "./dist/services/vendor-outreach/index.js"
+    },
     "./services/stripe-connect-service": {
       "types": "./dist/services/stripe-connect-service.d.ts",
       "import": "./dist/services/stripe-connect-service.js",
@@ -117,6 +128,16 @@
       "types": "./dist/services/platform-admin.d.ts",
       "import": "./dist/services/platform-admin.js",
       "require": "./dist/services/platform-admin.js"
+    },
+    "./services/sage-dev-issues": {
+      "types": "./dist/services/sage-dev-issues.d.ts",
+      "import": "./dist/services/sage-dev-issues.js",
+      "require": "./dist/services/sage-dev-issues.js"
+    },
+    "./services/sage-weekly-outreach": {
+      "types": "./dist/services/sage-weekly-outreach.d.ts",
+      "import": "./dist/services/sage-weekly-outreach.js",
+      "require": "./dist/services/sage-weekly-outreach.js"
     },
     "./services/welcome-tables": {
       "types": "./dist/services/welcome-tables.d.ts",
@@ -167,6 +188,11 @@
       "types": "./dist/services/sage-wake.d.ts",
       "import": "./dist/services/sage-wake.js",
       "require": "./dist/services/sage-wake.js"
+    },
+    "./services/agent-operations": {
+      "types": "./dist/services/agent-operations.d.ts",
+      "import": "./dist/services/agent-operations.js",
+      "require": "./dist/services/agent-operations.js"
     }
   },
   "keywords": [],
@@ -188,6 +214,7 @@
     "iron-session": "catalog:",
     "next-auth": "^4.24.13",
     "openai": "^6.10.0",
+    "posthog-node": "^5.28.0",
     "react": "catalog:react19",
     "resend": "^6.12.3",
     "stripe": "^20.1.2",

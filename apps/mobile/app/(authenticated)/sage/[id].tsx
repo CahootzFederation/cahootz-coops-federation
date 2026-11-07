@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
@@ -79,13 +79,14 @@ function SuggestionContextCard({ context, coopId }: { context: SuggestionContext
 }
 
 function labelForReviewType(reviewType: string, capability: string | null) {
-  if (reviewType === 'PROVIDE_CONTEXT') return 'Sage needs a few details from you';
-  if (reviewType === 'CONSENT_TO_SHARE') return 'Confirm what to share';
-  if (reviewType === 'ACCEPT_MATCH') return 'A member could use your help';
   if (reviewType === 'ACCEPT_INTRODUCTION') return 'Sage can introduce you';
   if (reviewType === 'APPROVE_SUGGESTION') {
     if (capability === 'comment_on_post') return 'Sage recommends commenting';
     if (capability === 'draft_proposal') return 'Sage recommends a proposal';
+    if (capability === 'post_for_member') return 'Sage can post this for you';
+    if (capability === 'thank_helper') return 'Did the introduction help?';
+    if (capability === 'share_win') return 'Share a shout-out for your help?';
+    if (capability === 'post_pre_vote_summary') return 'Sage wrote a summary before the vote';
     return 'Sage has an idea';
   }
   return 'Confirm details';
@@ -95,6 +96,10 @@ function labelForReviewType(reviewType: string, capability: string | null) {
 function approvalConsequence(capability: string | null) {
   if (capability === 'comment_on_post') return 'Approving posts this comment as Sage on that post. It will not speak for you.';
   if (capability === 'draft_proposal') return 'Approving saves an editable draft for you. Nothing is submitted until you submit it.';
+  if (capability === 'post_for_member') return 'Approving posts this in your Commons from Sage, without your name. Sage tells you privately when someone replies.';
+  if (capability === 'thank_helper') return 'Approving tells Sage it helped. Sage thanks the person who helped you; you are not named.';
+  if (capability === 'share_win') return 'Approving posts a short thank-you naming you in the Commons. The member you helped is not named or described.';
+  if (capability === 'post_pre_vote_summary') return "Approving posts this summary as Sage on the proposal's discussion while the vote is open. It doesn't say how to vote.";
   return null;
 }
 
@@ -105,9 +110,6 @@ export default function SageSuggestionDetailScreen() {
   const [isLoadingDetail, setIsLoadingDetail] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [isResponding, setIsResponding] = React.useState(false);
-  const [area, setArea] = React.useState('');
-  const [timeWindow, setTimeWindow] = React.useState('');
-  const [shareScope, setShareScope] = React.useState('');
 
   React.useEffect(() => {
     if (isLoading || (isAuthenticated && sessionToken)) return;
@@ -136,8 +138,7 @@ export default function SageSuggestionDetailScreen() {
     setIsResponding(true);
     setError(null);
     try {
-      const payload = pendingReview.reviewType === 'PROVIDE_CONTEXT' ? { area, timeWindow, shareScope } : undefined;
-      await api.respondToSageReview(pendingReview.id, response, sessionToken, payload);
+      await api.respondToSageReview(pendingReview.id, response, sessionToken);
       load();
     } catch (err) {
       setError(friendlyError(err, "We couldn't send your answer."));
@@ -248,32 +249,6 @@ export default function SageSuggestionDetailScreen() {
 
                 {pendingReview.reviewType === 'APPROVE_SUGGESTION' && approvalConsequence(detail.suggestion.capability) ? (
                   <Text style={{ color: THEME.muted, fontSize: 13 }}>{approvalConsequence(detail.suggestion.capability)}</Text>
-                ) : null}
-
-                {pendingReview.reviewType === 'PROVIDE_CONTEXT' ? (
-                  <View style={{ gap: 8 }}>
-                    <TextInput
-                      accessibilityLabel="General area"
-                      placeholder="General area (e.g. Downtown)"
-                      value={area}
-                      onChangeText={setArea}
-                      style={{ borderWidth: 1, borderColor: THEME.border, borderRadius: 10, padding: 10 }}
-                    />
-                    <TextInput
-                      accessibilityLabel="Time window"
-                      placeholder="Time window (e.g. Saturday morning)"
-                      value={timeWindow}
-                      onChangeText={setTimeWindow}
-                      style={{ borderWidth: 1, borderColor: THEME.border, borderRadius: 10, padding: 10 }}
-                    />
-                    <TextInput
-                      accessibilityLabel="What's OK to share"
-                      placeholder="What's OK to share with a match?"
-                      value={shareScope}
-                      onChangeText={setShareScope}
-                      style={{ borderWidth: 1, borderColor: THEME.border, borderRadius: 10, padding: 10 }}
-                    />
-                  </View>
                 ) : null}
 
 

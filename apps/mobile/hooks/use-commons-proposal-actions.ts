@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { api } from '@/lib/api';
+import { ApiError } from '@/lib/friendly-error';
 
 export type CommonsProposalActions = {
   draftCount: number;
@@ -32,6 +33,7 @@ export function useCommonsProposalActions({
   sessionToken?: string | null;
   walletAddress?: string | null;
 }) {
+  const [reloadKey, setReloadKey] = useState(0);
   const [state, setState] = useState<CommonsProposalActions>(EMPTY);
 
   useEffect(() => {
@@ -43,14 +45,18 @@ export function useCommonsProposalActions({
       };
     }
 
-    setState((current) => ({ ...current, loading: true }));
+    setState({ ...EMPTY, loading: true });
     const draftsRequest = sessionToken
       ? api.getCommonsProposalDrafts(sessionToken).then((drafts) =>
           drafts.filter((draft) => draft.coopId === coopId).length,
         )
       : Promise.resolve(0);
     const actionRequest = walletAddress
-      ? api.getProposalActionSummary(coopId, walletAddress).catch(() => null)
+      ? api.getProposalActionSummary(coopId, walletAddress).catch((error: unknown) => {
+          // Only an explicit permission response means this account cannot vote.
+          if (error instanceof ApiError && error.code === 'FORBIDDEN') return null;
+          throw error;
+        })
       : Promise.resolve(null);
 
     Promise.all([draftsRequest, actionRequest])
@@ -73,7 +79,7 @@ export function useCommonsProposalActions({
     return () => {
       mounted = false;
     };
-  }, [coopId, enabled, sessionToken, walletAddress]);
+  }, [coopId, enabled, sessionToken, walletAddress, reloadKey]);
 
-  return state;
+  return { ...state, retry: () => setReloadKey((key) => key + 1) };
 }

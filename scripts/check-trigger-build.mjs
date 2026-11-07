@@ -73,6 +73,14 @@ assert.deepEqual(
   "Workspace imports were left external",
 );
 
+// The API's env.ts validates every API secret on import and throws in production without them;
+// Trigger's environment doesn't carry all of those, so a task that imports it fails with
+// COULD_NOT_IMPORT_TASK before it runs.
+assert.ok(
+  !bundledFiles.has(join(root, "apps/api/src/env.ts")),
+  "A Trigger task imports apps/api/src/env.ts; read process.env directly instead",
+);
+
 console.log(
   `Trigger bundle check passed for ${entryPoints.length} task files.`,
 );

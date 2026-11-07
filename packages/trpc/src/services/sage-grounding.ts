@@ -125,3 +125,23 @@ export async function checkRelevance(
     return { relevant: false, reason: `The relevance check couldn't run (${error instanceof Error ? error.message : String(error)}).` };
   }
 }
+
+const NUMBER = /(\$\s?)?\d[\d,]*(?:\.\d+)?/g;
+
+function digits(token: string): string {
+  return token.replace(/[$,\s]/g, "").replace(/\.0+$/, "");
+}
+
+/**
+ * Every number in the text is backed by the evidence. Small counts (12 or less, without a $) are
+ * allowed, since "meet twice a month" or "for 3 months" are part of an idea, not facts about us.
+ */
+export function unbackedNumbers(text: string, evidenceTexts: string[]): string[] {
+  const known = new Set(evidenceTexts.flatMap((source) => [...source.matchAll(NUMBER)].map((match) => digits(match[0]))));
+  return [...text.matchAll(NUMBER)].flatMap((match) => {
+    const value = digits(match[0]);
+    const isMoney = Boolean(match[1]);
+    if (!isMoney && Number(value) <= 12) return [];
+    return known.has(value) ? [] : [match[0].trim()];
+  });
+}

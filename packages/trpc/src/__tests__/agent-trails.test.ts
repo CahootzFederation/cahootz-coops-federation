@@ -113,10 +113,19 @@ describe("Sage reply trail", () => {
     expect(db.sageDecisionTrail.create.mock.calls[1]![0].data).toMatchObject({ outcome: "Reply failed" });
   });
 
-  it("records why Sage didn't answer an @mention in a circle", async () => {
+  it("records a reply to an @mention in a circle, visible only to that circle", async () => {
+    await traceSageReply({ kind: "comment", coopId: "harbor", postId: "p2", commentId: "c2", circleId: "circle-1" },
+      { message: "@sage who has a ladder?", threadContext: "Original post: Gutter day", threadCount: 1 },
+      async () => ({ reply: "Ask in the tool library first.", grounding }), async () => {});
+    const data = db.sageDecisionTrail.create.mock.calls[0]![0].data;
+    expect(data).toMatchObject({ visibility: "CIRCLE", circleId: "circle-1", sourceType: "sage_mention", outcome: "Replied in the comments as Sage" });
+    expect(data.steps.find((step: { label: string }) => step.label === "Sage replies to @mentions in this Commons' circles, with no tools")).toMatchObject({ outcome: "PASS" });
+  });
+
+  it("records why Sage didn't answer an @mention where it doesn't reply", async () => {
     await recordSkippedCircleMention({ coopId: "harbor", circleId: "circle-1", postId: "p2", sourceId: "p2", kind: "post" }, "@sage help");
     expect(db.sageDecisionTrail.create).toHaveBeenCalledWith({ data: expect.objectContaining({
-      visibility: "CIRCLE", circleId: "circle-1", outcome: "Didn't reply: @mentions in circles aren't answered",
+      visibility: "CIRCLE", circleId: "circle-1", outcome: "Didn't reply: Sage doesn't answer here",
     }), select: { id: true } });
   });
 });

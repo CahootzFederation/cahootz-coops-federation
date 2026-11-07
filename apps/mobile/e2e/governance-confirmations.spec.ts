@@ -211,7 +211,7 @@ test.describe("governance confirmations", () => {
     }
   });
 
-  test("a council vote asks for confirmation before it is cast", async ({ browser }) => {
+  test("a council vote asks for confirmation before it is cast", { tag: "@smoke" }, async ({ browser }) => {
     test.setTimeout(180_000);
     const { proposalId, title } = fixture("e2e-governance-vote.ts", "seed", `${runId}-vote`, USER_A_EMAIL);
     let voter: Awaited<ReturnType<typeof newSignedInPage>> | undefined;

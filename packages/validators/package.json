@@ -18,6 +18,21 @@
       "types": "./dist/notification.d.ts",
       "import": "./dist/notification.js",
       "default": "./dist/notification.js"
+    },
+    "./error-tracking": {
+      "types": "./dist/error-tracking.d.ts",
+      "import": "./dist/error-tracking.js",
+      "default": "./dist/error-tracking.js"
+    },
+    "./marketplace-offers": {
+      "types": "./dist/marketplace-offers.d.ts",
+      "import": "./dist/marketplace-offers.js",
+      "default": "./dist/marketplace-offers.js"
+    },
+    "./street": {
+      "types": "./dist/street.d.ts",
+      "import": "./dist/street.js",
+      "default": "./dist/street.js"
     }
   },
   "scripts": {

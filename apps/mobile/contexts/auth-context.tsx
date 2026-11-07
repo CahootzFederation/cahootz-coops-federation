@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import { useGlobalSearchParams, usePathname, useRouter, useSegments } from 'expo-router';
+import { useNavigationReady } from '@/hooks/use-navigation-ready';
 import { secureStorage } from '@/lib/secure-storage';
 import { setActiveCoopConfig, resetCoopConfig, type CoopConfig } from '@/lib/coop-config';
 import { api, onSessionExpired } from '@/lib/api';
-import { registerForNativePushNotifications } from '@/lib/push-notifications';
 import { canAccessUpdateChannelDebug, clearUpdateChannelOverrideQuietly } from '@/lib/update-channel-debug';
 import { clearAnonymousProfileIntroSeen } from '@/lib/anonymous-id';
+import { clearOfflineCache } from '@/lib/offline-cache';
 import * as analytics from '@/lib/analytics';
 
 interface User {
@@ -14,6 +15,7 @@ interface User {
   email: string;
   handle: string;
   name: string | null;
+  nickname: string | null;
   roles: string[];
   status: string;
   walletAddress: string | null;
@@ -30,6 +32,10 @@ interface User {
   locationSummary?: string | null;
   profileSignals?: unknown;
   profileOnboardingCompletedAt?: Date | null;
+  isFirstLogin?: boolean;
+  onboardingStep?: string;
+  onboardingCompletedAt?: string | Date | null;
+  onboardingDraft?: Record<string, string>;
   sessionToken?: string;
   // Coop membership info (set after application approval)
   coop?: {
@@ -62,6 +68,8 @@ interface AuthContextType {
   // router navigation to "/" doesn't reliably work here, since the tabs
   // group's own index route can resolve to the same path and no-op the
   // navigation — this bypasses routing entirely.
+  /** Signed in and done with onboarding: time to make sure pushes can reach this phone. */
+  pushReady: boolean;
   forceWelcomeIntro: boolean;
   previewWelcomeScreen: () => Promise<void>;
   dismissForcedWelcomeIntro: () => void;
@@ -76,17 +84,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [forceWelcomeIntro, setForceWelcomeIntro] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const navigationReady = useNavigationReady();
   const segments = useSegments();
   const pathname = usePathname();
-  const { coopId: coopIdParam } = useGlobalSearchParams<{ coopId?: string | string[] }>();
+  const { coopId: coopIdParam, chooseCommons } = useGlobalSearchParams<{ coopId?: string | string[]; chooseCommons?: string }>();
   const activeCoopId = Array.isArray(coopIdParam) ? coopIdParam[0] : coopIdParam;
-  const pushRegistrationAttempt = useRef<string | null>(null);
   const userRef = useRef(user);
+  const wizardOwnsExit = useRef(false);
   userRef.current = user;
   const inProfileOnboarding = segments[0] === 'profile-onboarding';
+  // Only finishing the whole wizard skips onboarding. Login history is separate.
+  const returningUser = !!user?.onboardingCompletedAt;
   const readyForPushRegistration = !!user && (
-    !!user.profileOnboardingCompletedAt || profileOnboardingDeferredUserId === user.id
+    returningUser || !!user.profileOnboardingCompletedAt || profileOnboardingDeferredUserId === user.id
   );
+  // Once onboarding is completed or skipped and its screen has closed,
+  // PushPermissionGate asks for notifications on every app open.
+  const pushReady = !!sessionToken && !isLoading && readyForPushRegistration && !inProfileOnboarding;
 
   // Load session on mount
   useEffect(() => {
@@ -94,35 +108,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!sessionToken) {
-      pushRegistrationAttempt.current = null;
-      return;
-    }
-    // Wait until onboarding is completed or skipped and its screen has closed.
-    if (isLoading || !readyForPushRegistration || inProfileOnboarding) return;
-    const registrationKey = `${sessionToken}:${user?.coop?.id || 'cahootz'}`;
-    if (pushRegistrationAttempt.current === registrationKey) return;
-    pushRegistrationAttempt.current = registrationKey;
-
-    // Silently (re)register a device that already allowed notifications.
-    // Asking for permission waits for a moment that explains why - the
-    // primer shown after a newcomer posts their welcome lounge intro.
-    registerForNativePushNotifications(sessionToken, user?.coop?.id || 'cahootz', {
-      neverAsk: true,
-    }).catch((error) => {
-      console.warn('Native push registration skipped:', error);
-    });
-  }, [sessionToken, user?.coop?.id, isLoading, readyForPushRegistration, inProfileOnboarding]);
-
-  useEffect(() => {
     if (isLoading || canAccessUpdateChannelDebug(user?.email)) return;
 
     void clearUpdateChannelOverrideQuietly();
   }, [isLoading, user?.email]);
 
-  // Handle navigation based on auth state
+  // Handle navigation based on auth state. Offline, the session loads before
+  // the navigator is ready, and navigating then crashes the app (see
+  // useNavigationReady).
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || !navigationReady) return;
 
     const inAuthGroup = segments[0] === '(authenticated)';
     const inProfileOnboarding = segments[0] === 'profile-onboarding';
@@ -132,15 +127,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // bare "/(tabs)" and silently fall back to the default Commons.
     const atRoot = pathname === '/' && segments[0] !== '(tabs)';
 
-    if (!user && inAuthGroup) {
+    if (!user && (inAuthGroup || inProfileOnboarding)) {
       // User is not logged in but in authenticated routes, redirect to onboarding
-      router.replace('/');
+      router.replace({ pathname: '/', params: { entry: 'sign-in' } } as any);
       return;
     }
 
     const profileOnboardingDeferred = !!user && profileOnboardingDeferredUserId === user.id;
 
-    if (user && !user.profileOnboardingCompletedAt && !profileOnboardingDeferred && !inProfileOnboarding) {
+    if (!inProfileOnboarding) wizardOwnsExit.current = false;
+
+    if (user && returningUser && inProfileOnboarding && chooseCommons !== '1' && !wizardOwnsExit.current) {
+      router.replace('/(tabs)' as any);
+      return;
+    }
+
+
+    if (user && !returningUser && !inProfileOnboarding) {
       router.replace('/profile-onboarding' as any);
       return;
     }
@@ -152,10 +155,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (user?.profileOnboardingCompletedAt && inProfileOnboarding) {
-      router.replace('/(tabs)' as any);
-    }
-  }, [user, segments, isLoading, router, pathname, profileOnboardingDeferredUserId, activeCoopId]);
+    // The wizard owns its exit, including the final commons choice after saving a profile.
+  }, [user, segments, isLoading, navigationReady, router, pathname, profileOnboardingDeferredUserId, activeCoopId, returningUser, chooseCommons]);
 
   const loadSession = async () => {
     try {
@@ -174,6 +175,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           parsedUser.sessionToken ||
           (await secureStorage.getItem(secureStorage.keys.SESSION_TOKEN));
         setSessionToken(storedSessionToken);
+        if (storedSessionToken) {
+          // Refreshing onboarding progress needs the server. Offline, keep the
+          // saved copy so the member stays signed in.
+          try {
+            const progress = await api.getOnboardingProgress(storedSessionToken);
+            Object.assign(parsedUser, progress);
+            setUser({ ...parsedUser });
+          } catch (error) {
+            console.warn('Using saved onboarding progress:', error);
+          }
+        }
 
         // Set coop config if user has coop membership
         if (parsedUser.coop) {
@@ -271,10 +283,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // login() is also used to refresh the stored record for the same
       // account (e.g. after profile onboarding) - only a new id is a sign-in.
       const isNewSignIn = userRef.current?.id !== userData.id;
+      if (inProfileOnboarding && !userRef.current?.onboardingCompletedAt && userData.onboardingCompletedAt) {
+        wizardOwnsExit.current = true;
+      }
       setUser(userData);
       setSessionToken(userData.sessionToken || null);
       if (isNewSignIn) {
-        analytics.identify(userData.id, { coopId: userData.coop?.id ?? 'cahootz' });
+        analytics.identify(userData.id, { coopId: userData.coop?.id ?? 'cahootz', email: userData.email });
         analytics.track('signed_in');
       }
     } catch (error) {
@@ -291,6 +306,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (userRef.current) analytics.track('signed_out', { reason });
       analytics.reset();
       await secureStorage.clear();
+      // Data saved for offline use belongs to this account.
+      await clearOfflineCache();
       console.log('Secure storage cleared');
       resetCoopConfig();
       console.log('Coop config reset');
@@ -316,12 +333,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // the local "deferred" flag and the locally cached completion timestamp so
   // the navigation effect above redirects to /profile-onboarding on its own.
   const resetProfileOnboarding = async () => {
-    if (!user) return;
+    if (!user || !sessionToken) return;
+    const progress = await api.restartOnboarding(sessionToken);
 
     await secureStorage.removeItem(secureStorage.keys.PROFILE_ONBOARDING_DEFERRED_USER);
     setProfileOnboardingDeferredUserId(null);
 
-    const updatedUser = { ...user, profileOnboardingCompletedAt: null };
+    const updatedUser = { ...user, ...progress, profileOnboardingCompletedAt: null };
     await secureStorage.setItem(secureStorage.keys.USER, JSON.stringify(updatedUser));
     setUser(updatedUser);
   };
@@ -329,14 +347,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Dev/QA helper: the Welcome Wizard only ever shows on a logged-out
   // device, so previewing it again means clearing its "seen" flag and
   // signing out. Setting forceWelcomeIntro makes app/index.tsx route back
-  // into the wizard immediately, from whichever screen this was triggered
-  // from — no router navigation involved here.
+  // into the wizard once it's showing.
   const previewWelcomeScreen = async () => {
     await clearAnonymousProfileIntroSeen();
     if (user) {
       await logout();
     }
     setForceWelcomeIntro(true);
+    // app/index.tsx only sees the flag while it's mounted, so go there too
+    // (triggered from the drawer on another screen, it may not be).
+    router.replace('/' as any);
   };
 
   const dismissForcedWelcomeIntro = () => {
@@ -362,7 +382,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
-        isLoading,
+        isLoading: isLoading || (returningUser && inProfileOnboarding && chooseCommons !== '1' && !wizardOwnsExit.current),
         isAuthenticated: !!user,
         sessionToken,
         login,
@@ -370,6 +390,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         deferProfileOnboarding,
         resetProfileOnboarding,
+        pushReady,
         forceWelcomeIntro,
         previewWelcomeScreen,
         dismissForcedWelcomeIntro,

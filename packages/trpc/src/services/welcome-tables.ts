@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { defaultCircleNotificationLevel } from "@repo/validators/notification";
 
 import type { Context } from "../context.js";
 import { auditLogEntry } from "../lib/audit.js";
@@ -86,7 +87,12 @@ async function assignOrAdvance(db: Db, coopId: string, mode: AssignMode) {
 
           if (mode.type === "auto" && isOpen && newcomerCount < config.capacity) {
             await tx.groupMember.create({
-              data: { groupId: active!.id, userId: mode.newcomerId, role: "NEWCOMER" },
+              data: {
+                groupId: active!.id,
+                userId: mode.newcomerId,
+                role: "NEWCOMER",
+                notificationLevel: defaultCircleNotificationLevel,
+              },
             });
             if (newcomerCount + 1 >= config.capacity) {
               await tx.group.update({ where: { id: active!.id }, data: { welcomeTableStatus: "FULL" } });
@@ -119,12 +125,22 @@ async function assignOrAdvance(db: Db, coopId: string, mode: AssignMode) {
           });
           if (config.guideUserId) {
             await tx.groupMember.create({
-              data: { groupId: created.id, userId: config.guideUserId, role: "GUIDE" },
+              data: {
+                groupId: created.id,
+                userId: config.guideUserId,
+                role: "GUIDE",
+                notificationLevel: defaultCircleNotificationLevel,
+              },
             });
           }
           if (mode.type === "auto") {
             await tx.groupMember.create({
-              data: { groupId: created.id, userId: mode.newcomerId, role: "NEWCOMER" },
+              data: {
+                groupId: created.id,
+                userId: mode.newcomerId,
+                role: "NEWCOMER",
+                notificationLevel: defaultCircleNotificationLevel,
+              },
             });
           }
           const sage = await ensureSageBotUser(tx, coopId);

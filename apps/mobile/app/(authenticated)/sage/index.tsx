@@ -14,9 +14,10 @@ import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
 import { sageStatusMeta } from '@/lib/sage-status';
 import { SageFollowing } from '@/components/sage-following';
+import { SageAvatar } from '@/components/sage-avatar';
 import { SageIntro } from '@/components/sage-intro';
 import { friendlyError } from '@/lib/friendly-error';
-import { ArrowLeft, Sparkles } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 
 const THEME = {
   paper: '#F8FAFC',
@@ -84,11 +85,8 @@ export default function SageSuggestionsScreen() {
         >
           <ArrowLeft size={22} color={THEME.primary} />
         </TouchableOpacity>
-        <Sparkles size={22} color={THEME.primary} />
+        <SageAvatar size={32} motion="blink" />
         <Text style={{ fontSize: 20, fontWeight: '800', color: THEME.ink }}>Sage suggestions</Text>
-      </View>
-      <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
-        <SageIntro />
       </View>
 
       <ScrollView
@@ -121,6 +119,8 @@ export default function SageSuggestionsScreen() {
         contentContainerStyle={{ padding: 16, paddingTop: 0, gap: 10, flexGrow: 1 }}
         refreshControl={<RefreshControl refreshing={isLoadingList} onRefresh={load} />}
       >
+        {/* Scrolls with the list so the tabs above stay reachable on small screens. */}
+        <SageIntro />
         {activeTab === 'FOLLOWING' && sessionToken ? (
           <SageFollowing sessionToken={sessionToken} />
         ) : isLoadingList && suggestions.length === 0 ? (

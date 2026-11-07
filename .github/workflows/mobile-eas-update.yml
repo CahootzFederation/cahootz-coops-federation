@@ -72,6 +72,11 @@ jobs:
           packager: pnpm
           token: ${{ secrets.EXPO_TOKEN }}
 
+      # EAS Build runs this via eas-build-post-install; eas update does not,
+      # and the mobile app imports @repo/validators from its built dist/.
+      - name: Build workspace packages
+        run: pnpm --filter @repo/validators build --incremental false
+
       - name: Publish EAS update
         working-directory: apps/mobile
         env:

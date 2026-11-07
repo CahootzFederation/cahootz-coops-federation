@@ -2,7 +2,6 @@ import { env } from "./env.js";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import cors from "cors";
 import { trpcExpress } from "@repo/trpc/server";
-import { appRouter } from "@repo/trpc/router";
 import type { Application, Request, Response } from "express";
 import express from "express";
 import os from "os";
@@ -10,6 +9,10 @@ import { fileURLToPath } from "url";
 import { resolve } from "path";
 import { getHealthStatus, startHealthMonitoring } from "./health-monitor.js";
 import { startLocalSageWakeLoop } from "@repo/trpc/services/sage-wake";
+import { sendAgentOperationalAlert } from "@repo/trpc/services/slack-notification-service";
+import { startAgentOperationsMonitor, stopAgentOperationsMonitor } from "./agent-operations-monitor.js";
+import { isPrimaryProductionDeployment } from "@repo/trpc/services/agent-operations";
+import { captureServerException, flushErrorTracking } from "@repo/trpc/error-tracking";
 
 const app: Application = express();
 
@@ -219,96 +222,6 @@ app.post("/api/test-email/order-confirmation", async (req: Request, res: Respons
   }
 });
 
-app.post("/dev/newsletter-agent/run", async (req: Request, res: Response) => {
-  if (env.NODE_ENV === "production") {
-    return res.status(404).json({ success: false, message: "Not found" });
-  }
-
-  const configuredToken = env.DEV_AGENT_TOKEN;
-  const providedToken = req.headers["x-dev-agent-token"];
-  if (configuredToken && providedToken !== configuredToken) {
-    return res.status(403).json({
-      success: false,
-      message: "Invalid X-Dev-Agent-Token.",
-    });
-  }
-
-  const {
-    coopId,
-    agentId = "article-writer",
-    walletAddress,
-    refreshResearch = false,
-    sources,
-  } = req.body ?? {};
-
-  if (typeof coopId !== "string" || !coopId.trim()) {
-    return res.status(400).json({
-      success: false,
-      message: "coopId is required.",
-    });
-  }
-
-  if (!["article-writer", "event-writer"].includes(agentId)) {
-    return res.status(400).json({
-      success: false,
-      message: "agentId must be article-writer or event-writer.",
-    });
-  }
-
-  const devWalletAddress =
-    typeof walletAddress === "string" && walletAddress.trim()
-      ? walletAddress.trim()
-      : env.DEV_AGENT_WALLET_ADDRESS;
-
-  if (!devWalletAddress) {
-    return res.status(400).json({
-      success: false,
-      message: "Provide walletAddress in the JSON body or set DEV_AGENT_WALLET_ADDRESS.",
-    });
-  }
-
-  try {
-    const { db } = await import("@repo/db");
-    const caller = appRouter.createCaller({
-      db,
-      req: {
-        headers: {
-          "x-coop-id": coopId,
-          "x-wallet-address": devWalletAddress,
-        },
-      },
-      res: {},
-      coopId,
-    });
-
-    let researchResult: Awaited<ReturnType<typeof caller.publicCoopInfo.runNewsletterResearch>> | null = null;
-    if (refreshResearch) {
-      researchResult = await caller.publicCoopInfo.runNewsletterResearch({
-        coopId,
-        forceRefresh: true,
-        sources: Array.isArray(sources) ? sources : undefined,
-      });
-    }
-
-    const agentResult = await caller.publicCoopInfo.runNewsletterAgent({
-      coopId,
-      agentId,
-    });
-
-    return res.json({
-      success: true,
-      research: researchResult,
-      agent: agentResult,
-    });
-  } catch (error) {
-    console.error("❌ Dev newsletter agent run failed:", error);
-    return res.status(500).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to run newsletter agent.",
-    });
-  }
-});
-
 // Webhook endpoints (PayPal and Square use JSON body)
 app.post('/webhooks/paypal', handlePayPalWebhook);
 app.post('/webhooks/square', handleSquareWebhook);
@@ -317,6 +230,13 @@ app.post('/webhooks/square', handleSquareWebhook);
 app.use('/api/upload', uploadRouter);
 app.use('/api/newsletter-subscriptions', newsletterSubscriptionsRouter);
 
+// tRPC answers depend on who's asking (x-session-token), so never let a
+// phone or proxy reuse one person's or a signed-out response for another call.
+app.use("/trpc", (_req, res, next) => {
+  res.set("Cache-Control", "private, no-store");
+  res.set("Vary", "x-session-token, x-wallet-address");
+  next();
+});
 app.use("/trpc", trpcExpress);
 
 // TODO: Fix Sashimo middleware path-to-regexp compatibility issue
@@ -334,7 +254,10 @@ app.use((err: any, req: any, res: any, next: any) => {
   console.error(`💥 Error:`, err);
   console.error(`📚 Stack:`, err.stack);
   console.error('🚨 '.repeat(40) + '\n');
-  
+
+  // Only the route, never the body: webhook and upload payloads carry personal data.
+  captureServerException(err, { properties: { source: "express", route: req.path } });
+
   res.status(500).json({ error: 'Internal Server Error', message: err.message });
 });
 
@@ -422,11 +345,31 @@ const server = app.listen(port, async () => {
 
   // Without Trigger.dev, the API runs Sage's wake-and-wait loop itself (follow-ups, reminders).
   if (startLocalSageWakeLoop()) console.log('⏰ Sage wake loop running in the API (no Trigger key)');
+  if (startAgentOperationsMonitor()) console.log('🚨 Redundant agent operations monitor running in the API');
 });
 
 // Graceful shutdown handling
+let shutdownStarted = false;
 const gracefulShutdown = async (signal: string) => {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
   console.log(`\n⚠️  Received ${signal}, starting graceful shutdown...`);
+  stopAgentOperationsMonitor();
+  await flushErrorTracking();
+
+  // PR and dev copies shut down on every redeploy; only real production should alert.
+  if (isPrimaryProductionDeployment()) {
+    await sendAgentOperationalAlert({
+      checkedAt: new Date(),
+      environment: env.NODE_ENV,
+      source: 'API shutdown',
+      issues: [{
+        agentId: 'api-and-local-agent-loops',
+        state: 'OFF',
+        reason: `The API process is shutting down because it received ${signal}. External uptime monitoring must confirm whether it restarts.`,
+      }],
+    }).catch((error) => console.error('Failed to send shutdown alert:', error));
+  }
   
   server.close(async () => {
     console.log('✅ HTTP server closed');
@@ -460,7 +403,9 @@ process.on('uncaughtException', async (error) => {
   console.error('\n💥 UNCAUGHT EXCEPTION:');
   console.error(error);
   console.error('\n');
-  
+
+  captureServerException(error, { properties: { source: "uncaught_exception" } });
+
   // Send Slack notification
   try {
     const { sendApiErrorNotification } = await import("@repo/trpc/services/slack-notification-service");
@@ -481,7 +426,9 @@ process.on('unhandledRejection', async (reason, promise) => {
   console.error('Promise:', promise);
   console.error('Reason:', reason);
   console.error('\n');
-  
+
+  captureServerException(reason, { properties: { source: "unhandled_rejection" } });
+
   // Send Slack notification
   try {
     const { sendApiErrorNotification } = await import("@repo/trpc/services/slack-notification-service");

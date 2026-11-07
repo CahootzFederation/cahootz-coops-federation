@@ -4,7 +4,7 @@ import type { Prisma } from "@repo/db";
 
 import type { Context } from "../context.js";
 import { auditLogEntry } from "../lib/audit.js";
-import { COMMONS_COOP_ID, ensureCommonsMembership } from "../lib/commons.js";
+import { COMMONS_COOP_ID } from "../lib/commons.js";
 import { createNotificationAndPush } from "./push-notification-service.js";
 import { notifyCommonsMemberJoined } from "./member-join-notifications.js";
 
@@ -13,7 +13,7 @@ import { notifyCommonsMemberJoined } from "./member-join-notifications.js";
  *
  * Every commons has a join policy:
  *
- *   AUTOMATIC             Every account joins. Only the Cahootz Commons.
+ *   AUTOMATIC             Open to explicit self-join. Legacy name; never enrolls at signup.
  *   APPLICATION_REQUIRED  Everyone applies and a steward reviews. An
  *                         invitation is a referral ("Maya invited you to
  *                         apply"), never admission.
@@ -96,7 +96,7 @@ export async function getCommonsPolicy(db: Tx | Db, coopId: string) {
 
   return {
     ...config,
-    // The Cahootz Commons is automatic no matter what its row says, and
+    // The Cahootz Commons allows self-join no matter what its row says, and
     // invite-only commons are never listed publicly.
     joinPolicy: (coopId === COMMONS_COOP_ID
       ? "AUTOMATIC"
@@ -125,7 +125,7 @@ export function getInvitationPurpose(
   if (joinPolicy === "AUTOMATIC") {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Everyone joins the Cahootz Commons automatically.",
+      message: "People can join Cahootz Commons directly from its page.",
     });
   }
   if (joinPolicy === "APPLICATION_REQUIRED") return "APPLY";
@@ -225,10 +225,6 @@ export async function createMembership(
   const now = new Date();
   const existing = await getMembership(tx, params.userId, params.coopId);
   if (existing?.status === "ACTIVE") return { membership: existing, created: false };
-
-  if (params.coopId !== COMMONS_COOP_ID) {
-    await ensureCommonsMembership(tx, params.userId);
-  }
 
   const roles = params.roles ?? ["member"];
   const membership = await tx.userCoopMembership.upsert({

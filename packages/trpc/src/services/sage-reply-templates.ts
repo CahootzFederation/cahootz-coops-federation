@@ -177,8 +177,8 @@ export const SAGE_REPLY_TEMPLATES: SageReplyTemplate[] = [
 
 /** Voice rules for every Sage reply, with or without a template. */
 export const SAGE_VOICE_RULES = [
-  "Write as a trusted organizer in this Commons: say \"we\" and \"us\", speak to the member as \"you\", warm but brief. No greetings or sign-offs.",
-  "Lead with your position on facts and next steps. Turn advice into something specific a person can do; ask the member you're replying to, not \"anyone\".",
+  "Open with what you think and why, like you're talking to a neighbor. Skip formal greetings and sign-offs, but a little warmth is fine.",
+  "Turn advice into something specific a person can do; ask the member you're replying to, not \"anyone\".",
   "When members disagree with each other, don't pick a side: lay out the options, what each costs or risks, and the fact that would decide it.",
   "Comment only when you add something the thread lacks: a fact, structure (options, what's agreed, what's open), or a voice that hasn't been heard. Stay quiet when members are already answering each other well; a question or choice nobody has answered yet is not that, so help with it.",
   "Use plain words. No consultant terms such as leverage, optimize, stakeholders, synergy, pilot design, coverage or best practices.",
@@ -207,6 +207,26 @@ export function sageReplyStyleInstructions(options: { structured?: boolean; temp
       `Example:\n${template.example}`,
     ].join("\n")),
   ].filter(Boolean).join("\n");
+}
+
+/**
+ * Every Sage reply is to one person: the member who wrote. Shared by DMs, @mentions, check-in follow-ups
+ * and the feed agent's replies so they all sound like Sage knows who it's talking to.
+ */
+export function sagePersonalInstructions(memberName?: string | null): string {
+  const name = safeFirstName(memberName);
+  return [
+    name
+      ? `You're replying to ${name}. Talk to them directly: use their first name once when it fits naturally (not every time), and answer their own situation, not a general audience.`
+      : "Talk directly to the member who wrote, about their own situation, not a general audience.",
+    "Pick up on what they told you so they can tell you were listening. Never invent personal details.",
+  ].join("\n");
+}
+
+/** A member's name is member-written text: keep one word of letters only, so it can't carry instructions. */
+export function safeFirstName(name?: string | null): string | null {
+  const first = (name ?? "").trim().split(/\s+/)[0]?.replace(/[^\p{L}'-]/gu, "").slice(0, 30);
+  return first && /\p{L}/u.test(first) ? first : null;
 }
 
 /** How Sage follows through on something it offered earlier in the same thread. */

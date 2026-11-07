@@ -9,6 +9,7 @@ import { Text } from '@/components/ui/text';
 import { useAuth } from '@/contexts/auth-context';
 import { api, type FamilySetupInput } from '@/lib/api';
 import { friendlyError } from '@/lib/friendly-error';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -97,7 +98,7 @@ const amountOf = (goal: DraftGoal) => {
  */
 export default function CreateFamilyScreen() {
   const { sessionToken } = useAuth();
-  const params = useLocalSearchParams<{ coopId?: string }>();
+  const params = useLocalSearchParams<{ coopId?: string; fromOnboarding?: string }>();
   const editCoopId = typeof params.coopId === 'string' && params.coopId ? params.coopId : null;
   const editing = !!editCoopId;
   const [step, setStep] = useState<Step>(1);
@@ -166,6 +167,10 @@ export default function CreateFamilyScreen() {
   }, [editCoopId, sessionToken]);
 
   const leave = () => {
+    if (!editCoopId && params.fromOnboarding === '1') {
+      router.replace({ pathname: '/profile-onboarding', params: { step: 'commons', chooseCommons: '1' } } as any);
+      return;
+    }
     if (router.canGoBack()) router.back();
     else if (editCoopId) router.replace({ pathname: '/commons/[coopId]', params: { coopId: editCoopId } } as any);
     else router.replace('/commons' as any);
@@ -355,7 +360,7 @@ export default function CreateFamilyScreen() {
       );
       router.replace({
         pathname: '/(authenticated)/commons-invites',
-        params: { coopId: result.coopId },
+        params: { coopId: result.coopId, created: '1' },
       } as any);
     } catch (err) {
       console.error('Failed to create family commons:', err);
@@ -378,7 +383,7 @@ export default function CreateFamilyScreen() {
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
       <ScrollView
-        keyboardShouldPersistTaps="handled"
+        {...keyboardInsetScrollProps}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 }}
       >
         <View className="mb-4 flex-row items-center">

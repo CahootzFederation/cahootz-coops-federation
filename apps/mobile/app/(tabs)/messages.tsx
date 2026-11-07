@@ -1,19 +1,21 @@
 // Hallmark - pre-emit critique: P4 H4 E4 S4 R4 V4
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
   CheckCheck,
   Lock,
-  MessageCircle,
+  ArrowLeft,
   Search,
   Send,
   ShieldCheck,
-  Users,
+  Plus,
 } from 'lucide-react-native';
 
+import { CommunityTheme } from '@/constants/theme';
 import { Text } from '@/components/ui/text';
 import { MentionText } from '@/components/mention-text';
+import { keyboardAvoidingBehavior, keyboardScrollProps } from '@/lib/keyboard';
 import {
   api,
   type DirectMember,
@@ -22,6 +24,7 @@ import {
   type DirectThread,
 } from '@/lib/api';
 import { useAuth } from '@/contexts/auth-context';
+import { SageAvatar } from '@/components/sage-avatar';
 import { SageDecisionTrails } from '@/components/sage-decision-trail';
 import { LoadError } from '@/components/load-error';
 import { friendlyError } from '@/lib/friendly-error';
@@ -53,7 +56,7 @@ function threadToConversation(thread: DirectThread): Conversation {
 
 function memberToConversation(member: DirectMember): Conversation {
   return {
-    person: { id: member.id, name: member.name, handle: member.handle },
+    person: { id: member.id, name: member.name, handle: member.handle, isSage: member.isSage },
     groupId: null,
     preview: 'Start a private conversation',
     lastMessageAt: null,
@@ -79,7 +82,17 @@ export default function MessagesScreen() {
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [messageDraft, setMessageDraft] = useState('');
+  // Shown as a faded bubble until the send returns. A Sage reply is written
+  // inside the send request, so Sage shows as thinking while isSending.
+  const [pendingBody, setPendingBody] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const messageDraft = selectedPersonId ? drafts[selectedPersonId] || '' : '';
+  const setMessageDraft = (value: string | ((current: string) => string)) => {
+    if (!selectedPersonId) return;
+    setDrafts((current) => ({ ...current, [selectedPersonId]: typeof value === 'function' ? value(current[selectedPersonId] || '') : value }));
+  };
+  const [choosingPerson, setChoosingPerson] = useState(false);
+  const [loadingList, setLoadingList] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   // Sending failed (shown above the conversation).
   const [dmError, setDmError] = useState('');
@@ -108,6 +121,7 @@ export default function MessagesScreen() {
   useEffect(() => {
     if (!hasAccountSession) return;
 
+    setLoadingList(true);
     Promise.all([loadThreads(), api.listDirectMembers(sessionToken)])
       .then(([threadResult, memberResult]) => {
         setMembers(memberResult.members);
@@ -124,7 +138,7 @@ export default function MessagesScreen() {
       .catch((error) => {
         console.error('Failed to load direct messages:', error);
         setListError(friendlyError(error, "We couldn't load your messages."));
-      });
+      }).finally(() => setLoadingList(false));
   }, [hasAccountSession, loadThreads, params.groupId, sessionToken, listReloadKey]);
 
   const conversations = useMemo(() => {
@@ -145,14 +159,16 @@ export default function MessagesScreen() {
 
   const visibleConversations = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return conversations;
-    return conversations.filter((conversation) =>
+    const items = choosingPerson ? conversations : conversations.filter((conversation) => !!conversation.groupId);
+    items.sort((a, b) => (b.lastMessageAt || '').localeCompare(a.lastMessageAt || '') || a.person.name.localeCompare(b.person.name));
+    if (!query) return items;
+    return items.filter((conversation) =>
       [conversation.person.name, conversation.person.handle || '', conversation.preview]
         .join(' ')
         .toLowerCase()
         .includes(query),
     );
-  }, [conversations, searchQuery]);
+  }, [conversations, searchQuery, choosingPerson]);
 
   const selected = useMemo(
     () => conversations.find((conversation) => conversation.person.id === selectedPersonId) ?? null,
@@ -170,7 +186,7 @@ export default function MessagesScreen() {
     async (groupId: string) => {
       const result = await api.listDirectMessages(groupId, sessionToken);
       // Ignore a late response for a thread the viewer has switched away from.
-      if (selectedGroupIdRef.current && selectedGroupIdRef.current !== groupId) return;
+      if (selectedGroupIdRef.current !== groupId) return;
       setMessages(result.messages);
 
       const newestIncoming = [...result.messages].reverse().find((message) => !message.fromMe);
@@ -218,35 +234,47 @@ export default function MessagesScreen() {
     if (!content || !selected || !sessionToken || isSending) return;
 
     setIsSending(true);
+    setPendingBody(content);
+    setMessageDraft('');
+    let sent = false;
     try {
       const groupId =
         selected.groupId ?? (await api.openDirectThread(selected.person.id, sessionToken)).groupId;
       const result = await api.sendDirectMessage(groupId, content, sessionToken);
-      setMessages((current) => [...current, result.message]);
-      setMessageDraft('');
+      sent = true;
+      // A poll may have already picked it up while the send was in flight.
+      setMessages((current) =>
+        current.some((message) => message.id === result.message.id) ? current : [...current, result.message],
+      );
+      setPendingBody(null);
       setDmError('');
       await loadThreads();
       // Picks up an immediate reply (e.g. from Sage) in the same round trip.
       await loadMessages(groupId);
     } catch (error) {
       console.error('Failed to send direct message:', error);
-      setDmError(friendlyError(error, "We couldn't send your message. It's still in the box."));
+      if (!sent) {
+        // Put the note back unless they've already started typing another one.
+        setMessageDraft((current) => current || content);
+        setDmError(friendlyError(error, "We couldn't send your message. It's still in the box."));
+      }
     } finally {
+      setPendingBody(null);
       setIsSending(false);
     }
   };
 
   if (!hasAccountSession) {
     return (
-      <View className="flex-1 bg-stone-50">
-        <View className="px-5 pt-14 pb-4" style={{ backgroundColor: '#12362D' }}>
-          <Text className="text-2xl font-black text-white">Direct messages</Text>
-          <Text className="text-sm text-white/75">Create an account before sending private messages</Text>
+      <View className="flex-1 bg-white">
+        <View className="px-5 pt-14 pb-4" style={{ backgroundColor: '#FFFFFF' }}>
+          <Text className="text-2xl font-bold text-gray-900">Direct messages</Text>
+          <Text className="text-sm text-gray-600">Create an account before sending private messages</Text>
         </View>
         <View className="flex-1 justify-center px-6">
           <View className="rounded-xl border border-stone-200 bg-white p-5">
             <View className="mb-3 flex-row items-center gap-3">
-              <View className="h-11 w-11 items-center justify-center rounded-xl bg-emerald-100">
+              <View className="h-11 w-11 items-center justify-center rounded-xl bg-white">
                 <ShieldCheck size={21} color="#047857" />
               </View>
               <View className="flex-1">
@@ -269,104 +297,72 @@ export default function MessagesScreen() {
   }
 
   return (
-    <View className="flex-1 bg-stone-50">
-      <View className="px-5 pt-14 pb-4" style={{ backgroundColor: '#12362D' }}>
-        <View className="flex-row items-center justify-between">
-          <View>
-            <Text className="text-2xl font-black text-white">Direct messages</Text>
-            <Text className="text-sm text-white/75">Private circles for two</Text>
+    <KeyboardAvoidingView className="flex-1 bg-white" behavior={keyboardAvoidingBehavior}>
+      <View className="border-b border-gray-200 bg-white px-5 pt-6 pb-4">
+        <View className="flex-row items-center gap-3">
+          {selected || choosingPerson ? (
+            <TouchableOpacity
+              accessibilityRole="button" accessibilityLabel="Back to conversations"
+              onPress={() => { setSelectedPersonId(null); setChoosingPerson(false); setSearchQuery(''); setDmError(''); }}
+              className="h-11 w-11 items-center justify-center"
+              disabled={isSending}
+            ><ArrowLeft size={22} color={CommunityTheme.ink} /></TouchableOpacity>
+          ) : null}
+          <View className="flex-1">
+            <Text className="text-2xl font-bold text-gray-900">{choosingPerson && !selected ? 'New message' : 'Direct messages'}</Text>
+            {!selected ? <Text className="mt-1 text-sm text-gray-500">{choosingPerson ? 'Choose someone to message.' : unreadCount > 0 ? `${unreadCount} unread messages` : 'Your conversations'}</Text> : null}
           </View>
-          <View
-            className="h-10 min-w-10 items-center justify-center rounded-xl bg-white/12 px-3"
-            accessibilityLabel={`${unreadCount} unread messages`}
-          >
-            <Text className="text-sm font-black text-white">{unreadCount}</Text>
-          </View>
-        </View>
-
-        <View className="mt-4 flex-row items-center gap-2 rounded-xl bg-white/10 px-3 py-2">
-          <Search size={17} color="#F9F7EF" />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search people and messages"
-            placeholderTextColor="rgba(249, 247, 239, 0.7)"
-            autoCapitalize="none"
-            className="h-10 flex-1 text-sm text-white"
-          />
-          {searchQuery ? (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Text className="text-xs font-bold text-amber-200">Clear</Text>
+          {!selected && !choosingPerson ? (
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="New message"
+              onPress={() => { setChoosingPerson(true); setSearchQuery(''); }}
+              className="h-11 w-11 items-center justify-center rounded-xl border border-gray-200">
+              <Plus size={22} color={CommunityTheme.primary} />
             </TouchableOpacity>
           ) : null}
         </View>
+        {!selected ? (
+          <View className="mt-4 flex-row items-center gap-2 rounded-xl border border-gray-200 bg-white px-3">
+            <Search size={17} color={CommunityTheme.muted} />
+            <TextInput value={searchQuery} onChangeText={setSearchQuery}
+              placeholder={choosingPerson ? 'Search people' : 'Search conversations'}
+              accessibilityLabel={choosingPerson ? 'Search people' : 'Search conversations'}
+              placeholderTextColor={CommunityTheme.muted} autoCapitalize="none"
+              className="h-11 flex-1 text-base text-gray-900" />
+            {searchQuery ? <TouchableOpacity accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => setSearchQuery('')} className="h-11 justify-center px-2"><Text style={{ color: CommunityTheme.primary }}>Clear</Text></TouchableOpacity> : null}
+          </View>
+        ) : null}
       </View>
-
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 24 }}>
-        <View className="border-b border-stone-200 bg-white px-5 py-3">
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View className="flex-row gap-3">
-              {visibleConversations.map((conversation) => {
-                const isSelected = selected?.person.id === conversation.person.id;
-                return (
-                  <TouchableOpacity
-                    key={conversation.person.id}
-                    onPress={() => setSelectedPersonId(conversation.person.id)}
-                    accessibilityLabel={`Conversation with ${conversation.person.name}`}
-                    className={`w-44 rounded-xl border p-3 ${
-                      isSelected ? 'border-emerald-700 bg-emerald-50' : 'border-stone-200 bg-white'
-                    }`}
-                    activeOpacity={0.75}
-                  >
-                    <View className="mb-2 flex-row items-center gap-2">
-                      <View className="h-9 w-9 items-center justify-center rounded-xl bg-stone-100">
-                        <Text className="font-black text-stone-700">{conversation.person.name.slice(0, 1)}</Text>
-                      </View>
-                      <View className="flex-1">
-                        <Text className="font-bold text-gray-900" numberOfLines={1}>
-                          {conversation.person.name}
-                        </Text>
-                        {conversation.person.handle ? (
-                          <Text className="text-xs text-gray-500" numberOfLines={1}>
-                            @{conversation.person.handle}
-                          </Text>
-                        ) : null}
-                      </View>
-                      {conversation.unreadCount > 0 ? (
-                        <View
-                          className="h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1"
-                          accessibilityLabel={`${conversation.unreadCount} unread`}
-                        >
-                          <Text className="text-xs font-black text-white">{conversation.unreadCount}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <Text className="text-xs leading-4 text-stone-600" numberOfLines={2}>
-                      {conversation.preview}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </ScrollView>
-          {listError ? (
-            <View className="mt-3">
+      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 24 }} {...keyboardScrollProps}>
+        {!selected ? (
+          <View className="px-5">
+            {loadingList ? <ActivityIndicator accessibilityLabel="Loading conversations" className="my-6" color={CommunityTheme.primary} /> : listError ? (
               <LoadError message={listError} onRetry={() => setListReloadKey((key) => key + 1)} />
-            </View>
-          ) : visibleConversations.length === 0 ? (
-            <View className="mt-3 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4">
-              <Text className="font-bold text-gray-900">
-                {searchQuery ? 'No messages found' : 'No Commons members yet'}
-              </Text>
-              <Text className="mt-1 text-sm text-gray-600">
-                {searchQuery
-                  ? 'Clear search or try another name.'
-                  : 'As people create accounts, they will appear here for private follow-up.'}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-
+            ) : visibleConversations.length === 0 ? (
+              <View className="py-8">
+                <Text className="text-lg font-semibold text-gray-900">{searchQuery ? 'No matches' : choosingPerson ? 'No people to message yet' : 'No conversations yet'}</Text>
+                <Text className="mt-2 text-base text-gray-600">{searchQuery ? 'Try another name or clear your search.' : choosingPerson ? 'People you can message will appear here.' : 'Tap New message to start a conversation.'}</Text>
+              </View>
+            ) : visibleConversations.map((conversation) => (
+              <TouchableOpacity key={conversation.person.id} accessibilityRole="button"
+                accessibilityLabel={`Conversation with ${conversation.person.name}`}
+                onPress={() => { setSelectedPersonId(conversation.person.id); setChoosingPerson(false); setDmError(''); }}
+                className="flex-row items-center gap-3 border-b border-gray-200 py-4">
+                {conversation.person.isSage ? <SageAvatar size={40} /> : (
+                  <View className="h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white"><Text className="font-semibold text-gray-700">{conversation.person.name.slice(0, 1)}</Text></View>
+                )}
+                <View className="min-w-0 flex-1">
+                  <View className="flex-row items-center justify-between gap-2">
+                    <Text className="flex-1 font-semibold text-gray-900" numberOfLines={1}>{conversation.person.name}{conversation.person.isSage ? ' · AI assistant' : ''}</Text>
+                    {conversation.lastMessageAt ? <Text className="text-xs text-gray-500">{formatMessageTime(conversation.lastMessageAt)}</Text> : null}
+                  </View>
+                  {choosingPerson && conversation.person.handle ? <Text className="mt-1 text-xs text-gray-500">@{conversation.person.handle}</Text> : null}
+                  <Text className="mt-1 text-sm text-gray-600" numberOfLines={2}>{conversation.preview}</Text>
+                </View>
+                {conversation.unreadCount > 0 ? <View accessibilityLabel={`${conversation.unreadCount} unread`} className="min-w-6 items-center rounded-full px-2 py-1" style={{ backgroundColor: CommunityTheme.primary }}><Text className="text-xs font-bold text-white">{conversation.unreadCount}</Text></View> : null}
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
         <View className="px-5 py-4">
           {dmError ? (
             <View className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3">
@@ -374,24 +370,21 @@ export default function MessagesScreen() {
             </View>
           ) : null}
 
-          {!selected ? (
-            <View className="rounded-xl border border-stone-200 bg-white p-5">
-              <Text className="text-lg font-black text-gray-900">No conversation selected</Text>
-              <Text className="mt-1 text-sm leading-5 text-gray-600">
-                Pick a conversation above, or search for a Commons member to start a private follow-up.
-              </Text>
-            </View>
-          ) : (
+          {selected ? (
           <View className="rounded-xl border border-stone-200 bg-white">
             <View className="flex-row items-center gap-3 border-b border-stone-100 p-4">
-              <View className="h-11 w-11 items-center justify-center rounded-xl bg-emerald-100">
-                <Text className="font-black text-emerald-900">{selected.person.name.slice(0, 1)}</Text>
-              </View>
+              {selected.person.isSage ? (
+                <SageAvatar size={44} motion="blink" />
+              ) : (
+                <View className="h-11 w-11 items-center justify-center rounded-xl bg-white">
+                  <Text className="font-black text-emerald-900">{selected.person.name.slice(0, 1)}</Text>
+                </View>
+              )}
               <View className="flex-1">
                 <Text className="font-black text-gray-900">{selected.person.name}</Text>
                 <View className="flex-row items-center gap-1">
                   <Lock size={11} color="#6B7280" />
-                  <Text className="text-xs font-semibold text-gray-500">Private circle · only you two</Text>
+                  <Text className="text-xs font-semibold text-gray-500">{selected.person.isSage ? 'Private conversation · AI assistant' : 'Private circle · only you two'}</Text>
                 </View>
               </View>
             </View>
@@ -407,7 +400,7 @@ export default function MessagesScreen() {
                 />
               ) : null}
               {!isLoadingMessages && !conversationError && messages.length === 0 ? (
-                <View className="rounded-xl bg-stone-100 px-4 py-3">
+                <View className="rounded-xl bg-white px-4 py-3">
                   <Text className="text-sm leading-5 text-gray-700">
                     No private messages yet. Send the first note when it should not be public.
                   </Text>
@@ -417,7 +410,7 @@ export default function MessagesScreen() {
                 <View
                   key={message.id}
                   className={`max-w-[86%] rounded-xl px-4 py-3 ${
-                    message.fromMe ? 'self-end bg-emerald-800' : 'self-start bg-stone-100'
+                    message.fromMe ? 'self-end bg-emerald-800' : 'self-start bg-white'
                   }`}
                 >
                   <MentionText
@@ -433,6 +426,23 @@ export default function MessagesScreen() {
                   </View>
                 </View>
               ))}
+              {pendingBody ? (
+                <View className="max-w-[86%] self-end rounded-xl bg-emerald-800 px-4 py-3" style={{ opacity: 0.7 }}>
+                  <MentionText
+                    content={pendingBody}
+                    style={{ fontSize: 14, lineHeight: 20, color: '#FFFFFF' }}
+                    mentionClassName="font-bold text-white underline"
+                  />
+                </View>
+              ) : null}
+              {isSending && selected.person.isSage ? (
+                <View className="flex-row items-center gap-2 self-start">
+                  <SageAvatar size={32} motion="thinking" />
+                  <View className="rounded-xl bg-white px-4 py-3">
+                    <Text className="text-sm text-gray-500">Sage is thinking…</Text>
+                  </View>
+                </View>
+              ) : null}
             </View>
 
             {selectedGroupId ? (
@@ -440,62 +450,41 @@ export default function MessagesScreen() {
                 <SageDecisionTrails filter={{ circleId: selectedGroupId }} sessionToken={sessionToken} refreshKey={messages.length} hideWhenEmpty />
               </View>
             ) : null}
-
-            <View className="border-t border-stone-100 p-3">
-              <View className="flex-row items-end gap-2">
-                <TextInput
-                  value={messageDraft}
-                  onChangeText={setMessageDraft}
-                  placeholder={`Message ${selected.person.name}`}
-                  accessibilityLabel={`Message ${selected.person.name}`}
-                  placeholderTextColor="#78716C"
-                  multiline
-                  className="min-h-11 flex-1 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-base text-gray-900"
-                  style={{ maxHeight: 96, textAlignVertical: 'top' }}
-                />
-                <TouchableOpacity
-                  onPress={sendMessage}
-                  disabled={isSending}
-                  accessibilityLabel="Send message"
-                  className="h-11 w-11 items-center justify-center rounded-xl bg-red-600"
-                  style={{ opacity: isSending ? 0.6 : 1 }}
-                  activeOpacity={0.8}
-                >
-                  {isSending ? <ActivityIndicator size="small" color="white" /> : <Send size={18} color="white" />}
-                </TouchableOpacity>
-              </View>
-            </View>
           </View>
-          )}
+          ) : null}
 
-          <View className="mt-4 rounded-xl border border-emerald-900/10 bg-emerald-950 p-4">
-            <View className="flex-row items-start gap-3">
-              <ShieldCheck size={21} color="#FFB370" />
-              <View className="flex-1">
-                <Text className="font-bold text-white">DMs should stay secondary</Text>
-                <Text className="mt-1 text-sm leading-5 text-white/75">
-                  Each DM is a private circle only the two of you can see. Use it for sensitive follow-up, steward outreach, and coordination. The main community knowledge should live in posts and comments.
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          <View className="mt-4 rounded-xl border border-dashed border-stone-300 bg-white p-4">
-            <View className="flex-row items-center gap-3">
-              <View className="h-10 w-10 items-center justify-center rounded-xl bg-stone-100">
-                <Users size={20} color="#57534E" />
-              </View>
-              <View className="flex-1">
-                <Text className="font-bold text-gray-900">Move useful details back to comments</Text>
-                <Text className="mt-1 text-sm leading-5 text-gray-600">
-                  When a private exchange turns into something the commons should know, share it as a post.
-                </Text>
-              </View>
-              <MessageCircle size={18} color="#78716C" />
-            </View>
-          </View>
         </View>
       </ScrollView>
-    </View>
+
+      {selected ? (
+        // Pinned below the conversation so it rides up with the keyboard and
+        // Send is always reachable; dragging the conversation down hides the keyboard.
+        <View className="border-t border-stone-200 bg-white px-4 py-3">
+          <View className="flex-row items-end gap-2">
+            <TextInput
+              value={messageDraft}
+              onChangeText={setMessageDraft}
+              placeholder={`Message ${selected.person.name}`}
+              accessibilityLabel={`Message ${selected.person.name}`}
+              placeholderTextColor="#78716C"
+              multiline
+              className="min-h-11 flex-1 rounded-xl border border-stone-200 bg-white px-4 py-3 text-base text-gray-900"
+              style={{ maxHeight: 96, textAlignVertical: 'top' }}
+            />
+            <TouchableOpacity
+              onPress={sendMessage}
+              disabled={isSending}
+              accessibilityLabel="Send message"
+              accessibilityRole="button"
+              className="h-11 w-11 items-center justify-center rounded-xl"
+              style={{ opacity: isSending ? 0.6 : 1, backgroundColor: CommunityTheme.primary }}
+              activeOpacity={0.8}
+            >
+              {isSending ? <ActivityIndicator size="small" color="white" /> : <Send size={18} color="white" />}
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
+    </KeyboardAvoidingView>
   );
 }

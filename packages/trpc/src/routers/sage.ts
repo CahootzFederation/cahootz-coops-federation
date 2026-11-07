@@ -3,16 +3,13 @@ import { z } from "zod";
 
 import type { AccountAuthenticatedContext } from "../context.js";
 import { accountAuthenticatedProcedure } from "../procedures/account-authenticated.js";
-import { payloadHash } from "../services/sage-ride-match-agent.js";
-import { findRideMatchCandidate } from "../services/sage-ride-matcher.js";
 import { enqueueSageActionExecute } from "../services/sage-dispatch.js";
-import { createNotificationAndPush } from "../services/push-notification-service.js";
 import { describeSageAuditEvent } from "../services/sage-audit-descriptions.js";
 import { presentTrails } from "../services/sage-decision-trail.js";
 import { dismissSageTask } from "../services/sage-tasks.js";
 import { askIntroductionHelper } from "../services/sage-introductions.js";
 import { acknowledgeSageAlert, rerouteSageAlert } from "../services/sage-responsibility.js";
-import { SUGGESTION_TASK_SUBJECT, resolveSuggestionReviewTask } from "../services/sage-suggestion-follow-up.js";
+import { SUGGESTION_TASK_SUBJECT, closeSuggestion, resolveSuggestionReviewTask, retiredSuggestionReason } from "../services/sage-suggestion-follow-up.js";
 import { router } from "../trpc.js";
 
 const TERMINAL_STATUSES = ["APPROVED", "DISMISSED", "FAILED"] as const;
@@ -23,6 +20,8 @@ function conflict(message: string): never {
 }
 
 const CONTEXT_MESSAGE_LIMIT = 30;
+/** Action types whose review shows a capability and the exact text Sage would post. */
+const SUGGESTION_TYPES = new Set<string>(["SUGGEST_ACTION", "SUMMARIZE_DISCUSSION"]);
 
 function authorName(author: { name: string | null; handle: string | null }) {
   return author.name || (author.handle ? `@${author.handle}` : "A member");
@@ -104,7 +103,7 @@ async function loadCircleSuggestionContext(
 const TRAIL_LIMIT = 10;
 
 /**
- * Decision trails a member may see for a post or a suggestion: never admin-only trails (ride matches),
+ * Decision trails a member may see for a post or a suggestion: never admin-only trails,
  * Commons-feed trails only for active members of that Commons, circle trails only for members of that
  * circle. Content that has since been deleted is not shown.
  */
@@ -323,8 +322,8 @@ export const sageRouter = router({
       return {
         suggestion: {
           id: action.id, coopId: action.coopId, title: action.summary, status: action.status, circleId: action.circleId,
-          capability: action.type === "SUGGEST_ACTION" && typeof payload?.capability === "string" ? payload.capability : null,
-          proposedText: action.type === "SUGGEST_ACTION" && typeof payload?.body === "string" ? payload.body : null,
+          capability: SUGGESTION_TYPES.has(action.type) && typeof payload?.capability === "string" ? payload.capability : null,
+          proposedText: SUGGESTION_TYPES.has(action.type) && typeof payload?.body === "string" ? payload.body : null,
           // Sage's stated reason stays visible after the review is answered.
           reason: typeof reason === "string" ? reason : null,
           result: typeof result?.resultEntityType === "string" && typeof result.resultEntityId === "string"
@@ -349,7 +348,6 @@ export const sageRouter = router({
     .input(z.object({
       reviewId: z.string().min(1),
       response: z.enum(["APPROVE", "DECLINE", "ESCALATE"]),
-      payload: z.record(z.unknown()).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const context = ctx as AccountAuthenticatedContext;
@@ -360,6 +358,11 @@ export const sageRouter = router({
       if (review.status !== "PENDING") conflict("This review has already been answered");
       const action = await context.db.commonsAction.findUnique({ where: { id: review.actionId } });
       if (!action) throw new TRPCError({ code: "NOT_FOUND", message: "Suggestion not found" });
+      const retired = retiredSuggestionReason(action);
+      if (retired) {
+        await closeSuggestion(action.id, retired, "NO_LONGER_APPLIES");
+        conflict("Sage closed this suggestion, so it can't be answered anymore");
+      }
       if (review.payloadHash !== action.payloadHash) {
         await context.db.commonsActionReview.update({ where: { id: review.id }, data: { status: "SUPERSEDED" } });
         conflict("This suggestion changed since you were asked — refresh to see the current version");
@@ -388,52 +391,12 @@ export const sageRouter = router({
 
       await context.db.commonsActionAudit.create({ data: { actionId: action.id, actorId: userId, eventType: "REVIEW_APPROVED", metadata: { reviewType: review.reviewType } } });
 
-      if (review.reviewType === "PROVIDE_CONTEXT") {
-        const newPayload = { area: String(input.payload?.area ?? ""), timeWindow: String(input.payload?.timeWindow ?? ""), shareScope: String(input.payload?.shareScope ?? "") };
-        const newHash = payloadHash(newPayload);
-        await context.db.commonsAction.update({ where: { id: action.id }, data: { payload: newPayload, payloadHash: newHash, revision: { increment: 1 } } });
-        const candidate = await findRideMatchCandidate(action);
-        if (candidate) {
-          await context.db.commonsActionParticipant.upsert({
-            where: { actionId_userId: { actionId: action.id, userId: candidate.candidateUserId } },
-            create: { actionId: action.id, userId: candidate.candidateUserId, role: "HELPER" },
-            update: {},
-          });
-          await context.db.commonsActionReview.create({
-            data: {
-              actionId: action.id, userId: action.sourceAuthorId, reviewType: "CONSENT_TO_SHARE",
-              payloadHash: newHash, status: "PENDING",
-              presentationData: { message: "Sage found a possible match. Confirm what you're comfortable sharing." },
-            },
-          });
-          await createNotificationAndPush(context.db, {
-            userId: action.sourceAuthorId, coopId: action.coopId, type: "SAGE_SUGGESTION_NEEDS_YOU",
-            title: "Sage has a suggestion for you", body: "Sage found a possible match - confirm what you're comfortable sharing.",
-            data: { actionId: action.id },
-          }).catch((error) => console.error("Could not notify Sage suggestion subject", error));
-        }
-      } else if (review.reviewType === "CONSENT_TO_SHARE") {
-        const helper = await context.db.commonsActionParticipant.findFirst({ where: { actionId: action.id, role: "HELPER" } });
-        if (helper) {
-          await context.db.commonsActionReview.create({
-            data: {
-              actionId: action.id, userId: helper.userId, reviewType: "ACCEPT_MATCH",
-              payloadHash: action.payloadHash!, status: "PENDING",
-              presentationData: { message: "A circle member could use a ride matching what you offered. Interested?" },
-            },
-          });
-          await createNotificationAndPush(context.db, {
-            userId: helper.userId, coopId: action.coopId, type: "SAGE_SUGGESTION_NEEDS_YOU",
-            title: "Sage has a suggestion for you", body: "A circle member could use your help - take a look.",
-            data: { actionId: action.id },
-          }).catch((error) => console.error("Could not notify Sage suggestion helper", error));
-        }
-      } else if (review.reviewType === "ACCEPT_INTRODUCTION") {
+      if (review.reviewType === "ACCEPT_INTRODUCTION") {
         // The person with the need says yes first; then the helper is asked; both yeses create the circle.
         const participant = await context.db.commonsActionParticipant.findUnique({ where: { actionId_userId: { actionId: action.id, userId } }, select: { role: true } });
         if (participant?.role === "SUBJECT") await askIntroductionHelper(action.id);
         else await enqueueSageActionExecute(action.id, action.revision);
-      } else if (review.reviewType === "ACCEPT_MATCH" || review.reviewType === "APPROVE_SUGGESTION") {
+      } else if (review.reviewType === "APPROVE_SUGGESTION") {
         await enqueueSageActionExecute(action.id, action.revision);
       }
 

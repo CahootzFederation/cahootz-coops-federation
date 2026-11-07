@@ -7,6 +7,7 @@ import { withAIEvaluationLogging } from "../services/ai-evaluation-log.js";
 import { withCostedProposalRun } from "../services/ai-cost.js";
 import { buildCommentEvaluationFailureTrail, buildCommentEvaluationTrail } from "../services/proposal-trails.js";
 import { cleanseUntrustedText } from "../services/untrusted-input.js";
+import { SAGE_PROPOSAL_COMMENT_WALLET } from "../services/sage-pre-vote.js";
 
 function goalList(missionGoals: unknown): Array<{ key: string; label: string }> {
   if (!Array.isArray(missionGoals)) return [];
@@ -36,6 +37,7 @@ function mapCommentToOutput(
   content: string;
   createdAt: string;
   aiEvaluation?: CommentAIEvaluationOutput | null;
+  authorIsAi: boolean;
 } {
   return {
     id: record.id,
@@ -45,6 +47,7 @@ function mapCommentToOutput(
     content: record.content,
     createdAt: record.createdAt instanceof Date ? record.createdAt.toISOString() : record.createdAt,
     aiEvaluation: aiEvaluation ?? null,
+    authorIsAi: record.authorWallet === SAGE_PROPOSAL_COMMENT_WALLET,
   };
 }
 

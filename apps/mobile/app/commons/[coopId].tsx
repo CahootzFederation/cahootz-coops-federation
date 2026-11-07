@@ -2,6 +2,7 @@ import type {
   ApplicationQuestion,
   CommonsAccessStatus,
   CommonsDirectoryItem,
+  CommonsMember,
   CoopConfigDetail,
   PrivateGroupSummary,
   ProposalSummary,
@@ -18,8 +19,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/text';
+import { CommunityPulse } from '@/components/community-pulse';
+import { GoalSignalsCard, VotedAmendmentsCard } from '@/components/sage-goal-cards';
 import { useAuth } from '@/contexts/auth-context';
 import { api } from '@/lib/api';
+import { secureStorage } from '@/lib/secure-storage';
 import { friendlyError } from '@/lib/friendly-error';
 import { IconAvatar } from '@/components/icon-avatar';
 import { LoadError } from '@/components/load-error';
@@ -42,6 +46,7 @@ import {
   Vote,
   UserPlus,
 } from 'lucide-react-native';
+import { keyboardInsetScrollProps } from '@/lib/keyboard';
 
 const THEME = {
   paper: '#F6F7F8',
@@ -103,7 +108,7 @@ type AISpending = {
 
 type MembersPreview = {
   totalCount: number;
-  members: { id: string; name: string; handle: string }[];
+  members: CommonsMember[];
 };
 
 type InfoTab = 'overview' | 'community' | 'governance';
@@ -208,7 +213,7 @@ export default function CommonsDetailScreen() {
     invitationToken?: string;
   }>();
   const coopId = params.coopId || 'cahootz';
-  const { sessionToken, user } = useAuth();
+  const { sessionToken, user, isLoading: authLoading } = useAuth();
   const [config, setConfig] = useState<CoopConfigDetail | null>(null);
   const [directoryItem, setDirectoryItem] =
     useState<CommonsDirectoryItem | null>(null);
@@ -240,6 +245,7 @@ export default function CommonsDetailScreen() {
   const [applying, setApplying] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return;
     let mounted = true;
 
     async function load() {
@@ -345,7 +351,7 @@ export default function CommonsDetailScreen() {
     return () => {
       mounted = false;
     };
-  }, [coopId, sessionToken, user?.walletAddress, reloadKey]);
+  }, [authLoading, coopId, sessionToken, user?.walletAddress, reloadKey]);
 
 
   useEffect(() => {
@@ -384,10 +390,31 @@ export default function CommonsDetailScreen() {
   const needsProfileName = !user?.name?.trim();
   const needsProfilePhone = !user?.phone?.trim() && !phoneQuestion;
   const canOpenApply = canApply && !!sessionToken && !!user;
+  const canJoin = accessStatus === 'LOCKED' && joinPolicy === 'AUTOMATIC';
+  const [joining, setJoining] = useState(false);
+  async function handleJoin() {
+    if (!sessionToken || !user || joining) return;
+    setJoining(true);
+    try {
+      await api.joinOpenCommons(coopId, sessionToken);
+      router.replace({ pathname: '/(tabs)', params: { coopId } } as any);
+    } catch (err) {
+      setError(friendlyError(err, "We couldn't join this commons. Try again."));
+    } finally { setJoining(false); }
+  }
+  async function signInToJoin() {
+    await secureStorage.setItem(secureStorage.keys.COMMONS_DESTINATION, `commons:${coopId}`);
+    router.push({ pathname: '/', params: { entry: 'sign-in' } } as any);
+  }
 
   useEffect(() => {
-    if (params.apply === '1' && !loading && canOpenApply) setApplyOpen(true);
-  }, [params.apply, loading, canOpenApply]);
+    if (params.apply === '1' && !authLoading && !loading && canOpenApply) {
+      setApplyOpen(true);
+      // Consume the invitation's one-time request to open the form. Keep its
+      // referral fields, but never reopen a submitted application on reload.
+      router.setParams({ apply: undefined });
+    }
+  }, [params.apply, authLoading, loading, canOpenApply]);
 
   async function handleWithdraw() {
     if (!sessionToken || withdrawing) return;
@@ -625,13 +652,14 @@ export default function CommonsDetailScreen() {
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: THEME.paper }}>
       <ScrollView
+        {...keyboardInsetScrollProps}
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 32 }}
       >
         <View className="px-4 pb-4 pt-2">
           <View className="mb-4 flex-row items-center justify-between">
             <TouchableOpacity
-              onPress={() => router.back()}
+              onPress={() => router.canGoBack() ? router.back() : router.replace('/commons' as any)}
               className="h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white"
               accessibilityLabel="Go back"
             >
@@ -735,30 +763,35 @@ export default function CommonsDetailScreen() {
                 </>
               ) : (
                 <TouchableOpacity
-                  onPress={() =>
-                    canOpenApply ? setApplyOpen(true) : undefined
-                  }
-                  disabled={!canOpenApply}
+                  onPress={() => {
+                    if (!sessionToken) void signInToJoin();
+                    else if (canJoin) void handleJoin();
+                    else if (canOpenApply) setApplyOpen(true);
+                  }}
+                  accessibilityRole="button"
+                  disabled={joining || !(canApply || canJoin)}
                   className="flex-1 flex-row items-center justify-center gap-2 rounded-xl px-4 py-3"
                   style={{
-                    backgroundColor: canOpenApply
+                    backgroundColor: canApply || canJoin
                       ? THEME.primary
                       : THEME.border,
                   }}
                 >
-                  {canOpenApply ? (
+                  {canApply || canJoin ? (
                     <Send size={17} color="white" />
                   ) : (
                     <CheckCircle2 size={17} color={THEME.muted} />
                   )}
                   <Text
                     className={
-                      canOpenApply
+                      canApply || canJoin
                         ? 'font-black text-white'
                         : 'font-black text-gray-500'
                     }
                   >
-                    {canApply && !canOpenApply
+                    {canJoin
+                      ? joining ? 'Joining…' : sessionToken ? 'Join commons' : 'Sign in to join'
+                      : canApply && !canOpenApply
                       ? 'Sign in to apply'
                       : canOpenApply
                         ? 'Apply to join'
@@ -885,6 +918,7 @@ export default function CommonsDetailScreen() {
                     })
                   }
                   isFamily={isFamily}
+                  sageGoals={isMember && sessionToken ? { coopId, sessionToken } : undefined}
                   onEditFamilySetup={
                     isFamily && directoryItem?.isSteward
                       ? () =>
@@ -899,9 +933,16 @@ export default function CommonsDetailScreen() {
 
               {activeTab === 'community' ? (
                 <CommunityTab
+                  coopId={coopId}
                   membersPreview={membersPreview}
                   isSteward={!!directoryItem?.isSteward}
                   circles={circles}
+                  onSeeAllMembers={() =>
+                    router.push({
+                      pathname: '/(authenticated)/commons-members',
+                      params: { coopId, coopName: name },
+                    } as any)
+                  }
                   onOpenCircle={(circle) =>
                     router.push(
                       `/${coopId}/posts?circleId=${circle.id}` as any,
@@ -977,7 +1018,7 @@ export default function CommonsDetailScreen() {
               </View>
             ) : (
               <ScrollView
-                keyboardShouldPersistTaps="handled"
+                {...keyboardInsetScrollProps}
                 showsVerticalScrollIndicator={false}
               >
                 <View className="mb-4 flex-row items-start justify-between gap-3">
@@ -1119,6 +1160,7 @@ function OverviewTab({
   onBrowseResources,
   isFamily,
   onEditFamilySetup,
+  sageGoals,
 }: {
   config: CoopConfigDetail;
   stats: ActivityStats | null;
@@ -1129,6 +1171,8 @@ function OverviewTab({
   isFamily?: boolean;
   /** A family steward's way into setting up or changing the goals and agreement. */
   onEditFamilySetup?: () => void;
+  /** Members only: what Sage counts for each goal, and passed changes waiting for a steward. */
+  sageGoals?: { coopId: string; sessionToken: string };
 }) {
   return (
     <>
@@ -1151,7 +1195,7 @@ function OverviewTab({
         ) : null}
       </View>
 
-      <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
+      <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4" accessibilityLabel="What we're building toward">
         <View className="mb-1 flex-row items-center justify-between">
           <View className="flex-row items-center gap-2">
             <Target size={19} color={THEME.primary} />
@@ -1210,6 +1254,9 @@ function OverviewTab({
           </TouchableOpacity>
         ) : null}
       </View>
+
+      {sageGoals ? <VotedAmendmentsCard {...sageGoals} /> : null}
+      {sageGoals && config.missionGoals.length > 0 ? <GoalSignalsCard {...sageGoals} /> : null}
 
       <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
         <Text className="mb-3 text-lg font-black text-gray-950">
@@ -1380,24 +1427,39 @@ function SageAutonomyRow({
 }
 
 function CommunityTab({
+  coopId,
   membersPreview,
   isSteward,
   circles,
+  onSeeAllMembers,
   onOpenCircle,
   onSeeAllCircles,
 }: {
+  coopId: string;
   membersPreview: MembersPreview | null;
   isSteward: boolean;
   circles: PrivateGroupSummary[];
+  onSeeAllMembers: () => void;
   onOpenCircle: (circle: PrivateGroupSummary) => void;
   onSeeAllCircles: () => void;
 }) {
   return (
     <>
       <View className="mb-3 rounded-2xl border border-gray-200 bg-white p-4">
-        <View className="mb-3 flex-row items-center gap-2">
-          <Users size={19} color={THEME.primary} />
-          <Text className="text-lg font-black text-gray-950">People</Text>
+        <View className="mb-3 flex-row items-center justify-between">
+          <View className="flex-row items-center gap-2">
+            <Users size={19} color={THEME.primary} />
+            <Text className="text-lg font-black text-gray-950">People</Text>
+          </View>
+          <TouchableOpacity
+            onPress={onSeeAllMembers}
+            accessibilityRole="button"
+            accessibilityLabel="See all members"
+          >
+            <Text className="text-sm font-black" style={{ color: THEME.primary }}>
+              See all
+            </Text>
+          </TouchableOpacity>
         </View>
         {membersPreview ? (
           <>
@@ -1417,9 +1479,12 @@ function CommunityTab({
                 </PersonLink>
               ))}
             </View>
-            <Text className="mt-3 text-sm font-bold text-gray-500">
-              {membersPreview.totalCount} members
-            </Text>
+            <TouchableOpacity onPress={onSeeAllMembers} activeOpacity={0.72}>
+              <Text className="mt-3 text-sm font-bold text-gray-500">
+                {membersPreview.totalCount}{' '}
+                {membersPreview.totalCount === 1 ? 'member' : 'members'}
+              </Text>
+            </TouchableOpacity>
           </>
         ) : (
           <ActivityIndicator color={THEME.primary} />
@@ -1487,6 +1552,7 @@ function CommunityTab({
           <Text className="font-black text-gray-700">+ Start a circle</Text>
         </TouchableOpacity>
       </View>
+      <CommunityPulse key={coopId} coopId={coopId} />
     </>
   );
 }

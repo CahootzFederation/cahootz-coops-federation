@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   CheckCheck,
   Lock,
@@ -74,6 +75,7 @@ function formatMessageTime(iso: string) {
 export default function MessagesScreen() {
   const params = useLocalSearchParams<{ userId?: string; name?: string; groupId?: string }>();
   const { isAuthenticated, sessionToken } = useAuth();
+  const insets = useSafeAreaInsets();
   const hasAccountSession = isAuthenticated && !!sessionToken;
   const [threads, setThreads] = useState<DirectThread[]>([]);
   const [members, setMembers] = useState<DirectMember[]>([]);
@@ -267,7 +269,7 @@ export default function MessagesScreen() {
   if (!hasAccountSession) {
     return (
       <View className="flex-1 bg-white">
-        <View className="px-5 pt-14 pb-4" style={{ backgroundColor: '#FFFFFF' }}>
+        <View className="px-5 pb-4" style={{ backgroundColor: '#FFFFFF', paddingTop: insets.top + 16 }}>
           <Text className="text-2xl font-bold text-gray-900">Direct messages</Text>
           <Text className="text-sm text-gray-600">Create an account before sending private messages</Text>
         </View>
@@ -298,7 +300,7 @@ export default function MessagesScreen() {
 
   return (
     <KeyboardAvoidingView className="flex-1 bg-white" behavior={keyboardAvoidingBehavior}>
-      <View className="border-b border-gray-200 bg-white px-5 pt-6 pb-4">
+      <View className="border-b border-gray-200 bg-white px-5 pb-4" style={{ paddingTop: insets.top + 16 }}>
         <View className="flex-row items-center gap-3">
           {selected || choosingPerson ? (
             <TouchableOpacity

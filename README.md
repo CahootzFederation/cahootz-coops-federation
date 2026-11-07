@@ -1,11 +1,12 @@
 # Cahootz Monorepo
 
-Cahootz is a platform for launching and operating community-owned economies. It brings together member onboarding, cooperative storefronts, payments, governance, proposal workflows, and treasury tooling in one monorepo.
+Cahootz is the action and economic layer for purpose-driven communities. It helps communities turn conversation into shared needs, commitments, decisions, and completed outcomes, while bringing together member onboarding, cooperative storefronts, payments, governance, proposal workflows, and treasury tooling in one monorepo.
 
 The codebase currently includes web, mobile, API, database, smart contract, and shared service packages.
 
 ## Documentation
 
+- [Product Thesis](documents/product-thesis.md) - Canonical audience, product loop, principles, non-goals, and success measures.
 - [Getting Started](GETTING_STARTED.md) - Set up the project locally.
 - [Cahootz Charter](documents/cahootz-charter.md) - Placeholder charter for the Cahootz era.
 - [Proposal Engine](documents/cahootz-proposal-engine.md) - How proposal submission, review, scoring, and voting are intended to work.
